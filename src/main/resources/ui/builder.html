@@ -8,39 +8,71 @@
     input,select,button{margin:4px}
     table{border-collapse:collapse;width:100%;margin-top:10px}
     th,td{border:1px solid #ddd;padding:6px}
+    #container{display:flex;gap:20px}
+    #builder{flex:1}
+    #schemaList{width:360px;border:1px solid #ddd;padding:8px}
+    #schemaList h3{margin-top:0}
+    .schema-item{padding:6px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+    .small{font-size:0.9em;color:#666}
   </style>
 </head>
 <body>
   <h2>UI Builder (minimal)</h2>
-  <label>Entity name: <input id="entity" placeholder="e.g. contact"></label>
-  <h3>Fields</h3>
-  <div>
-    <input id="fname" placeholder="field name">
-    <select id="ftype">
-      <option value="string">string</option>
-      <option value="int">int</option>
-      <option value="long">long</option>
-      <option value="boolean">boolean</option>
-      <option value="date">date</option>
-      <option value="text">text</option>
-    </select>
-    <label><input type="checkbox" id="fpk"> PK</label>
-    <label><input type="checkbox" id="fauto"> Auto</label>
-    <input id="flen" placeholder="length" style="width:60px">
-    <button id="add">Add field</button>
+  <div id="container">
+    <div id="builder">
+      <label>Entity name: <input id="entity" placeholder="e.g. contact"></label>
+      <h3>Fields</h3>
+      <div>
+        <input id="fname" placeholder="field name">
+        <select id="ftype">
+          <option value="string">string</option>
+          <option value="int">int</option>
+          <option value="long">long</option>
+          <option value="boolean">boolean</option>
+          <option value="date">date</option>
+          <option value="text">text</option>
+        </select>
+        <label><input type="checkbox" id="fpk"> PK</label>
+        <label><input type="checkbox" id="fauto"> Auto</label>
+        <input id="flen" placeholder="length" style="width:60px">
+        <button id="add">Add field</button>
+      </div>
+
+      <table id="fields">
+        <thead><tr><th>Name</th><th>Type</th><th>PK</th><th>Auto</th><th>Len</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <div style="margin-top:12px">
+        <button id="export">Export JSON</button>
+        <button id="preview">Preview Migration</button>
+        <button id="apply" style="display:none">Apply Migration</button>
+        <button id="post">Save Schema to Server (/schema)</button>
+      </div>
+
+      <pre id="out" style="background:#f7f7f7;padding:10px;margin-top:12px;max-height:300px;overflow:auto"></pre>
+    </div>
+
+    <div id="schemaList">
+      <h3>Saved Schemas</h3>
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <input id="searchQ" placeholder="search..." style="flex:1">
+        <button id="searchBtn">Search</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <button id="refreshSchemas">Refresh</button>
+        <label class="small">Page size:
+          <select id="pageSizeSelect"><option>5</option><option selected>10</option><option>25</option></select>
+        </label>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+          <button id="prevPage">Prev</button>
+          <span id="pageInfo" class="small">1</span>
+          <button id="nextPage">Next</button>
+        </div>
+      </div>
+      <div id="list"></div>
+    </div>
   </div>
-
-  <table id="fields">
-    <thead><tr><th>Name</th><th>Type</th><th>PK</th><th>Auto</th><th>Len</th><th>Action</th></tr></thead>
-    <tbody></tbody>
-  </table>
-
-  <div style="margin-top:12px">
-    <button id="export">Export JSON</button>
-    <button id="post">Save Schema to Server (/schema)</button>
-  </div>
-
-  <pre id="out" style="background:#f7f7f7;padding:10px;margin-top:12px;max-height:300px;overflow:auto"></pre>
 
 <script>
   const fields = [];
@@ -82,13 +114,116 @@
     document.getElementById('out').textContent=JSON.stringify(s,null,2);
   });
 
-  document.getElementById('post').addEventListener('click',()=>{
+  async function doPost(url, body){
+    const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const text = await res.text();
+    return {status: res.status, body: text};
+  }
+
+  document.getElementById('post').addEventListener('click', async ()=>{
     const s=buildSchema(); if(!s) return;
     const url= (location.origin && location.origin !== 'null') ? location.origin + '/schema' : 'http://localhost:8080/schema';
-    fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(s)})
-      .then(r=>r.text().then(t=>{document.getElementById('out').textContent = 'Status:'+r.status+"\n"+t;}))
-      .catch(err=>{document.getElementById('out').textContent = 'Error: '+err});
+    try{
+      const r = await doPost(url, s);
+      document.getElementById('out').textContent = 'Status:'+r.status+"\n"+r.body;
+      refreshSchemas();
+    }catch(err){ document.getElementById('out').textContent = 'Error: '+err }
   });
+
+  document.getElementById('preview').addEventListener('click', async ()=>{
+    const s=buildSchema(); if(!s) return;
+    const base = (location.origin && location.origin !== 'null') ? location.origin + '/schema' : 'http://localhost:8080/schema';
+    const url = base + '?preview=true';
+    try{
+      const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(s)});
+      const plan = await res.json();
+      if(res.ok){
+        document.getElementById('out').textContent = 'Migration plan:\n' + plan.join('\n');
+        // show apply button
+        document.getElementById('apply').style.display = 'inline-block';
+        // store last plan and schema
+        window._lastPreview = {schema: s, plan};
+      } else {
+        document.getElementById('out').textContent = 'Preview failed: ' + JSON.stringify(plan);
+      }
+    }catch(e){ document.getElementById('out').textContent = 'Error: '+e }
+  });
+
+  document.getElementById('apply').addEventListener('click', async ()=>{
+    if(!window._lastPreview || !window._lastPreview.schema){ alert('No preview available.'); return; }
+    const s = window._lastPreview.schema;
+    const base = (location.origin && location.origin !== 'null') ? location.origin + '/schema' : 'http://localhost:8080/schema';
+    try{
+      const r = await doPost(base, s);
+      document.getElementById('out').textContent = 'Apply status:'+r.status+"\n"+r.body;
+      document.getElementById('apply').style.display='none';
+      refreshSchemas();
+    }catch(e){ document.getElementById('out').textContent = 'Error: '+e }
+  });
+
+  // --- New: schema list and load with pagination/search ---
+  let currentPage = 1;
+  let pageSize = parseInt(document.getElementById('pageSizeSelect').value,10) || 10;
+  let currentQuery = '';
+
+  async function refreshSchemas(page){
+    if(!page) page = currentPage;
+    const q = document.getElementById('searchQ').value.trim();
+    currentQuery = q;
+    pageSize = parseInt(document.getElementById('pageSizeSelect').value,10) || 10;
+    const base = (location.origin && location.origin !== 'null') ? location.origin + '/schema' : 'http://localhost:8080/schema';
+    const url = base + '?page=' + encodeURIComponent(page) + '&size=' + encodeURIComponent(pageSize) + '&q=' + encodeURIComponent(q);
+    try{
+      const res = await fetch(url);
+      if(!res.ok){ document.getElementById('list').textContent = 'Failed to load schemas: '+res.status; return; }
+      const names = await res.json();
+      const div = document.getElementById('list');
+      div.innerHTML='';
+      if(!names || names.length===0){ div.textContent='(no schemas found)'; document.getElementById('pageInfo').textContent = page; return; }
+      names.forEach(n=>{
+        const el = document.createElement('div'); el.className='schema-item';
+        el.innerHTML = `<span style="font-weight:600">${n}</span><div><button data-name='${n}' class='load'>Load</button></div>`;
+        div.appendChild(el);
+      });
+      currentPage = page;
+      document.getElementById('pageInfo').textContent = currentPage;
+    }catch(e){ document.getElementById('list').textContent = 'Error: '+e }
+  }
+
+  async function loadSchema(name){
+    const url = (location.origin && location.origin !== 'null') ? location.origin + '/schema/' + name : 'http://localhost:8080/schema/' + name;
+    try{
+      const res = await fetch(url);
+      if(!res.ok){ alert('Failed to load schema: '+res.status); return; }
+      const schema = await res.json();
+      // populate UI
+      document.getElementById('entity').value = schema.name || '';
+      fields.length = 0; // clear
+      if(schema.fields && Array.isArray(schema.fields)){
+        schema.fields.forEach(f => fields.push(f));
+      }
+      render();
+      document.getElementById('out').textContent = 'Loaded schema: ' + schema.name;
+    }catch(e){ alert('Error: '+e); }
+  }
+
+  document.getElementById('refreshSchemas').addEventListener('click', ()=>refreshSchemas(1));
+  document.getElementById('searchBtn').addEventListener('click', ()=>refreshSchemas(1));
+  document.getElementById('prevPage').addEventListener('click', ()=>{ if(currentPage>1) refreshSchemas(currentPage-1); });
+  document.getElementById('nextPage').addEventListener('click', ()=>{ refreshSchemas(currentPage+1); });
+  document.getElementById('list').addEventListener('click', e=>{
+    if(e.target.tagName==='BUTTON' && e.target.classList.contains('load')){
+      const name = e.target.getAttribute('data-name');
+      loadSchema(name);
+    }
+  });
+
+  document.getElementById('openH2').addEventListener('click', ()=>{
+    alert('Run H2 Console: java -cp ~/.m2/repository/com/h2database/h2/2.2.222/h2-2.2.222.jar org.h2.tools.Console -url jdbc:h2:./data/appbana -user sa');
+  });
+
+  // initial load
+  refreshSchemas(1);
 </script>
 </body>
 </html>

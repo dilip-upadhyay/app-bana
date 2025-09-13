@@ -226,4 +226,115 @@ public class SchemaManager {
     private static String quote(String identifier) {
         return "\"" + identifier + "\"";
     }
+
+    // --- NEW: migration preview (generateMigrationPlan) ---
+    public static List<String> generateMigrationPlan(EntitySchema schema) {
+        validateSchema(schema);
+        List<String> plan = new ArrayList<>();
+        try (Connection c = JdbcManager.getConnection()) {
+            String table = schema.getName();
+            DatabaseMetaData md = c.getMetaData();
+            boolean exists = false;
+            try (ResultSet tables = md.getTables(null, null, table.toUpperCase(), null)) {
+                exists = tables.next();
+            }
+            if (!exists) {
+                // build CREATE TABLE statement (same as createTable but do not execute)
+                List<String> cols = new ArrayList<>();
+                String pk = null;
+                for (EntitySchema.Field f : schema.getFields()) {
+                    String col = quote(f.getName()) + " " + sqlType(f);
+                    if (f.isPrimaryKey()) pk = quote(f.getName());
+                    cols.add(col);
+                }
+                StringBuilder sb = new StringBuilder();
+                sb.append("CREATE TABLE IF NOT EXISTS ").append(quote(table)).append(" (");
+                sb.append(String.join(", ", cols));
+                if (pk != null) sb.append(", PRIMARY KEY(").append(pk).append(")");
+                sb.append(")");
+                plan.add(sb.toString());
+                return plan;
+            }
+
+            // table exists: inspect columns
+            Map<String, ColumnInfo> existing = new HashMap<>();
+            try (ResultSet cols = md.getColumns(null, null, table.toUpperCase(), null)) {
+                while (cols.next()) {
+                    String colName = cols.getString("COLUMN_NAME");
+                    String typeName = cols.getString("TYPE_NAME");
+                    int size = cols.getInt("COLUMN_SIZE");
+                    existing.put(colName.toLowerCase(), new ColumnInfo(colName, typeName, size));
+                }
+            }
+
+            for (EntitySchema.Field f : schema.getFields()) {
+                String target = f.getName();
+                String targetLower = target.toLowerCase();
+                if (f.getExistingName() != null && !f.getExistingName().isEmpty()) {
+                    String old = f.getExistingName();
+                    if (existing.containsKey(old.toLowerCase()) && !existing.containsKey(targetLower)) {
+                        String renameSql = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(old) + " RENAME TO " + quote(target);
+                        plan.add(renameSql);
+                        ColumnInfo info = existing.remove(old.toLowerCase());
+                        existing.put(targetLower, new ColumnInfo(target, info.typeName, info.size));
+                    }
+                }
+                if (!existing.containsKey(targetLower)) {
+                    String alter = "ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " " + sqlType(f);
+                    plan.add(alter);
+                } else {
+                    ColumnInfo info = existing.get(targetLower);
+                    String desiredType = normalizeSqlType(sqlType(f));
+                    String currentType = normalizeSqlType(info.typeName + (info.size > 0 ? "(" + info.size + ")" : ""));
+                    if (!typesEquivalent(currentType, desiredType)) {
+                        String alterType = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " SET DATA TYPE " + sqlType(f);
+                        plan.add(alterType);
+                    }
+                }
+            }
+            return plan;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // --- NEW: list schema names (all) ---
+    public static List<String> listSchemaNames() {
+        List<String> names = new ArrayList<>();
+        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement("SELECT name FROM appbana_schemas ORDER BY name")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) names.add(rs.getString(1));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return names;
+    }
+
+    // --- NEW: list schema names with pagination and optional search q (substring match) ---
+    public static List<String> listSchemaNames(int page, int size, String q) {
+        List<String> names = new ArrayList<>();
+        if (page < 1) page = 1;
+        if (size <= 0) size = 10;
+        int offset = (page - 1) * size;
+        String sql;
+        boolean useFilter = q != null && !q.trim().isEmpty();
+        if (useFilter) {
+            sql = "SELECT name FROM appbana_schemas WHERE LOWER(name) LIKE ? ORDER BY name LIMIT ? OFFSET ?";
+        } else {
+            sql = "SELECT name FROM appbana_schemas ORDER BY name LIMIT ? OFFSET ?";
+        }
+        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            int idx = 1;
+            if (useFilter) ps.setString(idx++, "%" + q.toLowerCase() + "%");
+            ps.setInt(idx++, size);
+            ps.setInt(idx, offset);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) names.add(rs.getString(1));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return names;
+    }
 }

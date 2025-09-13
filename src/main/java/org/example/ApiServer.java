@@ -39,6 +39,17 @@ public class ApiServer {
         }
     }
 
+    private static Map<String,String> parseQuery(String query){
+        Map<String,String> map = new HashMap<>();
+        if(query==null||query.isEmpty()) return map;
+        for(String part: query.split("&")){
+            int i = part.indexOf('=');
+            if(i>0) map.put(part.substring(0,i), part.substring(i+1));
+            else map.put(part, "");
+        }
+        return map;
+    }
+
     public static void start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/schema", new SchemaHandler());
@@ -70,33 +81,66 @@ public class ApiServer {
             URI uri = exchange.getRequestURI();
             String path = uri.getPath(); // /schema or /schema/{name}
             String[] parts = path.split("/");
-            if ("POST".equalsIgnoreCase(method) && parts.length == 2) {
-                // create schema
-                try (InputStream is = exchange.getRequestBody()) {
-                    EntitySchema schema = M.readValue(is, EntitySchema.class);
-                    if (schema.getName() == null || schema.getName().isEmpty()) {
-                        send(exchange, 400, "{\"error\":\"missing schema name\"}");
+            Map<String,String> qmap = parseQuery(uri.getQuery());
+
+            try {
+                // POST /schema with optional preview=true
+                if ("POST".equalsIgnoreCase(method) && parts.length == 2) {
+                    boolean preview = "true".equalsIgnoreCase(qmap.getOrDefault("preview", "false"));
+                    try (InputStream is = exchange.getRequestBody()) {
+                        EntitySchema schema = M.readValue(is, EntitySchema.class);
+                        if (schema.getName() == null || schema.getName().isEmpty()) {
+                            send(exchange, 400, "{\"error\":\"missing schema name\"}");
+                            return;
+                        }
+                        if (preview) {
+                            List<String> plan = SchemaManager.generateMigrationPlan(schema);
+                            sendJson(exchange, 200, plan);
+                            return;
+                        } else {
+                            SchemaManager.saveSchema(schema);
+                            send(exchange, 201, "{\"status\":\"ok\"}");
+                            return;
+                        }
+                    }
+                }
+
+                // GET /schema - list (optionally paginated/search via query params)
+                if ("GET".equalsIgnoreCase(method) && parts.length == 2) {
+                    String pageS = qmap.get("page");
+                    String sizeS = qmap.get("size");
+                    String q = qmap.get("q");
+                    if (pageS != null || sizeS != null || q != null) {
+                        int page = 1; int size = 10;
+                        try { if (pageS != null) page = Integer.parseInt(pageS); } catch (Exception ignored) {}
+                        try { if (sizeS != null) size = Integer.parseInt(sizeS); } catch (Exception ignored) {}
+                        List<String> names = SchemaManager.listSchemaNames(page, size, q);
+                        sendJson(exchange, 200, names);
+                        return;
+                    } else {
+                        List<String> names = SchemaManager.listSchemaNames();
+                        sendJson(exchange, 200, names);
                         return;
                     }
-                    SchemaManager.saveSchema(schema);
-                    send(exchange, 201, "{\"status\":\"ok\"}");
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
                 }
-                return;
-            }
-            if ("GET".equalsIgnoreCase(method) && parts.length == 3) {
-                String name = parts[2];
-                EntitySchema schema = SchemaManager.loadSchema(name);
-                if (schema == null) {
-                    send(exchange, 404, "{\"error\":\"not found\"}");
+
+                // GET /schema/{name}
+                if ("GET".equalsIgnoreCase(method) && parts.length == 3) {
+                    String name = parts[2];
+                    EntitySchema schema = SchemaManager.loadSchema(name);
+                    if (schema == null) {
+                        send(exchange, 404, "{\"error\":\"not found\"}");
+                        return;
+                    }
+                    sendJson(exchange, 200, schema);
                     return;
                 }
-                sendJson(exchange, 200, schema);
-                return;
+
+                send(exchange, 404, "{\"error\":\"unsupported\"}");
+            } catch (Exception e) {
+                e.printStackTrace();
+                send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
             }
-            send(exchange, 404, "{\"error\":\"unsupported\"}");
         }
     }
 

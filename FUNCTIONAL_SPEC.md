@@ -14,7 +14,7 @@ Purpose
 - Frontend: static HTML/JS UI builder (served from resources) that creates EntitySchema JSON and POSTs to /schema.
 - Backend services:
   - ApiServer — embedded HTTP server; handlers for /schema and /api/* and static UI route /ui/builder.
-  - SchemaManager — validates schema JSON, persists schema (appbana_schemas), and creates/migrates tables (records DDLs in appbana_migrations).
+  - SchemaManager — validates schema JSON, persists schema (appbana_schemas), and creates/migrates tables (records DDLs in appbana_migrations). New: generateMigrationPlan(schema) provides a dry-run list of DDL statements and listSchemaNames(page,size,q) supports paginated/search listing used by the UI.
   - JdbcManager — manages JDBC connection (H2 by default) and ensures metadata tables exist.
   - CodeGenerator — simple generator that emits POJO Java sources into generated-sources/ (no compile/load).
 - Database: H2 file DB (./data/appbana) with metadata and entity tables created per schema.
@@ -23,21 +23,20 @@ Purpose
 - POST /schema
   - Input: JSON EntitySchema (see section 5)
   - Action: validate and persist schema + create or migrate table
+  - New: supports preview mode via POST /schema?preview=true which returns the planned DDL statements without applying them. The UI exposes a "Preview Migration" button that calls this endpoint; after preview the UI shows an "Apply Migration" button to execute the save.
   - Responses: 201 on success; 400 for validation errors; 500 for server errors
 - GET /schema/{name}
   - Return stored schema JSON or 404
+- GET /schema
+  - Return a list of saved schema names. Supports pagination and search via query parameters: ?page={n}&size={m}&q={substring}
 - POST /api/{entity}
   - Insert record. Body is JSON object mapping field names to values.
   - Server coercion & validation applied; uses PreparedStatement for SQL.
   - Returns generated PK id when available.
 - GET /api/{entity}
   - List all records
-- GET /api/{entity}/{id}
-  - Get record by primary key
-- PUT /api/{entity}/{id}
-  - Update fields (validated & coerced)
-- DELETE /api/{entity}/{id}
-  - Delete record by primary key
+- GET/PUT/DELETE /api/{entity}/{id}
+  - Record-level operations
 - GET /ui/builder
   - Serves the minimal UI builder (static HTML) to create schemas
 
@@ -74,6 +73,7 @@ Purpose
     - If a field declares existingName and existingName exists in DB, attempt rename: ALTER TABLE ... ALTER COLUMN "old" RENAME TO "new"
     - Detect simple type mismatches and attempt ALTER COLUMN ... SET DATA TYPE (DB-dependent; may fail)
   - Every executed DDL is inserted into appbana_migrations(schema_name, sql) for audit/history.
+- New: a preview/dry-run mode is available (POST /schema?preview=true) which returns the planned DDL statements without executing them; the UI leverages this to require explicit approval before applying changes.
 - Limitations: migrations are conservative (adds and simple renames/types) — complex migrations and data transformations must be manual or via migration preview and approval.
 
 7. Code generation
@@ -83,7 +83,11 @@ Purpose
 8. Frontend UI builder
 - Minimal single-file builder at src/main/resources/ui/builder.html.
 - Features: add fields, set type/length/PK/auto/required, export JSON, POST to /schema.
-- Limitations: no drag/drop, no load/edit existing schema, limited UI metadata editing.
+- Recent enhancements:
+  - "Preview Migration" button to preview planned DDL (POST /schema?preview=true).
+  - After a successful preview the UI shows an "Apply Migration" button to persist the schema and execute the DDL.
+  - Schema list supports pagination and search; UI calls GET /schema?page=&size=&q= to fetch names.
+- Limitations: no drag/drop, no advanced diff UI or automatic rollback.
 
 9. Build, run, environment
 - Build: Maven with Shade plugin; a runnable fat JAR is produced.
@@ -115,7 +119,7 @@ Purpose
 
 13. Recommended enhancements (prioritized)
 Priority A — Safety & environment (small effort, high value)
-- Add migration preview endpoint and UI (GET /schema/{name}/plan or POST /schema?preview=true) that returns the DDL statements the system would execute without applying them; require explicit user approval to apply. (Effort: 2–4 days)
+- Add migration preview endpoint and UI (done) that returns the DDL statements the system would execute without applying them; require explicit user approval to apply. (Effort: 2–4 days)
 - Replace downloader mvnw with the official Maven Wrapper (.mvn/wrapper/*) for standard behavior. (Effort: <1 day)
 - Add a pre-commit or CI check to ensure java.version matches project (.sdkmanrc or pom property). (Effort: <1 day)
 
@@ -134,7 +138,7 @@ Priority D — Advanced features (optional)
 - Multi-tenant support: namespace schemas and data per tenant, isolation and per-tenant migrations. (Effort: 10–20 days)
 
 14. Suggested immediate next tasks
-- Implement migration preview and approval UX (safety-first).
+- Implement migration preview and approval UX (safety-first). (Implemented)
 - Add official Maven Wrapper files and commit .sdkmanrc and CI workflow to the repo.
 - Add a simple integration test that exercises POST /schema + POST /api/{entity} + GET to validate end-to-end flow.
 
@@ -143,4 +147,3 @@ Priority D — Advanced features (optional)
 - When implementing features, follow the priorities above and keep changes small and testable.
 
 End of functional specification
-
