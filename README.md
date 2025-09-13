@@ -9,18 +9,27 @@ Quick summary
 
 Status of repository
 - Fully working MVP backend and minimal frontend builder included.
-- Built fat JAR available at `dist/app-bana.jar` (created by local build run).
+- Built fat JAR available at `dist/app-bana.jar` (created by local build run) and under `target/` after building.
 - .gitignore present to ignore build, generated sources, downloaded Maven and DB files.
+- .sdkmanrc pins Java version for the project (java=21.0.8-tem).
 - COPILOT_NOTES.md contains an agent-friendly snapshot of the current state.
+- CI workflow added at `.github/workflows/ci.yml` to build using JDK 21 in CI.
 
 Tech stack
-- Java 17 (compiled with `--release 17`)
+- Java 21 (LTS) is the recommended and configured Java for the project.
 - H2 (embedded) for development
 - Jackson (jackson-databind) for JSON
 - SLF4J simple for logging
 - Maven build with Shade plugin (produces an uber jar)
+- SDKMAN recommended for local Java version management (project .sdkmanrc provided)
 
 Build & run
+- Install SDKMAN (recommended) and ensure the project Java is available:
+  - curl -s "https://get.sdkman.io" | bash
+  - source "$HOME/.sdkman/bin/sdkman-init.sh"
+  - sdk install java 21.0.8-tem
+  - sdk default java 21.0.8-tem
+  - cd into the repo and SDKMAN will pick up `.sdkmanrc` if you enable auto-env or run `sdk env`.
 - With system Maven installed:
   - mvn -DskipTests package
   - java -jar target/original-app-bana-1.0-SNAPSHOT-fat.jar
@@ -30,8 +39,9 @@ Build & run
   - java -jar dist/app-bana.jar
 - From IDE: run org.example.Main
 
-Notes about the wrapper
-- `mvnw` is a downloader script (not the official maven-wrapper binary). It prefers installed `mvn`; otherwise it downloads Apache Maven into `.mvn/apache-maven` and runs it. If you prefer the official wrapper I can add `.mvn/wrapper/maven-wrapper.jar` and properties instead.
+Notes about the mvnw wrapper and CI
+- `mvnw` in this repo is a downloader-style wrapper (it will download Apache Maven if system `mvn` is not found). You can replace it with the official Maven Wrapper files if you prefer.
+- GitHub Actions workflow (.github/workflows/ci.yml) is configured to use Temurin JDK 21 and will run `mvn -DskipTests package` on push/PR.
 
 Default runtime behavior
 - On startup the app ensures two metadata tables exist in the H2 DB:
@@ -89,9 +99,10 @@ Migration behavior (what the server does when POST /schema)
   - Every DDL executed is recorded in `appbana_migrations` for audit.
 
 Configuration
+- Project Java default: Java 21 (pom property `java.version` = 21). You can override at build time with `-Djava.version=...` if needed.
 - Environment variables (optional):
   - APPBANA_PORT — server port (default: 8080). The code sets port in ApiServer.start; change Main.java to read this env var if you need dynamic port configuration.
-  - JDBC_URL — JDBC connection URL (default is defined in JdbcManager.java as jdbc:h2:./data/appbana;AUTO_SERVER=TRUE). To use another DB, update JdbcManager.getConnection or replace values with env variable reads.
+  - JDBC_URL — JDBC connection URL (default is defined in JdbcManager.java as jdbc:h2:./data/appbana;AUTO_SERVER=TRUE). To use another DB, update JdbcManager.getConnection or modify to read env variables.
   - DB_USER — DB username (default: "sa" for H2)
   - DB_PASS — DB password (default: empty string for H2)
 
