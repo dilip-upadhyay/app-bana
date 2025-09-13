@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>AppBana - UI Builder (minimal)</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:20px}
+    input,select,button{margin:4px}
+    table{border-collapse:collapse;width:100%;margin-top:10px}
+    th,td{border:1px solid #ddd;padding:6px}
+  </style>
+</head>
+<body>
+  <h2>UI Builder (minimal)</h2>
+  <label>Entity name: <input id="entity" placeholder="e.g. contact"></label>
+  <h3>Fields</h3>
+  <div>
+    <input id="fname" placeholder="field name">
+    <select id="ftype">
+      <option value="string">string</option>
+      <option value="int">int</option>
+      <option value="long">long</option>
+      <option value="boolean">boolean</option>
+      <option value="date">date</option>
+      <option value="text">text</option>
+    </select>
+    <label><input type="checkbox" id="fpk"> PK</label>
+    <label><input type="checkbox" id="fauto"> Auto</label>
+    <input id="flen" placeholder="length" style="width:60px">
+    <button id="add">Add field</button>
+  </div>
+
+  <table id="fields">
+    <thead><tr><th>Name</th><th>Type</th><th>PK</th><th>Auto</th><th>Len</th><th>Action</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <div style="margin-top:12px">
+    <button id="export">Export JSON</button>
+    <button id="post">Save Schema to Server (/schema)</button>
+  </div>
+
+  <pre id="out" style="background:#f7f7f7;padding:10px;margin-top:12px;max-height:300px;overflow:auto"></pre>
+
+<script>
+  const fields = [];
+  const tbody = document.querySelector('#fields tbody');
+  function render(){
+    tbody.innerHTML='';
+    fields.forEach((f,i)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${f.name}</td><td>${f.type}</td><td>${f.primaryKey? 'yes':''}</td><td>${f.autoIncrement? 'yes':''}</td><td>${f.length||''}</td><td><button data-i='${i}'>Del</button></td>`;
+      tbody.appendChild(tr);
+    });
+  }
+  document.getElementById('add').addEventListener('click',()=>{
+    const name=document.getElementById('fname').value.trim();
+    if(!name){alert('field name required');return}
+    const type=document.getElementById('ftype').value;
+    const pk=document.getElementById('fpk').checked;
+    const auto=document.getElementById('fauto').checked;
+    const len=document.getElementById('flen').value.trim();
+    fields.push({name,type,primaryKey:pk,autoIncrement:auto,length: len?parseInt(len):null});
+    document.getElementById('fname').value='';document.getElementById('flen').value='';document.getElementById('fpk').checked=false;document.getElementById('fauto').checked=false;
+    render();
+  });
+  tbody.addEventListener('click',e=>{
+    if(e.target.tagName==='BUTTON'){
+      const i=parseInt(e.target.getAttribute('data-i'));
+      fields.splice(i,1);render();
+    }
+  });
+
+  function buildSchema(){
+    const name=document.getElementById('entity').value.trim();
+    if(!name) { alert('entity name required'); return null; }
+    return {name, fields};
+  }
+
+  document.getElementById('export').addEventListener('click',()=>{
+    const s=buildSchema(); if(!s) return;
+    document.getElementById('out').textContent=JSON.stringify(s,null,2);
+  });
+
+  document.getElementById('post').addEventListener('click',()=>{
+    const s=buildSchema(); if(!s) return;
+    const url= (location.origin && location.origin !== 'null') ? location.origin + '/schema' : 'http://localhost:8080/schema';
+    fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(s)})
+      .then(r=>r.text().then(t=>{document.getElementById('out').textContent = 'Status:'+r.status+"\n"+t;}))
+      .catch(err=>{document.getElementById('out').textContent = 'Error: '+err});
+  });
+</script>
+</body>
+</html>

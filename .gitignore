@@ -36,3 +36,36 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+# Maven / build
+/target/
+/dist/
+/*.jar
+
+# Maven wrapper download dir
+/.mvn/
+/.mvn/apache-maven/
+/.mvn/tmp/
+
+# Generated sources
+/generated-sources/
+/generated-test-sources/
+
+# IDE / OS
+/.idea/
+*.iml
+*.class
+.classpath
+.project
+.DS_Store
+
+# Logs
+*.log
+
+# Database / runtime data
+/data/
+appbana.mv.db
+
+# Misc
+node_modules/
+.env
