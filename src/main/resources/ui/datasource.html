@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Configure Datasource</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h2>Datasource Configuration</h2>
+    <form id="dsForm" method="post" action="/ui/datasource/save">
+        <label for="url">JDBC URL:</label>
+        <input type="text" id="url" name="url" required><br><br>
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username"><br><br>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password"><br><br>
+        <label for="driver">Driver Class Name:</label>
+        <input type="text" id="driver" name="driver"><br><br>
+        <button type="submit">Save</button>
+    </form>
+    <div id="result"></div>
+    <script>
+    document.getElementById('dsForm').onsubmit = async function(e) {
+        e.preventDefault();
+        const form = e.target;
+        const data = {
+            url: form.url.value,
+            username: form.username.value,
+            password: form.password.value,
+            driver: form.driver.value
+        };
+        const resp = await fetch('/ui/datasource/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await resp.text();
+        document.getElementById('result').innerText = result;
+    };
+    </script>
+</body>
+</html>
+

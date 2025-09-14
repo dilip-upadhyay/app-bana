@@ -6,21 +6,30 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 public class JdbcManager {
-    private static final String JDBC_URL = "jdbc:h2:./data/appbana;AUTO_SERVER=TRUE";
-    private static final String USER = "sa";
-    private static final String PASS = "";
+    private static volatile boolean driverLoaded = false;
 
     static {
+        // keep H2 as a default fallback to avoid CNFE during class init
+        try { Class.forName("org.h2.Driver"); } catch (ClassNotFoundException ignored) {}
+    }
+
+    private static void ensureDriverLoaded() {
+        if (driverLoaded) return;
         try {
-            // Ensure driver is loaded
-            Class.forName("org.h2.Driver");
+            String drv = ConfigManager.getConfig().getDriver();
+            if (drv != null && !drv.isBlank()) {
+                Class.forName(drv);
+            }
+            driverLoaded = true;
         } catch (ClassNotFoundException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("JDBC driver class not found: " + e.getMessage(), e);
         }
     }
 
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(JDBC_URL, USER, PASS);
+        ensureDriverLoaded();
+        AppConfig cfg = ConfigManager.getConfig();
+        return DriverManager.getConnection(cfg.getJdbcUrl(), cfg.getUsername(), cfg.getPassword());
     }
 
     public static void ensureMetaTable() {

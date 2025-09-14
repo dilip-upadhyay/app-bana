@@ -129,6 +129,48 @@ public class ApiServer {
             }
         });
 
+        // serve the datasource config UI
+        server.createContext("/ui/datasource", exchange -> {
+            try (InputStream is = ApiServer.class.getResourceAsStream("/ui/datasource.html")) {
+                if (is == null) {
+                    byte[] b = "Not found".getBytes();
+                    exchange.sendResponseHeaders(404, b.length);
+                    try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
+                    return;
+                }
+                byte[] b = is.readAllBytes();
+                exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+                exchange.sendResponseHeaders(200, b.length);
+                try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
+            } catch (Exception e) {
+                LOG.error("Failed to serve datasource UI", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
+        // handle datasource config save
+        server.createContext("/ui/datasource/save", exchange -> {
+            try {
+                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
+                    return;
+                }
+                AppConfig cfg = ConfigManager.getConfig();
+                try (InputStream is = exchange.getRequestBody()) {
+                    Map<String, String> data = M.readValue(is, new TypeReference<Map<String, String>>() {});
+                    if (data.containsKey("url")) cfg.setJdbcUrl(data.get("url"));
+                    if (data.containsKey("username")) cfg.setUsername(data.get("username"));
+                    if (data.containsKey("password")) cfg.setPassword(data.get("password"));
+                    if (data.containsKey("driver")) cfg.setDriver(data.get("driver"));
+                    ConfigManager.saveConfig(cfg);
+                    send(exchange, 200, "Datasource configuration saved.");
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to save datasource config", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
         server.setExecutor(null);
         server.start();
         LOG.info("Server started on port {}", port);
