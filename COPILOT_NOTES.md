@@ -2,78 +2,95 @@
 
 This file summarizes the current state of the project so an automated agent (Copilot) can resume work from here.
 
-Project overview
-- Metadata-driven runtime API (MVP): UI builder -> schema JSON -> backend persists schema, auto-creates/migrates DB tables, exposes generic CRUD endpoints.
-- No heavy frameworks: Java SE HttpServer + JDBC + small libraries (Jackson, H2, SLF4J).
+## Change Log (recent)
+- 2025-09-14: Fixed Java syntax errors (missing/stray braces) in ApiServer and SchemaManager that prevented compilation.
+- 2025-09-14: Normalized SQL identifier quoting to use double-quoted UPPERCASE identifiers (e.g. "USER","NAME") across SchemaManager and ApiServer to avoid H2 reserved-word / case-sensitivity issues.
+- 2025-09-14: Added UI features in ui/builder.html:
+  - "Generated API Endpoints" panel (GET /api/endpoints).
+  - Clickable endpoints that open a minimal API Tester.
+  - API Tester supports GET/POST/PUT with sample body generation from /schema/{name}, ID input, send button, and response display.
+- 2025-09-14: Implemented migration preview (POST /schema?preview=true) and applied UI preview/apply flow.
+- 2025-09-14: Updated COPILOT_NOTES.md and FUNCTIONAL_SPEC.md to reflect changes and recommendations.
 
-Key components (src/main/java/org/example)
+## Key components (src/main/java/org/example)
 - Main.java — application entrypoint (SchemaManager.init(); ApiServer.start(8080)).
-- ApiServer.java — embedded HTTP server exposing endpoints and static UI route:
-  - POST /schema — save schema JSON; triggers create/migrate table. Supports preview mode via POST /schema?preview=true which returns the planned DDL without applying it.
-  - GET /schema/{name} — retrieve saved schema
-  - GET /schema - list saved schemas (supports pagination and search via ?page=..&size=..&q=..)
-  - POST /api/{entity} — insert record
-  - GET /api/{entity} — list records
-  - GET/PUT/DELETE /api/{entity}/{id} — record-level operations
-  - GET /ui/builder — serves the minimal UI builder page (updated to include migration preview and schema list pagination/search)
-  - Includes input coercion and validation (required, min/max, length, pattern) and returns 400 on validation errors.
-- SchemaManager.java — stores schema JSON in appbana_schemas, validates schema, creates tables, adds columns, supports renames (existingName) and ALTER TYPE, records executed DDL in appbana_migrations. New: added generateMigrationPlan(schema) to return planned DDL (dry-run) and listSchemaNames(page,size,q) to support paginated/search listing.
+- ApiServer.java — embedded HTTP server exposing endpoints and static UI route (see FUNCTIONAL_SPEC.md for details).
+- SchemaManager.java — stores schema JSON in appbana_schemas, validates schema, creates/migrates tables, records executed DDL in appbana_migrations.
 - JdbcManager.java — H2 connection and ensures meta tables (appbana_schemas, appbana_migrations).
-- CodeGenerator.java — simple POJO generator (writes files into generated-sources/...); does not compile/load classes.
-- model/EntitySchema.java — schema model with Field metadata (type, pk, autoIncrement, length, required, min, max, pattern, label, placeholder, order, existingName).
+- CodeGenerator.java — simple POJO generator.
+- model/EntitySchema.java — schema model with Field metadata.
 
 Frontend
-- src/main/resources/ui/builder.html — minimal vanilla JS UI builder that emits schema JSON and POSTs to /schema. Updated UI includes:
-  - "Preview Migration" button to preview planned DDL (POST /schema?preview=true)
-  - "Apply Migration" button appears after a successful preview to apply the previewed plan
-  - Schema list with pagination controls and search input that call GET /schema?page=&size=&q=
+- src/main/resources/ui/builder.html — minimal vanilla JS UI builder that emits schema JSON and POSTs to /schema. Recent UI changes:
+  - Added "Generated API Endpoints" panel showing endpoints for saved entities (GET /api/endpoints).
+  - Endpoints are clickable and open a minimal API Tester panel.
+  - API Tester supports GET/POST/PUT requests, shows an ID input when endpoint requires {id}, auto-generates a sample JSON body for POST/PUT by fetching the entity schema (/schema/{name}), and displays status + response body.
+  - Preview Migration and Apply Migration flow retained (POST /schema?preview=true then POST /schema to apply).
 
 Build & run
 - pom.xml — dependencies (jackson-databind, h2, slf4j-simple) and maven-shade-plugin producing an uber jar.
-- mvnw — wrapper script that prefers system mvn; if missing, downloads Apache Maven binary into .mvn/apache-maven and runs it.
-- Artifacts produced by build:
-  - target/original-app-bana-1.0-SNAPSHOT-fat.jar (or shaded jar)
-  - dist/app-bana.jar — copy of built fat jar for convenience
+- mvnw — wrapper script; project builds with Java 21 as configured.
+- After recent fixes the project builds cleanly (mvn package) and the server starts: java -jar dist/app-bana.jar
 
-Local DB
-- H2 file-based DB at ./data/appbana (AUTO_SERVER=TRUE) created on runtime.
+Local DB and migration notes
+- H2 file DB at ./data/appbana (AUTO_SERVER=TRUE).
 - Metadata tables:
   - appbana_schemas(name PK, json CLOB)
   - appbana_migrations(id, schema_name, sql, executed_at)
+- Important: because identifier quoting behavior changed to use double-quoted UPPERCASE identifiers, existing tables created earlier with different quoting/casing may cause SQL errors when applying migrations or inserting rows. If you encounter errors (column not found / syntax error) do one of the following:
+  - Recommended for development: DROP the problematic table and re-apply the schema so the server creates it with the new quoting. Example via H2 Console or JDBC:
+    DROP TABLE IF EXISTS "USER";
+    DROP TABLE IF EXISTS USER;
+  - Use the UI Preview (POST /schema?preview=true) to inspect the planned DDL and, if safe, click Apply in the UI to execute it.
 
-Limitations & caveats
-- Migrations are basic: add-column, rename (via existingName), alter column type attempted automatically — may fail for complex incompatible changes.
-- The preview feature allows inspecting planned DDL and requires user approval via the UI before execution. This reduces accidental destructive changes but users should still back up data.
-- No automated rollback or advanced migration planning UI (can be added).
-- Code generator produces sources only; no compile/load step implemented.
-- UI builder is minimal (no drag/drop, ordering via order property only).
-- mvnw uses a downloader script rather than official maven-wrapper jar; works if curl/wget and tar available.
+Notes and validation
+- I fixed compile-time issues introduced during edits (missing brace) and ensured the code compiles.
+- The identifier quoting change prevents H2 reserved-word and case-sensitivity issues for identifiers like USER or Name.
+- The UI tester provides a quick way to exercise runtime APIs without external tools.
 
-Next recommended tasks (pick and implement)
-- Add official Maven Wrapper files (.mvn/wrapper/*) instead of downloader script.
-- Improve migration UX further: better diffing, show migrations history, and allow reversing a planned change before applying.
-- Extend UI builder: drag/drop, reorder fields, field labels and validations UI, load/edit existing schema.
-- Extend CodeGenerator: generate DAOs/controllers and optionally compile/load generated code.
-- Add auth and audit for schema and data changes.
+Next suggested changes
+- Add example curl/snippets per endpoint in the API Tester UI.
+- Persist recent tester requests/responses in browser localStorage.
+- Add an option in SchemaManager to choose identifier quoting strategy (configurable) to assist migrations when moving between DBs.
 
-Useful commands (for humans)
-- Build: ./mvnw -DskipTests package  OR  mvn -DskipTests package
-- Run: java -jar dist/app-bana.jar
-- Open UI builder: http://localhost:8080/ui/builder
-- Example: preview migration via curl: curl -X POST -H "Content-Type: application/json" --data @schema.json "http://localhost:8080/schema?preview=true"
+If you want, I can:
+- Restart the server and run a safe migration (rename columns or drop/recreate a table) against your local H2 DB and report results.
+- Add example curl commands to the API Tester UI.
 
-Where to look (files)
-- pom.xml
-- mvnw
-- src/main/java/org/example/{Main,ApiServer,SchemaManager,JdbcManager,CodeGenerator}
-- src/main/java/org/example/model/EntitySchema.java
-- src/main/resources/ui/builder.html
-- .gitignore
-- dist/app-bana.jar (built artifact)
+Contact & continuation notes
+- Use this file as the up-to-date snapshot reflecting the recent code changes (API Tester, clickable endpoints, quoting fixes, compilation fixes, migration preview/apply flow).
+- When implementing further features, keep changes small and testable. Ensure migration preview is used before applying changes in environments with existing data.
 
-If you want, I will:
-- untrack build/generated files and commit .gitignore (run git commands), or
-- add the official Maven Wrapper files, or
-- implement one of the next recommended tasks above.
+## Files changed in the recent work (for quick reference)
+- src/main/java/org/example/ApiServer.java — fixed missing brace; updated quote() to produce double-quoted UPPERCASE identifiers to match SchemaManager; added /api/endpoints handler (if not present earlier).
+- src/main/java/org/example/SchemaManager.java — fixed stray brace; changed quote() to return double-quoted UPPERCASE identifiers; added generateMigrationPlan and paginated listSchemaNames.
+- src/main/resources/ui/builder.html — added endpoints panel, clickable links, and API Tester UI (sample body generation, send, response display).
+- COPILOT_NOTES.md, FUNCTIONAL_SPEC.md — documentation updates reflecting current behavior.
+
+## Rollback / revert notes
+- If you need to revert quoting strategy to previous behavior, revert quote() in both SchemaManager and ApiServer to previous implementation and re-run migration preview to assess DB differences.
+- The UI source is idempotent; if changes need to be undone, restore src/main/resources/ui/builder.html from VCS history.
+
+## DB migration caution (future reference)
+- Identifier quoting change may require manual reconciliation for existing H2 data files. If you see errors such as "Column "Name" not found" or SQL syntax errors referencing USER:
+  - Preferred dev path: drop the problematic table(s) and re-save schema via UI to re-create them with the new quoting.
+  - Non-destructive path: use POST /schema?preview=true to inspect planned DDL; verify ALTER/RENAME statements before applying.
+
+## Quick recovery commands (for local development)
+- Build and run:
+  ./mvnw -DskipTests package && java -jar dist/app-bana.jar
+- Drop a problematic table in H2 Console or JDBC:
+  DROP TABLE IF EXISTS "USER";
+  DROP TABLE IF EXISTS USER;
+
+## Recommendations for future work (short)
+- Add a configurable quoting strategy stored in metadata to assist migrations between quoting modes.
+- Add a migration-diff UI that highlights destructive changes and requires explicit confirmation with checkboxes for destructive statements.
+- Persist API Tester history in localStorage and add example curl snippets per endpoint in the UI.
+
+## Future reference: commit & code review checklist
+- Run mvn -DskipTests package after edits and ensure no compilation errors.
+- Run manual end-to-end test: POST /schema -> Apply Migration -> POST /api/{entity} (create) -> GET /api/{entity} and GET /api/{entity}/{id}.
+- Inspect appbana_migrations table to verify recorded DDL statements.
 
 End of snapshot.
