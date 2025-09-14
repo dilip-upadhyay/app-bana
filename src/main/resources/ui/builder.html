@@ -71,6 +71,36 @@
         </div>
       </div>
       <div id="list"></div>
+
+      <!-- New: API endpoints panel -->
+      <h3 style="margin-top:12px">Generated API Endpoints</h3>
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <button id="refreshApisBtn">Refresh API Endpoints</button>
+        <span class="small" style="margin-left:8px;color:#666">Shows the REST endpoints created for saved entities</span>
+      </div>
+      <div id="apiList" style="max-height:220px;overflow:auto;border-top:1px solid #eee;padding-top:8px"></div>
+
+      <!-- API tester panel (hidden until an endpoint is clicked) -->
+      <div id="apiTester" style="display:none;margin-top:10px;border-top:1px dashed #ddd;padding-top:8px">
+        <h4 style="margin:6px 0">API Tester</h4>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <label>Method: <input id="testerMethod" readonly style="width:120px"></label>
+          <label>URL: <input id="testerUrl" style="flex:1"></label>
+        </div>
+        <div id="testerIdRow" style="display:none;margin-bottom:8px">
+          <label>ID: <input id="testerId" placeholder="id value"></label>
+        </div>
+        <div style="margin-bottom:8px">
+          <label>Body (JSON):</label><br>
+          <textarea id="testerBody" style="width:100%;height:120px;font-family:monospace" placeholder="{}"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="testerSend">Send</button>
+          <button id="testerClose">Close</button>
+          <span class="small" id="testerStatus"></span>
+        </div>
+        <pre id="testerResponse" style="background:#f7f7f7;padding:8px;margin-top:8px;max-height:220px;overflow:auto"></pre>
+      </div>
     </div>
   </div>
 
@@ -218,12 +248,150 @@
     }
   });
 
+  // --- New: fetch and render API endpoints generated from entities ---
+  async function refreshApiEndpoints(){
+    const url = (location.origin && location.origin !== 'null') ? location.origin + '/api/endpoints' : 'http://localhost:8080/api/endpoints';
+    try{
+      const res = await fetch(url);
+      if(!res.ok){ document.getElementById('apiList').textContent = 'Failed to load API endpoints: '+res.status; return; }
+      const list = await res.json();
+      const div = document.getElementById('apiList');
+      div.innerHTML = '';
+      if(!list || list.length===0){ div.textContent = '(no endpoints)'; return; }
+      list.forEach(item => {
+        const el = document.createElement('div');
+        el.style.padding = '6px 0';
+        const title = document.createElement('div');
+        title.innerHTML = `<strong>${item.entity}</strong>`;
+        el.appendChild(title);
+        const ul = document.createElement('ul');
+        ul.style.margin = '6px 0 6px 12px';
+        (item.endpoints||[]).forEach(ep => {
+          const li = document.createElement('li');
+          li.style.marginBottom = '4px';
+          // make clickable
+          const a = document.createElement('a');
+          a.href = '#';
+          a.className = 'api-ep';
+          a.style.cursor = 'pointer';
+          a.setAttribute('data-entity', item.entity);
+          a.setAttribute('data-ep', ep);
+          a.textContent = ep;
+          li.appendChild(a);
+          ul.appendChild(li);
+        });
+        el.appendChild(ul);
+        div.appendChild(el);
+      });
+    }catch(e){ document.getElementById('apiList').textContent = 'Error: '+e }
+  }
+
+  document.getElementById('refreshApisBtn').addEventListener('click', ()=>refreshApiEndpoints());
+
+  // Click handler for API endpoint links (delegated)
+  document.getElementById('apiList').addEventListener('click', async (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('api-ep')) {
+      e.preventDefault();
+      const ep = e.target.getAttribute('data-ep');
+      const entity = e.target.getAttribute('data-entity');
+      // ep is like "POST /api/entity" or "GET /api/entity/{id}"
+      const parts = ep.split(' ');
+      const method = parts[0];
+      const path = parts[1];
+      // prepare tester UI
+      const tester = document.getElementById('apiTester');
+      document.getElementById('testerMethod').value = method;
+      // construct URL template
+      const base = (location.origin && location.origin !== 'null') ? location.origin : 'http://localhost:8080';
+      let url = base + path.replace('{id}', ':id');
+      document.getElementById('testerUrl').value = url;
+      // show/hide id field
+      const needsId = path.includes('{id}');
+      document.getElementById('testerIdRow').style.display = needsId ? 'block' : 'none';
+      document.getElementById('testerId').value = '';
+      // fetch schema to build sample body for POST/PUT
+      const bodyArea = document.getElementById('testerBody');
+      if (method === 'POST' || method === 'PUT') {
+        try {
+          const res = await fetch((location.origin && location.origin !== 'null') ? location.origin + '/schema/' + entity : 'http://localhost:8080/schema/' + entity);
+          if (res.ok) {
+            const schema = await res.json();
+            const sample = {};
+            if (schema.fields && Array.isArray(schema.fields)) {
+              schema.fields.forEach(f => {
+                // omit auto-increment PKs from sample
+                if (f.primaryKey && f.autoIncrement) return;
+                const t = (f.type||'').toLowerCase();
+                switch (t) {
+                  case 'int': case 'integer': sample[f.name] = 1; break;
+                  case 'long': sample[f.name] = 1; break;
+                  case 'boolean': sample[f.name] = true; break;
+                  case 'date': case 'timestamp': sample[f.name] = new Date().toISOString(); break;
+                  default: sample[f.name] = f.length && f.length>50 ? 'example long text' : 'example'; break;
+                }
+              });
+            }
+            bodyArea.value = JSON.stringify(sample, null, 2);
+          } else {
+            bodyArea.value = '{}';
+          }
+        } catch (err) {
+          bodyArea.value = '{}';
+        }
+      } else {
+        bodyArea.value = '';
+      }
+      document.getElementById('testerStatus').textContent = '';
+      document.getElementById('testerResponse').textContent = '';
+      tester.style.display = 'block';
+      // scroll into view
+      tester.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+  });
+
+  // Send request from tester
+  document.getElementById('testerSend').addEventListener('click', async ()=>{
+    const method = document.getElementById('testerMethod').value;
+    let url = document.getElementById('testerUrl').value.trim();
+    const idVal = document.getElementById('testerId').value.trim();
+    if (url.includes(':id')) {
+      if (!idVal) { alert('ID required for this endpoint'); return; }
+      url = url.replace(':id', encodeURIComponent(idVal));
+    }
+    let opts = { method };
+    if (method === 'POST' || method === 'PUT') {
+      let bodyText = document.getElementById('testerBody').value || '';
+      try {
+        // ensure valid JSON
+        JSON.parse(bodyText);
+      } catch (e) { alert('Invalid JSON body: ' + e); return; }
+      opts.headers = {'Content-Type':'application/json'};
+      opts.body = bodyText;
+    }
+    try {
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      document.getElementById('testerStatus').textContent = 'Status: ' + res.status;
+      try { document.getElementById('testerResponse').textContent = JSON.stringify(JSON.parse(text), null, 2); }
+      catch (e) { document.getElementById('testerResponse').textContent = text; }
+    } catch (err) {
+      document.getElementById('testerStatus').textContent = 'Error';
+      document.getElementById('testerResponse').textContent = String(err);
+    }
+  });
+
+  document.getElementById('testerClose').addEventListener('click', ()=>{
+    document.getElementById('apiTester').style.display = 'none';
+  });
+
   document.getElementById('openH2').addEventListener('click', ()=>{
     alert('Run H2 Console: java -cp ~/.m2/repository/com/h2database/h2/2.2.222/h2-2.2.222.jar org.h2.tools.Console -url jdbc:h2:./data/appbana -user sa');
   });
 
   // initial load
   refreshSchemas(1);
+  // initial load of API endpoints
+  refreshApiEndpoints();
 </script>
 </body>
 </html>

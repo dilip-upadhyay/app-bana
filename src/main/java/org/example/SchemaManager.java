@@ -226,7 +226,8 @@ public class SchemaManager {
     }
 
     private static String quote(String identifier) {
-        return "\"" + identifier + "\"";
+        if (identifier == null) return null;
+        return "\"" + identifier.toUpperCase() + "\"";
     }
 
     // --- NEW: migration preview (generateMigrationPlan) ---

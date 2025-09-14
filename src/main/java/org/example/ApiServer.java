@@ -369,7 +369,8 @@ public class ApiServer {
         }
 
         private String quote(String id) {
-            return "\"" + id + "\"";
+            if (id == null) return null;
+            return '"' + id.toUpperCase() + '"';
         }
 
         private Object coerceAndValidate(EntitySchema.Field f, Object raw) {
