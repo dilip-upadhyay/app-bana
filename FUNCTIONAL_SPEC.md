@@ -37,8 +37,10 @@ Purpose
   - List all records
 - GET/PUT/DELETE /api/{entity}/{id}
   - Record-level operations
-- GET /ui/builder
+- GET /ui/builder.html
   - Serves the minimal UI builder (static HTML) to create schemas
+- GET /openapi.json
+  - Returns the OpenAPI 3.0 spec for all generated REST endpoints, dynamically built from saved schemas
 
 4. EntitySchema model (fields and semantics)
 - Root: { name: string, fields: [ Field ] }
@@ -83,10 +85,7 @@ Purpose
 8. Frontend UI builder
 - Minimal single-file builder at src/main/resources/ui/builder.html.
 - Features: add fields, set type/length/PK/auto/required, export JSON, POST to /schema.
-- Recent enhancements:
-  - "Preview Migration" button to preview planned DDL (POST /schema?preview=true).
-  - After a successful preview the UI shows an "Apply Migration" button to persist the schema and execute the DDL.
-  - Schema list supports pagination and search; UI calls GET /schema?page=&size=&q= to fetch names.
+- All advanced builder-v2 UI features have been removed; only the basic builder-v1 UI remains.
 - Limitations: no drag/drop, no advanced diff UI or automatic rollback.
 
 9. Build, run, environment

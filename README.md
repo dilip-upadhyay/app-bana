@@ -9,6 +9,8 @@ Quick summary
 
 Status of repository
 - Fully working MVP backend and minimal frontend builder included.
+- All advanced builder-v2 UI files have been removed; only the basic builder-v1 UI remains.
+- Swagger/OpenAPI spec is now available at `/openapi.json` for all generated REST endpoints.
 - Built fat JAR available at `dist/app-bana.jar` (created by local build run) and under `target/` after building.
 - .gitignore present to ignore build, generated sources, downloaded Maven and DB files.
 - .sdkmanrc pins Java version for the project (java=21.0.8-tem).
@@ -48,7 +50,8 @@ Default runtime behavior
   - `appbana_schemas(name PK, json CLOB)` — stores schema JSON
   - `appbana_migrations(id IDENTITY, schema_name, sql CLOB, executed_at TIMESTAMP)` — records DDL executed
 - Embedded HTTP server listens on port 8080 by default.
-- UI builder served at: http://localhost:8080/ui/builder
+- UI builder served at: http://localhost:8080/ui/builder.html
+- OpenAPI spec served at: http://localhost:8080/openapi.json
 
 API endpoints (runtime generic)
 - POST /schema
@@ -65,6 +68,8 @@ API endpoints (runtime generic)
 - GET /api/{entity}/{id} — fetch record by PK
 - PUT /api/{entity}/{id} — update record (validated/coerced)
 - DELETE /api/{entity}/{id} — delete record by PK
+
+- GET /openapi.json — returns OpenAPI 3.0 spec for all generated endpoints
 
 Schema JSON (recommended format)
 - Example:
