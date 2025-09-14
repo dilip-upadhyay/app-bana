@@ -148,7 +148,7 @@ public class ApiServer {
             }
         });
 
-        // return current datasource config (without password)
+        // return current active datasource config (without password)
         server.createContext("/ui/datasource/config", exchange -> {
             try {
                 if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -156,11 +156,23 @@ public class ApiServer {
                     return;
                 }
                 AppConfig cfg = ConfigManager.getConfig();
+                String active = cfg.getActiveDatasource();
                 Map<String, Object> out = new LinkedHashMap<>();
-                out.put("name", cfg.getName());
-                out.put("jdbcUrl", cfg.getJdbcUrl());
-                out.put("username", cfg.getUsername());
-                out.put("driver", cfg.getDriver());
+                for (DatasourceConfig ds : cfg.getDatasources()) {
+                    if (ds.getName() != null && ds.getName().equals(active)) {
+                        out.put("name", ds.getName());
+                        out.put("jdbcUrl", ds.getJdbcUrl());
+                        out.put("username", ds.getUsername());
+                        out.put("driver", ds.getDriver());
+                        break;
+                    }
+                }
+                if (out.isEmpty()) {
+                    out.put("name", cfg.getName());
+                    out.put("jdbcUrl", cfg.getJdbcUrl());
+                    out.put("username", cfg.getUsername());
+                    out.put("driver", cfg.getDriver());
+                }
                 sendJson(exchange, 200, out);
             } catch (Exception e) {
                 LOG.error("Failed to get datasource config", e);
@@ -168,7 +180,33 @@ public class ApiServer {
             }
         });
 
-        // handle datasource config save
+        // list all datasources (without passwords)
+        server.createContext("/ui/datasource/list", exchange -> {
+            try {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
+                    return;
+                }
+                AppConfig cfg = ConfigManager.getConfig();
+                String active = cfg.getActiveDatasource();
+                List<Map<String, Object>> list = new ArrayList<>();
+                for (DatasourceConfig ds : cfg.getDatasources()) {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("name", ds.getName());
+                    m.put("jdbcUrl", ds.getJdbcUrl());
+                    m.put("username", ds.getUsername());
+                    m.put("driver", ds.getDriver());
+                    m.put("active", ds.getName() != null && ds.getName().equals(active));
+                    list.add(m);
+                }
+                sendJson(exchange, 200, list);
+            } catch (Exception e) {
+                LOG.error("Failed to list datasources", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
+        // handle datasource config save (upsert + set active)
         server.createContext("/ui/datasource/save", exchange -> {
             try {
                 if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -178,19 +216,88 @@ public class ApiServer {
                 AppConfig cfg = ConfigManager.getConfig();
                 try (InputStream is = exchange.getRequestBody()) {
                     Map<String, String> data = M.readValue(is, new TypeReference<Map<String, String>>() {});
-                    if (data.containsKey("name")) cfg.setName(data.get("name"));
-                    if (data.containsKey("url")) cfg.setJdbcUrl(data.get("url"));
-                    if (data.containsKey("username")) cfg.setUsername(data.get("username"));
-                    if (data.containsKey("password")) {
-                        String pw = data.get("password");
-                        if (pw != null && !pw.isBlank()) cfg.setPassword(pw);
+                    String name = data.get("name");
+                    if (name == null || name.isBlank()) {
+                        send(exchange, 400, "{\"error\":\"name required\"}");
+                        return;
                     }
-                    if (data.containsKey("driver")) cfg.setDriver(data.get("driver"));
+                    String url = data.get("url");
+                    String user = data.get("username");
+                    String pw = data.get("password");
+                    String drv = data.get("driver");
+                    boolean found = false;
+                    for (DatasourceConfig ds : cfg.getDatasources()) {
+                        if (name.equals(ds.getName())) {
+                            if (url != null) ds.setJdbcUrl(url);
+                            if (user != null) ds.setUsername(user);
+                            if (drv != null) ds.setDriver(drv);
+                            if (pw != null && !pw.isBlank()) ds.setPassword(pw);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        DatasourceConfig ds = new DatasourceConfig();
+                        ds.setName(name);
+                        ds.setJdbcUrl(url);
+                        ds.setUsername(user);
+                        if (pw != null && !pw.isBlank()) ds.setPassword(pw);
+                        ds.setDriver(drv);
+                        cfg.getDatasources().add(ds);
+                    }
+                    cfg.setActiveDatasource(name);
                     ConfigManager.saveConfig(cfg);
                     send(exchange, 200, "Datasource configuration saved.");
                 }
             } catch (Exception e) {
                 LOG.error("Failed to save datasource config", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
+        // activate a datasource by name
+        server.createContext("/ui/datasource/activate", exchange -> {
+            try {
+                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
+                    return;
+                }
+                Map<String, String> data = M.readValue(exchange.getRequestBody(), new TypeReference<Map<String, String>>() {});
+                String name = data.get("name");
+                if (name == null || name.isBlank()) { send(exchange, 400, "{\"error\":\"name required\"}"); return; }
+                AppConfig cfg = ConfigManager.getConfig();
+                boolean exists = cfg.getDatasources().stream().anyMatch(d -> name.equals(d.getName()));
+                if (!exists) { send(exchange, 404, "{\"error\":\"not found\"}"); return; }
+                cfg.setActiveDatasource(name);
+                ConfigManager.saveConfig(cfg);
+                send(exchange, 200, "Activated");
+            } catch (Exception e) {
+                LOG.error("Failed to activate datasource", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
+        // delete a datasource by name
+        server.createContext("/ui/datasource/delete", exchange -> {
+            try {
+                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { // using POST for simplicity
+                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
+                    return;
+                }
+                Map<String, String> data = M.readValue(exchange.getRequestBody(), new TypeReference<Map<String, String>>() {});
+                String name = data.get("name");
+                if (name == null || name.isBlank()) { send(exchange, 400, "{\"error\":\"name required\"}"); return; }
+                AppConfig cfg = ConfigManager.getConfig();
+                cfg.getDatasources().removeIf(d -> name.equals(d.getName()));
+                if (name.equals(cfg.getActiveDatasource())) {
+                    // set a new active if available
+                    if (!cfg.getDatasources().isEmpty()) cfg.setActiveDatasource(cfg.getDatasources().get(0).getName());
+                    else cfg.setActiveDatasource(null);
+                }
+                ConfigManager.saveConfig(cfg);
+                send(exchange, 200, "Deleted");
+            } catch (Exception e) {
+                LOG.error("Failed to delete datasource", e);
                 try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
             }
         });

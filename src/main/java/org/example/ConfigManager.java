@@ -6,6 +6,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class ConfigManager {
@@ -20,7 +22,7 @@ public class ConfigManager {
         File f = p.toFile();
         if (!f.exists()) {
             // return defaults (H2 embedded)
-            if (cached == null) cached = new AppConfig();
+            if (cached == null) cached = normalize(new AppConfig());
             return cached;
         }
         long mt = f.lastModified();
@@ -30,7 +32,7 @@ public class ConfigManager {
         try {
             byte[] b = Files.readAllBytes(p);
             AppConfig cfg = M.readValue(b, AppConfig.class);
-            cached = applyEnvOverrides(cfg);
+            cached = normalize(applyEnvOverrides(cfg));
             cachedMtime = mt;
             return cached;
         } catch (IOException e) {
@@ -45,7 +47,7 @@ public class ConfigManager {
             Files.createDirectories(p.getParent());
             byte[] b = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(cfg);
             Files.write(p, b);
-            cached = applyEnvOverrides(cfg);
+            cached = normalize(applyEnvOverrides(cfg));
             cachedMtime = p.toFile().lastModified();
         } catch (IOException e) {
             throw new RuntimeException("Failed to save config: " + e.getMessage(), e);
@@ -62,7 +64,34 @@ public class ConfigManager {
         out.setUsername(user != null ? user : cfg.getUsername());
         out.setPassword(pass != null ? pass : cfg.getPassword());
         out.setDriver(drv != null ? drv : cfg.getDriver());
+        out.setName(cfg.getName());
+        // preserve multi-datasource fields
+        out.setDatasources(cfg.getDatasources() != null ? cfg.getDatasources() : new ArrayList<>());
+        out.setActiveDatasource(cfg.getActiveDatasource());
         return out;
+    }
+
+    private static AppConfig normalize(AppConfig cfg) {
+        // If no datasources list, seed from root fields for backward-compat
+        List<DatasourceConfig> list = cfg.getDatasources();
+        if (list == null) {
+            list = new ArrayList<>();
+            cfg.setDatasources(list);
+        }
+        if (list.isEmpty()) {
+            DatasourceConfig ds = new DatasourceConfig();
+            ds.setName(cfg.getName() != null ? cfg.getName() : "default");
+            ds.setJdbcUrl(cfg.getJdbcUrl());
+            ds.setUsername(cfg.getUsername());
+            ds.setPassword(cfg.getPassword());
+            ds.setDriver(cfg.getDriver());
+            list.add(ds);
+        }
+        if (cfg.getActiveDatasource() == null || cfg.getActiveDatasource().isBlank()) {
+            String nm = cfg.getName() != null ? cfg.getName() : list.get(0).getName();
+            cfg.setActiveDatasource(nm);
+        }
+        return cfg;
     }
 
     private static String firstNonEmpty(String... s) {
@@ -73,4 +102,3 @@ public class ConfigManager {
         return null;
     }
 }
-

@@ -4,32 +4,51 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class JdbcManager {
-    private static volatile boolean driverLoaded = false;
+    private static final Set<String> LOADED = ConcurrentHashMap.newKeySet();
 
     static {
         // keep H2 as a default fallback to avoid CNFE during class init
-        try { Class.forName("org.h2.Driver"); } catch (ClassNotFoundException ignored) {}
+        try { Class.forName("org.h2.Driver"); LOADED.add("org.h2.Driver"); } catch (ClassNotFoundException ignored) {}
     }
 
-    private static void ensureDriverLoaded() {
-        if (driverLoaded) return;
+    private static void ensureDriverLoaded(String driver) {
+        if (driver == null || driver.isBlank()) return;
+        if (LOADED.contains(driver)) return;
         try {
-            String drv = ConfigManager.getConfig().getDriver();
-            if (drv != null && !drv.isBlank()) {
-                Class.forName(drv);
-            }
-            driverLoaded = true;
+            Class.forName(driver);
+            LOADED.add(driver);
         } catch (ClassNotFoundException e) {
-            throw new RuntimeException("JDBC driver class not found: " + e.getMessage(), e);
+            throw new RuntimeException("JDBC driver class not found: " + driver, e);
         }
     }
 
+    private static DatasourceConfig resolveActive(AppConfig cfg) {
+        if (cfg == null) cfg = ConfigManager.getConfig();
+        String active = cfg.getActiveDatasource();
+        if (cfg.getDatasources() != null && !cfg.getDatasources().isEmpty()) {
+            for (DatasourceConfig ds : cfg.getDatasources()) {
+                if (ds.getName() != null && ds.getName().equals(active)) return ds;
+            }
+            return cfg.getDatasources().get(0);
+        }
+        DatasourceConfig ds = new DatasourceConfig();
+        ds.setName(cfg.getName());
+        ds.setJdbcUrl(cfg.getJdbcUrl());
+        ds.setUsername(cfg.getUsername());
+        ds.setPassword(cfg.getPassword());
+        ds.setDriver(cfg.getDriver());
+        return ds;
+    }
+
     public static Connection getConnection() throws SQLException {
-        ensureDriverLoaded();
         AppConfig cfg = ConfigManager.getConfig();
-        return DriverManager.getConnection(cfg.getJdbcUrl(), cfg.getUsername(), cfg.getPassword());
+        DatasourceConfig ds = resolveActive(cfg);
+        ensureDriverLoaded(ds.getDriver());
+        return DriverManager.getConnection(ds.getJdbcUrl(), ds.getUsername(), ds.getPassword());
     }
 
     public static void ensureMetaTable() {

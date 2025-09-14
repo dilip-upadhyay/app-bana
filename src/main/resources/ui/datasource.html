@@ -3,24 +3,43 @@
 <head>
     <title>Configure Datasource</title>
     <meta charset="UTF-8">
+    <style>
+        table { border-collapse: collapse; margin-top: 16px; }
+        th, td { border: 1px solid #ccc; padding: 6px 8px; }
+        .active { color: green; font-weight: bold; }
+        .muted { color: #666; }
+        button.small { padding: 4px 8px; margin-right: 4px; }
+    </style>
 </head>
 <body>
     <h2>Datasource Configuration</h2>
-    <form id="dsForm" method="post" action="/ui/datasource/save">
-        <label for="name">Name:</label>
-        <input type="text" id="name" name="name" placeholder="default"><br><br>
-        <label for="url">JDBC URL:</label>
-        <input type="text" id="url" name="url" required><br><br>
-        <label for="username">Username:</label>
-        <input type="text" id="username" name="username"><br><br>
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password" placeholder="(unchanged)"><br><br>
-        <label for="driver">Driver Class Name:</label>
-        <input type="text" id="driver" name="driver"><br><br>
-        <button type="submit">Save</button>
-    </form>
-    <div id="result"></div>
+
+    <div>
+        <h3>Add or Update</h3>
+        <form id="dsForm" method="post" action="/ui/datasource/save">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" placeholder="default" required><br><br>
+            <label for="url">JDBC URL:</label>
+            <input type="text" id="url" name="url" required><br><br>
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username"><br><br>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" placeholder="(unchanged)"><br><br>
+            <label for="driver">Driver Class Name:</label>
+            <input type="text" id="driver" name="driver"><br><br>
+            <button type="submit">Save</button>
+        </form>
+        <div id="result" class="muted"></div>
+    </div>
+
+    <div>
+        <h3>Datasources</h3>
+        <div id="dsList">Loading...</div>
+    </div>
+
     <script>
+    function h(text) { return String(text==null?'':text); }
+
     async function prefill() {
         try {
             const resp = await fetch('/ui/datasource/config');
@@ -30,12 +49,80 @@
             document.getElementById('url').value = cfg.jdbcUrl || '';
             document.getElementById('username').value = cfg.username || '';
             document.getElementById('driver').value = cfg.driver || '';
-            // don't prefill password for security
+        } catch (e) { /* ignore */ }
+    }
+
+    async function loadList() {
+        const el = document.getElementById('dsList');
+        try {
+            const resp = await fetch('/ui/datasource/list');
+            if (!resp.ok) { el.textContent = 'Failed to load datasources'; return; }
+            const list = await resp.json();
+            if (!Array.isArray(list) || list.length === 0) { el.textContent = 'No datasources yet.'; return; }
+            let html = '<table><thead><tr><th>Active</th><th>Name</th><th>URL</th><th>User</th><th>Driver</th><th>Actions</th></tr></thead><tbody>';
+            for (const d of list) {
+                html += '<tr>' +
+                    '<td>' + (d.active ? '<span class="active">●</span>' : '') + '</td>' +
+                    '<td>' + h(d.name) + '</td>' +
+                    '<td class="muted">' + h(d.jdbcUrl) + '</td>' +
+                    '<td>' + h(d.username) + '</td>' +
+                    '<td>' + h(d.driver) + '</td>' +
+                    '<td>' +
+                    '<button class="small" onclick="loadIntoForm(\'' + encodeURIComponent(d.name) + '\')">Load</button>' +
+                    '<button class="small" onclick="activateDs(\'' + encodeURIComponent(d.name) + '\')">Activate</button>' +
+                    '<button class="small" onclick="deleteDs(\'' + encodeURIComponent(d.name) + '\')">Delete</button>' +
+                    '</td>' +
+                    '</tr>';
+            }
+            html += '</tbody></table>';
+            el.innerHTML = html;
         } catch (e) {
-            // ignore prefill errors
+            el.textContent = 'Error loading datasources: ' + e;
         }
     }
-    document.addEventListener('DOMContentLoaded', prefill);
+
+    async function loadIntoForm(name) {
+        try {
+            const resp = await fetch('/ui/datasource/list');
+            const list = await resp.json();
+            const dec = decodeURIComponent(name);
+            const d = list.find(x => x.name === dec);
+            if (d) {
+                document.getElementById('name').value = d.name || '';
+                document.getElementById('url').value = d.jdbcUrl || '';
+                document.getElementById('username').value = d.username || '';
+                document.getElementById('driver').value = d.driver || '';
+                document.getElementById('password').value = '';
+                document.getElementById('result').textContent = 'Loaded ' + d.name + ' into form.';
+            }
+        } catch (e) {}
+    }
+
+    async function activateDs(name) {
+        const dec = decodeURIComponent(name);
+        const resp = await fetch('/ui/datasource/activate', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: dec})
+        });
+        const msg = await resp.text();
+        document.getElementById('result').textContent = msg;
+        await loadList();
+    }
+
+    async function deleteDs(name) {
+        const dec = decodeURIComponent(name);
+        if (!confirm('Delete datasource "' + dec + '"?')) return;
+        const resp = await fetch('/ui/datasource/delete', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: dec})
+        });
+        const msg = await resp.text();
+        document.getElementById('result').textContent = msg;
+        await loadList();
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await prefill();
+        await loadList();
+    });
 
     document.getElementById('dsForm').onsubmit = async function(e) {
         e.preventDefault();
@@ -55,6 +142,7 @@
         const result = await resp.text();
         document.getElementById('result').innerText = result;
         form.password.value = '';
+        await loadList();
     };
     </script>
 </body>
