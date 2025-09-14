@@ -132,8 +132,10 @@ public class SchemaManager {
 
     private static boolean typesEquivalent(String current, String desired) {
         // very simple equivalence: compare lower-case, ignore whitespace
-        if (current == null) return false;
-        return current.replaceAll("\\s+", "").toLowerCase().equals(desired.replaceAll("\\s+", "").toLowerCase());
+        if (current == null || desired == null) return false;
+        String c = current.replaceAll("\\s+", "").trim();
+        String d = desired.replaceAll("\\s+", "").trim();
+        return c.equalsIgnoreCase(d);
     }
 
     private static class ColumnInfo {

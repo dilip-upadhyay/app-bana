@@ -6,6 +6,8 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.example.model.EntitySchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,6 +21,7 @@ import java.util.regex.Pattern;
 
 public class ApiServer {
     private static final ObjectMapper M = new ObjectMapper();
+    private static final Logger LOG = LoggerFactory.getLogger(ApiServer.class);
 
     // Shared utilities so both handlers can send responses
     public static void send(HttpExchange exchange, int status, String body) throws IOException {
@@ -54,6 +57,35 @@ public class ApiServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/schema", new SchemaHandler());
         server.createContext("/api", new EntityHandler());
+
+        // Return a machine-readable list of API endpoints generated from saved entities
+        server.createContext("/api/endpoints", exchange -> {
+            try {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
+                    return;
+                }
+                List<String> names = SchemaManager.listSchemaNames();
+                List<Map<String,Object>> out = new ArrayList<>();
+                for (String n : names) {
+                    Map<String,Object> m = new HashMap<>();
+                    m.put("entity", n);
+                    List<String> eps = new ArrayList<>();
+                    eps.add("POST /api/" + n);
+                    eps.add("GET /api/" + n);
+                    eps.add("GET /api/" + n + "/{id}");
+                    eps.add("PUT /api/" + n + "/{id}");
+                    eps.add("DELETE /api/" + n + "/{id}");
+                    m.put("endpoints", eps);
+                    out.add(m);
+                }
+                sendJson(exchange, 200, out);
+            } catch (Exception e) {
+                LOG.error("Failed to build /api/endpoints response", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
         // serve the UI builder static page
         server.createContext("/ui/builder", exchange -> {
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/builder.html")) {
@@ -67,11 +99,15 @@ public class ApiServer {
                 exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
                 exchange.sendResponseHeaders(200, b.length);
                 try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
+            } catch (Exception e) {
+                LOG.error("Failed to serve UI builder", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
             }
         });
+
         server.setExecutor(null);
         server.start();
-        System.out.println("Server started on port " + port);
+        LOG.info("Server started on port {}", port);
     }
 
     static class SchemaHandler implements HttpHandler {
@@ -138,8 +174,8 @@ public class ApiServer {
 
                 send(exchange, 404, "{\"error\":\"unsupported\"}");
             } catch (Exception e) {
-                e.printStackTrace();
-                send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+                LOG.error("SchemaHandler failed", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
             }
         }
     }
@@ -208,7 +244,7 @@ public class ApiServer {
                 }
                 send(exchange, 405, "{\"error\":\"method not allowed\"}");
             } catch (Exception e) {
-                e.printStackTrace();
+                LOG.error("EntityHandler error while processing request", e);
                 if (e instanceof IllegalArgumentException) {
                     send(exchange, 400, "{\"error\":\"" + e.getMessage() + "\"}");
                 } else {
@@ -222,10 +258,8 @@ public class ApiServer {
             List<String> cols = new ArrayList<>();
             List<String> placeholders = new ArrayList<>();
             List<Object> values = new ArrayList<>();
-            EntitySchema.Field pkField = null;
             for (EntitySchema.Field f : fields) {
                 if (f.isPrimaryKey() && f.isAutoIncrement()) {
-                    pkField = f;
                     continue; // skip if auto
                 }
                 cols.add(quote(f.getName()));
