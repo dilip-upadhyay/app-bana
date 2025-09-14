@@ -85,7 +85,40 @@ public class ConfigManager {
             ds.setUsername(cfg.getUsername());
             ds.setPassword(cfg.getPassword());
             ds.setDriver(cfg.getDriver());
+            // infer type from URL
+            String url = cfg.getJdbcUrl();
+            String type = null;
+            if (url != null) {
+                if (url.startsWith("jdbc:h2:")) type = "h2";
+                else if (url.startsWith("jdbc:postgresql:")) type = "postgres";
+                else if (url.startsWith("jdbc:mysql:")) type = "mysql";
+                else if (url.startsWith("jdbc:mariadb:")) type = "mariadb";
+                else if (url.startsWith("jdbc:sqlserver:")) type = "mssql";
+                else if (url.startsWith("jdbc:oracle:")) type = "oracle";
+                else if (url.startsWith("jdbc:sqlite:")) type = "sqlite";
+            }
+            if (type == null) type = "h2";
+            ds.setType(type);
             list.add(ds);
+        } else {
+            // ensure each has a type
+            for (DatasourceConfig ds : list) {
+                if (ds.getType() == null || ds.getType().isBlank()) {
+                    String url = ds.getJdbcUrl();
+                    String type = null;
+                    if (url != null) {
+                        if (url.startsWith("jdbc:h2:")) type = "h2";
+                        else if (url.startsWith("jdbc:postgresql:")) type = "postgres";
+                        else if (url.startsWith("jdbc:mysql:")) type = "mysql";
+                        else if (url.startsWith("jdbc:mariadb:")) type = "mariadb";
+                        else if (url.startsWith("jdbc:sqlserver:")) type = "mssql";
+                        else if (url.startsWith("jdbc:oracle:")) type = "oracle";
+                        else if (url.startsWith("jdbc:sqlite:")) type = "sqlite";
+                    }
+                    if (type == null) type = "h2";
+                    ds.setType(type);
+                }
+            }
         }
         if (cfg.getActiveDatasource() == null || cfg.getActiveDatasource().isBlank()) {
             String nm = cfg.getName() != null ? cfg.getName() : list.get(0).getName();

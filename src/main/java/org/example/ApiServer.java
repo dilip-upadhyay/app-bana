@@ -164,6 +164,7 @@ public class ApiServer {
                         out.put("jdbcUrl", ds.getJdbcUrl());
                         out.put("username", ds.getUsername());
                         out.put("driver", ds.getDriver());
+                        out.put("type", ds.getType());
                         break;
                     }
                 }
@@ -172,6 +173,7 @@ public class ApiServer {
                     out.put("jdbcUrl", cfg.getJdbcUrl());
                     out.put("username", cfg.getUsername());
                     out.put("driver", cfg.getDriver());
+                    out.put("type", null);
                 }
                 sendJson(exchange, 200, out);
             } catch (Exception e) {
@@ -196,6 +198,7 @@ public class ApiServer {
                     m.put("jdbcUrl", ds.getJdbcUrl());
                     m.put("username", ds.getUsername());
                     m.put("driver", ds.getDriver());
+                    m.put("type", ds.getType());
                     m.put("active", ds.getName() != null && ds.getName().equals(active));
                     list.add(m);
                 }
@@ -225,12 +228,14 @@ public class ApiServer {
                     String user = data.get("username");
                     String pw = data.get("password");
                     String drv = data.get("driver");
+                    String type = data.get("type");
                     boolean found = false;
                     for (DatasourceConfig ds : cfg.getDatasources()) {
                         if (name.equals(ds.getName())) {
                             if (url != null) ds.setJdbcUrl(url);
                             if (user != null) ds.setUsername(user);
                             if (drv != null) ds.setDriver(drv);
+                            if (type != null) ds.setType(type);
                             if (pw != null && !pw.isBlank()) ds.setPassword(pw);
                             found = true;
                             break;
@@ -243,6 +248,7 @@ public class ApiServer {
                         ds.setUsername(user);
                         if (pw != null && !pw.isBlank()) ds.setPassword(pw);
                         ds.setDriver(drv);
+                        ds.setType(type);
                         cfg.getDatasources().add(ds);
                     }
                     cfg.setActiveDatasource(name);

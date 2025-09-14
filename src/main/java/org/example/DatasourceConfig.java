@@ -6,6 +6,7 @@ public class DatasourceConfig {
     private String username;
     private String password;
     private String driver;
+    private String type; // e.g., h2, postgres, mysql, mariadb, mssql, oracle, sqlite
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -21,4 +22,7 @@ public class DatasourceConfig {
 
     public String getDriver() { return driver; }
     public void setDriver(String driver) { this.driver = driver; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 }
