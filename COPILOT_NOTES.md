@@ -1,48 +1,79 @@
 # Copilot Notes — project snapshot
 
-This file summarizes the current state of the project so an automated agent (Copilot) can resume work from here.
+This file summarizes the current state so an automated agent can resume work confidently.
 
 ## Change Log (recent)
-- 2025-09-14: UI reverted to basic builder-v1 (minimal entity/fields builder, no advanced panels or API tester).
-- 2025-09-14: All builder-v2 UI files removed from the project.
-- 2025-09-14: Added Swagger/OpenAPI spec endpoint at `/openapi.json` (dynamically generated for all REST endpoints from metadata).
-- 2025-09-14: Documentation updated in README.md and FUNCTIONAL_SPEC.md to reflect these changes.
+- 2025-09-14: Multi-datasource support added (UI + backend):
+  - New UI at /ui/datasource for Add/Update/List/Activate/Delete.
+  - New endpoints: GET /ui/datasource/list, GET /ui/datasource/config, POST /ui/datasource/save, POST /ui/datasource/activate, POST /ui/datasource/delete.
+  - Config model extended: AppConfig.datasources[] + activeDatasource; DatasourceConfig {name,type,jdbcUrl,username,password,driver}.
+  - Driver inference from type/URL when driver blank.
+  - Startup resiliency: server still starts if DB init fails to allow fixing datasource via UI.
+- 2025-09-14: OpenAPI endpoint added at /openapi.json (generated from saved schemas).
+- 2025-09-14: UI kept minimal for schema builder (builder-v1).
 
-## Key components (src/main/java/org/example)
-- Main.java — application entrypoint (SchemaManager.init(); ApiServer.start(8080)).
-- ApiServer.java — embedded HTTP server exposing endpoints and static UI route (see FUNCTIONAL_SPEC.md for details).
-- OpenApiGenerator.java — generates OpenAPI 3.0 spec from all saved schemas, served at /openapi.json.
-- SchemaManager.java — stores schema JSON in appbana_schemas, validates schema, creates/migrates tables, records executed DDL in appbana_migrations.
-- JdbcManager.java — H2 connection and ensures meta tables (appbana_schemas, appbana_migrations).
-- CodeGenerator.java — simple POJO generator.
-- model/EntitySchema.java — schema model with Field metadata.
+## Key components
+- Main.java — entrypoint. Starts SchemaManager.init() (best-effort) and ApiServer on port 8080.
+- ApiServer.java — HTTP server with handlers:
+  - /schema — save/preview/list/load schemas
+  - /api/* — runtime CRUD for saved entities
+  - /openapi.json — OpenAPI 3.0 for all CRUD endpoints
+  - /ui/builder — serves builder.html
+  - /ui/datasource — serves datasource.html
+  - /ui/datasource/* — JSON endpoints (list/config/save/activate/delete)
+- SchemaManager.java — validates/persists schema JSON; creates/migrates tables; migration preview.
+- JdbcManager.java — uses active datasource to create connections; infers driver from type/URL; ensures meta tables.
+- ConfigManager.java — loads/saves config JSON; normalizes to multi-DS shape; applies env overrides; seeds default.
+- AppConfig.java — root config (legacy single-DS fields retained for back-compat) + datasources[] + activeDatasource.
+- DatasourceConfig.java — {name,type,jdbcUrl,username,password,driver}.
+- model/EntitySchema.java — schema model.
+- OpenApiGenerator.java — builds /openapi.json from saved schemas.
 
-Frontend
-- src/main/resources/ui/builder.html — minimal vanilla JS UI builder that emits schema JSON and POSTs to /schema. No advanced panels or API tester.
+Frontend (resources/ui)
+- builder.html — minimal schema builder posting to /schema.
+- datasource.html — multi-DS management UI with Type selector and driver/URL hints.
 
-Build & run
-- pom.xml — dependencies (jackson-databind, h2, slf4j-simple) and maven-shade-plugin producing an uber jar.
-- mvnw — wrapper script; project builds with Java 21 as configured.
-- After recent fixes the project builds cleanly (mvn package) and the server starts: java -jar dist/app-bana.jar
+## Behavior and contracts
+- Active datasource governs all DB ops. Changing active affects subsequent connections.
+- Passwords are never returned by list/config endpoints. Blank password on save doesn’t overwrite existing.
+- Driver inference mapping:
+  - h2→org.h2.Driver; postgres→org.postgresql.Driver; mysql→com.mysql.cj.jdbc.Driver; mariadb→org.mariadb.jdbc.Driver; mssql→com.microsoft.sqlserver.jdbc.SQLServerDriver; oracle→oracle.jdbc.OracleDriver; sqlite→org.sqlite.JDBC.
 
-Local DB and migration notes
-- H2 file DB at ./data/appbana (AUTO_SERVER=TRUE).
-- Metadata tables:
-  - appbana_schemas(name PK, json CLOB)
-  - appbana_migrations(id, schema_name, sql, executed_at)
-- Identifier quoting uses double-quoted UPPERCASE identifiers to avoid H2 reserved-word / case-sensitivity issues.
+## Config model
+- Path: APPBANA_CONFIG env or -Dappbana.config (default data/appbana-config.json).
+- Shape:
+```
+{
+  "datasources": [
+    {"name":"primary","type":"h2","jdbcUrl":"jdbc:h2:./data/appbana;AUTO_SERVER=TRUE","username":"sa","password":"secret","driver":"org.h2.Driver"}
+  ],
+  "activeDatasource": "primary"
+}
+```
+- Back-compat: if only root fields exist (jdbcUrl/username/password/driver/name), ConfigManager seeds datasources[0] and sets active.
+- Env overrides (root): APPBANA_JDBC_URL, APPBANA_DB_USER, APPBANA_DB_PASS, APPBANA_DB_DRIVER.
 
-Notes and validation
-- The UI is now minimal and basic; all advanced features have been removed.
-- Swagger/OpenAPI spec is available at /openapi.json for all generated endpoints.
-- The project builds and runs cleanly with these changes.
+## Useful endpoints (JSON)
+- GET /ui/datasource/list → [{name,type,jdbcUrl,username,driver,active}]
+- GET /ui/datasource/config → {name,jdbcUrl,username,driver,type}
+- POST /ui/datasource/save → {name,type?,url,username?,password?,driver?}
+- POST /ui/datasource/activate → {name}
+- POST /ui/datasource/delete → {name}
+- POST /schema?preview=true → returns planned DDL (no changes)
+- POST /schema → apply schema (create/migrate)
+- CRUD: POST/GET /api/{entity}, GET/PUT/DELETE /api/{entity}/{id}
+- OpenAPI: GET /openapi.json
 
-Next suggested changes
-- Add Swagger UI static page to visualize the OpenAPI spec interactively (optional).
-- Enhance the minimal UI builder with schema editing/loading and field reordering (optional).
+## Startup and troubleshooting
+- If port 8080 is busy, free it before start (BindException).
+- If DB init fails (wrong creds), server still starts; use /ui/datasource to fix and retry operations.
 
-Contact & continuation notes
-- Use this file as the up-to-date snapshot reflecting the recent code changes (UI revert, OpenAPI spec endpoint, documentation updates).
-- When implementing further features, keep changes small and testable. Ensure migration preview is used before applying changes in environments with existing data.
+## Quick local smoke (manual)
+- Open /ui/datasource, add a new datasource by name and type; Save and Activate.
+- Open /ui/builder, create a test schema; POST to /schema; verify CRUD at /api/{entity}.
+- Fetch /openapi.json to confirm spec includes your entity.
 
-End of snapshot.
+## Next steps (suggested)
+- Add auth to /schema, /api/*, and /ui/datasource/*.
+- Add connection pooling (HikariCP) and connectivity test button in datasource UI.
+- Add Swagger UI page to render /openapi.json.
