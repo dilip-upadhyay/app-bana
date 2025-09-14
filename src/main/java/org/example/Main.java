@@ -10,8 +10,12 @@ public class Main {
 
     public static void main(String[] args) {
         try {
-            // initialize DB metadata
-            SchemaManager.init();
+            // initialize DB metadata (best-effort)
+            try {
+                SchemaManager.init();
+            } catch (Exception initErr) {
+                LOG.warn("DB initialization failed: {}. Server will still start so you can fix datasource via /ui/datasource.", initErr.toString());
+            }
             // start HTTP API server
             ApiServer.start(8080);
             System.out.println("AppBana running. Use /schema to POST schemas and /api/{entity} to access data.");

@@ -148,6 +148,26 @@ public class ApiServer {
             }
         });
 
+        // return current datasource config (without password)
+        server.createContext("/ui/datasource/config", exchange -> {
+            try {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
+                    return;
+                }
+                AppConfig cfg = ConfigManager.getConfig();
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("name", cfg.getName());
+                out.put("jdbcUrl", cfg.getJdbcUrl());
+                out.put("username", cfg.getUsername());
+                out.put("driver", cfg.getDriver());
+                sendJson(exchange, 200, out);
+            } catch (Exception e) {
+                LOG.error("Failed to get datasource config", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
         // handle datasource config save
         server.createContext("/ui/datasource/save", exchange -> {
             try {
@@ -158,9 +178,13 @@ public class ApiServer {
                 AppConfig cfg = ConfigManager.getConfig();
                 try (InputStream is = exchange.getRequestBody()) {
                     Map<String, String> data = M.readValue(is, new TypeReference<Map<String, String>>() {});
+                    if (data.containsKey("name")) cfg.setName(data.get("name"));
                     if (data.containsKey("url")) cfg.setJdbcUrl(data.get("url"));
                     if (data.containsKey("username")) cfg.setUsername(data.get("username"));
-                    if (data.containsKey("password")) cfg.setPassword(data.get("password"));
+                    if (data.containsKey("password")) {
+                        String pw = data.get("password");
+                        if (pw != null && !pw.isBlank()) cfg.setPassword(pw);
+                    }
                     if (data.containsKey("driver")) cfg.setDriver(data.get("driver"));
                     ConfigManager.saveConfig(cfg);
                     send(exchange, 200, "Datasource configuration saved.");

@@ -5,6 +5,7 @@ public class AppConfig {
     private String username = "sa";
     private String password = "";
     private String driver = "org.h2.Driver"; // optional override
+    private String name = "default"; // datasource name
 
     public String getJdbcUrl() { return jdbcUrl; }
     public void setJdbcUrl(String jdbcUrl) { this.jdbcUrl = jdbcUrl; }
@@ -17,5 +18,7 @@ public class AppConfig {
 
     public String getDriver() { return driver; }
     public void setDriver(String driver) { this.driver = driver; }
-}
 
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+}

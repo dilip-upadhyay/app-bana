@@ -7,22 +7,41 @@
 <body>
     <h2>Datasource Configuration</h2>
     <form id="dsForm" method="post" action="/ui/datasource/save">
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" placeholder="default"><br><br>
         <label for="url">JDBC URL:</label>
         <input type="text" id="url" name="url" required><br><br>
         <label for="username">Username:</label>
         <input type="text" id="username" name="username"><br><br>
         <label for="password">Password:</label>
-        <input type="password" id="password" name="password"><br><br>
+        <input type="password" id="password" name="password" placeholder="(unchanged)"><br><br>
         <label for="driver">Driver Class Name:</label>
         <input type="text" id="driver" name="driver"><br><br>
         <button type="submit">Save</button>
     </form>
     <div id="result"></div>
     <script>
+    async function prefill() {
+        try {
+            const resp = await fetch('/ui/datasource/config');
+            if (!resp.ok) return;
+            const cfg = await resp.json();
+            document.getElementById('name').value = cfg.name || '';
+            document.getElementById('url').value = cfg.jdbcUrl || '';
+            document.getElementById('username').value = cfg.username || '';
+            document.getElementById('driver').value = cfg.driver || '';
+            // don't prefill password for security
+        } catch (e) {
+            // ignore prefill errors
+        }
+    }
+    document.addEventListener('DOMContentLoaded', prefill);
+
     document.getElementById('dsForm').onsubmit = async function(e) {
         e.preventDefault();
         const form = e.target;
         const data = {
+            name: form.name.value,
             url: form.url.value,
             username: form.username.value,
             password: form.password.value,
@@ -35,8 +54,8 @@
         });
         const result = await resp.text();
         document.getElementById('result').innerText = result;
+        form.password.value = '';
     };
     </script>
 </body>
 </html>
-
