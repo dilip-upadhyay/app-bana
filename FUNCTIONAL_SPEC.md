@@ -146,4 +146,18 @@ Priority D — Advanced features (optional)
 - COPILOT_NOTES.md is maintained as the machine-friendly snapshot. Use it to resume development.
 - When implementing features, follow the priorities above and keep changes small and testable.
 
+## Change Log (recent)
+- 2025-09-14: Fixed Java syntax errors (missing/stray braces) in ApiServer and SchemaManager that prevented compilation.
+- 2025-09-14: Normalized SQL identifier quoting to use double-quoted UPPERCASE identifiers (e.g. "USER","NAME") across SchemaManager and ApiServer to avoid H2 reserved-word / case-sensitivity issues.
+- 2025-09-14: Added UI features in ui/builder.html: "Generated API Endpoints" panel, clickable endpoints, and a minimal API Tester (sample body generation from /schema/{name}, ID input, send, response display).
+- 2025-09-14: Implemented migration preview (POST /schema?preview=true) and applied UI preview/apply flow.
+
+## DB migration caution (recent)
+- Identifier quoting behavior changed to double-quoted UPPERCASE identifiers; existing H2 tables created under the previous quoting/casing may cause errors (e.g. "Column "Name" not found" or SQL syntax errors referencing USER).
+- Recommended developer recovery options:
+  - Quick (destructive, for dev): drop the problematic table and re-save the schema so the server creates it with the new quoting:
+    DROP TABLE IF EXISTS "USER";
+    DROP TABLE IF EXISTS USER;
+  - Safer (non-destructive): use the migration preview endpoint POST /schema?preview=true to inspect planned DDL before applying; review ALTER/RENAME statements and only apply when safe.
+
 End of functional specification
