@@ -105,6 +105,30 @@ public class ApiServer {
             }
         });
 
+        // serve OpenAPI spec at /openapi.json
+        server.createContext("/openapi.json", exchange -> {
+            try {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
+                    return;
+                }
+                List<String> names = SchemaManager.listSchemaNames();
+                List<org.example.model.EntitySchema> schemas = new ArrayList<>();
+                for (String n : names) {
+                    org.example.model.EntitySchema s = SchemaManager.loadSchema(n);
+                    if (s != null) schemas.add(s);
+                }
+                String spec = org.example.OpenApiGenerator.generate(schemas);
+                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+                byte[] b = spec.getBytes();
+                exchange.sendResponseHeaders(200, b.length);
+                try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
+            } catch (Exception e) {
+                LOG.error("Failed to serve OpenAPI spec", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
         server.setExecutor(null);
         server.start();
         LOG.info("Server started on port {}", port);
