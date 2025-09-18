@@ -185,6 +185,12 @@ Security notes
 UI step-by-step walkthroughs (all features)
 
 A) Datasource UI — Add a new datasource
+
+<picture>
+  <source srcset="docs/screenshots/datasource-add.png" type="image/png">
+  <img src="docs/screenshots/datasource-add.svg" alt="Datasource — Add or Update">
+</picture>
+
 1) Open http://localhost:8080/ui/datasource
 2) In “Add or Update”, fill:
    - Name: a short identifier (e.g., pg)
@@ -205,12 +211,24 @@ A) Datasource UI — Add a new datasource
 7) Check “Datasources” table below to confirm it’s listed and marked Active
 
 B) Datasource UI — Work with saved datasources
+
+<picture>
+  <source srcset="docs/screenshots/datasource-list.png" type="image/png">
+  <img src="docs/screenshots/datasource-list.svg" alt="Datasources — List">
+</picture>
+
 - Load: Click “Load” to copy a row’s values back into the form (password not shown)
 - Activate: Click “Activate” to switch the active datasource
 - Test: Click “Test” to validate connectivity for that saved datasource
 - Delete: Click “Delete” to remove it (if it was active, another datasource will be auto-selected if available)
 
 C) Datasource UI — Build JDBC URLs by example
+
+<picture>
+  <source srcset="docs/screenshots/datasource-test.png" type="image/png">
+  <img src="docs/screenshots/datasource-test.svg" alt="Datasource — Test Connection">
+</picture>
+
 - Postgres: Host=localhost, Port=5432, DB=appbana → jdbc:postgresql://localhost:5432/appbana
 - MySQL: Host=localhost, Port=3306, DB=appbana → jdbc:mysql://localhost:3306/appbana
 - MariaDB: Host=localhost, Port=3306, DB=appbana → jdbc:mariadb://localhost:3306/appbana
@@ -221,6 +239,12 @@ C) Datasource UI — Build JDBC URLs by example
 - H2 (mem): Name=demo → jdbc:h2:mem:demo;DB_CLOSE_DELAY=-1
 
 D) Schema Builder UI — Create and evolve a schema
+
+<picture>
+  <source srcset="docs/screenshots/builder.png" type="image/png">
+  <img src="docs/screenshots/builder.svg" alt="Schema Builder">
+</picture>
+
 1) Open http://localhost:8080/ui/builder
 2) Enter a Schema name (e.g., contact)
 3) Add fields:
@@ -232,6 +256,12 @@ D) Schema Builder UI — Create and evolve a schema
 6) Evolve safely: adjust fields and preview again to see DDL before applying
 
 E) Swagger UI — Explore and test APIs
+
+<picture>
+  <source srcset="docs/screenshots/swagger.png" type="image/png">
+  <img src="docs/screenshots/swagger.svg" alt="Swagger UI">
+</picture>
+
 1) Open http://localhost:8080/ui/swagger (loads /openapi.json)
 2) After saving schemas, hit refresh in Swagger UI to load new endpoints
 3) Expand your entity (e.g., contact) and click “Try it out” for POST/GET/PUT/DELETE
@@ -258,3 +288,5 @@ Recipes (common tasks)
 Where to go next
 - Explore the backlog in `TODO.md` (auth, health checks, last-tested badges, CI doc checks).
 - Review README.md for deeper details and API references.
+
+Note: The images above will automatically use PNGs (if present) and fall back to the bundled SVG placeholders under `docs/screenshots/`.
