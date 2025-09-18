@@ -41,6 +41,7 @@ java -Dappbana.port=8081 -jar target/app-bana-1.0-SNAPSHOT-fat.jar
 - Schema Builder: http://localhost:8080/ui/builder
 - Swagger UI: http://localhost:8080/ui/swagger
 - OpenAPI JSON: http://localhost:8080/openapi.json
+- API endpoints index (machine-readable): http://localhost:8080/api/endpoints
 
 Configuration
 - Port
@@ -51,6 +52,7 @@ Configuration
   - Override path: env `APPBANA_CONFIG` or `-Dappbana.config=...`
 - Env overrides for connection (optional)
   - APPBANA_JDBC_URL, APPBANA_DB_USER, APPBANA_DB_PASS, APPBANA_DB_DRIVER
+  - Or equivalent system properties: `-Dappbana.jdbc.url`, `-Dappbana.db.user`, `-Dappbana.db.pass`, `-Dappbana.db.driver`
 
 Datasource management
 Use the Datasource UI at /ui/datasource to:
@@ -67,6 +69,7 @@ Fields
 - Server-side URL build (API):
   - If you POST to save without `url`, the server builds it from components: { type, host, port, dbname, params }, plus H2/SQLite extras.
 - Pool settings (optional): maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName
+  - Defaults when omitted: maxPoolSize=10, minIdle=2, connectionTimeoutMs=30000, idleTimeoutMs=600000, maxLifetimeMs=1800000, autoCommit=true, poolName="appbana-<name>"
 
 Run Postgres in Docker (zsh-safe quoting for #)
 ```bash
@@ -127,6 +130,9 @@ Designing entities (Schema Builder)
 - POST to `/schema?preview=true` with the JSON; you’ll get a list of DDL statements.
 4) Save schema
 - POST to `/schema` with the JSON to persist and apply migrations.
+5) List/load schemas (optional)
+- GET `/schema` — list saved schema names (supports `?page=&size=&q=`)
+- GET `/schema/{name}` — fetch a specific schema JSON
 
 Using the runtime CRUD APIs
 - After saving a schema named `contact`, CRUD endpoints are available:
@@ -135,6 +141,7 @@ Using the runtime CRUD APIs
   - GET /api/contact/{id} — get
   - PUT /api/contact/{id} — update
   - DELETE /api/contact/{id} — delete
+- Tip: Discover available entity endpoints programmatically at `GET /api/endpoints`.
 
 Examples (replace port if overridden)
 ```bash
