@@ -18,6 +18,7 @@ Status of repository
 - HikariCP pool initialized based on the current active datasource; reconfigured when settings change.
 - Built fat JAR available under `target/` after building.
 - COPILOT_NOTES.md contains an agent-friendly snapshot of the current state.
+- For a step-by-step walkthrough, see `USER_GUIDE.md`.
 
 Tech stack
 - Java 25 (runs with virtual threads for HTTP request handling)
@@ -170,8 +171,4 @@ Notes
 - If DB credentials are wrong at startup, the app still starts the server so you can fix settings via `/ui/datasource`.
 - Identifier quoting uses double-quoted UPPERCASE to avoid reserved word/case issues in H2.
 - Backlog: see `TODO.md` for prioritized next steps and enhancements.
-
-Next recommended enhancements
-- Add authentication and role-based access to schema and datasource management.
-- Add per-datasource connectivity test/health checks.
-- Add Swagger UI to visualize `/openapi.json`.
+- New to the project? Start with `USER_GUIDE.md`.
