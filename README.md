@@ -8,18 +8,19 @@ Quick summary
 - DB: H2 embedded (file) by default; JDBC usage allows swapping to Postgres/MySQL/etc.
 - Datasources: built-in UI to add/manage multiple datasources (by name and type) and select the active one at runtime.
 - Pooling: HikariCP connection pool with configurable settings per datasource.
+- OpenAPI: live spec at /openapi.json and an embedded Swagger UI at /ui/swagger.
 
 Status of repository
 - Fully working MVP backend and minimal frontend builder included.
 - Basic builder-v1 UI is present; advanced builder-v2 files were removed.
-- Swagger/OpenAPI spec is available at `/openapi.json` for all generated REST endpoints.
+- Swagger/OpenAPI spec is available at `/openapi.json` and browsable at `/ui/swagger`.
 - Datasource management UI available at `/ui/datasource` with list/activate/delete actions.
 - HikariCP pool initialized based on the current active datasource; reconfigured when settings change.
 - Built fat JAR available under `target/` after building.
 - COPILOT_NOTES.md contains an agent-friendly snapshot of the current state.
 
 Tech stack
-- Java 21 (LTS)
+- Java 25 (runs with virtual threads for HTTP request handling)
 - H2 (embedded) for development
 - Jackson (jackson-databind) for JSON
 - SLF4J simple for logging
@@ -36,13 +37,19 @@ Build & run
   - java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
 - From IDE: run org.example.Main
 
+Port configuration
+- Default HTTP port: 8080
+- Override via system property: -Dappbana.port=9090
+- Or via environment variable: APPBANA_PORT=9090
+
 Default runtime behavior
 - On startup the app attempts to ensure two metadata tables (in the active datasource):
   - `appbana_schemas(name PK, json CLOB)` — stores schema JSON
   - `appbana_migrations(id IDENTITY, schema_name, sql CLOB, executed_at TIMESTAMP)` — records DDL executed
-- Embedded HTTP server listens on port 8080.
+- Embedded HTTP server listens on the configured port and uses Java virtual threads for request handling.
 - UI builder: http://localhost:8080/ui/builder
 - Datasource UI: http://localhost:8080/ui/datasource
+- Swagger UI: http://localhost:8080/ui/swagger
 - OpenAPI: http://localhost:8080/openapi.json
 
 Datasource management
@@ -132,7 +139,7 @@ Where to change common settings
 - Datasource UI: src/main/resources/ui/datasource.html
 
 Key files
-- src/main/java/org/example/ApiServer.java — HTTP handlers (schema, entity CRUD, datasource management, openapi)
+- src/main/java/org/example/ApiServer.java — HTTP handlers (schema, entity CRUD, datasource management, openapi, swagger UI)
 - src/main/java/org/example/SchemaManager.java — schema persistence and migration
 - src/main/java/org/example/JdbcManager.java — JDBC connection (HikariCP pool; uses active datasource)
 - src/main/java/org/example/ConfigManager.java — loads/saves config; normalizes multi-datasource format
@@ -140,6 +147,7 @@ Key files
 - src/main/java/org/example/model/EntitySchema.java — schema model
 - src/main/resources/ui/builder.html — minimal schema builder
 - src/main/resources/ui/datasource.html — datasource management UI (now includes pool settings)
+- src/main/resources/ui/swagger.html — embedded Swagger UI for /openapi.json
 
 Notes
 - If DB credentials are wrong at startup, the app still starts the server so you can fix settings via `/ui/datasource`.

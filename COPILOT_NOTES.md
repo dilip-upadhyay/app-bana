@@ -3,6 +3,11 @@
 This file summarizes the current state so an automated agent can resume work confidently.
 
 ## Change Log (recent)
+- 2025-09-19: Upgraded to Java 25; HTTP server now uses virtual threads; added Swagger UI.
+  - Maven set to java.version=25; app runs on Java 25.
+  - ApiServer uses virtual-thread-per-request executor (Thread.ofVirtual()).
+  - Port is configurable via -Dappbana.port or APPBANA_PORT (default 8080).
+  - Added /ui/swagger which serves an embedded Swagger UI for /openapi.json.
 - 2025-09-19: Connection pooling via HikariCP with per-datasource settings:
   - Added pool fields to DatasourceConfig: maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName.
   - JdbcManager now builds a HikariCP pool for the active datasource; pool is rebuilt lazily when config changes.
@@ -14,18 +19,19 @@ This file summarizes the current state so an automated agent can resume work con
   - New endpoints: GET /ui/datasource/list, GET /ui/datasource/config, POST /ui/datasource/save, POST /ui/datasource/activate, POST /ui/datasource/delete.
   - Config model extended: AppConfig.datasources[] + activeDatasource; DatasourceConfig {name,type,jdbcUrl,username,password,driver}.
   - Driver inference from type/URL when driver blank.
-  - Startup resiliency: server still starts if DB init fails to allow fixing datasource via UI.
+  - Startup resiliency: server still starts if DB init fails to allow fixing datasource via /ui/datasource.
 - 2025-09-14: OpenAPI endpoint added at /openapi.json (generated from saved schemas).
 - 2025-09-14: UI kept minimal for schema builder (builder-v1).
 
 ## Key components
-- Main.java — entrypoint. Starts SchemaManager.init() (best-effort) and ApiServer on port 8080.
+- Main.java — entrypoint. Starts SchemaManager.init() (best-effort) and ApiServer on configured port.
 - ApiServer.java — HTTP server with handlers:
   - /schema — save/preview/list/load schemas
   - /api/* — runtime CRUD for saved entities
   - /openapi.json — OpenAPI 3.0 for all CRUD endpoints
   - /ui/builder — serves builder.html
   - /ui/datasource — serves datasource.html
+  - /ui/swagger — serves swagger.html (Swagger UI for /openapi.json)
   - /ui/datasource/* — JSON endpoints (list/config/save/activate/delete) — now include pool fields
 - SchemaManager.java — validates/persists schema JSON; creates/migrates tables; migration preview.
 - JdbcManager.java — HikariCP pool for active datasource; infers driver from type/URL; ensures meta tables.
@@ -38,6 +44,7 @@ This file summarizes the current state so an automated agent can resume work con
 Frontend (resources/ui)
 - builder.html — minimal schema builder posting to /schema.
 - datasource.html — multi-DS management UI with Type selector, driver/URL hints, and Connection Pool section.
+- swagger.html — embedded Swagger UI for /openapi.json at /ui/swagger.
 
 ## Behavior and contracts
 - Active datasource governs all DB ops. Changing active or pool config rebuilds the pool on next use.
@@ -70,16 +77,16 @@ Frontend (resources/ui)
 - POST /schema?preview=true → returns planned DDL (no changes)
 - POST /schema → apply schema (create/migrate)
 - CRUD: POST/GET /api/{entity}, GET/PUT/DELETE /api/{entity}/{id}
-- OpenAPI: GET /openapi.json
+- OpenAPI: GET /openapi.json; Swagger UI: GET /ui/swagger
 
 ## Startup and troubleshooting
-- If port 8080 is busy, free it before start (BindException).
+- If default port 8080 is busy, override with -Dappbana.port=8081 or APPBANA_PORT.
 - If DB init fails (wrong creds), server still starts; use /ui/datasource to fix and retry operations.
 
 ## Quick local smoke (manual)
 - Open /ui/datasource, add or load a datasource; optionally set pool fields; Save (auto-activates); then refresh list.
 - Open /ui/builder, create a test schema; POST to /schema; verify CRUD at /api/{entity}.
-- Fetch /openapi.json to confirm spec includes your entity.
+- Fetch /openapi.json or visit /ui/swagger to confirm spec includes your entity.
 
 ## Next steps (suggested)
 - Add auth to /schema, /api/*, and /ui/datasource/*.

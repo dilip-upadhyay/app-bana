@@ -8,6 +8,11 @@ import org.slf4j.LoggerFactory;
 public class Main {
     private static final Logger LOG = LoggerFactory.getLogger(Main.class);
 
+    private static int parseIntOrDefault(String s, int def) {
+        if (s == null || s.isBlank()) return def;
+        try { return Integer.parseInt(s.trim()); } catch (Exception ignored) { return def; }
+    }
+
     public static void main(String[] args) {
         try {
             // initialize DB metadata (best-effort)
@@ -16,9 +21,11 @@ public class Main {
             } catch (Exception initErr) {
                 LOG.warn("DB initialization failed: {}. Server will still start so you can fix datasource via /ui/datasource.", initErr.toString());
             }
-            // start HTTP API server
-            ApiServer.start(8080);
-            System.out.println("AppBana running. Use /schema to POST schemas and /api/{entity} to access data.");
+            // start HTTP API server (port configurable via -Dappbana.port or APPBANA_PORT)
+            int port = Integer.getInteger("appbana.port",
+                    parseIntOrDefault(System.getenv("APPBANA_PORT"), 8080));
+            ApiServer.start(port);
+            System.out.println("AppBana running on port " + port + ". Use /schema to POST schemas and /api/{entity} to access data.");
         } catch (Exception e) {
             LOG.error("Fatal error starting AppBana", e);
             System.exit(1);

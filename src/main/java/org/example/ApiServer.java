@@ -164,6 +164,25 @@ public class ApiServer {
             }
         });
 
+        // Add Swagger UI page
+        server.createContext("/ui/swagger", exchange -> {
+            try (InputStream is = ApiServer.class.getResourceAsStream("/ui/swagger.html")) {
+                if (is == null) {
+                    byte[] b = "Not found".getBytes();
+                    exchange.sendResponseHeaders(404, b.length);
+                    try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
+                    return;
+                }
+                byte[] b = is.readAllBytes();
+                exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+                exchange.sendResponseHeaders(200, b.length);
+                try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
+            } catch (Exception e) {
+                LOG.error("Failed to serve swagger UI", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
         // return current active datasource config (without password)
         server.createContext("/ui/datasource/config", exchange -> {
             try {
@@ -366,7 +385,8 @@ public class ApiServer {
             }
         });
 
-        server.setExecutor(null);
+        // Use virtual threads for handling requests (Java 21+ feature)
+        server.setExecutor(r -> Thread.ofVirtual().start(r));
         server.start();
         LOG.info("Server started on port {}", port);
     }
