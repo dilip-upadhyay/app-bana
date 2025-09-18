@@ -24,16 +24,69 @@ public class SchemaManager {
         JdbcManager.ensureMetaTable();
     }
 
+    // Detect current dialect based on active datasource
+    private static String dialect() {
+        AppConfig cfg = ConfigManager.getConfig();
+        String active = cfg.getActiveDatasource();
+        String type = null; String url = null;
+        if (cfg.getDatasources() != null) {
+            for (DatasourceConfig ds : cfg.getDatasources()) {
+                if (ds.getName() != null && ds.getName().equals(active)) {
+                    type = ds.getType(); url = ds.getJdbcUrl(); break;
+                }
+            }
+        }
+        if ((type == null || type.isBlank()) && url == null) {
+            type = cfg.getName(); // fallback (unlikely used)
+            url = cfg.getJdbcUrl();
+        }
+        if (type != null && !type.isBlank()) return type.toLowerCase();
+        if (url == null) return "h2";
+        if (url.startsWith("jdbc:h2:")) return "h2";
+        if (url.startsWith("jdbc:postgresql:")) return "postgres";
+        if (url.startsWith("jdbc:mysql:")) return "mysql";
+        if (url.startsWith("jdbc:mariadb:")) return "mariadb";
+        if (url.startsWith("jdbc:sqlserver:")) return "mssql";
+        if (url.startsWith("jdbc:oracle:")) return "oracle";
+        if (url.startsWith("jdbc:sqlite:")) return "sqlite";
+        return "h2";
+    }
+
     public static void saveSchema(EntitySchema schema) {
         validateSchema(schema);
+        // Ensure meta tables exist in the current (possibly new) active datasource
+        JdbcManager.ensureMetaTable();
         try (Connection c = JdbcManager.getConnection()) {
             // store JSON
             String json = M.writeValueAsString(schema);
-            String upsert = "MERGE INTO appbana_schemas (name, json) KEY(name) VALUES (?, ?)";
-            try (PreparedStatement ps = c.prepareStatement(upsert)) {
-                ps.setString(1, schema.getName());
-                ps.setString(2, json);
-                ps.executeUpdate();
+            String d = dialect();
+            if ("postgres".equals(d)) {
+                String upsert = "INSERT INTO appbana_schemas(name, json) VALUES (?, ?) ON CONFLICT (name) DO UPDATE SET json = EXCLUDED.json";
+                try (PreparedStatement ps = c.prepareStatement(upsert)) {
+                    ps.setString(1, schema.getName());
+                    ps.setString(2, json);
+                    ps.executeUpdate();
+                }
+            } else {
+                String upsert = "MERGE INTO appbana_schemas (name, json) KEY(name) VALUES (?, ?)";
+                try (PreparedStatement ps = c.prepareStatement(upsert)) {
+                    ps.setString(1, schema.getName());
+                    ps.setString(2, json);
+                    ps.executeUpdate();
+                } catch (SQLException e) {
+                    // Fallback for engines without H2 MERGE support: try insert-then-update pattern
+                    try (PreparedStatement ins = c.prepareStatement("INSERT INTO appbana_schemas(name, json) VALUES (?, ?)")) {
+                        ins.setString(1, schema.getName());
+                        ins.setString(2, json);
+                        ins.executeUpdate();
+                    } catch (SQLException dup) {
+                        try (PreparedStatement upd = c.prepareStatement("UPDATE appbana_schemas SET json = ? WHERE name = ?")) {
+                            upd.setString(1, json);
+                            upd.setString(2, schema.getName());
+                            upd.executeUpdate();
+                        }
+                    }
+                }
             }
             // create or migrate table
             ensureTable(schema, c);
@@ -43,6 +96,8 @@ public class SchemaManager {
     }
 
     public static EntitySchema loadSchema(String name) {
+        // Ensure meta table exists in the active datasource before querying
+        JdbcManager.ensureMetaTable();
         try (Connection c = JdbcManager.getConnection();
              PreparedStatement ps = c.prepareStatement("SELECT json FROM appbana_schemas WHERE name = ?")) {
             ps.setString(1, name);
@@ -61,11 +116,12 @@ public class SchemaManager {
     private static void ensureTable(EntitySchema schema, Connection c) throws SQLException {
         String table = schema.getName();
         DatabaseMetaData md = c.getMetaData();
+        String d = dialect();
         // check if table exists
         try (ResultSet tables = md.getTables(null, null, table.toUpperCase(), null)) {
             boolean exists = tables.next();
             if (!exists) {
-                createTable(schema, c);
+                createTable(schema, c, d);
             } else {
                 // table exists: check for missing columns and add them, detect renames and type changes
                 Map<String, ColumnInfo> existing = new HashMap<>();
@@ -97,7 +153,7 @@ public class SchemaManager {
                     }
 
                     if (!existing.containsKey(targetLower)) {
-                        String alter = "ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " " + sqlType(f);
+                        String alter = "ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " " + sqlType(f, d);
                         try (Statement s = c.createStatement()) {
                             s.execute(alter);
                             recordMigration(c, schema.getName(), alter);
@@ -105,10 +161,15 @@ public class SchemaManager {
                     } else {
                         // detect type change
                         ColumnInfo info = existing.get(targetLower);
-                        String desiredType = normalizeSqlType(sqlType(f));
+                        String desiredType = normalizeSqlType(sqlType(f, d));
                         String currentType = normalizeSqlType(info.typeName + (info.size > 0 ? "(" + info.size + ")" : ""));
                         if (!typesEquivalent(currentType, desiredType)) {
-                            String alterType = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " SET DATA TYPE " + sqlType(f);
+                            String alterType;
+                            if ("postgres".equals(d)) {
+                                alterType = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " TYPE " + sqlType(f, d);
+                            } else {
+                                alterType = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " SET DATA TYPE " + sqlType(f, d);
+                            }
                             try (Statement s = c.createStatement()) {
                                 s.execute(alterType);
                                 recordMigration(c, schema.getName(), alterType);
@@ -121,7 +182,7 @@ public class SchemaManager {
     }
 
     private static void recordMigration(Connection c, String schemaName, String sql) {
-        try (PreparedStatement ps = c.prepareStatement("INSERT INTO appbana_migrations (schema_name, sql) VALUES (?, ?)") ) {
+        try (PreparedStatement ps = c.prepareStatement("INSERT INTO appbana_migrations (schema_name, sql) VALUES (?, ?)" ) ) {
             ps.setString(1, schemaName);
             ps.setString(2, sql);
             ps.executeUpdate();
@@ -145,12 +206,12 @@ public class SchemaManager {
         ColumnInfo(String name, String typeName, int size) { this.name = name; this.typeName = typeName; this.size = size; }
     }
 
-    private static void createTable(EntitySchema schema, Connection c) throws SQLException {
+    private static void createTable(EntitySchema schema, Connection c, String dialect) throws SQLException {
         String table = schema.getName();
         List<String> cols = new ArrayList<>();
         String pk = null;
         for (EntitySchema.Field f : schema.getFields()) {
-            String col = quote(f.getName()) + " " + sqlType(f);
+            String col = quote(f.getName()) + " " + sqlType(f, dialect);
             if (f.isPrimaryKey()) {
                 pk = quote(f.getName());
             }
@@ -196,18 +257,42 @@ public class SchemaManager {
         }
     }
 
-    private static String sqlType(EntitySchema.Field f) {
+    private static String sqlType(EntitySchema.Field f, String dialect) {
         String t = f.getType().toLowerCase();
+        boolean aiPk = f.isPrimaryKey() && f.isAutoIncrement();
+        if ("postgres".equals(dialect)) {
+            switch (t) {
+                case "string":
+                case "varchar":
+                    int len = (f.getLength() != null) ? f.getLength() : 255;
+                    return "VARCHAR(" + len + ")";
+                case "int":
+                case "integer":
+                    return aiPk ? "SERIAL" : "INTEGER";
+                case "long":
+                    return aiPk ? "BIGSERIAL" : "BIGINT";
+                case "boolean":
+                    return "BOOLEAN";
+                case "date":
+                case "timestamp":
+                    return "TIMESTAMP";
+                case "text":
+                    return "TEXT";
+                default:
+                    return "VARCHAR(255)";
+            }
+        }
+        // default (H2/MySQL/etc.)
         switch (t) {
             case "string":
             case "varchar":
                 int len = (f.getLength() != null) ? f.getLength() : 255;
-                return "VARCHAR(" + len + ")" + (f.isPrimaryKey() && f.isAutoIncrement() ? " AUTO_INCREMENT" : "");
+                return "VARCHAR(" + len + ")" + (aiPk ? " AUTO_INCREMENT" : "");
             case "int":
             case "integer":
-                return "INT" + (f.isPrimaryKey() && f.isAutoIncrement() ? " AUTO_INCREMENT" : "");
+                return "INT" + (aiPk ? " AUTO_INCREMENT" : "");
             case "long":
-                return "BIGINT" + (f.isPrimaryKey() && f.isAutoIncrement() ? " AUTO_INCREMENT" : "");
+                return "BIGINT" + (aiPk ? " AUTO_INCREMENT" : "");
             case "boolean":
                 return "BOOLEAN";
             case "date":
@@ -233,6 +318,8 @@ public class SchemaManager {
     // --- NEW: migration preview (generateMigrationPlan) ---
     public static List<String> generateMigrationPlan(EntitySchema schema) {
         validateSchema(schema);
+        // Ensure meta tables exist in the active datasource (safe no-op if already created)
+        JdbcManager.ensureMetaTable();
         List<String> plan = new ArrayList<>();
         try (Connection c = JdbcManager.getConnection()) {
             String table = schema.getName();
@@ -245,8 +332,9 @@ public class SchemaManager {
                 // build CREATE TABLE statement (same as createTable but do not execute)
                 List<String> cols = new ArrayList<>();
                 String pk = null;
+                String d = dialect();
                 for (EntitySchema.Field f : schema.getFields()) {
-                    String col = quote(f.getName()) + " " + sqlType(f);
+                    String col = quote(f.getName()) + " " + sqlType(f, d);
                     if (f.isPrimaryKey()) pk = quote(f.getName());
                     cols.add(col);
                 }
@@ -270,6 +358,7 @@ public class SchemaManager {
                 }
             }
 
+            String d = dialect();
             for (EntitySchema.Field f : schema.getFields()) {
                 String target = f.getName();
                 String targetLower = target.toLowerCase();
@@ -283,14 +372,16 @@ public class SchemaManager {
                     }
                 }
                 if (!existing.containsKey(targetLower)) {
-                    String alter = "ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " " + sqlType(f);
+                    String alter = "ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " " + sqlType(f, d);
                     plan.add(alter);
                 } else {
                     ColumnInfo info = existing.get(targetLower);
-                    String desiredType = normalizeSqlType(sqlType(f));
+                    String desiredType = normalizeSqlType(sqlType(f, d));
                     String currentType = normalizeSqlType(info.typeName + (info.size > 0 ? "(" + info.size + ")" : ""));
                     if (!typesEquivalent(currentType, desiredType)) {
-                        String alterType = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " SET DATA TYPE " + sqlType(f);
+                        String alterType = "postgres".equals(d)
+                                ? ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " TYPE " + sqlType(f, d))
+                                : ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " SET DATA TYPE " + sqlType(f, d));
                         plan.add(alterType);
                     }
                 }
@@ -303,6 +394,8 @@ public class SchemaManager {
 
     // --- NEW: list schema names (all) ---
     public static List<String> listSchemaNames() {
+        // Ensure meta table exists in the active datasource before querying
+        JdbcManager.ensureMetaTable();
         List<String> names = new ArrayList<>();
         try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement("SELECT name FROM appbana_schemas ORDER BY name")) {
             try (ResultSet rs = ps.executeQuery()) {
@@ -316,6 +409,8 @@ public class SchemaManager {
 
     // --- NEW: list schema names with pagination and optional search q (substring match) ---
     public static List<String> listSchemaNames(int page, int size, String q) {
+        // Ensure meta table exists in the active datasource before querying
+        JdbcManager.ensureMetaTable();
         List<String> names = new ArrayList<>();
         if (page < 1) page = 1;
         if (size <= 0) size = 10;
