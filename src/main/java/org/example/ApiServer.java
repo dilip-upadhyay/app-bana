@@ -171,6 +171,47 @@ public class ApiServer {
         server.createContext("/schema", new SchemaHandler());
         server.createContext("/api", new EntityHandler());
 
+        // Health endpoint (liveness)
+        server.createContext("/health", exchange -> {
+            try {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) { send(exchange, 405, "{\"error\":\"method not allowed\"}"); return; }
+                sendJson(exchange, 200, Map.of("status", "UP"));
+            } catch (Exception e) {
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ignored) {}
+            }
+        });
+
+        // Readiness endpoint
+        server.createContext("/ready", exchange -> {
+            try {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) { send(exchange, 405, "{\"error\":\"method not allowed\"}"); return; }
+                long start = System.currentTimeMillis();
+                try (Connection c = JdbcManager.getConnection()) {
+                    DatabaseMetaData md = c.getMetaData();
+                    long elapsed = System.currentTimeMillis() - start;
+                    AppConfig cfg = ConfigManager.getConfig();
+                    String active = cfg.getActiveDatasource();
+                    Map<String,Object> out = new LinkedHashMap<>();
+                    out.put("ok", true);
+                    out.put("activeDatasource", active);
+                    out.put("dbProduct", md.getDatabaseProductName());
+                    out.put("dbVersion", md.getDatabaseProductVersion());
+                    out.put("elapsedMs", elapsed);
+                    sendJson(exchange, 200, out);
+                } catch (Exception ce) {
+                    long elapsed = System.currentTimeMillis() - start;
+                    sendJson(exchange, 503, Map.of(
+                        "ok", false,
+                        "error", ce.getMessage(),
+                        "elapsedMs", elapsed
+                    ));
+                }
+            } catch (Exception e) {
+                LOG.error("/ready failed", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ignored) {}
+            }
+        });
+
         // Return a machine-readable list of API endpoints generated from saved entities
         server.createContext("/api/endpoints", exchange -> {
             try {

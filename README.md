@@ -9,6 +9,7 @@ Quick summary
 - Datasources: built-in UI to add/manage multiple datasources (by name and type) and select the active one at runtime.
 - Pooling: HikariCP connection pool with configurable settings per datasource.
 - OpenAPI: live spec at /openapi.json and an embedded Swagger UI at /ui/swagger.
+- Health: /health (liveness) and /ready (readiness with DB check).
 
 Status of repository
 - Fully working MVP backend and minimal frontend builder included.
@@ -52,6 +53,12 @@ Default runtime behavior
 - Datasource UI: http://localhost:8080/ui/datasource
 - Swagger UI: http://localhost:8080/ui/swagger
 - OpenAPI: http://localhost:8080/openapi.json
+- Health: http://localhost:8080/health (liveness) and http://localhost:8080/ready (readiness)
+
+Health & readiness
+- GET `/health` → `{ "status": "UP" }` (process liveness)
+- GET `/ready` → `{ ok: boolean, activeDatasource?: string, dbProduct?: string, dbVersion?: string, elapsedMs: number, error?: string }`
+  - Attempts a DB connection using the active datasource. Returns HTTP 200 when ok=true, or 503 with error details when ok=false.
 
 Datasource management
 - UI: `/ui/datasource` supports Add/Update, List, Activate, Delete, and Test Connection (both from the form and via a per-datasource “Test” action in the list).
@@ -137,6 +144,8 @@ API endpoints (runtime generic CRUD)
 - PUT /api/{entity}/{id} — update by id
 - DELETE /api/{entity}/{id} — delete by id
 - GET /openapi.json — OpenAPI 3.0 spec for all generated endpoints
+- GET /health — liveness check
+- GET /ready — readiness check with DB metadata
 
 Schema JSON (example)
 ```

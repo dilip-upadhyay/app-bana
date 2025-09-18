@@ -14,6 +14,7 @@ Contents
 - Designing entities (Schema Builder)
 - Using the runtime CRUD APIs
 - OpenAPI & Swagger UI
+- Health & readiness
 - Troubleshooting & tips
 - Security notes
 - UI step-by-step walkthroughs (all features)
@@ -42,6 +43,7 @@ java -Dappbana.port=8081 -jar target/app-bana-1.0-SNAPSHOT-fat.jar
 - Swagger UI: http://localhost:8080/ui/swagger
 - OpenAPI JSON: http://localhost:8080/openapi.json
 - API endpoints index (machine-readable): http://localhost:8080/api/endpoints
+- Health: http://localhost:8080/health and readiness: http://localhost:8080/ready
 
 Configuration
 - Port
@@ -169,6 +171,10 @@ OpenAPI & Swagger UI
 - Spec: GET /openapi.json
 - UI: /ui/swagger (renders the spec)
 - Tip: Re-open Swagger after adding schemas to see new endpoints.
+
+Health & readiness
+- GET `/health` → `{ "status": "UP" }` (process liveness)
+- GET `/ready` → `{ ok: boolean, activeDatasource?: string, dbProduct?: string, dbVersion?: string, elapsedMs: number, error?: string }` (DB readiness)
 
 Troubleshooting & tips
 - Wrong credentials
