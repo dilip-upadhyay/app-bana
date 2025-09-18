@@ -171,54 +171,36 @@ public class ApiServer {
         server.createContext("/schema", new SchemaHandler());
         server.createContext("/api", new EntityHandler());
 
-        // Health endpoint (liveness)
-        server.createContext("/health", exchange -> {
-            try {
-                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) { send(exchange, 405, "{\"error\":\"method not allowed\"}"); return; }
-                sendJson(exchange, 200, Map.of("status", "UP"));
-            } catch (Exception e) {
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ignored) {}
-            }
+        // Router integration for common utility endpoints
+        org.example.api.Router router = new org.example.api.Router();
+        router.get("/health", (req, res) -> {
+            res.json(200, Map.of("status", "UP"));
         });
-
-        // Readiness endpoint
-        server.createContext("/ready", exchange -> {
-            try {
-                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) { send(exchange, 405, "{\"error\":\"method not allowed\"}"); return; }
-                long start = System.currentTimeMillis();
-                try (Connection c = JdbcManager.getConnection()) {
-                    DatabaseMetaData md = c.getMetaData();
-                    long elapsed = System.currentTimeMillis() - start;
-                    AppConfig cfg = ConfigManager.getConfig();
-                    String active = cfg.getActiveDatasource();
-                    Map<String,Object> out = new LinkedHashMap<>();
-                    out.put("ok", true);
-                    out.put("activeDatasource", active);
-                    out.put("dbProduct", md.getDatabaseProductName());
-                    out.put("dbVersion", md.getDatabaseProductVersion());
-                    out.put("elapsedMs", elapsed);
-                    sendJson(exchange, 200, out);
-                } catch (Exception ce) {
-                    long elapsed = System.currentTimeMillis() - start;
-                    sendJson(exchange, 503, Map.of(
+        router.get("/ready", (req, res) -> {
+            long start = System.currentTimeMillis();
+            try (Connection c = JdbcManager.getConnection()) {
+                DatabaseMetaData md = c.getMetaData();
+                long elapsed = System.currentTimeMillis() - start;
+                AppConfig cfg = ConfigManager.getConfig();
+                String active = cfg.getActiveDatasource();
+                Map<String,Object> out = new LinkedHashMap<>();
+                out.put("ok", true);
+                out.put("activeDatasource", active);
+                out.put("dbProduct", md.getDatabaseProductName());
+                out.put("dbVersion", md.getDatabaseProductVersion());
+                out.put("elapsedMs", elapsed);
+                res.json(200, out);
+            } catch (Exception ce) {
+                long elapsed = System.currentTimeMillis() - start;
+                res.json(503, Map.of(
                         "ok", false,
                         "error", ce.getMessage(),
                         "elapsedMs", elapsed
-                    ));
-                }
-            } catch (Exception e) {
-                LOG.error("/ready failed", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ignored) {}
+                ));
             }
         });
-
-        // Return a machine-readable list of API endpoints generated from saved entities
-        server.createContext("/api/endpoints", exchange -> {
+        router.get("/api/endpoints", (req, res) -> {
             try {
-                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
-                    return;
-                }
                 List<String> names = SchemaManager.listSchemaNames();
                 List<Map<String,Object>> out = new ArrayList<>();
                 for (String n : names) {
@@ -233,11 +215,29 @@ public class ApiServer {
                     m.put("endpoints", eps);
                     out.add(m);
                 }
-                sendJson(exchange, 200, out);
+                res.json(200, out);
             } catch (Exception e) {
                 LOG.error("Failed to build /api/endpoints response", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+                res.json(500, Map.of("error", e.getMessage()));
             }
+        });
+        router.get("/openapi.json", (req, res) -> {
+            try {
+                List<String> names = SchemaManager.listSchemaNames();
+                List<org.example.model.EntitySchema> schemas = new ArrayList<>();
+                for (String n : names) {
+                    org.example.model.EntitySchema s = SchemaManager.loadSchema(n);
+                    if (s != null) schemas.add(s);
+                }
+                String spec = org.example.OpenApiGenerator.generate(schemas);
+                res.text(200, spec, "application/json; charset=utf-8");
+            } catch (Exception e) {
+                LOG.error("Failed to serve OpenAPI spec", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        server.createContext("/", exchange -> {
+            try { router.handle(exchange); } catch (IOException ioe) { LOG.error("Router handle failed", ioe); }
         });
 
         // serve the UI builder static page
@@ -255,30 +255,6 @@ public class ApiServer {
                 try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
             } catch (Exception e) {
                 LOG.error("Failed to serve UI builder", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
-            }
-        });
-
-        // serve OpenAPI spec at /openapi.json
-        server.createContext("/openapi.json", exchange -> {
-            try {
-                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
-                    return;
-                }
-                List<String> names = SchemaManager.listSchemaNames();
-                List<org.example.model.EntitySchema> schemas = new ArrayList<>();
-                for (String n : names) {
-                    org.example.model.EntitySchema s = SchemaManager.loadSchema(n);
-                    if (s != null) schemas.add(s);
-                }
-                String spec = org.example.OpenApiGenerator.generate(schemas);
-                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-                byte[] b = spec.getBytes();
-                exchange.sendResponseHeaders(200, b.length);
-                try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
-            } catch (Exception e) {
-                LOG.error("Failed to serve OpenAPI spec", e);
                 try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
             }
         });
