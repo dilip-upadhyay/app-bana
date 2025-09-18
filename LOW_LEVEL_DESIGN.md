@@ -30,6 +30,7 @@ Key packages and classes (src/main/java/org/example)
   - /ui/datasource — serves datasource.html
   - /ui/swagger — serves swagger.html (embedded Swagger UI loading /openapi.json)
   - /ui/datasource/config|list|save|activate|delete — JSON endpoints for multi-DS management (no passwords returned)
+  - /ui/datasource/test — JSON endpoint to attempt a one-off JDBC connection from provided fields (or by name); returns {ok,message|error,url,dbProduct,dbVersion,elapsedMs}
   - /ui/datasource/save — Also supports server-side JDBC URL construction: if `url` is omitted, ApiServer builds one from components (type, host, port, dbname, params, and H2/SQLite-specific fields). See buildJdbcUrl() helper inside ApiServer.
 - SchemaManager.java — Schema persistence/migrations:
   - init(): ensures meta tables
@@ -49,7 +50,7 @@ Key packages and classes (src/main/java/org/example)
 
 Static resources (src/main/resources/ui)
 - builder.html — Minimal schema builder UI (posts JSON to /schema; also useful for preview).
-- datasource.html — Multi-datasource management UI. Fields: name, type, jdbcUrl, username, password, driver, and Pool section (maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName). Actions: Save/Activate/Delete/List/Load. Includes a JDBC URL Builder that can synthesize URLs for H2/Postgres/MySQL/MariaDB/SQL Server/Oracle/SQLite from host/port/db/params.
+- datasource.html — Multi-datasource management UI with a JDBC URL Builder and a Test Connection button. The list also offers a per-row “Test” action that calls /ui/datasource/test with the saved datasource name and shows the result. Fields: name, type, jdbcUrl, username, password, driver, and Pool section (maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName). Actions: Save/Activate/Delete/List/Load. Includes a JDBC URL Builder that can synthesize URLs for H2/Postgres/MySQL/MariaDB/SQL Server/Oracle/SQLite from host/port/db/params.
 - swagger.html — Embedded Swagger UI for /openapi.json.
 
 Datasource URL construction (details)

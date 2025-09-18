@@ -38,6 +38,7 @@ Purpose
       - Components form (when url omitted): { name, type, host, port, dbname, params?, username?, password?, driver?, pool... }
         - H2 extras: h2Mode (file|mem), h2File, h2MemName; SQLite extra: sqliteFile
     - Empty/missing password does not overwrite existing
+  - POST /ui/datasource/test — attempt a one-off JDBC connection using provided url or components (or by name); returns {ok,message|error,url,dbProduct,dbVersion,elapsedMs}
   - POST /ui/datasource/activate — set active datasource by name
   - POST /ui/datasource/delete — delete datasource by name (reassigns active if needed)
 - OpenAPI: GET /openapi.json — generated spec for CRUD endpoints
@@ -68,7 +69,7 @@ Purpose
 
 8. Frontend UIs
 - builder.html — minimal schema builder (unchanged)
-- datasource.html — multi-datasource management UI with pool settings and a JDBC URL Builder that can generate URLs for H2/Postgres/MySQL/MariaDB/SQL Server/Oracle/SQLite
+- datasource.html — multi-datasource management UI with pool settings and a JDBC URL Builder that can generate URLs for H2/Postgres/MySQL/MariaDB/SQL Server/Oracle/SQLite; includes a “Test Connection” button and per-datasource “Test” action in the list
 - swagger.html — embedded Swagger UI for /openapi.json
 
 9. Build, run, environment
@@ -105,5 +106,6 @@ Purpose
 15. Change Log (recent)
 - 2025-09-19: Upgraded to Java 25, virtual threads for HTTP requests; added Swagger UI (/ui/swagger)
 - 2025-09-19: Added server-side JDBC URL construction in /ui/datasource/save (accepts type/host/port/dbname/params, plus H2/SQLite specific fields)
+- 2025-09-19: Added Test Connection feature: UI button, per-row test action, and POST /ui/datasource/test endpoint
 - 2025-09-19: Added HikariCP connection pooling with per-datasource settings; UI and endpoints extended to handle pool fields.
 - 2025-09-14: Added multi-datasource management (UI and endpoints); config format extended with datasources[] and activeDatasource; driver inference by type/URL; startup resiliency when DB init fails.

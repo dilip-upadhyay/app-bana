@@ -14,6 +14,9 @@
         .hint { font-size: 12px; color: #666; }
         .section { margin-top: 16px; padding-top: 8px; border-top: 1px dashed #ccc; }
         .row { margin: 4px 0; }
+        .ok { color: #0a0; }
+        .err { color: #a00; }
+        pre.light { background: #f7f7f7; padding: 6px; overflow: auto; }
     </style>
 </head>
 <body>
@@ -105,8 +108,10 @@
             </div>
 
             <button type="submit">Save</button>
+            <button type="button" id="testBtn">Test Connection</button>
         </form>
         <div id="result" class="muted"></div>
+        <div id="testOutput"></div>
     </div>
 
     <div>
@@ -212,6 +217,7 @@
                     '<button class="small" onclick="loadIntoForm(\'' + encodeURIComponent(d.name) + '\')">Load</button>' +
                     '<button class="small" onclick="activateDs(\'' + encodeURIComponent(d.name) + '\')">Activate</button>' +
                     '<button class="small" onclick="deleteDs(\'' + encodeURIComponent(d.name) + '\')">Delete</button>' +
+                    '<button class="small" onclick="testNamed(\'' + encodeURIComponent(d.name) + '\')">Test</button>' +
                     '</td>' +
                     '</tr>';
             }
@@ -390,6 +396,69 @@
     };
 
     function toNum(v){ if (v==null || v==='') return undefined; const n=Number(v); return Number.isNaN(n)? undefined : n; }
+
+    async function testConnection() {
+        const form = document.getElementById('dsForm');
+        // Gather payload: prefer explicit url if provided, otherwise components
+        const payload = {
+            name: form.name.value || undefined,
+            type: form.type.value === 'custom' ? undefined : form.type.value,
+            url: form.url.value || undefined,
+            username: form.username.value || undefined,
+            // send empty string if password typed; otherwise omit to avoid overwriting in other flows
+            password: (form.password.value !== '' ? form.password.value : ''),
+            driver: form.driver.value || undefined,
+            // components
+            host: val('host') || undefined,
+            port: val('port') || undefined,
+            dbname: val('dbname') || undefined,
+            params: val('params') || undefined,
+            h2Mode: (document.getElementById('h2Mode')? document.getElementById('h2Mode').value : undefined),
+            h2File: (document.getElementById('h2File')? val('h2File') : undefined),
+            h2MemName: (document.getElementById('h2MemName')? val('h2MemName') : undefined),
+            sqliteFile: (document.getElementById('sqliteFile')? val('sqliteFile') : undefined)
+        };
+        const out = document.getElementById('testOutput');
+        out.innerHTML = '<span class="muted">Testing connection...</span>';
+        try {
+            const resp = await fetch('/ui/datasource/test', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+            });
+            const json = await resp.json().catch(() => ({}));
+            if (json && json.ok) {
+                out.innerHTML = '<div class="ok">✔ ' + (json.message||'Connected') + ' (' + (json.elapsedMs||'?') + ' ms)</div>' +
+                    '<pre class="light">URL: ' + (json.url||'') + '\nDB: ' + (json.dbProduct||'') + ' ' + (json.dbVersion||'') + '</pre>';
+            } else {
+                out.innerHTML = '<div class="err">✖ Connection failed</div>' +
+                    '<pre class="light">URL: ' + ((json && json.url) || payload.url || '(built from fields)') + '\nError: ' + ((json && json.error) || (await resp.text())) + '</pre>';
+            }
+        } catch (e) {
+            out.innerHTML = '<div class="err">✖ Error running test</div><pre class="light">' + e + '</pre>';
+        }
+    }
+
+    async function testNamed(name) {
+        const dec = decodeURIComponent(name);
+        const out = document.getElementById('testOutput');
+        out.innerHTML = '<span class="muted">Testing ' + dec + '...</span>';
+        try {
+            const resp = await fetch('/ui/datasource/test', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: dec})
+            });
+            const json = await resp.json().catch(() => ({}));
+            if (json && json.ok) {
+                out.innerHTML = '<div class="ok">✔ ' + (json.message||'Connected') + ' (' + (json.elapsedMs||'?') + ' ms)</div>' +
+                    '<pre class="light">DS: ' + dec + '\nURL: ' + (json.url||'') + '\nDB: ' + (json.dbProduct||'') + ' ' + (json.dbVersion||'') + '</pre>';
+            } else {
+                out.innerHTML = '<div class="err">✖ Connection failed</div>' +
+                    '<pre class="light">DS: ' + dec + '\nURL: ' + ((json && json.url) || '') + '\nError: ' + ((json && json.error) || (await resp.text())) + '</pre>';
+            }
+        } catch (e) {
+            out.innerHTML = '<div class="err">✖ Error running test</div><pre class="light">' + e + '</pre>';
+        }
+    }
+
+    document.getElementById('testBtn').addEventListener('click', testConnection);
     </script>
 </body>
 </html>

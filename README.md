@@ -53,7 +53,7 @@ Default runtime behavior
 - OpenAPI: http://localhost:8080/openapi.json
 
 Datasource management
-- UI: `/ui/datasource` supports Add/Update, List, Activate, and Delete.
+- UI: `/ui/datasource` supports Add/Update, List, Activate, Delete, and Test Connection.
 - Each datasource has: name, type (h2/postgres/mysql/mariadb/mssql/oracle/sqlite/custom), jdbcUrl, username, password, driver.
 - JDBC URL Builder: optional helper in the form that builds the JDBC URL from fields (type, host, port, database/service, and extra params). Supports H2 (file/mem), Postgres, MySQL, MariaDB, SQL Server, Oracle, and SQLite. Enable Auto-build to keep the URL in sync as you edit fields.
 - Server-side URL build (API): if you POST to `/ui/datasource/save` without `url`, the server will construct it from components. Accepted fields:
@@ -67,6 +67,9 @@ Datasource management
     "username":"sa","password":"Password_123#","driver":"org.postgresql.Driver"
   }
   ```
+- Test connection: click “Test Connection” in the UI to attempt a short-lived connection using the entered fields (uses the URL or builds one from components). The API is also available at `POST /ui/datasource/test`.
+  - Request body: either {url, username?, password?, driver?, type?} or components {type, host, port, dbname, params?, username?, password?, driver?}; `name` can also be provided to test an existing saved datasource.
+  - Response: `{ ok: boolean, message?: string, error?: string, url: string, dbProduct?: string, dbVersion?: string, elapsedMs: number }`
 - Optional pool settings per datasource: maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName.
 - Driver inference: if driver is blank, the system infers it from `type` or the JDBC URL.
 - Active datasource: the server uses the currently active datasource for all DB operations.
@@ -77,6 +80,8 @@ Datasource API (JSON)
 - GET `/ui/datasource/config` → current active datasource details (without password), includes the pool fields.
 - POST `/ui/datasource/save` body: {name, type?, url, username?, password?, driver?, maxPoolSize?, minIdle?, connectionTimeoutMs?, idleTimeoutMs?, maxLifetimeMs?, autoCommit?, poolName?}
   - Upserts the datasource by name; if password is empty/missing it isn’t overwritten; activates the saved datasource.
+- POST `/ui/datasource/test` body: {url?, type?, host?, port?, dbname?, params?, username?, password?, driver?, name?}
+  - Attempts a one-off connection; does not persist; returns `{ok, ...}` with DB product/version on success.
 - POST `/ui/datasource/activate` body: {name}
 - POST `/ui/datasource/delete` body: {name}
 

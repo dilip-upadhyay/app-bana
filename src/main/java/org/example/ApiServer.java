@@ -138,6 +138,34 @@ public class ApiServer {
         }
     }
 
+    private static String inferDriver(String type, String url, String provided) {
+        if (provided != null && !provided.isBlank()) return provided;
+        if (type != null) {
+            String t = type.toLowerCase();
+            switch (t) {
+                case "h2": return "org.h2.Driver";
+                case "postgres":
+                case "postgresql": return "org.postgresql.Driver";
+                case "mysql": return "com.mysql.cj.jdbc.Driver";
+                case "mariadb": return "org.mariadb.jdbc.Driver";
+                case "mssql":
+                case "sqlserver": return "com.microsoft.sqlserver.jdbc.SQLServerDriver";
+                case "oracle": return "oracle.jdbc.OracleDriver";
+                case "sqlite": return "org.sqlite.JDBC";
+            }
+        }
+        if (url != null) {
+            if (url.startsWith("jdbc:h2:")) return "org.h2.Driver";
+            if (url.startsWith("jdbc:postgresql:")) return "org.postgresql.Driver";
+            if (url.startsWith("jdbc:mysql:")) return "com.mysql.cj.jdbc.Driver";
+            if (url.startsWith("jdbc:mariadb:")) return "org.mariadb.jdbc.Driver";
+            if (url.startsWith("jdbc:sqlserver:")) return "com.microsoft.sqlserver.jdbc.SQLServerDriver";
+            if (url.startsWith("jdbc:oracle:")) return "oracle.jdbc.OracleDriver";
+            if (url.startsWith("jdbc:sqlite:")) return "org.sqlite.JDBC";
+        }
+        return null;
+    }
+
     public static void start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/schema", new SchemaHandler());
@@ -408,6 +436,86 @@ public class ApiServer {
                 }
             } catch (Exception e) {
                 LOG.error("Failed to save datasource config", e);
+                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+            }
+        });
+
+        // test a datasource connection (does not persist)
+        server.createContext("/ui/datasource/test", exchange -> {
+            try {
+                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
+                    return;
+                }
+                Map<String, String> data = M.readValue(exchange.getRequestBody(), new TypeReference<Map<String, String>>() {});
+                String name = data.get("name"); // optional
+                String url = data.get("url");
+                String user = data.get("username");
+                String pw = data.get("password");
+                String drv = data.get("driver");
+                String type = data.get("type");
+
+                // If URL not provided, try building from components
+                if (url == null || url.isBlank()) {
+                    String built = buildJdbcUrl(data);
+                    if (built != null && !built.isBlank()) url = built;
+                }
+
+                // If still no URL, try lookup by name from config
+                if ((url == null || url.isBlank()) && name != null && !name.isBlank()) {
+                    AppConfig cfg = ConfigManager.getConfig();
+                    for (DatasourceConfig ds : cfg.getDatasources()) {
+                        if (name.equals(ds.getName())) {
+                            url = ds.getJdbcUrl();
+                            if (user == null) user = ds.getUsername();
+                            if ((pw == null || pw.isBlank())) pw = ds.getPassword();
+                            if (drv == null) drv = ds.getDriver();
+                            if (type == null) type = ds.getType();
+                            break;
+                        }
+                    }
+                }
+
+                if (url == null || url.isBlank()) {
+                    sendJson(exchange, 200, Map.of("ok", false, "error", "jdbc url is required or constructible from fields"));
+                    return;
+                }
+
+                String driver = inferDriver(type, url, drv);
+                try {
+                    if (driver != null) Class.forName(driver);
+                } catch (Throwable t) {
+                    sendJson(exchange, 200, Map.of("ok", false, "error", "driver not found: " + driver));
+                    return;
+                }
+
+                long start = System.currentTimeMillis();
+                java.sql.DriverManager.setLoginTimeout(5);
+                Properties props = new Properties();
+                if (user != null) props.setProperty("user", user);
+                if (pw != null) props.setProperty("password", pw);
+                try (Connection c = (props.isEmpty()? java.sql.DriverManager.getConnection(url) : java.sql.DriverManager.getConnection(url, props))) {
+                    DatabaseMetaData md = c.getMetaData();
+                    long elapsed = System.currentTimeMillis() - start;
+                    Map<String,Object> out = new LinkedHashMap<>();
+                    out.put("ok", true);
+                    out.put("message", "Connected");
+                    out.put("url", url);
+                    out.put("dbProduct", md.getDatabaseProductName());
+                    out.put("dbVersion", md.getDatabaseProductVersion());
+                    out.put("elapsedMs", elapsed);
+                    sendJson(exchange, 200, out);
+                } catch (Exception ce) {
+                    long elapsed = System.currentTimeMillis() - start;
+                    sendJson(exchange, 200, Map.of(
+                        "ok", false,
+                        "error", ce.getMessage(),
+                        "url", url,
+                        "elapsedMs", elapsed
+                    ));
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to test datasource connection", e);
                 try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
             }
         });
