@@ -53,6 +53,22 @@ public class ApiServer {
         return map;
     }
 
+    private static Integer parseInteger(String s) {
+        if (s == null || s.isBlank()) return null;
+        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return null; }
+    }
+    private static Long parseLong(String s) {
+        if (s == null || s.isBlank()) return null;
+        try { return Long.parseLong(s.trim()); } catch (Exception e) { return null; }
+    }
+    private static Boolean parseBoolean(String s) {
+        if (s == null || s.isBlank()) return null;
+        String v = s.trim().toLowerCase();
+        if ("true".equals(v) || "1".equals(v) || "yes".equals(v) || "y".equals(v)) return true;
+        if ("false".equals(v) || "0".equals(v) || "no".equals(v) || "n".equals(v)) return false;
+        return null;
+    }
+
     public static void start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/schema", new SchemaHandler());
@@ -165,6 +181,14 @@ public class ApiServer {
                         out.put("username", ds.getUsername());
                         out.put("driver", ds.getDriver());
                         out.put("type", ds.getType());
+                        // pool fields (no password)
+                        out.put("maxPoolSize", ds.getMaxPoolSize());
+                        out.put("minIdle", ds.getMinIdle());
+                        out.put("connectionTimeoutMs", ds.getConnectionTimeoutMs());
+                        out.put("idleTimeoutMs", ds.getIdleTimeoutMs());
+                        out.put("maxLifetimeMs", ds.getMaxLifetimeMs());
+                        out.put("autoCommit", ds.getAutoCommit());
+                        out.put("poolName", ds.getPoolName());
                         break;
                     }
                 }
@@ -199,6 +223,15 @@ public class ApiServer {
                     m.put("username", ds.getUsername());
                     m.put("driver", ds.getDriver());
                     m.put("type", ds.getType());
+                    // pool (no password)
+                    m.put("maxPoolSize", ds.getMaxPoolSize());
+                    m.put("minIdle", ds.getMinIdle());
+                    m.put("connectionTimeoutMs", ds.getConnectionTimeoutMs());
+                    m.put("idleTimeoutMs", ds.getIdleTimeoutMs());
+                    m.put("maxLifetimeMs", ds.getMaxLifetimeMs());
+                    m.put("autoCommit", ds.getAutoCommit());
+                    m.put("poolName", ds.getPoolName());
+
                     m.put("active", ds.getName() != null && ds.getName().equals(active));
                     list.add(m);
                 }
@@ -229,6 +262,15 @@ public class ApiServer {
                     String pw = data.get("password");
                     String drv = data.get("driver");
                     String type = data.get("type");
+                    // pool
+                    Integer maxPoolSize = parseInteger(data.get("maxPoolSize"));
+                    Integer minIdle = parseInteger(data.get("minIdle"));
+                    Long connectionTimeoutMs = parseLong(data.get("connectionTimeoutMs"));
+                    Long idleTimeoutMs = parseLong(data.get("idleTimeoutMs"));
+                    Long maxLifetimeMs = parseLong(data.get("maxLifetimeMs"));
+                    Boolean autoCommit = parseBoolean(data.get("autoCommit"));
+                    String poolName = data.get("poolName");
+
                     boolean found = false;
                     for (DatasourceConfig ds : cfg.getDatasources()) {
                         if (name.equals(ds.getName())) {
@@ -237,6 +279,14 @@ public class ApiServer {
                             if (drv != null) ds.setDriver(drv);
                             if (type != null) ds.setType(type);
                             if (pw != null && !pw.isBlank()) ds.setPassword(pw);
+                            // pool apply if present
+                            if (maxPoolSize != null) ds.setMaxPoolSize(maxPoolSize);
+                            if (minIdle != null) ds.setMinIdle(minIdle);
+                            if (connectionTimeoutMs != null) ds.setConnectionTimeoutMs(connectionTimeoutMs);
+                            if (idleTimeoutMs != null) ds.setIdleTimeoutMs(idleTimeoutMs);
+                            if (maxLifetimeMs != null) ds.setMaxLifetimeMs(maxLifetimeMs);
+                            if (autoCommit != null) ds.setAutoCommit(autoCommit);
+                            if (poolName != null) ds.setPoolName(poolName);
                             found = true;
                             break;
                         }
@@ -249,6 +299,14 @@ public class ApiServer {
                         if (pw != null && !pw.isBlank()) ds.setPassword(pw);
                         ds.setDriver(drv);
                         ds.setType(type);
+                        // pool
+                        ds.setMaxPoolSize(maxPoolSize);
+                        ds.setMinIdle(minIdle);
+                        ds.setConnectionTimeoutMs(connectionTimeoutMs);
+                        ds.setIdleTimeoutMs(idleTimeoutMs);
+                        ds.setMaxLifetimeMs(maxLifetimeMs);
+                        ds.setAutoCommit(autoCommit);
+                        ds.setPoolName(poolName);
                         cfg.getDatasources().add(ds);
                     }
                     cfg.setActiveDatasource(name);

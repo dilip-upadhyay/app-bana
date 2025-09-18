@@ -7,12 +7,14 @@ Quick summary
 - Backend: Java (HttpServer) that persists schemas, auto-creates/migrates tables via JDBC, and exposes generic CRUD endpoints at runtime.
 - DB: H2 embedded (file) by default; JDBC usage allows swapping to Postgres/MySQL/etc.
 - Datasources: built-in UI to add/manage multiple datasources (by name and type) and select the active one at runtime.
+- Pooling: HikariCP connection pool with configurable settings per datasource.
 
 Status of repository
 - Fully working MVP backend and minimal frontend builder included.
 - Basic builder-v1 UI is present; advanced builder-v2 files were removed.
 - Swagger/OpenAPI spec is available at `/openapi.json` for all generated REST endpoints.
 - Datasource management UI available at `/ui/datasource` with list/activate/delete actions.
+- HikariCP pool initialized based on the current active datasource; reconfigured when settings change.
 - Built fat JAR available under `target/` after building.
 - COPILOT_NOTES.md contains an agent-friendly snapshot of the current state.
 
@@ -21,6 +23,7 @@ Tech stack
 - H2 (embedded) for development
 - Jackson (jackson-databind) for JSON
 - SLF4J simple for logging
+- HikariCP for JDBC connection pooling
 - Maven build with Shade plugin (uber jar)
 
 Build & run
@@ -45,16 +48,27 @@ Default runtime behavior
 Datasource management
 - UI: `/ui/datasource` supports Add/Update, List, Activate, and Delete.
 - Each datasource has: name, type (h2/postgres/mysql/mariadb/mssql/oracle/sqlite/custom), jdbcUrl, username, password, driver.
+- Optional pool settings per datasource: maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName.
 - Driver inference: if driver is blank, the system infers it from `type` or the JDBC URL.
 - Active datasource: the server uses the currently active datasource for all DB operations.
+- Pool reconfiguration: any change to the active datasource (including pool fields) rebuilds the Hikari pool lazily on the next getConnection().
 
 Datasource API (JSON)
-- GET `/ui/datasource/list` → array of datasources (without passwords), each has {name,type,jdbcUrl,username,driver,active}.
-- GET `/ui/datasource/config` → current active datasource details (without password).
-- POST `/ui/datasource/save` body: {name, type?, url, username?, password?, driver?}
+- GET `/ui/datasource/list` → array of datasources (without passwords), each has {name,type,jdbcUrl,username,driver,active,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName}.
+- GET `/ui/datasource/config` → current active datasource details (without password), includes the pool fields.
+- POST `/ui/datasource/save` body: {name, type?, url, username?, password?, driver?, maxPoolSize?, minIdle?, connectionTimeoutMs?, idleTimeoutMs?, maxLifetimeMs?, autoCommit?, poolName?}
   - Upserts the datasource by name; if password is empty/missing it isn’t overwritten; activates the saved datasource.
 - POST `/ui/datasource/activate` body: {name}
 - POST `/ui/datasource/delete` body: {name}
+
+Pooling defaults (if a field is omitted)
+- maxPoolSize: 10
+- minIdle: 2
+- connectionTimeoutMs: 30000
+- idleTimeoutMs: 600000 (10 minutes)
+- maxLifetimeMs: 1800000 (30 minutes)
+- autoCommit: true
+- poolName: `appbana-<datasourceName>`
 
 Configuration
 - Config file path: `APPBANA_CONFIG` env var or `-Dappbana.config=...` system property (default: `data/appbana-config.json`).
@@ -73,7 +87,14 @@ Configuration
       "jdbcUrl": "jdbc:h2:./data/appbana;AUTO_SERVER=TRUE",
       "username": "sa",
       "password": "secret",
-      "driver": "org.h2.Driver"
+      "driver": "org.h2.Driver",
+      "maxPoolSize": 10,
+      "minIdle": 2,
+      "connectionTimeoutMs": 30000,
+      "idleTimeoutMs": 600000,
+      "maxLifetimeMs": 1800000,
+      "autoCommit": true,
+      "poolName": "appbana-primary"
     }
   ],
   "activeDatasource": "primary"
@@ -106,19 +127,19 @@ Schema JSON (example)
 
 Where to change common settings
 - Port: src/main/java/org/example/Main.java (argument to ApiServer.start)
-- Datasource resolution: src/main/java/org/example/JdbcManager.java
+- Datasource resolution & pooling: src/main/java/org/example/JdbcManager.java
 - Config: src/main/java/org/example/ConfigManager.java and src/main/java/org/example/AppConfig.java
 - Datasource UI: src/main/resources/ui/datasource.html
 
 Key files
 - src/main/java/org/example/ApiServer.java — HTTP handlers (schema, entity CRUD, datasource management, openapi)
 - src/main/java/org/example/SchemaManager.java — schema persistence and migration
-- src/main/java/org/example/JdbcManager.java — JDBC connection (uses active datasource)
+- src/main/java/org/example/JdbcManager.java — JDBC connection (HikariCP pool; uses active datasource)
 - src/main/java/org/example/ConfigManager.java — loads/saves config; normalizes multi-datasource format
-- src/main/java/org/example/AppConfig.java, DatasourceConfig.java — config models
+- src/main/java/org/example/AppConfig.java, DatasourceConfig.java — config models (DatasourceConfig includes pool fields)
 - src/main/java/org/example/model/EntitySchema.java — schema model
 - src/main/resources/ui/builder.html — minimal schema builder
-- src/main/resources/ui/datasource.html — datasource management UI
+- src/main/resources/ui/datasource.html — datasource management UI (now includes pool settings)
 
 Notes
 - If DB credentials are wrong at startup, the app still starts the server so you can fix settings via `/ui/datasource`.
@@ -126,5 +147,5 @@ Notes
 
 Next recommended enhancements
 - Add authentication and role-based access to schema and datasource management.
-- Add connection pooling (HikariCP) and health checks per datasource.
+- Add per-datasource connectivity test/health checks.
 - Add Swagger UI to visualize `/openapi.json`.

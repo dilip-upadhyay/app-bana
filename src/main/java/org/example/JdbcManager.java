@@ -1,11 +1,13 @@
 package org.example;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
 public class JdbcManager {
     private static final Set<String> LOADED = ConcurrentHashMap.newKeySet();
@@ -74,12 +76,67 @@ public class JdbcManager {
         return ds;
     }
 
-    public static Connection getConnection() throws SQLException {
+    private static volatile HikariDataSource POOL;
+    private static volatile String POOL_SIG;
+
+    private static String signature(DatasourceConfig ds, String driver) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(nz(ds.getName())).append('|')
+          .append(nz(ds.getJdbcUrl())).append('|')
+          .append(nz(ds.getUsername())).append('|')
+          .append(nz(driver)).append('|')
+          .append(nz(String.valueOf(ds.getMaxPoolSize()))).append('|')
+          .append(nz(String.valueOf(ds.getMinIdle()))).append('|')
+          .append(nz(String.valueOf(ds.getConnectionTimeoutMs()))).append('|')
+          .append(nz(String.valueOf(ds.getIdleTimeoutMs()))).append('|')
+          .append(nz(String.valueOf(ds.getMaxLifetimeMs()))).append('|')
+          .append(nz(String.valueOf(ds.getAutoCommit()))).append('|')
+          .append(nz(ds.getPoolName()));
+        return sb.toString();
+    }
+
+    private static String nz(String s) { return s == null ? "" : s; }
+
+    private static synchronized void ensurePool() {
         AppConfig cfg = ConfigManager.getConfig();
         DatasourceConfig ds = resolveActive(cfg);
         String driver = (ds.getDriver() == null || ds.getDriver().isBlank()) ? inferDriver(ds) : ds.getDriver();
         ensureDriverLoaded(driver);
-        return DriverManager.getConnection(ds.getJdbcUrl(), ds.getUsername(), ds.getPassword());
+        String sig = signature(ds, driver);
+        if (POOL != null && sig.equals(POOL_SIG)) return; // up-to-date
+        if (POOL != null) {
+            try { POOL.close(); } catch (Exception ignored) {}
+            POOL = null; POOL_SIG = null;
+        }
+        HikariConfig hc = new HikariConfig();
+        if (driver != null && !driver.isBlank()) hc.setDriverClassName(driver);
+        hc.setJdbcUrl(ds.getJdbcUrl());
+        if (ds.getUsername() != null) hc.setUsername(ds.getUsername());
+        if (ds.getPassword() != null) hc.setPassword(ds.getPassword());
+        // Defaults
+        int maxPool = ds.getMaxPoolSize() != null ? ds.getMaxPoolSize() : 10;
+        int minIdle = ds.getMinIdle() != null ? ds.getMinIdle() : 2;
+        long connTimeout = ds.getConnectionTimeoutMs() != null ? ds.getConnectionTimeoutMs() : 30_000L;
+        long idleTimeout = ds.getIdleTimeoutMs() != null ? ds.getIdleTimeoutMs() : 600_000L;
+        long maxLifetime = ds.getMaxLifetimeMs() != null ? ds.getMaxLifetimeMs() : 1_800_000L;
+        boolean autoCommit = ds.getAutoCommit() != null ? ds.getAutoCommit() : true;
+        String poolName = ds.getPoolName() != null ? ds.getPoolName() : ("appbana-" + (ds.getName() != null ? ds.getName() : "default"));
+
+        hc.setMaximumPoolSize(maxPool);
+        hc.setMinimumIdle(minIdle);
+        hc.setConnectionTimeout(connTimeout);
+        hc.setIdleTimeout(idleTimeout);
+        hc.setMaxLifetime(maxLifetime);
+        hc.setAutoCommit(autoCommit);
+        hc.setPoolName(poolName);
+
+        POOL = new HikariDataSource(hc);
+        POOL_SIG = sig;
+    }
+
+    public static java.sql.Connection getConnection() throws SQLException {
+        ensurePool();
+        return POOL.getConnection();
     }
 
     public static void ensureMetaTable() {

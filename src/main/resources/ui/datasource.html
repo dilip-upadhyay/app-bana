@@ -9,8 +9,10 @@
         .active { color: green; font-weight: bold; }
         .muted { color: #666; }
         button.small { padding: 4px 8px; margin-right: 4px; }
-        label { display: inline-block; width: 150px; vertical-align: top; }
-        input, select { width: 380px; }
+        label { display: inline-block; width: 220px; vertical-align: top; }
+        input, select { width: 360px; }
+        .hint { font-size: 12px; color: #666; }
+        .section { margin-top: 16px; padding-top: 8px; border-top: 1px dashed #ccc; }
     </style>
 </head>
 <body>
@@ -45,6 +47,32 @@
 
             <label for="driver">Driver Class Name:</label>
             <input type="text" id="driver" name="driver" placeholder="org.h2.Driver"><br><br>
+
+            <div class="section">
+                <strong>Connection Pool (optional)</strong>
+                <div class="hint">Only set fields you want to override; others use sensible defaults.</div><br>
+                <label for="maxPoolSize">Max Pool Size:</label>
+                <input type="number" id="maxPoolSize" name="maxPoolSize" min="1" placeholder="10"><br><br>
+
+                <label for="minIdle">Min Idle:</label>
+                <input type="number" id="minIdle" name="minIdle" min="0" placeholder="2"><br><br>
+
+                <label for="connectionTimeoutMs">Connection Timeout (ms):</label>
+                <input type="number" id="connectionTimeoutMs" name="connectionTimeoutMs" min="100" step="100" placeholder="30000"><br><br>
+
+                <label for="idleTimeoutMs">Idle Timeout (ms):</label>
+                <input type="number" id="idleTimeoutMs" name="idleTimeoutMs" min="0" step="1000" placeholder="600000"><br><br>
+
+                <label for="maxLifetimeMs">Max Lifetime (ms):</label>
+                <input type="number" id="maxLifetimeMs" name="maxLifetimeMs" min="0" step="1000" placeholder="1800000"><br><br>
+
+                <label for="autoCommit">Auto-commit:</label>
+                <input type="checkbox" id="autoCommit" name="autoCommit" checked>
+                <span class="hint">Checked = true</span><br><br>
+
+                <label for="poolName">Pool Name:</label>
+                <input type="text" id="poolName" name="poolName" placeholder="appbana-<name>"><br><br>
+            </div>
 
             <button type="submit">Save</button>
         </form>
@@ -99,8 +127,18 @@
             document.getElementById('url').value = cfg.jdbcUrl || '';
             document.getElementById('username').value = cfg.username || '';
             document.getElementById('driver').value = cfg.driver || document.getElementById('driver').value;
+            // pool
+            setNum('maxPoolSize', cfg.maxPoolSize);
+            setNum('minIdle', cfg.minIdle);
+            setNum('connectionTimeoutMs', cfg.connectionTimeoutMs);
+            setNum('idleTimeoutMs', cfg.idleTimeoutMs);
+            setNum('maxLifetimeMs', cfg.maxLifetimeMs);
+            document.getElementById('autoCommit').checked = cfg.autoCommit == null ? true : !!cfg.autoCommit;
+            document.getElementById('poolName').value = cfg.poolName || '';
         } catch (e) { /* ignore */ }
     }
+
+    function setNum(id, v) { const el = document.getElementById(id); el.value = (v==null? '': v); }
 
     function inferTypeFromUrl(url) {
         if (!url) return null;
@@ -160,6 +198,14 @@
                 document.getElementById('username').value = d.username || '';
                 document.getElementById('driver').value = d.driver || document.getElementById('driver').value;
                 document.getElementById('password').value = '';
+                // pool
+                setNum('maxPoolSize', d.maxPoolSize);
+                setNum('minIdle', d.minIdle);
+                setNum('connectionTimeoutMs', d.connectionTimeoutMs);
+                setNum('idleTimeoutMs', d.idleTimeoutMs);
+                setNum('maxLifetimeMs', d.maxLifetimeMs);
+                document.getElementById('autoCommit').checked = d.autoCommit == null ? true : !!d.autoCommit;
+                document.getElementById('poolName').value = d.poolName || '';
                 document.getElementById('result').textContent = 'Loaded ' + d.name + ' into form.';
             }
         } catch (e) {}
@@ -198,9 +244,17 @@
             name: form.name.value,
             type: form.type.value === 'custom' ? undefined : form.type.value,
             url: form.url.value,
-            username: form.username.value,
-            password: form.password.value,
-            driver: form.driver.value
+            username: form.username.value || undefined,
+            password: form.password.value || undefined,
+            driver: form.driver.value || undefined,
+            // pool (omit blanks)
+            maxPoolSize: toNum(form.maxPoolSize.value),
+            minIdle: toNum(form.minIdle.value),
+            connectionTimeoutMs: toNum(form.connectionTimeoutMs.value),
+            idleTimeoutMs: toNum(form.idleTimeoutMs.value),
+            maxLifetimeMs: toNum(form.maxLifetimeMs.value),
+            autoCommit: form.autoCommit.checked,
+            poolName: form.poolName.value || undefined
         };
         const resp = await fetch('/ui/datasource/save', {
             method: 'POST',
@@ -212,6 +266,8 @@
         form.password.value = '';
         await loadList();
     };
+
+    function toNum(v){ if (v==null || v==='') return undefined; const n=Number(v); return Number.isNaN(n)? undefined : n; }
     </script>
 </body>
 </html>
