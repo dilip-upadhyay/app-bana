@@ -53,7 +53,7 @@ Default runtime behavior
 - OpenAPI: http://localhost:8080/openapi.json
 
 Datasource management
-- UI: `/ui/datasource` supports Add/Update, List, Activate, Delete, and Test Connection.
+- UI: `/ui/datasource` supports Add/Update, List, Activate, Delete, and Test Connection (both from the form and via a per-datasource “Test” action in the list).
 - Each datasource has: name, type (h2/postgres/mysql/mariadb/mssql/oracle/sqlite/custom), jdbcUrl, username, password, driver.
 - JDBC URL Builder: optional helper in the form that builds the JDBC URL from fields (type, host, port, database/service, and extra params). Supports H2 (file/mem), Postgres, MySQL, MariaDB, SQL Server, Oracle, and SQLite. Enable Auto-build to keep the URL in sync as you edit fields.
 - Server-side URL build (API): if you POST to `/ui/datasource/save` without `url`, the server will construct it from components. Accepted fields:
@@ -67,7 +67,7 @@ Datasource management
     "username":"sa","password":"Password_123#","driver":"org.postgresql.Driver"
   }
   ```
-- Test connection: click “Test Connection” in the UI to attempt a short-lived connection using the entered fields (uses the URL or builds one from components). The API is also available at `POST /ui/datasource/test`.
+- Test connection: click “Test Connection” in the form or the per-row “Test” action to attempt a short-lived connection (uses the URL or builds one from components). The API is also available at `POST /ui/datasource/test`.
   - Request body: either {url, username?, password?, driver?, type?} or components {type, host, port, dbname, params?, username?, password?, driver?}; `name` can also be provided to test an existing saved datasource.
   - Response: `{ ok: boolean, message?: string, error?: string, url: string, dbProduct?: string, dbVersion?: string, elapsedMs: number }`
 - Optional pool settings per datasource: maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName.
@@ -169,6 +169,7 @@ Key files
 Notes
 - If DB credentials are wrong at startup, the app still starts the server so you can fix settings via `/ui/datasource`.
 - Identifier quoting uses double-quoted UPPERCASE to avoid reserved word/case issues in H2.
+- Backlog: see `TODO.md` for prioritized next steps and enhancements.
 
 Next recommended enhancements
 - Add authentication and role-based access to schema and datasource management.

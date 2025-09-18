@@ -2,6 +2,8 @@
 
 This file summarizes the current state so an automated agent can resume work confidently.
 
+Backlog: see `TODO.md` for a prioritized to-do list and next actions.
+
 ## Contributor checklist (please follow on every change)
 - Update all docs to reflect changes (keep these synchronized):
   - README.md (usage, endpoints, how-to)
@@ -12,10 +14,13 @@ This file summarizes the current state so an automated agent can resume work con
   - ./mvnw -DskipTests package
   - java -Dappbana.port=8081 -jar target/app-bana-1.0-SNAPSHOT-fat.jar
 - Verify key routes: /ui/datasource, /ui/builder, /openapi.json, /ui/swagger.
-- If you change datasource behavior, test save/list/activate/delete paths and pool settings.
+- If you change datasource behavior, test save/list/activate/delete/test paths and pool settings.
 - If you change OpenAPI, verify /openapi.json and Swagger UI rendering.
 
 ## Change Log (recent)
+- 2025-09-19: Added Test Connection feature for datasources.
+  - Backend: POST /ui/datasource/test attempts a short-lived JDBC connection from provided url or components (or by name); returns {ok,message|error,url,dbProduct,dbVersion,elapsedMs}.
+  - UI: “Test Connection” button on the form; per-row “Test” action in the list.
 - 2025-09-19: Upgraded to Java 25; HTTP server now uses virtual threads; added Swagger UI.
   - Maven set to java.version=25; app runs on Java 25.
   - ApiServer uses virtual-thread-per-request executor (Thread.ofVirtual()).
@@ -45,7 +50,7 @@ This file summarizes the current state so an automated agent can resume work con
   - /ui/builder — serves builder.html
   - /ui/datasource — serves datasource.html
   - /ui/swagger — serves swagger.html (Swagger UI for /openapi.json)
-  - /ui/datasource/* — JSON endpoints (list/config/save/activate/delete) — now include pool fields
+  - /ui/datasource/* — JSON endpoints (list/config/save/test/activate/delete) — now include pool fields and testing endpoint
 - SchemaManager.java — validates/persists schema JSON; creates/migrates tables; migration preview.
 - JdbcManager.java — HikariCP pool for active datasource; infers driver from type/URL; ensures meta tables.
 - ConfigManager.java — loads/saves config JSON; normalizes to multi-DS shape; applies env overrides; seeds default.
@@ -56,7 +61,7 @@ This file summarizes the current state so an automated agent can resume work con
 
 Frontend (resources/ui)
 - builder.html — minimal schema builder posting to /schema.
-- datasource.html — multi-DS management UI with Type selector, driver/URL hints, and Connection Pool section.
+- datasource.html — multi-DS management UI with Type selector, driver/URL hints, JDBC URL Builder, Connection Pool section, and Test Connection (form and per-row).
 - swagger.html — embedded Swagger UI for /openapi.json at /ui/swagger.
 
 ## Behavior and contracts
@@ -66,6 +71,9 @@ Frontend (resources/ui)
   - Common fields: `type`, `host`, `port`, `dbname`, `params`
   - H2: `h2Mode` (file|mem), `h2File`, `h2MemName`
   - SQLite: `sqliteFile`
+- Test Connection:
+  - Endpoint: POST /ui/datasource/test → { ok, message|error, url, dbProduct?, dbVersion?, elapsedMs }
+  - Request body: either {url, username?, password?, driver?, type?} or components {type, host, port, dbname, params?, username?, password?, driver?}; `name` can reference an existing saved datasource.
 - Driver inference mapping:
   - h2→org.h2.Driver; postgres→org.postgresql.Driver; mysql→com.mysql.cj.jdbc.Driver; mariadb→org.mariadb.jdbc.Driver; mssql→com.microsoft.sqlserver.jdbc.SQLServerDriver; oracle→oracle.jdbc.OracleDriver; sqlite→org.sqlite.JDBC.
 - Pool defaults when unset: maxPoolSize=10, minIdle=2, connectionTimeoutMs=30000, idleTimeoutMs=600000, maxLifetimeMs=1800000, autoCommit=true, poolName="appbana-<name>".
@@ -89,6 +97,7 @@ Frontend (resources/ui)
 - GET /ui/datasource/list → [{name,type,jdbcUrl,username,driver,active,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName}]
 - GET /ui/datasource/config → {name,jdbcUrl,username,driver,type,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName}
 - POST /ui/datasource/save → accepts either a full `url` or components listed above; also {name,type?,username?,password?,driver?,maxPoolSize?,minIdle?,connectionTimeoutMs?,idleTimeoutMs?,maxLifetimeMs?,autoCommit?,poolName?}
+- POST /ui/datasource/test → one-off connection test; returns {ok, url, message|error, dbProduct?, dbVersion?, elapsedMs}
 - POST /ui/datasource/activate → {name}
 - POST /ui/datasource/delete → {name}
 - POST /schema?preview=true → returns planned DDL (no changes)
@@ -102,6 +111,7 @@ Frontend (resources/ui)
 
 ## Quick local smoke (manual)
 - Open /ui/datasource, add or load a datasource; optionally set pool fields; Save (auto-activates); then refresh list.
+- Use the Test Connection button or per-row Test action to validate connectivity.
 - Open /ui/builder, create a test schema; POST to /schema; verify CRUD at /api/{entity}.
 - Fetch /openapi.json or visit /ui/swagger to confirm spec includes your entity.
 
