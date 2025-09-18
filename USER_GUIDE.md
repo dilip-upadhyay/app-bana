@@ -193,10 +193,7 @@ UI step-by-step walkthroughs (all features)
 
 A) Datasource UI — Add a new datasource
 
-<picture>
-  <source srcset="docs/screenshots/datasource-add.png" type="image/png">
-  <img src="docs/screenshots/datasource-add.svg" alt="Datasource — Add or Update">
-</picture>
+![Datasource — Add or Update](docs/screenshots/datasource-add.svg)
 
 1) Open http://localhost:8080/ui/datasource
 2) In “Add or Update”, fill:
@@ -219,10 +216,7 @@ A) Datasource UI — Add a new datasource
 
 B) Datasource UI — Work with saved datasources
 
-<picture>
-  <source srcset="docs/screenshots/datasource-list.png" type="image/png">
-  <img src="docs/screenshots/datasource-list.svg" alt="Datasources — List">
-</picture>
+![Datasources — List](docs/screenshots/datasource-list.svg)
 
 - Load: Click “Load” to copy a row’s values back into the form (password not shown)
 - Activate: Click “Activate” to switch the active datasource
@@ -231,10 +225,7 @@ B) Datasource UI — Work with saved datasources
 
 C) Datasource UI — Build JDBC URLs by example
 
-<picture>
-  <source srcset="docs/screenshots/datasource-test.png" type="image/png">
-  <img src="docs/screenshots/datasource-test.svg" alt="Datasource — Test Connection">
-</picture>
+![Datasource — Test Connection](docs/screenshots/datasource-test.svg)
 
 - Postgres: Host=localhost, Port=5432, DB=appbana → jdbc:postgresql://localhost:5432/appbana
 - MySQL: Host=localhost, Port=3306, DB=appbana → jdbc:mysql://localhost:3306/appbana
@@ -247,10 +238,7 @@ C) Datasource UI — Build JDBC URLs by example
 
 D) Schema Builder UI — Create and evolve a schema
 
-<picture>
-  <source srcset="docs/screenshots/builder.png" type="image/png">
-  <img src="docs/screenshots/builder.svg" alt="Schema Builder">
-</picture>
+![Schema Builder](docs/screenshots/builder.svg)
 
 1) Open http://localhost:8080/ui/builder
 2) Enter a Schema name (e.g., contact)
@@ -264,10 +252,7 @@ D) Schema Builder UI — Create and evolve a schema
 
 E) Swagger UI — Explore and test APIs
 
-<picture>
-  <source srcset="docs/screenshots/swagger.png" type="image/png">
-  <img src="docs/screenshots/swagger.svg" alt="Swagger UI">
-</picture>
+![Swagger UI](docs/screenshots/swagger.svg)
 
 1) Open http://localhost:8080/ui/swagger (loads /openapi.json)
 2) After saving schemas, hit refresh in Swagger UI to load new endpoints
@@ -296,4 +281,4 @@ Where to go next
 - Explore the backlog in `TODO.md` (auth, health checks, last-tested badges, CI doc checks).
 - Review README.md for deeper details and API references.
 
-Note: The images above will automatically use PNGs (if present) and fall back to the bundled SVG placeholders under `docs/screenshots/`.
+Note: The images above will automatically use the bundled SVGs under `docs/screenshots/`.
