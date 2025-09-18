@@ -69,6 +69,75 @@ public class ApiServer {
         return null;
     }
 
+    private static String buildJdbcUrl(Map<String, String> data) {
+        String type = Optional.ofNullable(data.get("type")).orElse("").toLowerCase();
+        String params = Optional.ofNullable(data.get("params")).orElse("").trim();
+        switch (type) {
+            case "h2": {
+                String mode = Optional.ofNullable(data.get("h2Mode")).orElse("file");
+                if ("mem".equalsIgnoreCase(mode)) {
+                    String name = Optional.ofNullable(data.get("h2MemName")).filter(s -> !s.isBlank()).orElse("test");
+                    String url = "jdbc:h2:mem:" + name + ";DB_CLOSE_DELAY=-1";
+                    if (!params.isEmpty()) url += ";" + params.replaceAll("[&?]+", ";");
+                    return url;
+                } else {
+                    String file = Optional.ofNullable(data.get("h2File")).filter(s -> !s.isBlank()).orElse("./data/appbana");
+                    String url = "jdbc:h2:" + file + ";AUTO_SERVER=TRUE";
+                    if (!params.isEmpty()) url += ";" + params.replaceAll("[&?]+", ";");
+                    return url;
+                }
+            }
+            case "sqlite": {
+                String file = Optional.ofNullable(data.get("sqliteFile")).filter(s -> !s.isBlank()).orElse("/path/to/file.db");
+                String url = "jdbc:sqlite:" + file;
+                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                return url;
+            }
+            case "postgres": {
+                String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
+                String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("5432");
+                String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("postgres");
+                String url = "jdbc:postgresql://" + host + ":" + port + "/" + db;
+                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                return url;
+            }
+            case "mysql": {
+                String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
+                String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("3306");
+                String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("test");
+                String url = "jdbc:mysql://" + host + ":" + port + "/" + db;
+                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                return url;
+            }
+            case "mariadb": {
+                String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
+                String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("3306");
+                String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("test");
+                String url = "jdbc:mariadb://" + host + ":" + port + "/" + db;
+                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                return url;
+            }
+            case "mssql": {
+                String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
+                String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("1433");
+                String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("master");
+                String url = "jdbc:sqlserver://" + host + ":" + port + ";databaseName=" + db;
+                if (!params.isEmpty()) url += ";" + params.replaceAll("[&?]+", ";");
+                return url;
+            }
+            case "oracle": {
+                String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
+                String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("1521");
+                String svc = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("orcl");
+                String url = "jdbc:oracle:thin:@" + host + ":" + port + "/" + svc;
+                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                return url;
+            }
+            default:
+                return null;
+        }
+    }
+
     public static void start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/schema", new SchemaHandler());
@@ -281,6 +350,11 @@ public class ApiServer {
                     String pw = data.get("password");
                     String drv = data.get("driver");
                     String type = data.get("type");
+                    // If URL not provided, attempt to construct from pieces
+                    if (url == null || url.isBlank()) {
+                        String built = buildJdbcUrl(data);
+                        if (built != null && !built.isBlank()) url = built;
+                    }
                     // pool
                     Integer maxPoolSize = parseInteger(data.get("maxPoolSize"));
                     Integer minIdle = parseInteger(data.get("minIdle"));

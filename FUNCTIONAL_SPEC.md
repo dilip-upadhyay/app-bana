@@ -17,10 +17,10 @@ Purpose
 2. High-level architecture
 - Frontend: static HTML/JS UIs served from resources:
   - builder.html — create EntitySchema JSON and POST to /schema
-  - datasource.html — manage datasources (add/update/list/activate/delete) via /ui/datasource/* endpoints; supports configuring pool settings
+  - datasource.html — manage datasources (add/update/list/activate/delete) via /ui/datasource/* endpoints; supports configuring pool settings; includes a JDBC URL Builder
   - swagger.html — embedded Swagger UI for /openapi.json
 - Backend services:
-  - ApiServer — embedded HTTP server; handlers for /schema, /api/*, /openapi.json, /ui/swagger, and datasource routes under /ui/datasource/* (includes pool fields in list/config/save)
+  - ApiServer — embedded HTTP server; handlers for /schema, /api/*, /openapi.json, /ui/swagger, and datasource routes under /ui/datasource/* (includes pool fields in list/config/save). Also constructs JDBC URLs from components when url is omitted in /ui/datasource/save.
   - SchemaManager — validates schema JSON, persists schema (appbana_schemas), creates/migrates tables (records DDLs in appbana_migrations), supports migration preview and list with pagination/search
   - JdbcManager — resolves the active datasource from config, infers JDBC driver from type/URL when missing, configures a HikariCP connection pool with per-datasource settings
   - ConfigManager — loads/saves config JSON (data/appbana-config.json by default), normalizes to multi-datasource format, applies env overrides
@@ -33,7 +33,10 @@ Purpose
   - GET /ui/datasource/list — list all datasources (no passwords), includes pool fields
   - GET /ui/datasource/config — current active datasource details (no password), includes pool fields
   - POST /ui/datasource/save — upsert datasource and set active
-    - Body: { name, type?, url, username?, password?, driver?, maxPoolSize?, minIdle?, connectionTimeoutMs?, idleTimeoutMs?, maxLifetimeMs?, autoCommit?, poolName? }
+    - Body supports EITHER a full URL OR components for server-side construction.
+      - Full URL form: { name, type?, url, username?, password?, driver?, maxPoolSize?, minIdle?, connectionTimeoutMs?, idleTimeoutMs?, maxLifetimeMs?, autoCommit?, poolName? }
+      - Components form (when url omitted): { name, type, host, port, dbname, params?, username?, password?, driver?, pool... }
+        - H2 extras: h2Mode (file|mem), h2File, h2MemName; SQLite extra: sqliteFile
     - Empty/missing password does not overwrite existing
   - POST /ui/datasource/activate — set active datasource by name
   - POST /ui/datasource/delete — delete datasource by name (reassigns active if needed)
@@ -65,7 +68,7 @@ Purpose
 
 8. Frontend UIs
 - builder.html — minimal schema builder (unchanged)
-- datasource.html — multi-datasource management UI with pool settings
+- datasource.html — multi-datasource management UI with pool settings and a JDBC URL Builder that can generate URLs for H2/Postgres/MySQL/MariaDB/SQL Server/Oracle/SQLite
 - swagger.html — embedded Swagger UI for /openapi.json
 
 9. Build, run, environment
@@ -82,11 +85,11 @@ Purpose
 
 12. Artifacts, files, and locations (updated)
 - Key files:
-  - src/main/java/org/example/ApiServer.java — datasource endpoints include pool fields; serves Swagger UI
+  - src/main/java/org/example/ApiServer.java — datasource endpoints include pool fields; serves Swagger UI; server-side JDBC URL construction
   - src/main/java/org/example/JdbcManager.java — HikariCP pool configuration
   - src/main/java/org/example/ConfigManager.java — multi-datasource normalization & env overrides
   - src/main/java/org/example/AppConfig.java, DatasourceConfig.java — config models (DatasourceConfig includes pool fields)
-  - src/main/resources/ui/datasource.html — UI for datasource management (pool settings)
+  - src/main/resources/ui/datasource.html — UI for datasource management (pool settings + JDBC URL Builder)
   - src/main/resources/ui/swagger.html — Swagger UI
 - Built artifacts: target/app-bana-1.0-SNAPSHOT-fat.jar
 
@@ -101,5 +104,6 @@ Purpose
 
 15. Change Log (recent)
 - 2025-09-19: Upgraded to Java 25, virtual threads for HTTP requests; added Swagger UI (/ui/swagger)
+- 2025-09-19: Added server-side JDBC URL construction in /ui/datasource/save (accepts type/host/port/dbname/params, plus H2/SQLite specific fields)
 - 2025-09-19: Added HikariCP connection pooling with per-datasource settings; UI and endpoints extended to handle pool fields.
 - 2025-09-14: Added multi-datasource management (UI and endpoints); config format extended with datasources[] and activeDatasource; driver inference by type/URL; startup resiliency when DB init fails.

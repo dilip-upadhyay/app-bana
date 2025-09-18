@@ -55,6 +55,18 @@ Default runtime behavior
 Datasource management
 - UI: `/ui/datasource` supports Add/Update, List, Activate, and Delete.
 - Each datasource has: name, type (h2/postgres/mysql/mariadb/mssql/oracle/sqlite/custom), jdbcUrl, username, password, driver.
+- JDBC URL Builder: optional helper in the form that builds the JDBC URL from fields (type, host, port, database/service, and extra params). Supports H2 (file/mem), Postgres, MySQL, MariaDB, SQL Server, Oracle, and SQLite. Enable Auto-build to keep the URL in sync as you edit fields.
+- Server-side URL build (API): if you POST to `/ui/datasource/save` without `url`, the server will construct it from components. Accepted fields:
+  - Common: `type`, `host`, `port`, `dbname`, `params`
+  - H2-specific: `h2Mode` (file|mem), `h2File`, `h2MemName`
+  - SQLite-specific: `sqliteFile`
+  Example (Postgres):
+  ```json
+  {
+    "name":"pg","type":"postgres","host":"localhost","port":"5432","dbname":"appbana",
+    "username":"sa","password":"Password_123#","driver":"org.postgresql.Driver"
+  }
+  ```
 - Optional pool settings per datasource: maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName.
 - Driver inference: if driver is blank, the system infers it from `type` or the JDBC URL.
 - Active datasource: the server uses the currently active datasource for all DB operations.

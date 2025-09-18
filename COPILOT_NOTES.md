@@ -2,6 +2,19 @@
 
 This file summarizes the current state so an automated agent can resume work confidently.
 
+## Contributor checklist (please follow on every change)
+- Update all docs to reflect changes (keep these synchronized):
+  - README.md (usage, endpoints, how-to)
+  - FUNCTIONAL_SPEC.md (functional behavior and contracts)
+  - LOW_LEVEL_DESIGN.md (structure, modules, data contracts)
+  - COPILOT_NOTES.md (this file — snapshot and workflow notes)
+- Build and smoke test locally (override port if busy):
+  - ./mvnw -DskipTests package
+  - java -Dappbana.port=8081 -jar target/app-bana-1.0-SNAPSHOT-fat.jar
+- Verify key routes: /ui/datasource, /ui/builder, /openapi.json, /ui/swagger.
+- If you change datasource behavior, test save/list/activate/delete paths and pool settings.
+- If you change OpenAPI, verify /openapi.json and Swagger UI rendering.
+
 ## Change Log (recent)
 - 2025-09-19: Upgraded to Java 25; HTTP server now uses virtual threads; added Swagger UI.
   - Maven set to java.version=25; app runs on Java 25.
@@ -49,6 +62,10 @@ Frontend (resources/ui)
 ## Behavior and contracts
 - Active datasource governs all DB ops. Changing active or pool config rebuilds the pool on next use.
 - Passwords are never returned by list/config endpoints. Blank password on save doesn’t overwrite existing.
+- JDBC URL construction (server-side): if `url` is omitted in POST /ui/datasource/save, the server builds it from components.
+  - Common fields: `type`, `host`, `port`, `dbname`, `params`
+  - H2: `h2Mode` (file|mem), `h2File`, `h2MemName`
+  - SQLite: `sqliteFile`
 - Driver inference mapping:
   - h2→org.h2.Driver; postgres→org.postgresql.Driver; mysql→com.mysql.cj.jdbc.Driver; mariadb→org.mariadb.jdbc.Driver; mssql→com.microsoft.sqlserver.jdbc.SQLServerDriver; oracle→oracle.jdbc.OracleDriver; sqlite→org.sqlite.JDBC.
 - Pool defaults when unset: maxPoolSize=10, minIdle=2, connectionTimeoutMs=30000, idleTimeoutMs=600000, maxLifetimeMs=1800000, autoCommit=true, poolName="appbana-<name>".
@@ -71,7 +88,7 @@ Frontend (resources/ui)
 ## Useful endpoints (JSON)
 - GET /ui/datasource/list → [{name,type,jdbcUrl,username,driver,active,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName}]
 - GET /ui/datasource/config → {name,jdbcUrl,username,driver,type,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName}
-- POST /ui/datasource/save → {name,type?,url,username?,password?,driver?,maxPoolSize?,minIdle?,connectionTimeoutMs?,idleTimeoutMs?,maxLifetimeMs?,autoCommit?,poolName?}
+- POST /ui/datasource/save → accepts either a full `url` or components listed above; also {name,type?,username?,password?,driver?,maxPoolSize?,minIdle?,connectionTimeoutMs?,idleTimeoutMs?,maxLifetimeMs?,autoCommit?,poolName?}
 - POST /ui/datasource/activate → {name}
 - POST /ui/datasource/delete → {name}
 - POST /schema?preview=true → returns planned DDL (no changes)

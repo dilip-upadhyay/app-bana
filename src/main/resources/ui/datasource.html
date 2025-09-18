@@ -13,6 +13,7 @@
         input, select { width: 360px; }
         .hint { font-size: 12px; color: #666; }
         .section { margin-top: 16px; padding-top: 8px; border-top: 1px dashed #ccc; }
+        .row { margin: 4px 0; }
     </style>
 </head>
 <body>
@@ -47,6 +48,35 @@
 
             <label for="driver">Driver Class Name:</label>
             <input type="text" id="driver" name="driver" placeholder="org.h2.Driver"><br><br>
+
+            <div class="section">
+                <strong>JDBC URL Builder (optional)</strong>
+                <div class="hint">Enter connection pieces and click Build, or enable Auto-build to fill the JDBC URL.</div><br>
+                <div class="row">
+                    <label><input type="checkbox" id="autoBuildUrl" checked> Auto-build URL from fields</label>
+                </div>
+                <div id="builder-common">
+                    <div class="row"><label for="host">Host:</label><input type="text" id="host" placeholder="localhost"></div>
+                    <div class="row"><label for="port">Port:</label><input type="number" id="port" placeholder="5432"></div>
+                    <div class="row"><label for="dbname">Database / Service:</label><input type="text" id="dbname" placeholder="appbana"></div>
+                </div>
+                <div id="builder-h2" style="display:none;">
+                    <div class="row"><label for="h2Mode">H2 Mode:</label>
+                        <select id="h2Mode">
+                            <option value="file">File</option>
+                            <option value="mem">In-Memory</option>
+                        </select>
+                    </div>
+                    <div class="row" id="h2-file-row"><label for="h2File">File path:</label><input type="text" id="h2File" placeholder="./data/appbana"></div>
+                    <div class="row" id="h2-mem-row" style="display:none;"><label for="h2MemName">Memory DB name:</label><input type="text" id="h2MemName" placeholder="appbana"></div>
+                </div>
+                <div id="builder-sqlite" style="display:none;">
+                    <div class="row"><label for="sqliteFile">SQLite file:</label><input type="text" id="sqliteFile" placeholder="/path/to/file.db"></div>
+                </div>
+                <div class="row"><label for="params">Extra params:</label><input type="text" id="params" placeholder="key1=val1&key2=val2"></div>
+                <div class="hint">For SQL Server, params use ;key=value format automatically. For others, use key=value pairs joined by &.</div><br>
+                <button type="button" id="buildUrlBtn">Build JDBC URL</button>
+            </div>
 
             <div class="section">
                 <strong>Connection Pool (optional)</strong>
@@ -88,13 +118,13 @@
     function h(text) { return String(text==null?'':text); }
 
     const defaults = {
-        h2: { driver: 'org.h2.Driver', url: 'jdbc:h2:./data/appbana;AUTO_SERVER=TRUE' },
-        postgres: { driver: 'org.postgresql.Driver', url: 'jdbc:postgresql://localhost:5432/dbname' },
-        mysql: { driver: 'com.mysql.cj.jdbc.Driver', url: 'jdbc:mysql://localhost:3306/dbname' },
-        mariadb: { driver: 'org.mariadb.jdbc.Driver', url: 'jdbc:mariadb://localhost:3306/dbname' },
-        mssql: { driver: 'com.microsoft.sqlserver.jdbc.SQLServerDriver', url: 'jdbc:sqlserver://localhost:1433;databaseName=dbname' },
-        oracle: { driver: 'oracle.jdbc.OracleDriver', url: 'jdbc:oracle:thin:@localhost:1521:orcl' },
-        sqlite: { driver: 'org.sqlite.JDBC', url: 'jdbc:sqlite:/path/to/file.db' }
+        h2: { driver: 'org.h2.Driver', url: 'jdbc:h2:./data/appbana;AUTO_SERVER=TRUE', port: null },
+        postgres: { driver: 'org.postgresql.Driver', url: 'jdbc:postgresql://localhost:5432/dbname', port: 5432 },
+        mysql: { driver: 'com.mysql.cj.jdbc.Driver', url: 'jdbc:mysql://localhost:3306/dbname', port: 3306 },
+        mariadb: { driver: 'org.mariadb.jdbc.Driver', url: 'jdbc:mariadb://localhost:3306/dbname', port: 3306 },
+        mssql: { driver: 'com.microsoft.sqlserver.jdbc.SQLServerDriver', url: 'jdbc:sqlserver://localhost:1433;databaseName=dbname', port: 1433 },
+        oracle: { driver: 'oracle.jdbc.OracleDriver', url: 'jdbc:oracle:thin:@localhost:1521/orcl', port: 1521 },
+        sqlite: { driver: 'org.sqlite.JDBC', url: 'jdbc:sqlite:/path/to/file.db', port: null }
     };
 
     function applyTypeHints(type, {forceDriver=false, forceUrl=false} = {}) {
@@ -107,10 +137,20 @@
             urlEl.placeholder = d.url;
             if (forceDriver || !driverEl.value) driverEl.value = d.driver;
             if (forceUrl || !urlEl.value) urlEl.value = d.url;
+            // builder UI visibility and defaults
+            document.getElementById('builder-common').style.display = (t==='h2'||t==='sqlite') ? 'none' : '';
+            document.getElementById('builder-h2').style.display = (t==='h2') ? '' : 'none';
+            document.getElementById('builder-sqlite').style.display = (t==='sqlite') ? '' : 'none';
+            const portEl = document.getElementById('port');
+            portEl.placeholder = d.port==null? '' : d.port;
         } else {
             driverEl.placeholder = '';
             urlEl.placeholder = '';
+            document.getElementById('builder-common').style.display = '';
+            document.getElementById('builder-h2').style.display = 'none';
+            document.getElementById('builder-sqlite').style.display = 'none';
         }
+        maybeAutoBuild();
     }
 
     document.getElementById('type').addEventListener('change', (e) => applyTypeHints(e.target.value));
@@ -232,9 +272,91 @@
         await loadList();
     }
 
+    // URL Builder logic
+    function val(id){ return (document.getElementById(id).value||'').trim(); }
+    function nvl(v, d){ return (v==null||v==='')? d : v; }
+
+    function buildJdbcUrl() {
+        const t = (document.getElementById('type').value||'').toLowerCase();
+        let url = '';
+        const params = val('params');
+        if (t === 'h2') {
+            const mode = document.getElementById('h2Mode').value;
+            if (mode === 'mem') {
+                const name = nvl(val('h2MemName'), 'test');
+                url = 'jdbc:h2:mem:' + name + ';DB_CLOSE_DELAY=-1';
+            } else {
+                const fp = nvl(val('h2File'), './data/appbana');
+                url = 'jdbc:h2:' + fp + ';AUTO_SERVER=TRUE';
+            }
+            if (params) url += ';' + params.replace(/[&?]+/g,';');
+        } else if (t === 'sqlite') {
+            const fp = nvl(val('sqliteFile'), '/path/to/file.db');
+            url = 'jdbc:sqlite:' + fp;
+            // SQLite params can be appended with ?
+            if (params) url += (url.includes('?')? '&' : '?') + params;
+        } else if (t === 'postgres') {
+            const host = nvl(val('host'), 'localhost');
+            const port = nvl(val('port'), (defaults.postgres.port||5432));
+            const db = nvl(val('dbname'), 'postgres');
+            url = `jdbc:postgresql://${host}:${port}/${db}`;
+            if (params) url += (url.includes('?')? '&' : '?') + params;
+        } else if (t === 'mysql') {
+            const host = nvl(val('host'), 'localhost');
+            const port = nvl(val('port'), (defaults.mysql.port||3306));
+            const db = nvl(val('dbname'), 'test');
+            url = `jdbc:mysql://${host}:${port}/${db}`;
+            if (params) url += (url.includes('?')? '&' : '?') + params;
+        } else if (t === 'mariadb') {
+            const host = nvl(val('host'), 'localhost');
+            const port = nvl(val('port'), (defaults.mariadb.port||3306));
+            const db = nvl(val('dbname'), 'test');
+            url = `jdbc:mariadb://${host}:${port}/${db}`;
+            if (params) url += (url.includes('?')? '&' : '?') + params;
+        } else if (t === 'mssql') {
+            const host = nvl(val('host'), 'localhost');
+            const port = nvl(val('port'), (defaults.mssql.port||1433));
+            const db = nvl(val('dbname'), 'master');
+            url = `jdbc:sqlserver://${host}:${port};databaseName=${db}`;
+            if (params) url += ';' + params.replace(/[&?]+/g,';');
+        } else if (t === 'oracle') {
+            const host = nvl(val('host'), 'localhost');
+            const port = nvl(val('port'), (defaults.oracle.port||1521));
+            const svc = nvl(val('dbname'), 'orcl');
+            url = `jdbc:oracle:thin:@${host}:${port}/${svc}`;
+            if (params) url += (url.includes('?')? '&' : '?') + params;
+        } else {
+            // custom: do nothing
+            url = val('url') || '';
+        }
+        document.getElementById('url').value = url;
+        return url;
+    }
+
+    function maybeAutoBuild(){ if (document.getElementById('autoBuildUrl').checked) buildJdbcUrl(); }
+
+    // Builder wiring
+    document.getElementById('buildUrlBtn').addEventListener('click', buildJdbcUrl);
+    document.getElementById('autoBuildUrl').addEventListener('change', maybeAutoBuild);
+    ['host','port','dbname','h2Mode','h2File','h2MemName','sqliteFile','params','type'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', maybeAutoBuild);
+        if (el) el.addEventListener('change', maybeAutoBuild);
+    });
+
+    // Toggle H2 sub-fields
+    document.getElementById('h2Mode').addEventListener('change', () => {
+        const mem = document.getElementById('h2Mode').value === 'mem';
+        document.getElementById('h2-file-row').style.display = mem ? 'none' : '';
+        document.getElementById('h2-mem-row').style.display = mem ? '' : 'none';
+        maybeAutoBuild();
+    });
+
     document.addEventListener('DOMContentLoaded', async () => {
         await prefill();
         await loadList();
+        applyTypeHints(document.getElementById('type').value, {forceDriver:false, forceUrl:false});
+        maybeAutoBuild();
     });
 
     document.getElementById('dsForm').onsubmit = async function(e) {

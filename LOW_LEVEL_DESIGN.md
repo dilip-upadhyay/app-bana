@@ -30,6 +30,7 @@ Key packages and classes (src/main/java/org/example)
   - /ui/datasource — serves datasource.html
   - /ui/swagger — serves swagger.html (embedded Swagger UI loading /openapi.json)
   - /ui/datasource/config|list|save|activate|delete — JSON endpoints for multi-DS management (no passwords returned)
+  - /ui/datasource/save — Also supports server-side JDBC URL construction: if `url` is omitted, ApiServer builds one from components (type, host, port, dbname, params, and H2/SQLite-specific fields). See buildJdbcUrl() helper inside ApiServer.
 - SchemaManager.java — Schema persistence/migrations:
   - init(): ensures meta tables
   - saveSchema(EntitySchema): validates, persists JSON, applies DDL changes
@@ -48,8 +49,16 @@ Key packages and classes (src/main/java/org/example)
 
 Static resources (src/main/resources/ui)
 - builder.html — Minimal schema builder UI (posts JSON to /schema; also useful for preview).
-- datasource.html — Multi-datasource management UI. Fields: name, type, jdbcUrl, username, password, driver, and Pool section (maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName). Actions: Save/Activate/Delete/List/Load.
+- datasource.html — Multi-datasource management UI. Fields: name, type, jdbcUrl, username, password, driver, and Pool section (maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName). Actions: Save/Activate/Delete/List/Load. Includes a JDBC URL Builder that can synthesize URLs for H2/Postgres/MySQL/MariaDB/SQL Server/Oracle/SQLite from host/port/db/params.
 - swagger.html — Embedded Swagger UI for /openapi.json.
+
+Datasource URL construction (details)
+- UI-side builder: builds the JDBC URL in the browser from type + host/port/db/params and writes it to the `url` field.
+- Server-side construction: if client omits `url` in POST /ui/datasource/save, ApiServer.buildJdbcUrl() constructs it using submitted components.
+  - Common fields: type, host, port, dbname, params
+  - H2-only: h2Mode (file|mem), h2File, h2MemName
+  - SQLite-only: sqliteFile
+  - Driver inference still applies in JdbcManager if driver not provided.
 
 Config resolution
 - Path: APPBANA_CONFIG or -Dappbana.config; default data/appbana-config.json.
@@ -105,4 +114,3 @@ Test checklist (manual)
 - POST /schema?preview=true returns DDL plan; POST /schema applies
 - CRUD endpoints operate as expected; GET /openapi.json reflects entities
 - /ui/swagger renders the spec
-
