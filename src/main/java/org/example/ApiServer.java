@@ -776,6 +776,33 @@ public class ApiServer {
                 return;
             }
             String entity = parts[2];
+
+            // Special-case: GET /api/endpoints → list generated CRUD endpoints
+            if ("GET".equalsIgnoreCase(method) && parts.length == 3 && "endpoints".equalsIgnoreCase(entity)) {
+                try {
+                    List<String> names = SchemaManager.listSchemaNames();
+                    List<Map<String,Object>> out = new ArrayList<>();
+                    for (String n : names) {
+                        Map<String,Object> m = new HashMap<>();
+                        m.put("entity", n);
+                        List<String> eps = new ArrayList<>();
+                        eps.add("POST /api/" + n);
+                        eps.add("GET /api/" + n);
+                        eps.add("GET /api/" + n + "/{id}");
+                        eps.add("PUT /api/" + n + "/{id}");
+                        eps.add("DELETE /api/" + n + "/{id}");
+                        m.put("endpoints", eps);
+                        out.add(m);
+                    }
+                    sendJson(exchange, 200, out);
+                    return;
+                } catch (Exception e) {
+                    LOG.error("Failed to build /api/endpoints response", e);
+                    send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+                    return;
+                }
+            }
+
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) {
                 send(exchange, 404, "{\"error\":\"unknown entity\"}");

@@ -98,13 +98,25 @@ public class SchemaManager {
     public static EntitySchema loadSchema(String name) {
         // Ensure meta table exists in the active datasource before querying
         JdbcManager.ensureMetaTable();
-        try (Connection c = JdbcManager.getConnection();
-             PreparedStatement ps = c.prepareStatement("SELECT json FROM appbana_schemas WHERE name = ?")) {
-            ps.setString(1, name);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    String json = rs.getString(1);
-                    return M.readValue(json, EntitySchema.class);
+        try (Connection c = JdbcManager.getConnection()) {
+            // 1) exact match first
+            try (PreparedStatement ps = c.prepareStatement("SELECT json FROM appbana_schemas WHERE name = ?")) {
+                ps.setString(1, name);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        String json = rs.getString(1);
+                        return M.readValue(json, EntitySchema.class);
+                    }
+                }
+            }
+            // 2) fallback: case-insensitive match
+            try (PreparedStatement ps = c.prepareStatement("SELECT json FROM appbana_schemas WHERE LOWER(name) = ?")) {
+                ps.setString(1, name == null ? null : name.toLowerCase());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        String json = rs.getString(1);
+                        return M.readValue(json, EntitySchema.class);
+                    }
                 }
             }
             return null;
