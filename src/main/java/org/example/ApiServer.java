@@ -168,10 +168,9 @@ public class ApiServer {
 
     public static void start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/schema", new SchemaHandler());
         server.createContext("/api", new EntityHandler());
 
-        // Router integration for common utility endpoints
+        // Router integration for common utility endpoints and schema
         org.example.api.Router router = new org.example.api.Router();
         router.get("/health", (req, res) -> {
             res.json(200, Map.of("status", "UP"));
@@ -234,6 +233,39 @@ public class ApiServer {
             } catch (Exception e) {
                 LOG.error("Failed to serve OpenAPI spec", e);
                 res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        router.get("/schema", (req, res) -> {
+            String pageS = req.query("page");
+            String sizeS = req.query("size");
+            String q = req.query("q");
+            if (pageS != null || sizeS != null || q != null) {
+                int page = 1; int size = 10;
+                try { if (pageS != null) page = Integer.parseInt(pageS); } catch (Exception ignored) {}
+                try { if (sizeS != null) size = Integer.parseInt(sizeS); } catch (Exception ignored) {}
+                List<String> names = SchemaManager.listSchemaNames(page, size, q);
+                res.json(200, names);
+            } else {
+                List<String> names = SchemaManager.listSchemaNames();
+                res.json(200, names);
+            }
+        });
+        router.get("/schema/{name}", (req, res) -> {
+            String name = req.pathParam("name");
+            EntitySchema schema = SchemaManager.loadSchema(name);
+            if (schema == null) { res.json(404, Map.of("error","not found")); return; }
+            res.json(200, schema);
+        });
+        router.post("/schema", (req, res) -> {
+            boolean preview = "true".equalsIgnoreCase(Optional.ofNullable(req.query("preview")).orElse("false"));
+            EntitySchema schema = req.readJson(new TypeReference<EntitySchema>(){});
+            if (schema.getName() == null || schema.getName().isEmpty()) { res.json(400, Map.of("error","missing schema name")); return; }
+            if (preview) {
+                List<String> plan = SchemaManager.generateMigrationPlan(schema);
+                res.json(200, plan);
+            } else {
+                SchemaManager.saveSchema(schema);
+                res.json(201, Map.of("status","ok"));
             }
         });
         server.createContext("/", exchange -> {
