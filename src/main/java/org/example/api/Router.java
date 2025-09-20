@@ -108,7 +108,13 @@ public class Router {
         public String pathParam(String name){ return pathParams.get(name); }
         public Map<String,String> query(){ return query; }
         public String query(String k){ return query.get(k); }
-        public <T> T readJson(TypeReference<T> typ) throws IOException { try (InputStream is = ex.getRequestBody()) { return M.readValue(is, typ); } }
+        public <T> T readJson(TypeReference<T> typ) {
+            try (InputStream is = ex.getRequestBody()) {
+                return M.readValue(is, typ);
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
+        }
     }
 
     public static class HttpResponse {
