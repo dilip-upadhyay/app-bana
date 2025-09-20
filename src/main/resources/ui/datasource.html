@@ -17,6 +17,12 @@
         .ok { color: #0a0; }
         .err { color: #a00; }
         pre.light { background: #f7f7f7; padding: 6px; overflow: auto; }
+        .chip { display: inline-block; padding: 2px 6px; border-radius: 12px; font-size: 12px; }
+        .chip.ok { background: #e6f6e6; color: #0a0; border: 1px solid #b6e0b6; }
+        .chip.err { background: #fdeaea; color: #a00; border: 1px solid #f1b3b3; }
+        .chip.unknown { background: #eee; color: #555; border: 1px solid #ddd; }
+        td.status, th.status { text-align: center; white-space: nowrap; }
+        td.lastTest, th.lastTest { white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -197,6 +203,34 @@
         return null;
     }
 
+    function relativeTime(ts) {
+        if (!ts) return 'never';
+        const diff = Date.now() - Number(ts);
+        const sec = Math.floor(diff/1000);
+        if (sec < 60) return sec + 's ago';
+        const min = Math.floor(sec/60);
+        if (min < 60) return min + 'm ago';
+        const hr = Math.floor(min/60);
+        if (hr < 24) return hr + 'h ago';
+        const d = Math.floor(hr/24);
+        return d + 'd ago';
+    }
+
+    function renderStatus(d) {
+        if (d.lastTestOk === true) return '<span class="chip ok">Live</span>';
+        if (d.lastTestOk === false) return '<span class="chip err">Down</span>';
+        return '<span class="chip unknown">Unknown</span>';
+    }
+
+    function renderLastTest(d) {
+        if (!d.lastTestAtEpochMs) return '<span class="muted">never</span>';
+        const when = new Date(Number(d.lastTestAtEpochMs));
+        const rel = relativeTime(d.lastTestAtEpochMs);
+        const dur = (d.lastTestElapsedMs!=null? d.lastTestElapsedMs + ' ms' : '');
+        const msg = d.lastTestMessage ? (' — ' + h(d.lastTestMessage)) : '';
+        return `<span title="${when.toLocaleString()}">${rel}${dur? ' · '+dur:''}${msg}</span>`;
+    }
+
     async function loadList() {
         const el = document.getElementById('dsList');
         try {
@@ -204,22 +238,28 @@
             if (!resp.ok) { el.textContent = 'Failed to load datasources'; return; }
             const list = await resp.json();
             if (!Array.isArray(list) || list.length === 0) { el.textContent = 'No datasources yet.'; return; }
-            let html = '<table><thead><tr><th>Active</th><th>Name</th><th>Type</th><th>URL</th><th>User</th><th>Driver</th><th>Actions</th></tr></thead><tbody>';
+            let html = '<table><thead><tr>'+
+                '<th>Active</th><th>Name</th><th>Type</th><th class="status">Status</th><th class="lastTest">Last tested</th><th>URL</th><th>User</th><th>Driver</th><th>Actions</th>'+
+                '</tr></thead><tbody>';
             for (const d of list) {
-                html += '<tr>' +
-                    '<td>' + (d.active ? '<span class="active">●</span>' : '') + '</td>' +
-                    '<td>' + h(d.name) + '</td>' +
-                    '<td>' + h(d.type||'') + '</td>' +
-                    '<td class="muted">' + h(d.jdbcUrl) + '</td>' +
-                    '<td>' + h(d.username) + '</td>' +
-                    '<td>' + h(d.driver) + '</td>' +
-                    '<td>' +
-                    '<button class="small" onclick="loadIntoForm(\'' + encodeURIComponent(d.name) + '\')">Load</button>' +
-                    '<button class="small" onclick="activateDs(\'' + encodeURIComponent(d.name) + '\')">Activate</button>' +
-                    '<button class="small" onclick="deleteDs(\'' + encodeURIComponent(d.name) + '\')">Delete</button>' +
-                    '<button class="small" onclick="testNamed(\'' + encodeURIComponent(d.name) + '\')">Test</button>' +
-                    '</td>' +
-                    '</tr>';
+                const enc = encodeURIComponent(d.name||'');
+                html += `<tr id="row-${enc}">`+
+                    `<td>${d.active ? '<span class="active">\u25cf</span>' : ''}</td>`+
+                    `<td>${h(d.name)}</td>`+
+                    `<td>${h(d.type||'')}</td>`+
+                    `<td class="status" id="status-${enc}">${renderStatus(d)}</td>`+
+                    `<td class="lastTest" id="last-${enc}">${renderLastTest(d)}</td>`+
+                    `<td class="muted">${h(d.jdbcUrl)}</td>`+
+                    `<td>${h(d.username)}</td>`+
+                    `<td>${h(d.driver)}</td>`+
+                    `<td>`+
+                    `<button class="small" onclick="loadIntoForm('${enc}')">Load</button>`+
+                    `<button class="small" onclick="activateDs('${enc}')">Activate</button>`+
+                    `<button class="small" onclick="deleteDs('${enc}')">Delete</button>`+
+                    `<button class="small" onclick="testNamed('${enc}')">Test</button>`+
+                    `<button class="small" onclick="pingHealth('${enc}')">Ping</button>`+
+                    `</td>`+
+                    `</tr>`;
             }
             html += '</tbody></table>';
             el.innerHTML = html;
@@ -416,7 +456,8 @@
             h2Mode: (document.getElementById('h2Mode')? document.getElementById('h2Mode').value : undefined),
             h2File: (document.getElementById('h2File')? val('h2File') : undefined),
             h2MemName: (document.getElementById('h2MemName')? val('h2MemName') : undefined),
-            sqliteFile: (document.getElementById('sqliteFile')? val('sqliteFile') : undefined)
+            sqliteFile: (document.getElementById('sqliteFile')? val('sqliteFile') : undefined),
+            timeoutSec: 5
         };
         const out = document.getElementById('testOutput');
         out.innerHTML = '<span class="muted">Testing connection...</span>';
@@ -426,14 +467,14 @@
             });
             const json = await resp.json().catch(() => ({}));
             if (json && json.ok) {
-                out.innerHTML = '<div class="ok">✔ ' + (json.message||'Connected') + ' (' + (json.elapsedMs||'?') + ' ms)</div>' +
+                out.innerHTML = '<div class="ok">\u2714 ' + (json.message||'Connected') + ' (' + (json.elapsedMs||'?') + ' ms)</div>' +
                     '<pre class="light">URL: ' + (json.url||'') + '\nDB: ' + (json.dbProduct||'') + ' ' + (json.dbVersion||'') + '</pre>';
             } else {
-                out.innerHTML = '<div class="err">✖ Connection failed</div>' +
-                    '<pre class="light">URL: ' + ((json && json.url) || payload.url || '(built from fields)') + '\nError: ' + ((json && json.error) || (await resp.text())) + '</pre>';
+                out.innerHTML = '<div class="err">\u2716 Connection failed</div>' +
+                    '<pre class="light">URL: ' + ((json && json.url) || payload.url || '(built from fields)') + '\nError: ' + ((json && json.error) || (await resp.text())) + (json && json.sqlState? ('\nSQLState: '+json.sqlState):'') + (json && json.errorCode!=null? ('\nErrorCode: '+json.errorCode):'') + '</pre>';
             }
         } catch (e) {
-            out.innerHTML = '<div class="err">✖ Error running test</div><pre class="light">' + e + '</pre>';
+            out.innerHTML = '<div class="err">\u2716 Error running test</div><pre class="light">' + e + '</pre>';
         }
     }
 
@@ -443,18 +484,39 @@
         out.innerHTML = '<span class="muted">Testing ' + dec + '...</span>';
         try {
             const resp = await fetch('/ui/datasource/test', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: dec})
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: dec, timeoutSec: 5})
             });
             const json = await resp.json().catch(() => ({}));
             if (json && json.ok) {
-                out.innerHTML = '<div class="ok">✔ ' + (json.message||'Connected') + ' (' + (json.elapsedMs||'?') + ' ms)</div>' +
+                out.innerHTML = '<div class="ok">\u2714 ' + (json.message||'Connected') + ' (' + (json.elapsedMs||'?') + ' ms)</div>' +
                     '<pre class="light">DS: ' + dec + '\nURL: ' + (json.url||'') + '\nDB: ' + (json.dbProduct||'') + ' ' + (json.dbVersion||'') + '</pre>';
             } else {
-                out.innerHTML = '<div class="err">✖ Connection failed</div>' +
-                    '<pre class="light">DS: ' + dec + '\nURL: ' + ((json && json.url) || '') + '\nError: ' + ((json && json.error) || (await resp.text())) + '</pre>';
+                out.innerHTML = '<div class="err">\u2716 Connection failed</div>' +
+                    '<pre class="light">DS: ' + dec + '\nURL: ' + ((json && json.url) || '') + '\nError: ' + ((json && json.error) || (await resp.text())) + (json && json.sqlState? ('\nSQLState: '+json.sqlState):'') + (json && json.errorCode!=null? ('\nErrorCode: '+json.errorCode):'') + '</pre>';
+            }
+            // Refresh list to show persisted last test metadata
+            await loadList();
+        } catch (e) {
+            out.innerHTML = '<div class="err">\u2716 Error running test</div><pre class="light">' + e + '</pre>';
+        }
+    }
+
+    async function pingHealth(name) {
+        const dec = decodeURIComponent(name);
+        try {
+            const resp = await fetch(`/ui/datasource/health?name=${encodeURIComponent(dec)}&timeoutSec=3`);
+            const json = await resp.json().catch(() => ({}));
+            const statusEl = document.getElementById('status-' + name);
+            const lastEl = document.getElementById('last-' + name);
+            if (json && json.ok) {
+                if (statusEl) statusEl.innerHTML = '<span class="chip ok">Live</span>';
+                if (lastEl) lastEl.innerHTML = `<span title="${new Date().toLocaleString()}">just now · ${(json.elapsedMs||'?')} ms</span>`;
+            } else {
+                if (statusEl) statusEl.innerHTML = '<span class="chip err">Down</span>';
+                if (lastEl) lastEl.innerHTML = `<span title="${new Date().toLocaleString()}">just now · error</span>`;
             }
         } catch (e) {
-            out.innerHTML = '<div class="err">✖ Error running test</div><pre class="light">' + e + '</pre>';
+            // ignore UI update on error
         }
     }
 

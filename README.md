@@ -9,13 +9,13 @@ Quick summary
 - Datasources: built-in UI to add/manage multiple datasources (by name and type) and select the active one at runtime.
 - Pooling: HikariCP connection pool with configurable settings per datasource.
 - OpenAPI: live spec at /openapi.json and an embedded Swagger UI at /ui/swagger.
-- Health: /health (liveness) and /ready (readiness with DB check).
+- Health: /health (liveness), /ready (readiness with DB check), and per-datasource health at /ui/datasource/health.
 
 Status of repository
 - Fully working MVP backend and minimal frontend builder included.
 - Basic builder-v1 UI is present; advanced builder-v2 files were removed.
 - Swagger/OpenAPI spec is available at `/openapi.json` and browsable at `/ui/swagger`.
-- Datasource management UI available at `/ui/datasource` with list/activate/delete actions.
+- Datasource management UI available at `/ui/datasource` with list/activate/delete actions, Test Connection, and a live Status badge with “Last tested” info.
 - HikariCP pool initialized based on the current active datasource; reconfigured when settings change.
 - Built fat JAR available under `target/` after building.
 - COPILOT_NOTES.md contains an agent-friendly snapshot of the current state.
@@ -53,15 +53,17 @@ Default runtime behavior
 - Datasource UI: http://localhost:8080/ui/datasource
 - Swagger UI: http://localhost:8080/ui/swagger
 - OpenAPI: http://localhost:8080/openapi.json
-- Health: http://localhost:8080/health (liveness) and http://localhost:8080/ready (readiness)
+- Health: http://localhost:8080/health (liveness), http://localhost:8080/ready (readiness), and http://localhost:8080/ui/datasource/health (per-datasource DB ping)
 
 Health & readiness
 - GET `/health` → `{ "status": "UP" }` (process liveness)
 - GET `/ready` → `{ ok: boolean, activeDatasource?: string, dbProduct?: string, dbVersion?: string, elapsedMs: number, error?: string }`
   - Attempts a DB connection using the active datasource. Returns HTTP 200 when ok=true, or 503 with error details when ok=false.
+- GET `/ui/datasource/health?name=<ds>&timeoutSec=<n>` → `{ ok: boolean, name: string, url: string (masked), dbProduct?: string, dbVersion?: string, elapsedMs: number, error?: string, sqlState?: string, errorCode?: number }`
+  - Pings the specified datasource (or the active one if name omitted). `timeoutSec` optional (default 3; max 60). URL is masked to avoid leaking passwords.
 
 Datasource management
-- UI: `/ui/datasource` supports Add/Update, List, Activate, Delete, and Test Connection (both from the form and via a per-datasource “Test” action in the list).
+- UI: `/ui/datasource` supports Add/Update, List, Activate, Delete, and Test Connection (both from the form and via a per-datasource “Test” action in the list). Each row shows a Status badge (Live/Down/Unknown) and a “Last tested” column.
 - Each datasource has: name, type (h2/postgres/mysql/mariadb/mssql/oracle/sqlite/custom), jdbcUrl, username, password, driver.
 - JDBC URL Builder: optional helper in the form that builds the JDBC URL from fields (type, host, port, database/service, and extra params). Supports H2 (file/mem), Postgres, MySQL, MariaDB, SQL Server, Oracle, and SQLite. Enable Auto-build to keep the URL in sync as you edit fields.
 - Server-side URL build (API): if you POST to `/ui/datasource/save` without `url`, the server will construct it from components. Accepted fields:
@@ -77,19 +79,24 @@ Datasource management
   ```
 - Test connection: click “Test Connection” in the form or the per-row “Test” action to attempt a short-lived connection (uses the URL or builds one from components). The API is also available at `POST /ui/datasource/test`.
   - Request body: either {url, username?, password?, driver?, type?} or components {type, host, port, dbname, params?, username?, password?, driver?}; `name` can also be provided to test an existing saved datasource.
-  - Response: `{ ok: boolean, message?: string, error?: string, url: string, dbProduct?: string, dbVersion?: string, elapsedMs: number }`
+  - Optional `timeoutSec` limits the attempt (default 5, max 60).
+  - Response: `{ ok: boolean, message?: string, error?: string, url: string (masked), dbProduct?: string, dbVersion?: string, elapsedMs: number, sqlState?: string, errorCode?: number }`
+  - When testing a saved datasource by `name`, the last test result is persisted to config and shown in the list.
 - Optional pool settings per datasource: maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName.
 - Driver inference: if driver is blank, the system infers it from `type` or the JDBC URL.
 - Active datasource: the server uses the currently active datasource for all DB operations.
 - Pool reconfiguration: any change to the active datasource (including pool fields) rebuilds the Hikari pool lazily on the next getConnection().
 
 Datasource API (JSON)
-- GET `/ui/datasource/list` → array of datasources (without passwords), each has {name,type,jdbcUrl,username,driver,active,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName}.
+- GET `/ui/datasource/list` → array of datasources (without passwords), each has {name,type,jdbcUrl,username,driver,active,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName,
+  lastTestOk?, lastTestAtEpochMs?, lastTestMessage?, lastTestDbProduct?, lastTestDbVersion?, lastTestElapsedMs?}.
 - GET `/ui/datasource/config` → current active datasource details (without password), includes the pool fields.
 - POST `/ui/datasource/save` body: {name, type?, url, username?, password?, driver?, maxPoolSize?, minIdle?, connectionTimeoutMs?, idleTimeoutMs?, maxLifetimeMs?, autoCommit?, poolName?}
   - Upserts the datasource by name; if password is empty/missing it isn’t overwritten; activates the saved datasource.
-- POST `/ui/datasource/test` body: {url?, type?, host?, port?, dbname?, params?, username?, password?, driver?, name?}
-  - Attempts a one-off connection; does not persist; returns `{ok, ...}` with DB product/version on success.
+- POST `/ui/datasource/test` body: {url?, type?, host?, port?, dbname?, params?, username?, password?, driver?, name?, timeoutSec?}
+  - Attempts a one-off connection; returns `{ok, ...}` with DB product/version on success; masks sensitive parts of the URL.
+  - If `name` is provided and matches a saved datasource, the last test result is persisted to config.
+- GET `/ui/datasource/health?name=<ds>&timeoutSec=<n>` — ping a datasource (or active if name omitted) and return status.
 - POST `/ui/datasource/activate` body: {name}
 - POST `/ui/datasource/delete` body: {name}
 
@@ -170,10 +177,10 @@ Key files
 - src/main/java/org/example/SchemaManager.java — schema persistence and migration
 - src/main/java/org/example/JdbcManager.java — JDBC connection (HikariCP pool; uses active datasource)
 - src/main/java/org/example/ConfigManager.java — loads/saves config; normalizes multi-datasource format
-- src/main/java/org/example/AppConfig.java, DatasourceConfig.java — config models (DatasourceConfig includes pool fields)
+- src/main/java/org/example/AppConfig.java, DatasourceConfig.java — config models (DatasourceConfig includes pool and last test fields)
 - src/main/java/org/example/model/EntitySchema.java — schema model
 - src/main/resources/ui/builder.html — minimal schema builder
-- src/main/resources/ui/datasource.html — datasource management UI (now includes pool settings)
+- src/main/resources/ui/datasource.html — datasource management UI (pool settings, status badge, last tested)
 - src/main/resources/ui/swagger.html — embedded Swagger UI for /openapi.json
 
 Notes

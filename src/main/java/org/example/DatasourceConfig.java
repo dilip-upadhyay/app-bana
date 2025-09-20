@@ -17,6 +17,14 @@ public class DatasourceConfig {
     private Boolean autoCommit;       // default true
     private String poolName;          // optional label
 
+    // Last test result metadata (persisted)
+    private Boolean lastTestOk;            // null if never tested
+    private Long lastTestAtEpochMs;        // when test was performed (epoch millis)
+    private String lastTestMessage;        // success or error message
+    private String lastTestDbProduct;      // DB product name on success
+    private String lastTestDbVersion;      // DB version on success
+    private Long lastTestElapsedMs;        // how long the test took
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 
@@ -55,4 +63,22 @@ public class DatasourceConfig {
 
     public String getPoolName() { return poolName; }
     public void setPoolName(String poolName) { this.poolName = poolName; }
+
+    public Boolean getLastTestOk() { return lastTestOk; }
+    public void setLastTestOk(Boolean lastTestOk) { this.lastTestOk = lastTestOk; }
+
+    public Long getLastTestAtEpochMs() { return lastTestAtEpochMs; }
+    public void setLastTestAtEpochMs(Long lastTestAtEpochMs) { this.lastTestAtEpochMs = lastTestAtEpochMs; }
+
+    public String getLastTestMessage() { return lastTestMessage; }
+    public void setLastTestMessage(String lastTestMessage) { this.lastTestMessage = lastTestMessage; }
+
+    public String getLastTestDbProduct() { return lastTestDbProduct; }
+    public void setLastTestDbProduct(String lastTestDbProduct) { this.lastTestDbProduct = lastTestDbProduct; }
+
+    public String getLastTestDbVersion() { return lastTestDbVersion; }
+    public void setLastTestDbVersion(String lastTestDbVersion) { this.lastTestDbVersion = lastTestDbVersion; }
+
+    public Long getLastTestElapsedMs() { return lastTestElapsedMs; }
+    public void setLastTestElapsedMs(Long lastTestElapsedMs) { this.lastTestElapsedMs = lastTestElapsedMs; }
 }

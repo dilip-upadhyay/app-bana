@@ -90,7 +90,7 @@ public class ApiServer {
             case "sqlite": {
                 String file = Optional.ofNullable(data.get("sqliteFile")).filter(s -> !s.isBlank()).orElse("/path/to/file.db");
                 String url = "jdbc:sqlite:" + file;
-                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
                 return url;
             }
             case "postgres": {
@@ -98,7 +98,7 @@ public class ApiServer {
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("5432");
                 String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("postgres");
                 String url = "jdbc:postgresql://" + host + ":" + port + "/" + db;
-                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
                 return url;
             }
             case "mysql": {
@@ -106,7 +106,7 @@ public class ApiServer {
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("3306");
                 String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("test");
                 String url = "jdbc:mysql://" + host + ":" + port + "/" + db;
-                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
                 return url;
             }
             case "mariadb": {
@@ -114,7 +114,7 @@ public class ApiServer {
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("3306");
                 String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("test");
                 String url = "jdbc:mariadb://" + host + ":" + port + "/" + db;
-                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
                 return url;
             }
             case "mssql": {
@@ -130,7 +130,7 @@ public class ApiServer {
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("1521");
                 String svc = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("orcl");
                 String url = "jdbc:oracle:thin:@" + host + ":" + port + "/" + svc;
-                if (!params.isEmpty()) url += (url.contains("?") ? "&" : "?") + params;
+                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
                 return url;
             }
             default:
@@ -138,32 +138,30 @@ public class ApiServer {
         }
     }
 
-    private static String inferDriver(String type, String url, String provided) {
-        if (provided != null && !provided.isBlank()) return provided;
-        if (type != null) {
-            String t = type.toLowerCase();
-            switch (t) {
-                case "h2": return "org.h2.Driver";
-                case "postgres":
-                case "postgresql": return "org.postgresql.Driver";
-                case "mysql": return "com.mysql.cj.jdbc.Driver";
-                case "mariadb": return "org.mariadb.jdbc.Driver";
-                case "mssql":
-                case "sqlserver": return "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-                case "oracle": return "oracle.jdbc.OracleDriver";
-                case "sqlite": return "org.sqlite.JDBC";
-            }
+    private static String sanitizeUrl(String url) {
+        if (url == null) return null;
+        String u = url;
+        // Mask common password keys in query or ;key=value formats
+        String[] keys = {"password", "pwd", "pass"};
+        for (String k : keys) {
+            // mask in ?k=...& or &k=...& patterns
+            u = u.replaceAll("(?i)([?&]" + k + ")=([^&;]+)", "$1=***");
+            // mask in ;k=...; patterns (SQL Server / H2)
+            u = u.replaceAll("(?i)(;" + k + ")=([^;&]+)", "$1=***");
         }
-        if (url != null) {
-            if (url.startsWith("jdbc:h2:")) return "org.h2.Driver";
-            if (url.startsWith("jdbc:postgresql:")) return "org.postgresql.Driver";
-            if (url.startsWith("jdbc:mysql:")) return "com.mysql.cj.jdbc.Driver";
-            if (url.startsWith("jdbc:mariadb:")) return "org.mariadb.jdbc.Driver";
-            if (url.startsWith("jdbc:sqlserver:")) return "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-            if (url.startsWith("jdbc:oracle:")) return "oracle.jdbc.OracleDriver";
-            if (url.startsWith("jdbc:sqlite:")) return "org.sqlite.JDBC";
+        return u;
+    }
+
+    private static Map<String, Object> errorDetails(Throwable ce) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("ok", false);
+        m.put("error", ce.getMessage());
+        if (ce instanceof SQLException) {
+            SQLException se = (SQLException) ce;
+            m.put("sqlState", se.getSQLState());
+            m.put("errorCode", se.getErrorCode());
         }
-        return null;
+        return m;
     }
 
     public static void start(int port) throws IOException {
@@ -191,11 +189,9 @@ public class ApiServer {
                 res.json(200, out);
             } catch (Exception ce) {
                 long elapsed = System.currentTimeMillis() - start;
-                res.json(503, Map.of(
-                        "ok", false,
-                        "error", ce.getMessage(),
-                        "elapsedMs", elapsed
-                ));
+                Map<String,Object> out = errorDetails(ce);
+                out.put("elapsedMs", elapsed);
+                res.json(503, out);
             }
         });
         router.get("/api/endpoints", (req, res) -> {
@@ -316,6 +312,13 @@ public class ApiServer {
                 m.put("maxLifetimeMs", ds.getMaxLifetimeMs());
                 m.put("autoCommit", ds.getAutoCommit());
                 m.put("poolName", ds.getPoolName());
+                // last test metadata
+                m.put("lastTestOk", ds.getLastTestOk());
+                m.put("lastTestAtEpochMs", ds.getLastTestAtEpochMs());
+                m.put("lastTestMessage", ds.getLastTestMessage());
+                m.put("lastTestDbProduct", ds.getLastTestDbProduct());
+                m.put("lastTestDbVersion", ds.getLastTestDbVersion());
+                m.put("lastTestElapsedMs", ds.getLastTestElapsedMs());
                 m.put("active", ds.getName() != null && ds.getName().equals(active));
                 list.add(m);
             }
@@ -390,10 +393,14 @@ public class ApiServer {
             String pw = data.get("password");
             String drv = data.get("driver");
             String type = data.get("type");
+            Integer timeoutSec = parseInteger(data.get("timeoutSec"));
+            if (timeoutSec == null || timeoutSec <= 0) timeoutSec = 5;
+            if (timeoutSec > 60) timeoutSec = 60; // cap
             if (url == null || url.isBlank()) {
                 String built = buildJdbcUrl(data);
                 if (built != null && !built.isBlank()) url = built;
             }
+            DatasourceConfig toPersist = null;
             if ((url == null || url.isBlank()) && name != null && !name.isBlank()) {
                 AppConfig cfg = ConfigManager.getConfig();
                 for (DatasourceConfig ds : cfg.getDatasources()) {
@@ -403,32 +410,55 @@ public class ApiServer {
                         if (pw == null || pw.isBlank()) pw = ds.getPassword();
                         if (drv == null) drv = ds.getDriver();
                         if (type == null) type = ds.getType();
+                        toPersist = ds;
                         break;
                     }
                 }
             }
             if (url == null || url.isBlank()) { res.json(200, Map.of("ok", false, "error", "jdbc url is required or constructible from fields")); return; }
-            String driver = inferDriver(type, url, drv);
+            String driver = DriverUtil.inferDriver(type, url, drv);
             try { if (driver != null) Class.forName(driver); } catch (Throwable t) { res.json(200, Map.of("ok", false, "error", "driver not found: "+driver)); return; }
             long start = System.currentTimeMillis();
-            java.sql.DriverManager.setLoginTimeout(5);
+            java.sql.DriverManager.setLoginTimeout(timeoutSec);
             Properties props = new Properties();
             if (user != null) props.setProperty("user", user);
-            if (pw != null) props.setProperty("password", pw);
+            if (pw != null && !pw.isEmpty()) props.setProperty("password", pw);
             try (Connection c = (props.isEmpty()? java.sql.DriverManager.getConnection(url) : java.sql.DriverManager.getConnection(url, props))) {
                 DatabaseMetaData md = c.getMetaData();
                 long elapsed = System.currentTimeMillis() - start;
                 Map<String,Object> out = new LinkedHashMap<>();
                 out.put("ok", true);
                 out.put("message", "Connected");
-                out.put("url", url);
+                out.put("url", sanitizeUrl(url));
                 out.put("dbProduct", md.getDatabaseProductName());
                 out.put("dbVersion", md.getDatabaseProductVersion());
                 out.put("elapsedMs", elapsed);
+                // persist last test result if testing a named datasource
+                if (toPersist != null) {
+                    toPersist.setLastTestOk(true);
+                    toPersist.setLastTestAtEpochMs(System.currentTimeMillis());
+                    toPersist.setLastTestMessage("Connected");
+                    toPersist.setLastTestDbProduct(md.getDatabaseProductName());
+                    toPersist.setLastTestDbVersion(md.getDatabaseProductVersion());
+                    toPersist.setLastTestElapsedMs(elapsed);
+                    ConfigManager.saveConfig(ConfigManager.getConfig());
+                }
                 res.json(200, out);
             } catch (Exception ce) {
                 long elapsed = System.currentTimeMillis() - start;
-                res.json(200, Map.of("ok", false, "error", ce.getMessage(), "url", url, "elapsedMs", elapsed));
+                Map<String, Object> out = errorDetails(ce);
+                out.put("url", sanitizeUrl(url));
+                out.put("elapsedMs", elapsed);
+                if (toPersist != null) {
+                    toPersist.setLastTestOk(false);
+                    toPersist.setLastTestAtEpochMs(System.currentTimeMillis());
+                    toPersist.setLastTestMessage(ce.getMessage());
+                    toPersist.setLastTestDbProduct(null);
+                    toPersist.setLastTestDbVersion(null);
+                    toPersist.setLastTestElapsedMs(elapsed);
+                    ConfigManager.saveConfig(ConfigManager.getConfig());
+                }
+                res.json(200, out);
             }
         });
         router.post("/ui/datasource/activate", (req, res) -> {
@@ -454,6 +484,59 @@ public class ApiServer {
             }
             ConfigManager.saveConfig(cfg);
             res.text(200, "Deleted", "application/json");
+        });
+        // Per-datasource health check (non-persisted)
+        router.get("/ui/datasource/health", (req, res) -> {
+            String name = req.query("name");
+            Integer timeoutSec = parseInteger(req.query("timeoutSec"));
+            if (timeoutSec == null || timeoutSec <= 0) timeoutSec = 3;
+            if (timeoutSec > 60) timeoutSec = 60;
+            AppConfig cfg = ConfigManager.getConfig();
+            DatasourceConfig target = null;
+            if (name != null && !name.isBlank()) {
+                for (DatasourceConfig d : cfg.getDatasources()) {
+                    if (name.equals(d.getName())) { target = d; break; }
+                }
+                if (target == null) { res.json(404, Map.of("ok", false, "error", "datasource not found")); return; }
+            } else {
+                // use active
+                String active = cfg.getActiveDatasource();
+                for (DatasourceConfig d : cfg.getDatasources()) {
+                    if (active != null && active.equals(d.getName())) { target = d; break; }
+                }
+                if (target == null && !cfg.getDatasources().isEmpty()) target = cfg.getDatasources().get(0);
+            }
+            String url = target.getJdbcUrl();
+            String user = target.getUsername();
+            String pw = target.getPassword();
+            String driver = target.getDriver();
+            String type = target.getType();
+            driver = DriverUtil.inferDriver(type, url, driver);
+            try { if (driver != null) Class.forName(driver); } catch (Throwable t) { res.json(200, Map.of("ok", false, "error", "driver not found: "+driver)); return; }
+            long start = System.currentTimeMillis();
+            java.sql.DriverManager.setLoginTimeout(timeoutSec);
+            Properties props = new Properties();
+            if (user != null) props.setProperty("user", user);
+            if (pw != null && !pw.isEmpty()) props.setProperty("password", pw);
+            try (Connection c = (props.isEmpty()? java.sql.DriverManager.getConnection(url) : java.sql.DriverManager.getConnection(url, props))) {
+                DatabaseMetaData md = c.getMetaData();
+                long elapsed = System.currentTimeMillis() - start;
+                Map<String,Object> out = new LinkedHashMap<>();
+                out.put("ok", true);
+                out.put("name", target.getName());
+                out.put("url", sanitizeUrl(url));
+                out.put("dbProduct", md.getDatabaseProductName());
+                out.put("dbVersion", md.getDatabaseProductVersion());
+                out.put("elapsedMs", elapsed);
+                res.json(200, out);
+            } catch (Exception ce) {
+                long elapsed = System.currentTimeMillis() - start;
+                Map<String, Object> out = errorDetails(ce);
+                out.put("name", target.getName());
+                out.put("url", sanitizeUrl(url));
+                out.put("elapsedMs", elapsed);
+                res.json(200, out);
+            }
         });
 
         server.createContext("/", exchange -> {

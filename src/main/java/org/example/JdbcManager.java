@@ -30,32 +30,7 @@ public class JdbcManager {
 
     private static String inferDriver(DatasourceConfig ds) {
         if (ds == null) return null;
-        String t = ds.getType();
-        if (t != null) {
-            String lt = t.toLowerCase();
-            switch (lt) {
-                case "h2": return "org.h2.Driver";
-                case "postgres":
-                case "postgresql": return "org.postgresql.Driver";
-                case "mysql": return "com.mysql.cj.jdbc.Driver";
-                case "mariadb": return "org.mariadb.jdbc.Driver";
-                case "mssql":
-                case "sqlserver": return "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-                case "oracle": return "oracle.jdbc.OracleDriver";
-                case "sqlite": return "org.sqlite.JDBC";
-            }
-        }
-        String url = ds.getJdbcUrl();
-        if (url != null) {
-            if (url.startsWith("jdbc:h2:")) return "org.h2.Driver";
-            if (url.startsWith("jdbc:postgresql:")) return "org.postgresql.Driver";
-            if (url.startsWith("jdbc:mysql:")) return "com.mysql.cj.jdbc.Driver";
-            if (url.startsWith("jdbc:mariadb:")) return "org.mariadb.jdbc.Driver";
-            if (url.startsWith("jdbc:sqlserver:")) return "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-            if (url.startsWith("jdbc:oracle:")) return "oracle.jdbc.OracleDriver";
-            if (url.startsWith("jdbc:sqlite:")) return "org.sqlite.JDBC";
-        }
-        return null;
+        return DriverUtil.inferDriver(ds.getType(), ds.getJdbcUrl(), ds.getDriver());
     }
 
     private static DatasourceConfig resolveActive(AppConfig cfg) {
@@ -100,7 +75,7 @@ public class JdbcManager {
     private static synchronized void ensurePool() {
         AppConfig cfg = ConfigManager.getConfig();
         DatasourceConfig ds = resolveActive(cfg);
-        String driver = (ds.getDriver() == null || ds.getDriver().isBlank()) ? inferDriver(ds) : ds.getDriver();
+        String driver = inferDriver(ds);
         ensureDriverLoaded(driver);
         String sig = signature(ds, driver);
         if (POOL != null && sig.equals(POOL_SIG)) return; // up-to-date
@@ -145,15 +120,8 @@ public class JdbcManager {
         String t = ds.getType();
         if (t != null && !t.isBlank()) return t.toLowerCase();
         String url = ds.getJdbcUrl();
-        if (url == null) return "h2";
-        if (url.startsWith("jdbc:h2:")) return "h2";
-        if (url.startsWith("jdbc:postgresql:")) return "postgres";
-        if (url.startsWith("jdbc:mysql:")) return "mysql";
-        if (url.startsWith("jdbc:mariadb:")) return "mariadb";
-        if (url.startsWith("jdbc:sqlserver:")) return "mssql";
-        if (url.startsWith("jdbc:oracle:")) return "oracle";
-        if (url.startsWith("jdbc:sqlite:")) return "sqlite";
-        return "h2"; // safe default
+        String inferred = DriverUtil.inferTypeFromUrl(url);
+        return inferred != null ? inferred : "h2";
     }
 
     public static void ensureMetaTable() {

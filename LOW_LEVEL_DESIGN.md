@@ -9,8 +9,10 @@ Runtime contract
   - /api/{entity}[/{id}] — CRUD over JDBC using metadata-defined tables
   - /ui/* — static HTML UIs (builder, datasource, swagger)
   - /openapi.json — generated OpenAPI 3.0 spec
+  - /health, /ready — liveness/readiness
+  - /ui/datasource/health — per-datasource DB ping
 - Output: JSON for API responses, HTML for UI pages.
-- Errors: JSON {"error":"message"}; appropriate HTTP status (400/404/405/500).
+- Errors: JSON {"error":"message"}; appropriate HTTP status (400/404/405/500). Health endpoints return 200 with ok=false payloads for failures except /ready uses 503 when DB is not ready.
 
 Ports and processes
 - Default HTTP port 8080. Override with -Dappbana.port or APPBANA_PORT.
@@ -29,28 +31,20 @@ Key packages and classes (src/main/java/org/example)
   - /ui/builder — serves builder.html
   - /ui/datasource — serves datasource.html
   - /ui/swagger — serves swagger.html (embedded Swagger UI loading /openapi.json)
-  - /ui/datasource/config|list|save|activate|delete — JSON endpoints for multi-DS management (no passwords returned)
-  - /ui/datasource/test — JSON endpoint to attempt a one-off JDBC connection from provided fields (or by name); returns {ok,message|error,url,dbProduct,dbVersion,elapsedMs}
-  - /ui/datasource/save — Also supports server-side JDBC URL construction: if `url` is omitted, ApiServer builds one from components (type, host, port, dbname, params, and H2/SQLite-specific fields). See buildJdbcUrl() helper inside ApiServer.
-- SchemaManager.java — Schema persistence/migrations:
-  - init(): ensures meta tables
-  - saveSchema(EntitySchema): validates, persists JSON, applies DDL changes
-  - generateMigrationPlan(EntitySchema): preview DDL without applying
-  - listSchemaNames([page,size,q]): list stored schemas
-  - loadSchema(name): load JSON into EntitySchema
-- JdbcManager.java — Connection acquisition via HikariCP. Responsibilities:
-  - Build/maintain a HikariDataSource for the active datasource
-  - Infer driver from type/URL if missing; apply pool settings and sane defaults
-  - Expose getConnection(); rebuild pool lazily on config change
-- ConfigManager.java — Load/save config JSON (data/appbana-config.json default), normalize into multi-DS shape, apply env overrides.
+  - /ui/datasource/config|list|save|test|activate|delete — JSON endpoints for multi-DS management
+  - /ui/datasource/health — GET; ping a datasource by name (or active if omitted)
+- SchemaManager.java — Schema persistence/migrations (init/save/generateMigrationPlan/list/load)
+- JdbcManager.java — Connection acquisition via HikariCP. Uses DriverUtil to infer driver/type; rebuilds pool lazily on config change
+- ConfigManager.java — Load/save config JSON (default path), normalize into multi-DS shape; infer missing datasource types via DriverUtil; apply env overrides.
+- DriverUtil.java — Centralized mapping for DB type and JDBC driver inference.
 - AppConfig.java — Root config model (legacy single-DS fields kept for back-compat) + datasources[] + activeDatasource.
-- DatasourceConfig.java — DS model: {name,type,jdbcUrl,username,password,driver,maxPoolSize?,minIdle?,connectionTimeoutMs?,idleTimeoutMs?,maxLifetimeMs?,autoCommit?,poolName?}.
+- DatasourceConfig.java — DS model: {name,type,jdbcUrl,username,password,driver,maxPoolSize?,minIdle?,connectionTimeoutMs?,idleTimeoutMs?,maxLifetimeMs?,autoCommit?,poolName?, lastTest*?}.
 - OpenApiGenerator.java — Converts stored EntitySchema list into a minimal OpenAPI 3.0 document.
 - model/EntitySchema.java — Schema model with Field sub-class (name,type,length,required,primaryKey,autoIncrement,min,max,pattern).
 
 Static resources (src/main/resources/ui)
 - builder.html — Minimal schema builder UI (posts JSON to /schema; also useful for preview).
-- datasource.html — Multi-datasource management UI with a JDBC URL Builder and a Test Connection button. The list also offers a per-row “Test” action that calls /ui/datasource/test with the saved datasource name and shows the result. Fields: name, type, jdbcUrl, username, password, driver, and Pool section (maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName). Actions: Save/Activate/Delete/List/Load. Includes a JDBC URL Builder that can synthesize URLs for H2/Postgres/MySQL/MariaDB/SQL Server/Oracle/SQLite from host/port/db/params.
+- datasource.html — Multi-datasource management UI with a JDBC URL Builder and a Test Connection button, plus per-row Test and Ping actions. Shows Status chip and Last tested. Fields: name, type, jdbcUrl, username, password, driver, and Pool section (maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName). Actions: Save/Activate/Delete/List/Load/Test/Ping.
 - swagger.html — Embedded Swagger UI for /openapi.json.
 
 Datasource URL construction (details)
@@ -59,7 +53,11 @@ Datasource URL construction (details)
   - Common fields: type, host, port, dbname, params
   - H2-only: h2Mode (file|mem), h2File, h2MemName
   - SQLite-only: sqliteFile
-  - Driver inference still applies in JdbcManager if driver not provided.
+  - Driver inference via DriverUtil when driver not provided.
+
+Test Connection and health
+- POST /ui/datasource/test: one-off connection attempt. Supports timeoutSec (default 5; max 60). Response includes ok/message|error, masked url, dbProduct/dbVersion on success, elapsedMs, and optional sqlState/errorCode for SQLExceptions. When testing a saved datasource by name, the result is persisted into DatasourceConfig.lastTest* fields.
+- GET /ui/datasource/health: quick ping for a saved datasource (or active if none specified). Does not persist; returns ok flag and timings.
 
 Config resolution
 - Path: APPBANA_CONFIG or -Dappbana.config; default data/appbana-config.json.
@@ -68,35 +66,22 @@ Config resolution
 
 Database mapping rules
 - Table name = UPPERCASE(schema.name). Column names = UPPERCASE(field.name). Quoted identifiers with double-quotes.
-- Supported field types → SQL types (simplified):
-  - string/text → VARCHAR(length or default)
-  - int/integer → INTEGER
-  - long → BIGINT
-  - boolean → BOOLEAN
-  - date/timestamp → TIMESTAMP
-- Primary key: first field with primaryKey=true. Auto-increment supported for integer/long on H2 and common RDBMS.
+- Supported field types → SQL types (simplified). Primary key handling and auto-increment as before.
 
 Validation and coercion (EntityHandler)
-- Required fields enforced; numbers range-checked (min/max), strings length-checked, regex pattern supported; timestamps accept epoch millis or ISO-8601.
-- Bad input → 400 with {error}.
-
-OpenAPI generation
-- Paths for each stored entity: /api/{entity} (GET,POST) and /api/{entity}/{id} (GET,PUT,DELETE).
-- Components.schemas include object model per entity based on fields.
-- Served at /openapi.json; Swagger UI at /ui/swagger.
+- Required, number ranges, string length/patterns, timestamp parsing (epoch millis or ISO-8601). Bad input → 400.
 
 Error handling
-- send() and sendJson() helpers. 405 for wrong methods; 404 for unknown entity or missing schema; 500 for unexpected exceptions.
+- send()/sendJson() helpers. 405 for wrong methods; 404 for unknown entity or missing schema; 500 for unexpected errors.
 
 Performance notes
-- Virtual threads minimize thread overhead for blocking JDBC per request.
-- HikariCP settings default to conservative values; configurable per datasource.
+- Virtual threads minimize thread overhead for blocking JDBC per request. HikariCP settings default to conservative values.
 
 Observability
-- SLF4J simple logs. TODO: add health endpoints and per-DS connectivity check.
+- SLF4J simple logs. Health endpoints for liveness/readiness and per-DS ping.
 
 Security considerations
-- No auth by default; avoid exposing in untrusted networks. TODO: add authN/Z on schema and datasource endpoints.
+- No auth by default; TODO: add authN/Z on schema and datasource endpoints.
 
 Developer workflows
 - Build: ./mvnw -DskipTests package → target/app-bana-1.0-SNAPSHOT-fat.jar
@@ -110,8 +95,9 @@ Edge cases to watch
 - No schemas stored → /openapi.json returns an empty paths object (valid)
 
 Test checklist (manual)
-- GET /ui/datasource/list returns array (default H2 present)
+- GET /ui/datasource/list returns array with lastTest* fields
 - POST /ui/datasource/save with new name creates + activates; list shows it
+- POST /ui/datasource/test with name persists lastTest*; list shows Status and Last tested updated
+- GET /ui/datasource/health?name=<ds> shows live/down with elapsedMs; Ping button updates the row
 - POST /schema?preview=true returns DDL plan; POST /schema applies
-- CRUD endpoints operate as expected; GET /openapi.json reflects entities
-- /ui/swagger renders the spec
+- CRUD endpoints operate as expected; GET /openapi.json reflects entities; /ui/swagger renders the spec

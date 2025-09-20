@@ -4,9 +4,9 @@ This backlog captures near-term and medium-term improvements. Check off items as
 
 Priority A (next)
 - [ ] Add authentication and role-based access control to /schema, /api/*, and /ui/datasource/*.
-- [ ] Add per-datasource health endpoint and surface status in UI (badge + last tested timestamp).
-- [ ] Persist last test result/time for each datasource; show a “last tested” column in the list.
-- [ ] Make Test Connection timeout configurable; improve error details and mask sensitive data.
+- [x] Add per-datasource health endpoint and surface status in UI (badge + last tested timestamp).
+- [x] Persist last test result/time for each datasource; show a “last tested” column in the list.
+- [x] Make Test Connection timeout configurable; improve error details and mask sensitive data.
 
 Priority B
 - [ ] Add CI checks and a PR template to enforce “docs updated” (README.md, FUNCTIONAL_SPEC.md, LOW_LEVEL_DESIGN.md, COPILOT_NOTES.md).
@@ -23,11 +23,10 @@ Priority C
 - [ ] Improve migration engine (rename columns safely, rollback plan preview, dry-run SQL validation per DB type).
 
 Housekeeping
-- [ ] Add “last tested” visual indicator in the UI list; allow manual refresh; debounce repeat tests.
-- [ ] Add connectivity indicator chip (Live/Down) that pings health endpoint.
-- [ ] Centralize driver inference map; document supported DBs and jdbc-url examples in README.
+- [x] Add “last tested” visual indicator in the UI list; allow manual refresh; debounce repeat tests. (Added status chip + Last tested column; manual refresh via Test/Ping.)
+- [x] Add connectivity indicator chip (Live/Down) that pings health endpoint. (Added Ping action hitting /ui/datasource/health.)
+- [x] Centralize driver inference map; document supported DBs and jdbc-url examples in README. (Introduced DriverUtil and updated README.)
 
 Notes
 - Keep this file aligned with the “Next recommended enhancements” sections in README.md and FUNCTIONAL_SPEC.md.
 - After implementing a backlog item, update docs and the change logs accordingly.
-

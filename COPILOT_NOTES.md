@@ -18,6 +18,12 @@ Backlog: see `TODO.md` for a prioritized to-do list and next actions.
 - If you change OpenAPI, verify /openapi.json and Swagger UI rendering.
 
 ## Change Log (recent)
+- 2025-09-20: Per-datasource health + last test persistence; driver util centralization.
+  - Backend: GET /ui/datasource/health pings a datasource (by name or active) and returns {ok,name,url(masked),dbProduct?,dbVersion?,elapsedMs,error?}.
+  - Backend: POST /ui/datasource/test now accepts timeoutSec, returns sqlState/errorCode for SQLExceptions, masks passwords in URL, and persists lastTest* fields when testing a saved datasource by name.
+  - Model: DatasourceConfig gains lastTestOk, lastTestAtEpochMs, lastTestMessage, lastTestDbProduct, lastTestDbVersion, lastTestElapsedMs.
+  - UI: datasource.html shows a Status chip (Live/Down/Unknown) and a Last tested column; added a Ping action to call /ui/datasource/health.
+  - Refactor: centralized driver/type inference into DriverUtil and updated ApiServer/JdbcManager/ConfigManager to use it.
 - 2025-09-19: Added Test Connection feature for datasources.
   - Backend: POST /ui/datasource/test attempts a short-lived JDBC connection from provided url or components (or by name); returns {ok,message|error,url,dbProduct,dbVersion,elapsedMs}.
   - UI: “Test Connection” button on the form; per-row “Test” action in the list.
@@ -50,54 +56,38 @@ Backlog: see `TODO.md` for a prioritized to-do list and next actions.
   - /ui/builder — serves builder.html
   - /ui/datasource — serves datasource.html
   - /ui/swagger — serves swagger.html (Swagger UI for /openapi.json)
-  - /ui/datasource/* — JSON endpoints (list/config/save/test/activate/delete) — now include pool fields and testing endpoint
+  - /ui/datasource/* — JSON endpoints (list/config/save/test/activate/delete/health) — include pool fields, persist last test metadata, and testing/health endpoints
 - SchemaManager.java — validates/persists schema JSON; creates/migrates tables; migration preview.
-- JdbcManager.java — HikariCP pool for active datasource; infers driver from type/URL; ensures meta tables.
-- ConfigManager.java — loads/saves config JSON; normalizes to multi-DS shape; applies env overrides; seeds default.
-- AppConfig.java — root config (legacy single-DS fields retained for back-compat) + datasources[] + activeDatasource.
-- DatasourceConfig.java — {name,type,jdbcUrl,username,password,driver,maxPoolSize?,minIdle?,connectionTimeoutMs?,idleTimeoutMs?,maxLifetimeMs?,autoCommit?,poolName?}.
+- JdbcManager.java — HikariCP pool for the active datasource; infers driver from type/URL (via DriverUtil); ensures meta tables.
+- ConfigManager.java — loads/saves config JSON; normalizes to multi-DS shape; applies env overrides; seeds default; infers missing types via DriverUtil.
+- AppConfig.java — root config + datasources[] + activeDatasource.
+- DatasourceConfig.java — {name,type,jdbcUrl,username,password,driver,maxPoolSize?,minIdle?,connectionTimeoutMs?,idleTimeoutMs?,maxLifetimeMs?,autoCommit?,poolName?, lastTest*?}.
 - model/EntitySchema.java — schema model.
 - OpenApiGenerator.java — builds /openapi.json from saved schemas.
 
 Frontend (resources/ui)
 - builder.html — minimal schema builder posting to /schema.
-- datasource.html — multi-DS management UI with Type selector, driver/URL hints, JDBC URL Builder, Connection Pool section, and Test Connection (form and per-row).
+- datasource.html — multi-DS management UI with Type selector, driver/URL hints, JDBC URL Builder, Connection Pool section, Test Connection, per-row Test, Status chip (Live/Down/Unknown), Last tested, and Ping.
 - swagger.html — embedded Swagger UI for /openapi.json at /ui/swagger.
 
 ## Behavior and contracts
 - Active datasource governs all DB ops. Changing active or pool config rebuilds the pool on next use.
 - Passwords are never returned by list/config endpoints. Blank password on save doesn’t overwrite existing.
 - JDBC URL construction (server-side): if `url` is omitted in POST /ui/datasource/save, the server builds it from components.
-  - Common fields: `type`, `host`, `port`, `dbname`, `params`
-  - H2: `h2Mode` (file|mem), `h2File`, `h2MemName`
-  - SQLite: `sqliteFile`
-- Test Connection:
-  - Endpoint: POST /ui/datasource/test → { ok, message|error, url, dbProduct?, dbVersion?, elapsedMs }
-  - Request body: either {url, username?, password?, driver?, type?} or components {type, host, port, dbname, params?, username?, password?, driver?}; `name` can reference an existing saved datasource.
-- Driver inference mapping:
-  - h2→org.h2.Driver; postgres→org.postgresql.Driver; mysql→com.mysql.cj.jdbc.Driver; mariadb→org.mariadb.jdbc.Driver; mssql→com.microsoft.sqlserver.jdbc.SQLServerDriver; oracle→oracle.jdbc.OracleDriver; sqlite→org.sqlite.JDBC.
-- Pool defaults when unset: maxPoolSize=10, minIdle=2, connectionTimeoutMs=30000, idleTimeoutMs=600000, maxLifetimeMs=1800000, autoCommit=true, poolName="appbana-<name>".
+- Test Connection: POST /ui/datasource/test returns structured result; masks password in URL; persists last test if testing by name; supports timeoutSec.
+- Health: GET /ui/datasource/health tests connectivity for a named or active datasource without persisting.
+- Driver inference mapping centralized in DriverUtil.
 
 ## Config model
 - Path: APPBANA_CONFIG env or -Dappbana.config (default data/appbana-config.json).
-- Shape:
-```
-{
-  "datasources": [
-    {"name":"primary","type":"h2","jdbcUrl":"jdbc:h2:./data/appbana;AUTO_SERVER=TRUE","username":"sa","password":"secret","driver":"org.h2.Driver",
-     "maxPoolSize":10,"minIdle":2,"connectionTimeoutMs":30000,"idleTimeoutMs":600000,"maxLifetimeMs":1800000,"autoCommit":true,"poolName":"appbana-primary"}
-  ],
-  "activeDatasource": "primary"
-}
-```
-- Back-compat: if only root fields exist (jdbcUrl/username/password/driver/name), ConfigManager seeds datasources[0] and sets active.
-- Env overrides (root): APPBANA_JDBC_URL, APPBANA_DB_USER, APPBANA_DB_PASS, APPBANA_DB_DRIVER.
+- See README for example shape. DatasourceConfig includes pool and last test fields.
 
 ## Useful endpoints (JSON)
-- GET /ui/datasource/list → [{name,type,jdbcUrl,username,driver,active,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName}]
+- GET /ui/datasource/list → [{name,type,jdbcUrl,username,driver,active,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName,lastTestOk,lastTestAtEpochMs,lastTestMessage,lastTestDbProduct,lastTestDbVersion,lastTestElapsedMs}]
 - GET /ui/datasource/config → {name,jdbcUrl,username,driver,type,maxPoolSize,minIdle,connectionTimeoutMs,idleTimeoutMs,maxLifetimeMs,autoCommit,poolName}
-- POST /ui/datasource/save → accepts either a full `url` or components listed above; also {name,type?,username?,password?,driver?,maxPoolSize?,minIdle?,connectionTimeoutMs?,idleTimeoutMs?,maxLifetimeMs?,autoCommit?,poolName?}
-- POST /ui/datasource/test → one-off connection test; returns {ok, url, message|error, dbProduct?, dbVersion?, elapsedMs}
+- POST /ui/datasource/save → accepts a full `url` or components; also pool fields
+- POST /ui/datasource/test → one-off connection test; supports timeoutSec; masks password; persists last test for named DS
+- GET /ui/datasource/health → ping a datasource (by name or active)
 - POST /ui/datasource/activate → {name}
 - POST /ui/datasource/delete → {name}
 - POST /schema?preview=true → returns planned DDL (no changes)
@@ -111,11 +101,11 @@ Frontend (resources/ui)
 
 ## Quick local smoke (manual)
 - Open /ui/datasource, add or load a datasource; optionally set pool fields; Save (auto-activates); then refresh list.
-- Use the Test Connection button or per-row Test action to validate connectivity.
+- Use the Test Connection button or per-row Test action to validate connectivity; Ping for a quick status.
 - Open /ui/builder, create a test schema; POST to /schema; verify CRUD at /api/{entity}.
 - Fetch /openapi.json or visit /ui/swagger to confirm spec includes your entity.
 
 ## Next steps (suggested)
 - Add auth to /schema, /api/*, and /ui/datasource/*.
-- Add per-datasource connectivity test button in datasource UI and a health endpoint.
-- Add Swagger UI page to render /openapi.json.
+- Add metrics and structured request logs; basic rate limiting for test/health endpoints.
+- Expand OpenAPI with response schemas and examples.
