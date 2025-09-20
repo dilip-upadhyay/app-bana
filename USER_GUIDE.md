@@ -10,6 +10,7 @@ Contents
 - Prerequisites
 - Quick start
 - Configuration (port, config file, environment overrides)
+- Authentication (optional)
 - Datasource management (UI + API)
 - Designing entities (Schema Builder)
 - Using the runtime CRUD APIs
@@ -45,6 +46,25 @@ java -Dappbana.port=8081 -jar target/app-bana-1.0-SNAPSHOT-fat.jar
 - API endpoints index (machine-readable): http://localhost:8080/api/endpoints
 - Health: http://localhost:8080/health and readiness: http://localhost:8080/ready
 
+Note: If authentication is enabled (see below), enter your token in the top bar of the UIs (builder, datasource, swagger) to authorize requests.
+
+## Token quickstart (optional)
+- Set tokens when starting the server (zsh)
+```bash
+export APPBANA_ADMIN_TOKEN=admin123
+export APPBANA_READ_TOKEN=read123
+java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
+```
+- In the UIs (builder, datasource, swagger): paste your token in the “Auth token” box and click “Save token”.
+- With curl (either header works)
+```bash
+export TOKEN=admin123
+# Using custom header
+curl -sS http://localhost:8080/schema -H "X-AppBana-Token: $TOKEN"
+# Or using Bearer auth
+curl -sS http://localhost:8080/schema -H "Authorization: Bearer $TOKEN"
+```
+
 Configuration
 - Port
   - System property: `-Dappbana.port=9090`
@@ -55,6 +75,32 @@ Configuration
 - Env overrides for connection (optional)
   - APPBANA_JDBC_URL, APPBANA_DB_USER, APPBANA_DB_PASS, APPBANA_DB_DRIVER
   - Or equivalent system properties: `-Dappbana.jdbc.url`, `-Dappbana.db.user`, `-Dappbana.db.pass`, `-Dappbana.db.driver`
+
+Authentication (optional)
+- AppBana supports simple token-based auth. When no tokens are configured, all endpoints are open (development mode).
+- Configure tokens in the config file or via environment/system properties:
+  - Config fields: `adminToken` (read-write) and `readToken` (read-only)
+  - Env vars: `APPBANA_ADMIN_TOKEN`, `APPBANA_READ_TOKEN`
+  - System props: `-Dappbana.admin.token=...`, `-Dappbana.read.token=...`
+- Client headers (either works):
+  - `X-AppBana-Token: <token>`
+  - `Authorization: Bearer <token>`
+- Authorization rules when tokens are set:
+  - Read-only (readToken or adminToken): GET /schema, GET /schema/{name}, GET /api/*, GET /openapi.json, GET /ui/datasource/list|config|health
+  - Admin (adminToken only): POST /schema (apply/preview), POST /api/* (writes), PUT/DELETE /api/*, POST /ui/datasource/save|test|activate|delete
+- UIs: builder.html, datasource.html, and swagger.html include an “Auth token” box. Saving the token stores it in localStorage so all UI requests send it automatically.
+- Curl examples with token
+```bash
+# set your token for convenience
+export TOKEN=admin123
+# Save a schema (admin)
+curl -sS -X POST http://localhost:8080/schema \
+  -H 'Content-Type: application/json' \
+  -H "X-AppBana-Token: $TOKEN" \
+  --data-binary '{"name":"contact","fields":[{"name":"id","type":"long","primaryKey":true,"autoIncrement":true}]}'
+# List schemas (read)
+curl -sS http://localhost:8080/schema -H "Authorization: Bearer $TOKEN"
+```
 
 Datasource management
 Use the Datasource UI at /ui/datasource to:
@@ -147,29 +193,35 @@ Using the runtime CRUD APIs
 
 Examples (replace port if overridden)
 ```bash
-# Create
+# Optional: supply token if auth is enabled
+export TOKEN=read123
+
+# Create (requires admin token)
 curl -sS -X POST http://localhost:8080/api/contact \
   -H 'Content-Type: application/json' \
+  -H "X-AppBana-Token: $TOKEN" \
   -d '{"firstName":"Ada","age":36}'
 
-# List
-curl -sS http://localhost:8080/api/contact
+# List (read)
+curl -sS http://localhost:8080/api/contact -H "Authorization: Bearer $TOKEN"
 
-# Get by id
-curl -sS http://localhost:8080/api/contact/1
+# Get by id (read)
+curl -sS http://localhost:8080/api/contact/1 -H "X-AppBana-Token: $TOKEN"
 
-# Update
+# Update (admin)
 curl -sS -X PUT http://localhost:8080/api/contact/1 \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"age":37}'
 
-# Delete
-curl -sS -X DELETE http://localhost:8080/api/contact/1
+# Delete (admin)
+curl -sS -X DELETE http://localhost:8080/api/contact/1 -H "X-AppBana-Token: $TOKEN"
 ```
 
 OpenAPI & Swagger UI
 - Spec: GET /openapi.json
 - UI: /ui/swagger (renders the spec)
+- If auth is enabled, enter your token in the top bar and click Save token; the UI will include it automatically for fetching the spec and for Try it out requests.
 - Tip: Re-open Swagger after adding schemas to see new endpoints.
 
 Health & readiness
@@ -192,8 +244,10 @@ Troubleshooting & tips
   - If only root fields are present, AppBana seeds a default datasource and marks it active.
 
 Security notes
-- No auth by default. Don’t expose /schema and /ui/datasource in untrusted networks.
-- Add a reverse proxy with auth or network restrictions for production.
+- Auth is optional. If `adminToken`/`readToken` are not set, endpoints are open (development mode).
+- When tokens are set, read operations require read/admin token; write operations require admin token.
+- UIs provide a token input; tokens are stored locally in the browser (localStorage) for convenience.
+- For production, place AppBana behind TLS (reverse proxy) and restrict access to admin endpoints.
 
 UI step-by-step walkthroughs (all features)
 
@@ -261,17 +315,18 @@ E) Swagger UI — Explore and test APIs
 ![Swagger UI](docs/screenshots/swagger.svg)
 
 1) Open http://localhost:8080/ui/swagger (loads /openapi.json)
-2) After saving schemas, hit refresh in Swagger UI to load new endpoints
-3) Expand your entity (e.g., contact) and click “Try it out” for POST/GET/PUT/DELETE
-4) Use JSON bodies that match your schema; submit and inspect responses
-5) Errors will be shown with details — fix input or schema accordingly
+2) If auth is enabled, enter your token in the top bar and click Save token
+3) After saving schemas, hit refresh in Swagger UI to load new endpoints
+4) Expand your entity (e.g., contact) and click “Try it out” for POST/GET/PUT/DELETE
+5) Use JSON bodies that match your schema; submit and inspect responses
+6) Errors will be shown with details — fix input or schema accordingly
 
 Recipes (common tasks)
 
 1) Quick smoke test with H2 (in-memory)
 - In Datasource UI: Type=H2, Mode=In-Memory, Name=smoke, Username=sa → Test Connection → Save
 - In Builder UI: Create a small schema → Save
-- In Swagger UI: POST a record, then GET the list
+- In Swagger UI: Enter token if configured → POST a record, then GET the list
 
 2) Switch to Postgres running in Docker
 - Run the Docker command above (sa / Password_123#)
@@ -284,7 +339,7 @@ Recipes (common tasks)
 - Save and monitor DB performance
 
 Where to go next
-- Explore the backlog in `TODO.md` (auth, health checks, last-tested badges, CI doc checks).
+- Explore the backlog in `TODO.md`.
 - Review README.md for deeper details and API references.
 
 Note: The images above will automatically use the bundled SVGs under `docs/screenshots/`.
