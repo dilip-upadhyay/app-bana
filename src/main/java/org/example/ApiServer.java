@@ -170,7 +170,7 @@ public class ApiServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/api", new EntityHandler());
 
-        // Router integration for common utility endpoints and schema
+        // Router integration for utility, schema, and datasource JSON endpoints
         org.example.api.Router router = new org.example.api.Router();
         router.get("/health", (req, res) -> {
             res.json(200, Map.of("status", "UP"));
@@ -268,11 +268,199 @@ public class ApiServer {
                 res.json(201, Map.of("status","ok"));
             }
         });
+        router.get("/ui/datasource/config", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String active = cfg.getActiveDatasource();
+            Map<String, Object> out = new LinkedHashMap<>();
+            for (DatasourceConfig ds : cfg.getDatasources()) {
+                if (ds.getName() != null && ds.getName().equals(active)) {
+                    out.put("name", ds.getName());
+                    out.put("jdbcUrl", ds.getJdbcUrl());
+                    out.put("username", ds.getUsername());
+                    out.put("driver", ds.getDriver());
+                    out.put("type", ds.getType());
+                    out.put("maxPoolSize", ds.getMaxPoolSize());
+                    out.put("minIdle", ds.getMinIdle());
+                    out.put("connectionTimeoutMs", ds.getConnectionTimeoutMs());
+                    out.put("idleTimeoutMs", ds.getIdleTimeoutMs());
+                    out.put("maxLifetimeMs", ds.getMaxLifetimeMs());
+                    out.put("autoCommit", ds.getAutoCommit());
+                    out.put("poolName", ds.getPoolName());
+                    break;
+                }
+            }
+            if (out.isEmpty()) {
+                out.put("name", cfg.getName());
+                out.put("jdbcUrl", cfg.getJdbcUrl());
+                out.put("username", cfg.getUsername());
+                out.put("driver", cfg.getDriver());
+                out.put("type", null);
+            }
+            res.json(200, out);
+        });
+        router.get("/ui/datasource/list", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String active = cfg.getActiveDatasource();
+            List<Map<String, Object>> list = new ArrayList<>();
+            for (DatasourceConfig ds : cfg.getDatasources()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", ds.getName());
+                m.put("jdbcUrl", ds.getJdbcUrl());
+                m.put("username", ds.getUsername());
+                m.put("driver", ds.getDriver());
+                m.put("type", ds.getType());
+                m.put("maxPoolSize", ds.getMaxPoolSize());
+                m.put("minIdle", ds.getMinIdle());
+                m.put("connectionTimeoutMs", ds.getConnectionTimeoutMs());
+                m.put("idleTimeoutMs", ds.getIdleTimeoutMs());
+                m.put("maxLifetimeMs", ds.getMaxLifetimeMs());
+                m.put("autoCommit", ds.getAutoCommit());
+                m.put("poolName", ds.getPoolName());
+                m.put("active", ds.getName() != null && ds.getName().equals(active));
+                list.add(m);
+            }
+            res.json(200, list);
+        });
+        router.post("/ui/datasource/save", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
+            String name = data.get("name");
+            if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
+            String url = data.get("url");
+            String user = data.get("username");
+            String pw = data.get("password");
+            String drv = data.get("driver");
+            String type = data.get("type");
+            if (url == null || url.isBlank()) {
+                String built = buildJdbcUrl(data);
+                if (built != null && !built.isBlank()) url = built;
+            }
+            Integer maxPoolSize = parseInteger(data.get("maxPoolSize"));
+            Integer minIdle = parseInteger(data.get("minIdle"));
+            Long connectionTimeoutMs = parseLong(data.get("connectionTimeoutMs"));
+            Long idleTimeoutMs = parseLong(data.get("idleTimeoutMs"));
+            Long maxLifetimeMs = parseLong(data.get("maxLifetimeMs"));
+            Boolean autoCommit = parseBoolean(data.get("autoCommit"));
+            String poolName = data.get("poolName");
+
+            boolean found = false;
+            for (DatasourceConfig ds : cfg.getDatasources()) {
+                if (name.equals(ds.getName())) {
+                    if (url != null) ds.setJdbcUrl(url);
+                    if (user != null) ds.setUsername(user);
+                    if (drv != null) ds.setDriver(drv);
+                    if (type != null) ds.setType(type);
+                    if (pw != null && !pw.isBlank()) ds.setPassword(pw);
+                    if (maxPoolSize != null) ds.setMaxPoolSize(maxPoolSize);
+                    if (minIdle != null) ds.setMinIdle(minIdle);
+                    if (connectionTimeoutMs != null) ds.setConnectionTimeoutMs(connectionTimeoutMs);
+                    if (idleTimeoutMs != null) ds.setIdleTimeoutMs(idleTimeoutMs);
+                    if (maxLifetimeMs != null) ds.setMaxLifetimeMs(maxLifetimeMs);
+                    if (autoCommit != null) ds.setAutoCommit(autoCommit);
+                    if (poolName != null) ds.setPoolName(poolName);
+                    found = true; break;
+                }
+            }
+            if (!found) {
+                DatasourceConfig ds = new DatasourceConfig();
+                ds.setName(name);
+                ds.setJdbcUrl(url);
+                ds.setUsername(user);
+                if (pw != null && !pw.isBlank()) ds.setPassword(pw);
+                ds.setDriver(drv);
+                ds.setType(type);
+                ds.setMaxPoolSize(maxPoolSize);
+                ds.setMinIdle(minIdle);
+                ds.setConnectionTimeoutMs(connectionTimeoutMs);
+                ds.setIdleTimeoutMs(idleTimeoutMs);
+                ds.setMaxLifetimeMs(maxLifetimeMs);
+                ds.setAutoCommit(autoCommit);
+                ds.setPoolName(poolName);
+                cfg.getDatasources().add(ds);
+            }
+            cfg.setActiveDatasource(name);
+            ConfigManager.saveConfig(cfg);
+            res.text(200, "Datasource configuration saved.", "application/json");
+        });
+        router.post("/ui/datasource/test", (req, res) -> {
+            Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
+            String name = data.get("name");
+            String url = data.get("url");
+            String user = data.get("username");
+            String pw = data.get("password");
+            String drv = data.get("driver");
+            String type = data.get("type");
+            if (url == null || url.isBlank()) {
+                String built = buildJdbcUrl(data);
+                if (built != null && !built.isBlank()) url = built;
+            }
+            if ((url == null || url.isBlank()) && name != null && !name.isBlank()) {
+                AppConfig cfg = ConfigManager.getConfig();
+                for (DatasourceConfig ds : cfg.getDatasources()) {
+                    if (name.equals(ds.getName())) {
+                        url = ds.getJdbcUrl();
+                        if (user == null) user = ds.getUsername();
+                        if (pw == null || pw.isBlank()) pw = ds.getPassword();
+                        if (drv == null) drv = ds.getDriver();
+                        if (type == null) type = ds.getType();
+                        break;
+                    }
+                }
+            }
+            if (url == null || url.isBlank()) { res.json(200, Map.of("ok", false, "error", "jdbc url is required or constructible from fields")); return; }
+            String driver = inferDriver(type, url, drv);
+            try { if (driver != null) Class.forName(driver); } catch (Throwable t) { res.json(200, Map.of("ok", false, "error", "driver not found: "+driver)); return; }
+            long start = System.currentTimeMillis();
+            java.sql.DriverManager.setLoginTimeout(5);
+            Properties props = new Properties();
+            if (user != null) props.setProperty("user", user);
+            if (pw != null) props.setProperty("password", pw);
+            try (Connection c = (props.isEmpty()? java.sql.DriverManager.getConnection(url) : java.sql.DriverManager.getConnection(url, props))) {
+                DatabaseMetaData md = c.getMetaData();
+                long elapsed = System.currentTimeMillis() - start;
+                Map<String,Object> out = new LinkedHashMap<>();
+                out.put("ok", true);
+                out.put("message", "Connected");
+                out.put("url", url);
+                out.put("dbProduct", md.getDatabaseProductName());
+                out.put("dbVersion", md.getDatabaseProductVersion());
+                out.put("elapsedMs", elapsed);
+                res.json(200, out);
+            } catch (Exception ce) {
+                long elapsed = System.currentTimeMillis() - start;
+                res.json(200, Map.of("ok", false, "error", ce.getMessage(), "url", url, "elapsedMs", elapsed));
+            }
+        });
+        router.post("/ui/datasource/activate", (req, res) -> {
+            Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
+            String name = data.get("name");
+            if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
+            AppConfig cfg = ConfigManager.getConfig();
+            boolean exists = cfg.getDatasources().stream().anyMatch(d -> name.equals(d.getName()));
+            if (!exists) { res.json(404, Map.of("error","not found")); return; }
+            cfg.setActiveDatasource(name);
+            ConfigManager.saveConfig(cfg);
+            res.text(200, "Activated", "application/json");
+        });
+        router.post("/ui/datasource/delete", (req, res) -> {
+            Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
+            String name = data.get("name");
+            if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
+            AppConfig cfg = ConfigManager.getConfig();
+            cfg.getDatasources().removeIf(d -> name.equals(d.getName()));
+            if (name.equals(cfg.getActiveDatasource())) {
+                if (!cfg.getDatasources().isEmpty()) cfg.setActiveDatasource(cfg.getDatasources().get(0).getName());
+                else cfg.setActiveDatasource(null);
+            }
+            ConfigManager.saveConfig(cfg);
+            res.text(200, "Deleted", "application/json");
+        });
+
         server.createContext("/", exchange -> {
             try { router.handle(exchange); } catch (IOException ioe) { LOG.error("Router handle failed", ioe); }
         });
 
-        // serve the UI builder static page
+        // serve the UI builder static page (HTML)
         server.createContext("/ui/builder", exchange -> {
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/builder.html")) {
                 if (is == null) {
@@ -291,7 +479,7 @@ public class ApiServer {
             }
         });
 
-        // serve the datasource config UI
+        // serve the datasource config UI (HTML)
         server.createContext("/ui/datasource", exchange -> {
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/datasource.html")) {
                 if (is == null) {
@@ -310,7 +498,7 @@ public class ApiServer {
             }
         });
 
-        // Add Swagger UI page
+        // Add Swagger UI page (HTML)
         server.createContext("/ui/swagger", exchange -> {
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/swagger.html")) {
                 if (is == null) {
@@ -325,293 +513,6 @@ public class ApiServer {
                 try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
             } catch (Exception e) {
                 LOG.error("Failed to serve swagger UI", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
-            }
-        });
-
-        // return current active datasource config (without password)
-        server.createContext("/ui/datasource/config", exchange -> {
-            try {
-                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
-                    return;
-                }
-                AppConfig cfg = ConfigManager.getConfig();
-                String active = cfg.getActiveDatasource();
-                Map<String, Object> out = new LinkedHashMap<>();
-                for (DatasourceConfig ds : cfg.getDatasources()) {
-                    if (ds.getName() != null && ds.getName().equals(active)) {
-                        out.put("name", ds.getName());
-                        out.put("jdbcUrl", ds.getJdbcUrl());
-                        out.put("username", ds.getUsername());
-                        out.put("driver", ds.getDriver());
-                        out.put("type", ds.getType());
-                        // pool fields (no password)
-                        out.put("maxPoolSize", ds.getMaxPoolSize());
-                        out.put("minIdle", ds.getMinIdle());
-                        out.put("connectionTimeoutMs", ds.getConnectionTimeoutMs());
-                        out.put("idleTimeoutMs", ds.getIdleTimeoutMs());
-                        out.put("maxLifetimeMs", ds.getMaxLifetimeMs());
-                        out.put("autoCommit", ds.getAutoCommit());
-                        out.put("poolName", ds.getPoolName());
-                        break;
-                    }
-                }
-                if (out.isEmpty()) {
-                    out.put("name", cfg.getName());
-                    out.put("jdbcUrl", cfg.getJdbcUrl());
-                    out.put("username", cfg.getUsername());
-                    out.put("driver", cfg.getDriver());
-                    out.put("type", null);
-                }
-                sendJson(exchange, 200, out);
-            } catch (Exception e) {
-                LOG.error("Failed to get datasource config", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
-            }
-        });
-
-        // list all datasources (without passwords)
-        server.createContext("/ui/datasource/list", exchange -> {
-            try {
-                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
-                    return;
-                }
-                AppConfig cfg = ConfigManager.getConfig();
-                String active = cfg.getActiveDatasource();
-                List<Map<String, Object>> list = new ArrayList<>();
-                for (DatasourceConfig ds : cfg.getDatasources()) {
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("name", ds.getName());
-                    m.put("jdbcUrl", ds.getJdbcUrl());
-                    m.put("username", ds.getUsername());
-                    m.put("driver", ds.getDriver());
-                    m.put("type", ds.getType());
-                    // pool (no password)
-                    m.put("maxPoolSize", ds.getMaxPoolSize());
-                    m.put("minIdle", ds.getMinIdle());
-                    m.put("connectionTimeoutMs", ds.getConnectionTimeoutMs());
-                    m.put("idleTimeoutMs", ds.getIdleTimeoutMs());
-                    m.put("maxLifetimeMs", ds.getMaxLifetimeMs());
-                    m.put("autoCommit", ds.getAutoCommit());
-                    m.put("poolName", ds.getPoolName());
-
-                    m.put("active", ds.getName() != null && ds.getName().equals(active));
-                    list.add(m);
-                }
-                sendJson(exchange, 200, list);
-            } catch (Exception e) {
-                LOG.error("Failed to list datasources", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
-            }
-        });
-
-        // handle datasource config save (upsert + set active)
-        server.createContext("/ui/datasource/save", exchange -> {
-            try {
-                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
-                    return;
-                }
-                AppConfig cfg = ConfigManager.getConfig();
-                try (InputStream is = exchange.getRequestBody()) {
-                    Map<String, String> data = M.readValue(is, new TypeReference<Map<String, String>>() {});
-                    String name = data.get("name");
-                    if (name == null || name.isBlank()) {
-                        send(exchange, 400, "{\"error\":\"name required\"}");
-                        return;
-                    }
-                    String url = data.get("url");
-                    String user = data.get("username");
-                    String pw = data.get("password");
-                    String drv = data.get("driver");
-                    String type = data.get("type");
-                    // If URL not provided, attempt to construct from pieces
-                    if (url == null || url.isBlank()) {
-                        String built = buildJdbcUrl(data);
-                        if (built != null && !built.isBlank()) url = built;
-                    }
-                    // pool
-                    Integer maxPoolSize = parseInteger(data.get("maxPoolSize"));
-                    Integer minIdle = parseInteger(data.get("minIdle"));
-                    Long connectionTimeoutMs = parseLong(data.get("connectionTimeoutMs"));
-                    Long idleTimeoutMs = parseLong(data.get("idleTimeoutMs"));
-                    Long maxLifetimeMs = parseLong(data.get("maxLifetimeMs"));
-                    Boolean autoCommit = parseBoolean(data.get("autoCommit"));
-                    String poolName = data.get("poolName");
-
-                    boolean found = false;
-                    for (DatasourceConfig ds : cfg.getDatasources()) {
-                        if (name.equals(ds.getName())) {
-                            if (url != null) ds.setJdbcUrl(url);
-                            if (user != null) ds.setUsername(user);
-                            if (drv != null) ds.setDriver(drv);
-                            if (type != null) ds.setType(type);
-                            if (pw != null && !pw.isBlank()) ds.setPassword(pw);
-                            // pool apply if present
-                            if (maxPoolSize != null) ds.setMaxPoolSize(maxPoolSize);
-                            if (minIdle != null) ds.setMinIdle(minIdle);
-                            if (connectionTimeoutMs != null) ds.setConnectionTimeoutMs(connectionTimeoutMs);
-                            if (idleTimeoutMs != null) ds.setIdleTimeoutMs(idleTimeoutMs);
-                            if (maxLifetimeMs != null) ds.setMaxLifetimeMs(maxLifetimeMs);
-                            if (autoCommit != null) ds.setAutoCommit(autoCommit);
-                            if (poolName != null) ds.setPoolName(poolName);
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        DatasourceConfig ds = new DatasourceConfig();
-                        ds.setName(name);
-                        ds.setJdbcUrl(url);
-                        ds.setUsername(user);
-                        if (pw != null && !pw.isBlank()) ds.setPassword(pw);
-                        ds.setDriver(drv);
-                        ds.setType(type);
-                        // pool
-                        ds.setMaxPoolSize(maxPoolSize);
-                        ds.setMinIdle(minIdle);
-                        ds.setConnectionTimeoutMs(connectionTimeoutMs);
-                        ds.setIdleTimeoutMs(idleTimeoutMs);
-                        ds.setMaxLifetimeMs(maxLifetimeMs);
-                        ds.setAutoCommit(autoCommit);
-                        ds.setPoolName(poolName);
-                        cfg.getDatasources().add(ds);
-                    }
-                    cfg.setActiveDatasource(name);
-                    ConfigManager.saveConfig(cfg);
-                    send(exchange, 200, "Datasource configuration saved.");
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to save datasource config", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
-            }
-        });
-
-        // test a datasource connection (does not persist)
-        server.createContext("/ui/datasource/test", exchange -> {
-            try {
-                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
-                    return;
-                }
-                Map<String, String> data = M.readValue(exchange.getRequestBody(), new TypeReference<Map<String, String>>() {});
-                String name = data.get("name"); // optional
-                String url = data.get("url");
-                String user = data.get("username");
-                String pw = data.get("password");
-                String drv = data.get("driver");
-                String type = data.get("type");
-
-                // If URL not provided, try building from components
-                if (url == null || url.isBlank()) {
-                    String built = buildJdbcUrl(data);
-                    if (built != null && !built.isBlank()) url = built;
-                }
-
-                // If still no URL, try lookup by name from config
-                if ((url == null || url.isBlank()) && name != null && !name.isBlank()) {
-                    AppConfig cfg = ConfigManager.getConfig();
-                    for (DatasourceConfig ds : cfg.getDatasources()) {
-                        if (name.equals(ds.getName())) {
-                            url = ds.getJdbcUrl();
-                            if (user == null) user = ds.getUsername();
-                            if ((pw == null || pw.isBlank())) pw = ds.getPassword();
-                            if (drv == null) drv = ds.getDriver();
-                            if (type == null) type = ds.getType();
-                            break;
-                        }
-                    }
-                }
-
-                if (url == null || url.isBlank()) {
-                    sendJson(exchange, 200, Map.of("ok", false, "error", "jdbc url is required or constructible from fields"));
-                    return;
-                }
-
-                String driver = inferDriver(type, url, drv);
-                try {
-                    if (driver != null) Class.forName(driver);
-                } catch (Throwable t) {
-                    sendJson(exchange, 200, Map.of("ok", false, "error", "driver not found: " + driver));
-                    return;
-                }
-
-                long start = System.currentTimeMillis();
-                java.sql.DriverManager.setLoginTimeout(5);
-                Properties props = new Properties();
-                if (user != null) props.setProperty("user", user);
-                if (pw != null) props.setProperty("password", pw);
-                try (Connection c = (props.isEmpty()? java.sql.DriverManager.getConnection(url) : java.sql.DriverManager.getConnection(url, props))) {
-                    DatabaseMetaData md = c.getMetaData();
-                    long elapsed = System.currentTimeMillis() - start;
-                    Map<String,Object> out = new LinkedHashMap<>();
-                    out.put("ok", true);
-                    out.put("message", "Connected");
-                    out.put("url", url);
-                    out.put("dbProduct", md.getDatabaseProductName());
-                    out.put("dbVersion", md.getDatabaseProductVersion());
-                    out.put("elapsedMs", elapsed);
-                    sendJson(exchange, 200, out);
-                } catch (Exception ce) {
-                    long elapsed = System.currentTimeMillis() - start;
-                    sendJson(exchange, 200, Map.of(
-                        "ok", false,
-                        "error", ce.getMessage(),
-                        "url", url,
-                        "elapsedMs", elapsed
-                    ));
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to test datasource connection", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
-            }
-        });
-
-        // activate a datasource by name
-        server.createContext("/ui/datasource/activate", exchange -> {
-            try {
-                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
-                    return;
-                }
-                Map<String, String> data = M.readValue(exchange.getRequestBody(), new TypeReference<Map<String, String>>() {});
-                String name = data.get("name");
-                if (name == null || name.isBlank()) { send(exchange, 400, "{\"error\":\"name required\"}"); return; }
-                AppConfig cfg = ConfigManager.getConfig();
-                boolean exists = cfg.getDatasources().stream().anyMatch(d -> name.equals(d.getName()));
-                if (!exists) { send(exchange, 404, "{\"error\":\"not found\"}"); return; }
-                cfg.setActiveDatasource(name);
-                ConfigManager.saveConfig(cfg);
-                send(exchange, 200, "Activated");
-            } catch (Exception e) {
-                LOG.error("Failed to activate datasource", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
-            }
-        });
-
-        // delete a datasource by name
-        server.createContext("/ui/datasource/delete", exchange -> {
-            try {
-                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) { // using POST for simplicity
-                    send(exchange, 405, "{\"error\":\"method not allowed\"}");
-                    return;
-                }
-                Map<String, String> data = M.readValue(exchange.getRequestBody(), new TypeReference<Map<String, String>>() {});
-                String name = data.get("name");
-                if (name == null || name.isBlank()) { send(exchange, 400, "{\"error\":\"name required\"}"); return; }
-                AppConfig cfg = ConfigManager.getConfig();
-                cfg.getDatasources().removeIf(d -> name.equals(d.getName()));
-                if (name.equals(cfg.getActiveDatasource())) {
-                    // set a new active if available
-                    if (!cfg.getDatasources().isEmpty()) cfg.setActiveDatasource(cfg.getDatasources().get(0).getName());
-                    else cfg.setActiveDatasource(null);
-                }
-                ConfigManager.saveConfig(cfg);
-                send(exchange, 200, "Deleted");
-            } catch (Exception e) {
-                LOG.error("Failed to delete datasource", e);
                 try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
             }
         });
