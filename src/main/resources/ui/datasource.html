@@ -23,10 +23,19 @@
         .chip.unknown { background: #eee; color: #555; border: 1px solid #ddd; }
         td.status, th.status { text-align: center; white-space: nowrap; }
         td.lastTest, th.lastTest { white-space: nowrap; }
+        .topbar { display:flex; gap:12px; align-items:center; margin-bottom: 8px; }
+        .topbar input { width: 300px; }
+        .topbar .small { font-size: 12px; color: #666; }
     </style>
 </head>
 <body>
     <h2>Datasource Configuration</h2>
+
+    <div class="topbar">
+        <label style="width:auto">Auth token: <input type="password" id="authToken" placeholder="X-AppBana-Token" /></label>
+        <button id="saveToken" class="small">Save token</button>
+        <span class="small">Protected endpoints require this token if the server is configured with tokens.</span>
+    </div>
 
     <div>
         <h3>Add or Update</h3>
@@ -128,6 +137,15 @@
     <script>
     function h(text) { return String(text==null?'':text); }
 
+    // Token helpers
+    function getToken(){ return localStorage.getItem('appbana_token')||''; }
+    function setToken(t){ if(t==null) t=''; localStorage.setItem('appbana_token', t); }
+    function authHeaders(){ const t=getToken(); return t? {'X-AppBana-Token': t, 'Authorization': 'Bearer '+t} : {}; }
+
+    // General fetch wrappers
+    async function getJson(url){ const res = await fetch(url, {headers: authHeaders()}); if(!res.ok) throw new Error(res.status); return res.json(); }
+    async function postJson(url, body){ const headers = Object.assign({'Content-Type':'application/json'}, authHeaders()); const res = await fetch(url, {method:'POST', headers, body: JSON.stringify(body)}); return res; }
+
     const defaults = {
         h2: { driver: 'org.h2.Driver', url: 'jdbc:h2:./data/appbana;AUTO_SERVER=TRUE', port: null },
         postgres: { driver: 'org.postgresql.Driver', url: 'jdbc:postgresql://localhost:5432/dbname', port: 5432 },
@@ -168,9 +186,7 @@
 
     async function prefill() {
         try {
-            const resp = await fetch('/ui/datasource/config');
-            if (!resp.ok) return;
-            const cfg = await resp.json();
+            const cfg = await getJson('/ui/datasource/config');
             const type = cfg.type || inferTypeFromUrl(cfg.jdbcUrl) || 'h2';
             document.getElementById('type').value = ['h2','postgres','mysql','mariadb','mssql','oracle','sqlite'].includes(type) ? type : 'custom';
             applyTypeHints(document.getElementById('type').value);
@@ -234,9 +250,7 @@
     async function loadList() {
         const el = document.getElementById('dsList');
         try {
-            const resp = await fetch('/ui/datasource/list');
-            if (!resp.ok) { el.textContent = 'Failed to load datasources'; return; }
-            const list = await resp.json();
+            const list = await getJson('/ui/datasource/list');
             if (!Array.isArray(list) || list.length === 0) { el.textContent = 'No datasources yet.'; return; }
             let html = '<table><thead><tr>'+
                 '<th>Active</th><th>Name</th><th>Type</th><th class="status">Status</th><th class="lastTest">Last tested</th><th>URL</th><th>User</th><th>Driver</th><th>Actions</th>'+
@@ -270,8 +284,7 @@
 
     async function loadIntoForm(name) {
         try {
-            const resp = await fetch('/ui/datasource/list');
-            const list = await resp.json();
+            const list = await getJson('/ui/datasource/list');
             const dec = decodeURIComponent(name);
             const d = list.find(x => x.name === dec);
             if (d) {
@@ -299,9 +312,7 @@
 
     async function activateDs(name) {
         const dec = decodeURIComponent(name);
-        const resp = await fetch('/ui/datasource/activate', {
-            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: dec})
-        });
+        const resp = await postJson('/ui/datasource/activate', {name: dec});
         const msg = await resp.text();
         document.getElementById('result').textContent = msg;
         await loadList();
@@ -310,9 +321,7 @@
     async function deleteDs(name) {
         const dec = decodeURIComponent(name);
         if (!confirm('Delete datasource "' + dec + '"?')) return;
-        const resp = await fetch('/ui/datasource/delete', {
-            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: dec})
-        });
+        const resp = await postJson('/ui/datasource/delete', {name: dec});
         const msg = await resp.text();
         document.getElementById('result').textContent = msg;
         await loadList();
@@ -399,6 +408,9 @@
     });
 
     document.addEventListener('DOMContentLoaded', async () => {
+        // init token field
+        document.getElementById('authToken').value = getToken();
+        document.getElementById('saveToken').addEventListener('click', ()=>{ setToken(document.getElementById('authToken').value||''); });
         await prefill();
         await loadList();
         applyTypeHints(document.getElementById('type').value, {forceDriver:false, forceUrl:false});
@@ -424,11 +436,7 @@
             autoCommit: form.autoCommit.checked,
             poolName: form.poolName.value || undefined
         };
-        const resp = await fetch('/ui/datasource/save', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
+        const resp = await postJson('/ui/datasource/save', data);
         const result = await resp.text();
         document.getElementById('result').innerText = result;
         form.password.value = '';
@@ -462,16 +470,14 @@
         const out = document.getElementById('testOutput');
         out.innerHTML = '<span class="muted">Testing connection...</span>';
         try {
-            const resp = await fetch('/ui/datasource/test', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
-            });
+            const resp = await postJson('/ui/datasource/test', payload);
             const json = await resp.json().catch(() => ({}));
             if (json && json.ok) {
                 out.innerHTML = '<div class="ok">\u2714 ' + (json.message||'Connected') + ' (' + (json.elapsedMs||'?') + ' ms)</div>' +
                     '<pre class="light">URL: ' + (json.url||'') + '\nDB: ' + (json.dbProduct||'') + ' ' + (json.dbVersion||'') + '</pre>';
             } else {
                 out.innerHTML = '<div class="err">\u2716 Connection failed</div>' +
-                    '<pre class="light">URL: ' + ((json && json.url) || payload.url || '(built from fields)') + '\nError: ' + ((json && json.error) || (await resp.text())) + (json && json.sqlState? ('\nSQLState: '+json.sqlState):'') + (json && json.errorCode!=null? ('\nErrorCode: '+json.errorCode):'') + '</pre>';
+                    '<pre class="light">URL: ' + ((json && json.url) || payload.url || '(built from fields)') + '\nError: ' + ((json && json.error) || await resp.text()) + (json && json.sqlState? ('\nSQLState: '+json.sqlState):'') + (json && json.errorCode!=null? ('\nErrorCode: '+json.errorCode):'') + '</pre>';
             }
         } catch (e) {
             out.innerHTML = '<div class="err">\u2716 Error running test</div><pre class="light">' + e + '</pre>';
@@ -483,16 +489,14 @@
         const out = document.getElementById('testOutput');
         out.innerHTML = '<span class="muted">Testing ' + dec + '...</span>';
         try {
-            const resp = await fetch('/ui/datasource/test', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: dec, timeoutSec: 5})
-            });
+            const resp = await postJson('/ui/datasource/test', {name: dec, timeoutSec: 5});
             const json = await resp.json().catch(() => ({}));
             if (json && json.ok) {
                 out.innerHTML = '<div class="ok">\u2714 ' + (json.message||'Connected') + ' (' + (json.elapsedMs||'?') + ' ms)</div>' +
                     '<pre class="light">DS: ' + dec + '\nURL: ' + (json.url||'') + '\nDB: ' + (json.dbProduct||'') + ' ' + (json.dbVersion||'') + '</pre>';
             } else {
                 out.innerHTML = '<div class="err">\u2716 Connection failed</div>' +
-                    '<pre class="light">DS: ' + dec + '\nURL: ' + ((json && json.url) || '') + '\nError: ' + ((json && json.error) || (await resp.text())) + (json && json.sqlState? ('\nSQLState: '+json.sqlState):'') + (json && json.errorCode!=null? ('\nErrorCode: '+json.errorCode):'') + '</pre>';
+                    '<pre class="light">DS: ' + dec + '\nURL: ' + ((json && json.url) || '') + '\nError: ' + ((json && json.error) || await resp.text()) + (json && json.sqlState? ('\nSQLState: '+json.sqlState):'') + (json && json.errorCode!=null? ('\nErrorCode: '+json.errorCode):'') + '</pre>';
             }
             // Refresh list to show persisted last test metadata
             await loadList();
@@ -504,7 +508,7 @@
     async function pingHealth(name) {
         const dec = decodeURIComponent(name);
         try {
-            const resp = await fetch(`/ui/datasource/health?name=${encodeURIComponent(dec)}&timeoutSec=3`);
+            const resp = await fetch(`/ui/datasource/health?name=${encodeURIComponent(dec)}&timeoutSec=3`, {headers: authHeaders()});
             const json = await resp.json().catch(() => ({}));
             const statusEl = document.getElementById('status-' + name);
             const lastEl = document.getElementById('last-' + name);

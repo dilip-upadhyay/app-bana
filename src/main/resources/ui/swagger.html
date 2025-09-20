@@ -6,19 +6,51 @@
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
   <style>
     html, body { height: 100%; margin: 0; }
-    #swagger-ui { height: 100%; }
+    #swagger-ui { height: calc(100% - 52px); }
+    .topbar-token { display:flex; gap:8px; align-items:center; padding:8px 12px; border-bottom:1px solid #eee; font-family: Arial, Helvetica, sans-serif; }
+    .topbar-token label { font-size: 14px; color:#444 }
+    .topbar-token input { width: 320px; padding:4px 6px; }
+    .topbar-token button { padding:4px 8px; }
+    .topbar-token .hint { font-size:12px; color:#666 }
   </style>
 </head>
 <body>
+  <div class="topbar-token">
+    <label>Auth token: <input type="password" id="authToken" placeholder="X-AppBana-Token or Bearer" /></label>
+    <button id="saveToken">Save token</button>
+    <span class="hint">Protected endpoints and the OpenAPI spec require this token when server auth is enabled.</span>
+  </div>
   <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
+    // Token helpers (same key as builder.html)
+    function getToken(){ try { return localStorage.getItem('appbana_token')||''; } catch(e){ return ''; } }
+    function setToken(t){ try { localStorage.setItem('appbana_token', t || ''); } catch(e){} }
+
+    function withAuthHeaders(req){
+      const tok = getToken();
+      if (tok && req && req.headers) {
+        req.headers['X-AppBana-Token'] = tok;
+        // Also send as Bearer for convenience
+        req.headers['Authorization'] = 'Bearer ' + tok;
+      }
+      return req;
+    }
+
     window.addEventListener('load', () => {
+      // Initialize input from storage
+      var inp = document.getElementById('authToken');
+      if (inp) inp.value = getToken();
+      var btn = document.getElementById('saveToken');
+      if (btn) btn.addEventListener('click', function(){ setToken(document.getElementById('authToken').value||''); });
+
+      // Build Swagger UI with request interceptor to inject token
       window.ui = SwaggerUIBundle({
         url: '/openapi.json',
         dom_id: '#swagger-ui',
         presets: [SwaggerUIBundle.presets.apis],
-        layout: 'BaseLayout'
+        layout: 'BaseLayout',
+        requestInterceptor: withAuthHeaders
       });
     });
   </script>
@@ -27,4 +59,3 @@
   </noscript>
 </body>
 </html>
-

@@ -14,10 +14,17 @@
     #schemaList h3{margin-top:0}
     .schema-item{padding:6px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
     .small{font-size:0.9em;color:#666}
+    .topbar{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .topbar input{width:300px}
   </style>
 </head>
 <body>
   <h2>UI Builder (minimal)</h2>
+  <div class="topbar">
+    <label>Auth token: <input type="password" id="authToken" placeholder="X-AppBana-Token"></label>
+    <button id="saveToken" class="small">Save token</button>
+    <span class="small">Protected endpoints require this token when server auth is enabled.</span>
+  </div>
   <div id="container">
     <div id="builder">
       <label>Entity name: <input id="entity" placeholder="e.g. contact"></label>
@@ -105,6 +112,11 @@
   </div>
 
 <script>
+  // Token helpers
+  function getToken(){ return localStorage.getItem('appbana_token')||''; }
+  function setToken(t){ if(t==null) t=''; localStorage.setItem('appbana_token', t); }
+  function authHeaders(){ const t=getToken(); return t? {'X-AppBana-Token': t, 'Authorization': 'Bearer '+t} : {}; }
+
   const fields = [];
   const tbody = document.querySelector('#fields tbody');
   function render(){
@@ -145,7 +157,8 @@
   });
 
   async function doPost(url, body){
-    const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const headers = Object.assign({'Content-Type':'application/json'}, authHeaders());
+    const res = await fetch(url, {method:'POST', headers, body: JSON.stringify(body)});
     const text = await res.text();
     return {status: res.status, body: text};
   }
@@ -165,13 +178,11 @@
     const base = (location.origin && location.origin !== 'null') ? location.origin + '/schema' : 'http://localhost:8080/schema';
     const url = base + '?preview=true';
     try{
-      const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(s)});
+      const res = await fetch(url, {method:'POST', headers:Object.assign({'Content-Type':'application/json'}, authHeaders()), body: JSON.stringify(s)});
       const plan = await res.json();
       if(res.ok){
         document.getElementById('out').textContent = 'Migration plan:\n' + plan.join('\n');
-        // show apply button
         document.getElementById('apply').style.display = 'inline-block';
-        // store last plan and schema
         window._lastPreview = {schema: s, plan};
       } else {
         document.getElementById('out').textContent = 'Preview failed: ' + JSON.stringify(plan);
@@ -191,7 +202,6 @@
     }catch(e){ document.getElementById('out').textContent = 'Error: '+e }
   });
 
-  // --- New: schema list and load with pagination/search ---
   let currentPage = 1;
   let pageSize = parseInt(document.getElementById('pageSizeSelect').value,10) || 10;
   let currentQuery = '';
@@ -204,7 +214,7 @@
     const base = (location.origin && location.origin !== 'null') ? location.origin + '/schema' : 'http://localhost:8080/schema';
     const url = base + '?page=' + encodeURIComponent(page) + '&size=' + encodeURIComponent(pageSize) + '&q=' + encodeURIComponent(q);
     try{
-      const res = await fetch(url);
+      const res = await fetch(url, {headers: authHeaders()});
       if(!res.ok){ document.getElementById('list').textContent = 'Failed to load schemas: '+res.status; return; }
       const names = await res.json();
       const div = document.getElementById('list');
@@ -223,12 +233,11 @@
   async function loadSchema(name){
     const url = (location.origin && location.origin !== 'null') ? location.origin + '/schema/' + name : 'http://localhost:8080/schema/' + name;
     try{
-      const res = await fetch(url);
+      const res = await fetch(url, {headers: authHeaders()});
       if(!res.ok){ alert('Failed to load schema: '+res.status); return; }
       const schema = await res.json();
-      // populate UI
       document.getElementById('entity').value = schema.name || '';
-      fields.length = 0; // clear
+      fields.length = 0;
       if(schema.fields && Array.isArray(schema.fields)){
         schema.fields.forEach(f => fields.push(f));
       }
@@ -237,22 +246,10 @@
     }catch(e){ alert('Error: '+e); }
   }
 
-  document.getElementById('refreshSchemas').addEventListener('click', ()=>refreshSchemas(1));
-  document.getElementById('searchBtn').addEventListener('click', ()=>refreshSchemas(1));
-  document.getElementById('prevPage').addEventListener('click', ()=>{ if(currentPage>1) refreshSchemas(currentPage-1); });
-  document.getElementById('nextPage').addEventListener('click', ()=>{ refreshSchemas(currentPage+1); });
-  document.getElementById('list').addEventListener('click', e=>{
-    if(e.target.tagName==='BUTTON' && e.target.classList.contains('load')){
-      const name = e.target.getAttribute('data-name');
-      loadSchema(name);
-    }
-  });
-
-  // --- New: fetch and render API endpoints generated from entities ---
   async function refreshApiEndpoints(){
     const url = (location.origin && location.origin !== 'null') ? location.origin + '/api/endpoints' : 'http://localhost:8080/api/endpoints';
     try{
-      const res = await fetch(url);
+      const res = await fetch(url, {headers: authHeaders()});
       if(!res.ok){ document.getElementById('apiList').textContent = 'Failed to load API endpoints: '+res.status; return; }
       const list = await res.json();
       const div = document.getElementById('apiList');
@@ -269,7 +266,6 @@
         (item.endpoints||[]).forEach(ep => {
           const li = document.createElement('li');
           li.style.marginBottom = '4px';
-          // make clickable
           const a = document.createElement('a');
           a.href = '#';
           a.className = 'api-ep';
@@ -288,38 +284,31 @@
 
   document.getElementById('refreshApisBtn').addEventListener('click', ()=>refreshApiEndpoints());
 
-  // Click handler for API endpoint links (delegated)
   document.getElementById('apiList').addEventListener('click', async (e) => {
     if (e.target && e.target.classList && e.target.classList.contains('api-ep')) {
       e.preventDefault();
       const ep = e.target.getAttribute('data-ep');
       const entity = e.target.getAttribute('data-entity');
-      // ep is like "POST /api/entity" or "GET /api/entity/{id}"
       const parts = ep.split(' ');
       const method = parts[0];
       const path = parts[1];
-      // prepare tester UI
       const tester = document.getElementById('apiTester');
       document.getElementById('testerMethod').value = method;
-      // construct URL template
       const base = (location.origin && location.origin !== 'null') ? location.origin : 'http://localhost:8080';
       let url = base + path.replace('{id}', ':id');
       document.getElementById('testerUrl').value = url;
-      // show/hide id field
       const needsId = path.includes('{id}');
       document.getElementById('testerIdRow').style.display = needsId ? 'block' : 'none';
       document.getElementById('testerId').value = '';
-      // fetch schema to build sample body for POST/PUT
       const bodyArea = document.getElementById('testerBody');
       if (method === 'POST' || method === 'PUT') {
         try {
-          const res = await fetch((location.origin && location.origin !== 'null') ? location.origin + '/schema/' + entity : 'http://localhost:8080/schema/' + entity);
+          const res = await fetch((location.origin && location.origin !== 'null') ? location.origin + '/schema/' + entity : 'http://localhost:8080/schema/' + entity, {headers: authHeaders()});
           if (res.ok) {
             const schema = await res.json();
             const sample = {};
             if (schema.fields && Array.isArray(schema.fields)) {
               schema.fields.forEach(f => {
-                // omit auto-increment PKs from sample
                 if (f.primaryKey && f.autoIncrement) return;
                 const t = (f.type||'').toLowerCase();
                 switch (t) {
@@ -344,12 +333,10 @@
       document.getElementById('testerStatus').textContent = '';
       document.getElementById('testerResponse').textContent = '';
       tester.style.display = 'block';
-      // scroll into view
       tester.scrollIntoView({behavior:'smooth', block:'center'});
     }
   });
 
-  // Send request from tester
   document.getElementById('testerSend').addEventListener('click', async ()=>{
     const method = document.getElementById('testerMethod').value;
     let url = document.getElementById('testerUrl').value.trim();
@@ -358,14 +345,11 @@
       if (!idVal) { alert('ID required for this endpoint'); return; }
       url = url.replace(':id', encodeURIComponent(idVal));
     }
-    let opts = { method };
+    let opts = { method, headers: authHeaders() };
     if (method === 'POST' || method === 'PUT') {
       let bodyText = document.getElementById('testerBody').value || '';
-      try {
-        // ensure valid JSON
-        JSON.parse(bodyText);
-      } catch (e) { alert('Invalid JSON body: ' + e); return; }
-      opts.headers = {'Content-Type':'application/json'};
+      try { JSON.parse(bodyText); } catch (e) { alert('Invalid JSON body: ' + e); return; }
+      opts.headers = Object.assign({'Content-Type':'application/json'}, authHeaders());
       opts.body = bodyText;
     }
     try {
@@ -384,13 +368,23 @@
     document.getElementById('apiTester').style.display = 'none';
   });
 
-  document.getElementById('openH2').addEventListener('click', ()=>{
-    alert('Run H2 Console: java -cp ~/.m2/repository/com/h2database/h2/2.2.222/h2-2.2.222.jar org.h2.tools.Console -url jdbc:h2:./data/appbana -user sa');
+  document.addEventListener('DOMContentLoaded', ()=>{
+    document.getElementById('authToken').value = getToken();
+    document.getElementById('saveToken').addEventListener('click', ()=> setToken(document.getElementById('authToken').value||''));
   });
 
-  // initial load
+  document.getElementById('refreshSchemas').addEventListener('click', ()=>refreshSchemas(1));
+  document.getElementById('searchBtn').addEventListener('click', ()=>refreshSchemas(1));
+  document.getElementById('prevPage').addEventListener('click', ()=>{ if(currentPage>1) refreshSchemas(currentPage-1); });
+  document.getElementById('nextPage').addEventListener('click', ()=>{ refreshSchemas(currentPage+1); });
+  document.getElementById('list').addEventListener('click', e=>{
+    if(e.target.tagName==='BUTTON' && e.target.classList.contains('load')){
+      const name = e.target.getAttribute('data-name');
+      loadSchema(name);
+    }
+  });
+
   refreshSchemas(1);
-  // initial load of API endpoints
   refreshApiEndpoints();
 </script>
 </body>

@@ -108,6 +108,7 @@ public class Router {
         public String pathParam(String name){ return pathParams.get(name); }
         public Map<String,String> query(){ return query; }
         public String query(String k){ return query.get(k); }
+        public String header(String name){ return ex.getRequestHeaders().getFirst(name); }
         public <T> T readJson(TypeReference<T> typ) {
             try (InputStream is = ex.getRequestBody()) {
                 return M.readValue(is, typ);

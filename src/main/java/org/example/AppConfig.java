@@ -14,6 +14,10 @@ public class AppConfig {
     private List<DatasourceConfig> datasources = new ArrayList<>();
     private String activeDatasource; // name
 
+    // Optional token-based auth (if both null/blank, auth is disabled)
+    private String adminToken; // full read-write access
+    private String readToken;  // read-only access
+
     public String getJdbcUrl() { return jdbcUrl; }
     public void setJdbcUrl(String jdbcUrl) { this.jdbcUrl = jdbcUrl; }
 
@@ -34,4 +38,10 @@ public class AppConfig {
 
     public String getActiveDatasource() { return activeDatasource; }
     public void setActiveDatasource(String activeDatasource) { this.activeDatasource = activeDatasource; }
+
+    public String getAdminToken() { return adminToken; }
+    public void setAdminToken(String adminToken) { this.adminToken = adminToken; }
+
+    public String getReadToken() { return readToken; }
+    public void setReadToken(String readToken) { this.readToken = readToken; }
 }

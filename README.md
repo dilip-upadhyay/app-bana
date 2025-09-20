@@ -10,6 +10,7 @@ Quick summary
 - Pooling: HikariCP connection pool with configurable settings per datasource.
 - OpenAPI: live spec at /openapi.json and an embedded Swagger UI at /ui/swagger.
 - Health: /health (liveness), /ready (readiness with DB check), and per-datasource health at /ui/datasource/health.
+- Authentication (optional): token-based auth for /schema, /api/*, /openapi.json, and /ui/datasource/*.
 
 Status of repository
 - Fully working MVP backend and minimal frontend builder included.
@@ -44,6 +45,20 @@ Port configuration
 - Override via system property: -Dappbana.port=9090
 - Or via environment variable: APPBANA_PORT=9090
 
+Authentication (optional)
+- App supports simple token-based auth. When no tokens are configured, all endpoints are open (dev mode).
+- Configure tokens in config file or via env/system properties:
+  - Config fields: `adminToken` (read-write) and `readToken` (read-only)
+  - Env vars: `APPBANA_ADMIN_TOKEN`, `APPBANA_READ_TOKEN`
+  - System props: `-Dappbana.admin.token=...`, `-Dappbana.read.token=...`
+- Client headers (either works):
+  - `X-AppBana-Token: <token>`
+  - `Authorization: Bearer <token>`
+- Authorization rules when tokens are set:
+  - Read-only (readToken or adminToken): GET /schema, GET /schema/{name}, GET /api/*, GET /openapi.json, GET /ui/datasource/list|config|health
+  - Admin (adminToken only): POST /schema (apply/preview), POST /api/* (writes), PUT/DELETE /api/*, POST /ui/datasource/save|test|activate|delete
+- UIs: builder.html and datasource.html include an “Auth token” box; swagger.html also has one. Saving the token stores it in localStorage and all UI requests send the header automatically.
+
 Default runtime behavior
 - On startup the app attempts to ensure two metadata tables (in the active datasource):
   - `appbana_schemas(name PK, json CLOB)` — stores schema JSON
@@ -52,7 +67,7 @@ Default runtime behavior
 - UI builder: http://localhost:8080/ui/builder
 - Datasource UI: http://localhost:8080/ui/datasource
 - Swagger UI: http://localhost:8080/ui/swagger
-- OpenAPI: http://localhost:8080/openapi.json
+- OpenAPI: http://localhost:8080/openapi.json (requires token when auth is enabled)
 - Health: http://localhost:8080/health (liveness), http://localhost:8080/ready (readiness), and http://localhost:8080/ui/datasource/health (per-datasource DB ping)
 
 Health & readiness
@@ -116,6 +131,8 @@ Configuration
   - APPBANA_DB_USER — override username
   - APPBANA_DB_PASS — override password
   - APPBANA_DB_DRIVER — override driver class
+  - APPBANA_ADMIN_TOKEN — set admin token
+  - APPBANA_READ_TOKEN — set read-only token
 - Config file format (example):
 ```
 {
@@ -136,7 +153,9 @@ Configuration
       "poolName": "appbana-primary"
     }
   ],
-  "activeDatasource": "primary"
+  "activeDatasource": "primary",
+  "adminToken": "change-me-admin",
+  "readToken": "change-me-read"
 }
 ```
 - Backward compatibility: if only root fields are present (jdbcUrl/username/password/driver/name), the app seeds a default datasource and marks it active.

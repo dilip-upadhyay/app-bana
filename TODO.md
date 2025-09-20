@@ -3,7 +3,7 @@
 This backlog captures near-term and medium-term improvements. Check off items as they are completed and keep this list synchronized with docs.
 
 Priority A (next)
-- [ ] Add authentication and role-based access control to /schema, /api/*, and /ui/datasource/*.
+- [x] Add authentication and role-based access control to /schema, /api/*, and /ui/datasource/*.
 - [x] Add per-datasource health endpoint and surface status in UI (badge + last tested timestamp).
 - [x] Persist last test result/time for each datasource; show a “last tested” column in the list.
 - [x] Make Test Connection timeout configurable; improve error details and mask sensitive data.

@@ -59,6 +59,8 @@ public class ConfigManager {
         String user = firstNonEmpty(System.getenv("APPBANA_DB_USER"), System.getProperty("appbana.db.user"));
         String pass = firstNonEmpty(System.getenv("APPBANA_DB_PASS"), System.getProperty("appbana.db.pass"));
         String drv = firstNonEmpty(System.getenv("APPBANA_DB_DRIVER"), System.getProperty("appbana.db.driver"));
+        String adminTok = firstNonEmpty(System.getenv("APPBANA_ADMIN_TOKEN"), System.getProperty("appbana.admin.token"));
+        String readTok = firstNonEmpty(System.getenv("APPBANA_READ_TOKEN"), System.getProperty("appbana.read.token"));
         AppConfig out = new AppConfig();
         out.setJdbcUrl(url != null ? url : cfg.getJdbcUrl());
         out.setUsername(user != null ? user : cfg.getUsername());
@@ -68,6 +70,9 @@ public class ConfigManager {
         // preserve multi-datasource fields
         out.setDatasources(cfg.getDatasources() != null ? cfg.getDatasources() : new ArrayList<>());
         out.setActiveDatasource(cfg.getActiveDatasource());
+        // tokens
+        out.setAdminToken(adminTok != null ? adminTok : cfg.getAdminToken());
+        out.setReadToken(readTok != null ? readTok : cfg.getReadToken());
         return out;
     }
 

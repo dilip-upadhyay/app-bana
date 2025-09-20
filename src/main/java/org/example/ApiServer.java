@@ -164,6 +164,35 @@ public class ApiServer {
         return m;
     }
 
+    private static boolean authEnabled(AppConfig cfg) {
+        return cfg.getAdminToken() != null && !cfg.getAdminToken().isBlank() || cfg.getReadToken() != null && !cfg.getReadToken().isBlank();
+    }
+    private static String extractToken(org.example.api.Router.HttpRequest req) {
+        String tok = req.header("X-AppBana-Token");
+        if (tok == null || tok.isBlank()) {
+            String auth = req.header("Authorization");
+            if (auth != null && auth.toLowerCase(Locale.ROOT).startsWith("bearer ")) tok = auth.substring(7).trim();
+        }
+        return tok;
+    }
+    private static String extractToken(HttpExchange ex) {
+        String tok = ex.getRequestHeaders().getFirst("X-AppBana-Token");
+        if (tok == null || tok.isBlank()) {
+            String auth = ex.getRequestHeaders().getFirst("Authorization");
+            if (auth != null && auth.toLowerCase(Locale.ROOT).startsWith("bearer ")) tok = auth.substring(7).trim();
+        }
+        return tok;
+    }
+    private static boolean hasAdmin(String token, AppConfig cfg) {
+        String at = cfg.getAdminToken();
+        return at != null && !at.isBlank() && at.equals(token);
+    }
+    private static boolean hasRead(String token, AppConfig cfg) {
+        if (hasAdmin(token, cfg)) return true;
+        String rt = cfg.getReadToken();
+        return rt != null && !rt.isBlank() && rt.equals(token);
+    }
+
     public static void start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/api", new EntityHandler());
@@ -195,6 +224,11 @@ public class ApiServer {
             }
         });
         router.get("/api/endpoints", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             try {
                 List<String> names = SchemaManager.listSchemaNames();
                 List<Map<String,Object>> out = new ArrayList<>();
@@ -217,6 +251,11 @@ public class ApiServer {
             }
         });
         router.get("/openapi.json", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             try {
                 List<String> names = SchemaManager.listSchemaNames();
                 List<org.example.model.EntitySchema> schemas = new ArrayList<>();
@@ -232,6 +271,11 @@ public class ApiServer {
             }
         });
         router.get("/schema", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             String pageS = req.query("page");
             String sizeS = req.query("size");
             String q = req.query("q");
@@ -247,12 +291,22 @@ public class ApiServer {
             }
         });
         router.get("/schema/{name}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             String name = req.pathParam("name");
             EntitySchema schema = SchemaManager.loadSchema(name);
             if (schema == null) { res.json(404, Map.of("error","not found")); return; }
             res.json(200, schema);
         });
         router.post("/schema", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             boolean preview = "true".equalsIgnoreCase(Optional.ofNullable(req.query("preview")).orElse("false"));
             EntitySchema schema = req.readJson(new TypeReference<EntitySchema>(){});
             if (schema.getName() == null || schema.getName().isEmpty()) { res.json(400, Map.of("error","missing schema name")); return; }
@@ -266,6 +320,10 @@ public class ApiServer {
         });
         router.get("/ui/datasource/config", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             String active = cfg.getActiveDatasource();
             Map<String, Object> out = new LinkedHashMap<>();
             for (DatasourceConfig ds : cfg.getDatasources()) {
@@ -296,6 +354,10 @@ public class ApiServer {
         });
         router.get("/ui/datasource/list", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             String active = cfg.getActiveDatasource();
             List<Map<String, Object>> list = new ArrayList<>();
             for (DatasourceConfig ds : cfg.getDatasources()) {
@@ -312,7 +374,6 @@ public class ApiServer {
                 m.put("maxLifetimeMs", ds.getMaxLifetimeMs());
                 m.put("autoCommit", ds.getAutoCommit());
                 m.put("poolName", ds.getPoolName());
-                // last test metadata
                 m.put("lastTestOk", ds.getLastTestOk());
                 m.put("lastTestAtEpochMs", ds.getLastTestAtEpochMs());
                 m.put("lastTestMessage", ds.getLastTestMessage());
@@ -326,6 +387,10 @@ public class ApiServer {
         });
         router.post("/ui/datasource/save", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
             String name = data.get("name");
             if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
@@ -386,6 +451,11 @@ public class ApiServer {
             res.text(200, "Datasource configuration saved.", "application/json");
         });
         router.post("/ui/datasource/test", (req, res) -> {
+            AppConfig cfgAuth = ConfigManager.getConfig();
+            if (authEnabled(cfgAuth)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfgAuth)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
             String name = data.get("name");
             String url = data.get("url");
@@ -462,10 +532,14 @@ public class ApiServer {
             }
         });
         router.post("/ui/datasource/activate", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
             String name = data.get("name");
             if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
-            AppConfig cfg = ConfigManager.getConfig();
             boolean exists = cfg.getDatasources().stream().anyMatch(d -> name.equals(d.getName()));
             if (!exists) { res.json(404, Map.of("error","not found")); return; }
             cfg.setActiveDatasource(name);
@@ -473,10 +547,14 @@ public class ApiServer {
             res.text(200, "Activated", "application/json");
         });
         router.post("/ui/datasource/delete", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
             String name = data.get("name");
             if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
-            AppConfig cfg = ConfigManager.getConfig();
             cfg.getDatasources().removeIf(d -> name.equals(d.getName()));
             if (name.equals(cfg.getActiveDatasource())) {
                 if (!cfg.getDatasources().isEmpty()) cfg.setActiveDatasource(cfg.getDatasources().get(0).getName());
@@ -485,13 +563,16 @@ public class ApiServer {
             ConfigManager.saveConfig(cfg);
             res.text(200, "Deleted", "application/json");
         });
-        // Per-datasource health check (non-persisted)
         router.get("/ui/datasource/health", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
             String name = req.query("name");
             Integer timeoutSec = parseInteger(req.query("timeoutSec"));
             if (timeoutSec == null || timeoutSec <= 0) timeoutSec = 3;
             if (timeoutSec > 60) timeoutSec = 60;
-            AppConfig cfg = ConfigManager.getConfig();
             DatasourceConfig target = null;
             if (name != null && !name.isBlank()) {
                 for (DatasourceConfig d : cfg.getDatasources()) {
@@ -499,7 +580,6 @@ public class ApiServer {
                 }
                 if (target == null) { res.json(404, Map.of("ok", false, "error", "datasource not found")); return; }
             } else {
-                // use active
                 String active = cfg.getActiveDatasource();
                 for (DatasourceConfig d : cfg.getDatasources()) {
                     if (active != null && active.equals(d.getName())) { target = d; break; }
@@ -538,7 +618,6 @@ public class ApiServer {
                 res.json(200, out);
             }
         });
-
         server.createContext("/", exchange -> {
             try { router.handle(exchange); } catch (IOException ioe) { LOG.error("Router handle failed", ioe); }
         });
@@ -680,6 +759,15 @@ public class ApiServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             String method = exchange.getRequestMethod();
+            // auth check
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(exchange);
+                boolean isWrite = "POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method);
+                boolean ok = isWrite ? hasAdmin(tok, cfg) : hasRead(tok, cfg);
+                if (!ok) { send(exchange, 401, "{\"error\":\"unauthorized\"}"); return; }
+            }
+
             URI uri = exchange.getRequestURI();
             String path = uri.getPath(); // /api or /api/{entity} or /api/{entity}/{id}
             String[] parts = path.split("/");
