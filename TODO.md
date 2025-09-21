@@ -4,22 +4,24 @@ This plan is the actionable backlog for October–December 2025. Keep it synchro
 
 ## October 2025 — Enterprise Foundation (MVP)
 - [ ] Angular 21 UI Foundation (MVP)
-  - [ ] Scaffold Angular workspace (Nx): apps/studio; libs/runtime, libs/designer, libs/ui-schema.
-  - [ ] Implement minimal runtime renderer ("Hello from Runtime") and designer shell with Container/Text/Button + Settings (token input).
-  - [ ] Wire HttpInterceptor for X-AppBana-Token; ensure Node LTS via `.nvmrc`; add dev/test/lint scripts.
-  - [ ] Basic audit log UI scaffold (list/export CSV stub).
+  - [ ] Scaffold Angular workspace (Nx): apps/studio; libs/runtime, libs/designer, libs/ui-schema. [O1-S1](OCT_2025_EPICS_STORIES.md#o1-s1-scaffold-angular-workspace-nx)
+  - [ ] Implement minimal runtime renderer ("Hello from Runtime") and designer shell with Container/Text/Button + Settings (token input). [O1-S2](OCT_2025_EPICS_STORIES.md#o1-s2-minimal-runtime-renderer) · [O1-S3](OCT_2025_EPICS_STORIES.md#o1-s3-designer-shell--settings-token)
+  - [ ] Wire HttpInterceptor for X-AppBana-Token; ensure Node LTS via `.nvmrc`; add dev/test/lint scripts. [O1-S4](OCT_2025_EPICS_STORIES.md#o1-s4-httpinterceptor--scripts--ci-stub)
+  - [ ] Basic audit log UI scaffold (list/export CSV stub). [O1-S5](OCT_2025_EPICS_STORIES.md#o1-s5-audit-ui-scaffold-listexport-stub)
 - [ ] Server-side Workflow Engine (MVP)
-  - [ ] Persist workflow instances and transitions (draft/submitted/approved/rejected) with idempotency.
-  - [ ] UI schema: add `workflows` and map actions to transitions; designer bindings.
-  - [ ] Runtime: start/approve actions; resume by owner.
+  - [ ] Persist workflow instances and transitions (draft/submitted/approved/rejected) with idempotency. [O2-S1](OCT_2025_EPICS_STORIES.md#o2-s1-schema--migrations-for-workflows)
+  - [ ] UI schema: add `workflows` and map actions to transitions; designer bindings. [O2-S4](OCT_2025_EPICS_STORIES.md#o2-s4-ui-schema--runtime-actions)
+  - [ ] Runtime: start/approve actions; resume by owner. [O2-S3](OCT_2025_EPICS_STORIES.md#o2-s3-instance--transition-apis)
+  - [ ] Definition APIs (create/list) available. [O2-S2](OCT_2025_EPICS_STORIES.md#o2-s2-definition-apis)
 - [ ] Advanced Security & Auditing
-  - [ ] Server-side audit records for all CRUD and workflow transitions (who/when/what/entity/id/IP/UA + before/after hash).
-  - [ ] Export CSV + filters (user/entity/date).
-  - [ ] Field-Level Security (FLS): enforce on read (redact/omit) and write (reject), and honor hide/disable in runtime.
+  - [ ] Server-side audit records for all CRUD and workflow transitions (who/when/what/entity/id/IP/UA + before/after hash). [O3-S1](OCT_2025_EPICS_STORIES.md#o3-s1-audit-model--repository--service)
+  - [ ] Export CSV + filters (user/entity/date). [O3-S2](OCT_2025_EPICS_STORIES.md#o3-s2-audit-query--csv-export)
+  - [ ] Field-Level Security (FLS): enforce on read (redact/omit) and write (reject), and honor hide/disable in runtime. [O3-S3](OCT_2025_EPICS_STORIES.md#o3-s3-field-level-security-engine-backend) · [O3-S4](OCT_2025_EPICS_STORIES.md#o3-s4-runtime-fls-enforcement-ui)
+  - [ ] Hook Audit UI into backend. [O3-S5](OCT_2025_EPICS_STORIES.md#o3-s5-audit-ui-integration)
 - [ ] Foundational Plugin API
-  - [ ] Component/data-connector/action registration (DI multi-providers) with docs.
-  - [ ] Example component: Signature Pad shipped.
-  - [ ] Data connector skeleton ready.
+  - [ ] Component/data-connector/action registration (DI multi-providers) with docs. [O4-S1](OCT_2025_EPICS_STORIES.md#o4-s1-define-di-tokens--registry-ui)
+  - [ ] Example component: Signature Pad shipped. [O4-S2](OCT_2025_EPICS_STORIES.md#o4-s2-signature-pad-component-plugin)
+  - [ ] Data connector skeleton ready. [O4-S3](OCT_2025_EPICS_STORIES.md#o4-s3-data-connector-skeleton-plugin)
 
 Acceptance criteria: see `Product_AppBana.md` §5 October.
 
