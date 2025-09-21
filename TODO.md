@@ -1,32 +1,71 @@
-# TODO / Backlog
+# Q4 2025 Delivery Plan — Aligned with Product_AppBana
 
-This backlog captures near-term and medium-term improvements. Check off items as they are completed and keep this list synchronized with docs.
+This plan is the actionable backlog for October–December 2025. Keep it synchronized with `Product_AppBana.md` (§5 acceptance criteria; §17 logistics) and update checkboxes as items are delivered.
 
-Priority A (next)
-- [x] Add authentication and role-based access control to /schema, /api/*, and /ui/datasource/*.
-- [x] Add per-datasource health endpoint and surface status in UI (badge + last tested timestamp).
-- [x] Persist last test result/time for each datasource; show a “last tested” column in the list.
-- [x] Make Test Connection timeout configurable; improve error details and mask sensitive data.
+## October 2025 — Enterprise Foundation (MVP)
+- [ ] Server-side Workflow Engine (MVP)
+  - [ ] Persist workflow instances and transitions (draft/submitted/approved/rejected) with idempotency.
+  - [ ] UI schema: add `workflows` and map actions to transitions; designer bindings.
+  - [ ] Runtime: start/approve actions; resume by owner.
+- [ ] Advanced Security & Auditing
+  - [ ] Server-side audit records for all CRUD and workflow transitions (who/when/what/entity/id/IP/UA + before/after hash).
+  - [ ] Export CSV + filters (user/entity/date).
+  - [ ] Field-Level Security (FLS): enforce on read (redact/omit) and write (reject), and honor hide/disable in runtime.
+- [ ] Foundational Plugin API
+  - [ ] Component/data-connector/action registration (DI multi-providers) with docs.
+  - [ ] Example component: Signature Pad shipped.
+  - [ ] Data connector skeleton ready.
 
-Priority B
-- [ ] Add CI checks and a PR template to enforce “docs updated” (README.md, FUNCTIONAL_SPEC.md, LOW_LEVEL_DESIGN.md, COPILOT_NOTES.md).
-- [ ] Enhance OpenAPI: add response schemas/examples; optionally bundle Swagger UI locally (avoid CDN).
-- [ ] Add pagination, sorting, and basic filtering to GET /api/{entity} (query params) and reflect in OpenAPI.
-- [ ] Add audit logging for schema and datasource changes (who/when/what).
-- [ ] Add import/export for datasources and schemas (JSON) via UI and API.
+Acceptance criteria: see `Product_AppBana.md` §5 October.
 
-Priority C
-- [ ] Multi-tenant support (namespacing per-tenant for schemas and data access).
-- [ ] Optional Spring Boot adapter while retaining metadata-based design (same endpoints + swagger).
-- [ ] Deployment: Docker/Compose polish, sample Postgres + app compose file; Helm chart (optional).
-- [ ] Unit tests: OpenApiGenerator, SchemaManager.generateMigrationPlan, ApiServer handlers (schema/datasource/test), URL builder.
-- [ ] Improve migration engine (rename columns safely, rollback plan preview, dry-run SQL validation per DB type).
+## November 2025 — Logistics & HR Acceleration (MVP)
+- [ ] PWA/Offline
+  - [ ] Installable, cache static assets and last-used pages; queue-and-replay writes; background sync.
+- [ ] Real-time Connectors
+  - [ ] WebSocket DataSource stable with backoff; auth header propagation.
+  - [ ] MQTT DataSource (wss) with reconnect/backoff; message transform; auth headers.
+- [ ] Barcode/QR Scanner Component
+  - [ ] Mobile-friendly capture; debounce; events wired to forms/actions.
+- [ ] Reporting & Export (MVP)
+  - [ ] Visual report designer (columns/groups/totals) and CSV/Excel export.
+  - [ ] Audit report access.
+- [ ] Workflows & Permissions
+  - [ ] Multi-actor approvals with role assignment and SLA timers + escalations.
+  - [ ] Relationship-based permission checks (e.g., "manager of").
+- [ ] Multi-tenant Scoping (MVP)
+  - [ ] tenantId propagation in auth/session; UI/API query scoping; designer simulation for role/tenant.
 
-Housekeeping
-- [x] Add “last tested” visual indicator in the UI list; allow manual refresh; debounce repeat tests. (Added status chip + Last tested column; manual refresh via Test/Ping.)
-- [x] Add connectivity indicator chip (Live/Down) that pings health endpoint. (Added Ping action hitting /ui/datasource/health.)
-- [x] Centralize driver inference map; document supported DBs and jdbc-url examples in README. (Introduced DriverUtil and updated README.)
+Acceptance criteria: see `Product_AppBana.md` §5 November and §17.4.
 
-Notes
-- Keep this file aligned with the “Next recommended enhancements” sections in README.md and FUNCTIONAL_SPEC.md.
-- After implementing a backlog item, update docs and the change logs accordingly.
+## December 2025 — Healthcare & Platform Leadership (MVP)
+- [ ] FHIR R4 Connector (read-only)
+  - [ ] Configure base URL + auth; Patient/Observation/Encounter reads + search params.
+  - [ ] All access audited as PHI.
+- [ ] Patient History Timeline Component
+  - [ ] Render encounters/observations; filters; a11y; handle 1k+ events smoothly.
+- [ ] Design Versioning & Marketplace
+  - [ ] Save with semantic version + notes; diff + rollback; publish permissions.
+  - [ ] Marketplace (MVP) for enabling first-party plugins (Signature Pad, Barcode, Timeline, FHIR) with signed manifests.
+- [ ] Logistics Addendum
+  - [ ] Document Store (MVP): upload/view PDFs/images; checksums; audited access.
+  - [ ] Exception Rules & Alerts (MVP): rule DSL; sendEmail/sendSms actions; alert audit entries.
+  - [ ] Emissions Estimator (MVP): voyage CO2e calculator (guidance).
+
+Acceptance criteria: see `Product_AppBana.md` §5 December and §17.4.
+
+---
+
+## Backlog (Post-Q4 or Nice-to-Haves)
+- OpenAPI enhancements (response schemas/examples); optionally bundle Swagger UI locally.
+- Pagination/sorting/filtering for GET /api/{entity} with OpenAPI reflection.
+- Import/export for datasources and schemas (JSON) via UI & API.
+- Optional Spring Boot adapter; Docker/Compose polish; Helm chart.
+- Unit tests: OpenApiGenerator, SchemaManager.generateMigrationPlan, ApiServer handlers, URL builder.
+- Migration engine improvements (safe rename, rollback preview, dry-run per DB).
+- PDF report rendering; FHIR write operations and SMART on FHIR; DICOM viewer; real-time designer collaboration.
+
+---
+
+## Notes
+- Keep this file aligned with `Product_AppBana.md` and `UI_Development_Plan.md`.
+- Update docs and change logs when checking off items.

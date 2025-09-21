@@ -1,10 +1,10 @@
 # AppBana Functional Specification
 
-Version: 1.6 (snapshot)
+Version: 2.0 (Q4 2025 aligned — snapshot)
 Date: 2025-09-21
 
 Purpose
-- Describe current, working functionality of the AppBana MVP (metadata-driven UI → API → DB), including multi-datasource management, connection pooling, Java 25 runtime, per-datasource health checks, optional token-based authentication, and provide prioritized future enhancements.
+- Describe current, working functionality of the AppBana MVP (metadata-driven UI → API → DB) and document the Q4 2025 roadmap features and contracts needed to deliver an enterprise-grade platform for Healthcare, Logistics, and HR.
 
 1. Overview
 - Runtime is metadata-driven: a UI builder emits an entity schema (JSON). Backend persists the schema and automatically creates/migrates a backing SQL table. Generic CRUD endpoints are exposed at runtime for each saved entity.
@@ -122,3 +122,129 @@ Purpose
 - 2025-09-20: Added per-datasource health endpoint (/ui/datasource/health); persisted last test metadata; masked sensitive URL parts; configurable test timeout; centralized driver/type inference via DriverUtil.
 - 2025-09-19: Upgraded to Java 25, virtual threads; added Swagger UI (/ui/swagger).
 - 2025-09-19: Added server-side JDBC URL construction in /ui/datasource/save; Test Connection endpoint and UI; HikariCP pooling with per-datasource settings; multi-datasource management.
+
+---
+
+15. Q4 2025 Roadmap — Functional Addenda (new)
+
+15.1 Stateful Workflow Engine (October)
+- Goal: Long-running, multi-step workflows with resumable state and auditable transitions.
+- Concepts:
+  - WorkflowDefinition: id, name, steps[], transitions[], roles[]
+  - WorkflowInstance: id, definitionId, tenantId?, state, assignees[], createdAt, updatedAt
+  - Transition: id, fromState, toState, guard?, effects[]
+- Behavior:
+  - Start workflow from UI action; advance via transitions (approve/reject/etc.).
+  - Idempotent transition application; permission checks; full audit per transition.
+- Acceptance criteria: Product_AppBana.md §5 October.
+
+15.2 Advanced Security & Auditing (October)
+- Server-side audit for: CRUD, workflow transitions, document access, report exports, connector calls.
+- Field-Level Security (FLS): read masking/omission and write enforcement; UI runtime hides/disables fields accordingly.
+- Permission simulation: admin UI to preview effective permissions for a user/role.
+- Acceptance criteria: Product_AppBana.md §5 October.
+
+15.3 Plugin API (October)
+- Extensible registry for components, data connectors, action types; includes Signature Pad example.
+
+15.4 PWA/Offline & Real-time (November)
+- PWA: installable app, offline cache of static assets and recent pages; queue-and-replay for writes; background sync.
+- Real-time: WebSocket DataSource with backoff/retry; MQTT DataSource (wss) for scanner/IoT feeds.
+- Acceptance criteria: Product_AppBana.md §5 November and §17.4.
+
+15.5 Reporting (November)
+- Visual designer for tabular reports (columns, groups, totals) and server-side CSV/Excel export; access audited.
+
+15.6 Multi-actor Workflows & Relationship Permissions (November)
+- Assignment to roles; SLA timers and escalations; relationship-based checks (e.g., manager-of).
+
+15.7 Healthcare & Leadership (December)
+- FHIR R4 (read-only) connector: Patient, Observation, Encounter; search parameters; access audited as PHI.
+- Patient History Timeline component (front-end plugin) with accessible interactions.
+- Design Versioning & Marketplace: versioned saves, diff/rollback, publish; marketplace to enable first-party plugins.
+- Logistics addendum: Document Store (PDF/image), Exception Rules + Alerts (email/SMS), Emissions estimator (guidance).
+- Acceptance criteria: Product_AppBana.md §5 December and §17.4.
+
+15.8 Multi-tenant scoping (Q4)
+- Tenant isolation across UI and API; tenantId propagated via token or header; designer supports role/tenant simulation.
+
+---
+
+16. Planned API Contracts (Q4 MVP)
+
+Note: These endpoints are planned for the Q4 delivery. Existing MVP endpoints remain unchanged. All new endpoints enforce the same token model (X-AppBana-Token or Authorization: Bearer) and will include tenant scoping when enabled.
+
+16.1 Workflow APIs (October)
+- POST /workflows/definitions — create/update definition (admin)
+- GET /workflows/definitions[?page=&q=] — list definitions (read/admin)
+- POST /workflows/instances — start instance {definitionId, inputs}
+- GET /workflows/instances/{id} — get instance (read/admin, scoped)
+- POST /workflows/instances/{id}/transitions — advance {transitionId, comments?} (perm checks, idempotent)
+- GET /workflows/instances/{id}/history — list transitions (audited)
+
+16.2 Audit APIs (October)
+- POST /audit/query — filter {user?, entity?, dateFrom?, dateTo?, action?}
+- GET /audit/export.csv — stream CSV of query results
+
+16.3 Security/FLS APIs (October)
+- GET /security/fls — list rules (read/admin)
+- POST /security/fls — upsert rules (admin)
+
+16.4 Real-time (November)
+- GET /rt/ws — WebSocket endpoint; auth required; multiplexed channels by topic/entity (design TBD)
+- MQTT: connect via broker wss:// (client library in UI); optional reverse proxy not required in MVP
+
+16.5 Reporting (November)
+- POST /reports/definitions — create/update report definition (admin)
+- GET /reports/definitions — list (read/admin)
+- POST /reports/{id}/export.csv — generate CSV
+- POST /reports/{id}/export.xlsx — generate Excel (if feasible in MVP; else CSV only)
+
+16.6 Multi-tenant Scoping (November)
+- Header X-AppBana-Tenant or token-bound tenant; APIs must filter by tenantId where applicable. Admin-only endpoints may require explicit tenant override flag.
+
+16.7 Document Store (December)
+- POST /documents — upload {metadata + file}; returns document id; stores checksum
+- GET /documents/{id} — metadata
+- GET /documents/{id}/content — stream content (audited)
+
+16.8 Alerts & Rules (December)
+- POST /alerts/rules — create/update rule {condition, actions}
+- GET /alerts/rules — list rules
+- POST /alerts/test — fire a test alert {ruleId}
+
+16.9 FHIR Connector (December)
+- Option A (proxy): GET /connectors/fhir/{resource} — forwards to configured FHIR base with auth; whitelisted resources
+- Option B (client-only plugin): no server proxy; UI connector signs requests directly to FHIR endpoint (not preferred for PHI)
+
+16.10 Designs & Marketplace (December)
+- GET /designs/versions?app= — list versions
+- POST /designs/versions — save version {app, version, notes, json}
+- POST /designs/rollback — rollback to version
+- GET /marketplace/plugins — list available first-party plugins; signed manifests
+
+---
+
+17. Data Model Additions (planned)
+- appbana_audit_log(id, ts, user, action, entity, entityId, detailsHash, ip, ua, tenantId?)
+- appbana_workflow_def(id, name, json, createdAt, updatedAt, tenantId?)
+- appbana_workflow_instance(id, defId, state, assigneesJson, createdAt, updatedAt, tenantId?)
+- appbana_document(id, name, type, size, checksum, metaJson, createdAt, createdBy, tenantId?)
+- appbana_design_version(id, app, version, notes, json, createdAt, createdBy)
+- appbana_alert_rule(id, name, conditionJson, actionsJson, createdAt, createdBy, tenantId?)
+
+---
+
+18. Non-functional Targets (Q4 v1)
+- Availability: 99.5%
+- Performance: P95 API < 500ms @ 200 RPS; P95 report export < 5s for 10k rows; map 1k markers clustered at 60fps
+- Offline: ≥ 99% of queued writes replayed within 10 minutes
+- Security: 100% PHI accesses audited; 0 high-severity vulns at release
+
+---
+
+19. References
+- Product roadmap: Product_AppBana.md §§5–17
+- UI prompt: UI_Development_Plan.md
+- Execution notes: COPILOT_NOTES.md
+- Delivery plan: TODO.md
