@@ -82,6 +82,7 @@ Notes
 
 - The Studio app includes Google Material Icons via a link tag in `projects/studio/src/index.html`, enabling `<mat-icon>` ligatures.
 - Library build order and workspace paths are managed by the root `build.sh`.
+- See also: `llms-angular.txt` (agent guardrails/execution patterns for Angular work) and `angular-best-practices.md` (coding, style, architecture). Follow both alongside `docs/STYLE_GUIDE.md` when implementing UI changes.
 
 ## Additional Resources
 

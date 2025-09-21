@@ -3,6 +3,7 @@
 Purpose
 - This file contains a complete, copy‑pasteable system/developer prompt for a Copilot/Agent tasked with delivering a production‑grade, no/low‑code UI Designer for AppBana.
 - It is tailored to the existing AppBana backend (OpenAPI at /openapi.json, token-based auth) and uses Angular 21 with latest stable Node.js (LTS).
+- See also: `llms-angular.txt` (agent guardrails and execution patterns for Angular work) and `angular-best-practices.md` (coding/style/architecture). Follow both alongside `docs/STYLE_GUIDE.md` during UI development.
 
 Master system prompt (paste into your Copilot agent as the System/Developer prompt)
 
