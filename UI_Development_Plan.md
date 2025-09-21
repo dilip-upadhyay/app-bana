@@ -65,50 +65,13 @@ Architecture and defaults (Angular-first)
   - JSON schema validation (for design files): Zod or Ajv.
   - Logistics libraries (new): ngx-leaflet or maplibre-gl for Map, mqtt over WebSocket (mqtt.js) for MQTT DataSource.
 
-UI schema (versioned DSL)
-- Top-level
-  - version: string (e.g., "1.0.0")
-  - app: { name, theme, globals }
-  - routes: [ { id, path, layoutId?, pageId, auth?: {roles?: string[], scopes?: string[]}, tenantScope?: string (new) } ]
-  - pages: [ { id, name, rootId, dataSources: DataSource[], state: StateVar[], actions: Action[], i18n?: {...}, tenantScope?: string (new) } ]
-  - components: [ ComponentNode ]
-  - permissions: { roles: string[], rules: PermissionRule[] }
-- ComponentNode
-  - { id, type, name?, inputs: Record<string, BindingOrValue>, children?: string[], outputs?: EventBinding[], visible?: BindingOrValue<boolean>, disabled?: BindingOrValue<boolean>, style?: BindingOrValue<Style> }
-- BindingOrValue
-  - literal values or { binding: "state.xxx | data.xxx | params.id | expr:<expression>" }
-- DataSource
-  - { id, name, type: "openapi" | "websocket" | "mqtt" (new) | "plugin", operationId?: string, method?: string, path?: string, params?: Bindings, body?: BindingOrValue, headers?: BindingOrValue, paging?: { pageParam, sizeParam, map }, cache?: { key?, ttlSec? }, onLoad?: boolean, transform?: expr, mqtt?: { url, topic, qoss?, clientId? } (new) }
-- Action
-  - { id, type: "fetch|create|update|delete|navigate|openModal|closeModal|setState|toast|confirm|runExpr|workflow|sendEmail|sendSms|raiseAlert" (new), config: {...}, success?: Step[], error?: Step[], finally?: Step[] }
-- EventBinding
-  - { event: "click|change|load|submit|rowSelect|success|error|visible|mapMarkerClick|scanDetected" (new), steps: Step[] }
-- Step
-  - { if?: expr, then: ActionRefOrInline[], else?: ActionRefOrInline[] }
-- StateVar
-  - { name, type, initial: BindingOrValue }
-- Include a migration utility for schema version bumps.
-
-Key contracts to implement (Angular specifics)
-- Designer
-  - Palette + Canvas: CDK drag-drop with nested containers; ghost/preview rendering.
-  - Property panel: dynamic form driven by component prop schemas; show defaults and docs.
-  - Bindings: binding picker (state/data/params) + expression editor with Monaco autocomplete.
-  - Event graph: visualize outputs → actions; simulate events in preview mode.
-  - Tenant/role simulation (new): preview as selected role/tenant.
-- Runtime
-  - Deterministically renders ComponentNode trees using a registry of Angular components (DI token registry).
-  - Create components dynamically via ViewContainerRef.createComponent; bind inputs; wire outputs to EventBinding steps; resolve bindings from signals/state/data.
-  - Inject services (data/auth/storage/navigation) into runtime; no designer deps.
-  - Permissions: prune/disable secure nodes at render time based on roles/scopes; enforce tenant scoping (new).
-- Data integration
-  - Import OpenAPI (/openapi.json), generate Angular services/models (typescript-angular or ng-openapi-gen).
-  - Global HttpInterceptor: adds X-AppBana-Token securely, base URL, timeout, error normalization.
-  - Support mock/live toggle; query caching; optimistic updates for create/update/delete.
-  - MQTT DataSource (new): wss client with reconnect/backoff; message transform; auth header support.
-  - EDI plugin connectors (new): upload/ingest endpoint and parser hook to produce normalized events.
-- Theming and layout
-  - Angular Material theming with CSS variables; dark/light switch; responsive grid using CSS Grid + CDK Layout breakpoints.
+Styling policy (long‑term)
+- Goals: fast iteration in the studio app, predictable theming in the runtime, no dependence on dynamic utility generation.
+- Approach:
+  - Use Angular Material theming and CSS variables as the single source of truth for theme tokens (colors, spacing, radii, typography). Define a shared tokens file and support dark mode via a `.dark` class.
+  - Studio/designer (apps/studio): allow a tiny local utility layer (e.g., `u-flex`, `u-grid`, `u-m-0..8`, `u-p-0..8`) implemented in plain CSS/SCSS referencing the same tokens. Avoid global resets that fight MDC (no Tailwind Preflight).
+  - Runtime renderer (libs/runtime): do not rely on arbitrary utility classes coming from design JSON. Prefer token-driven inline styles and component inputs; if utilities are needed, expose a fixed, documented subset only.
+  - Keep bundle size small and theming consistent by avoiding purge/safelist complexity associated with utility frameworks in the runtime.
 
 Iteration protocol (follow on every cycle)
 1) Confirm environment and backend assumptions (OpenAPI at /openapi.json; X-AppBana-Token header; same-origin).
@@ -144,6 +107,7 @@ Constraints and preferences
 - Performance: virtualize long lists; debounce live searches; memoize heavy computations (signals/computed).
 - Internationalization: basic i18n layer; all user‑facing strings translatable.
 - Bundle assets locally (no CDN reliance) unless explicitly allowed.
+- Styling: follow the styling policy above (Material + CSS variables tokens; tiny local utilities in studio; token-driven runtime).
 
 Backend integration notes (AppBana-specific)
 - OpenAPI: GET /openapi.json (auth: read).

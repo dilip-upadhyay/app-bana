@@ -243,7 +243,8 @@ Key files
 - src/main/resources/ui/swagger.html — embedded Swagger UI for /openapi.json
 
 Notes
-- If DB credentials are wrong at startup, the app still starts the server so you can fix settings via `/ui/datasource`.
+- If DB credentials are wrong at startup, the app still starts so you can fix settings via `/ui/datasource`.
 - Identifier quoting uses double-quoted UPPERCASE to avoid reserved word/case issues in H2.
 - Backlog: see `TODO.md` for prioritized next steps and enhancements.
 - New to the project? Start with `USER_GUIDE.md`.
+- UI Styling policy (designer/runtime): see `docs/STYLE_GUIDE.md` (Material + CSS variables tokens, tiny local utilities in studio, token-driven runtime).
