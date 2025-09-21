@@ -72,6 +72,22 @@ Stories
 - Estimate: 3 pts
 - Labels: angular, audit, ux
 
+#### O1-S6 Host Angular app at /ui/designer (Java server)
+- Description: Serve the Angular studio app from the existing Java server behind /ui/designer without breaking existing UIs.
+- Acceptance: /ui/designer loads Angular app (built artifacts served); existing UIs /ui/builder, /ui/datasource, /ui/swagger still work.
+- Tasks: static asset handler or proxy for /ui/designer; build output path alignment; cache headers; basic 404 handling to index.html.
+- Dependencies: O1-S1
+- Estimate: 3 pts
+- Labels: hosting, integration
+
+#### O1-S7 Regression smoke for existing UIs
+- Description: Add a short smoke checklist (manual or simple script) to verify /ui/builder, /ui/datasource, /ui/swagger still function after Angular hosting is enabled.
+- Acceptance: documented smoke steps in repo; run passes locally; issues tracked if any.
+- Tasks: write smoke doc; optional curl checks; link from COPILOT_NOTES.md.
+- Dependencies: O1-S6
+- Estimate: 1 pt
+- Labels: qa, docs
+
 ---
 
 EPIC O2 — Stateful Workflow Engine (MVP)

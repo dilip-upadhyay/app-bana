@@ -72,6 +72,7 @@ To confidently ship a credible v1 by December, each phase must meet the followin
 - Advanced Auditing: server persists audit records for all CRUD and workflow transitions (who, when, what, entity/id, before/after hash, IP/UA); export CSV; filter by user/entity/date.
 - Field-Level Security (FLS): enforce on read (redact/omit) and write (reject masked fields), with UI runtime honoring hide/disable; configuration stored in metadata.
 - Plugin API: documented with one shipping example (Signature Pad) and one data connector skeleton; plugin sandboxing rules defined.
+- Existing UIs compatibility: host Angular app at /ui/designer and confirm /ui/builder, /ui/datasource, /ui/swagger remain fully functional.
 
 ### November 2025 — Logistics & HR Acceleration (MVP)
 - PWA: installable, offline cache for static assets and last-used pages; queue-and-replay of POST/PUT/DELETE with conflict prompts; background sync when online.
