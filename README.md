@@ -248,3 +248,25 @@ Notes
 - Backlog: see `TODO.md` for prioritized next steps and enhancements.
 - New to the project? Start with `USER_GUIDE.md`.
 - UI Styling policy (designer/runtime): see `docs/STYLE_GUIDE.md` (Material + CSS variables tokens, tiny local utilities in studio, token-driven runtime).
+
+---
+
+Angular UI (Designer/Studio) quick build & run
+- Build all Angular libraries and the Studio app:
+  ```zsh
+  cd /Users/dilip/git/app-bana
+  ./build.sh --clean    # or just ./build.sh for an incremental build
+  ```
+- Run the Studio SSR server (rebuilds first):
+  ```zsh
+  cd /Users/dilip/git/app-bana
+  ./run.sh              # defaults to port 4000
+  # Options:
+  #   --clean        Clean build before running
+  #   --reinstall    Reinstall npm deps before building
+  #   --port 5000    Run on a custom port
+  #   --open         Open the browser automatically (macOS)
+  ```
+- Output paths after build (Angular workspace):
+  - Libraries: `ui/dist/{ui-material,ui-schema,designer,runtime}`
+  - Studio app: `ui/dist/studio/{browser,server}`
