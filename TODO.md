@@ -8,6 +8,7 @@ This plan is the actionable backlog for October–December 2025. Keep it synchro
   - [ ] Implement minimal runtime renderer ("Hello from Runtime") and designer shell with Container/Text/Button + Settings (token input). [O1-S2](OCT_2025_EPICS_STORIES.md#o1-s2-minimal-runtime-renderer) · [O1-S3](OCT_2025_EPICS_STORIES.md#o1-s3-designer-shell--settings-token)
   - [ ] Wire HttpInterceptor for X-AppBana-Token; ensure Node LTS via `.nvmrc`; add dev/test/lint scripts. [O1-S4](OCT_2025_EPICS_STORIES.md#o1-s4-httpinterceptor--scripts--ci-stub)
   - [ ] Basic audit log UI scaffold (list/export CSV stub). [O1-S5](OCT_2025_EPICS_STORIES.md#o1-s5-audit-ui-scaffold-listexport-stub)
+  - [ ] Styling baseline: create shared theme tokens (CSS variables) and minimal utilities in studio per `docs/STYLE_GUIDE.md`; import tokens in runtime (no utilities).
 - [ ] Server-side Workflow Engine (MVP)
   - [ ] Persist workflow instances and transitions (draft/submitted/approved/rejected) with idempotency. [O2-S1](OCT_2025_EPICS_STORIES.md#o2-s1-schema--migrations-for-workflows)
   - [ ] UI schema: add `workflows` and map actions to transitions; designer bindings. [O2-S4](OCT_2025_EPICS_STORIES.md#o2-s4-ui-schema--runtime-actions)
@@ -22,6 +23,7 @@ This plan is the actionable backlog for October–December 2025. Keep it synchro
   - [ ] Component/data-connector/action registration (DI multi-providers) with docs. [O4-S1](OCT_2025_EPICS_STORIES.md#o4-s1-define-di-tokens--registry-ui)
   - [ ] Example component: Signature Pad shipped. [O4-S2](OCT_2025_EPICS_STORIES.md#o4-s2-signature-pad-component-plugin)
   - [ ] Data connector skeleton ready. [O4-S3](OCT_2025_EPICS_STORIES.md#o4-s3-data-connector-skeleton-plugin)
+  - [ ] Define plugin registry shape per `UI_Development_Plan.md` → “Plugin boundary via Web Components”; document inputs/outputs/theming/SDK bridge.
 
 Acceptance criteria: see `Product_AppBana.md` §5 October.
 

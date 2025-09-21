@@ -248,3 +248,5 @@ Note: These endpoints are planned for the Q4 delivery. Existing MVP endpoints re
 - UI prompt: UI_Development_Plan.md
 - Execution notes: COPILOT_NOTES.md
 - Delivery plan: TODO.md
+- Styling policy: docs/STYLE_GUIDE.md (Material + CSS variables tokens; tiny local utilities in studio; token-driven runtime)
+- Plugin boundary: UI_Development_Plan.md → “Plugin boundary via Web Components (short)” (minimal contract and phased plan)
