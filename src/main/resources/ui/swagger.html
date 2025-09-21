@@ -16,23 +16,23 @@
 </head>
 <body>
   <div class="topbar-token">
-    <label>Auth token: <input type="password" id="authToken" placeholder="X-AppBana-Token or Bearer" /></label>
+    <label>Auth token: <input type="password" id="authToken" placeholder="X-AppBana-Token" /></label>
     <button id="saveToken">Save token</button>
     <span class="hint">Protected endpoints and the OpenAPI spec require this token when server auth is enabled.</span>
   </div>
   <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
-    // Token helpers (same key as builder.html)
+    // Token helpers (same key as other UIs)
     function getToken(){ try { return localStorage.getItem('appbana_token')||''; } catch(e){ return ''; } }
     function setToken(t){ try { localStorage.setItem('appbana_token', t || ''); } catch(e){} }
+    function sanitizeToken(t){ return (t||'').toString().replace(/[^\x20-\x7E]/g,'').trim(); }
 
     function withAuthHeaders(req){
-      const tok = getToken();
+      const tok = sanitizeToken(getToken());
       if (tok && req && req.headers) {
         req.headers['X-AppBana-Token'] = tok;
-        // Also send as Bearer for convenience
-        req.headers['Authorization'] = 'Bearer ' + tok;
+        // Avoid Authorization header to prevent header syntax errors in browsers when tokens contain special chars
       }
       return req;
     }

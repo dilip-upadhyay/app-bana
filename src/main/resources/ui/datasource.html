@@ -140,7 +140,8 @@
     // Token helpers
     function getToken(){ return localStorage.getItem('appbana_token')||''; }
     function setToken(t){ if(t==null) t=''; localStorage.setItem('appbana_token', t); }
-    function authHeaders(){ const t=getToken(); return t? {'X-AppBana-Token': t, 'Authorization': 'Bearer '+t} : {}; }
+    function sanitizeToken(t){ return (t||'').toString().replace(/[^\x20-\x7E]/g,'').trim(); }
+    function authHeaders(){ const t=sanitizeToken(getToken()); return t? {'X-AppBana-Token': t} : {}; }
 
     // General fetch wrappers
     async function getJson(url){ const res = await fetch(url, {headers: authHeaders()}); if(!res.ok) throw new Error(res.status); return res.json(); }

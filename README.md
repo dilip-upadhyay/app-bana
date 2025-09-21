@@ -80,9 +80,12 @@ Authentication (optional)
   - Config fields: `adminToken` (read-write) and `readToken` (read-only)
   - Env vars: `APPBANA_ADMIN_TOKEN`, `APPBANA_READ_TOKEN`
   - System props: `-Dappbana.admin.token=...`, `-Dappbana.read.token=...`
-- Client headers (either works):
+- Client headers (either works on the server):
   - `X-AppBana-Token: <token>`
   - `Authorization: Bearer <token>`
+- Built-in UIs (builder.html, datasource.html, swagger.html):
+  - Use only `X-AppBana-Token` (token value sanitized to avoid browser header restrictions) and store it in localStorage.
+  - For API clients and curl examples, `Authorization: Bearer` continues to work.
 - Authorization rules when tokens are set:
   - Read-only (readToken or adminToken): GET /schema, GET /schema/{name}, GET /api/*, GET /openapi.json, GET /ui/datasource/list|config|health
   - Admin (adminToken only): POST /schema (apply/preview), POST /api/* (writes), PUT/DELETE /api/*, POST /ui/datasource/save|test|activate|delete

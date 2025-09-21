@@ -18,6 +18,9 @@ Backlog: see `TODO.md` for a prioritized to-do list and next actions.
 - If you change OpenAPI, verify /openapi.json and Swagger UI rendering.
 
 ## Change Log (recent)
+- 2025-09-21: UI token header hardening.
+  - UIs (builder.html, datasource.html, swagger.html) now send only `X-AppBana-Token` and sanitize the token value to avoid browser header syntax errors. Server still accepts `Authorization: Bearer` for non-UI clients and curl.
+  - Docs updated: README, FUNCTIONAL_SPEC, LOW_LEVEL_DESIGN, USER_GUIDE.
 - 2025-09-20: Optional token-based auth + UI wiring.
   - Backend: When adminToken/readToken configured (via config/env/sys props), enforce tokens on /schema, /api/*, /openapi.json, and /ui/datasource/*; read vs admin scopes.
   - Headers supported: X-AppBana-Token or Authorization: Bearer <token>.
@@ -71,9 +74,9 @@ Backlog: see `TODO.md` for a prioritized to-do list and next actions.
 - OpenApiGenerator.java — builds /openapi.json from saved schemas.
 
 Frontend (resources/ui)
-- builder.html — minimal schema builder posting to /schema; has Auth token box; sends X-AppBana-Token and Bearer headers.
-- datasource.html — multi-DS management UI with Type selector, driver/URL hints, JDBC URL Builder, Connection Pool section, Test Connection, per-row Test, Status chip (Live/Down/Unknown), Last tested, Ping; has Auth token box; sends token headers.
-- swagger.html — embedded Swagger UI for /openapi.json at /ui/swagger; includes token box and injects headers for all requests.
+- builder.html — minimal schema builder posting to /schema; has Auth token box; sends only `X-AppBana-Token` header (sanitized).
+- datasource.html — multi-DS management UI with Type selector, driver/URL hints, JDBC URL Builder, Connection Pool section, Test Connection, per-row Test, Status chip (Live/Down/Unknown), Last tested, Ping; has Auth token box; sends only `X-AppBana-Token` header (sanitized).
+- swagger.html — embedded Swagger UI for /openapi.json at /ui/swagger; includes token box and injects only `X-AppBana-Token` for all requests.
 
 ## Behavior and contracts
 - Active datasource governs all DB ops. Changing active or pool config rebuilds the pool on next use.
@@ -81,7 +84,7 @@ Frontend (resources/ui)
 - JDBC URL construction (server-side): if `url` is omitted in POST /ui/datasource/save, the server builds it from components.
 - Test Connection: POST /ui/datasource/test returns structured result; masks password in URL; persists last test if testing by name; supports timeoutSec.
 - Health: GET /ui/datasource/health tests connectivity for a named or active datasource without persisting.
-- Auth (optional): If AppConfig.adminToken or readToken is set (or via env/sys props), endpoints enforce tokens. Clients may use X-AppBana-Token or Authorization: Bearer.
+- Auth (optional): If AppConfig.adminToken or readToken is set (or via env/sys props), endpoints enforce tokens. Clients may use `X-AppBana-Token` or `Authorization: Bearer`. Built-in UIs send only `X-AppBana-Token`.
 
 ## Config model
 - Path: APPBANA_CONFIG env or -Dappbana.config (default data/appbana-config.json).

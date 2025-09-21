@@ -13,6 +13,7 @@ Runtime contract
   - /ui/datasource/health — per-datasource DB ping
 - Auth (optional): when tokens configured, clients must send either header `X-AppBana-Token: <token>` or `Authorization: Bearer <token>`.
   - readToken grants read-only access; adminToken grants write and read.
+  - Built-in UIs send only `X-AppBana-Token` (sanitized) to avoid browser header syntax errors; API clients may use either header.
 - HTTPS (optional): when enabled and keystore is configured, an HTTPS listener is started; optionally, HTTP requests are redirected (308) to HTTPS.
 - Output: JSON for API responses, HTML for UI pages.
 - Errors: JSON {"error":"message"}; appropriate HTTP status (400/404/405/500). Health endpoints return 200 with ok=false payloads for failures except /ready uses 503 when DB is not ready.
@@ -49,9 +50,9 @@ Key packages and classes (src/main/java/org/example)
 - model/EntitySchema.java — Schema model with Field sub-class (name,type,length,required,primaryKey,autoIncrement,min,max,pattern).
 
 Static resources (src/main/resources/ui)
-- builder.html — Minimal schema builder UI (posts JSON to /schema; includes an Auth token box; sends X-AppBana-Token and Authorization headers).
-- datasource.html — Multi-datasource management UI with a JDBC URL Builder and a Test Connection button, plus per-row Test and Ping actions. Shows Status chip and Last tested. Fields: name, type, jdbcUrl, username, password, driver, and Pool section (maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName). Actions: Save/Activate/Delete/List/Load/Test/Ping. Includes Auth token box and sends token header.
-- swagger.html — Embedded Swagger UI for /openapi.json with an Auth token box; uses requestInterceptor to attach token headers on all requests (including initial spec fetch).
+- builder.html — Minimal schema builder UI (posts JSON to /schema; includes an Auth token box; sends only X-AppBana-Token header).
+- datasource.html — Multi-datasource management UI with a JDBC URL Builder and a Test Connection button, plus per-row Test and Ping actions. Shows Status chip and Last tested. Fields: name, type, jdbcUrl, username, password, driver, and Pool section (maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName). Actions: Save/Activate/Delete/List/Load/Test/Ping. Includes Auth token box and sends only X-AppBana-Token header.
+- swagger.html — Embedded Swagger UI for /openapi.json with an Auth token box; uses requestInterceptor to attach only X-AppBana-Token on all requests (including initial spec fetch).
 
 Config resolution
 - Path: APPBANA_CONFIG or -Dappbana.config; default data/appbana-config.json.
