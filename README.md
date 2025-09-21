@@ -267,6 +267,11 @@ Angular UI (Designer/Studio) quick build & run
   #   --port 5000    Run on a custom port
   #   --open         Open the browser automatically (macOS)
   ```
+- Alternatively, using npm aliases from the repo root:
+  ```zsh
+  npm run ui:build
+  npm run ui:run -- --port 4000
+  ```
 - Output paths after build (Angular workspace):
   - Libraries: `ui/dist/{ui-material,ui-schema,designer,runtime}`
   - Studio app: `ui/dist/studio/{browser,server}`

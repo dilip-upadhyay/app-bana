@@ -1,7 +1,7 @@
 # AppBana Functional Specification
 
 Version: 2.0 (Q4 2025 aligned — snapshot)
-Date: 2025-09-21
+Date: 2025-09-22
 
 Purpose
 - Describe current, working functionality of the AppBana MVP (metadata-driven UI → API → DB) and document the Q4 2025 roadmap features and contracts needed to deliver an enterprise-grade platform for Healthcare, Logistics, and HR.
@@ -74,6 +74,7 @@ Purpose
 - builder.html — minimal schema builder with auth token box; sends only `X-AppBana-Token` header (token value sanitized) to avoid browser header restrictions; server also accepts `Authorization: Bearer` for non-UI clients
 - datasource.html — multi-datasource management UI with pool settings, JDBC URL Builder, Test/Ping, status chip and Last tested; includes auth token box; sends only `X-AppBana-Token` header (sanitized)
 - swagger.html — embedded Swagger UI; auth token box with requestInterceptor that injects only `X-AppBana-Token` for all requests (including initial /openapi.json)
+- Studio app (Angular SSR, optional during UI development) — served by a Node/Express server after building the Angular workspace; includes Google Material Icons via a link tag in `ui/projects/studio/src/index.html` so `<mat-icon>` ligatures work.
 
 9. Build, run, environment
 - Build: Maven with Shade plugin; runnable fat JAR under target/
@@ -85,6 +86,20 @@ Purpose
   - AppConfig fields: httpsEnabled (bool), httpsPort (int), keystorePath (string), keystorePassword (string), keyPassword (string?), redirectHttpToHttps (bool)
   - Env/system props: APPBANA_HTTPS_ENABLED | -Dappbana.https.enabled, APPBANA_HTTPS_PORT | -Dappbana.https.port, APPBANA_KEYSTORE_PATH | -Dappbana.keystore.path, APPBANA_KEYSTORE_PASSWORD | -Dappbana.keystore.password, APPBANA_KEY_PASSWORD | -Dappbana.key.password, APPBANA_REDIRECT_HTTP_TO_HTTPS | -Dappbana.redirect.http.to.https
   - Behavior: when enabled and keystore is valid, an HTTPS server starts; if redirect is true, HTTP returns 308 with Location to HTTPS URL.
+
+9.1 Angular Studio (UI) quickstart (optional)
+- The Angular workspace lives under `ui/`. During UI development, you can build and run the SSR Studio app separately:
+```zsh
+cd /Users/dilip/git/app-bana
+./build.sh --clean        # builds libraries + Studio
+./run.sh --port 4000 --open
+```
+- Default SSR port: 4000 (override with `--port`).
+- Alternatively from `ui/` after building:
+```zsh
+cd /Users/dilip/git/app-bana/ui
+npm run serve:ssr:studio
+```
 
 10. Security and production considerations
 - Auth model (optional): when either adminToken or readToken is configured in AppConfig (or via env/system properties), endpoints enforce tokens.
@@ -116,6 +131,10 @@ Purpose
 - C: Migration engine improvements; rollback support; test coverage; CI/docs checks
 
 14. Change Log (recent)
+- 2025-09-22: Angular UI scripts/docs and UI library public API.
+  - Added root build/run scripts for Angular UI (build.sh, run.sh) and documented Studio SSR quickstart (default port 4000).
+  - Included Google Material Icons in Studio `index.html` for `<mat-icon>` ligatures.
+  - Confirmed `ui-material` public API exports all wrapper components; added usage docs in its README.
 - 2025-09-21: Optional HTTPS support with keystore-based TLS and optional HTTP→HTTPS redirect; env/system properties for configuration.
 - 2025-09-21: UI token header hardening — built-in UIs now send only X-AppBana-Token with sanitized value to avoid browser header syntax errors; server still accepts Authorization: Bearer for API clients.
 - 2025-09-20: Optional token-based authentication implemented. Builder/datasource/swagger UIs include token box and send headers; backend enforces read/admin tokens for /schema, /api/*, /openapi.json, and /ui/datasource/*.

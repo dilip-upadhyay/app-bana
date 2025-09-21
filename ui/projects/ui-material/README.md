@@ -61,3 +61,45 @@ Angular CLI does not come with an end-to-end testing framework by default. You c
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+
+## Public API (wrapper components)
+
+All wrapper components are exported from the library's public API barrel at `src/public-api.ts`.
+You can import them directly from `ui-material`:
+
+```ts
+import { AbButton, Icon } from 'ui-material';
+```
+
+Example usage in a standalone component:
+
+```ts
+import { Component } from '@angular/core';
+import { AbButton, Icon } from 'ui-material';
+
+@Component({
+  selector: 'demo-material-usage',
+  standalone: true,
+  imports: [AbButton, Icon],
+  template: `
+    <ab-icon name="home"></ab-icon>
+    <ab-button color="primary">Click me</ab-button>
+  `,
+})
+export class DemoMaterialUsage {}
+```
+
+Available wrappers (selectors)
+- Button: `<ab-button>`
+- Icon: `<ab-icon>`
+- Select: `<ab-select>`
+- Checkbox: `<ab-checkbox>`
+- Radio: `<ab-radio>`
+- Slide toggle: `<ab-slide-toggle>`
+- Datepicker: `<ab-datepicker>`
+- Card: `<ab-card>`
+- Toolbar: `<ab-toolbar>`
+- Tabs: `<ab-tabs>`
+- Input: `<ab-input>`
+
+Note: The Studio app includes the Google Material Icons stylesheet in its `index.html` so `<mat-icon>` ligatures work when used there.

@@ -54,6 +54,35 @@ ng e2e
 
 Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
 
+## Quick build & run (workspace)
+
+Use the repo-root scripts to build all libraries and the Studio app, and to run the SSR server:
+
+```zsh
+cd /Users/dilip/git/app-bana
+./build.sh --clean   # or just ./build.sh for incremental
+./run.sh --port 4000 # defaults to 4000; add --open on macOS
+```
+
+Alternatively, from the repo root via npm scripts:
+
+```zsh
+npm run ui:build
+npm run ui:run -- --port 4000
+```
+
+SSR-only (from the UI workspace after a build):
+
+```zsh
+cd /Users/dilip/git/app-bana/ui
+npm run serve:ssr:studio
+```
+
+Notes
+
+- The Studio app includes Google Material Icons via a link tag in `projects/studio/src/index.html`, enabling `<mat-icon>` ligatures.
+- Library build order and workspace paths are managed by the root `build.sh`.
+
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.

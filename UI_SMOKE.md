@@ -1,7 +1,7 @@
 # UI Smoke Test — Existing UIs and /ui/designer Hosting
 
 Status: Ready to run
-Last updated: 2025-09-21
+Last updated: 2025-09-22
 
 Purpose
 - Provide a fast, repeatable smoke checklist to validate that the existing UIs continue to work, and that the Angular app (when added) is correctly hosted at /ui/designer without regressions.
@@ -95,6 +95,17 @@ curl -s -H "Authorization: Bearer ${APPBANA_READ_TOKEN:-admin123}" http://localh
   - http://localhost:8080/ui/datasource
   - http://localhost:8080/ui/swagger
 
+6b) Studio SSR (optional quick check)
+- The Studio app can also be run as a standalone SSR server during UI development.
+- Build & run from the repo root:
+```zsh
+cd /Users/dilip/git/app-bana
+./build.sh --clean
+./run.sh --port 4000 --open
+```
+- Then open: http://localhost:4000/
+- Note: This SSR server is separate from the Java server hosting /ui/* on port 8080.
+
 7) Optional HTTPS quick check (if enabled)
 - If you started with HTTPS settings, verify redirects/served pages:
 ```bash
@@ -110,4 +121,3 @@ Troubleshooting
 Notes
 - Keep this checklist updated as we add features. For October, ensure steps 1–5 pass; add step 6 once /ui/designer is wired.
 - This is a smoke test, not a full regression; add deeper tests as needed.
-

@@ -17,9 +17,14 @@ Backlog: see `TODO.md` for a prioritized to-do list and next actions.
 - If you change datasource behavior, test save/list/activate/delete/test paths and pool settings.
 - If you change OpenAPI, verify /openapi.json and Swagger UI rendering.
 - For any Node/Angular tooling (e.g., Angular Designer), use the latest stable Node.js (LTS) pinned via `.nvmrc`. Run `nvm use` before installing/running Node-based tools and keep a lockfile (npm/pnpm).
-- UI workspace: Angular Nx workspace lives under `ui/` (not `ui-builder/`). To scaffold or update it quickly, run `scripts/scaffold-ui.sh` after `nvm use`.
+- UI workspace: Angular CLI workspace lives under `ui/` (not `ui-builder/`). To scaffold or update it quickly, run `scripts/scaffold-ui.sh` after `nvm use`.
 
 ## Change Log (recent)
+- 2025-09-22: Angular UI build/run scripts and docs updates.
+  - Added root `build.sh` (builds ui-material, ui-schema, designer, runtime, then studio) and `run.sh` (rebuilds and launches Studio SSR). Added root `package.json` with `ui:build` and `ui:run` aliases.
+  - Updated docs: root README (Angular quick build & run), UI workspace README, Studio README, User Guide, and UI Smoke Test to reference the scripts and SSR port (default 4000).
+  - Studio `projects/studio/src/index.html` now includes Google Material Icons link for `<mat-icon>` ligatures.
+  - Confirmed `ui-material` library exports all wrapper components via `src/public-api.ts`; added usage examples to its README.
 - 2025-09-21: UI token header hardening.
   - UIs (builder.html, datasource.html, swagger.html) now send only `X-AppBana-Token` and sanitize the token value to avoid browser header syntax errors. Server still accepts `Authorization: Bearer` for non-UI clients and curl.
   - Docs updated: README, FUNCTIONAL_SPEC, LOW_LEVEL_DESIGN, USER_GUIDE.

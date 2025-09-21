@@ -70,6 +70,28 @@ Developer workflows
 - Run (HTTP only): java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
 - Run (HTTPS): set APPBANA_HTTPS_ENABLED=true and keystore env vars, then run the JAR; visit https://localhost:<httpsPort>/ui/builder
 
+Angular UI development (workspace)
+- UI workspace lives under `ui/` (Angular CLI workspace).
+- One-command build (libraries + Studio app) and run (SSR):
+```zsh
+cd /Users/dilip/git/app-bana
+./build.sh --clean
+./run.sh --port 4000 --open
+```
+- NPM aliases from repo root (equivalent):
+```zsh
+npm run ui:build
+npm run ui:run -- --port 4000
+```
+- Direct SSR run from UI workspace (after a build):
+```zsh
+cd /Users/dilip/git/app-bana/ui
+npm run serve:ssr:studio
+```
+- Notes:
+  - Studio SSR default port is 4000 (override with `--port`).
+  - `projects/studio/src/index.html` includes Google Material Icons so `<mat-icon>` ligatures render correctly.
+
 Test checklist (manual)
 - With tokens set, ensure 401 is returned when missing/invalid token; success when valid.
 - With HTTPS enabled, confirm HTTPS listener works and optional HTTP→HTTPS redirect returns 308 with Location.

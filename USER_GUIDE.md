@@ -373,3 +373,23 @@ Where to go next
 - Review README.md for deeper details and API references.
 
 Note: The images above will automatically use the bundled SVGs under `docs/screenshots/`.
+
+---
+
+Angular Studio (UI) quickstart — optional
+- The repository includes an Angular workspace under `ui/` with a Studio app (SSR).
+- Use these scripts from the repo root to build libraries + Studio and run the SSR server:
+
+```zsh
+cd /Users/dilip/git/app-bana
+./build.sh --clean        # build all Angular libs and the Studio app
+./run.sh --port 4000 --open
+```
+
+- After the server logs “Node Express server listening on http://localhost:4000”, open:
+  - http://localhost:4000
+
+Notes
+- You can also run from the UI workspace after a build:
+  - `cd ui && npm run serve:ssr:studio`
+- The Studio app includes Google Material Icons via a link tag in `projects/studio/src/index.html` so `<mat-icon>` ligatures work.

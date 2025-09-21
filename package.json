@@ -1,0 +1,9 @@
+{
+  "name": "appbana-root",
+  "private": true,
+  "scripts": {
+    "ui:build": "./build.sh",
+    "ui:run": "./run.sh"
+  }
+}
+
