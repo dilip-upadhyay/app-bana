@@ -17,6 +17,7 @@ Backlog: see `TODO.md` for a prioritized to-do list and next actions.
 - If you change datasource behavior, test save/list/activate/delete/test paths and pool settings.
 - If you change OpenAPI, verify /openapi.json and Swagger UI rendering.
 - For any Node/Angular tooling (e.g., Angular Designer), use the latest stable Node.js (LTS) pinned via `.nvmrc`. Run `nvm use` before installing/running Node-based tools and keep a lockfile (npm/pnpm).
+- UI workspace: Angular Nx workspace lives under `ui/` (not `ui-builder/`). To scaffold or update it quickly, run `scripts/scaffold-ui.sh` after `nvm use`.
 
 ## Change Log (recent)
 - 2025-09-21: UI token header hardening.
@@ -46,17 +47,16 @@ Backlog: see `TODO.md` for a prioritized to-do list and next actions.
 - 2025-09-19: Connection pooling via HikariCP with per-datasource settings:
   - Added pool fields to DatasourceConfig: maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, maxLifetimeMs, autoCommit, poolName.
   - JdbcManager now builds a HikariCP pool for the active datasource; pool is rebuilt lazily when config changes.
-  - UI (/ui/datasource) extended with a “Connection Pool” section to configure these fields.
+  - UI: datasource.html, /ui/datasource, supports a “Connection Pool” section to configure these fields.
   - Endpoints /ui/datasource/list and /ui/datasource/config return pool fields; /ui/datasource/save accepts them.
   - Sensible defaults when fields omitted: maxPoolSize=10, minIdle=2, connectionTimeoutMs=30000, idleTimeoutMs=600000, maxLifetimeMs=1800000, autoCommit=true, poolName="appbana-<name>".
 - 2025-09-14: Multi-datasource support added (UI + backend):
   - New UI at /ui/datasource for Add/Update/List/Activate/Delete.
-  - New endpoints: GET /ui/datasource/list, GET /ui/datasource/config, POST /ui/datasource/save, POST /ui/datasource/activate, POST /ui/datasource/delete.
+  - New endpoints: GET /ui/datasource/list, GET /ui/datasource/config, POST /ui/datasource/save, POST /ui/datasource/test, POST /ui/datasource/activate, POST /ui/datasource/delete.
   - Config model extended: AppConfig.datasources[] + activeDatasource; DatasourceConfig {name,type,jdbcUrl,username,password,driver}.
   - Driver inference from type/URL when driver blank.
   - Startup resiliency: server still starts if DB init fails to allow fixing datasource via /ui/datasource.
 - 2025-09-14: OpenAPI endpoint added at /openapi.json (generated from saved schemas).
-- 2025-09-14: UI kept minimal for schema builder (builder-v1).
 
 ## Key components
 - Main.java — entrypoint. Starts SchemaManager.init() (best-effort) and ApiServer on configured port.
@@ -112,13 +112,14 @@ Frontend (resources/ui)
 - If DB init fails (wrong creds), server still starts; use /ui/datasource to fix and retry operations.
 
 ## Quick local smoke (manual)
-- For the full step-by-step checklist, follow `UI_SMOKE.md`. Run it against your local server at http://localhost:8080 (or your configured port).
-- Set tokens (optional): export APPBANA_ADMIN_TOKEN=admin123; export APPBANA_READ_TOKEN=read123 (or via -D system props).
-- Open /ui/datasource, add or load a datasource; optionally set pool fields; Save (auto-activates); then refresh list.
-- Use the Test Connection button or per-row Test action to validate connectivity; Ping for a quick status.
-- Open /ui/builder, create a test schema; POST to /schema; verify CRUD at /api/{entity}.
-- Fetch /openapi.json or visit /ui/swagger to confirm spec includes your entity.
-- See `UI_SMOKE.md` for a full, fast smoke checklist covering /ui/builder, /ui/datasource, /ui/swagger, and (when present) /ui/designer.
+- Guide location: `UI_SMOKE.md` at the repo root. Run this against your local server.
+- Server URL: open your browser at http://localhost:8080 (or your configured port) and exercise the UIs below.
+- Steps overview (see UI_SMOKE.md for the full checklist):
+  - Open /ui/datasource → add or load a datasource; optionally set pool fields; Save (auto-activates); refresh list.
+  - Use Test Connection or per-row Test to validate connectivity; use Ping for a quick status.
+  - Open /ui/builder → create a test schema; POST to /schema; verify CRUD at /api/{entity}.
+  - Fetch /openapi.json or visit /ui/swagger → confirm spec includes your entity.
+- Note: When the Angular Designer is introduced, it will be hosted at /ui/designer. The smoke remains focused on existing UIs to ensure no regressions.
 
 ## Next Steps (Accelerated Roadmap — October 2025)
 The following epics from `Product_AppBana.md` are the immediate priority for October.
@@ -131,7 +132,7 @@ The following epics from `Product_AppBana.md` are the immediate priority for Oct
 | **Angular 21 UI Foundation** | - Scaffold Nx workspace and minimal runtime/designer shell; wire HttpInterceptor; host at /ui/designer; run `UI_SMOKE.md` to verify existing UIs remain functional. |
 
 Validation
-- Before merging October work, run the UI Smoke Test guide (`UI_SMOKE.md`) against your local server at http://localhost:8080 (or your configured port) to verify /ui/builder, /ui/datasource, /ui/swagger, and (when present) /ui/designer.
+- Before merging October work, explicitly run the UI Smoke Test guide (`UI_SMOKE.md` at repo root) against http://localhost:8080 (or your configured port) and verify: /ui/builder, /ui/datasource, /ui/swagger, and (when present) /ui/designer. Record results in PR notes.
 
 Notes
 - Keep this file aligned with the “Next recommended enhancements” sections in README.md and FUNCTIONAL_SPEC.md.

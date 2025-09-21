@@ -1,0 +1,5 @@
+<mat-slide-toggle [disabled]="disabled" [checked]="checked" (change)="checkedChange.emit($event.checked)">
+  {{ label }}
+  <ng-content></ng-content>
+</mat-slide-toggle>
+

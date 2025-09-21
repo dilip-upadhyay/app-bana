@@ -1,0 +1,69 @@
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "paths": {
+      "designer": [
+        "./dist/designer"
+      ],
+      "runtime": [
+        "./dist/runtime"
+      ],
+      "ui-material": [
+        "./dist/ui-material"
+      ],
+      "ui-schema": [
+        "./dist/ui-schema"
+      ]
+    },
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve"
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "typeCheckHostBindings": true,
+    "strictTemplates": true
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./projects/studio/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/runtime/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/runtime/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/designer/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/designer/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/ui-schema/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/ui-schema/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/ui-material/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/ui-material/tsconfig.spec.json"
+    }
+  ]
+}

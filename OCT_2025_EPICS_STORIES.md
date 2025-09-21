@@ -34,7 +34,7 @@ Epic acceptance criteria
 
 Stories
 #### O1-S1 Scaffold Angular workspace (Nx)
-- Description: Create Nx workspace under ui-builder/, add apps/studio and libs (runtime, designer, ui-schema). Configure tsconfig, lint, unit test runner.
+- Description: Create Nx workspace under ui/, add apps/studio and libs (runtime, designer, ui-schema). Configure tsconfig, lint, unit test runner.
 - Acceptance: `npm run build` passes; `npm run lint` passes; apps/studio serves.
 - Tasks: Nx init; lib/app gen; tsconfig path mapping; base scripts; README quickstart.
 - Dependencies: Node LTS (.nvmrc), none else.

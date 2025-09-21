@@ -16,7 +16,7 @@ Context (set/assume before starting)
   - CORS: same origin (served by the Java server under /ui/*)
 - Non‑functional: modern browsers (last 2), responsive, accessible (WCAG 2.1 AA baseline), secure by default.
 - Environment: Node.js latest stable LTS (use .nvmrc lts/*), Angular 21, TypeScript.
-- Repo: add a new Angular workspace (prefer Nx) under ui-builder/ or integrate as apps/studio served behind /ui/designer.
+- Repo: add a new Angular workspace (prefer Nx) under ui/ and serve apps/studio behind /ui/designer.
 
 Scope and capabilities (must implement)
 - Drag‑and‑drop UI Designer
