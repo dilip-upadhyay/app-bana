@@ -25,6 +25,7 @@ KPIs (October)
 EPIC O1 — Angular 21 UI Foundation (MVP)
 Objective
 - Establish the Angular 21 workspace, a minimal runtime renderer, and a designer shell as the platform for Q4 features.
+- Styling: follow `docs/STYLE_GUIDE.md` (Material + CSS variables tokens; tiny local utilities in studio; token‑driven runtime).
 
 Epic acceptance criteria
 - Nx workspace created with apps/studio and libs/runtime, libs/designer, libs/ui-schema.
@@ -190,6 +191,7 @@ Stories
 EPIC O4 — Foundational Plugin API
 Objective
 - Establish a plugin architecture for components, data connectors, and action types, and ship an example plugin.
+- Reference: see `UI_Development_Plan.md` → “Plugin boundary via Web Components (short)” for the minimal plugin contract and phased plan.
 
 Epic acceptance criteria
 - DI-based registry for component/data/action types with docs.
@@ -198,6 +200,7 @@ Epic acceptance criteria
 Stories
 #### O4-S1 Define DI tokens + registry (UI)
 - Description: Create injection tokens and registries for component, data connector, and action plugins.
+- Note: Align the registry shape with the Web Components boundary (type → tagName + metadata) described in `UI_Development_Plan.md`.
 - Acceptance: core components register via the same path; unit test covers registration/lookup.
 - Tasks: tokens; registries; tests.
 - Dependencies: O1-S1

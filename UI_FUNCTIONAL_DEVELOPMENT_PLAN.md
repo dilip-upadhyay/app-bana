@@ -122,6 +122,8 @@ Revised industry readiness (v1 by December)
 - Harden compliance posture: map features to HIPAA controls, add permission simulation UI, run a light HIPAA gap review in October.
 - Security/ops rails: enable OpenTelemetry, SAST/DAST, CSP defaults, and axe a11y in CI before November releases.
 - Defer higher-risk scope intentionally (PDF reports, FHIR write, DICOM, real-time designer collaboration) to Q1 2026.
+- Styling and theming: follow `docs/STYLE_GUIDE.md` (Material + CSS variables tokens; tiny local utilities in studio; token-driven runtime) to keep UX consistent and upgrades predictable.
+- Plugin boundary: implement the minimal Web Components contract described in `UI_Development_Plan.md` (Plugin boundary via Web Components) to enable safe extensibility without committing to a single framework for plugins.
 
 References
 - Product Roadmap: `Product_AppBana.md` §§5–16, Logistics: §17.

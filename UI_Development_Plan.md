@@ -73,6 +73,23 @@ Styling policy (long‑term)
   - Runtime renderer (libs/runtime): do not rely on arbitrary utility classes coming from design JSON. Prefer token-driven inline styles and component inputs; if utilities are needed, expose a fixed, documented subset only.
   - Keep bundle size small and theming consistent by avoiding purge/safelist complexity associated with utility frameworks in the runtime.
 
+Plugin boundary via Web Components (short)
+- Goal: allow specialized components from Angular or non‑Angular ecosystems to plug into the runtime without changing the app’s framework.
+- Options supported:
+  - Angular Elements: wrap selected Angular components as custom elements (<ab-*>), ideal for first‑party plugins.
+  - Native/Lit custom elements: author framework‑agnostic plugins that the Angular runtime can host.
+- Minimal plugin contract:
+  - Registration: runtime registry maps a `type` → `tagName` + metadata (version, lazy chunk, inputs/outputs).
+  - Inputs: set via properties/attributes (strings/JSON where needed). Examples: `value`, `disabled`, `config`.
+  - Outputs: CustomEvent events (e.g., `change`, `submit`, `scanDetected`) with `event.detail` payload.
+  - Theming: read CSS variables (design tokens) for colors/spacing/typography; dark mode via `.dark` on a root.
+  - Data access: call a tiny SDK bridge (e.g., `window.AppBana.sdk.fetch`) so auth headers (X‑AppBana‑Token) and base URL are injected centrally.
+  - Loading: lazy‑load plugin bundles; version metadata for compatibility checks.
+- Phased adoption:
+  1) Define the registry shape and tokens contract; host one Angular Element (Signature Pad) as <ab-signature-pad>.
+  2) Add one Lit‑based plugin (e.g., <ab-map>) to validate non‑Angular integration.
+  3) Introduce a minimal plugin SDK (fetch/events/context); document inputs/outputs and versioning.
+
 Iteration protocol (follow on every cycle)
 1) Confirm environment and backend assumptions (OpenAPI at /openapi.json; X-AppBana-Token header; same-origin).
 2) Generate a minimal UI schema and render via runtime with Container/Text/Button.

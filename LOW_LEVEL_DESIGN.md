@@ -207,6 +207,10 @@ These sections describe low-level structures for roadmap features. They are addi
   - Add OpenTelemetry hooks in ApiServer handlers and services (latency, errors, attributes: tenantId, entity, action)
 - Error handling
   - Keep JSON error shape; for streaming endpoints, map to 4xx/5xx with small JSON body
+- Styling policy
+  - Follow `docs/STYLE_GUIDE.md`: Angular Material + CSS variables as theme tokens; tiny local utilities in the studio app; runtime is token‑driven and avoids arbitrary utility classes from design JSON.
+- Plugin boundary via Web Components
+  - Runtime can host plugins authored as Angular Elements or native/Lit custom elements. Use a small registry (type → tagName), inputs via properties/attributes, outputs via CustomEvent, theming via CSS variables, and data access via a small SDK bridge for auth/base URL. See `UI_Development_Plan.md` (Plugin boundary via Web Components).
 
 ### Sequences (abridged)
 - Barcode scan → MQTT → UI table update

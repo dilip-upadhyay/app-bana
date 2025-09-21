@@ -47,6 +47,9 @@ java -Dappbana.port=8081 -jar target/app-bana-1.0-SNAPSHOT-fat.jar
 - API endpoints index (machine-readable): http://localhost:8080/api/endpoints
 - Health: http://localhost:8080/health and readiness: http://localhost:8080/ready
 
+Smoke test (optional)
+- For a fast, repeatable end-to-end check of existing UIs and key routes, follow `UI_SMOKE.md`. Run it against http://localhost:8080 (or your configured port).
+
 Note: If authentication is enabled (see below), enter your token in the top bar of the UIs (builder, datasource, swagger) to authorize requests.
 
 ## Token quickstart (optional)
