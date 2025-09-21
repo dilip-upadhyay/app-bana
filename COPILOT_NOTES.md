@@ -117,6 +117,7 @@ Frontend (resources/ui)
 - Use the Test Connection button or per-row Test action to validate connectivity; Ping for a quick status.
 - Open /ui/builder, create a test schema; POST to /schema; verify CRUD at /api/{entity}.
 - Fetch /openapi.json or visit /ui/swagger to confirm spec includes your entity.
+- See `UI_SMOKE.md` for a full, fast smoke checklist covering /ui/builder, /ui/datasource, /ui/swagger, and (when present) /ui/designer.
 
 ## Next Steps (Accelerated Roadmap — October 2025)
 The following epics from `Product_AppBana.md` are the immediate priority for October.
@@ -126,6 +127,7 @@ The following epics from `Product_AppBana.md` are the immediate priority for Oct
 | **Stateful Workflow Engine (MVP)** | - Implement server-side workflow engine.<br>- Model `workflows` in UI schema.<br>- Support single-user stateful actions (save & resume). |
 | **Advanced Security & Auditing** | - Implement server-side audit trails for all data access.<br>- Introduce Field-Level Security (FLS) in backend & UI.<br>- Create a UI for viewing/exporting audit logs. |
 | **Foundational Plugin API** | - Solidify and document Plugin APIs for custom components & data connectors.<br>- Develop a "Signature Pad" component to prove the model. |
+| **Angular 21 UI Foundation** | - Scaffold Nx workspace and minimal runtime/designer shell; wire HttpInterceptor; host at /ui/designer; run `UI_SMOKE.md` to verify existing UIs remain functional. |
 
 Notes
 - Keep this file aligned with the “Next recommended enhancements” sections in README.md and FUNCTIONAL_SPEC.md.

@@ -84,6 +84,7 @@ Stories
 - Description: Add a short smoke checklist (manual or simple script) to verify /ui/builder, /ui/datasource, /ui/swagger still function after Angular hosting is enabled.
 - Acceptance: documented smoke steps in repo; run passes locally; issues tracked if any.
 - Tasks: write smoke doc; optional curl checks; link from COPILOT_NOTES.md.
+- Deliverable: See `UI_SMOKE.md` for the smoke checklist.
 - Dependencies: O1-S6
 - Estimate: 1 pt
 - Labels: qa, docs
