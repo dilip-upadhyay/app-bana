@@ -3,6 +3,11 @@
 This plan is the actionable backlog for October–December 2025. Keep it synchronized with `Product_AppBana.md` (§5 acceptance criteria; §17 logistics) and update checkboxes as items are delivered.
 
 ## October 2025 — Enterprise Foundation (MVP)
+- [ ] Angular 21 UI Foundation (MVP)
+  - [ ] Scaffold Angular workspace (Nx): apps/studio; libs/runtime, libs/designer, libs/ui-schema.
+  - [ ] Implement minimal runtime renderer ("Hello from Runtime") and designer shell with Container/Text/Button + Settings (token input).
+  - [ ] Wire HttpInterceptor for X-AppBana-Token; ensure Node LTS via `.nvmrc`; add dev/test/lint scripts.
+  - [ ] Basic audit log UI scaffold (list/export CSV stub).
 - [ ] Server-side Workflow Engine (MVP)
   - [ ] Persist workflow instances and transitions (draft/submitted/approved/rejected) with idempotency.
   - [ ] UI schema: add `workflows` and map actions to transitions; designer bindings.
