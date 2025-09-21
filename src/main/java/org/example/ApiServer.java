@@ -176,14 +176,6 @@ public class ApiServer {
         }
         return tok;
     }
-    public static String extractToken(HttpExchange ex) {
-        String tok = ex.getRequestHeaders().getFirst("X-AppBana-Token");
-        if (tok == null || tok.isBlank()) {
-            String auth = ex.getRequestHeaders().getFirst("Authorization");
-            if (auth != null && auth.toLowerCase(Locale.ROOT).startsWith("bearer ")) tok = auth.substring(7).trim();
-        }
-        return tok;
-    }
     public static boolean hasAdmin(String token, AppConfig cfg) {
         String at = cfg.getAdminToken();
         return at != null && !at.isBlank() && at.equals(token);
@@ -226,11 +218,12 @@ public class ApiServer {
                             try {
                                 SSLContext c = getSSLContext();
                                 SSLEngine engine = c.createSSLEngine();
-                                params.setNeedClientAuth(false);
-                                params.setCipherSuites(engine.getEnabledCipherSuites());
-                                params.setProtocols(engine.getEnabledProtocols());
-                                SSLParameters defaultSSLParameters = c.getDefaultSSLParameters();
-                                params.setSSLParameters(defaultSSLParameters);
+                                // Build SSLParameters and apply to avoid deprecated HttpsParameters setters
+                                SSLParameters sslParams = c.getDefaultSSLParameters();
+                                sslParams.setNeedClientAuth(false);
+                                sslParams.setCipherSuites(engine.getEnabledCipherSuites());
+                                sslParams.setProtocols(engine.getEnabledProtocols());
+                                params.setSSLParameters(sslParams);
                             } catch (Exception ex) {
                                 LOG.error("Failed to configure HTTPS parameters", ex);
                             }
@@ -277,7 +270,7 @@ public class ApiServer {
 
     public static org.example.api.Router buildRouter() {
         org.example.api.Router router = new org.example.api.Router();
-        router.get("/health", (req, res) -> { res.json(200, Map.of("status", "UP")); });
+        router.get("/health", (req, res) -> res.json(200, Map.of("status", "UP")));
         router.get("/ready", (req, res) -> {
             long start = System.currentTimeMillis();
             try (Connection c = JdbcManager.getConnection()) {
@@ -384,7 +377,7 @@ public class ApiServer {
                 if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
             }
             boolean preview = "true".equalsIgnoreCase(Optional.ofNullable(req.query("preview")).orElse("false"));
-            EntitySchema schema = req.readJson(new TypeReference<EntitySchema>(){});
+            EntitySchema schema = req.readJson(new TypeReference<>(){});
             if (schema.getName() == null || schema.getName().isEmpty()) { res.json(400, Map.of("error","missing schema name")); return; }
             if (preview) {
                 List<String> plan = SchemaManager.generateMigrationPlan(schema);
@@ -469,7 +462,7 @@ public class ApiServer {
                 String tok = extractToken(req);
                 if (!hasAdmin(tok, cfgAuth)) { res.json(401, Map.of("error","unauthorized")); return; }
             }
-            Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
+            Map<String, String> data = req.readJson(new TypeReference<>() {});
             String name = data.get("name");
             if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
             String url = data.get("url");
@@ -535,7 +528,7 @@ public class ApiServer {
                 String tok = extractToken(req);
                 if (!hasAdmin(tok, cfgAuth)) { res.json(401, Map.of("error","unauthorized")); return; }
             }
-            Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
+            Map<String, String> data = req.readJson(new TypeReference<>() {});
             String name = data.get("name");
             String url = data.get("url");
             String user = data.get("username");
@@ -616,7 +609,7 @@ public class ApiServer {
                 String tok = extractToken(req);
                 if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
             }
-            Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
+            Map<String, String> data = req.readJson(new TypeReference<>() {});
             String name = data.get("name");
             if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
             AppConfig cfgNow = ConfigManager.getConfig();
@@ -632,13 +625,13 @@ public class ApiServer {
                 String tok = extractToken(req);
                 if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
             }
-            Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
+            Map<String, String> data = req.readJson(new TypeReference<>() {});
             String name = data.get("name");
             if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
             AppConfig cfgNow = ConfigManager.getConfig();
             cfgNow.getDatasources().removeIf(d -> name.equals(d.getName()));
             if (name.equals(cfgNow.getActiveDatasource())) {
-                if (!cfgNow.getDatasources().isEmpty()) cfgNow.setActiveDatasource(cfgNow.getDatasources().get(0).getName());
+                if (!cfgNow.getDatasources().isEmpty()) cfgNow.setActiveDatasource(cfgNow.getDatasources().getFirst().getName());
                 else cfgNow.setActiveDatasource(null);
             }
             ConfigManager.saveConfig(cfgNow);
@@ -666,7 +659,7 @@ public class ApiServer {
                 for (DatasourceConfig d : cfgNow.getDatasources()) {
                     if (active != null && active.equals(d.getName())) { target = d; break; }
                 }
-                if (target == null && !cfgNow.getDatasources().isEmpty()) target = cfgNow.getDatasources().get(0);
+                if (target == null && !cfgNow.getDatasources().isEmpty()) target = cfgNow.getDatasources().getFirst();
             }
             String url = target.getJdbcUrl();
             String user = target.getUsername();
@@ -1041,7 +1034,7 @@ public class ApiServer {
             ps.setObject(1, parseId(id, pk));
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
-                return list.isEmpty() ? null : list.get(0);
+                return list.isEmpty() ? null : list.getFirst();
             }
         }
     }
