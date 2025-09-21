@@ -18,6 +18,14 @@ public class AppConfig {
     private String adminToken; // full read-write access
     private String readToken;  // read-only access
 
+    // Optional HTTPS support
+    private Boolean httpsEnabled; // if true, start an HTTPS server as configured
+    private Integer httpsPort;    // default 8443 if enabled and not set
+    private String keystorePath;  // path to JKS/PKCS12 keystore
+    private String keystorePassword; // keystore password
+    private String keyPassword;       // key password (defaults to keystorePassword if null)
+    private Boolean redirectHttpToHttps; // if true, HTTP server redirects all requests to HTTPS
+
     public String getJdbcUrl() { return jdbcUrl; }
     public void setJdbcUrl(String jdbcUrl) { this.jdbcUrl = jdbcUrl; }
 
@@ -44,4 +52,22 @@ public class AppConfig {
 
     public String getReadToken() { return readToken; }
     public void setReadToken(String readToken) { this.readToken = readToken; }
+
+    public Boolean getHttpsEnabled() { return httpsEnabled; }
+    public void setHttpsEnabled(Boolean httpsEnabled) { this.httpsEnabled = httpsEnabled; }
+
+    public Integer getHttpsPort() { return httpsPort; }
+    public void setHttpsPort(Integer httpsPort) { this.httpsPort = httpsPort; }
+
+    public String getKeystorePath() { return keystorePath; }
+    public void setKeystorePath(String keystorePath) { this.keystorePath = keystorePath; }
+
+    public String getKeystorePassword() { return keystorePassword; }
+    public void setKeystorePassword(String keystorePassword) { this.keystorePassword = keystorePassword; }
+
+    public String getKeyPassword() { return keyPassword; }
+    public void setKeyPassword(String keyPassword) { this.keyPassword = keyPassword; }
+
+    public Boolean getRedirectHttpToHttps() { return redirectHttpToHttps; }
+    public void setRedirectHttpToHttps(Boolean redirectHttpToHttps) { this.redirectHttpToHttps = redirectHttpToHttps; }
 }

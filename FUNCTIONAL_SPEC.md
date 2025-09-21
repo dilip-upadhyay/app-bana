@@ -1,7 +1,7 @@
 # AppBana Functional Specification
 
-Version: 1.5 (snapshot)
-Date: 2025-09-20
+Version: 1.6 (snapshot)
+Date: 2025-09-21
 
 Purpose
 - Describe current, working functionality of the AppBana MVP (metadata-driven UI → API → DB), including multi-datasource management, connection pooling, Java 25 runtime, per-datasource health checks, optional token-based authentication, and provide prioritized future enhancements.
@@ -15,6 +15,7 @@ Purpose
 - OpenAPI: spec generated from stored schemas at /openapi.json; embedded Swagger UI at /ui/swagger.
 - Health: liveness (/health), readiness with DB check (/ready), and per-datasource health (/ui/datasource/health).
 - Authentication (optional): token-based auth for /schema, /api/*, /openapi.json, and /ui/datasource/*.
+- HTTPS (optional): server can expose an HTTPS listener (TLS) with a provided keystore and optionally redirect HTTP to HTTPS.
 
 2. High-level architecture
 - Frontend: static HTML/JS UIs served from resources:
@@ -22,7 +23,7 @@ Purpose
   - datasource.html — manage datasources (add/update/list/activate/delete) via /ui/datasource/* endpoints; supports pool settings and Test/Ping; includes Auth token box
   - swagger.html — embedded Swagger UI for /openapi.json with a token box; injects token headers via requestInterceptor
 - Backend services:
-  - ApiServer — embedded HTTP server; handlers for /schema, /api/*, /openapi.json, /ui/swagger, and datasource routes under /ui/datasource/* (includes pool fields in list/config/save). Also constructs JDBC URLs from components when url is omitted in /ui/datasource/save. Exposes per-datasource health endpoint. Enforces optional token-based auth.
+  - ApiServer — embedded HTTP server; handlers for /schema, /api/*, /openapi.json, /ui/swagger, and datasource routes under /ui/datasource/* (includes pool fields in list/config/save). Also constructs JDBC URLs from components when url is omitted in /ui/datasource/save. Exposes per-datasource health endpoint. Enforces optional token-based auth. Starts optional HTTPS server and optional redirect from HTTP to HTTPS.
   - SchemaManager — validates schema JSON, persists schema (appbana_schemas), creates/migrates tables (records DDLs in appbana_migrations), supports migration preview and list with pagination/search
   - JdbcManager — resolves the active datasource from config, infers JDBC driver from type/URL when missing (via DriverUtil), configures a HikariCP connection pool with per-datasource settings
   - ConfigManager — loads/saves config JSON; normalizes to multi-datasource format; applies env overrides; fills missing datasource types via DriverUtil
@@ -64,6 +65,7 @@ Purpose
   - datasources: [ { name, type, jdbcUrl, username, password, driver, maxPoolSize?, minIdle?, connectionTimeoutMs?, idleTimeoutMs?, maxLifetimeMs?, autoCommit?, poolName?, lastTest*? } ]
   - activeDatasource: string (name)
   - Optional: adminToken (read-write), readToken (read-only)
+  - HTTPS: httpsEnabled (bool), httpsPort (int), keystorePath (string), keystorePassword (string), keyPassword (string?), redirectHttpToHttps (bool)
 - Backward compatibility: if only root fields are present (jdbcUrl/username/password/driver/name), ConfigManager seeds a default datasource and marks it active.
 - Environment overrides (optional, applied to root fields and tokens): APPBANA_JDBC_URL, APPBANA_DB_USER, APPBANA_DB_PASS, APPBANA_DB_DRIVER, APPBANA_ADMIN_TOKEN, APPBANA_READ_TOKEN.
 - Config path: APPBANA_CONFIG env or -Dappbana.config (default data/appbana-config.json).
@@ -76,14 +78,20 @@ Purpose
 9. Build, run, environment
 - Build: Maven with Shade plugin; runnable fat JAR under target/
 - Run: java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
-- Port: default 8080; override with -Dappbana.port or APPBANA_PORT
-- Startup behavior: if DB init fails (e.g., bad credentials), server still starts so you can fix the datasource via /ui/datasource
+- Ports:
+  - HTTP: default 8080; override with -Dappbana.port or APPBANA_PORT
+  - HTTPS (optional): default 8443; enable with httpsEnabled=true and configure keystore
+- HTTPS configuration
+  - AppConfig fields: httpsEnabled (bool), httpsPort (int), keystorePath (string), keystorePassword (string), keyPassword (string?), redirectHttpToHttps (bool)
+  - Env/system props: APPBANA_HTTPS_ENABLED | -Dappbana.https.enabled, APPBANA_HTTPS_PORT | -Dappbana.https.port, APPBANA_KEYSTORE_PATH | -Dappbana.keystore.path, APPBANA_KEYSTORE_PASSWORD | -Dappbana.keystore.password, APPBANA_KEY_PASSWORD | -Dappbana.key.password, APPBANA_REDIRECT_HTTP_TO_HTTPS | -Dappbana.redirect.http.to.https
+  - Behavior: when enabled and keystore is valid, an HTTPS server starts; if redirect is true, HTTP returns 308 with Location to HTTPS URL.
 
 10. Security and production considerations
 - Auth model (optional): when either adminToken or readToken is configured in AppConfig (or via env/system properties), endpoints enforce tokens.
   - Client may send token via `X-AppBana-Token: <token>` or `Authorization: Bearer <token>`.
   - readToken grants read-only access; adminToken grants full read/write (and also satisfies read checks).
   - If no tokens are configured, all endpoints are open (development mode).
+- HTTPS: expose an HTTPS listener (TLS) with a provided keystore; optionally redirect HTTP to HTTPS.
 - Additional recommendations: protect config files; add TLS/HTTPS via reverse proxy; rate limit expensive endpoints; structured request logs and metrics.
 
 11. Logging and monitoring
@@ -91,11 +99,11 @@ Purpose
 
 12. Artifacts, files, and locations (updated)
 - Key files:
-  - src/main/java/org/example/ApiServer.java — datasource endpoints include pool fields and last test metadata; exposes /ui/datasource/health; server-side JDBC URL construction; enforces token auth
+  - src/main/java/org/example/ApiServer.java — datasource endpoints include pool fields and last test metadata; exposes /ui/datasource/health; server-side JDBC URL construction; enforces token auth; starts optional HttpsServer and optional redirect
   - src/main/java/org/example/JdbcManager.java — HikariCP pool configuration; uses DriverUtil for driver/type inference
-  - src/main/java/org/example/ConfigManager.java — multi-datasource normalization & env overrides; infers missing types via DriverUtil; applies token env overrides
+  - src/main/java/org/example/ConfigManager.java — multi-datasource normalization & env overrides; infers missing types via DriverUtil; applies token env overrides; reads HTTPS env/system properties
   - src/main/java/org/example/DriverUtil.java — central driver/type inference mapping
-  - src/main/java/org/example/AppConfig.java, DatasourceConfig.java — config models (DatasourceConfig includes pool and last test fields)
+  - src/main/java/org/example/AppConfig.java, DatasourceConfig.java — config models (DatasourceConfig includes pool and last test fields); HTTPS fields added
   - src/main/resources/ui/datasource.html — UI for datasource management (pool settings, status chip, last tested, Test/Ping, auth token box)
   - src/main/resources/ui/builder.html — schema builder UI with auth token box
   - src/main/resources/ui/swagger.html — Swagger UI with auth token box and requestInterceptor
@@ -107,6 +115,7 @@ Purpose
 - C: Migration engine improvements; rollback support; test coverage; CI/docs checks
 
 14. Change Log (recent)
+- 2025-09-21: Optional HTTPS support with keystore-based TLS and optional HTTP→HTTPS redirect; env/system properties for configuration.
 - 2025-09-20: Optional token-based authentication implemented. Builder/datasource/swagger UIs include token box and send headers; backend enforces read/admin tokens for /schema, /api/*, /openapi.json, and /ui/datasource/*.
 - 2025-09-20: Added per-datasource health endpoint (/ui/datasource/health); persisted last test metadata; masked sensitive URL parts; configurable test timeout; centralized driver/type inference via DriverUtil.
 - 2025-09-19: Upgraded to Java 25, virtual threads; added Swagger UI (/ui/swagger).

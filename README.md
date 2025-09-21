@@ -45,6 +45,35 @@ Port configuration
 - Override via system property: -Dappbana.port=9090
 - Or via environment variable: APPBANA_PORT=9090
 
+HTTPS (optional)
+- The server can also listen on HTTPS when enabled via config or env/system props.
+- Config fields in appbana-config.json:
+  - httpsEnabled: true|false (default: false)
+  - httpsPort: number (default: 8443)
+  - keystorePath: path to JKS or PKCS12 keystore (e.g., certs/keystore.p12)
+  - keystorePassword: password for the keystore
+  - keyPassword: password for the key (defaults to keystorePassword if omitted)
+  - redirectHttpToHttps: true|false — if true, the HTTP server responds with 308 redirect to the HTTPS URL
+- Environment variables / system properties:
+  - APPBANA_HTTPS_ENABLED=true | -Dappbana.https.enabled=true
+  - APPBANA_HTTPS_PORT=8443 | -Dappbana.https.port=8443
+  - APPBANA_KEYSTORE_PATH=certs/keystore.p12 | -Dappbana.keystore.path=...
+  - APPBANA_KEYSTORE_PASSWORD=changeit | -Dappbana.keystore.password=...
+  - APPBANA_KEY_PASSWORD=changeit | -Dappbana.key.password=...
+  - APPBANA_REDIRECT_HTTP_TO_HTTPS=true | -Dappbana.redirect.http.to.https=true
+- Quickstart (self-signed, PKCS12)
+  1) Generate a keystore:
+     keytool -genkeypair -alias appbana -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore certs/keystore.p12 -storepass changeit -keypass changeit -dname "CN=localhost, OU=Dev, O=AppBana, L=Local, S=Local, C=US"
+  2) Run with env vars:
+     APPBANA_HTTPS_ENABLED=true \
+     APPBANA_KEYSTORE_PATH=certs/keystore.p12 \
+     APPBANA_KEYSTORE_PASSWORD=changeit \
+     APPBANA_KEY_PASSWORD=changeit \
+     APPBANA_HTTPS_PORT=8443 \
+     APPBANA_REDIRECT_HTTP_TO_HTTPS=true \
+     java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
+  3) Open https://localhost:8443/ui/builder (accept your self-signed cert in the browser).
+
 Authentication (optional)
 - App supports simple token-based auth. When no tokens are configured, all endpoints are open (dev mode).
 - Configure tokens in config file or via env/system properties:
@@ -133,6 +162,7 @@ Configuration
   - APPBANA_DB_DRIVER — override driver class
   - APPBANA_ADMIN_TOKEN — set admin token
   - APPBANA_READ_TOKEN — set read-only token
+  - APPBANA_HTTPS_ENABLED, APPBANA_HTTPS_PORT, APPBANA_KEYSTORE_PATH, APPBANA_KEYSTORE_PASSWORD, APPBANA_KEY_PASSWORD, APPBANA_REDIRECT_HTTP_TO_HTTPS
 - Config file format (example):
 ```
 {
@@ -155,7 +185,13 @@ Configuration
   ],
   "activeDatasource": "primary",
   "adminToken": "change-me-admin",
-  "readToken": "change-me-read"
+  "readToken": "change-me-read",
+  "httpsEnabled": true,
+  "httpsPort": 8443,
+  "keystorePath": "certs/keystore.p12",
+  "keystorePassword": "changeit",
+  "keyPassword": "changeit",
+  "redirectHttpToHttps": true
 }
 ```
 - Backward compatibility: if only root fields are present (jdbcUrl/username/password/driver/name), the app seeds a default datasource and marks it active.

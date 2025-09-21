@@ -2,18 +2,19 @@ package org.example;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.*;
 import org.example.model.EntitySchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.*;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.security.KeyStore;
 import java.sql.*;
 import java.time.Instant;
 import java.util.*;
@@ -194,9 +195,87 @@ public class ApiServer {
     }
 
     public static void start(int port) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/api", new EntityHandler());
+        AppConfig cfg = ConfigManager.getConfig();
+        // Always start the HTTP server (can redirect to HTTPS if configured)
+        HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
+        configureServer(httpServer);
+        boolean httpsStarted = false;
 
+        // Optionally start HTTPS server
+        if (Boolean.TRUE.equals(cfg.getHttpsEnabled())) {
+            Integer httpsPort = cfg.getHttpsPort() != null ? cfg.getHttpsPort() : 8443;
+            String ksPath = cfg.getKeystorePath();
+            String ksPass = cfg.getKeystorePassword();
+            String keyPass = cfg.getKeyPassword() != null ? cfg.getKeyPassword() : ksPass;
+            if (ksPath == null || ksPath.isBlank() || ksPass == null) {
+                LOG.error("HTTPS enabled but keystorePath/keystorePassword not provided; skipping HTTPS startup");
+            } else {
+                try {
+                    char[] kp = keyPass != null ? keyPass.toCharArray() : ksPass.toCharArray();
+                    char[] ksp = ksPass.toCharArray();
+                    KeyStore ks = KeyStore.getInstance(ksPath.toLowerCase().endsWith(".p12") || ksPath.toLowerCase().endsWith(".pkcs12") ? "PKCS12" : "JKS");
+                    try (FileInputStream fis = new FileInputStream(ksPath)) { ks.load(fis, ksp); }
+                    KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                    kmf.init(ks, kp);
+                    SSLContext sslContext = SSLContext.getInstance("TLS");
+                    sslContext.init(kmf.getKeyManagers(), null, null);
+
+                    HttpsServer httpsServer = HttpsServer.create(new InetSocketAddress(httpsPort), 0);
+                    httpsServer.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
+                        @Override public void configure(HttpsParameters params) {
+                            try {
+                                SSLContext c = getSSLContext();
+                                SSLEngine engine = c.createSSLEngine();
+                                params.setNeedClientAuth(false);
+                                params.setCipherSuites(engine.getEnabledCipherSuites());
+                                params.setProtocols(engine.getEnabledProtocols());
+                                SSLParameters defaultSSLParameters = c.getDefaultSSLParameters();
+                                params.setSSLParameters(defaultSSLParameters);
+                            } catch (Exception ex) {
+                                LOG.error("Failed to configure HTTPS parameters", ex);
+                            }
+                        }
+                    });
+                    configureServer(httpsServer);
+                    httpsServer.start();
+                    httpsStarted = true;
+                    LOG.info("HTTPS server started on port {}", httpsPort);
+
+                    // If redirect is enabled, overwrite HTTP server handler to redirect
+                    if (Boolean.TRUE.equals(cfg.getRedirectHttpToHttps())) {
+                        // Replace default handler with a redirect handler
+                        httpServer.removeContext("/");
+                        httpServer.createContext("/", ex -> {
+                            try {
+                                String host = Optional.ofNullable(ex.getRequestHeaders().getFirst("Host")).orElse("localhost");
+                                // strip port from Host if present
+                                String hostOnly = host;
+                                int idx = host.indexOf(":");
+                                if (idx >= 0) hostOnly = host.substring(0, idx);
+                                URI uri = ex.getRequestURI();
+                                String loc = "https://" + hostOnly + ":" + httpsPort + uri.toString();
+                                Headers h = ex.getResponseHeaders();
+                                h.set("Location", loc);
+                                ex.sendResponseHeaders(308, -1);
+                            } finally {
+                                ex.close();
+                            }
+                        });
+                        LOG.info("HTTP requests will be redirected to HTTPS port {}", httpsPort);
+                    }
+                } catch (Exception e) {
+                    LOG.error("Failed to start HTTPS server: {}", e.getMessage(), e);
+                }
+            }
+        }
+
+        // Use virtual threads for handling requests (Java 21+)
+        httpServer.setExecutor(r -> Thread.ofVirtual().start(r));
+        httpServer.start();
+        LOG.info("HTTP server started on port {}{}", port, httpsStarted ? " (HTTPS also enabled)" : "");
+    }
+
+    private static void configureServer(HttpServer server) {
         // Router integration for utility, schema, and datasource JSON endpoints
         org.example.api.Router router = new org.example.api.Router();
         router.get("/health", (req, res) -> {
@@ -618,6 +697,7 @@ public class ApiServer {
                 res.json(200, out);
             }
         });
+        // Root routes via router
         server.createContext("/", exchange -> {
             try { router.handle(exchange); } catch (IOException ioe) { LOG.error("Router handle failed", ioe); }
         });
@@ -679,10 +759,11 @@ public class ApiServer {
             }
         });
 
-        // Use virtual threads for handling requests (Java 21+ feature)
+        // Entity CRUD under /api
+        server.createContext("/api", new EntityHandler());
+
+        // Use virtual threads per server
         server.setExecutor(r -> Thread.ofVirtual().start(r));
-        server.start();
-        LOG.info("Server started on port {}", port);
     }
 
     static class SchemaHandler implements HttpHandler {

@@ -11,6 +11,7 @@ Contents
 - Quick start
 - Configuration (port, config file, environment overrides)
 - Authentication (optional)
+- HTTPS (optional)
 - Datasource management (UI + API)
 - Designing entities (Schema Builder)
 - Using the runtime CRUD APIs
@@ -75,6 +76,32 @@ Configuration
 - Env overrides for connection (optional)
   - APPBANA_JDBC_URL, APPBANA_DB_USER, APPBANA_DB_PASS, APPBANA_DB_DRIVER
   - Or equivalent system properties: `-Dappbana.jdbc.url`, `-Dappbana.db.user`, `-Dappbana.db.pass`, `-Dappbana.db.driver`
+
+HTTPS (optional)
+- AppBana can serve HTTPS alongside HTTP when enabled.
+- Config fields: `httpsEnabled`, `httpsPort` (default 8443), `keystorePath`, `keystorePassword`, `keyPassword?`, `redirectHttpToHttps`.
+- Env/system props: `APPBANA_HTTPS_ENABLED`, `APPBANA_HTTPS_PORT`, `APPBANA_KEYSTORE_PATH`, `APPBANA_KEYSTORE_PASSWORD`, `APPBANA_KEY_PASSWORD`, `APPBANA_REDIRECT_HTTP_TO_HTTPS` (or `-Dappbana.*` equivalents).
+- Quickstart (self-signed PKCS12):
+```bash
+# 1) Generate a local PKCS12 keystore (macOS zsh)
+mkdir -p certs
+keytool -genkeypair -alias appbana -keyalg RSA -keysize 2048 -storetype PKCS12 \
+  -keystore certs/keystore.p12 -storepass changeit -keypass changeit \
+  -dname "CN=localhost, OU=Dev, O=AppBana, L=Local, S=Local, C=US"
+
+# 2) Start the app with HTTPS enabled (and redirect HTTP→HTTPS)
+APPBANA_HTTPS_ENABLED=true \
+APPBANA_KEYSTORE_PATH=certs/keystore.p12 \
+APPBANA_KEYSTORE_PASSWORD=changeit \
+APPBANA_KEY_PASSWORD=changeit \
+APPBANA_HTTPS_PORT=8443 \
+APPBANA_REDIRECT_HTTP_TO_HTTPS=true \
+java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
+
+# 3) Visit
+open https://localhost:8443/ui/builder  # accept the self-signed cert
+```
+- Notes: With `redirectHttpToHttps=true`, any request on HTTP port (default 8080) returns 308 to the HTTPS URL.
 
 Authentication (optional)
 - AppBana supports simple token-based auth. When no tokens are configured, all endpoints are open (development mode).

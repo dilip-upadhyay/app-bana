@@ -21,8 +21,7 @@ public class ConfigManager {
                 .orElseGet(() -> System.getProperty("appbana.config", DEFAULT_PATH)));
         File f = p.toFile();
         if (!f.exists()) {
-            // return defaults (H2 embedded)
-            if (cached == null) cached = normalize(new AppConfig());
+            if (cached == null) cached = applyEnvOverrides(normalize(new AppConfig()));
             return cached;
         }
         long mt = f.lastModified();
@@ -32,7 +31,7 @@ public class ConfigManager {
         try {
             byte[] b = Files.readAllBytes(p);
             AppConfig cfg = M.readValue(b, AppConfig.class);
-            cached = normalize(applyEnvOverrides(cfg));
+            cached = applyEnvOverrides(normalize(cfg));
             cachedMtime = mt;
             return cached;
         } catch (IOException e) {
@@ -47,32 +46,98 @@ public class ConfigManager {
             Files.createDirectories(p.getParent());
             byte[] b = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(cfg);
             Files.write(p, b);
-            cached = normalize(applyEnvOverrides(cfg));
+            // Cache normalized + env-overridden view
+            cached = applyEnvOverrides(normalize(cfg));
             cachedMtime = p.toFile().lastModified();
         } catch (IOException e) {
             throw new RuntimeException("Failed to save config: " + e.getMessage(), e);
         }
     }
 
-    private static AppConfig applyEnvOverrides(AppConfig cfg) {
+    private static AppConfig applyEnvOverrides(AppConfig in) {
+        AppConfig cfg = in == null ? new AppConfig() : in;
         String url = firstNonEmpty(System.getenv("APPBANA_JDBC_URL"), System.getProperty("appbana.jdbc.url"));
         String user = firstNonEmpty(System.getenv("APPBANA_DB_USER"), System.getProperty("appbana.db.user"));
         String pass = firstNonEmpty(System.getenv("APPBANA_DB_PASS"), System.getProperty("appbana.db.pass"));
         String drv = firstNonEmpty(System.getenv("APPBANA_DB_DRIVER"), System.getProperty("appbana.db.driver"));
         String adminTok = firstNonEmpty(System.getenv("APPBANA_ADMIN_TOKEN"), System.getProperty("appbana.admin.token"));
         String readTok = firstNonEmpty(System.getenv("APPBANA_READ_TOKEN"), System.getProperty("appbana.read.token"));
+        // HTTPS-related
+        String httpsEnabled = firstNonEmpty(System.getenv("APPBANA_HTTPS_ENABLED"), System.getProperty("appbana.https.enabled"));
+        String httpsPort = firstNonEmpty(System.getenv("APPBANA_HTTPS_PORT"), System.getProperty("appbana.https.port"));
+        String ksPath = firstNonEmpty(System.getenv("APPBANA_KEYSTORE_PATH"), System.getProperty("appbana.keystore.path"));
+        String ksPass = firstNonEmpty(System.getenv("APPBANA_KEYSTORE_PASSWORD"), System.getProperty("appbana.keystore.password"));
+        String keyPass = firstNonEmpty(System.getenv("APPBANA_KEY_PASSWORD"), System.getProperty("appbana.key.password"));
+        String redirect = firstNonEmpty(System.getenv("APPBANA_REDIRECT_HTTP_TO_HTTPS"), System.getProperty("appbana.redirect.http.to.https"));
+
         AppConfig out = new AppConfig();
-        out.setJdbcUrl(url != null ? url : cfg.getJdbcUrl());
-        out.setUsername(user != null ? user : cfg.getUsername());
-        out.setPassword(pass != null ? pass : cfg.getPassword());
-        out.setDriver(drv != null ? drv : cfg.getDriver());
+        // Copy existing (normalized) config first
         out.setName(cfg.getName());
-        // preserve multi-datasource fields
-        out.setDatasources(cfg.getDatasources() != null ? cfg.getDatasources() : new ArrayList<>());
+        out.setJdbcUrl(cfg.getJdbcUrl());
+        out.setUsername(cfg.getUsername());
+        out.setPassword(cfg.getPassword());
+        out.setDriver(cfg.getDriver());
+        out.setDatasources(cfg.getDatasources() != null ? new ArrayList<>(cfg.getDatasources()) : new ArrayList<>());
         out.setActiveDatasource(cfg.getActiveDatasource());
-        // tokens
-        out.setAdminToken(adminTok != null ? adminTok : cfg.getAdminToken());
-        out.setReadToken(readTok != null ? readTok : cfg.getReadToken());
+        out.setAdminToken(cfg.getAdminToken());
+        out.setReadToken(cfg.getReadToken());
+        out.setHttpsEnabled(cfg.getHttpsEnabled());
+        out.setHttpsPort(cfg.getHttpsPort());
+        out.setKeystorePath(cfg.getKeystorePath());
+        out.setKeystorePassword(cfg.getKeystorePassword());
+        out.setKeyPassword(cfg.getKeyPassword());
+        out.setRedirectHttpToHttps(cfg.getRedirectHttpToHttps());
+
+        // Apply root field overrides
+        if (url != null) out.setJdbcUrl(url);
+        if (user != null) out.setUsername(user);
+        if (pass != null) out.setPassword(pass);
+        if (drv != null) out.setDriver(drv);
+        // Tokens
+        if (adminTok != null) out.setAdminToken(adminTok);
+        if (readTok != null) out.setReadToken(readTok);
+        // HTTPS
+        if (httpsEnabled != null) out.setHttpsEnabled(parseBool(httpsEnabled));
+        if (httpsPort != null) out.setHttpsPort(parseInt(httpsPort));
+        if (ksPath != null) out.setKeystorePath(ksPath);
+        if (ksPass != null) out.setKeystorePassword(ksPass);
+        if (keyPass != null) out.setKeyPassword(keyPass);
+        if (redirect != null) out.setRedirectHttpToHttps(parseBool(redirect));
+
+        // If JDBC overrides present, also override the active datasource entry (in-memory only)
+        if (url != null || user != null || pass != null || drv != null) {
+            String active = out.getActiveDatasource();
+            List<DatasourceConfig> list = out.getDatasources();
+            if (list != null && !list.isEmpty()) {
+                for (int i = 0; i < list.size(); i++) {
+                    DatasourceConfig ds = list.get(i);
+                    if (ds.getName() != null && ds.getName().equals(active)) {
+                        DatasourceConfig copy = new DatasourceConfig();
+                        copy.setName(ds.getName());
+                        copy.setJdbcUrl(url != null ? url : ds.getJdbcUrl());
+                        copy.setUsername(user != null ? user : ds.getUsername());
+                        copy.setPassword(pass != null ? pass : ds.getPassword());
+                        copy.setDriver(drv != null ? drv : ds.getDriver());
+                        copy.setType(ds.getType());
+                        copy.setMaxPoolSize(ds.getMaxPoolSize());
+                        copy.setMinIdle(ds.getMinIdle());
+                        copy.setConnectionTimeoutMs(ds.getConnectionTimeoutMs());
+                        copy.setIdleTimeoutMs(ds.getIdleTimeoutMs());
+                        copy.setMaxLifetimeMs(ds.getMaxLifetimeMs());
+                        copy.setAutoCommit(ds.getAutoCommit());
+                        copy.setPoolName(ds.getPoolName());
+                        copy.setLastTestOk(ds.getLastTestOk());
+                        copy.setLastTestAtEpochMs(ds.getLastTestAtEpochMs());
+                        copy.setLastTestMessage(ds.getLastTestMessage());
+                        copy.setLastTestDbProduct(ds.getLastTestDbProduct());
+                        copy.setLastTestDbVersion(ds.getLastTestDbVersion());
+                        copy.setLastTestElapsedMs(ds.getLastTestElapsedMs());
+                        list.set(i, copy);
+                        break;
+                    }
+                }
+            }
+        }
         return out;
     }
 
@@ -117,5 +182,18 @@ public class ConfigManager {
             if (x != null && !x.isBlank()) return x;
         }
         return null;
+    }
+
+    private static Boolean parseBool(String s) {
+        if (s == null) return null;
+        String v = s.trim().toLowerCase();
+        if ("true".equals(v) || "1".equals(v) || "yes".equals(v) || "y".equals(v)) return true;
+        if ("false".equals(v) || "0".equals(v) || "no".equals(v) || "n".equals(v)) return false;
+        return null;
+    }
+
+    private static Integer parseInt(String s) {
+        if (s == null) return null;
+        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return null; }
     }
 }
