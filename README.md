@@ -21,6 +21,7 @@ Status of repository
 - Built fat JAR available under `target/` after building.
 - COPILOT_NOTES.md contains an agent-friendly snapshot of the current state.
 - For a step-by-step walkthrough, see `USER_GUIDE.md`.
+- UI_Development_Plan.md contains the master system prompt and architecture plan for the upcoming Angular 21 no/low-code UI Designer; Node.js latest stable LTS is pinned via `.nvmrc`.
 
 Tech stack
 - Java 25 (runs with virtual threads for HTTP request handling)
