@@ -20,36 +20,36 @@ Context (set/assume before starting)
 
 Scope and capabilities (must implement)
 - Drag‑and‑drop UI Designer
-  - Canvas with component palette: Container, Grid, Tabs, Form, Field (Text, Number, Select, Date/Time, Checkbox, Switch), Table, List, Chart (bar/line), Button, Icon, Modal, Drawer, Card, Accordion, Breadcrumb, Menu, Tree, Image, Markdown.
+  - Canvas with component palette: Container, Grid, Tabs, Form, Field (Text, Number, Select, Date/Time, Checkbox, Switch), Table, List, Chart (bar/line), Button, Icon, Modal, Drawer, Card, Accordion, Breadcrumb, Menu, Tree, Image, Markdown, Map (new), DocumentViewer (new).
   - Property inspector with type‑safe props and validation.
   - Layout: responsive grid with breakpoints; flex/grid options; alignment/spacing controls (Angular CDK Layout + CSS Grid/Flex).
   - Theming: light/dark, primary palette; exportable theme tokens (Angular Material theming).
   - Reusable components (compositions) and templates; copy/paste/duplicate.
 - Data and actions
   - Data sources that bind to backend endpoints. Import OpenAPI and generate CRUD operations automatically per entity.
-  - Declarative actions: fetch, create, update, delete, call endpoint, open modal/drawer, navigate, set state, toast, confirm, run expression, workflow.
+  - Real-time connectors: WebSocket and MQTT (new) data sources with reconnect/backoff and auth header support.
+  - Declarative actions: fetch, create, update, delete, call endpoint, open modal/drawer, navigate, set state, toast, confirm, run expression, workflow, sendEmail (new), sendSms (new), raiseAlert (new).
   - Bindings: any component input can bind to state, data source results, route params, form values, or expressions.
   - Client state store with page/global/component scopes; computed selectors; expressions via a sandboxed interpreter.
   - Validation rules at field level (sync/async), submission flows, optimistic update option, error handling.
+  - Multi-tenant scoping (new): designer can simulate role/tenant; runtime resolves tenant from auth/session and scopes queries.
 - Event model
-  - Components emit events (click, change, load, rowSelect, submit, success, error, visible).
+  - Components emit events (click, change, load, rowSelect, submit, success, error, visible, mapMarkerClick (new), scanDetected (new)).
   - Event graph/flow editor to chain actions with conditionals and branching.
 - Pages and routing
   - Multi‑page with nested routes (Angular Router); per‑page layout slots; URL params/query binding.
-  - Preview mode and live data toggle (mock vs real).
+  - Preview mode and live data toggle (mock vs real); tenant/role simulation (new).
 - Security/permissions
   - Per‑page and per‑action permissions (roles/scopes); hide/disable if unauthorized.
+  - Field-level permissions (FLS) enforced in runtime and designer previews (per Product roadmap).
   - Secrets never stored in designs; token handled via secure storage; headers injected at request time.
 - Persistence and collaboration (MVP)
   - Save/load designs as JSON. Versioning with change notes. Import/export.
   - Minimal local audit log; extensible for server persistence (/schema) later.
 - Extensibility
-  - Plugin API: register new components, validators, data connectors, action types (Angular DI multi‑providers).
+  - Plugin API: register new components, validators, data connectors, action types.
+  - EDI connector plugins (new): pluggable parsers (e.g., COARRI/CODECO) producing normalized events.
   - Optional custom code nodes executed in a sandboxed, typed way; documented and off by default.
-- Quality
-  - Strong typing, unit tests for core utilities, integration tests for schema render/data binding, basic e2e for a template CRUD flow.
-  - Accessibility: CDK a11y guidelines; keyboard navigation for canvas and palette.
-  - Error boundaries and offline handling for designer and runtime.
 
 Architecture and defaults (Angular-first)
 - Stack:
@@ -63,21 +63,14 @@ Architecture and defaults (Angular-first)
   - Expression engine: jsep + a safe interpreter or expr-eval in a sandbox.
   - Code editor for expressions: Monaco (ngx-monaco-editor or custom integration).
   - JSON schema validation (for design files): Zod or Ajv.
-- Monorepo (Nx recommended):
-  - libs/ui-schema: schema types, validators, migrations
-  - libs/runtime: schema → Angular component tree renderer
-  - libs/designer: canvas, palette, inspectors, event graph
-  - libs/data: OpenAPI client, data source manager, auth, caching, mocking
-  - apps/studio: UI Designer host (designer + runtime preview)
-  - apps/examples: sample generated apps
-- Build: pnpm or npm; scripts for dev/test/build/lint/typecheck. Pin versions.
+  - Logistics libraries (new): ngx-leaflet or maplibre-gl for Map, mqtt over WebSocket (mqtt.js) for MQTT DataSource.
 
 UI schema (versioned DSL)
 - Top-level
   - version: string (e.g., "1.0.0")
   - app: { name, theme, globals }
-  - routes: [ { id, path, layoutId?, pageId, auth?: {roles?: string[], scopes?: string[]} } ]
-  - pages: [ { id, name, rootId, dataSources: DataSource[], state: StateVar[], actions: Action[], i18n?: {...} } ]
+  - routes: [ { id, path, layoutId?, pageId, auth?: {roles?: string[], scopes?: string[]}, tenantScope?: string (new) } ]
+  - pages: [ { id, name, rootId, dataSources: DataSource[], state: StateVar[], actions: Action[], i18n?: {...}, tenantScope?: string (new) } ]
   - components: [ ComponentNode ]
   - permissions: { roles: string[], rules: PermissionRule[] }
 - ComponentNode
@@ -85,11 +78,11 @@ UI schema (versioned DSL)
 - BindingOrValue
   - literal values or { binding: "state.xxx | data.xxx | params.id | expr:<expression>" }
 - DataSource
-  - { id, name, type: "openapi", operationId?: string, method?: string, path?: string, params?: Bindings, body?: BindingOrValue, headers?: BindingOrValue, paging?: { pageParam, sizeParam, map }, cache?: { key?, ttlSec? }, onLoad?: boolean, transform?: expr }
+  - { id, name, type: "openapi" | "websocket" | "mqtt" (new) | "plugin", operationId?: string, method?: string, path?: string, params?: Bindings, body?: BindingOrValue, headers?: BindingOrValue, paging?: { pageParam, sizeParam, map }, cache?: { key?, ttlSec? }, onLoad?: boolean, transform?: expr, mqtt?: { url, topic, qoss?, clientId? } (new) }
 - Action
-  - { id, type: "fetch|create|update|delete|navigate|openModal|closeModal|setState|toast|confirm|runExpr|workflow", config: {...}, success?: Step[], error?: Step[], finally?: Step[] }
+  - { id, type: "fetch|create|update|delete|navigate|openModal|closeModal|setState|toast|confirm|runExpr|workflow|sendEmail|sendSms|raiseAlert" (new), config: {...}, success?: Step[], error?: Step[], finally?: Step[] }
 - EventBinding
-  - { event: "click|change|load|submit|rowSelect|success|error|visible", steps: Step[] }
+  - { event: "click|change|load|submit|rowSelect|success|error|visible|mapMarkerClick|scanDetected" (new), steps: Step[] }
 - Step
   - { if?: expr, then: ActionRefOrInline[], else?: ActionRefOrInline[] }
 - StateVar
@@ -102,23 +95,20 @@ Key contracts to implement (Angular specifics)
   - Property panel: dynamic form driven by component prop schemas; show defaults and docs.
   - Bindings: binding picker (state/data/params) + expression editor with Monaco autocomplete.
   - Event graph: visualize outputs → actions; simulate events in preview mode.
+  - Tenant/role simulation (new): preview as selected role/tenant.
 - Runtime
   - Deterministically renders ComponentNode trees using a registry of Angular components (DI token registry).
   - Create components dynamically via ViewContainerRef.createComponent; bind inputs; wire outputs to EventBinding steps; resolve bindings from signals/state/data.
   - Inject services (data/auth/storage/navigation) into runtime; no designer deps.
-  - Permissions: prune/disable secure nodes at render time based on roles/scopes.
+  - Permissions: prune/disable secure nodes at render time based on roles/scopes; enforce tenant scoping (new).
 - Data integration
   - Import OpenAPI (/openapi.json), generate Angular services/models (typescript-angular or ng-openapi-gen).
   - Global HttpInterceptor: adds X-AppBana-Token securely, base URL, timeout, error normalization.
   - Support mock/live toggle; query caching; optimistic updates for create/update/delete.
+  - MQTT DataSource (new): wss client with reconnect/backoff; message transform; auth header support.
+  - EDI plugin connectors (new): upload/ingest endpoint and parser hook to produce normalized events.
 - Theming and layout
   - Angular Material theming with CSS variables; dark/light switch; responsive grid using CSS Grid + CDK Layout breakpoints.
-
-Security and privacy
-- Never persist auth tokens in design JSON; store in secure browser storage; inject via HttpInterceptor.
-- Sanitize and sandbox all expression evaluation (no window/global access).
-- Sanitize HTML/Markdown; escape user strings; follow Angular security best practices (DOM sanitization).
-- Respect backend’s read/admin scopes; degrade gracefully with toasts and disabled controls.
 
 Iteration protocol (follow on every cycle)
 1) Confirm environment and backend assumptions (OpenAPI at /openapi.json; X-AppBana-Token header; same-origin).
@@ -130,6 +120,7 @@ Iteration protocol (follow on every cycle)
 7) Add theming, responsive breakpoints, and accessibility checks.
 8) Add tests: unit (schema utils), integration (renderer + bindings), e2e (create page, bind CRUD, submit).
 9) Ship a minimal template app showing list → details → edit → delete.
+10) Logistics extensions (new): add Map component, MQTT DataSource, EDI connector hook, DocumentViewer, alert actions, and multi-tenant simulation; ship a Control Tower example (map + streaming table + scanner).
 
 Deliverables per iteration
 - Code: conventional commits; strict types; lint clean.
@@ -145,6 +136,7 @@ Acceptance criteria (MVP)
 - Persistence: user can export a design JSON and re-import it to restore.
 - OpenAPI import: for at least one entity, endpoints/types are generated and bindable.
 - Accessibility: keyboard navigation across palette/canvas/props; labeled form fields with proper aria attributes.
+- Logistics extension: Control Tower example renders map with markers/routes, a real-time table fed by WebSocket/MQTT, and a scanner flow that updates rows; works offline with queue-and-replay.
 
 Constraints and preferences
 - Keep dependencies minimal and maintained; pin versions.
@@ -159,22 +151,9 @@ Backend integration notes (AppBana-specific)
 - UI hosting: Serve apps/studio at /ui/designer from the Java server to keep same-origin headers simple and reuse existing token flow.
 - Existing UIs: /ui/builder, /ui/datasource, /ui/swagger—do not break; add the new designer under a new route to avoid regressions.
 
-Plugin API (Angular DI)
-- Provide an injection token COMPONENT_REGISTRY with multi: true. Each plugin registers:
-  - component type key
-  - Angular component class
-  - prop schema (for inspector UI)
-  - input/output contract
-- Provide tokens similarly for validators, data connectors, and action types.
-
 Start now
-- Step 1: Print a short plan (5–8 bullets) and any assumptions (Node LTS via .nvmrc, OpenAPI at /openapi.json, auth header). Then scaffold the Angular workspace (Nx monorepo with libs and apps as above). Commit scaffolding.
-- Step 2: Implement the runtime renderer with a minimal schema and render "Hello from Runtime" using Container, Text, Button.
-- Step 3: Add HttpInterceptor to inject X-AppBana-Token; add a Settings panel to input token (persist securely).
-- Step 4: Integrate OpenAPI client codegen from /openapi.json and demonstrate a List + Create flow against one entity.
-
-How to use this prompt
-- Paste the prompt above into your Copilot/agent as the System/Developer prompt.
-- It’s tailored to AppBana: /openapi.json and X-AppBana-Token.
-- Use Node.js latest stable LTS (nvm use, .nvmrc already set to lts/*). If integrating into this repo, serve under /ui/designer.
-
+- Step 1: Print a short plan reflecting the October goals (Workflow Engine MVP, Advanced Auditing/FLS, Plugin API + Signature Pad). Then scaffold the Angular workspace (Nx) and commit.
+- Step 2: Implement Advanced Security & Auditing including the audit log UI and FLS enforcement in runtime/designer.
+- Step 3: Implement the Stateful Workflow Engine (MVP) for single-user stateful actions and wire to designer actions.
+- Step 4: Solidify the Plugin API and build the Signature Pad example; prepare stubs for Map, MQTT, EDI, DocumentViewer.
+- Step 5: Ship the Control Tower example (map + streaming table + scanner) behind a feature flag and validate offline queue.

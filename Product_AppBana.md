@@ -187,3 +187,66 @@ To confidently ship a credible v1 by December, each phase must meet the followin
 ## 16. Document Governance
 
 - This roadmap is the authoritative source for Q4 2025. Any deviation requires an update here and corresponding updates to `UI_Development_Plan.md` and `COPILOT_NOTES.md`.
+
+---
+
+## 17. RoRo Logistics (Wallenius Wilhelmsen) Readiness
+
+This section evaluates our capability to deliver an end‑to‑end solution for a global RoRo carrier (e.g., Wallenius Wilhelmsen) and lists targeted feature additions to close gaps by December.
+
+### 17.1 Key Business Flows
+- Ocean operations: vessel schedules, port calls, berth windows, stowage summaries, COARRI/CODECO events.
+- Terminals & yards: gate-in/out, yard inventory (VIN/equipment), damage capture/claims, holds/releases, VPC (processing steps).
+- Bookings & allocations: OEM allocations, bookings, exceptions (rolls, no-shows), customs/doc status.
+- Visibility & events: milestone tracking (departed/arrived/loaded/discharged), ETA/ETD updates, exceptions management.
+- Mobile scanning: VIN/booking barcodes/QRs; offline in yards; queue-and-replay when online.
+- Customer self-service: track-and-trace, inventory views, downloadable reports.
+- ESG & compliance: voyage emissions (IMO DCS/EU MRV estimates), damage KPIs.
+
+### 17.2 Capability Mapping (Have vs Need)
+- Have (by Oct/Nov/Dec plan):
+  - PWA/offline, WebSockets, barcode scanner component, reporting (CSV/Excel), stateful workflows, field-level security, audit trails.
+- Additional needs for WALWIL-class use cases:
+  - Geospatial components: map with layers (vessels, yards, geofences), routes, clustering.
+  - Realtime/IoT connector: MQTT/SSE for yard scanners, IoT tags; topic subscription model.
+  - EDI/Batch connectors: EDIFACT (COARRI/CODECO/COPARN/COPRAR) ingestion parsers and mapping; file drop/API intake.
+  - Multi-tenant partitioning: OEM vs terminal vs carrier views; data isolation and scoped queries.
+  - Document management: store/display PDFs (B/L, customs, inspection), metadata, and access logs.
+  - ETA/exception analytics: basic ETA smoothing, exception rules, alerts (email/SMS provider connector).
+
+### 17.3 New Feature Additions (Roadmap Alignment)
+- November (extend Vertical Acceleration):
+  - Map Plugin (MVP): Leaflet/Mapbox integration, markers, polylines, clustering, click events; bind to data sources.
+  - MQTT DataSource (MVP): connect via wss:// with auth header; subscribe/unsubscribe; message schema transform.
+  - EDI Intake (MVP): pluggable parser for EDIFACT COARRI/CODECO; REST upload endpoint and S3/FS watch; map to normalized events.
+  - Multi-tenant Scoping (MVP): tenantId propagation in auth/session; query scoping helpers; designer preview as role/tenant.
+- December (Healthcare & Leadership month, plus logistics addendum):
+  - Document Store (MVP): metadata + object storage adapter; viewer component for PDFs/images; audited access.
+  - Exception Rules & Alerts (MVP): rule DSL on events (if shipment delayed > X then alert); email/SMS connectors.
+  - Emissions Estimator (MVP): simple CO2e calculator by voyage leg using distance + vessel factors (guidance only).
+
+### 17.4 Acceptance Criteria (Logistics addendum)
+- Map Plugin: render 1k markers with clustering at 60fps on modern laptop; show vessel track polyline; click → open detail modal.
+- MQTT DataSource: reconnect with exponential backoff; deliver messages to bound table within 200ms median; auth header injected.
+- EDI Intake: parse sample COARRI/CODECO files; produce normalized event objects; idempotent re-processing (same control number).
+- Multi-tenant: user restricted to assigned tenant’s data in UI and API; designer can simulate roles/tenants; audit log records tenant.
+- Document Store: upload/download with checksum; viewer renders common PDF/image types; all access audited.
+- Alerts: rule creation in designer; test fire; email received within 60s; alert audit entry created.
+
+### 17.5 KPIs (WALWIL pilot)
+- P95 live dashboard update < 1s on WebSocket push.
+- Offline queue replay success ≥ 99% within 10 minutes of connectivity restoration.
+- EDI file processing: 10k lines in < 60s; 0 data loss; duplicate suppression rate 100% for retries.
+
+### 17.6 Appendix — RoRo Control Tower Blueprint (condensed)
+- Pages:
+  - Fleet Overview (Map + KPI tiles + vessel list)
+  - Terminal Ops (yard inventory table, gate events, damage capture modal)
+  - Bookings & Exceptions (bookings grid with filters, exception board, workflows)
+  - Customer Portal (track & trace, inventory, export reports)
+- Components:
+  - Map with vessel routes; Real-time table; Barcode scanner; Exception panel; Report export button; Document viewer
+- Data sources:
+  - REST: schedule/ports/bookings; WebSocket: live events; MQTT: scanner topics; EDI: COARRI/CODECO intake endpoint
+- Workflows:
+  - Damage claim workflow (multi-actor); Hold/Release approval; Exception triage with SLA timers
