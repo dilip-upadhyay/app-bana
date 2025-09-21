@@ -112,6 +112,7 @@ Frontend (resources/ui)
 - If DB init fails (wrong creds), server still starts; use /ui/datasource to fix and retry operations.
 
 ## Quick local smoke (manual)
+- For the full step-by-step checklist, follow `UI_SMOKE.md`. Run it against your local server at http://localhost:8080 (or your configured port).
 - Set tokens (optional): export APPBANA_ADMIN_TOKEN=admin123; export APPBANA_READ_TOKEN=read123 (or via -D system props).
 - Open /ui/datasource, add or load a datasource; optionally set pool fields; Save (auto-activates); then refresh list.
 - Use the Test Connection button or per-row Test action to validate connectivity; Ping for a quick status.
@@ -128,6 +129,9 @@ The following epics from `Product_AppBana.md` are the immediate priority for Oct
 | **Advanced Security & Auditing** | - Implement server-side audit trails for all data access.<br>- Introduce Field-Level Security (FLS) in backend & UI.<br>- Create a UI for viewing/exporting audit logs. |
 | **Foundational Plugin API** | - Solidify and document Plugin APIs for custom components & data connectors.<br>- Develop a "Signature Pad" component to prove the model. |
 | **Angular 21 UI Foundation** | - Scaffold Nx workspace and minimal runtime/designer shell; wire HttpInterceptor; host at /ui/designer; run `UI_SMOKE.md` to verify existing UIs remain functional. |
+
+Validation
+- Before merging October work, run the UI Smoke Test guide (`UI_SMOKE.md`) against your local server at http://localhost:8080 (or your configured port) to verify /ui/builder, /ui/datasource, /ui/swagger, and (when present) /ui/designer.
 
 Notes
 - Keep this file aligned with the “Next recommended enhancements” sections in README.md and FUNCTIONAL_SPEC.md.
