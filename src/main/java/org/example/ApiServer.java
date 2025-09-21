@@ -43,7 +43,7 @@ public class ApiServer {
         }
     }
 
-    private static Map<String,String> parseQuery(String query){
+    public static Map<String,String> parseQuery(String query){
         Map<String,String> map = new HashMap<>();
         if(query==null||query.isEmpty()) return map;
         for(String part: query.split("&")){
@@ -54,15 +54,15 @@ public class ApiServer {
         return map;
     }
 
-    private static Integer parseInteger(String s) {
+    public static Integer parseInteger(String s) {
         if (s == null || s.isBlank()) return null;
         try { return Integer.parseInt(s.trim()); } catch (Exception e) { return null; }
     }
-    private static Long parseLong(String s) {
+    public static Long parseLong(String s) {
         if (s == null || s.isBlank()) return null;
         try { return Long.parseLong(s.trim()); } catch (Exception e) { return null; }
     }
-    private static Boolean parseBoolean(String s) {
+    public static Boolean parseBoolean(String s) {
         if (s == null || s.isBlank()) return null;
         String v = s.trim().toLowerCase();
         if ("true".equals(v) || "1".equals(v) || "yes".equals(v) || "y".equals(v)) return true;
@@ -70,7 +70,7 @@ public class ApiServer {
         return null;
     }
 
-    private static String buildJdbcUrl(Map<String, String> data) {
+    public static String buildJdbcUrl(Map<String, String> data) {
         String type = Optional.ofNullable(data.get("type")).orElse("").toLowerCase();
         String params = Optional.ofNullable(data.get("params")).orElse("").trim();
         switch (type) {
@@ -130,7 +130,7 @@ public class ApiServer {
                 String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("1521");
                 String svc = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("orcl");
-                String url = "jdbc:oracle:thin:@" + host + ":" + port + "/" + svc;
+                String url = "jdbc:oracle:thin@" + host + ":" + port + "/" + svc;
                 if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
                 return url;
             }
@@ -139,7 +139,7 @@ public class ApiServer {
         }
     }
 
-    private static String sanitizeUrl(String url) {
+    public static String sanitizeUrl(String url) {
         if (url == null) return null;
         String u = url;
         // Mask common password keys in query or ;key=value formats
@@ -153,7 +153,7 @@ public class ApiServer {
         return u;
     }
 
-    private static Map<String, Object> errorDetails(Throwable ce) {
+    public static Map<String, Object> errorDetails(Throwable ce) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("ok", false);
         m.put("error", ce.getMessage());
@@ -165,10 +165,10 @@ public class ApiServer {
         return m;
     }
 
-    private static boolean authEnabled(AppConfig cfg) {
+    public static boolean authEnabled(AppConfig cfg) {
         return cfg.getAdminToken() != null && !cfg.getAdminToken().isBlank() || cfg.getReadToken() != null && !cfg.getReadToken().isBlank();
     }
-    private static String extractToken(org.example.api.Router.HttpRequest req) {
+    public static String extractToken(org.example.api.Router.HttpRequest req) {
         String tok = req.header("X-AppBana-Token");
         if (tok == null || tok.isBlank()) {
             String auth = req.header("Authorization");
@@ -176,7 +176,7 @@ public class ApiServer {
         }
         return tok;
     }
-    private static String extractToken(HttpExchange ex) {
+    public static String extractToken(HttpExchange ex) {
         String tok = ex.getRequestHeaders().getFirst("X-AppBana-Token");
         if (tok == null || tok.isBlank()) {
             String auth = ex.getRequestHeaders().getFirst("Authorization");
@@ -184,17 +184,17 @@ public class ApiServer {
         }
         return tok;
     }
-    private static boolean hasAdmin(String token, AppConfig cfg) {
+    public static boolean hasAdmin(String token, AppConfig cfg) {
         String at = cfg.getAdminToken();
         return at != null && !at.isBlank() && at.equals(token);
     }
-    private static boolean hasRead(String token, AppConfig cfg) {
+    public static boolean hasRead(String token, AppConfig cfg) {
         if (hasAdmin(token, cfg)) return true;
         String rt = cfg.getReadToken();
         return rt != null && !rt.isBlank() && rt.equals(token);
     }
 
-    public static void start(int port) throws IOException {
+    public static void startJdk(int port) throws IOException {
         AppConfig cfg = ConfigManager.getConfig();
         // Always start the HTTP server (can redirect to HTTPS if configured)
         HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
@@ -275,12 +275,9 @@ public class ApiServer {
         LOG.info("HTTP server started on port {}{}", port, httpsStarted ? " (HTTPS also enabled)" : "");
     }
 
-    private static void configureServer(HttpServer server) {
-        // Router integration for utility, schema, and datasource JSON endpoints
+    public static org.example.api.Router buildRouter() {
         org.example.api.Router router = new org.example.api.Router();
-        router.get("/health", (req, res) -> {
-            res.json(200, Map.of("status", "UP"));
-        });
+        router.get("/health", (req, res) -> { res.json(200, Map.of("status", "UP")); });
         router.get("/ready", (req, res) -> {
             long start = System.currentTimeMillis();
             try (Connection c = JdbcManager.getConnection()) {
@@ -403,9 +400,10 @@ public class ApiServer {
                 String tok = extractToken(req);
                 if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
             }
-            String active = cfg.getActiveDatasource();
+            AppConfig cfgNow = ConfigManager.getConfig();
+            String active = cfgNow.getActiveDatasource();
             Map<String, Object> out = new LinkedHashMap<>();
-            for (DatasourceConfig ds : cfg.getDatasources()) {
+            for (DatasourceConfig ds : cfgNow.getDatasources()) {
                 if (ds.getName() != null && ds.getName().equals(active)) {
                     out.put("name", ds.getName());
                     out.put("jdbcUrl", ds.getJdbcUrl());
@@ -423,10 +421,10 @@ public class ApiServer {
                 }
             }
             if (out.isEmpty()) {
-                out.put("name", cfg.getName());
-                out.put("jdbcUrl", cfg.getJdbcUrl());
-                out.put("username", cfg.getUsername());
-                out.put("driver", cfg.getDriver());
+                out.put("name", cfgNow.getName());
+                out.put("jdbcUrl", cfgNow.getJdbcUrl());
+                out.put("username", cfgNow.getUsername());
+                out.put("driver", cfgNow.getDriver());
                 out.put("type", null);
             }
             res.json(200, out);
@@ -437,9 +435,10 @@ public class ApiServer {
                 String tok = extractToken(req);
                 if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
             }
-            String active = cfg.getActiveDatasource();
+            AppConfig cfgNow = ConfigManager.getConfig();
+            String active = cfgNow.getActiveDatasource();
             List<Map<String, Object>> list = new ArrayList<>();
-            for (DatasourceConfig ds : cfg.getDatasources()) {
+            for (DatasourceConfig ds : cfgNow.getDatasources()) {
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("name", ds.getName());
                 m.put("jdbcUrl", ds.getJdbcUrl());
@@ -465,10 +464,10 @@ public class ApiServer {
             res.json(200, list);
         });
         router.post("/ui/datasource/save", (req, res) -> {
-            AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
+            AppConfig cfgAuth = ConfigManager.getConfig();
+            if (authEnabled(cfgAuth)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfgAuth)) { res.json(401, Map.of("error","unauthorized")); return; }
             }
             Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
             String name = data.get("name");
@@ -490,8 +489,9 @@ public class ApiServer {
             Boolean autoCommit = parseBoolean(data.get("autoCommit"));
             String poolName = data.get("poolName");
 
+            AppConfig cfgNow = ConfigManager.getConfig();
             boolean found = false;
-            for (DatasourceConfig ds : cfg.getDatasources()) {
+            for (DatasourceConfig ds : cfgNow.getDatasources()) {
                 if (name.equals(ds.getName())) {
                     if (url != null) ds.setJdbcUrl(url);
                     if (user != null) ds.setUsername(user);
@@ -523,10 +523,10 @@ public class ApiServer {
                 ds.setMaxLifetimeMs(maxLifetimeMs);
                 ds.setAutoCommit(autoCommit);
                 ds.setPoolName(poolName);
-                cfg.getDatasources().add(ds);
+                cfgNow.getDatasources().add(ds);
             }
-            cfg.setActiveDatasource(name);
-            ConfigManager.saveConfig(cfg);
+            cfgNow.setActiveDatasource(name);
+            ConfigManager.saveConfig(cfgNow);
             res.text(200, "Datasource configuration saved.", "application/json");
         });
         router.post("/ui/datasource/test", (req, res) -> {
@@ -551,8 +551,8 @@ public class ApiServer {
             }
             DatasourceConfig toPersist = null;
             if ((url == null || url.isBlank()) && name != null && !name.isBlank()) {
-                AppConfig cfg = ConfigManager.getConfig();
-                for (DatasourceConfig ds : cfg.getDatasources()) {
+                AppConfig cfgNow = ConfigManager.getConfig();
+                for (DatasourceConfig ds : cfgNow.getDatasources()) {
                     if (name.equals(ds.getName())) {
                         url = ds.getJdbcUrl();
                         if (user == null) user = ds.getUsername();
@@ -619,10 +619,11 @@ public class ApiServer {
             Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
             String name = data.get("name");
             if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
-            boolean exists = cfg.getDatasources().stream().anyMatch(d -> name.equals(d.getName()));
+            AppConfig cfgNow = ConfigManager.getConfig();
+            boolean exists = cfgNow.getDatasources().stream().anyMatch(d -> name.equals(d.getName()));
             if (!exists) { res.json(404, Map.of("error","not found")); return; }
-            cfg.setActiveDatasource(name);
-            ConfigManager.saveConfig(cfg);
+            cfgNow.setActiveDatasource(name);
+            ConfigManager.saveConfig(cfgNow);
             res.text(200, "Activated", "application/json");
         });
         router.post("/ui/datasource/delete", (req, res) -> {
@@ -634,12 +635,13 @@ public class ApiServer {
             Map<String, String> data = req.readJson(new TypeReference<Map<String, String>>() {});
             String name = data.get("name");
             if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
-            cfg.getDatasources().removeIf(d -> name.equals(d.getName()));
-            if (name.equals(cfg.getActiveDatasource())) {
-                if (!cfg.getDatasources().isEmpty()) cfg.setActiveDatasource(cfg.getDatasources().get(0).getName());
-                else cfg.setActiveDatasource(null);
+            AppConfig cfgNow = ConfigManager.getConfig();
+            cfgNow.getDatasources().removeIf(d -> name.equals(d.getName()));
+            if (name.equals(cfgNow.getActiveDatasource())) {
+                if (!cfgNow.getDatasources().isEmpty()) cfgNow.setActiveDatasource(cfgNow.getDatasources().get(0).getName());
+                else cfgNow.setActiveDatasource(null);
             }
-            ConfigManager.saveConfig(cfg);
+            ConfigManager.saveConfig(cfgNow);
             res.text(200, "Deleted", "application/json");
         });
         router.get("/ui/datasource/health", (req, res) -> {
@@ -652,18 +654,19 @@ public class ApiServer {
             Integer timeoutSec = parseInteger(req.query("timeoutSec"));
             if (timeoutSec == null || timeoutSec <= 0) timeoutSec = 3;
             if (timeoutSec > 60) timeoutSec = 60;
+            AppConfig cfgNow = ConfigManager.getConfig();
             DatasourceConfig target = null;
             if (name != null && !name.isBlank()) {
-                for (DatasourceConfig d : cfg.getDatasources()) {
+                for (DatasourceConfig d : cfgNow.getDatasources()) {
                     if (name.equals(d.getName())) { target = d; break; }
                 }
                 if (target == null) { res.json(404, Map.of("ok", false, "error", "datasource not found")); return; }
             } else {
-                String active = cfg.getActiveDatasource();
-                for (DatasourceConfig d : cfg.getDatasources()) {
+                String active = cfgNow.getActiveDatasource();
+                for (DatasourceConfig d : cfgNow.getDatasources()) {
                     if (active != null && active.equals(d.getName())) { target = d; break; }
                 }
-                if (target == null && !cfg.getDatasources().isEmpty()) target = cfg.getDatasources().get(0);
+                if (target == null && !cfgNow.getDatasources().isEmpty()) target = cfgNow.getDatasources().get(0);
             }
             String url = target.getJdbcUrl();
             String user = target.getUsername();
@@ -697,6 +700,137 @@ public class ApiServer {
                 res.json(200, out);
             }
         });
+
+        // CRUD endpoints via router
+        router.post("/api/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            Map<String, Object> data = req.readJson(new TypeReference<>() {});
+            try {
+                long id = insertRecord(schema, data);
+                res.json(201, Map.of("id", id));
+            } catch (SQLException e) {
+                LOG.error("Insert failed for entity {}", entity, e);
+                res.json(500, errorDetails(e));
+            }
+        });
+        router.get("/api/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            try {
+                List<Map<String, Object>> rows = listAll(schema);
+                res.json(200, rows);
+            } catch (SQLException e) {
+                LOG.error("List failed for entity {}", entity, e);
+                res.json(500, errorDetails(e));
+            }
+        });
+        router.get("/api/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            try {
+                Map<String,Object> row = getById(schema, idStr);
+                if (row == null) res.json(404, Map.of("error","not found")); else res.json(200, row);
+            } catch (SQLException e) {
+                LOG.error("Get by id failed for entity {} id {}", entity, idStr, e);
+                res.json(500, errorDetails(e));
+            }
+        });
+        router.put("/api/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            Map<String, Object> data = req.readJson(new TypeReference<>() {});
+            try {
+                int updated = updateById(schema, idStr, data);
+                res.json(200, Map.of("updated", updated));
+            } catch (SQLException e) {
+                LOG.error("Update failed for entity {} id {}", entity, idStr, e);
+                res.json(500, errorDetails(e));
+            }
+        });
+        router.delete("/api/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            try {
+                int deleted = deleteById(schema, idStr);
+                res.json(200, Map.of("deleted", deleted));
+            } catch (SQLException e) {
+                LOG.error("Delete failed for entity {} id {}", entity, idStr, e);
+                res.json(500, errorDetails(e));
+            }
+        });
+
+        // Serve static UI pages for servlet containers
+        router.get("/ui/builder", (req, res) -> {
+            try (InputStream is = ApiServer.class.getResourceAsStream("/ui/builder.html")) {
+                if (is == null) { res.text(404, "Not found", "text/plain; charset=utf-8"); return; }
+                String html = new String(is.readAllBytes());
+                res.text(200, html, "text/html; charset=utf-8");
+            } catch (IOException ioe) {
+                LOG.error("Failed to read /ui/builder.html", ioe);
+                res.text(500, "Internal Server Error", "text/plain; charset=utf-8");
+            }
+        });
+        router.get("/ui/datasource", (req, res) -> {
+            try (InputStream is = ApiServer.class.getResourceAsStream("/ui/datasource.html")) {
+                if (is == null) { res.text(404, "Not found", "text/plain; charset=utf-8"); return; }
+                String html = new String(is.readAllBytes());
+                res.text(200, html, "text/html; charset=utf-8");
+            } catch (IOException ioe) {
+                LOG.error("Failed to read /ui/datasource.html", ioe);
+                res.text(500, "Internal Server Error", "text/plain; charset=utf-8");
+            }
+        });
+        router.get("/ui/swagger", (req, res) -> {
+            try (InputStream is = ApiServer.class.getResourceAsStream("/ui/swagger.html")) {
+                if (is == null) { res.text(404, "Not found", "text/plain; charset=utf-8"); return; }
+                String html = new String(is.readAllBytes());
+                res.text(200, html, "text/html; charset=utf-8");
+            } catch (IOException ioe) {
+                LOG.error("Failed to read /ui/swagger.html", ioe);
+                res.text(500, "Internal Server Error", "text/plain; charset=utf-8");
+            }
+        });
+        return router;
+    }
+
+    private static void configureServer(HttpServer server) {
+        // Build router with all JSON endpoints
+        org.example.api.Router router = buildRouter();
+
         // Root routes via router
         server.createContext("/", exchange -> {
             try { router.handle(exchange); } catch (IOException ioe) { LOG.error("Router handle failed", ioe); }
@@ -740,7 +874,7 @@ public class ApiServer {
             }
         });
 
-        // Add Swagger UI page (HTML)
+        // serve the swagger UI (HTML)
         server.createContext("/ui/swagger", exchange -> {
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/swagger.html")) {
                 if (is == null) {
@@ -759,379 +893,188 @@ public class ApiServer {
             }
         });
 
-        // Entity CRUD under /api
-        server.createContext("/api", new EntityHandler());
-
         // Use virtual threads per server
         server.setExecutor(r -> Thread.ofVirtual().start(r));
     }
 
-    static class SchemaHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            String method = exchange.getRequestMethod();
-            URI uri = exchange.getRequestURI();
-            String path = uri.getPath(); // /schema or /schema/{name}
-            String[] parts = path.split("/");
-            Map<String,String> qmap = parseQuery(uri.getQuery());
-
-            try {
-                // POST /schema with optional preview=true
-                if ("POST".equalsIgnoreCase(method) && parts.length == 2) {
-                    boolean preview = "true".equalsIgnoreCase(qmap.getOrDefault("preview", "false"));
-                    try (InputStream is = exchange.getRequestBody()) {
-                        EntitySchema schema = M.readValue(is, EntitySchema.class);
-                        if (schema.getName() == null || schema.getName().isEmpty()) {
-                            send(exchange, 400, "{\"error\":\"missing schema name\"}");
-                            return;
-                        }
-                        if (preview) {
-                            List<String> plan = SchemaManager.generateMigrationPlan(schema);
-                            sendJson(exchange, 200, plan);
-                            return;
-                        } else {
-                            SchemaManager.saveSchema(schema);
-                            send(exchange, 201, "{\"status\":\"ok\"}");
-                            return;
-                        }
-                    }
-                }
-
-                // GET /schema - list (optionally paginated/search via query params)
-                if ("GET".equalsIgnoreCase(method) && parts.length == 2) {
-                    String pageS = qmap.get("page");
-                    String sizeS = qmap.get("size");
-                    String q = qmap.get("q");
-                    if (pageS != null || sizeS != null || q != null) {
-                        int page = 1; int size = 10;
-                        try { if (pageS != null) page = Integer.parseInt(pageS); } catch (Exception ignored) {}
-                        try { if (sizeS != null) size = Integer.parseInt(sizeS); } catch (Exception ignored) {}
-                        List<String> names = SchemaManager.listSchemaNames(page, size, q);
-                        sendJson(exchange, 200, names);
-                        return;
-                    } else {
-                        List<String> names = SchemaManager.listSchemaNames();
-                        sendJson(exchange, 200, names);
-                        return;
-                    }
-                }
-
-                // GET /schema/{name}
-                if ("GET".equalsIgnoreCase(method) && parts.length == 3) {
-                    String name = parts[2];
-                    EntitySchema schema = SchemaManager.loadSchema(name);
-                    if (schema == null) {
-                        send(exchange, 404, "{\"error\":\"not found\"}");
-                        return;
-                    }
-                    sendJson(exchange, 200, schema);
-                    return;
-                }
-
-                send(exchange, 404, "{\"error\":\"unsupported\"}");
-            } catch (Exception e) {
-                LOG.error("SchemaHandler failed", e);
-                try { send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}"); } catch (IOException ex) { LOG.error("Failed to send error response", ex); }
+    // CRUD helpers extracted from EntityHandler
+    private static String quote(String id) {
+        if (id == null) return null;
+        return '"' + id.toUpperCase() + '"';
+    }
+    private static Object parseId(String idStr, EntitySchema.Field pk) {
+        String t = pk.getType().toLowerCase();
+        try {
+            switch (t) {
+                case "int":
+                case "integer":
+                    return Integer.parseInt(idStr);
+                case "long":
+                    return Long.parseLong(idStr);
+                default:
+                    return idStr;
             }
+        } catch (Exception e) {
+            return idStr;
         }
     }
-
-    static class EntityHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            String method = exchange.getRequestMethod();
-            // auth check
-            AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(exchange);
-                boolean isWrite = "POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method);
-                boolean ok = isWrite ? hasAdmin(tok, cfg) : hasRead(tok, cfg);
-                if (!ok) { send(exchange, 401, "{\"error\":\"unauthorized\"}"); return; }
+    private static List<Map<String, Object>> toList(ResultSet rs) throws SQLException {
+        List<Map<String, Object>> list = new ArrayList<>();
+        ResultSetMetaData md = rs.getMetaData();
+        int cols = md.getColumnCount();
+        while (rs.next()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            for (int i = 1; i <= cols; i++) {
+                String name = md.getColumnLabel(i);
+                Object val = rs.getObject(i);
+                row.put(name, val);
             }
-
-            URI uri = exchange.getRequestURI();
-            String path = uri.getPath(); // /api or /api/{entity} or /api/{entity}/{id}
-            String[] parts = path.split("/");
-            if (parts.length < 3) {
-                send(exchange, 400, "{\"error\":\"entity required\"}");
-                return;
-            }
-            String entity = parts[2];
-
-            // Special-case: GET /api/endpoints → list generated CRUD endpoints
-            if ("GET".equalsIgnoreCase(method) && parts.length == 3 && "endpoints".equalsIgnoreCase(entity)) {
-                try {
-                    List<String> names = SchemaManager.listSchemaNames();
-                    List<Map<String,Object>> out = new ArrayList<>();
-                    for (String n : names) {
-                        Map<String,Object> m = new HashMap<>();
-                        m.put("entity", n);
-                        List<String> eps = new ArrayList<>();
-                        eps.add("POST /api/" + n);
-                        eps.add("GET /api/" + n);
-                        eps.add("GET /api/" + n + "/{id}");
-                        eps.add("PUT /api/" + n + "/{id}");
-                        eps.add("DELETE /api/" + n + "/{id}");
-                        m.put("endpoints", eps);
-                        out.add(m);
+            list.add(row);
+        }
+        return list;
+    }
+    private static Object coerceAndValidate(EntitySchema.Field f, Object raw) {
+        // required
+        if (raw == null) {
+            if (f.isRequired()) throw new IllegalArgumentException("field '" + f.getName() + "' is required");
+            return null;
+        }
+        String t = f.getType().toLowerCase();
+        try {
+            switch (t) {
+                case "int":
+                case "integer":
+                    if (raw instanceof Number) {
+                        long lv = ((Number) raw).longValue();
+                        if (f.getMin() != null && lv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                        if (f.getMax() != null && lv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        return (int) lv;
                     }
-                    sendJson(exchange, 200, out);
-                    return;
-                } catch (Exception e) {
-                    LOG.error("Failed to build /api/endpoints response", e);
-                    send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
-                    return;
-                }
-            }
-
-            EntitySchema schema = SchemaManager.loadSchema(entity);
-            if (schema == null) {
-                send(exchange, 404, "{\"error\":\"unknown entity\"}");
-                return;
-            }
-
-            try {
-                if ("POST".equalsIgnoreCase(method) && parts.length == 3) {
-                    // create record
-                    Map<String, Object> data = M.readValue(exchange.getRequestBody(), new TypeReference<>() {});
-                    long id = insertRecord(schema, data);
-                    Map<String, Object> resp = new HashMap<>();
-                    resp.put("id", id);
-                    sendJson(exchange, 201, resp);
-                    return;
-                }
-                if ("GET".equalsIgnoreCase(method) && parts.length == 3) {
-                    // list all
-                    List<Map<String, Object>> rows = listAll(schema);
-                    sendJson(exchange, 200, rows);
-                    return;
-                }
-                if (parts.length == 4) {
-                    String idStr = parts[3];
-                    EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
-                    if (pk == null) {
-                        send(exchange, 400, "{\"error\":\"no primary key defined\"}");
-                        return;
-                    }
-                    if ("GET".equalsIgnoreCase(method)) {
-                        Map<String, Object> row = getById(schema, idStr);
-                        if (row == null) {
-                            send(exchange, 404, "{\"error\":\"not found\"}");
-                        } else {
-                            sendJson(exchange, 200, row);
-                        }
-                        return;
-                    }
-                    if ("PUT".equalsIgnoreCase(method)) {
-                        Map<String, Object> data = M.readValue(exchange.getRequestBody(), new TypeReference<>() {});
-                        int updated = updateById(schema, idStr, data);
-                        sendJson(exchange, 200, Collections.singletonMap("updated", updated));
-                        return;
-                    }
-                    if ("DELETE".equalsIgnoreCase(method)) {
-                        int deleted = deleteById(schema, idStr);
-                        sendJson(exchange, 200, Collections.singletonMap("deleted", deleted));
-                        return;
-                    }
-                }
-                send(exchange, 405, "{\"error\":\"method not allowed\"}");
-            } catch (Exception e) {
-                LOG.error("EntityHandler error while processing request", e);
-                if (e instanceof IllegalArgumentException) {
-                    send(exchange, 400, "{\"error\":\"" + e.getMessage() + "\"}");
-                } else {
-                    send(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
-                }
-            }
-        }
-
-        private long insertRecord(EntitySchema schema, Map<String, Object> data) throws SQLException {
-            List<EntitySchema.Field> fields = schema.getFields();
-            List<String> cols = new ArrayList<>();
-            List<String> placeholders = new ArrayList<>();
-            List<Object> values = new ArrayList<>();
-            for (EntitySchema.Field f : fields) {
-                if (f.isPrimaryKey() && f.isAutoIncrement()) {
-                    continue; // skip if auto
-                }
-                cols.add(quote(f.getName()));
-                placeholders.add("?");
-                Object raw = data.get(f.getName());
-                Object val = coerceAndValidate(f, raw);
-                values.add(val);
-            }
-            String sql = "INSERT INTO " + quote(schema.getName()) + " (" + String.join(",", cols) + ") VALUES (" + String.join(",", placeholders) + ")";
-            try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                for (int i = 0; i < values.size(); i++) {
-                    ps.setObject(i + 1, values.get(i));
-                }
-                ps.executeUpdate();
-                try (ResultSet rs = ps.getGeneratedKeys()) {
-                    if (rs.next()) return rs.getLong(1);
-                }
-            }
-            return -1;
-        }
-
-        private List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {
-            String sql = "SELECT * FROM " + quote(schema.getName());
-            try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
-                return toList(rs);
-            }
-        }
-
-        private Map<String, Object> getById(EntitySchema schema, String id) throws SQLException {
-            EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
-            if (pk == null) return null;
-            String sql = "SELECT * FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
-            try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-                ps.setObject(1, parseId(id, pk));
-                try (ResultSet rs = ps.executeQuery()) {
-                    List<Map<String, Object>> list = toList(rs);
-                    return list.isEmpty() ? null : list.get(0);
-                }
-            }
-        }
-
-        private int updateById(EntitySchema schema, String id, Map<String, Object> data) throws SQLException {
-            EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
-            if (pk == null) return 0;
-            List<String> set = new ArrayList<>();
-            List<Object> vals = new ArrayList<>();
-            for (EntitySchema.Field f : schema.getFields()) {
-                if (f.isPrimaryKey()) continue;
-                if (data.containsKey(f.getName())) {
-                    Object raw = data.get(f.getName());
-                    Object val = coerceAndValidate(f, raw);
-                    set.add(quote(f.getName()) + " = ?");
-                    vals.add(val);
-                }
-            }
-            if (set.isEmpty()) return 0;
-            String sql = "UPDATE " + quote(schema.getName()) + " SET " + String.join(",", set) + " WHERE " + quote(pk.getName()) + " = ?";
-            try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-                int i = 1;
-                for (Object v : vals) ps.setObject(i++, v);
-                ps.setObject(i, parseId(id, pk));
-                return ps.executeUpdate();
-            }
-        }
-
-        private int deleteById(EntitySchema schema, String id) throws SQLException {
-            EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
-            if (pk == null) return 0;
-            String sql = "DELETE FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
-            try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-                ps.setObject(1, parseId(id, pk));
-                return ps.executeUpdate();
-            }
-        }
-
-        private Object parseId(String idStr, EntitySchema.Field pk) {
-            String t = pk.getType().toLowerCase();
-            try {
-                switch (t) {
-                    case "int":
-                    case "integer":
-                        return Integer.parseInt(idStr);
-                    case "long":
-                        return Long.parseLong(idStr);
-                    default:
-                        return idStr;
-                }
-            } catch (Exception e) {
-                return idStr;
-            }
-        }
-
-        private List<Map<String, Object>> toList(ResultSet rs) throws SQLException {
-            List<Map<String, Object>> list = new ArrayList<>();
-            ResultSetMetaData md = rs.getMetaData();
-            int cols = md.getColumnCount();
-            while (rs.next()) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                for (int i = 1; i <= cols; i++) {
-                    String name = md.getColumnLabel(i);
-                    Object val = rs.getObject(i);
-                    row.put(name, val);
-                }
-                list.add(row);
-            }
-            return list;
-        }
-
-        private String quote(String id) {
-            if (id == null) return null;
-            return '"' + id.toUpperCase() + '"';
-        }
-
-        private Object coerceAndValidate(EntitySchema.Field f, Object raw) {
-            // required
-            if (raw == null) {
-                if (f.isRequired()) throw new IllegalArgumentException("field '" + f.getName() + "' is required");
-                return null;
-            }
-            String t = f.getType().toLowerCase();
-            try {
-                switch (t) {
-                    case "int":
-                    case "integer":
-                        if (raw instanceof Number) {
-                            long lv = ((Number) raw).longValue();
-                            if (f.getMin() != null && lv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                            if (f.getMax() != null && lv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
-                            return (int) lv;
-                        }
-                        int iv = Integer.parseInt(raw.toString());
-                        if (f.getMin() != null && iv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                        if (f.getMax() != null && iv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
-                        return iv;
-                    case "long":
-                        if (raw instanceof Number) {
-                            long lv = ((Number) raw).longValue();
-                            if (f.getMin() != null && lv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                            if (f.getMax() != null && lv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
-                            return lv;
-                        }
-                        long lv = Long.parseLong(raw.toString());
+                    int iv = Integer.parseInt(raw.toString());
+                    if (f.getMin() != null && iv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                    if (f.getMax() != null && iv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    return iv;
+                case "long":
+                    if (raw instanceof Number) {
+                        long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
                         if (f.getMax() != null && lv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                         return lv;
-                    case "boolean":
-                        if (raw instanceof Boolean) return raw;
-                        String s = raw.toString().toLowerCase();
-                        if ("true".equals(s) || "1".equals(s)) return true;
-                        if ("false".equals(s) || "0".equals(s)) return false;
-                        throw new IllegalArgumentException("field '" + f.getName() + "' invalid boolean");
-                    case "date":
-                    case "timestamp":
-                        // accept epoch millis or ISO-8601
-                        if (raw instanceof Number) {
-                            return new Timestamp(((Number) raw).longValue());
-                        }
-                        String rs = raw.toString();
-                        try {
-                            Instant inst = Instant.parse(rs);
-                            return Timestamp.from(inst);
-                        } catch (Exception ex) {
-                            // try parse long
-                            long millis = Long.parseLong(rs);
-                            return new Timestamp(millis);
-                        }
-                    case "text":
-                    case "string":
-                    default:
-                        String str = raw.toString();
-                        if (f.getLength() != null && str.length() > f.getLength()) throw new IllegalArgumentException("field '" + f.getName() + "' length exceeds " + f.getLength());
-                        if (f.getPattern() != null && !f.getPattern().isEmpty()) {
-                            if (!Pattern.compile(f.getPattern()).matcher(str).matches()) throw new IllegalArgumentException("field '" + f.getName() + "' does not match pattern");
-                        }
-                        return str;
-                }
-            } catch (NumberFormatException nfe) {
-                throw new IllegalArgumentException("field '" + f.getName() + "' invalid format");
+                    }
+                    long lv = Long.parseLong(raw.toString());
+                    if (f.getMin() != null && lv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                    if (f.getMax() != null && lv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    return lv;
+                case "boolean":
+                    if (raw instanceof Boolean) return raw;
+                    String s = raw.toString().toLowerCase();
+                    if ("true".equals(s) || "1".equals(s)) return true;
+                    if ("false".equals(s) || "0".equals(s)) return false;
+                    throw new IllegalArgumentException("field '" + f.getName() + "' invalid boolean");
+                case "date":
+                case "timestamp":
+                    // accept epoch millis or ISO-8601
+                    if (raw instanceof Number) {
+                        return new Timestamp(((Number) raw).longValue());
+                    }
+                    String rs = raw.toString();
+                    try {
+                        Instant inst = Instant.parse(rs);
+                        return Timestamp.from(inst);
+                    } catch (Exception ex) {
+                        // try parse long
+                        long millis = Long.parseLong(rs);
+                        return new Timestamp(millis);
+                    }
+                case "text":
+                case "string":
+                default:
+                    String str = raw.toString();
+                    if (f.getLength() != null && str.length() > f.getLength()) throw new IllegalArgumentException("field '" + f.getName() + "' length exceeds " + f.getLength());
+                    if (f.getPattern() != null && !f.getPattern().isEmpty()) {
+                        if (!Pattern.compile(f.getPattern()).matcher(str).matches()) throw new IllegalArgumentException("field '" + f.getName() + "' does not match pattern");
+                    }
+                    return str;
+            }
+        } catch (NumberFormatException nfe) {
+            throw new IllegalArgumentException("field '" + f.getName() + "' invalid format");
+        }
+    }
+    public static long insertRecord(EntitySchema schema, Map<String, Object> data) throws SQLException {
+        List<EntitySchema.Field> fields = schema.getFields();
+        List<String> cols = new ArrayList<>();
+        List<String> placeholders = new ArrayList<>();
+        List<Object> values = new ArrayList<>();
+        for (EntitySchema.Field f : fields) {
+            if (f.isPrimaryKey() && f.isAutoIncrement()) {
+                continue; // skip if auto
+            }
+            cols.add(quote(f.getName()));
+            placeholders.add("?");
+            Object raw = data.get(f.getName());
+            Object val = coerceAndValidate(f, raw);
+            values.add(val);
+        }
+        String sql = "INSERT INTO " + quote(schema.getName()) + " (" + String.join(",", cols) + ") VALUES (" + String.join(",", placeholders) + ")";
+        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            for (int i = 0; i < values.size(); i++) {
+                ps.setObject(i + 1, values.get(i));
+            }
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) return rs.getLong(1);
             }
         }
-
+        return -1;
+    }
+    public static List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {
+        String sql = "SELECT * FROM " + quote(schema.getName());
+        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            return toList(rs);
+        }
+    }
+    public static Map<String, Object> getById(EntitySchema schema, String id) throws SQLException {
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
+        if (pk == null) return null;
+        String sql = "SELECT * FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
+        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, parseId(id, pk));
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Map<String, Object>> list = toList(rs);
+                return list.isEmpty() ? null : list.get(0);
+            }
+        }
+    }
+    public static int updateById(EntitySchema schema, String id, Map<String, Object> data) throws SQLException {
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
+        if (pk == null) return 0;
+        List<String> set = new ArrayList<>();
+        List<Object> vals = new ArrayList<>();
+        for (EntitySchema.Field f : schema.getFields()) {
+            if (f.isPrimaryKey()) continue;
+            if (data.containsKey(f.getName())) {
+                Object raw = data.get(f.getName());
+                Object val = coerceAndValidate(f, raw);
+                set.add(quote(f.getName()) + " = ?");
+                vals.add(val);
+            }
+        }
+        if (set.isEmpty()) return 0;
+        String sql = "UPDATE " + quote(schema.getName()) + " SET " + String.join(",", set) + " WHERE " + quote(pk.getName()) + " = ?";
+        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            int i = 1;
+            for (Object v : vals) ps.setObject(i++, v);
+            ps.setObject(i, parseId(id, pk));
+            return ps.executeUpdate();
+        }
+    }
+    public static int deleteById(EntitySchema schema, String id) throws SQLException {
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
+        if (pk == null) return 0;
+        String sql = "DELETE FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
+        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, parseId(id, pk));
+            return ps.executeUpdate();
+        }
     }
 }

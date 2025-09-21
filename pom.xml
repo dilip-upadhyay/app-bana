@@ -16,6 +16,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <main.class>org.example.Main</main.class>
         <junit.jupiter.version>5.10.2</junit.jupiter.version>
+        <tomcat.embed.version>10.1.25</tomcat.embed.version>
     </properties>
 
     <dependencies>
@@ -53,6 +54,20 @@
             <artifactId>postgresql</artifactId>
             <version>42.7.3</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- Embedded Tomcat (optional runtime) -->
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-core</artifactId>
+            <version>${tomcat.embed.version}</version>
+        </dependency>
+
+        <!-- Jakarta Servlet API used by Router and TomcatServer -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.1.0</version>
         </dependency>
 
         <!-- JUnit 5 for testing -->

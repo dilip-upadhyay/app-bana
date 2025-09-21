@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -57,6 +59,28 @@ public class Router {
         sendError(ex, 404, "not found");
     }
 
+    // New: servlet-based handle for use with embedded containers (Tomcat, Jetty, etc.)
+    public void handle(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        String method = req.getMethod().toUpperCase(Locale.ROOT);
+        String path = req.getRequestURI();
+        List<String> reqParts = split(path);
+        for (Route r : routes) {
+            if (!r.method.equals(method)) continue;
+            Map<String,String> params = new HashMap<>();
+            if (match(r.parts, reqParts, params)) {
+                HttpRequestServlet reqW = new HttpRequestServlet(req, params, parseQuery(req.getQueryString()));
+                HttpResponseServlet resW = new HttpResponseServlet(resp);
+                try {
+                    r.handler.accept(reqW, resW);
+                } catch (Exception e) {
+                    sendError(resp, 500, e.getMessage());
+                }
+                return;
+            }
+        }
+        sendError(resp, 404, "not found");
+    }
+
     private static List<String> split(String p) {
         if (p == null || p.isEmpty()) return List.of("");
         String s = p.startsWith("/") ? p.substring(1) : p;
@@ -97,6 +121,15 @@ public class Router {
         try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
     }
 
+    private static void sendError(HttpServletResponse resp, int status, String msg) throws IOException {
+        byte[] b = ("{\"error\":\"" + (msg==null?"":msg.replace('"','\'')) + "\"}").getBytes(StandardCharsets.UTF_8);
+        resp.setStatus(status);
+        resp.setContentType("application/json");
+        resp.setCharacterEncoding("UTF-8");
+        resp.setContentLength(b.length);
+        try (OutputStream os = resp.getOutputStream()) { os.write(b); }
+    }
+
     public static class HttpRequest {
         private final HttpExchange ex;
         private final Map<String,String> pathParams;
@@ -111,6 +144,31 @@ public class Router {
         public String header(String name){ return ex.getRequestHeaders().getFirst(name); }
         public <T> T readJson(TypeReference<T> typ) {
             try (InputStream is = ex.getRequestBody()) {
+                return M.readValue(is, typ);
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
+        }
+    }
+
+    // Servlet-backed request wrapper
+    public static class HttpRequestServlet extends HttpRequest {
+        private final HttpServletRequest req;
+        private final Map<String,String> pathParams;
+        private final Map<String,String> query;
+        public HttpRequestServlet(HttpServletRequest req, Map<String,String> pathParams, Map<String,String> query) {
+            super(null, pathParams, query);
+            this.req = req; this.pathParams = pathParams; this.query = query;
+        }
+        @Override public String method(){ return req.getMethod(); }
+        @Override public String path(){ return req.getRequestURI(); }
+        @Override public Map<String,String> pathParams(){ return pathParams; }
+        @Override public String pathParam(String name){ return pathParams.get(name); }
+        @Override public Map<String,String> query(){ return query; }
+        @Override public String query(String k){ return query.get(k); }
+        @Override public String header(String name){ return req.getHeader(name); }
+        @Override public <T> T readJson(TypeReference<T> typ) {
+            try (InputStream is = req.getInputStream()) {
                 return M.readValue(is, typ);
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
@@ -140,6 +198,32 @@ public class Router {
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }
+        }
+    }
+
+    // Servlet-backed response wrapper
+    public static class HttpResponseServlet extends HttpResponse {
+        private final HttpServletResponse resp;
+        public HttpResponseServlet(HttpServletResponse resp) { super(null); this.resp = resp; }
+        @Override public void json(int status, Object obj) {
+            try {
+                byte[] b = M.writeValueAsBytes(obj);
+                resp.setStatus(status);
+                resp.setContentType("application/json");
+                resp.setCharacterEncoding("UTF-8");
+                resp.setContentLength(b.length);
+                try (OutputStream os = resp.getOutputStream()) { os.write(b); }
+            } catch (IOException ioe) { throw new RuntimeException(ioe); }
+        }
+        @Override public void text(int status, String body, String contentType) {
+            try {
+                byte[] b = body.getBytes(StandardCharsets.UTF_8);
+                resp.setStatus(status);
+                resp.setContentType(contentType==null?"text/plain; charset=utf-8":contentType);
+                resp.setCharacterEncoding("UTF-8");
+                resp.setContentLength(b.length);
+                try (OutputStream os = resp.getOutputStream()) { os.write(b); }
+            } catch (IOException ioe) { throw new RuntimeException(ioe); }
         }
     }
 }

@@ -26,6 +26,9 @@ public class AppConfig {
     private String keyPassword;       // key password (defaults to keystorePassword if null)
     private Boolean redirectHttpToHttps; // if true, HTTP server redirects all requests to HTTPS
 
+    // Web server implementation: "jdk" (default) or "tomcat"
+    private String serverType; // null => default to "jdk"
+
     public String getJdbcUrl() { return jdbcUrl; }
     public void setJdbcUrl(String jdbcUrl) { this.jdbcUrl = jdbcUrl; }
 
@@ -70,4 +73,7 @@ public class AppConfig {
 
     public Boolean getRedirectHttpToHttps() { return redirectHttpToHttps; }
     public void setRedirectHttpToHttps(Boolean redirectHttpToHttps) { this.redirectHttpToHttps = redirectHttpToHttps; }
+
+    public String getServerType() { return serverType; }
+    public void setServerType(String serverType) { this.serverType = serverType; }
 }

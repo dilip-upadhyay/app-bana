@@ -69,6 +69,8 @@ public class ConfigManager {
         String ksPass = firstNonEmpty(System.getenv("APPBANA_KEYSTORE_PASSWORD"), System.getProperty("appbana.keystore.password"));
         String keyPass = firstNonEmpty(System.getenv("APPBANA_KEY_PASSWORD"), System.getProperty("appbana.key.password"));
         String redirect = firstNonEmpty(System.getenv("APPBANA_REDIRECT_HTTP_TO_HTTPS"), System.getProperty("appbana.redirect.http.to.https"));
+        // Server type
+        String serverType = firstNonEmpty(System.getenv("APPBANA_SERVER_TYPE"), System.getProperty("appbana.server.type"));
 
         AppConfig out = new AppConfig();
         // Copy existing (normalized) config first
@@ -87,6 +89,7 @@ public class ConfigManager {
         out.setKeystorePassword(cfg.getKeystorePassword());
         out.setKeyPassword(cfg.getKeyPassword());
         out.setRedirectHttpToHttps(cfg.getRedirectHttpToHttps());
+        out.setServerType(cfg.getServerType());
 
         // Apply root field overrides
         if (url != null) out.setJdbcUrl(url);
@@ -103,6 +106,8 @@ public class ConfigManager {
         if (ksPass != null) out.setKeystorePassword(ksPass);
         if (keyPass != null) out.setKeyPassword(keyPass);
         if (redirect != null) out.setRedirectHttpToHttps(parseBool(redirect));
+        // Server type
+        if (serverType != null) out.setServerType(serverType);
 
         // If JDBC overrides present, also override the active datasource entry (in-memory only)
         if (url != null || user != null || pass != null || drv != null) {

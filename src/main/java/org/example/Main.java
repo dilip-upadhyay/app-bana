@@ -24,8 +24,21 @@ public class Main {
             // start HTTP API server (port configurable via -Dappbana.port or APPBANA_PORT)
             int port = Integer.getInteger("appbana.port",
                     parseIntOrDefault(System.getenv("APPBANA_PORT"), 8080));
-            ApiServer.start(port);
-            System.out.println("AppBana running on port " + port + ". Use /schema to POST schemas and /api/{entity} to access data.");
+
+            String serverType = null;
+            try { serverType = ConfigManager.getConfig().getServerType(); } catch (Throwable ignored) {}
+            if (serverType == null || serverType.isBlank()) serverType = "jdk";
+            switch (serverType.toLowerCase()) {
+                case "tomcat":
+                    TomcatServer.start(port);
+                    System.out.println("AppBana (Tomcat) running on port " + port + ". Use /schema to POST schemas and /api/{entity} to access data.");
+                    break;
+                case "jdk":
+                default:
+                    ApiServer.startJdk(port);
+                    System.out.println("AppBana (JDK HTTP) running on port " + port + ". Use /schema to POST schemas and /api/{entity} to access data.");
+                    break;
+            }
         } catch (Exception e) {
             LOG.error("Fatal error starting AppBana", e);
             System.exit(1);
