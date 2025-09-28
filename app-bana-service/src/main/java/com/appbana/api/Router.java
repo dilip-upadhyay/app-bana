@@ -199,6 +199,18 @@ public class Router {
                 throw new RuntimeException(ioe);
             }
         }
+
+        public void bytes(int status, byte[] body, String contentType) {
+            try {
+                ex.getResponseHeaders().set("Content-Type", contentType == null ? "application/octet-stream" : contentType);
+                ex.sendResponseHeaders(status, body.length);
+                try (OutputStream os = ex.getResponseBody()) {
+                    os.write(body);
+                }
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
+        }
     }
 
     // Servlet-backed response wrapper
@@ -220,10 +232,24 @@ public class Router {
                 byte[] b = body.getBytes(StandardCharsets.UTF_8);
                 resp.setStatus(status);
                 resp.setContentType(contentType==null?"text/plain; charset=utf-8":contentType);
-                resp.setCharacterEncoding("UTF-8");
                 resp.setContentLength(b.length);
                 try (OutputStream os = resp.getOutputStream()) { os.write(b); }
-            } catch (IOException ioe) { throw new RuntimeException(ioe); }
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
+        }
+
+        public void bytes(int status, byte[] body, String contentType) {
+            try {
+                resp.setStatus(status);
+                resp.setContentType(contentType == null ? "application/octet-stream" : contentType);
+                resp.setContentLength(body.length);
+                try (OutputStream os = resp.getOutputStream()) {
+                    os.write(body);
+                }
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
         }
     }
 }
