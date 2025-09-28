@@ -4,6 +4,7 @@ import './schema-builder';
 import './app-renderer';
 import './components/StudioWelcome';
 import './components/entity-explorer'; // NEW explorer component
+import demoPage from './demo/demo-page.json';
 // --- AppBana Studio Runtime Demo ---
 import { registerComponent } from './core/registry';
 import { renderPage } from './runtime/renderer/Renderer';
@@ -11,57 +12,35 @@ import { ContainerElement } from './components/ContainerElement';
 import { TextElement } from './components/TextElement';
 import { ButtonElement } from './components/ButtonElement';
 import { PageMeta } from './models/metadata';
-
-// Register demo components
-registerComponent('container', ContainerElement);
-registerComponent('text', TextElement);
-registerComponent('button', ButtonElement);
-
-// Demo PageMeta JSON
-const demoPage: PageMeta = {
-  id: 'page1',
-  path: '/',
-  name: 'Demo Page',
-  type: 'page',
-  rootId: 'container1',
-  nodes: [
-    {
-      id: 'container1',
-      type: 'container',
-      props: {},
-      children: ['text1', 'button1'],
-      style: { classes: ['demo-container'] }
-    },
-    {
-      id: 'text1',
-      type: 'text',
-      props: { text: 'Hello from metadata-driven UI!' }
-    },
-    {
-      id: 'button1',
-      type: 'button',
-      props: { label: 'Click Me' }
-    }
-  ]
-};
-
-// Render demo page if on /demo path
-if (window.location.pathname === '/demo') {
-  document.body.innerHTML = '<div id="demo-root"></div>';
-  const container = document.getElementById('demo-root')!;
-  renderPage(demoPage, container);
-}
+import { UnknownElement } from './components/UnknownElement';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
+  firstUpdated() {
+    const path = window.location.pathname;
+    if (path.includes('/studio')) {
+      // Register core + unknown placeholder
+      registerComponent('container', ContainerElement);
+      registerComponent('text', TextElement);
+      registerComponent('button', ButtonElement);
+      registerComponent('unknown', UnknownElement);
+      const host = this.renderRoot.querySelector('#studio-root') as HTMLElement | null;
+      if (host) {
+        renderPage(demoPage as PageMeta, host);
+      }
+    }
+  }
+
   render() {
     const path = window.location.pathname;
-    if (path.startsWith('/builder')) {
+    if (path.includes('/builder')) {
       return html`<schema-builder></schema-builder>`;
-    } else if (path.startsWith('/explorer')) {
+    } else if (path.includes('/explorer')) {
       return html`<entity-explorer></entity-explorer>`;
-    } else if (path.startsWith('/app')) {
+    } else if (path.includes('/app')) {
       return html`<app-renderer></app-renderer>`;
+    } else if (path.includes('/studio')) {
+      return html`<div id="studio-root"></div>`;
     }
     return html`
       <h1>Welcome to AppBana Studio</h1>
