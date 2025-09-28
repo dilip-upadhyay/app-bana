@@ -758,6 +758,28 @@ public class ApiServer {
                 res.json(500, errorDetails(e));
             }
         });
+        router.post("/api/{entity}/batch", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            List<Map<String,Object>> payload;
+            try { payload = req.readJson(new TypeReference<>(){}); } catch (Exception e){ res.json(400, Map.of("error","invalid json array")); return; }
+            if (payload == null) { res.json(400, Map.of("error","array required")); return; }
+            int max = 1000; // safety cap
+            if (payload.size() > max) { res.json(400, Map.of("error","batch too large","max",max)); return; }
+            try {
+                Map<String,Object> out = insertBatch(schema, payload);
+                res.json(201, out);
+            } catch (Exception e) {
+                LOG.error("Batch insert failed for {}", entity, e);
+                res.json(500, errorDetails(e));
+            }
+        });
         router.get("/api/{entity}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
@@ -770,20 +792,35 @@ public class ApiServer {
             String limitS = req.query("limit");
             String offsetS = req.query("offset");
             String q = req.query("q");
-            boolean paged = (limitS != null || offsetS != null || (q != null && !q.isBlank()));
+            String fieldsParam = req.query("fields");
+            String sortParam = req.query("sort");
+            String filterParam = req.query("filter");
+            String countFlag = req.query("count");
+            Map<String,Object> filters = parseFilters(filterParam, schema);
+            boolean countOnly = "true".equalsIgnoreCase(countFlag) || (countFlag != null && countFlag.equals("1"));
             Integer limit = null; Integer offset = null;
-            if (paged) {
+            boolean anyAdv = countOnly || q!=null || fieldsParam!=null || sortParam!=null || filterParam!=null || limitS!=null || offsetS!=null;
+            if (limitS != null || offsetS != null || q!=null || fieldsParam!=null || sortParam!=null || filterParam!=null) {
                 try { limit = limitS != null ? Integer.parseInt(limitS) : 50; } catch (Exception ignore) { limit = 50; }
                 try { offset = offsetS != null ? Integer.parseInt(offsetS) : 0; } catch (Exception ignore) { offset = 0; }
                 if (limit <= 0) limit = 50; if (limit > 500) limit = 500; if (offset < 0) offset = 0;
             }
             try {
-                if (!paged) {
-                    List<Map<String, Object>> rows = listAll(schema);
+                if (!anyAdv) {
+                    List<Map<String,Object>> rows = listAll(schema);
                     res.json(200, rows);
                 } else {
-                    Map<String,Object> out = listPaged(schema, limit, offset, q);
-                    res.json(200, out);
+                    if (countOnly) {
+                        long total = countOnly(schema, q, filters);
+                        Map<String,Object> out = new LinkedHashMap<>();
+                        out.put("total", total);
+                        if (q != null && !q.isBlank()) out.put("query", q);
+                        if (!filters.isEmpty()) out.put("filters", filters);
+                        res.json(200, out);
+                    } else {
+                        Map<String,Object> out = listAdvanced(schema, limit, offset, q, fieldsParam, sortParam, filters);
+                        res.json(200, out);
+                    }
                 }
             } catch (SQLException e) {
                 LOG.error("List failed for entity {}", entity, e);
@@ -1162,10 +1199,53 @@ public class ApiServer {
         }
     }
 
-    private static Map<String,Object> listPaged(EntitySchema schema, int limit, int offset, String q) throws SQLException {
-        String base = "FROM " + quote(schema.getName());
+    private static Map<String,Object> parseFilters(String raw, EntitySchema schema) {
+        Map<String,Object> map = new LinkedHashMap<>();
+        if (raw == null || raw.isBlank()) return map;
+        String[] pairs = raw.split(",");
+        Map<String,EntitySchema.Field> fieldMap = new HashMap<>();
+        for (EntitySchema.Field f: schema.getFields()) fieldMap.put(f.getName().toLowerCase(), f);
+        for (String p: pairs) {
+            int idx = p.indexOf(":");
+            if (idx <= 0) continue;
+            String name = p.substring(0, idx).trim();
+            String val = p.substring(idx+1).trim();
+            if (name.isEmpty()) continue;
+            EntitySchema.Field f = fieldMap.get(name.toLowerCase());
+            if (f == null) continue; // ignore unknown
+            Object parsed = parseFilterValue(f, val);
+            map.put(f.getName(), parsed); // use canonical case
+        }
+        return map;
+    }
+    private static Object parseFilterValue(EntitySchema.Field f, String v) {
+        String t = f.getType().toLowerCase();
+        try {
+            switch (t) {
+                case "int": case "integer": return Integer.parseInt(v);
+                case "long": return Long.parseLong(v);
+                case "boolean": return ("true".equalsIgnoreCase(v) || "1".equals(v));
+                case "date": case "timestamp":
+                    // Accept only valid ISO-8601 instant strings; if parsing fails treat as raw literal (DB may coerce or fail at execution time)
+                    try { return Timestamp.from(Instant.parse(v)); } catch (Exception ignored) { return v; }
+                default: return v; // string/text or unhandled types
+            }
+        } catch (Exception e) { return v; }
+    }
+
+    private static long countOnly(EntitySchema schema, String q, Map<String,Object> filters) throws SQLException {
         StringBuilder where = new StringBuilder();
         List<Object> params = new ArrayList<>();
+        buildWhere(schema, q, filters, where, params);
+        String sql = "SELECT COUNT(*) FROM " + quote(schema.getName()) + where;
+        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i=0;i<params.size();i++) ps.setObject(i+1, params.get(i));
+            try (ResultSet rs = ps.executeQuery()) { rs.next(); return rs.getLong(1); }
+        }
+    }
+
+    private static void buildWhere(EntitySchema schema, String q, Map<String,Object> filters, StringBuilder where, List<Object> params) {
+        List<String> parts = new ArrayList<>();
         if (q != null && !q.isBlank()) {
             String uq = q.trim().toUpperCase();
             List<String> likeParts = new ArrayList<>();
@@ -1176,19 +1256,73 @@ public class ApiServer {
                     params.add("%" + uq + "%");
                 }
             }
-            if (!likeParts.isEmpty()) {
-                where.append(" WHERE (").append(String.join(" OR ", likeParts)).append(")");
+            if (!likeParts.isEmpty()) parts.add("(" + String.join(" OR ", likeParts) + ")");
+        }
+        if (filters != null && !filters.isEmpty()) {
+            for (Map.Entry<String,Object> e : filters.entrySet()) {
+                parts.add(quote(e.getKey()) + " = ?");
+                params.add(e.getValue());
             }
         }
-        String countSql = "SELECT COUNT(*) " + base + where;
-        String dataSql = "SELECT * " + base + where + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"; // ANSI style supported by H2 / many DBs; for unsupported DB adjust later
+        if (!parts.isEmpty()) where.append(" WHERE ").append(String.join(" AND ", parts));
+    }
+
+    private static Map<String,Object> listAdvanced(EntitySchema schema, int limit, int offset, String q, String fieldsParam, String sortParam, Map<String,Object> filters) throws SQLException {
+        // Projection (preserve order, remove duplicates while keeping first occurrence)
+        List<String> projection = new ArrayList<>();
+        Set<String> seenProj = new HashSet<>();
+        Map<String,EntitySchema.Field> fieldMap = new HashMap<>();
+        for (EntitySchema.Field f: schema.getFields()) fieldMap.put(f.getName().toLowerCase(), f);
+        if (fieldsParam != null && !fieldsParam.isBlank()) {
+            for (String fn : fieldsParam.split(",")) {
+                String trimmed = fn.trim(); if (trimmed.isEmpty()) continue;
+                EntitySchema.Field f = fieldMap.get(trimmed.toLowerCase());
+                if (f != null) {
+                    String canonical = f.getName();
+                    if (seenProj.add(canonical.toLowerCase())) projection.add(canonical);
+                }
+            }
+        }
+        if (projection.isEmpty()) { // default all, preserve declared order
+            for (EntitySchema.Field f: schema.getFields()) {
+                String canonical = f.getName();
+                if (seenProj.add(canonical.toLowerCase())) projection.add(canonical);
+            }
+        }
+        // Build WHERE
+        StringBuilder where = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        buildWhere(schema, q, filters, where, params);
+        // Count
+        String countSql = "SELECT COUNT(*) FROM " + quote(schema.getName()) + where;
+        long total;
+        // Sorting (preserve order, ignore duplicates after first)
+        List<String> orderParts = new ArrayList<>();
+        Set<String> seenSort = new HashSet<>();
+        if (sortParam != null && !sortParam.isBlank()) {
+            for (String token : sortParam.split(",")) {
+                String t = token.trim(); if (t.isEmpty()) continue;
+                boolean desc = t.startsWith("-");
+                String name = desc ? t.substring(1) : (t.startsWith("+") ? t.substring(1) : t);
+                EntitySchema.Field f = fieldMap.get(name.toLowerCase());
+                if (f == null) continue;
+                String key = f.getName().toLowerCase();
+                if (seenSort.add(key)) {
+                    orderParts.add(quote(f.getName()) + (desc?" DESC":" ASC"));
+                }
+            }
+        }
+        String orderClause = orderParts.isEmpty() ? "" : (" ORDER BY " + String.join(", ", orderParts));
+        // Projection list with alias to preserve original casing
+        List<String> selectCols = new ArrayList<>();
+        for (String col : projection) selectCols.add(quote(col) + " AS \""+col+"\"");
+        String dataSql = "SELECT " + String.join(",", selectCols) + " FROM " + quote(schema.getName()) + where + orderClause + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
         try (Connection c = schemaConnection(schema)) {
-            long total;
             try (PreparedStatement cps = c.prepareStatement(countSql)) {
                 for (int i=0;i<params.size();i++) cps.setObject(i+1, params.get(i));
                 try (ResultSet rs = cps.executeQuery()) { rs.next(); total = rs.getLong(1); }
             }
-            List<Map<String,Object>> rows = new ArrayList<>();
+            List<Map<String,Object>> rows;
             try (PreparedStatement dps = c.prepareStatement(dataSql)) {
                 int idx=1; for (Object p : params) dps.setObject(idx++, p);
                 dps.setInt(idx++, offset);
@@ -1200,8 +1334,49 @@ public class ApiServer {
             out.put("total", total);
             out.put("limit", limit);
             out.put("offset", offset);
-            if (q != null && !q.isBlank()) out.put("query", q);
+            if (q != null && !q.isBlank()) out.put("query", q); // if no string fields existed, q is silently ignored (where part empty)
+            if (fieldsParam != null && !fieldsParam.isBlank()) out.put("fields", projection);
+            if (sortParam != null && !sortParam.isBlank()) out.put("sort", orderParts);
+            if (filters != null && !filters.isEmpty()) out.put("filters", filters);
             return out;
         }
     }
-}
+
+    private static Map<String,Object> insertBatch(EntitySchema schema, List<Map<String,Object>> batch) throws SQLException {
+        List<EntitySchema.Field> fields = schema.getFields();
+        List<EntitySchema.Field> insertable = new ArrayList<>();
+        for (EntitySchema.Field f : fields) {
+            if (f.isPrimaryKey() && f.isAutoIncrement()) continue; // skip auto
+            insertable.add(f);
+        }
+        String cols = String.join(",", insertable.stream().map(f->quote(f.getName())).toList());
+        String placeholders = String.join(",", Collections.nCopies(insertable.size(), "?"));
+        String sql = "INSERT INTO " + quote(schema.getName()) + (insertable.isEmpty()? " DEFAULT VALUES" : (" ("+cols+") VALUES ("+placeholders+")"));
+        List<Long> ids = new ArrayList<>();
+        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            c.setAutoCommit(false);
+            for (Map<String,Object> row : batch) {
+                int idx=1;
+                for (EntitySchema.Field f : insertable) {
+                    Object raw = row.get(f.getName());
+                    Object val = coerceAndValidate(f, raw);
+                    ps.setObject(idx++, val);
+                }
+                ps.addBatch();
+            }
+            ps.executeBatch();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                while (rs.next()) ids.add(rs.getLong(1));
+            } catch (SQLException ignore) { }
+            c.commit();
+        }
+        Map<String,Object> out = new LinkedHashMap<>();
+        out.put("inserted", batch.size());
+        if (!ids.isEmpty()) out.put("ids", ids);
+        return out;
+    }
+
+    // Replace old listPaged with advanced version usage
+    private static Map<String,Object> listPaged(EntitySchema schema, int limit, int offset, String q) throws SQLException {
+        return listAdvanced(schema, limit, offset, q, null, null, Collections.emptyMap());
+    }
