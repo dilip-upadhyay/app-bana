@@ -1,4 +1,4 @@
-package org.example;
+package com.appbana;
 
 import java.sql.Connection;
 import java.sql.SQLException;

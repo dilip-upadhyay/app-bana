@@ -1,4 +1,4 @@
-package org.example.model;
+package com.appbana.model;
 
 import java.util.List;
 

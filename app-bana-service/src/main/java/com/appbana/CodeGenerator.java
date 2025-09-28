@@ -1,6 +1,6 @@
-package org.example;
+package com.appbana;
 
-import org.example.model.EntitySchema;
+import com.appbana.model.EntitySchema;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,7 +11,7 @@ import java.util.StringJoiner;
 public class CodeGenerator {
     // Generates simple POJO source into ./generated-sources/{Entity}.java
     public static Path generate(EntitySchema schema) throws IOException {
-        String pkg = "org.example.generated";
+        String pkg = "com.appbana.generated";
         String className = capitalize(schema.getName());
         StringJoiner sj = new StringJoiner(System.lineSeparator());
         sj.add("package " + pkg + ";");

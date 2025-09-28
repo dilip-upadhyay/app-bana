@@ -1,6 +1,6 @@
-package org.example;
+package com.appbana;
 
-import org.example.model.EntitySchema;
+import com.appbana.model.EntitySchema;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

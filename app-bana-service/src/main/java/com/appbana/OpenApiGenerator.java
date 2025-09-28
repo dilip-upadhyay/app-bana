@@ -1,6 +1,6 @@
-package org.example;
+package com.appbana;
 
-import org.example.model.EntitySchema;
+import com.appbana.model.EntitySchema;
 import java.util.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 

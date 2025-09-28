@@ -1,4 +1,4 @@
-package org.example.api;
+package com.appbana.api;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

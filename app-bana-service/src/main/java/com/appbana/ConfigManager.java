@@ -1,4 +1,4 @@
-package org.example;
+package com.appbana;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 

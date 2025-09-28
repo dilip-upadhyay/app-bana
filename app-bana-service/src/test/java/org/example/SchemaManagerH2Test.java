@@ -1,4 +1,4 @@
-package org.example;
+package com.appbana;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

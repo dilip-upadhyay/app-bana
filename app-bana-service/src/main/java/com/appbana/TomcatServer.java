@@ -1,4 +1,4 @@
-package org.example;
+package com.appbana;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;

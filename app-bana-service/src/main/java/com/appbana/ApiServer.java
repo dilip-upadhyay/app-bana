@@ -1,9 +1,9 @@
-package org.example;
+package com.appbana;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.*;
-import org.example.model.EntitySchema;
+import com.appbana.model.EntitySchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -168,7 +168,7 @@ public class ApiServer {
     public static boolean authEnabled(AppConfig cfg) {
         return cfg.getAdminToken() != null && !cfg.getAdminToken().isBlank() || cfg.getReadToken() != null && !cfg.getReadToken().isBlank();
     }
-    public static String extractToken(org.example.api.Router.HttpRequest req) {
+    public static String extractToken(com.appbana.api.Router.HttpRequest req) {
         String tok = req.header("X-AppBana-Token");
         if (tok == null || tok.isBlank()) {
             String auth = req.header("Authorization");
@@ -268,8 +268,8 @@ public class ApiServer {
         LOG.info("HTTP server started on port {}{}", port, httpsStarted ? " (HTTPS also enabled)" : "");
     }
 
-    public static org.example.api.Router buildRouter() {
-        org.example.api.Router router = new org.example.api.Router();
+    public static com.appbana.api.Router buildRouter() {
+        com.appbana.api.Router router = new com.appbana.api.Router();
         router.get("/health", (req, res) -> res.json(200, Map.of("status", "UP")));
         router.get("/ready", (req, res) -> {
             long start = System.currentTimeMillis();
@@ -327,12 +327,12 @@ public class ApiServer {
             }
             try {
                 List<String> names = SchemaManager.listSchemaNames();
-                List<org.example.model.EntitySchema> schemas = new ArrayList<>();
+                List<com.appbana.model.EntitySchema> schemas = new ArrayList<>();
                 for (String n : names) {
-                    org.example.model.EntitySchema s = SchemaManager.loadSchema(n);
+                    com.appbana.model.EntitySchema s = SchemaManager.loadSchema(n);
                     if (s != null) schemas.add(s);
                 }
-                String spec = org.example.OpenApiGenerator.generate(schemas);
+                String spec = com.appbana.OpenApiGenerator.generate(schemas);
                 res.text(200, spec, "application/json; charset=utf-8");
             } catch (Exception e) {
                 LOG.error("Failed to serve OpenAPI spec", e);
@@ -817,12 +817,40 @@ public class ApiServer {
                 res.text(500, "Internal Server Error", "text/plain; charset=utf-8");
             }
         });
+        router.get("/ui/{path}", (req, res) -> {
+            String path = req.pathParam("path");
+            if (path == null || path.isBlank() || path.contains("..")) {
+                res.text(400, "Bad Request", "text/plain");
+                return;
+            }
+            String resourcePath = "ui/" + path;
+            try (InputStream is = ApiServer.class.getClassLoader().getResourceAsStream(resourcePath)) {
+                if (is == null) {
+                    res.text(404, "Not Found", "text/plain");
+                    return;
+                }
+                String mimeType = "application/octet-stream";
+                if (path.endsWith(".html")) mimeType = "text/html";
+                else if (path.endsWith(".css")) mimeType = "text/css";
+                else if (path.endsWith(".js")) mimeType = "application/javascript";
+                else if (path.endsWith(".json")) mimeType = "application/json";
+                else if (path.endsWith(".png")) mimeType = "image/png";
+                else if (path.endsWith(".jpg") || path.endsWith(".jpeg")) mimeType = "image/jpeg";
+                else if (path.endsWith(".gif")) mimeType = "image/gif";
+                else if (path.endsWith(".svg")) mimeType = "image/svg+xml";
+
+                res.bytes(200, is.readAllBytes(), mimeType);
+            } catch (IOException e) {
+                LOG.error("Failed to serve UI file: {}", resourcePath, e);
+                res.text(500, "Internal Server Error", "text/plain");
+            }
+        });
         return router;
     }
 
     private static void configureServer(HttpServer server) {
         // Build router with all JSON endpoints
-        org.example.api.Router router = buildRouter();
+        com.appbana.api.Router router = buildRouter();
 
         // Root routes via router
         server.createContext("/", exchange -> {

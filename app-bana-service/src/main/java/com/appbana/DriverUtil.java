@@ -1,4 +1,4 @@
-package org.example;
+package com.appbana;
 
 public final class DriverUtil {
     private DriverUtil() {}

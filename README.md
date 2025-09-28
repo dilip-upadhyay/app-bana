@@ -39,7 +39,7 @@ Build & run
   - chmod +x mvnw
   - ./mvnw -DskipTests package
   - java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
-- From IDE: run org.example.Main
+- From IDE: run com.appbana.Main
 
 Port configuration
 - Default HTTP port: 8080
