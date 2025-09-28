@@ -69,3 +69,5 @@ appbana.mv.db
 # Misc
 node_modules/
 .env
+/app-bana-ui/src/main/resources/ui/dist/
+/app-bana-ui/package-lock.json

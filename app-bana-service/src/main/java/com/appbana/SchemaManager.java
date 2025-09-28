@@ -209,9 +209,24 @@ public class SchemaManager {
 
     private static boolean typesEquivalent(String current, String desired) {
         if (current == null || desired == null) return false;
-        String c = current.replaceAll("\\s+", "").trim();
-        String d = desired.replaceAll("\\s+", "").trim();
-        return c.equalsIgnoreCase(d);
+        // Normalize whitespace and remove auto-increment / identity decorations so we don't try to ALTER just to add AI (H2 disallows this form)
+        current = normalizeForCompare(current);
+        desired = normalizeForCompare(desired);
+        return current.equalsIgnoreCase(desired);
+    }
+
+    private static String normalizeForCompare(String s) {
+        s = s
+                .replaceAll("(?i)AUTO_INCREMENT", "")
+                .replaceAll("(?i)IDENTITY", "")
+                .replaceAll("(?i)SERIAL", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+        // Treat numeric width for integer types as non-significant (H2 reports BIGINT(64), etc.)
+        s = s.replaceAll("(?i)BIGINT\\(\\d+\\)", "BIGINT");
+        s = s.replaceAll("(?i)INT\\(\\d+\\)", "INT");
+        s = s.replaceAll("(?i)INTEGER\\(\\d+\\)", "INTEGER");
+        return s;
     }
 
     private static class ColumnInfo { String name; String typeName; int size; ColumnInfo(String name, String typeName, int size){this.name=name;this.typeName=typeName;this.size=size;} }

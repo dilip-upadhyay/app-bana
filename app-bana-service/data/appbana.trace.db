@@ -45,3 +45,50 @@ Caused by: java.lang.IllegalArgumentException: notISO
 2025-09-28 22:59:44.211863+05:30 jdbc[3]: exception
 org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "ALTER TABLE ""CUSTOMER"" ALTER COLUMN ""ID"" SET DATA TYPE BIGINT [*]AUTO_INCREMENT"; SQL statement:
 ALTER TABLE "CUSTOMER" ALTER COLUMN "ID" SET DATA TYPE BIGINT AUTO_INCREMENT [42000-222]
+2025-09-28 23:03:46.339621+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "ALTER TABLE ""CUSTOMER"" ALTER COLUMN ""ID"" SET DATA TYPE BIGINT [*]AUTO_INCREMENT"; SQL statement:
+ALTER TABLE "CUSTOMER" ALTER COLUMN "ID" SET DATA TYPE BIGINT AUTO_INCREMENT [42000-222]
+2025-09-28 23:06:48.263075+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Cannot parse "TIMESTAMP" constant "notISO"; SQL statement:
+SELECT COUNT(*) FROM "LOGS" WHERE "CREATEDAT" = ? [22007-222]
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:518)
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:489)
+	at org.h2.message.DbException.get(DbException.java:212)
+	at org.h2.value.ValueTimestamp.parse(ValueTimestamp.java:88)
+	at org.h2.value.Value.convertToTimestamp(Value.java:2001)
+	at org.h2.value.Value.convertTo(Value.java:1174)
+	at org.h2.value.Value.convertTo(Value.java:1015)
+	at org.h2.value.Value.compareToNotNullable(Value.java:2654)
+	at org.h2.value.Value.compareWithNull(Value.java:2698)
+	at org.h2.engine.SessionLocal.compareWithNull(SessionLocal.java:1981)
+	at org.h2.expression.condition.Comparison.compare(Comparison.java:258)
+	at org.h2.expression.condition.Comparison.getValue(Comparison.java:230)
+	at org.h2.expression.Expression.getBooleanValue(Expression.java:332)
+	at org.h2.command.query.Select.isConditionMet(Select.java:449)
+	at org.h2.command.query.Select.gatherGroup(Select.java:519)
+	at org.h2.command.query.Select.queryGroup(Select.java:488)
+	at org.h2.command.query.Select.queryWithoutCache(Select.java:828)
+	at org.h2.command.query.Query.queryWithoutCacheLazyCheck(Query.java:197)
+	at org.h2.command.query.Query.query(Query.java:520)
+	at org.h2.command.query.Query.query(Query.java:483)
+	at org.h2.command.CommandContainer.query(CommandContainer.java:252)
+	at org.h2.command.Command.executeQuery(Command.java:192)
+	at org.h2.jdbc.JdbcPreparedStatement.executeQuery(JdbcPreparedStatement.java:131)
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeQuery(ProxyPreparedStatement.java:52)
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeQuery(HikariProxyPreparedStatement.java)
+	at com.appbana.ApiServer.countOnly(ApiServer.java:1270)
+	at com.appbana.ApiServer.lambda$buildRouter$21(ApiServer.java:814)
+	at com.appbana.api.Router.handle(Router.java:52)
+	at com.appbana.ApiServer.lambda$configureServer$0(ApiServer.java:981)
+	at jdk.httpserver/com.sun.net.httpserver.Filter$Chain.doFilter(Filter.java:98)
+	at jdk.httpserver/sun.net.httpserver.AuthFilter.doFilter(AuthFilter.java:76)
+	at jdk.httpserver/com.sun.net.httpserver.Filter$Chain.doFilter(Filter.java:101)
+	at jdk.httpserver/sun.net.httpserver.ServerImpl$Exchange$LinkHandler.handle(ServerImpl.java:915)
+	at jdk.httpserver/com.sun.net.httpserver.Filter$Chain.doFilter(Filter.java:98)
+	at jdk.httpserver/sun.net.httpserver.ServerImpl$Exchange.run(ServerImpl.java:891)
+	at java.base/java.lang.VirtualThread.run(VirtualThread.java:456)
+Caused by: java.lang.IllegalArgumentException: notISO
+	at org.h2.util.DateTimeUtils.parseDateValue(DateTimeUtils.java:187)
+	at org.h2.util.DateTimeUtils.parseTimestamp(DateTimeUtils.java:338)
+	at org.h2.value.ValueTimestamp.parse(ValueTimestamp.java:86)
+	... 32 more

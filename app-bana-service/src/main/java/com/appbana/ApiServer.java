@@ -1286,7 +1286,18 @@ public class ApiServer {
             if (!likeParts.isEmpty()) parts.add("(" + String.join(" OR ", likeParts) + ")");
         }
         if (filters != null && !filters.isEmpty()) {
+            Map<String,EntitySchema.Field> fieldMap = new HashMap<>();
+            for (EntitySchema.Field f : schema.getFields()) fieldMap.put(f.getName().toLowerCase(), f);
             for (Map.Entry<String,Object> e : filters.entrySet()) {
+                EntitySchema.Field f = fieldMap.get(e.getKey().toLowerCase());
+                if (f == null) continue; // unknown
+                String t = f.getType().toLowerCase();
+                if ((t.equalsIgnoreCase("date") || t.equalsIgnoreCase("timestamp")) && e.getValue() instanceof String sVal) {
+                    // Attempt to parse; if invalid, skip predicate (treat as literal left in filters output)
+                    boolean valid = false;
+                    try { java.time.Instant.parse(sVal); valid = true; } catch (Exception ignored) { }
+                    if (!valid) continue; // skip adding predicate, prevents DB parse error
+                }
                 parts.add(quote(e.getKey()) + " = ?");
                 params.add(e.getValue());
             }
