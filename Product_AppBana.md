@@ -2,7 +2,7 @@
 
 **Author:** Product Owner
 **Date:** September 21, 2025
-**Status:** Strategic Plan v1
+**Status:** Strategic Plan v1 (Angular plan deprecated; custom in‑house Studio framework adopted)
 
 ## 1. Product Vision
 
@@ -27,7 +27,8 @@ This roadmap is phased to deliver a powerful, enterprise-ready v1 platform by th
 
 | Epic | Key Features | Business Goal |
 | :--- | :--- | :--- |
-| **Angular 21 UI Foundation (MVP)** | - Scaffold Angular workspace (Nx) and repository structure (apps/studio; libs/runtime, libs/designer, libs/ui-schema).<br>- Implement minimal runtime renderer ("Hello from Runtime") and designer shell with Container/Text/Button + Settings panel (token input).<br>- Wire HttpInterceptor for X-AppBana-Token; add basic audit log UI scaffold.<br>- Ensure Node LTS via `.nvmrc`; add dev/test/lint scripts.<br>- Styling: follow `docs/STYLE_GUIDE.md` (Material + CSS variables tokens; tiny local utilities in studio; token-driven runtime).<br>- Plugin boundary: align with `UI_Development_Plan.md` → “Plugin boundary via Web Components (short)” for a minimal, framework-agnostic plugin contract. | Establish the UI platform needed to deliver workflows, security/auditing, and November/December features. |
+| **Custom UI Studio Foundation (MVP)** | - Scaffold lightweight in‑house UI Studio workspace (no Angular/Nx).<br>- Implement minimal runtime renderer core (Container/Text/Button) + metadata-driven layout.
+<br>- Designer shell with Settings (token persistence) and live preview area.<br>- Simple request helper injecting X-AppBana-Token.<br>- Styling: token-based CSS variables + minimal utilities (see STYLE_GUIDE.md, framework-agnostic).<br>- Define plugin boundary via Web Components / simple module contract (per UI_Development_Plan.md updated). | Establish the UI platform needed to deliver workflows, security/auditing, and Nov/Dec features. |
 | **Stateful Workflow Engine (MVP)** | - Design & implement a server-side workflow engine.<br>- Model `workflows` in the UI schema for multi-step processes.<br>- Support single-user stateful actions (e.g., save a multi-page form and resume later). | Address the foundational need for process automation in HR and Healthcare. |
 | **Advanced Security & Auditing** | - Implement comprehensive, server-side audit trails for all data access (CRUD) and actions.<br>- Introduce Field-Level Security (FLS) in the metadata backend and UI renderer.<br>- Create a UI for viewing and exporting audit logs. | Achieve baseline compliance for Healthcare (HIPAA) and provide the enterprise-grade security our customers demand. |
 | **Foundational Plugin API** | - Solidify and document the Plugin APIs for custom components and data connectors.<br>- Develop one example custom component (e.g., a "Signature Pad") to prove the model. | Enable extensibility, foster a developer community, and prepare for vertical-specific features. |
@@ -72,7 +73,7 @@ To confidently ship a credible v1 by December, each phase must meet the followin
 - Advanced Auditing: server persists audit records for all CRUD and workflow transitions (who, when, what, entity/id, before/after hash, IP/UA); export CSV; filter by user/entity/date.
 - Field-Level Security (FLS): enforce on read (redact/omit) and write (reject masked fields), with UI runtime honoring hide/disable; configuration stored in metadata.
 - Plugin API: documented with one shipping example (Signature Pad) and one data connector skeleton; plugin sandboxing rules defined.
-- Existing UIs compatibility: host Angular app at /ui/designer and confirm /ui/builder, /ui/datasource, /ui/swagger remain fully functional.
+- Existing UIs compatibility: legacy builder/datasource/swagger remain functional while Studio prototype is optional (no Angular hosting requirement).
 
 ### November 2025 — Logistics & HR Acceleration (MVP)
 - PWA: installable, offline cache for static assets and last-used pages; queue-and-replay of POST/PUT/DELETE with conflict prompts; background sync when online.
@@ -172,8 +173,8 @@ To confidently ship a credible v1 by December, each phase must meet the followin
 
 ## 14. Dependencies & Resourcing Assumptions
 
-- Skills: Angular senior, backend Java with security/auditing, workflow/domain expert, UX for designer, DevOps/SRE, compliance advisor.
-- Tooling: OpenAPI generator, OTel stack, axe accessibility tests, security scanning (SAST/DAST).
+- Skills: Frontend engineer (custom web components / vanilla TS), backend Java with security/auditing, workflow/domain expert, UX for designer, DevOps/SRE, compliance advisor.
+- Tooling: OpenAPI generator, OTel stack, axe accessibility tests (framework-agnostic), security scanning (SAST/DAST).
 
 ---
 

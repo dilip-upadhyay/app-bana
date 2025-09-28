@@ -21,7 +21,7 @@ Status of repository
 - Built fat JAR available under `target/` after building.
 - COPILOT_NOTES.md contains an agent-friendly snapshot of the current state.
 - For a step-by-step walkthrough, see `USER_GUIDE.md`.
-- UI_Development_Plan.md contains the master system prompt and architecture plan for the upcoming Angular 21 no/low-code UI Designer; Node.js latest stable LTS is pinned via `.nvmrc`.
+- UI_Development_Plan.md contains the evolving architecture plan for an upcoming custom in-house no/low‑code “Studio” (prior Angular plan deprecated).
 
 Tech stack
 - Java 25 (runs with virtual threads for HTTP request handling)
@@ -247,31 +247,8 @@ Notes
 - Identifier quoting uses double-quoted UPPERCASE to avoid reserved word/case issues in H2.
 - Backlog: see `TODO.md` for prioritized next steps and enhancements.
 - New to the project? Start with `USER_GUIDE.md`.
-- UI Styling policy (designer/runtime): see `docs/STYLE_GUIDE.md` (Material + CSS variables tokens, tiny local utilities in studio, token-driven runtime).
+- UI Styling policy (designer/runtime): see `docs/STYLE_GUIDE.md` (now generalized for custom framework; previous Angular Material specifics removed).
 
 ---
 
-Angular UI (Designer/Studio) quick build & run
-- Build all Angular libraries and the Studio app:
-  ```zsh
-  cd /Users/dilip/git/app-bana
-  ./build.sh --clean    # or just ./build.sh for an incremental build
-  ```
-- Run the Studio SSR server (rebuilds first):
-  ```zsh
-  cd /Users/dilip/git/app-bana
-  ./run.sh              # defaults to port 4000
-  # Options:
-  #   --clean        Clean build before running
-  #   --reinstall    Reinstall npm deps before building
-  #   --port 5000    Run on a custom port
-  #   --open         Open the browser automatically (macOS)
-  ```
-- Alternatively, using npm aliases from the repo root:
-  ```zsh
-  npm run ui:build
-  npm run ui:run -- --port 4000
-  ```
-- Output paths after build (Angular workspace):
-  - Libraries: `ui/dist/{ui-material,ui-schema,designer,runtime}`
-  - Studio app: `ui/dist/studio/{browser,server}`
+(Angular-specific build/run instructions removed; custom Studio implementation will define new scripts when introduced.)
