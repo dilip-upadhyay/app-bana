@@ -237,6 +237,52 @@ New / updated endpoints
 Using the runtime CRUD APIs
 - After saving *or editing* a schema, CRUD endpoints reflect the updated columns. Only additive / rename / type changes are applied; destructive changes (field removal) are not yet supported.
 
+## Advanced Query Parameters (GET /api/{entity})
+Without any parameters the endpoint returns a legacy JSON array. Supplying any advanced parameter (`limit, offset, q, fields, sort, filter, count`) switches to an object response (except `count=true` which returns only a count object).
+
+Parameters:
+- limit: integer (default 50, max 500) page size.
+- offset: integer (default 0) zero-based offset.
+- q: substring (case-insensitive) matched against textual fields only (ignored if none exist).
+- fields: comma-separated projection. Duplicates removed (first occurrence kept); blank value defaults to all.
+- sort: comma-separated field list with optional prefix `-` for DESC (e.g. `sort=-createdAt,firstName`). Duplicates removed (first kept).
+- filter: comma-separated equality pairs `field:value` (e.g. `filter=status:OPEN,age:30`). Type coercion for int/long/boolean/date/timestamp. Date/timestamp must be ISO-8601 or is treated as a literal string.
+- count: `true` / `1` returns only `{ total, query?, filters? }`.
+
+Response shapes:
+Legacy:
+```
+[ { ...row } ]
+```
+Advanced object:
+```
+{
+  "rows": [ { ... } ],
+  "total": 42,
+  "limit": 50,
+  "offset": 0,
+  "query": "abc",          // if q used
+  "fields": ["id","name"], // if projection supplied
+  "sort": ["\"NAME\" ASC"],
+  "filters": { "status":"OPEN" }
+}
+```
+Count-only:
+```
+{ "total": 42, "query": "abc", "filters": { ... } }
+```
+Batch insert:
+```
+POST /api/{entity}/batch
+Body: [ {row1}, {row2} ]  (max 1000)
+Response: { "inserted": N, "ids": [ ... ] }
+```
+Notes:
+- q ignored gracefully if no textual fields (still echoed as `query`).
+- Projection & sort preserve ordering, dropping duplicates after first.
+- Timestamp filter non-ISO values left as raw strings.
+- ORDER BY fragments (`sort`) show internal quoted uppercase columns.
+
 OpenAPI & Swagger UI
 - Refresh after edits to view updated model in the spec. Migration operations (preview / history / delete) are intentionally not included in the OpenAPI spec (admin-only operational endpoints).
 

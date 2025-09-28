@@ -257,17 +257,62 @@ API endpoints (runtime generic CRUD & schema management)
 - GET /api/endpoints — machine-readable list of CRUD endpoints
 - Health: /health, /ready
 
-Schema JSON (example)
-```json
+## Advanced Entity Query Parameters
+The `GET /api/{entity}` endpoint supports advanced server-side querying. Without any parameters it returns a legacy plain JSON array. Supplying *any* advanced parameter switches to an object response (unless only `count=true`, which returns just a count object).
+
+Query parameters:
+- limit: integer (default 50, max 500) – page size.
+- offset: integer (default 0) – zero-based row offset.
+- q: string – case-insensitive substring match across textual (string/text/varchar) fields. Ignored gracefully if entity has no textual fields.
+- fields: comma list of field names for projection (e.g. `fields=id,firstName`). Order preserved; duplicates ignored after first. If blank (e.g. `fields=`) projection defaults to all and the response omits `fields` key.
+- sort: comma list (e.g. `sort=-createdAt,firstName`). Prefix `-` for DESC, optional `+` for ASC. Duplicates ignored after first, preserving order.
+- filter: comma-separated equality filters `field:value` (e.g. `filter=status:ACTIVE,age:30`). Types auto-coerced for int/long/boolean/date/timestamp. Date/timestamp requires ISO-8601; otherwise treated as a literal string.
+- count: `true` / `1` – when set returns `{ total, query?, filters? }` instead of rows.
+
+Response shapes:
+1) Legacy (no advanced params):
+```
+[ { ...row }, { ...row } ]
+```
+2) Advanced:
+```
 {
-  "name": "contact",
-  "fields": [
-    {"name":"id","type":"long","primaryKey":true,"autoIncrement":true},
-    {"name":"firstName","type":"string","length":100,"required":true},
-    {"name":"age","type":"int","min":0}
-  ]
+  "rows": [ { ...projectedRow } ],
+  "total": 123,
+  "limit": 50,
+  "offset": 0,
+  "query": "abc",              // only if q supplied
+  "fields": ["id","firstName"], // only if projection applied
+  "sort": ["\"FIRSTNAME\" ASC"], // ORDER BY fragments (quoted, upper-cased identifiers)
+  "filters": { "status": "ACTIVE" } // only if filters applied
 }
 ```
+3) Count-only:
+```
+{
+  "total": 123,
+  "query": "abc",      // optional
+  "filters": { ... }    // optional
+}
+```
+
+Batch insert:
+- `POST /api/{entity}/batch` – body is JSON array of row objects (max 1000). Auto-increment PK fields may be omitted.
+- Response: `{ "inserted": N, "ids": [ ... ] }` (ids only if driver returns generated keys).
+
+Examples:
+```
+GET /api/customer?sort=-createdAt,firstName&fields=id,firstName,lastName&limit=25&offset=50
+GET /api/order?filter=status:OPEN,priority:HIGH&q=urgent&limit=20
+GET /api/logs?count=true&filter=level:ERROR
+POST /api/customer/batch  (array body)
+```
+
+Notes:
+- Search (`q`) ignored silently if no textual columns exist (still echoed as `query` in advanced response).
+- Projection and sort keep first occurrence only; later duplicates dropped.
+- Timestamp filter values must be ISO-8601 to be parsed; bad values are left as raw strings (DB may reject or coerce).
+- ORDER BY fragments (`sort` array) use quoted, upper-cased identifiers to match internal canonical form.
 
 Renaming a field
 - Edit in UI or send updated schema with the field's new `name` and `existingName` set to the old column. Example field object:
