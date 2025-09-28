@@ -283,7 +283,7 @@ UI step-by-step walkthroughs (all features)
 
 A) Datasource UI — Add a new datasource
 
-![Datasource — Add or Update](docs/screenshots/datasource-add.svg)
+![Datasource — Add or Update](app-bana-service/docs/screenshots/datasource-add.svg)
 
 1) Open http://localhost:8080/ui/datasource
 2) In “Add or Update”, fill:
@@ -306,7 +306,7 @@ A) Datasource UI — Add a new datasource
 
 B) Datasource UI — Work with saved datasources
 
-![Datasources — List](docs/screenshots/datasource-list.svg)
+![Datasources — List](app-bana-service/docs/screenshots/datasource-list.svg)
 
 - Load: Click “Load” to copy a row’s values back into the form (password not shown)
 - Activate: Click “Activate” to switch the active datasource
@@ -315,7 +315,7 @@ B) Datasource UI — Work with saved datasources
 
 C) Datasource UI — Build JDBC URLs by example
 
-![Datasource — Test Connection](docs/screenshots/datasource-test.svg)
+![Datasource — Test Connection](app-bana-service/docs/screenshots/datasource-test.svg)
 
 - Postgres: Host=localhost, Port=5432, DB=appbana → jdbc:postgresql://localhost:5432/appbana
 - MySQL: Host=localhost, Port=3306, DB=appbana → jdbc:mysql://localhost:3306/appbana
@@ -328,7 +328,7 @@ C) Datasource UI — Build JDBC URLs by example
 
 D) Schema Builder UI — Create and evolve a schema
 
-![Schema Builder](docs/screenshots/builder.svg)
+![Schema Builder](app-bana-service/docs/screenshots/builder.svg)
 
 1) Open http://localhost:8080/ui/builder
 2) Enter a Schema name (e.g., contact)
@@ -342,7 +342,7 @@ D) Schema Builder UI — Create and evolve a schema
 
 E) Swagger UI — Explore and test APIs
 
-![Swagger UI](docs/screenshots/swagger.svg)
+![Swagger UI](app-bana-service/docs/screenshots/swagger.svg)
 
 1) Open http://localhost:8080/ui/swagger (loads /openapi.json)
 2) If auth is enabled, enter your token in the top bar and click Save token
