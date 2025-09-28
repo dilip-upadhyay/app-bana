@@ -32,6 +32,33 @@ Status of repository
 - `.github/COPILOT_GUIDE.md` contains an agent-friendly snapshot of the current state and the development plan.
 - For a step-by-step walkthrough, see `docs/USER_GUIDE.md`.
 
+## Studio (Custom UI Framework) Status
+Current Phase: A (Foundation — in progress)
+
+Planned phased delivery (summary): A Foundation → B Builder MVP → C Runtime MVP → D Enhancements (expressions/theme) → E Advanced (versioning/plugins/realtime) → F Distribution (PWA/marketplace).
+
+Active Phase A exit criteria:
+- Metadata interfaces (Page, ComponentNode, Theme, Navigation, Binding, Action) in `models/metadata.ts`.
+- Registry bootstrap auto-registers core components.
+- Demo page JSON rendered at `/ui/studio` using runtime renderer.
+- Vitest harness with at least one renderer test passes.
+
+See full plan: `docs/UI_Development_Plan.md` (authoritative), quick snapshot: `.github/COPILOT_GUIDE.md`.
+
+### Immediate Next (Phase A tasks)
+1. Add metadata model TypeScript file.
+2. Recursive renderer supports children + simple props.
+3. Demo JSON + placeholder component for unknown types.
+4. Vitest setup & first test.
+5. Package demo page into service JAR.
+
+### Contribution (Components)
+1. Create component in `app-bana-ui/src/components/` extending BaseElement.
+2. Export static definition (type, propsSchema, defaultProps).
+3. Register in `core/registry.ts`.
+4. Add example usage to demo page JSON.
+5. Add/extend test (Vitest).
+
 Tech stack
 - Java 25 (LTS, with virtual threads for HTTP request handling)
 - Frontend: TypeScript, Vite, Lit (as a temporary helper)
@@ -361,3 +388,10 @@ Notes
 ---
 
 (Angular-specific build/run instructions removed; custom Studio implementation will define new scripts when introduced.)
+
+## Cross-Reference
+- Deep Studio Plan: `docs/UI_Development_Plan.md`
+- Assistant Snapshot: `.github/COPILOT_GUIDE.md`
+- Implementation Backlog: `docs/TODO.md`
+
+---

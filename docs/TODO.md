@@ -64,6 +64,18 @@ Acceptance criteria: see `Product_AppBana.md` §5 December and §17.4.
 
 ---
 
+## Phase A (Studio Foundation) – Alignment Snapshot
+(See `docs/UI_Development_Plan.md` §7 for detailed exit criteria.)
+- [ ] metadata.ts (PageMeta, ComponentNode, ThemeMeta, NavigationMeta, Binding, Action)
+- [ ] registry bootstrap (auto-register core built-ins)
+- [ ] demo-page.json packaged & rendered at /ui/studio
+- [ ] Renderer recursive children traversal + prop application
+- [ ] Unknown component placeholder element
+- [ ] Vitest harness + first renderer test
+- [ ] README + Copilot Guide component contribution section (README updated ✓, guide updated ✓)
+
+Progress tags: mark each upon commit; do not advance to Phase B checklist until all above are checked.
+
 ## Backlog (Post-Q4 or Nice-to-Haves)
 - OpenAPI enhancements (response schemas/examples); optionally bundle Swagger UI locally.
 - Pagination/sorting/filtering for GET /api/{entity} with OpenAPI reflection.

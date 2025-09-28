@@ -131,6 +131,39 @@ Backend applies `ALTER TABLE ... RENAME COLUMN` if old column exists and new doe
 - Marketplace/Registry stub (enable first-party plugins securely)
 - Document Store (upload/view) + audited access
 
+## 10.1 Studio Status (Snapshot)
+This is a concise assistant-facing mirror of the deeper `docs/UI_Development_Plan.md`.
+
+Current Phase: A (Foundation – in progress)
+
+| Area | Status | Notes |
+|------|--------|-------|
+| BaseElement | Seeded | Minimal lifecycle + render hook |
+| Registry | Seeded | No plugin discovery yet |
+| Renderer | Minimal | Container/Text/Button only |
+| Metadata TS models | Partial | Extended shapes (Page/Theme/Nav) pending |
+| Page persistence endpoints | Missing | Planned Phase C design/runtime split |
+| Builder canvas/inspector | Missing | Phase B scope |
+| Bindings/actions | Missing | Phase C/D |
+| Theme tokens | Missing | Phase D |
+| Expression sandbox | Missing | Phase D (security gate) |
+| Plugin boundary | Planned | Phase E |
+| Tests (UI) | Missing | Vitest harness part of Phase A exit |
+
+Immediate Phase A Completion Tasks (must be green before advancing):
+1. Add `models/metadata.ts` (PageMeta, ComponentNode union, ThemeMeta, NavigationMeta, Binding, Action).
+2. Registry bootstrap autoload built-ins.
+3. `demo-page.json` + load in `app-renderer.ts`.
+4. Recursive renderer (children traversal + prop mapping).
+5. Vitest + first renderer test.
+6. Unknown component placeholder.
+7. Copy demo page into packaged JAR for `/ui/studio`.
+8. Update README + this guide with component contribution workflow.
+
+Exit Criterion Phase A: `/ui/studio` renders demo JSON page + Vitest suite passes.
+
+See `docs/UI_Development_Plan.md` for the authoritative extended plan (phases, risks, metrics).
+
 ## 11. Testing & Verification
 
 Quick smoke:
