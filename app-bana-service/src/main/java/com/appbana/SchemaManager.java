@@ -396,4 +396,89 @@ public class SchemaManager {
             return plan;
         } catch (SQLException e) { throw new RuntimeException(e); }
     }
+
+    public static List<Map<String,Object>> listMigrations(String schemaName) {
+        List<Map<String,Object>> out = new ArrayList<>();
+        for (DatasourceConfig ds : allDatasources()) {
+            String dsName = ds.getName();
+            try {
+                JdbcManager.ensureMetaTableFor(dsName);
+                try (Connection c = JdbcManager.getConnection(dsName)) {
+                    try (PreparedStatement ps = c.prepareStatement("SELECT executed_at, sql FROM appbana_migrations WHERE schema_name = ? ORDER BY executed_at, id")) {
+                        ps.setString(1, schemaName);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                Map<String,Object> m = new LinkedHashMap<>();
+                                m.put("datasource", dsName);
+                                m.put("executedAt", rs.getObject(1));
+                                m.put("sql", rs.getString(2));
+                                out.add(m);
+                            }
+                        }
+                    } catch (SQLException ignore) { }
+                }
+            } catch (Exception ignore) { }
+        }
+        return out;
+    }
+
+    public static boolean deleteSchema(String name, boolean dropTable) {
+        // find schema & datasource
+        EntitySchema schema = loadSchema(name);
+        if (schema == null) return false;
+        String dsName = schema.getDatasourceName();
+        if (dsName == null || dsName.isBlank()) {
+            // fallback to active datasource (legacy) - attempt deletion
+            AppConfig cfg = ConfigManager.getConfig();
+            dsName = cfg.getActiveDatasource();
+        }
+        try (Connection c = JdbcManager.getConnection(dsName)) {
+            // remove row from meta table
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM appbana_schemas WHERE name = ?")) {
+                ps.setString(1, name);
+                ps.executeUpdate();
+            }
+            if (dropTable) {
+                String sql = "DROP TABLE IF EXISTS \"" + name.toUpperCase() + "\"";
+                try (Statement s = c.createStatement()) { s.execute(sql); }
+                // record migration note
+                try (PreparedStatement ps = c.prepareStatement("INSERT INTO appbana_migrations (schema_name, sql) VALUES (?, ?)");) {
+                    ps.setString(1, name);
+                    ps.setString(2, sql);
+                    ps.executeUpdate();
+                } catch (SQLException ignore) { }
+            }
+            return true;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // --- NEW: list schema summaries (name + datasource) ---
+    public static List<Map<String,Object>> listSchemaSummaries() {
+        List<Map<String,Object>> out = new ArrayList<>();
+        for (DatasourceConfig ds : allDatasources()) {
+            String dsName = ds.getName();
+            try {
+                JdbcManager.ensureMetaTableFor(dsName);
+                try (Connection c = JdbcManager.getConnection(dsName); PreparedStatement ps = c.prepareStatement("SELECT json FROM appbana_schemas")) {
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            String json = rs.getString(1);
+                            try {
+                                EntitySchema schema = M.readValue(json, EntitySchema.class);
+                                if (schema.getDatasourceName() == null || schema.getDatasourceName().isBlank()) schema.setDatasourceName(dsName); // backfill
+                                Map<String,Object> m = new LinkedHashMap<>();
+                                m.put("name", schema.getName());
+                                m.put("datasource", schema.getDatasourceName());
+                                out.add(m);
+                            } catch (Exception ignore) { }
+                        }
+                    }
+                }
+            } catch (Exception ignore) { }
+        }
+        out.sort(Comparator.comparing(o -> (String)o.get("name")));
+        return out;
+    }
 }

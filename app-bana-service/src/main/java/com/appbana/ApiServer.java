@@ -387,6 +387,51 @@ public class ApiServer {
                 res.json(201, Map.of("status","ok"));
             }
         });
+        // --- NEW: schema summaries (name + datasource) ---
+        router.get("/schema/summaries", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            try {
+                res.json(200, SchemaManager.listSchemaSummaries());
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        // --- NEW: schema migration history ---
+        router.get("/schema/{name}/migrations", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            String name = req.pathParam("name");
+            try {
+                List<Map<String,Object>> hist = SchemaManager.listMigrations(name);
+                res.json(200, hist);
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        // --- NEW: schema delete (optional dropTable) ---
+        router.delete("/schema/{name}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            String name = req.pathParam("name");
+            boolean drop = "true".equalsIgnoreCase(Optional.ofNullable(req.query("dropTable")).orElse("false"));
+            try {
+                boolean ok = SchemaManager.deleteSchema(name, drop);
+                if (!ok) { res.json(404, Map.of("error","not found")); return; }
+                res.json(200, Map.of("status","deleted","dropTable", drop));
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
         router.get("/ui/datasource/config", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {

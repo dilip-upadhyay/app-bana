@@ -1,5 +1,16 @@
 # AppBana — Copilot Guide
 
+<!-- Added: Recent feature enhancements snapshot -->
+**Recent Enhancements (Q4 2025 incremental)**
+- Schema edit (non‑PK rename with `existingName` + auto DDL)
+- Migration preview (POST /schema?preview=true) & history (GET /schema/{name}/migrations)
+- Schema delete (DELETE /schema/{name}?dropTable=true|false)
+- Schema summaries (GET /schema/summaries) for UI datasource filtering
+- Field reorder UI (display order only)
+- Duplicate field validation (client-side block on save/preview)
+- Inline JSON import/export in builder
+- Helper script `./run-ui.sh` (dev/build/preview with nvm auto-detect)
+
 This guide provides a technical snapshot for AI assistants to understand and interact with the AppBana project.
 
 ## 1. Project Overview
@@ -36,29 +47,23 @@ This guide provides a technical snapshot for AI assistants to understand and int
    - HTTPS env vars: `APPBANA_HTTPS_ENABLED=true APPBANA_KEYSTORE_PATH=certs/keystore.p12 ...`
 
 ### Frontend (Development)
-The frontend uses `vite` for a live development server with proxying to the backend.
-1. Navigate to the UI module:
-   ```bash
-   cd app-bana-ui
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Run the dev server (defaults to http://localhost:5173):
-   ```bash
-   npm run dev
-   ```
-4. To create production assets that get bundled into the Java application, run:
-   ```bash
-   npm run build
-   ```
-   This command is automatically executed by the Maven build process.
+Existing manual steps remain valid. Prefer helper:
+```bash
+./run-ui.sh            # dev (vite)
+./run-ui.sh build      # production build (dist/)
+./run-ui.sh preview    # serve built build
+USE_SYSTEM_NODE=1 UI_PORT=5190 ./run-ui.sh dev
+```
 
-## 4. Key Endpoints
-
-- **UI:** `/ui/builder`, `/ui/datasource`, `/ui/swagger`
-- **API:** `/schema`, `/api/{entity}`, `/openapi.json`, `/health`, `/ready`, datasource endpoints under `/ui/datasource/*`
+## 4. Key Endpoints (Augmented)
+- /schema (GET list, POST save/preview)
+- /schema/summaries (GET name + datasource list)
+- /schema/{name} (GET detail)
+- /schema/{name}/migrations (GET executed DDL history)
+- /schema/{name} (DELETE with optional dropTable flag)
+- /api/{entity} CRUD
+- /api/endpoints (enumerates dynamic CRUD)
+- /openapi.json (excludes admin-only migration/delete endpoints by design)
 
 ## 5. Configuration
 
@@ -73,28 +78,22 @@ The frontend uses `vite` for a live development server with proxying to the back
 - Test / Activate / Delete endpoints
 - HikariCP pool settings per datasource (defaults documented in README)
 
-## 7. Schema Format (Example)
-
+## 7. Schema Format (Rename Extension)
+Field rename during edit:
 ```json
 {
-  "name": "contact",
-  "fields": [
-    {"name":"id","type":"long","primaryKey":true,"autoIncrement":true},
-    {"name":"firstName","type":"string","length":100,"required":true},
-    {"name":"age","type":"int","min":0}
-  ]
+  "name": "email_address",
+  "existingName": "email",
+  "type": "string",
+  "length": 255
 }
 ```
+Backend applies `ALTER TABLE ... RENAME COLUMN` if old column exists and new does not.
 
-## 8. Codebase Structure (Key Files)
-
-- `app-bana-service/src/main/java/org/example/ApiServer.java` – lightweight HTTP dispatch
-- `SchemaManager.java` – schema persistence + migration
-- `JdbcManager.java` – active datasource + pooling
-- `ConfigManager.java` / `AppConfig.java` – config load/save
-- `OpenApiGenerator.java` – dynamic spec
-- `app-bana-ui/src/index.ts` - Main entry point for the new frontend application.
-- `app-bana-ui/vite.config.ts` - Vite configuration, including backend proxy settings.
+## 8. Codebase Structure (Key Files – Updated)
+- `app-bana-service/src/main/java/com/appbana/ApiServer.java` (new delete + migrations + summaries routes)
+- `app-bana-service/src/main/java/com/appbana/SchemaManager.java` (generateMigrationPlan, listMigrations, deleteSchema, listSchemaSummaries)
+- `run-ui.sh` (root) helper for frontend lifecycle.
 
 ## 9. Refactor Trajectory (High Level)
 
@@ -142,6 +141,25 @@ sleep 2
 curl -s localhost:8080/health
 ```
 
+Migration preview:
+```bash
+curl -s -X POST 'http://localhost:8080/schema?preview=true' \
+ -H 'Content-Type: application/json' \
+ --data '{"name":"demo","fields":[{"name":"id","type":"long","primaryKey":true,"autoIncrement":true}]}'
+```
+Migration history:
+```bash
+curl -s http://localhost:8080/schema/demo/migrations
+```
+Delete (keep table):
+```bash
+curl -X DELETE http://localhost:8080/schema/demo
+```
+Delete (drop table):
+```bash
+curl -X DELETE 'http://localhost:8080/schema/demo?dropTable=true'
+```
+
 ## 12. Assistant Guidance
 
 - Use groupId `com.appbana` for new modules/dependencies.
@@ -177,10 +195,8 @@ kill $PID
 ---
 Updated for multi-module + groupId change to `com.appbana` and Java 21.
 
-## 17. Studio Domain Model & Metadata Roadmap (NEW)
-
-High-level user flow target:
-create-project → create-app → create-schema → design UI (pages/layout/components) → runtime render & interact.
+## 17. Studio Domain Model & Metadata Roadmap (Notes)
+No functional change yet; relational path extended with edit/delete lifecycle. Non-relational kinds still UI-only modeling; backend ignores `modelKind` != relational.
 
 ### 17.1 Hierarchy
 Project
@@ -447,4 +463,3 @@ Backend guard (future): reject save of non-relational schema unless feature flag
 - [ ] Frontend: introduce `schema.ts` with discriminated union
 - [ ] Add adapter interface scaffold in `runtime/datasource`
 - [ ] Guard in backend (future flag) before accepting non-relational modelKind.
-

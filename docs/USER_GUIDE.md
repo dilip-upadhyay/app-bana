@@ -23,7 +23,7 @@ Contents
 - Recipes (common tasks)
 
 Prerequisites
-- Java 25 (required)
+- Java 25 (LTS)
 - macOS/Linux or Windows
 - Internet access (for Swagger UI CDN), optional
 - Optional: Docker (to run Postgres locally)
@@ -31,7 +31,7 @@ Prerequisites
 Quick start
 1) Build the app
 ```bash
-./mvnw -DskipTests package
+./app-bana-service/mvnw -DskipTests package
 ```
 2) Run it
 ```bash
@@ -193,7 +193,19 @@ curl -sS -X POST http://localhost:8080/ui/datasource/test \
 
 Designing entities (Schema Builder)
 1) Visit /ui/builder
-2) Define a schema (example):
+2) Create a new schema or select an existing one from the left pane.
+3) Features:
+   - Create: define name, datasource, and fields (exactly one PK).
+   - Edit: open a saved schema, click Edit to modify non‑PK fields.
+   - Rename: change the field name; backend uses `existingName` to emit a RENAME COLUMN.
+   - Reorder: use ▲ / ▼ controls (visual only; does not change physical column order).
+   - Duplicate detection: duplicates are highlighted and block Preview/Save.
+   - Preview: generates a migration DDL plan (POST /schema?preview=true) without applying.
+   - Save: applies only necessary ALTER statements and records them in migration history.
+   - History: toggle "Show Migrations" to view executed DDL (GET /schema/{name}/migrations).
+   - Delete: removes schema metadata; optionally drop underlying table (DELETE /schema/{name}?dropTable=true|false).
+   - JSON import/export: toggle panel to edit raw JSON or copy current definition.
+4) Example schema
 ```json
 {
   "name": "contact",
@@ -204,80 +216,36 @@ Designing entities (Schema Builder)
   ]
 }
 ```
-3) Preview migration
-- POST to `/schema?preview=true` with the JSON; you’ll get a list of DDL statements.
-4) Save schema
-- POST to `/schema` with the JSON to persist and apply migrations.
-5) List/load schemas (optional)
-- GET `/schema` — list saved schema names (supports `?page=&size=&q=`)
-- GET `/schema/{name}` — fetch a specific schema JSON
-
-Using the runtime CRUD APIs
-- After saving a schema named `contact`, CRUD endpoints are available:
-  - POST /api/contact — create
-  - GET /api/contact — list
-  - GET /api/contact/{id} — get
-  - PUT /api/contact/{id} — update
-  - DELETE /api/contact/{id} — delete
-- Tip: Discover available entity endpoints programmatically at `GET /api/endpoints`.
-
-Examples (replace port if overridden)
+5) Field rename example
+```json
+{"name":"email_address","existingName":"email","type":"string","length":255}
+```
+6) Deleting a schema (with table drop)
 ```bash
-# Optional: supply token if auth is enabled
-export TOKEN=read123
-
-# Create (requires admin token)
-curl -sS -X POST http://localhost:8080/api/contact \
-  -H 'Content-Type: application/json' \
-  -H "X-AppBana-Token: $TOKEN" \
-  -d '{"firstName":"Ada","age":36}'
-
-# List (read)
-curl -sS http://localhost:8080/api/contact -H "Authorization: Bearer $TOKEN"
-
-# Get by id (read)
-curl -sS http://localhost:8080/api/contact/1 -H "X-AppBana-Token: $TOKEN"
-
-# Update (admin)
-curl -sS -X PUT http://localhost:8080/api/contact/1 \
-  -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"age":37}'
-
-# Delete (admin)
-curl -sS -X DELETE http://localhost:8080/api/contact/1 -H "X-AppBana-Token: $TOKEN"
+curl -X DELETE "http://localhost:8080/schema/contact?dropTable=true"
+```
+7) Migration history
+```bash
+curl -s http://localhost:8080/schema/contact/migrations
 ```
 
-OpenAPI & Swagger UI
-- Spec: GET /openapi.json
-- UI: /ui/swagger (renders the spec)
-- If auth is enabled, enter your token in the top bar and click Save token; the UI will include it automatically for fetching the spec and for Try it out requests.
-- Tip: Re-open Swagger after adding schemas to see new endpoints.
+New / updated endpoints
+- GET /schema/summaries — list `{name,datasource}` for filtering/grouping.
+- GET /schema/{name}/migrations — migration history (ordered by execution time).
+- DELETE /schema/{name}?dropTable=true|false — delete schema metadata (and optionally its table).
 
-Health & readiness
-- GET `/health` → `{ "status": "UP" }` (process liveness)
-- GET `/ready` → `{ ok: boolean, activeDatasource?: string, dbProduct?: string, dbVersion?: string, elapsedMs: number, error?: string }` (DB readiness)
+Using the runtime CRUD APIs
+- After saving *or editing* a schema, CRUD endpoints reflect the updated columns. Only additive / rename / type changes are applied; destructive changes (field removal) are not yet supported.
+
+OpenAPI & Swagger UI
+- Refresh after edits to view updated model in the spec. Migration operations (preview / history / delete) are intentionally not included in the OpenAPI spec (admin-only operational endpoints).
 
 Troubleshooting & tips
-- Wrong credentials
-  - Use /ui/datasource “Test Connection” (form or per-row) and fix settings.
-  - The server still starts even if init fails; check logs.
-- Port already in use
-  - Run with `-Dappbana.port=8081`.
-- Driver not found
-  - Ensure the `driver` matches the type (e.g., Postgres → org.postgresql.Driver).
-- H2 file locks
-  - Close other processes using the file; use H2 mem mode for quick tests.
-- Slow or failing connections
-  - Use the Test endpoint (it times out quickly). Consider tuning pool settings.
-- Config file shape
-  - If only root fields are present, AppBana seeds a default datasource and marks it active.
+- Rename didn’t apply? Ensure you previewed & saved (not only previewed). Field removal currently unsupported (request ignored) — use rename or plan a future destructive migration process.
+- Duplicate name error: resolve highlighted fields; preview is blocked until resolved.
 
 Security notes
-- Auth is optional. If `adminToken`/`readToken` are not set, endpoints are open (development mode).
-- When tokens are set, read operations require read/admin token; write operations require admin token.
-- UIs provide a token input; tokens are stored locally in the browser (localStorage) for convenience.
-- For production, place AppBana behind TLS (reverse proxy) and restrict access to admin endpoints.
+- DELETE /schema/{name} requires admin token when auth is enabled.
 
 UI step-by-step walkthroughs (all features)
 
@@ -367,6 +335,33 @@ Recipes (common tasks)
 3) Tune pooling when traffic increases
 - Open the active datasource → set maxPoolSize to a higher value (e.g., 20) and minIdle to 5
 - Save and monitor DB performance
+
+Add recipe: Preview + Apply rename
+```bash
+# Preview rename email -> email_address
+curl -s -X POST 'http://localhost:8080/schema?preview=true' \
+ -H 'Content-Type: application/json' \
+ --data '{"name":"contact","fields":[{"name":"id","type":"long","primaryKey":true,"autoIncrement":true},{"name":"email_address","existingName":"email","type":"string","length":255}]}'
+# Apply
+curl -s -X POST http://localhost:8080/schema \
+ -H 'Content-Type: application/json' \
+ --data '{"name":"contact","fields":[{"name":"id","type":"long","primaryKey":true,"autoIncrement":true},{"name":"email_address","existingName":"email","type":"string","length":255}]}'
+```
+
+Add recipe: View migration history
+```bash
+curl -s http://localhost:8080/schema/contact/migrations
+```
+
+Add recipe: Delete schema only (keep table)
+```bash
+curl -X DELETE http://localhost:8080/schema/contact
+```
+
+Add recipe: Delete schema and drop table
+```bash
+curl -X DELETE 'http://localhost:8080/schema/contact?dropTable=true'
+```
 
 Where to go next
 - Explore the backlog in `TODO.md`.

@@ -1,5 +1,16 @@
 # AppBana — Metadata-driven UI → API → Database
 
+<!-- Added: High-level feature snapshot -->
+**Latest feature highlights**
+- Schema editing (rename non‑PK fields with automatic migration)
+- Migration preview (dry-run DDL plan) & migration history per schema
+- Schema deletion (optionally drop underlying table)
+- Field reordering (UI ordering only)
+- Search & datasource filtering for schemas
+- Duplicate field name validation (client-side)
+- Inline JSON import/export of schema definitions
+- New helper script `./run-ui.sh` for UI dev/build/preview
+
 Metadata-driven MVP: design forms in a minimal UI builder, persist the schema, auto-create/migrate a backing table, and expose runtime CRUD APIs. Implemented with plain Java SE (no heavy frameworks).
 
 Quick summary
@@ -9,11 +20,10 @@ Quick summary
 - Datasources: built-in UI to add/manage multiple datasources (by name and type) and select the active one at runtime.
 - Pooling: HikariCP connection pool with configurable settings per datasource.
 - OpenAPI: live spec at /openapi.json and an embedded Swagger UI at /ui/swagger.
-- Health: /health (liveness), /ready (readiness with DB check), and per-datasource health at /ui/datasource/health.
-- Authentication (optional): token-based auth for /schema, /api/*, /openapi.json, and /ui/datasource/*.
+- New endpoints: `/schema/summaries`, `/schema/{name}/migrations`, `DELETE /schema/{name}`.
 
 Status of repository
-- Fully working MVP backend and minimal frontend builder included.
+- Fully working MVP backend and enhanced schema builder (edit / delete / migration history).  
 - Basic builder-v1 UI is present; advanced builder-v2 files were removed.
 - Swagger/OpenAPI spec is available at `/openapi.json` and browsable at `/ui/swagger`.
 - Datasource management UI available at `/ui/datasource` with list/activate/delete actions, Test Connection, and a live Status badge with “Last tested” info.
@@ -23,7 +33,7 @@ Status of repository
 - For a step-by-step walkthrough, see `docs/USER_GUIDE.md`.
 
 Tech stack
-- Java 21 (LTS, with virtual threads for HTTP request handling)
+- Java 25 (LTS, with virtual threads for HTTP request handling)
 - Frontend: TypeScript, Vite, Lit (as a temporary helper)
 - H2 (embedded) for development
 - Jackson (jackson-databind) for JSON
@@ -36,7 +46,6 @@ Build & run
 ### Backend
 1. Build the entire project (including frontend assets):
    ```bash
-   # From the root directory
    ./app-bana-service/mvnw clean package -DskipTests
    ```
 2. Run the backend server:
@@ -58,6 +67,16 @@ For a live development server with hot-reloading:
    ```bash
    npm run dev
    ```
+
+### Fast helper (recommended)
+Use the provided script (auto-detects nvm / Node, installs deps, runs the right command):
+```bash
+./run-ui.sh            # start dev server (vite)
+./run-ui.sh build      # production build (dist/)
+./run-ui.sh preview    # serve built assets
+UI_PORT=5180 ./run-ui.sh dev   # custom port
+```
+Set `USE_SYSTEM_NODE=1` to skip nvm detection.
 
 Port configuration
 - Default HTTP port: 8080
@@ -111,6 +130,10 @@ Authentication (optional)
 - UIs: builder.html and datasource.html include an “Auth token” box; swagger.html also has one. Saving the token stores it in localStorage and all UI requests send the header automatically.
 
 Default runtime behavior
+- Metadata tables: `appbana_schemas`, `appbana_migrations` (DDL recorded).  
+- Migration history endpoint: `GET /schema/{name}/migrations` returns ordered executed SQL.
+- Summaries endpoint: `GET /schema/summaries` for name + datasource (supports UI filtering).  
+- Delete: `DELETE /schema/{name}?dropTable=true|false` (admin token required when auth enabled).
 - On startup the app attempts to ensure two metadata tables (in the active datasource):
   - `appbana_schemas(name PK, json CLOB)` — stores schema JSON
   - `appbana_migrations(id IDENTITY, schema_name, sql CLOB, executed_at TIMESTAMP)` — records DDL executed
@@ -218,21 +241,24 @@ Configuration
 ```
 - Backward compatibility: if only root fields are present (jdbcUrl/username/password/driver/name), the app seeds a default datasource and marks it active.
 
-API endpoints (runtime generic CRUD)
-- POST /schema — save schema or preview migration with `?preview=true`
+API endpoints (runtime generic CRUD & schema management)
+- POST /schema — save schema (or preview with `?preview=true` returns DDL plan)
 - GET /schema — list schema names (supports `?page=&size=&q=`)
+- GET /schema/summaries — list objects `{name,datasource}`
 - GET /schema/{name} — return schema JSON
+- GET /schema/{name}/migrations — migration history (ordered executed SQL)
+- DELETE /schema/{name}?dropTable=true|false — delete schema metadata (and optionally drop table)
 - POST /api/{entity} — insert
 - GET /api/{entity} — list
 - GET /api/{entity}/{id} — get by id
 - PUT /api/{entity}/{id} — update by id
 - DELETE /api/{entity}/{id} — delete by id
-- GET /openapi.json — OpenAPI 3.0 spec for all generated endpoints
-- GET /health — liveness check
-- GET /ready — readiness check with DB metadata
+- GET /openapi.json — OpenAPI 3.0 spec
+- GET /api/endpoints — machine-readable list of CRUD endpoints
+- Health: /health, /ready
 
 Schema JSON (example)
-```
+```json
 {
   "name": "contact",
   "fields": [
@@ -243,15 +269,33 @@ Schema JSON (example)
 }
 ```
 
+Renaming a field
+- Edit in UI or send updated schema with the field's new `name` and `existingName` set to the old column. Example field object:
+```json
+{"name":"email_address","existingName":"email","type":"string","length":255}
+```
+The backend emits an `ALTER TABLE ... RENAME COLUMN` migration if applicable.
+
+Deleting a schema
+```bash
+curl -X DELETE "http://localhost:8080/schema/contact?dropTable=true"
+```
+
+Migration preview
+```bash
+curl -s -X POST 'http://localhost:8080/schema?preview=true' \
+  -H 'Content-Type: application/json' \
+  --data '{"name":"demo","fields":[{"name":"id","type":"long","primaryKey":true,"autoIncrement":true}]}'
+```
+Returns array of SQL statements (no changes applied).
+
 Where to change common settings
-- Port: src/main/java/org/example/Main.java (argument to ApiServer.start)
-- Datasource resolution & pooling: src/main/java/org/example/JdbcManager.java
-- Config: src/main/java/org/example/ConfigManager.java and src/main/java/org/example/AppConfig.java
-- Datasource UI: src/main/resources/ui/datasource.html
+- Code packages now under `com.appbana` (earlier docs referencing `org.example` updated).  
+- See: `com/appbana/ApiServer.java`, `SchemaManager.java`, `JdbcManager.java`.
 
 Key files
-- src/main/java/org/example/ApiServer.java — HTTP handlers (schema, entity CRUD, datasource management, openapi, swagger UI)
-- src/main/java/org/example/SchemaManager.java — schema persistence and migration
+- `app-bana-service/src/main/java/com/appbana/ApiServer.java` — HTTP handlers
+- `app-bana-service/src/main/java/com/appbana/SchemaManager.java` — schema & migrations
 - src/main/java/org/example/JdbcManager.java — JDBC connection (HikariCP pool; uses active datasource)
 - src/main/java/org/example/ConfigManager.java — loads/saves config; normalizes multi-datasource format
 - src/main/java/org/example/AppConfig.java, DatasourceConfig.java — config models (DatasourceConfig includes pool and last test fields)
@@ -261,6 +305,8 @@ Key files
 - src/main/resources/ui/swagger.html — embedded Swagger UI for /openapi.json
 
 Notes
+- Editing a schema replays only necessary ALTER statements; preview first for safety.
+- Field order affects display only (not physical ordering in DB).
 - If DB credentials are wrong at startup, the app still starts so you can fix settings via `/ui/datasource`.
 - Identifier quoting uses double-quoted UPPERCASE to avoid reserved word/case issues in H2.
 - Backlog: see `TODO.md` for prioritized next steps and enhancements.
