@@ -1,5 +1,4 @@
 // Discriminated schema union types for Studio (frontend only for now)
-import { ComponentNode } from './metadata';
 
 export type ModelKind = 'relational' | 'document' | 'apiResource';
 
@@ -72,4 +71,3 @@ export function isDocument(s: AnyDesignSchema): s is DocumentSchema {
 export function isResource(s: AnyDesignSchema): s is ResourceSchema {
   return s.modelKind === 'apiResource';
 }
-

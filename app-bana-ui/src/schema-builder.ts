@@ -378,6 +378,7 @@ export class SchemaBuilder extends LitElement {
             ${datasources.map(d=> html`<option value=${d}>${d}</option>`)}
           </select>`: ''}
           <button @click=${() => this.refreshSchemas()}>Reload</button>
+          ${this.loadingDs ? html`<span class="small" title="Loading datasources">DS…</span>`:''}
         </div>
         <table>
           <thead><tr><th>Name</th><th>Datasource</th></tr></thead>

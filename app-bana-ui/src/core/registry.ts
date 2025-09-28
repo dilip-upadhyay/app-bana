@@ -1,21 +1,19 @@
-// Simple component registry for Studio runtime & builder
-export interface RegisteredComponent {
-  type: string;          // logical type in metadata (e.g., "Container")
-  tag: string;           // custom element tag (e.g., "studio-container")
-  version?: number;
-  category?: string;
-  defaultProps?: Record<string, any>;
+// src/core/registry.ts
+// Simple component registry for Studio UI
+
+export type ComponentConstructor = CustomElementConstructor;
+
+const registry = new Map<string, ComponentConstructor>();
+
+export function registerComponent(type: string, ctor: ComponentConstructor) {
+  registry.set(type, ctor);
 }
 
-const _registry: Map<string, RegisteredComponent> = new Map();
-
-export function registerComponent(def: RegisteredComponent) {
-  _registry.set(def.type, def);
+export function getComponent(type: string): ComponentConstructor | undefined {
+  return registry.get(type);
 }
 
-export function getComponent(type: string): RegisteredComponent | undefined {
-  return _registry.get(type);
+export function getAllComponentTypes(): string[] {
+  return Array.from(registry.keys());
 }
-
-export function listComponents(): RegisteredComponent[] { return Array.from(_registry.values()); }
 

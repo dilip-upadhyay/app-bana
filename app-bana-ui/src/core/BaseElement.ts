@@ -43,7 +43,7 @@ export abstract class BaseElement extends HTMLElement {
       }
     }
     if (changed) {
-      this._update();
+      this.requestRender();
     }
   }
 
@@ -60,10 +60,12 @@ export abstract class BaseElement extends HTMLElement {
 
   private _mount() {
     this.onInit();
-    this._update();
+    this._renderInternal();
   }
 
-  private _update() {
+  protected requestRender() { this._renderInternal(); }
+
+  private _renderInternal() {
     const template = `
       ${this.styles() ? `<style>${this.styles()}</style>` : ''}
       ${this.render()}
@@ -71,4 +73,3 @@ export abstract class BaseElement extends HTMLElement {
     this.root.innerHTML = template;
   }
 }
-
