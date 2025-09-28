@@ -3,6 +3,7 @@ package com.appbana;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -11,6 +12,8 @@ import com.zaxxer.hikari.HikariDataSource;
 
 public class JdbcManager {
     private static final Set<String> LOADED = ConcurrentHashMap.newKeySet();
+    private static final Map<String, HikariDataSource> POOLS = new ConcurrentHashMap<>();
+    private static final Map<String, String> POOL_SIGS = new ConcurrentHashMap<>();
 
     static {
         // keep H2 as a default fallback to avoid CNFE during class init
@@ -20,17 +23,20 @@ public class JdbcManager {
     private static void ensureDriverLoaded(String driver) {
         if (driver == null || driver.isBlank()) return;
         if (LOADED.contains(driver)) return;
-        try {
-            Class.forName(driver);
-            LOADED.add(driver);
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException("JDBC driver class not found: " + driver, e);
-        }
+        try { Class.forName(driver); LOADED.add(driver); } catch (ClassNotFoundException e) { throw new RuntimeException("JDBC driver class not found: " + driver, e); }
     }
 
-    private static String inferDriver(DatasourceConfig ds) {
-        if (ds == null) return null;
-        return DriverUtil.inferDriver(ds.getType(), ds.getJdbcUrl(), ds.getDriver());
+    private static String inferDriver(DatasourceConfig ds) { return ds == null ? null : DriverUtil.inferDriver(ds.getType(), ds.getJdbcUrl(), ds.getDriver()); }
+
+    private static DatasourceConfig findDatasource(String name, AppConfig cfg) {
+        if (cfg == null) cfg = ConfigManager.getConfig();
+        if (name == null || name.isBlank()) return resolveActive(cfg);
+        if (cfg.getDatasources() != null) {
+            for (DatasourceConfig ds : cfg.getDatasources()) {
+                if (name.equals(ds.getName())) return ds;
+            }
+        }
+        return resolveActive(cfg);
     }
 
     private static DatasourceConfig resolveActive(AppConfig cfg) {
@@ -51,44 +57,28 @@ public class JdbcManager {
         return ds;
     }
 
-    private static volatile HikariDataSource POOL;
-    private static volatile String POOL_SIG;
-
     private static String signature(DatasourceConfig ds, String driver) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(nz(ds.getName())).append('|')
-          .append(nz(ds.getJdbcUrl())).append('|')
-          .append(nz(ds.getUsername())).append('|')
-          .append(nz(driver)).append('|')
-          .append(nz(String.valueOf(ds.getMaxPoolSize()))).append('|')
-          .append(nz(String.valueOf(ds.getMinIdle()))).append('|')
-          .append(nz(String.valueOf(ds.getConnectionTimeoutMs()))).append('|')
-          .append(nz(String.valueOf(ds.getIdleTimeoutMs()))).append('|')
-          .append(nz(String.valueOf(ds.getMaxLifetimeMs()))).append('|')
-          .append(nz(String.valueOf(ds.getAutoCommit()))).append('|')
-          .append(nz(ds.getPoolName()));
-        return sb.toString();
+        return (nz(ds.getName())+ '|' + nz(ds.getJdbcUrl())+ '|' + nz(ds.getUsername())+ '|' + nz(driver)+ '|' + nz(String.valueOf(ds.getMaxPoolSize()))+ '|' + nz(String.valueOf(ds.getMinIdle()))+ '|' + nz(String.valueOf(ds.getConnectionTimeoutMs()))+ '|' + nz(String.valueOf(ds.getIdleTimeoutMs()))+ '|' + nz(String.valueOf(ds.getMaxLifetimeMs()))+ '|' + nz(String.valueOf(ds.getAutoCommit()))+ '|' + nz(ds.getPoolName()));
     }
+    private static String nz(String s){ return s==null?"":s; }
 
-    private static String nz(String s) { return s == null ? "" : s; }
-
-    private static synchronized void ensurePool() {
-        AppConfig cfg = ConfigManager.getConfig();
-        DatasourceConfig ds = resolveActive(cfg);
+    private static synchronized HikariDataSource ensurePool(DatasourceConfig ds) {
         String driver = inferDriver(ds);
         ensureDriverLoaded(driver);
         String sig = signature(ds, driver);
-        if (POOL != null && sig.equals(POOL_SIG)) return; // up-to-date
-        if (POOL != null) {
-            try { POOL.close(); } catch (Exception ignored) {}
-            POOL = null; POOL_SIG = null;
+        String key = ds.getName()!=null? ds.getName():"__default";
+        HikariDataSource existing = POOLS.get(key);
+        if (existing != null) {
+            String prevSig = POOL_SIGS.get(key);
+            if (sig.equals(prevSig)) return existing; // up-to-date
+            try { existing.close(); } catch (Exception ignored) {}
+            POOLS.remove(key); POOL_SIGS.remove(key);
         }
         HikariConfig hc = new HikariConfig();
         if (driver != null && !driver.isBlank()) hc.setDriverClassName(driver);
         hc.setJdbcUrl(ds.getJdbcUrl());
         if (ds.getUsername() != null) hc.setUsername(ds.getUsername());
         if (ds.getPassword() != null) hc.setPassword(ds.getPassword());
-        // Defaults
         int maxPool = ds.getMaxPoolSize() != null ? ds.getMaxPoolSize() : 10;
         int minIdle = ds.getMinIdle() != null ? ds.getMinIdle() : 2;
         long connTimeout = ds.getConnectionTimeoutMs() != null ? ds.getConnectionTimeoutMs() : 30_000L;
@@ -96,7 +86,6 @@ public class JdbcManager {
         long maxLifetime = ds.getMaxLifetimeMs() != null ? ds.getMaxLifetimeMs() : 1_800_000L;
         boolean autoCommit = ds.getAutoCommit() != null ? ds.getAutoCommit() : true;
         String poolName = ds.getPoolName() != null ? ds.getPoolName() : ("appbana-" + (ds.getName() != null ? ds.getName() : "default"));
-
         hc.setMaximumPoolSize(maxPool);
         hc.setMinimumIdle(minIdle);
         hc.setConnectionTimeout(connTimeout);
@@ -104,19 +93,20 @@ public class JdbcManager {
         hc.setMaxLifetime(maxLifetime);
         hc.setAutoCommit(autoCommit);
         hc.setPoolName(poolName);
-
-        POOL = new HikariDataSource(hc);
-        POOL_SIG = sig;
+        HikariDataSource dsPool = new HikariDataSource(hc);
+        POOLS.put(key, dsPool); POOL_SIGS.put(key, sig);
+        return dsPool;
     }
 
-    public static java.sql.Connection getConnection() throws SQLException {
-        ensurePool();
-        return POOL.getConnection();
+    public static Connection getConnection() throws SQLException { return getConnection((String)null); }
+    public static Connection getConnection(String datasourceName) throws SQLException {
+        DatasourceConfig ds = findDatasource(datasourceName, ConfigManager.getConfig());
+        HikariDataSource pool = ensurePool(ds);
+        return pool.getConnection();
     }
 
-    // Dialect detection based on active datasource
-    private static String detectDialect() {
-        DatasourceConfig ds = resolveActive(ConfigManager.getConfig());
+    private static String detectDialect(DatasourceConfig ds) {
+        if (ds == null) ds = resolveActive(ConfigManager.getConfig());
         String t = ds.getType();
         if (t != null && !t.isBlank()) return t.toLowerCase();
         String url = ds.getJdbcUrl();
@@ -124,44 +114,35 @@ public class JdbcManager {
         return inferred != null ? inferred : "h2";
     }
 
-    public static void ensureMetaTable() {
-        String dialect = detectDialect();
-        String schemasSql;
-        String migSql;
+    public static void ensureMetaTable() { ensureMetaTableFor(null); }
+    public static void ensureMetaTableFor(String datasourceName) {
+        DatasourceConfig ds = findDatasource(datasourceName, ConfigManager.getConfig());
+        String dialect = detectDialect(ds);
+        String schemasSql; String migSql;
         switch (dialect) {
             case "postgres":
                 schemasSql = "CREATE TABLE IF NOT EXISTS appbana_schemas (name VARCHAR(200) PRIMARY KEY, json TEXT)";
-                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id BIGSERIAL PRIMARY KEY, schema_name VARCHAR(200), sql TEXT, executed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)";
-                break;
+                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id BIGSERIAL PRIMARY KEY, schema_name VARCHAR(200), sql TEXT, executed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)"; break;
             case "mysql":
             case "mariadb":
                 schemasSql = "CREATE TABLE IF NOT EXISTS appbana_schemas (name VARCHAR(200) PRIMARY KEY, json TEXT)";
-                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id BIGINT AUTO_INCREMENT PRIMARY KEY, schema_name VARCHAR(200), sql TEXT, executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)";
-                break;
+                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id BIGINT AUTO_INCREMENT PRIMARY KEY, schema_name VARCHAR(200), sql TEXT, executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"; break;
             case "sqlite":
                 schemasSql = "CREATE TABLE IF NOT EXISTS appbana_schemas (name TEXT PRIMARY KEY, json TEXT)";
-                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, schema_name TEXT, sql TEXT, executed_at DATETIME DEFAULT CURRENT_TIMESTAMP)";
-                break;
+                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, schema_name TEXT, sql TEXT, executed_at DATETIME DEFAULT CURRENT_TIMESTAMP)"; break;
             case "mssql":
                 schemasSql = "CREATE TABLE IF NOT EXISTS appbana_schemas (name NVARCHAR(200) PRIMARY KEY, json NVARCHAR(MAX))";
-                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id BIGINT IDENTITY(1,1) PRIMARY KEY, schema_name NVARCHAR(200), sql NVARCHAR(MAX), executed_at DATETIME2 DEFAULT SYSDATETIME())";
-                break;
+                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id BIGINT IDENTITY(1,1) PRIMARY KEY, schema_name NVARCHAR(200), sql NVARCHAR(MAX), executed_at DATETIME2 DEFAULT SYSDATETIME())"; break;
             case "oracle":
                 schemasSql = "BEGIN EXECUTE IMMEDIATE 'CREATE TABLE appbana_schemas (name VARCHAR2(200) PRIMARY KEY, json CLOB)'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;";
-                migSql = "BEGIN EXECUTE IMMEDIATE 'CREATE TABLE appbana_migrations (id NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, schema_name VARCHAR2(200), sql CLOB, executed_at TIMESTAMP DEFAULT SYSTIMESTAMP)'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;";
-                break;
+                migSql = "BEGIN EXECUTE IMMEDIATE 'CREATE TABLE appbana_migrations (id NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, schema_name VARCHAR2(200), sql CLOB, executed_at TIMESTAMP DEFAULT SYSTIMESTAMP)'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;"; break;
             case "h2":
             default:
                 schemasSql = "CREATE TABLE IF NOT EXISTS appbana_schemas (name VARCHAR(200) PRIMARY KEY, json CLOB)";
-                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id IDENTITY PRIMARY KEY, schema_name VARCHAR(200), sql CLOB, executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)";
-                break;
+                migSql = "CREATE TABLE IF NOT EXISTS appbana_migrations (id IDENTITY PRIMARY KEY, schema_name VARCHAR(200), sql CLOB, executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"; break;
         }
-        try (Connection c = getConnection(); Statement s = c.createStatement()) {
-            // Oracle uses anonymous PL/SQL blocks above; others are standard DDL
-            s.execute(schemasSql);
-            s.execute(migSql);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        try (Connection c = getConnection(datasourceName); Statement s = c.createStatement()) {
+            s.execute(schemasSql); s.execute(migSql);
+        } catch (SQLException e) { throw new RuntimeException(e); }
     }
 }

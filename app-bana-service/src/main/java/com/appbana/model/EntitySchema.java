@@ -5,6 +5,7 @@ import java.util.List;
 public class EntitySchema {
     private String name;
     private List<Field> fields;
+    private String datasourceName; // optional: target datasource for this schema's table
 
     public EntitySchema() {}
 
@@ -27,6 +28,14 @@ public class EntitySchema {
 
     public void setFields(List<Field> fields) {
         this.fields = fields;
+    }
+
+    public String getDatasourceName() {
+        return datasourceName;
+    }
+
+    public void setDatasourceName(String datasourceName) {
+        this.datasourceName = datasourceName;
     }
 
     public static class Field {

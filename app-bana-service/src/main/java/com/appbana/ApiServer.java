@@ -1021,6 +1021,9 @@ public class ApiServer {
             throw new IllegalArgumentException("field '" + f.getName() + "' invalid format");
         }
     }
+    private static java.sql.Connection schemaConnection(com.appbana.model.EntitySchema schema) throws java.sql.SQLException {
+        return JdbcManager.getConnection(schema != null ? schema.getDatasourceName() : null);
+    }
     public static long insertRecord(EntitySchema schema, Map<String, Object> data) throws SQLException {
         List<EntitySchema.Field> fields = schema.getFields();
         List<String> cols = new ArrayList<>();
@@ -1037,7 +1040,7 @@ public class ApiServer {
             values.add(val);
         }
         String sql = "INSERT INTO " + quote(schema.getName()) + " (" + String.join(",", cols) + ") VALUES (" + String.join(",", placeholders) + ")";
-        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             for (int i = 0; i < values.size(); i++) {
                 ps.setObject(i + 1, values.get(i));
             }
@@ -1050,7 +1053,7 @@ public class ApiServer {
     }
     public static List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {
         String sql = "SELECT * FROM " + quote(schema.getName());
-        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             return toList(rs);
         }
     }
@@ -1058,7 +1061,7 @@ public class ApiServer {
         EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
         if (pk == null) return null;
         String sql = "SELECT * FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
-        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
@@ -1082,7 +1085,7 @@ public class ApiServer {
         }
         if (set.isEmpty()) return 0;
         String sql = "UPDATE " + quote(schema.getName()) + " SET " + String.join(",", set) + " WHERE " + quote(pk.getName()) + " = ?";
-        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = 1;
             for (Object v : vals) ps.setObject(i++, v);
             ps.setObject(i, parseId(id, pk));
@@ -1093,7 +1096,7 @@ public class ApiServer {
         EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
         if (pk == null) return 0;
         String sql = "DELETE FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
-        try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
             return ps.executeUpdate();
         }
