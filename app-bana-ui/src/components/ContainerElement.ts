@@ -1,4 +1,5 @@
 import { BaseElement } from '../core/BaseElement';
+import { registerComponent } from '../core/registry';
 
 export class ContainerElement extends BaseElement {
   protected render(): string { return `<slot></slot>`; }
@@ -6,3 +7,4 @@ export class ContainerElement extends BaseElement {
 }
 
 customElements.define('studio-container', ContainerElement);
+registerComponent('container', ContainerElement);

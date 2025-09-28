@@ -1,4 +1,5 @@
 import { BaseElement } from '../core/BaseElement';
+import { registerComponent } from '../core/registry';
 
 export class TextElement extends BaseElement {
   static get observedAttributes() { return ['text']; }
@@ -13,3 +14,4 @@ export class TextElement extends BaseElement {
 }
 
 customElements.define('studio-text', TextElement);
+registerComponent('text', TextElement);

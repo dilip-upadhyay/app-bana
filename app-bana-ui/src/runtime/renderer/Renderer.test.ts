@@ -2,18 +2,10 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { renderPage } from './Renderer';
 import demoPage from '../../demo/demo-page.json';
 import { PageMeta } from '../../models/metadata';
-import { registerComponent } from '../../core/registry';
-import { ContainerElement } from '../../components/ContainerElement';
-import { TextElement } from '../../components/TextElement';
-import { ButtonElement } from '../../components/ButtonElement';
-import { UnknownElement } from '../../components/UnknownElement';
+import { ensureCoreRegistered } from '../../core/registry';
 
-// Ensure custom elements are registered for tests
-beforeAll(() => {
-  registerComponent('container', ContainerElement);
-  registerComponent('text', TextElement);
-  registerComponent('button', ButtonElement);
-  registerComponent('unknown', UnknownElement);
+beforeAll(async () => {
+  await ensureCoreRegistered();
 });
 
 describe('Renderer', () => {
@@ -35,4 +27,3 @@ describe('Renderer', () => {
     expect(unknown).toBeTruthy();
   });
 });
-

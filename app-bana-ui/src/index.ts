@@ -3,27 +3,18 @@ import { customElement } from 'lit/decorators.js';
 import './schema-builder';
 import './app-renderer';
 import './components/StudioWelcome';
-import './components/entity-explorer'; // NEW explorer component
+import './components/entity-explorer';
 import demoPage from './demo/demo-page.json';
-// --- AppBana Studio Runtime Demo ---
-import { registerComponent } from './core/registry';
+import { ensureCoreRegistered } from './core/registry';
 import { renderPage } from './runtime/renderer/Renderer';
-import { ContainerElement } from './components/ContainerElement';
-import { TextElement } from './components/TextElement';
-import { ButtonElement } from './components/ButtonElement';
 import { PageMeta } from './models/metadata';
-import { UnknownElement } from './components/UnknownElement';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
-  firstUpdated() {
+  async firstUpdated() {
     const path = window.location.pathname;
     if (path.includes('/studio')) {
-      // Register core + unknown placeholder
-      registerComponent('container', ContainerElement);
-      registerComponent('text', TextElement);
-      registerComponent('button', ButtonElement);
-      registerComponent('unknown', UnknownElement);
+      await ensureCoreRegistered();
       const host = this.renderRoot.querySelector('#studio-root') as HTMLElement | null;
       if (host) {
         renderPage(demoPage as PageMeta, host);

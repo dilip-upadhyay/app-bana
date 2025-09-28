@@ -1,4 +1,5 @@
 import { BaseElement } from '../core/BaseElement';
+import { registerComponent } from '../core/registry';
 
 export class UnknownElement extends BaseElement {
   static get observedAttributes() { return ['data-type']; }
@@ -10,4 +11,4 @@ export class UnknownElement extends BaseElement {
 }
 
 customElements.define('studio-unknown', UnknownElement);
-
+registerComponent('unknown', UnknownElement);

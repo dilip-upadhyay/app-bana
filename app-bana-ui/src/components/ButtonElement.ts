@@ -1,4 +1,5 @@
 import { BaseElement } from '../core/BaseElement';
+import { registerComponent } from '../core/registry';
 
 export class ButtonElement extends BaseElement {
   static get observedAttributes() { return ['label']; }
@@ -17,3 +18,4 @@ export class ButtonElement extends BaseElement {
 }
 
 customElements.define('studio-button', ButtonElement);
+registerComponent('button', ButtonElement);

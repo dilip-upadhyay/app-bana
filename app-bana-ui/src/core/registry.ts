@@ -18,18 +18,19 @@ export function getAllComponentTypes(): string[] {
 }
 
 // Bootstrap helper so runtime code can ensure core components are registered.
-export function ensureCoreRegistered() {
+export function ensureCoreRegistered(): Promise<void> {
+  const proms: Promise<any>[] = [];
   if (!registry.has('container')) {
-    // Dynamic import to avoid hard coupling when tree-shaken
-    import('../components/ContainerElement.js').then(()=>{/*noop*/});
+    proms.push(import('../components/ContainerElement.js'));
   }
   if (!registry.has('text')) {
-    import('../components/TextElement.js').then(()=>{/*noop*/});
+    proms.push(import('../components/TextElement.js'));
   }
   if (!registry.has('button')) {
-    import('../components/ButtonElement.js').then(()=>{/*noop*/});
+    proms.push(import('../components/ButtonElement.js'));
   }
   if (!registry.has('unknown')) {
-    import('../components/UnknownElement.js').then(()=>{/*noop*/});
+    proms.push(import('../components/UnknownElement.js'));
   }
+  return Promise.all(proms).then(()=>{});
 }

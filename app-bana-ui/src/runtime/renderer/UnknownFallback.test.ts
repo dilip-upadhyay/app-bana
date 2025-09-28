@@ -1,18 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { renderPage } from './Renderer';
-import { registerComponent } from '../../core/registry';
-import { ContainerElement } from '../../components/ContainerElement';
-import { TextElement } from '../../components/TextElement';
-import { ButtonElement } from '../../components/ButtonElement';
-import { UnknownElement } from '../../components/UnknownElement';
+import { ensureCoreRegistered } from '../../core/registry';
 import { PageMeta } from '../../models/metadata';
 
-beforeAll(() => {
-  registerComponent('container', ContainerElement);
-  registerComponent('text', TextElement);
-  registerComponent('button', ButtonElement);
-  registerComponent('unknown', UnknownElement);
-});
+beforeAll(async () => { await ensureCoreRegistered(); });
 
 describe('Unknown component fallback', () => {
   it('renders studio-unknown with original type name', () => {
@@ -32,4 +23,3 @@ describe('Unknown component fallback', () => {
     expect(shadowText).toMatch(/notRegisteredWidget/);
   });
 });
-
