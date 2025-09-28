@@ -3,7 +3,7 @@
 Metadata-driven MVP: design forms in a minimal UI builder, persist the schema, auto-create/migrate a backing table, and expose runtime CRUD APIs. Implemented with plain Java SE (no heavy frameworks).
 
 Quick summary
-- Frontend: minimal UI builder (vanilla JS) that emits schema JSON.
+- Frontend: A custom, lightweight UI framework ("Studio") is being developed using TypeScript and native Web Components. It uses `vite` for development and builds. `lit` is used as a temporary helper, with the long-term goal of being replaced by a minimal internal `BaseElement` core.
 - Backend: Java (HttpServer) that persists schemas, auto-creates/migrates tables via JDBC, and exposes generic CRUD endpoints at runtime.
 - DB: H2 embedded (file) by default; JDBC usage allows swapping to Postgres/MySQL/etc.
 - Datasources: built-in UI to add/manage multiple datasources (by name and type) and select the active one at runtime.
@@ -18,13 +18,13 @@ Status of repository
 - Swagger/OpenAPI spec is available at `/openapi.json` and browsable at `/ui/swagger`.
 - Datasource management UI available at `/ui/datasource` with list/activate/delete actions, Test Connection, and a live Status badge with “Last tested” info.
 - HikariCP pool initialized based on the current active datasource; reconfigured when settings change.
-- Built fat JAR available under `target/` after building.
-- COPILOT_NOTES.md contains an agent-friendly snapshot of the current state.
-- For a step-by-step walkthrough, see `USER_GUIDE.md`.
-- UI_Development_Plan.md contains the evolving architecture plan for an upcoming custom in-house no/low‑code “Studio” (prior Angular plan deprecated).
+- Built fat JAR available under `app-bana-service/target/` after building.
+- `.github/COPILOT_GUIDE.md` contains an agent-friendly snapshot of the current state and the development plan.
+- For a step-by-step walkthrough, see `docs/USER_GUIDE.md`.
 
 Tech stack
-- Java 25 (runs with virtual threads for HTTP request handling)
+- Java 21 (LTS, with virtual threads for HTTP request handling)
+- Frontend: TypeScript, Vite, Lit (as a temporary helper)
 - H2 (embedded) for development
 - Jackson (jackson-databind) for JSON
 - SLF4J simple for logging
@@ -32,14 +32,32 @@ Tech stack
 - Maven build with Shade plugin (uber jar)
 
 Build & run
-- With system Maven installed:
-  - mvn -DskipTests package
-  - java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
-- With the provided wrapper:
-  - chmod +x mvnw
-  - ./mvnw -DskipTests package
-  - java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
-- From IDE: run com.appbana.Main
+
+### Backend
+1. Build the entire project (including frontend assets):
+   ```bash
+   # From the root directory
+   ./app-bana-service/mvnw clean package -DskipTests
+   ```
+2. Run the backend server:
+   ```bash
+   java -jar app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar
+   ```
+
+### Frontend (for Development)
+For a live development server with hot-reloading:
+1. Navigate to the UI module:
+   ```bash
+   cd app-bana-ui
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Run the dev server (proxies to the backend):
+   ```bash
+   npm run dev
+   ```
 
 Port configuration
 - Default HTTP port: 8080
