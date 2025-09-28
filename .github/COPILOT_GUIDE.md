@@ -5,7 +5,10 @@ This guide provides a technical snapshot for AI assistants to understand and int
 ## 1. Project Overview
 
 - **What it is:** A metadata-driven application platform. Design schemas in a UI, and the backend auto-creates tables and exposes CRUD APIs.
-- **Core Stack:** Java 25 (virtual threads), H2 (default), Jackson, SLF4J, HikariCP, Maven.
+- **Core Stack:** Java 21 (LTS, virtual threads if available), H2 (default), Jackson, SLF4J, HikariCP, Maven multi-module.
+- **Modules:**
+  - `app-bana-ui` (groupId: `com.appbana`) – packs static UI resources.
+  - `app-bana-service` – backend service (depends on ui module; shaded runnable JAR).
 - **Frontend:** Current UIs are plain HTML/vanilla JS (builder, datasource, swagger). A custom in-house UI “Studio” will supersede the deprecated previous framework plan.
 
 ## 2. Current Status
@@ -19,18 +22,18 @@ This guide provides a technical snapshot for AI assistants to understand and int
 
 ## 3. How to Build and Run
 
-1.  Build backend
-    ```bash
-    ./mvnw -DskipTests package
-    ```
-2.  Run backend
-    ```bash
-    java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
-    ```
-3.  Options
-    - Custom port: `-Dappbana.port=9090` or env `APPBANA_PORT=9090`
-    - Tokens (auth): `export APPBANA_ADMIN_TOKEN=admin123 APPBANA_READ_TOKEN=read123`
-    - HTTPS env vars: `APPBANA_HTTPS_ENABLED=true APPBANA_KEYSTORE_PATH=certs/keystore.p12 ...`
+1. Build (root is parent POM; wrapper lives in service module):
+   ```bash
+   ./app-bana-service/mvnw clean package -DskipTests
+   ```
+2. Run backend (fat JAR produced by service module):
+   ```bash
+   java -jar app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar
+   ```
+3. Options
+   - Custom port: `-Dappbana.port=9090` or env `APPBANA_PORT=9090`
+   - Tokens (auth): `export APPBANA_ADMIN_TOKEN=admin123 APPBANA_READ_TOKEN=read123`
+   - HTTPS env vars: `APPBANA_HTTPS_ENABLED=true APPBANA_KEYSTORE_PATH=certs/keystore.p12 ...`
 
 ## 4. Key Endpoints
 
@@ -65,12 +68,12 @@ This guide provides a technical snapshot for AI assistants to understand and int
 
 ## 8. Codebase Structure (Key Files)
 
-- `ApiServer.java` – lightweight HTTP dispatch
+- `app-bana-service/src/main/java/org/example/ApiServer.java` – lightweight HTTP dispatch
 - `SchemaManager.java` – schema persistence + migration
 - `JdbcManager.java` – active datasource + pooling
 - `ConfigManager.java` / `AppConfig.java` – config load/save
 - `OpenApiGenerator.java` – dynamic spec
-- UI assets under `src/main/resources/ui/`
+- UI assets packaged now from `app-bana-ui/src/main/resources/ui/`
 
 ## 9. Refactor Trajectory (High Level)
 
@@ -104,59 +107,45 @@ This guide provides a technical snapshot for AI assistants to understand and int
 
 ## 11. Testing & Verification
 
-Refer to `UI_SMOKE.md` for quick manual checks. Add scripted tests as refactor advances:
-- Schema CRUD + entity CRUD cycle
-- Datasource add/test/activate fallback behavior
-- OpenAPI generation stability snapshot
+Quick smoke:
+```bash
+./app-bana-service/mvnw -q -DskipTests package
+java -jar app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar &
+sleep 2
+curl -s localhost:8080/health
+```
 
 ## 12. Assistant Guidance
 
-When generating code or changes:
-- Preserve public endpoint signatures
-- Avoid introducing heavy frameworks; stay minimal unless value justified
-- Keep auth optional; gate new admin endpoints consistently
-- Mask secrets in logs; never echo raw passwords/tokens in examples
-- Prefer incremental refactors (compile + run smoke after each logical step)
-
-Priority for contributions:
-1. Safety & correctness (validation, error mapping)
-2. Refactor boundaries (Router, Dialect separation)
-3. Workflow + auditing foundations
-4. Security (FLS) enforcement completeness
-5. Extensibility (plugin surface) without over-abstraction
+- Use groupId `com.appbana` for new modules/dependencies.
+- Keep endpoints stable; avoid heavyweight frameworks.
+- Favor incremental, tested refactors.
 
 ## 13. Known Gaps / Backlog Seeds
 
-- Pagination/sorting/filtering for list endpoints
-- Import/export (schemas & datasources) bundle
-- Migration plan enhancements (rename detection, rollback preview)
-- Testcontainers DB matrix
-- Advanced reporting (PDF) – deferred
-- FHIR write & SMART auth – deferred
+(Refer to README / TODO)
 
 ## 14. De-scoped / Removed
 
-- Prior external framework (and related workspace/SSR build scripts) fully removed
-- Framework-specific theming (replaced by generic CSS variable token approach)
+- Prior external framework tooling & build pipeline.
 
-## 15. Style & Theming (Current Interim)
+## 15. Style & Theming
 
-- Use CSS variables (tokens) for color/spacing/typography
-- Minimal utility classes limited to internal UIs; no user-supplied arbitrary class injection
-- Future: theme JSON → CSS variable injection pipeline (planned)
+- CSS variables (tokens) approach; future: theme JSON → CSS pipeline.
 
-## 16. Quick Smoke (Inline)
+## 16. Extended Smoke Example
 
 ```bash
-./mvnw -DskipTests package
-java -jar target/app-bana-1.0-SNAPSHOT-fat.jar &
+./app-bana-service/mvnw clean package -DskipTests
+java -jar app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar &
+PID=$!
+sleep 3
 curl -s localhost:8080/health
-curl -s localhost:8080/ui/datasource/list
-curl -s -X POST localhost:8080/schema \
-  -H 'Content-Type: application/json' \
+curl -s -X POST localhost:8080/schema -H 'Content-Type: application/json' \
   --data '{"name":"smoke","fields":[{"name":"id","type":"long","primaryKey":true,"autoIncrement":true}]}'
 curl -s localhost:8080/api/smoke
+kill $PID
 ```
 
 ---
-All prior framework-specific references were removed/replaced. Use this guide as the single source for assistant context going forward.
+Updated for multi-module + groupId change to `com.appbana` and Java 21.
