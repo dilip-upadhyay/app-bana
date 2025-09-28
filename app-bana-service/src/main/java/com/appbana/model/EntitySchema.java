@@ -6,6 +6,7 @@ public class EntitySchema {
     private String name;
     private List<Field> fields;
     private String datasourceName; // optional: target datasource for this schema's table
+    private String modelKind; // 'relational' | 'document' | 'apiResource' (default: relational)
 
     public EntitySchema() {}
 
@@ -36,6 +37,14 @@ public class EntitySchema {
 
     public void setDatasourceName(String datasourceName) {
         this.datasourceName = datasourceName;
+    }
+
+    public String getModelKind() {
+        return modelKind;
+    }
+
+    public void setModelKind(String modelKind) {
+        this.modelKind = modelKind;
     }
 
     public static class Field {
