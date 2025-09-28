@@ -16,7 +16,7 @@ This guide provides a technical snapshot for AI assistants to understand and int
 ## 1. Project Overview
 
 - **What it is:** A metadata-driven application platform. Design schemas in a UI, and the backend auto-creates tables and exposes CRUD APIs.
-- **Core Stack:** Java 21 (LTS, virtual threads if available), H2 (default), Jackson, SLF4J, HikariCP, Maven multi-module.
+- **Core Stack:** Java 25 (LTS, virtual threads if available), H2 (default), Jackson, SLF4J, HikariCP, Maven multi-module.
 - **Modules:**
   - `app-bana-ui` (groupId: `com.appbana`) – Contains the frontend application source (`src/`) and packages the final static UI resources for the backend.
   - `app-bana-service` – backend service (depends on ui module; shaded runnable JAR).
@@ -193,7 +193,7 @@ kill $PID
 ```
 
 ---
-Updated for multi-module + groupId change to `com.appbana` and Java 21.
+Updated for multi-module + groupId change to `com.appbana` and Java 25.
 
 ## 17. Studio Domain Model & Metadata Roadmap (Notes)
 No functional change yet; relational path extended with edit/delete lifecycle. Non-relational kinds still UI-only modeling; backend ignores `modelKind` != relational.

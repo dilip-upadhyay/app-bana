@@ -767,9 +767,24 @@ public class ApiServer {
             String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            String limitS = req.query("limit");
+            String offsetS = req.query("offset");
+            String q = req.query("q");
+            boolean paged = (limitS != null || offsetS != null || (q != null && !q.isBlank()));
+            Integer limit = null; Integer offset = null;
+            if (paged) {
+                try { limit = limitS != null ? Integer.parseInt(limitS) : 50; } catch (Exception ignore) { limit = 50; }
+                try { offset = offsetS != null ? Integer.parseInt(offsetS) : 0; } catch (Exception ignore) { offset = 0; }
+                if (limit <= 0) limit = 50; if (limit > 500) limit = 500; if (offset < 0) offset = 0;
+            }
             try {
-                List<Map<String, Object>> rows = listAll(schema);
-                res.json(200, rows);
+                if (!paged) {
+                    List<Map<String, Object>> rows = listAll(schema);
+                    res.json(200, rows);
+                } else {
+                    Map<String,Object> out = listPaged(schema, limit, offset, q);
+                    res.json(200, out);
+                }
             } catch (SQLException e) {
                 LOG.error("List failed for entity {}", entity, e);
                 res.json(500, errorDetails(e));
@@ -1144,6 +1159,49 @@ public class ApiServer {
         try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
             return ps.executeUpdate();
+        }
+    }
+
+    private static Map<String,Object> listPaged(EntitySchema schema, int limit, int offset, String q) throws SQLException {
+        String base = "FROM " + quote(schema.getName());
+        StringBuilder where = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        if (q != null && !q.isBlank()) {
+            String uq = q.trim().toUpperCase();
+            List<String> likeParts = new ArrayList<>();
+            for (EntitySchema.Field f : schema.getFields()) {
+                String t = f.getType().toLowerCase();
+                if (t.equals("string") || t.equals("text") || t.equals("varchar")) {
+                    likeParts.add("UPPER(" + quote(f.getName()) + ") LIKE ?");
+                    params.add("%" + uq + "%");
+                }
+            }
+            if (!likeParts.isEmpty()) {
+                where.append(" WHERE (").append(String.join(" OR ", likeParts)).append(")");
+            }
+        }
+        String countSql = "SELECT COUNT(*) " + base + where;
+        String dataSql = "SELECT * " + base + where + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"; // ANSI style supported by H2 / many DBs; for unsupported DB adjust later
+        try (Connection c = schemaConnection(schema)) {
+            long total;
+            try (PreparedStatement cps = c.prepareStatement(countSql)) {
+                for (int i=0;i<params.size();i++) cps.setObject(i+1, params.get(i));
+                try (ResultSet rs = cps.executeQuery()) { rs.next(); total = rs.getLong(1); }
+            }
+            List<Map<String,Object>> rows = new ArrayList<>();
+            try (PreparedStatement dps = c.prepareStatement(dataSql)) {
+                int idx=1; for (Object p : params) dps.setObject(idx++, p);
+                dps.setInt(idx++, offset);
+                dps.setInt(idx, limit);
+                try (ResultSet rs = dps.executeQuery()) { rows = toList(rs); }
+            }
+            Map<String,Object> out = new LinkedHashMap<>();
+            out.put("rows", rows);
+            out.put("total", total);
+            out.put("limit", limit);
+            out.put("offset", offset);
+            if (q != null && !q.isBlank()) out.put("query", q);
+            return out;
         }
     }
 }
