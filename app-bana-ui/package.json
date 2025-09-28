@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify": "npm run build && test -f src/main/resources/ui/dist/index.html && grep -R \"Hello from metadata-driven Studio\" src/main/resources/ui/dist/assets >/dev/null"
   },
   "dependencies": {
     "lit": "^3.1.4"
