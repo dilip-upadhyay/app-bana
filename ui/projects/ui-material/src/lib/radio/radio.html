@@ -1,6 +1,0 @@
-<mat-radio-group [disabled]="disabled" [value]="value" (change)="valueChange.emit($event.value)">
-  <mat-radio-button *ngFor="let opt of options" [value]="opt.value">
-    {{ opt.label }}
-  </mat-radio-button>
-</mat-radio-group>
-
