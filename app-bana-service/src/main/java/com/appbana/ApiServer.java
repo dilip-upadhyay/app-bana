@@ -914,6 +914,33 @@ public class ApiServer {
                 res.text(500, "Internal Server Error", "text/plain; charset=utf-8");
             }
         });
+        router.get("/ui/studio", (req, res) -> {
+            try (InputStream is = ApiServer.class.getResourceAsStream("/ui/dist/index.html")) {
+                if (is == null) {
+                    res.text(503, "UI build missing. Run ./run-ui.sh build (or npm run build) to generate /ui/dist.", "text/plain; charset=utf-8");
+                    return;
+                }
+                String html = new String(is.readAllBytes());
+                res.text(200, html, "text/html; charset=utf-8");
+            } catch (IOException ioe) {
+                LOG.error("Failed to serve /ui/studio", ioe);
+                res.text(500, "Internal Server Error", "text/plain; charset=utf-8");
+            }
+        });
+        router.get("/ui/explorer", (req, res) -> {
+            // Alias to studio index (SPA handles internal routing for /explorer path)
+            try (InputStream is = ApiServer.class.getResourceAsStream("/ui/dist/index.html")) {
+                if (is == null) {
+                    res.text(503, "UI build missing. Run ./run-ui.sh build (or npm run build) to generate /ui/dist.", "text/plain; charset=utf-8");
+                    return;
+                }
+                String html = new String(is.readAllBytes());
+                res.text(200, html, "text/html; charset=utf-8");
+            } catch (IOException ioe) {
+                LOG.error("Failed to serve /ui/explorer", ioe);
+                res.text(500, "Internal Server Error", "text/plain; charset=utf-8");
+            }
+        });
         router.get("/ui/{path}", (req, res) -> {
             String path = req.pathParam("path");
             if (path == null || path.isBlank() || path.contains("..")) {
