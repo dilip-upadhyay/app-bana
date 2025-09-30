@@ -106,6 +106,53 @@ export class TreeStore {
     this.pushHistory(op);
   }
 
+  duplicate(id: string) {
+    if (!this.nodes.has(id)) return;
+    if (id === this.page.rootId) return; // do not duplicate root for now
+    const original = this.require(id);
+    const parent = this.findParent(id);
+    if (!parent) return;
+    // Collect original subtree
+    const originals: ComponentNode[] = [];
+    const collect = (n: ComponentNode) => { originals.push(n); (n.children||[]).forEach(cid=>collect(this.require(cid))); };
+    collect(original);
+    // Build id map + cloned nodes
+    const idMap = new Map<string,string>();
+    const genId = (base: string) => {
+      let candidate: string; let attempt=0;
+      do { candidate = base + '-copy' + (attempt? '-' + attempt : ''); attempt++; } while (this.nodes.has(candidate));
+      return candidate;
+    };
+    for (const n of originals) idMap.set(n.id, genId(n.id));
+    const clonedNodes: ComponentNode[] = originals.map(n => ({
+      ...structuredClone(n),
+      id: idMap.get(n.id)!,
+      children: n.children ? n.children.map(cid=> idMap.get(cid)!) : n.children
+    }));
+    const newRootId = idMap.get(id)!;
+    const parentChildrenPrev = [...(parent.children||[])];
+    const insertIndex = parent.children ? parent.children.indexOf(id)+1 : 0;
+    const op: Operation = {
+      desc: `duplicate:${id}`,
+      undo: () => {
+        parent.children = parent.children?.filter(cid => !clonedNodes.some(cn => cn.id === cid));
+        for (const cn of clonedNodes) this.nodes.delete(cn.id);
+      },
+      redo: () => {
+        for (const cn of clonedNodes) this.nodes.set(cn.id, structuredClone(cn));
+        parent.children = parent.children||[];
+        // insert new root id + ensure children order for subtree root only
+        if (!parent.children.includes(newRootId)) {
+          if (insertIndex<0 || insertIndex>parent.children.length) parent.children.push(newRootId);
+          else parent.children.splice(insertIndex,0,newRootId);
+        }
+      }
+    };
+    op.redo();
+    this.pushHistory(op);
+    this.select(newRootId);
+  }
+
   undo() { const op = this.history.pop(); if (!op) return; op.undo(); this.future.push(op); this.save(false); this.notify(); }
   redo() { const op = this.future.pop(); if (!op) return; op.redo(); this.history.push(op); this.save(false); this.notify(); }
 

@@ -28,7 +28,23 @@ export class BuilderCanvas extends LitElement {
       this.requestUpdate();
     });
     this.page = currentStore!.getPage();
+    this.addEventListener('keydown', this.onKeyDown as any);
+    this.setAttribute('tabindex','0');
   }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.removeEventListener('keydown', this.onKeyDown as any);
+  }
+
+  private onKeyDown = (e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase()==='d') {
+      if (this.selectedId && this.selectedId !== this.page!.rootId) {
+        currentStore?.duplicate(this.selectedId);
+        e.preventDefault();
+      }
+    }
+  };
 
   private select(id: string) { currentStore?.select(id); }
   private addChild(parentId: string) {
@@ -36,6 +52,9 @@ export class BuilderCanvas extends LitElement {
     currentStore?.addNode(parentId, { id, type: 'text', props: { text: 'New text' } });
   }
   private remove(id: string) { currentStore?.removeNode(id); }
+  private duplicateSelected() {
+    if (this.selectedId && this.selectedId !== this.page!.rootId) currentStore?.duplicate(this.selectedId);
+  }
 
   private renderNode(node: ComponentNode) {
     const sel = node.id === this.selectedId;
@@ -58,8 +77,8 @@ export class BuilderCanvas extends LitElement {
       <div class="toolbar">
         <button @click=${()=>currentStore?.undo()}>Undo</button>
         <button @click=${()=>currentStore?.redo()}>Redo</button>
+        <button ?disabled=${!this.selectedId || this.selectedId===this.page.rootId} @click=${()=>this.duplicateSelected()}>Duplicate</button>
       </div>
       <div class="tree">${this.renderNode(root)}</div>`;
   }
 }
-
