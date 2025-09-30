@@ -10,6 +10,8 @@
 - Duplicate field name validation (client-side)
 - Inline JSON import/export of schema definitions
 - New helper script `./run-ui.sh` for UI dev/build/preview
+- **Baseline CRUD Audit Logging** (INSERT / UPDATE / DELETE with before/after & field diff — see `docs/AUDIT_LOGGING.md`, query via `GET /audit`)
+- **Studio Builder (experimental) productivity**: duplicate subtree (Cmd/Ctrl+D), keyboard delete w/ confirm, drag & drop reparent, inline text edit (Enter), search palette (Cmd/Ctrl+P), copy ID (Shift+Cmd/Ctrl+C), persistent expand/collapse — full list in `docs/UI_BUILDER_SHORTCUTS.md`
 
 Metadata-driven MVP: design forms in a minimal UI builder, persist the schema, auto-create/migrate a backing table, and expose runtime CRUD APIs. Implemented with plain Java SE (no heavy frameworks).
 
