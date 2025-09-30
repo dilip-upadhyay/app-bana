@@ -1,8 +1,10 @@
 # October 2025 — Enterprise Foundation (MVP)
 
-Status: Planned (Q4 2025)
-Owner: Product/Engineering
-Last updated: 2025-09-21
+> UPDATE 2025-10-01: This file preserves original Angular-centric story wording for traceability. The Angular workspace plan is **deprecated**. Stories remain as anchor IDs (O1-S*, O2-S*, etc.) but their implementation path now maps to the custom Studio (Web Components) framework. Where relevant, a *Studio Mapping* line has been added. Do not remove anchors; adjust acceptance criteria in PRs as implementation details shift.
+
+Status: Planned (Q4 2025) — Partial progress on O1 (Studio Base)  
+Owner: Product/Engineering  
+Last updated: 2025-10-01
 
 Purpose
 - Define the epics and user stories required to deliver the October phase of the accelerated roadmap.
@@ -23,17 +25,19 @@ KPIs (October)
 ---
 
 EPIC O1 — Angular 21 UI Foundation (MVP)
-Objective
-- Establish the Angular 21 workspace, a minimal runtime renderer, and a designer shell as the platform for Q4 features.
-- Styling: follow `docs/STYLE_GUIDE.md` (Material + CSS variables tokens; tiny local utilities in studio; token‑driven runtime).
+> LEGACY TITLE. Treat as **Studio UI Foundation (Phase A → early B)**.
 
-Epic acceptance criteria
-- Nx workspace created with apps/studio and libs/runtime, libs/designer, libs/ui-schema.
-- Runtime renders a schema with Container/Text/Button; designer shell present; Settings panel stores token securely.
-- HttpInterceptor injects X-AppBana-Token; build/test/lint scripts available; Node LTS honored via .nvmrc.
+Objective
+- Establish the UI foundation for Q4 features.
+- Styling tokens & minimal utilities (unchanged goal).
+
+Epic acceptance criteria *(adjusted)*
+- Studio Phase A exit (metadata, registry, demo, unknown placeholder, renderer + test, packaging) then Phase B canvas skeleton.
 
 Stories
 #### O1-S1 Scaffold Angular workspace (Nx)
+_Studio Mapping:_ Already satisfied by creating `app-bana-ui` Vite workspace + metadata model + registry (DONE). No Nx/Angular.
+
 - Description: Create Nx workspace under ui/, add apps/studio and libs (runtime, designer, ui-schema). Configure tsconfig, lint, unit test runner.
 - Acceptance: `npm run build` passes; `npm run lint` passes; apps/studio serves.
 - Tasks: Nx init; lib/app gen; tsconfig path mapping; base scripts; README quickstart.
@@ -42,6 +46,8 @@ Stories
 - Labels: angular, tooling, nx
 
 #### O1-S2 Minimal runtime renderer
+_Studio Mapping:_ Implement recursive renderer in `app-renderer.ts` (PENDING); core components & demo metadata DONE.
+
 - Description: Implement runtime lib: component registry + ViewContainerRef-based renderer for Container/Text/Button.
 - Acceptance: "Hello from Runtime" renders from a JSON schema; no designer deps in runtime.
 - Tasks: runtime service + renderer component; basic components; sample schema.
@@ -50,6 +56,8 @@ Stories
 - Labels: angular, runtime
 
 #### O1-S3 Designer shell + Settings (token)
+_Studio Mapping:_ Pending Phase B; legacy token persistence UI deferred until after renderer test.
+
 - Description: Implement basic designer shell UI with canvas placeholder and a Settings panel that saves X-AppBana-Token to secure storage and updates interceptor.
 - Acceptance: token persists; interceptor sends header; canvas shows live preview area.
 - Tasks: designer shell component; settings service; secure storage; wiring to interceptor.
@@ -58,6 +66,8 @@ Stories
 - Labels: angular, designer, security
 
 #### O1-S4 HttpInterceptor + scripts + CI stub
+_Studio Mapping:_ Not applicable (no Angular HttpInterceptor). Equivalent: request helper module + scripts (pending).
+
 - Description: Add HttpInterceptor; ensure scripts for build/test/lint; add minimal CI config (stub) and Node LTS via .nvmrc mention.
 - Acceptance: requests include X-AppBana-Token when set; scripts run locally; CI stub file present.
 - Tasks: interceptor; package scripts; ci.yml (stub)
@@ -66,6 +76,8 @@ Stories
 - Labels: angular, security, ci
 
 #### O1-S5 Audit UI scaffold (list/export stub)
+_Studio Mapping:_ Pending; will consume future `/audit/export.csv` + query endpoint extension.
+
 - Description: Create a basic Audit page in studio app: filters (user/entity/date), list, and Export CSV button that calls backend stub.
 - Acceptance: page loads; filters debounce; export triggers call.
 - Tasks: route/page; table; export call; lightweight error toast.
@@ -74,6 +86,8 @@ Stories
 - Labels: angular, audit, ux
 
 #### O1-S6 Host Angular app at /ui/designer (Java server)
+_Studio Mapping:_ Replace with hosting `/ui/studio` static assets built by Vite (PENDING packaging step).
+
 - Description: Serve the Angular studio app from the existing Java server behind /ui/designer without breaking existing UIs.
 - Acceptance: /ui/designer loads Angular app (built artifacts served); existing UIs /ui/builder, /ui/datasource, /ui/swagger still work.
 - Tasks: static asset handler or proxy for /ui/designer; build output path alignment; cache headers; basic 404 handling to index.html.
@@ -82,6 +96,8 @@ Stories
 - Labels: hosting, integration
 
 #### O1-S7 Regression smoke for existing UIs
+_Studio Mapping:_ Still valid — ensure legacy `/ui/builder`, `/ui/datasource`, `/ui/swagger` unaffected by new `/ui/studio` route.
+
 - Description: Add a short smoke checklist (manual or simple script) to verify /ui/builder, /ui/datasource, /ui/swagger still function after Angular hosting is enabled.
 - Acceptance: documented smoke steps in repo; run passes locally; issues tracked if any.
 - Tasks: write smoke doc; optional curl checks; link from COPILOT_NOTES.md.
@@ -93,6 +109,8 @@ Stories
 ---
 
 EPIC O2 — Stateful Workflow Engine (MVP)
+> Unchanged concept; UI schema integration will bind to Studio runtime actions instead of Angular services.
+
 Objective
 - Enable long-running workflows with resumable state, auditable transitions, and UI schema bindings.
 
@@ -137,6 +155,8 @@ Stories
 ---
 
 EPIC O3 — Advanced Security & Auditing
+> Adjust: baseline CRUD audit DONE; transition & CSV export PENDING; FLS to integrate with Studio runtime redaction pipeline.
+
 Objective
 - Provide HIPAA-aligned auditing and Field-Level Security with runtime enforcement and basic UI tooling.
 
@@ -189,6 +209,8 @@ Stories
 ---
 
 EPIC O4 — Foundational Plugin API
+> Adjust: DI tokens → simple registry + dynamic import contract; plugin examples to register custom elements via global hook (`window.AppBanaStudio.registerComponent`).
+
 Objective
 - Establish a plugin architecture for components, data connectors, and action types, and ship an example plugin.
 - Reference: see `UI_Development_Plan.md` → “Plugin boundary via Web Components (short)” for the minimal plugin contract and phased plan.
@@ -245,3 +267,16 @@ Definition of Done (per story)
 - Code merged with CI green; unit/integration tests updated and passing.
 - Docs updated (README, FUNCTIONAL_SPEC or LOW_LEVEL_DESIGN as needed).
 - Manual smoke where applicable; acceptance criteria met.
+
+**Status Summary (2025-10-01)**
+| Story | Legacy Intent | Studio Mapping Status |
+|-------|---------------|-----------------------|
+| O1-S1 | Nx scaffold | DONE (Vite workspace + registry) |
+| O1-S2 | Minimal renderer | PARTIAL (core comps done; recursive walker missing) |
+| O1-S3 | Designer shell + token | NOT STARTED |
+| O1-S4 | HttpInterceptor | REPLACED (request helper TBD) |
+| O1-S5 | Audit UI scaffold | NOT STARTED |
+| O1-S6 | Host Angular app | PENDING (/ui/studio packaging) |
+| O1-S7 | Regression smoke | NOT STARTED (will reuse UI_SMOKE + add /ui/studio) |
+
+> Continue to reference anchor IDs in commits/PRs. Update this mapping table as progress changes.

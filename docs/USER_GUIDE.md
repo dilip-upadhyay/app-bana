@@ -1,5 +1,7 @@
 # AppBana — User Guide
 
+> Updated 2025-10-01: Added Studio (custom Web Components UI) progress note. Angular quickstart section marked as legacy (kept for historical reference). `/ui/studio` route will appear once Phase A renderer is completed.
+
 Welcome! This guide walks you through installing, configuring, and using AppBana end to end.
 
 What is AppBana?
@@ -417,7 +419,24 @@ Note: The images above will automatically use the bundled SVGs under `docs/scree
 
 ---
 
-Angular Studio (UI) quickstart — optional
+## Studio (New Custom UI) Preview
+A new lightweight Web Components based UI framework ("Studio") is under development:
+- Current status (Phase A partial): BaseElement, component registry, core components (Container/Text/Button), demo metadata, unknown component placeholder.
+- Pending (to activate `/ui/studio`): recursive renderer implementation, first Vitest renderer test, packaging of a `studio.html` entry into the service JAR.
+- Until `/ui/studio` is available, continue using legacy builder at `/ui/builder`.
+
+When `/ui/studio` lands you will be able to:
+1. Open a demo page rendered from JSON metadata.
+2. Inspect placeholder content representing future design-time canvas features.
+3. Gradually adopt new components as Builder MVP (Phase B) introduces selection, inspector, and undo/redo.
+
+Track progress: `README.md` (Studio Status) and `.github/COPILOT_GUIDE.md` (assistant-facing checklist).
+
+---
+
+Angular Studio (UI) quickstart — legacy (historic reference only)
+> This section reflects a deprecated plan to use Angular/Nx; retained for historical trace. New development uses the custom Studio framework described above.
+
 - The repository includes an Angular workspace under `ui/` with a Studio app (SSR).
 - Use these scripts from the repo root to build libraries + Studio and run the SSR server:
 
@@ -435,93 +454,3 @@ Notes
   - `cd ui && npm run serve:ssr:studio`
 - The Studio app includes Google Material Icons via a link tag in `projects/studio/src/index.html` so `<mat-icon>` ligatures work.
 
-## Audit Logging (Baseline CRUD)
-AppBana now records an immutable trail for each successful data mutation through dynamic CRUD endpoints.
-
-What is logged:
-- Operations: INSERT, UPDATE, DELETE (and each row of batch INSERT)
-- Fields: full before & after row JSON, plus a per-field `changes` diff map (field → [old, new])
-- Actor: token value (or `anonymous` when auth disabled / no token header)
-- Timestamp: database-generated
-
-Storage:
-- Table: `appbana_audit` (auto-created alongside metadata tables)
-- Created per active datasource automatically; supported dialects inherit correct column types.
-
-Query API:
-```
-GET /audit?entity=<entityName>&pk=<primaryKey>&limit=50&offset=0
-```
-Parameters (all optional except paging defaults):
-- `entity`: filter by entity (schema) name
-- `pk`: filter by primary key value (string compare)
-- `limit`: page size (default 50, max 500)
-- `offset`: zero-based offset
-
-Response example:
-```json
-{
-  "rows": [
-    {
-      "id": 12,
-      "ts": "2025-10-01T00:35:12.345Z",
-      "op": "UPDATE",
-      "entity": "customer",
-      "pk": "42",
-      "actor": "admin123",
-      "before": { "ID":42, "FIRSTNAME":"Jane", "LASTNAME":"Doe" },
-      "after": { "ID":42, "FIRSTNAME":"Janet", "LASTNAME":"Doe" },
-      "changes": { "FIRSTNAME": ["Jane", "Janet"] }
-    }
-  ],
-  "limit": 50,
-  "offset": 0,
-  "total": 1,
-  "entity": "customer",
-  "pk": "42"
-}
-```
-
-Batch insert:
-- Each row with a generated key yields an INSERT audit row (before=null, changes show null→value transitions).
-
-Error handling:
-- Audit failures never block primary CRUD; they are swallowed. A transient `lastError` may appear in `/audit` responses for diagnostics.
-
-More detail: `docs/AUDIT_LOGGING.md`.
-
-## Experimental Studio Builder (Tree Canvas)
-A prototype tree‑based UI builder is available (depending on distribution, either `/ui/studio` or integrated into `/ui/builder`). It allows fast manipulation of an in-memory page/component tree (metadata-driven) before persistence features arrive in a later phase.
-
-Current capabilities:
-- Duplicate subtree (Cmd/Ctrl + D) with full undo/redo
-- Drag & drop reparent into container nodes (auto-appends as last child)
-- Inline text content editing (Enter to edit/commit, Esc to cancel)
-- Keyboard delete (Backspace/Delete) with confirmation for subtrees; root protected
-- Search palette (Cmd/Ctrl + P): filter by id/type/text, arrow navigate, Enter to select
-- Copy node ID (Shift+Cmd/Ctrl + C) with toast feedback
-- Persistent expand/collapse state across sessions (localStorage)
-- Accessible tree semantics: role=tree, treeitem, group, aria-expanded/selected, dialog for palette, live region for toasts
-
-Planned near-term enhancements:
-- Sibling reordering (insertion indicators) rather than append-only reparent
-- Arrow key navigation & Left/Right expand/collapse
-- Multi-select & batch operations
-
-Shortcut reference (subset):
-| Action | macOS | Win/Linux |
-|--------|-------|-----------|
-| Duplicate node | Cmd+D | Ctrl+D |
-| Delete node | Delete / Backspace | Delete / Backspace |
-| Search palette | Cmd+P | Ctrl+P |
-| Copy node ID | Shift+Cmd+C | Shift+Ctrl+C |
-| Inline edit text | Enter | Enter |
-
-Full list & roadmap: `docs/UI_BUILDER_SHORTCUTS.md`.
-
-Undo/Redo integration:
-- All structural mutations (add, remove, duplicate, move) and text edits push history operations.
-- Redo stack is cleared on any new mutation.
-
-Persistence warning:
-- The current builder stores a draft to localStorage only (page-specific key). Server-side page persistence will arrive in a later design phase.

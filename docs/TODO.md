@@ -3,27 +3,34 @@
 This plan is the actionable backlog for October–December 2025. Keep it synchronized with `Product_AppBana.md` (§5 acceptance criteria; §17 logistics) and update checkboxes as items are delivered.
 
 ## October 2025 — Enterprise Foundation (MVP)
-- [ ] Custom UI Studio Foundation (MVP)
-  - [ ] Scaffold minimal Studio workspace (plain TS/JS + build script). [O1-S1](OCT_2025_EPICS_STORIES.md#o1-s1-scaffold-studio-workspace)
-  - [ ] Implement minimal runtime renderer (Container/Text/Button) + designer shell with Settings (token persistence). [O1-S2](OCT_2025_EPICS_STORIES.md#o1-s2-minimal-runtime-renderer) · [O1-S3](OCT_2025_EPICS_STORIES.md#o1-s3-designer-shell--settings)
-  - [ ] Request helper injecting X-AppBana-Token; add dev/test scripts. [O1-S4](OCT_2025_EPICS_STORIES.md#o1-s4-request-helper--scripts)
+- [ ] Custom UI Studio Foundation (MVP)  
+  Progress: Base scaffolding & core components DONE; renderer/test/packaging pending.
+  - [x] Scaffold minimal Studio workspace (plain TS/JS + build script). [O1-S1](OCT_2025_EPICS_STORIES.md#o1-s1-scaffold-studio-workspace) *(Adjusted: custom Studio vs Angular)*
+  - [x] Implement component registry + core components Container/Text/Button. [O1-S2](OCT_2025_EPICS_STORIES.md#o1-s2-minimal-runtime-renderer)
+  - [x] Demo metadata JSON + unknown component placeholder. [O1-S2](OCT_2025_EPICS_STORIES.md#o1-s2-minimal-runtime-renderer)
+  - [ ] Recursive runtime renderer (walk nodes, attach props, children).
+  - [ ] Vitest renderer test (assert demo renders & unknown placeholder used).
+  - [ ] `/ui/studio` packaging into fat JAR (HTML + bootstrap script).
+  - [ ] Builder canvas skeleton (selection + tree mount) & token persistence shell. [O1-S3](OCT_2025_EPICS_STORIES.md#o1-s3-designer-shell--settings)
   - [ ] Basic audit log UI scaffold (list/export stub). [O1-S5](OCT_2025_EPICS_STORIES.md#o1-s5-audit-ui-scaffold)
   - [ ] Styling baseline: tokens (CSS variables) + minimal utility classes per `docs/STYLE_GUIDE.md`.
 - [ ] Server-side Workflow Engine (MVP)
-  - [ ] Persist workflow instances and transitions (draft/submitted/approved/rejected) with idempotency. [O2-S1](OCT_2025_EPICS_STORIES.md#o2-s1-schema--migrations-for-workflows)
-  - [ ] UI schema: add `workflows` and map actions to transitions; designer bindings. [O2-S4](OCT_2025_EPICS_STORIES.md#o2-s4-ui-schema--runtime-actions)
-  - [ ] Runtime: start/approve actions; resume by owner. [O2-S3](OCT_2025_EPICS_STORIES.md#o2-s3-instance--transition-apis)
-  - [ ] Definition APIs (create/list) available. [O2-S2](OCT_2025_EPICS_STORIES.md#o2-s2-definition-apis)
+  - [ ] Persist workflow definitions/instances & transitions (draft/submitted/approved/rejected) with idempotency. [O2-S1](OCT_2025_EPICS_STORIES.md#o2-s1-schema--migrations-for-workflows)
+  - [ ] Definition APIs (create/list). [O2-S2](OCT_2025_EPICS_STORIES.md#o2-s2-definition-apis)
+  - [ ] Instance + transition APIs with history. [O2-S3](OCT_2025_EPICS_STORIES.md#o2-s3-instance--transition-apis)
+  - [ ] UI schema extension + runtime actions (start/approve). [O2-S4](OCT_2025_EPICS_STORIES.md#o2-s4-ui-schema--runtime-actions)
 - [ ] Advanced Security & Auditing
-  - [ ] Server-side audit records for all CRUD and workflow transitions (who/when/what/entity/id/IP/UA + before/after hash). [O3-S1](OCT_2025_EPICS_STORIES.md#o3-s1-audit-model--repository--service)
-  - [ ] Export CSV + filters (user/entity/date). [O3-S2](OCT_2025_EPICS_STORIES.md#o3-s2-audit-query--csv-export)
-  - [ ] Field-Level Security (FLS): enforce on read (redact/omit) and write (reject), and honor hide/disable in runtime. [O3-S3](OCT_2025_EPICS_STORIES.md#o3-s3-field-level-security-engine-backend) · [O3-S4](OCT_2025_EPICS_STORIES.md#o3-s4-runtime-fls-enforcement-ui)
-  - [ ] Hook Audit UI into backend. [O3-S5](OCT_2025_EPICS_STORIES.md#o3-s5-audit-ui-integration)
+  - [x] Baseline CRUD audit (INSERT/UPDATE/DELETE + batch rows). [O3-S1]
+  - [ ] Workflow transition audit linkage. [O3-S1]
+  - [ ] Export CSV + filters (user/entity/date/op). [O3-S2](OCT_2025_EPICS_STORIES.md#o3-s2-audit-query--csv-export)
+  - [ ] Field-Level Security (FLS) engine backend. [O3-S3](OCT_2025_EPICS_STORIES.md#o3-s3-field-level-security-engine-backend)
+  - [ ] Runtime FLS enforcement (hide/disable / redact). [O3-S4](OCT_2025_EPICS_STORIES.md#o3-s4-runtime-fls-enforcement-ui)
+  - [ ] Audit UI integration. [O3-S5](OCT_2025_EPICS_STORIES.md#o3-s5-audit-ui-integration)
 - [ ] Foundational Plugin API
-  - [ ] Component/data-connector/action registration registry with docs. [O4-S1](OCT_2025_EPICS_STORIES.md#o4-s1-define-plugin-registry)
-  - [ ] Example component: Signature Pad shipped. [O4-S2](OCT_2025_EPICS_STORIES.md#o4-s2-signature-pad-component-plugin)
-  - [ ] Data connector skeleton ready. [O4-S3](OCT_2025_EPICS_STORIES.md#o4-s3-data-connector-skeleton-plugin)
-  - [ ] Define plugin boundary (Web Components/module contract) and document inputs/outputs/theming/SDK bridge.
+  - [x] Component registration mechanism (registry) established. [O4-S1](OCT_2025_EPICS_STORIES.md#o4-s1-define-plugin-registry)
+  - [ ] Data connector skeleton plugin. [O4-S3](OCT_2025_EPICS_STORIES.md#o4-s3-data-connector-skeleton-plugin)
+  - [ ] Example component: Signature Pad plugin. [O4-S2](OCT_2025_EPICS_STORIES.md#o4-s2-signature-pad-component-plugin)
+  - [ ] Document plugin contract (loading boundary, theming, lifecycle).
 
 Acceptance criteria: see `Product_AppBana.md` §5 October.
 
@@ -66,15 +73,15 @@ Acceptance criteria: see `Product_AppBana.md` §5 December and §17.4.
 
 ## Phase A (Studio Foundation) – Alignment Snapshot
 (See `docs/UI_Development_Plan.md` §7 for detailed exit criteria.)
-- [ ] metadata.ts (PageMeta, ComponentNode, ThemeMeta, NavigationMeta, Binding, Action)
-- [ ] registry bootstrap (auto-register core built-ins)
-- [ ] demo-page.json packaged & rendered at /ui/studio
+- [x] metadata.ts (PageMeta, ComponentNode, ThemeMeta, NavigationMeta, Binding, Action) *(initial subset — will expand later)*
+- [x] registry bootstrap (auto-register core built-ins)
+- [x] demo-page.json created (demo) — packaging pending
 - [ ] Renderer recursive children traversal + prop application
-- [ ] Unknown component placeholder element
-- [ ] Vitest harness + first renderer test
-- [ ] README + Copilot Guide component contribution section (README updated ✓, guide updated ✓)
+- [x] Unknown component placeholder element
+- [ ] Vitest harness + first renderer test (harness present; test missing)
+- [ ] README + Copilot Guide component contribution update (partial; finalize after renderer API)
 
-Progress tags: mark each upon commit; do not advance to Phase B checklist until all above are checked.
+Progress tags: do not advance to Phase B checklist until all above are checked.
 
 ## Backlog (Post-Q4 or Nice-to-Haves)
 - OpenAPI enhancements (response schemas/examples); optionally bundle Swagger UI locally.
@@ -90,3 +97,4 @@ Progress tags: mark each upon commit; do not advance to Phase B checklist until 
 ## Notes
 - Keep this file aligned with `Product_AppBana.md` and `UI_Development_Plan.md`.
 - Update docs and change logs when checking off items.
+- Legend: ✅ = done, ☐ = pending.

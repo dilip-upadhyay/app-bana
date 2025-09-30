@@ -1,17 +1,19 @@
 # AppBana — Copilot Guide
 
-<!-- Added: Recent feature enhancements snapshot -->
+<!-- Updated 2025-10-01: Phase A progress + next steps -->
 **Recent Enhancements (Q4 2025 incremental)**
 - Schema edit (non‑PK rename with `existingName` + auto DDL)
-- Migration preview (POST /schema?preview=true) & history (GET /schema/{name}/migrations)
-- Schema delete (DELETE /schema/{name}?dropTable=true|false)
-- Schema summaries (GET /schema/summaries) for UI datasource filtering
-- Field reorder UI (display order only)
-- Duplicate field validation (client-side block on save/preview)
-- Inline JSON import/export in builder
-- Helper script `./run-ui.sh` (dev/build/preview with nvm auto-detect)
+- Migration preview & history
+- Schema delete (+ optional table drop)
+- Schema summaries endpoint
+- Field reorder (display only)
+- Duplicate field validation
+- Inline JSON import/export
+- Helper script `./run-ui.sh`
+- Baseline CRUD Audit Logging (single + batch insert rows, update, delete) with per-field diff
+- Studio: BaseElement, component registry, core components (Container/Text/Button), demo metadata, unknown component placeholder
 
-This guide provides a technical snapshot for AI assistants to understand and interact with the AppBana project.
+This guide provides a technical snapshot for AI assistants. Keep responses aligned with the authoritative deeper docs (`docs/UI_Development_Plan.md`, `docs/PRODUCT_PLAN.md`, `docs/TODO.md`).
 
 ## 1. Project Overview
 
@@ -22,13 +24,11 @@ This guide provides a technical snapshot for AI assistants to understand and int
   - `app-bana-service` – backend service (depends on ui module; shaded runnable JAR).
 - **Frontend:** A custom, lightweight UI framework ("Studio") is being developed using TypeScript and native Web Components. It uses `vite` for development and builds. `lit` is used as a temporary helper, with the long-term goal of being replaced by a minimal internal `BaseElement` core.
 
-## 2. Current Status
-
-- Fully working MVP backend.
-- New Vite-based frontend application scaffolded in `app-bana-ui/`.
-- Legacy UIs (`builder.html`, `datasource.html`) are still present but will be replaced by the new Studio application.
-- Swagger UI at `/ui/swagger` and OpenAPI spec at `/openapi.json`.
-- Refactor initiative in `docs/REFACTOR_PROPOSAL.md`.
+## 2. Current Status (Oct 1, 2025)
+- Backend: stable MVP; audit baseline shipped.
+- Frontend (Studio): Phase A partially complete (renderer & test pending).
+- Legacy HTML UIs (builder/datasource/swagger) still active; Angular plan deprecated.
+- NOTE: Earlier references to `docs/REFACTOR_PROPOSAL.md` are legacy — file removed; refactor intent summarized in section 9.
 
 ## 3. How to Build and Run
 
@@ -65,20 +65,17 @@ USE_SYSTEM_NODE=1 UI_PORT=5190 ./run-ui.sh dev
 - /api/endpoints (enumerates dynamic CRUD)
 - /openapi.json (excludes admin-only migration/delete endpoints by design)
 
-## 5. Configuration
+## 5–9 (Configuration, Datasources, Schema Format, Structure, Refactor Trajectory)
 
 - Config file (default): `data/appbana-config.json` (override via `APPBANA_CONFIG` or `-Dappbana.config`)
 - Env/System overrides: JDBC URL/credentials, tokens, HTTPS flags
 - Auth headers accepted: `X-AppBana-Token` or `Authorization: Bearer <token>`
-
-## 6. Datasource Management (Summary)
 
 - Multi-datasource JSON config with active selection
 - URL Builder (types: h2/postgres/mysql/mariadb/mssql/oracle/sqlite)
 - Test / Activate / Delete endpoints
 - HikariCP pool settings per datasource (defaults documented in README)
 
-## 7. Schema Format (Rename Extension)
 Field rename during edit:
 ```json
 {
@@ -90,7 +87,6 @@ Field rename during edit:
 ```
 Backend applies `ALTER TABLE ... RENAME COLUMN` if old column exists and new does not.
 
-## 8. Codebase Structure (Key Files – Updated)
 - `app-bana-service/src/main/java/com/appbana/ApiServer.java` (new delete + migrations + summaries routes)
 - `app-bana-service/src/main/java/com/appbana/SchemaManager.java` (generateMigrationPlan, listMigrations, deleteSchema, listSchemaSummaries)
 - `run-ui.sh` (root) helper for frontend lifecycle.
@@ -104,32 +100,33 @@ Backend applies `ALTER TABLE ... RENAME COLUMN` if old column exists and new doe
 - Add automated tests (unit + integration with alternate DB)
 
 ## 10. Q4 2025 Development Focus (Rebased – Custom UI Core)
+### Progress Snapshot vs Goals
+| Item | Status | Notes |
+|------|--------|-------|
+| BaseElement core | ✅ Done | Minimal lifecycle present |
+| Component registry | ✅ Done | Dynamic import bootstrap |
+| Core components (container/text/button) | ✅ Done | Registered lazily |
+| Unknown component placeholder | ✅ Done | Graceful fallback ensures forward compatibility |
+| Demo metadata JSON | ✅ Done | `src/demo/demo-page.json` includes unknown type test |
+| Recursive runtime renderer | ☐ Pending | Implement in `app-renderer.ts` (currently empty) |
+| Vitest renderer test | ☐ Pending | Add test verifying node count & text content |
+| /ui/studio packaging (HTML + bootstrap) | ☐ Pending | Add HTML served by backend + copy step |
+| Builder canvas skeleton | ☐ Pending | Begins Phase B after renderer/test |
+| Audit UI integration | ☐ Pending | Depends on audit export endpoint |
 
-### October 2025 (Platform Foundation & UI Core)
-- **Custom UI Framework Core ("Studio"):** The Studio framework is composed of two primary parts:
-    1.  **The Builder:** A visual, no-code canvas application. Users will drag and drop components to design application UIs, and the builder will produce a metadata JSON definition representing that UI.
-    2.  **The Runtime:** A lightweight rendering engine. It takes the metadata JSON generated by the builder and dynamically renders the final, interactive user application.
-- **Development Plan:**
-    - **Phase 0 (Current):** Utilize `vite` as the build tool and `lit` as a temporary helper for productivity.
-    - **Phase 1 (Incubate):** Introduce a custom `BaseElement.ts` as the foundation for all future UI components. This class will manage a shadow root, simple state, and a reactive `render()` method.
-    - **Phase 2 (Adopt):** Begin building new UI components for both the Builder and the Runtime using the internal `BaseElement` core.
-    - **Phase 3 (Migrate):** Incrementally replace `lit`-based components, with the end goal of removing the `lit` dependency entirely.
-- **Stateful Workflow Engine MVP:** Begin backend work on definitions, instances, transitions, and history.
-- **Plugin & Extension Boundary:** Formalize the component registry concept. Define a simple JavaScript module contract for how custom components can be discovered and integrated.
-
-### November 2025 (Vertical Enablement)
-- Offline/PWA baseline (asset + last schema cache; queued write replay)
-- Real-time channels (WebSocket + MQTT connector prototypes) and event distribution layer
-- Barcode/QR capture component (camera API) feeding form fields / actions
-- Reporting designer MVP (tabular config → CSV/Excel export service)
-- Multi-actor workflow enhancements & relationship permissions
-
-### December 2025 (Healthcare + Governance)
-- FHIR (read-only) connector + mapping helpers
-- Patient Timeline component (events over time, virtualization)
-- Design versioning & rollback metadata
-- Marketplace/Registry stub (enable first-party plugins securely)
-- Document Store (upload/view) + audited access
+### Immediate Next Action Checklist (Assistant / Dev)
+1. Implement recursive renderer in `app-bana-ui/src/app-renderer.ts`:
+   - Load demo JSON (import) & index nodes
+   - DFS build DOM: create element per node type via registry, apply simple props (e.g., text -> attribute)
+   - Append children
+2. Create `studio.html` (or `index-studio.html`) + bootstrap script that calls renderer (copy to service resources at build).
+3. Update build pipeline to copy new studio assets into `app-bana-service` JAR (parallel to existing `/ui/*`).
+4. Add Vitest test: import demo metadata, run renderer into a detached DOM container (jsdom), assert:
+   - Container exists
+   - Text node content matches demo JSON
+   - Unknown component placeholder rendered (e.g., tag `studio-unknown` present)
+5. Mark Phase A tasks complete in `TODO.md` and this guide.
+6. THEN begin Builder canvas store + selection model (Phase B) — not before.
 
 ## 10.1 Studio Status (Snapshot)
 This is a concise assistant-facing mirror of the deeper `docs/UI_Development_Plan.md`.

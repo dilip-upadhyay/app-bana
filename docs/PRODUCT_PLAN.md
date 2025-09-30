@@ -1,6 +1,10 @@
 # AppBana — Product Plan & Roadmap
 
+_Last updated: 2025-10-01 (Angular workspace plan deprecated; Studio custom UI path active)_
+
 This document outlines the product vision, strategic roadmap, and feature planning for AppBana. It is intended for product owners and stakeholders to guide development efforts.
+
+> Legacy Note: Previous references to an Angular 21 + Nx workspace have been superseded by the custom Studio (Web Components + TypeScript) implementation. Epics retain identifiers for traceability; descriptions adjusted where applicable.
 
 ## 1. Product Vision
 
@@ -20,12 +24,12 @@ The roadmap is phased to deliver an enterprise-ready v1 platform by the end of D
 ### **October 2025: The Enterprise Foundation**
 *Goal: Solidify core enterprise-grade features.*
 
-| Epic | Key Features | Business Goal |
+| Epic | Key Features (Adjusted for Studio) | Business Goal |
 | :--- | :--- | :--- |
-| **Angular 21 UI Foundation (MVP)** | - Scaffold Angular workspace (Nx) and repository structure<br>- Implement minimal runtime renderer and designer shell<br>- Wire HttpInterceptor for X-AppBana-Token<br>- Add dev/test/lint scripts<br>- Follow Material + CSS variables token styling | Establish the UI platform needed to deliver workflows, security/auditing, and future features. |
-| **Stateful Workflow Engine (MVP)** | - Design & implement a server-side workflow engine<br>- Model `workflows` in the UI schema for multi-step processes<br>- Support single-user stateful actions | Address the foundational need for process automation in HR and Healthcare. |
-| **Advanced Security & Auditing** | - Implement comprehensive, server-side audit trails for all data access<br>- Introduce Field-Level Security (FLS) in backend and UI renderer<br>- Create a UI for viewing and exporting audit logs | Achieve baseline compliance for Healthcare (HIPAA) and provide enterprise-grade security. |
-| **Foundational Plugin API** | - Document Plugin APIs for custom components and data connectors<br>- Develop an example Signature Pad component | Enable extensibility, foster a developer community, and prepare for vertical-specific features. |
+| **Studio UI Foundation (Phase A → early B)** | - BaseElement + registry + core components (DONE) <br>- Recursive runtime renderer + demo page at /ui/studio (PENDING) <br>- Vitest renderer test (PENDING) <br>- Builder canvas skeleton & local draft (Phase B start) | Establish the UI platform needed to deliver workflows, security/auditing, and future features. |
+| **Stateful Workflow Engine (MVP)** | - Definitions, instances, transitions, basic audit hook | Enable process automation foundation (HR & Healthcare). |
+| **Advanced Security & Auditing** | - CRUD baseline audit (DONE) <br>- Transition audit extension (pending engine) <br>- Field-Level Security engine + redaction/write enforcement (planned) <br>- Audit export + filters (entity, op, actor, date) | Compliance & trust (HIPAA alignment groundwork). |
+| **Foundational Plugin API** | - Component registry contract (seeded) <br>- Plugin loading boundary draft (Phase E design) <br>- Example Signature Pad component (Dec earliest) | Prepare extensibility & ecosystem. |
 
 ### **November 2025: Vertical Acceleration (Logistics & HR)**
 *Goal: Launch high-impact features for Logistics and HR.*
@@ -51,11 +55,13 @@ The roadmap is phased to deliver an enterprise-ready v1 platform by the end of D
 ## 4. Acceptance Criteria (by phase)
 
 ### October 2025 — Enterprise Foundation (MVP)
-- Workflow Engine: persist workflow instances, support states (draft, submitted, approved, rejected), resume by owner, idempotent transitions, audit trail.
-- UI schema supports `workflows` and maps actions to transitions; designer can attach Start/Approve actions.
-- Advanced Auditing: server persists audit records for all CRUD and workflow transitions; export CSV; filter by user/entity/date.
-- Field-Level Security: enforce on read (redact/omit) and write (reject masked fields), with UI runtime honoring hide/disable; configuration stored in metadata.
-- Plugin API: documented with one shipping example (Signature Pad) and one data connector skeleton.
+_Progress markers inserted where partially delivered._
+- Workflow Engine: persist workflow instances, support states (draft, submitted, approved, rejected), resume by owner, idempotent transitions, audit trail. (NOT STARTED)
+- UI schema supports `workflows` and maps actions to transitions; designer can attach Start/Approve actions. (NOT STARTED)
+- Advanced Auditing: server persists audit records for all CRUD (DONE) and workflow transitions (PENDING); export CSV + filters (PENDING). 
+- Field-Level Security: enforce on read/write + UI runtime hide/disable (PENDING).
+- Plugin API: documented baseline (registry seeded), example component (PENDING), data connector skeleton (PENDING).
+- Studio Phase A exit: metadata models, registry, demo, core components, unknown placeholder (DONE); renderer + test + packaging (PENDING).
 
 ### November 2025 — Logistics & HR Acceleration (MVP)
 - PWA: installable, offline cache for static assets and last-used pages; queue-and-replay of POST/PUT/DELETE; background sync.
@@ -108,8 +114,9 @@ To succeed, AppBana must address the unique needs of its target verticals:
 - **Reliability:** < 1% offline sync conflicts unresolved; WebSocket reconnect success P95 < 3s.
 - **Security:** 100% of PHI accesses audited; 0 high-severity vulnerabilities at release.
 
-## 8. Risks & Mitigations
-
+## 8. Risks & Mitigations (Updated Snapshot)
+- **UI Foundation Delay:** Renderer/test tasks slip → compress Phase B. Mitigation: prioritize minimal renderer, defer stylistic niceties.
+- **Workflow & Audit Coupling:** Parallel development risk. Mitigation: isolate audit extension interface early.
 - **Scope Risk:** December timeline is aggressive. Mitigation: MVP strictness, defer non-essential features (PDF export, DICOM viewer) to Q1.
 - **Compliance Risk:** HIPAA misinterpretation. Mitigation: engage compliance advisor; run lightweight gap assessment in October.
 - **Performance Risk:** Real-time + offline + workflow complexity. Mitigation: performance budgets, profiling, virtualization of large lists.
@@ -134,8 +141,7 @@ Features deferred to Q1 2026 include:
 - Advanced ETA analytics for logistics
 
 ## 11. References & Supporting Documents
-
-- **TODO.md:** Current actionable backlog with prioritized next steps.
-- **OCT_2025_EPICS_STORIES.md:** Detailed user stories for October 2025.
-- **UI_FUNCTIONAL_DEVELOPMENT_PLAN.md:** Detailed UI development strategy.
-- **UI_DEVELOPMENT_PLAN.md:** Technical execution plan for Angular 21 UI.
+- **TODO.md:** Current actionable backlog with phase-linked checkboxes (Studio terminology updated).
+- **OCT_2025_EPICS_STORIES.md:** Original epic/story list (Angular references legacy; see header note there).
+- **UI_Development_Plan.md:** Detailed Studio development plan (authoritative for phases A–F).
+- **.github/COPILOT_GUIDE.md:** Assistant-facing status + immediate tasks.

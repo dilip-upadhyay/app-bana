@@ -6,105 +6,125 @@ This document provides a comprehensive overview of the AppBana application, inte
 
 **Vision:** AppBana aims to be the dominant platform for rapidly building secure, complex, and scalable enterprise solutions, with a focus on Healthcare, Logistics, and HR Management.
 
-**Core Architecture:** AppBana is a **metadata-driven platform**. The core principle is to design data schemas in a UI, which the system then uses to automatically:
+**Core Architecture:** AppBana is a **metadata-driven platform**. The core principle is to design data schemas (and, evolving now, UI pages) as metadata, which the system then uses to automatically:
 1.  Persist the schema.
 2.  Create or migrate a backing database table.
 3.  Expose a full set of runtime CRUD (Create, Read, Update, Delete) APIs for that schema.
+4.  (Emerging) Render UI pages from JSON page metadata using a lightweight custom runtime.
 
 This end-to-end cohesion, from database to UI, is the primary competitive advantage.
 
-**Tech Stack:**
-- **Backend:** Java 25 with virtual threads, using the built-in `HttpServer`. It's designed to be lightweight with no heavy frameworks.
-- **Database:** H2 (embedded file-based) by default, but any JDBC-compliant database (Postgres, MySQL, etc.) can be used.
+**Tech Stack (Current Oct 2025):**
+- **Backend:** Java 25 with virtual threads, using the built-in `HttpServer`. Lightweight, framework-free core.
+- **Database:** H2 (embedded file-based) by default; any JDBC-compliant database (Postgres, MySQL, etc.) supported.
 - **Connection Pooling:** HikariCP for efficient database connection management.
 - **JSON Processing:** Jackson (`jackson-databind`).
-- **Logging:** SLF4J.
-- **Build:** Maven with the Shade plugin to create an executable "uber jar".
-- **Frontend:** Current minimal UIs use vanilla JS, with an Angular 21 UI being developed.
+- **Logging:** SLF4J (simple binding).
+- **Build:** Maven (multi-module) with the Shade plugin to create an executable "uber jar" for the service module.
+- **Frontend:** Custom TypeScript + Web Components framework "Studio" (Phase A) using Vite; legacy HTML builders still shipped for schemas & datasources.
 
 ## 2. Key Features and Capabilities
 
 ### 2.1 Dynamic Schema Management
-- Visual schema builder allows defining entity models in a UI.
-- Preview migration before applying to see the DDL changes.
-- Schema persistence and versioning.
-- Auto-generates tables and migrations.
+- Visual schema builder (legacy UI) allows defining entity models.
+- Preview migration before applying (DDL plan generation).
+- Schema persistence and migration history tracking.
+- Auto-generates tables and applies safe ALTER statements (rename, add column).
 
 ### 2.2 Datasource Management
-- Support for multiple datasources (H2, PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite)
-- UI for adding, testing, and managing database connections
-- Switch the active datasource at runtime
-- Connection pooling with HikariCP, with configurable settings per datasource
-- URL Builder to assist with JDBC connection strings
+- Support for multiple datasources (H2, PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite).
+- UI for adding, testing, and managing database connections.
+- Switch the active datasource at runtime.
+- Connection pooling with HikariCP, configurable per datasource.
+- URL Builder to assist with JDBC connection strings (server-side build fallback).
 
 ### 2.3 API Generation
-- Automatic CRUD API endpoints for each schema
-- Live OpenAPI 3.0 specification
-- Embedded Swagger UI for API exploration
-- Health and readiness endpoints
+- Automatic CRUD API endpoints for each relational schema.
+- Advanced query params: pagination, search, projection, sorting, filters, count-only.
+- Live OpenAPI 3.0 specification (`/openapi.json`).
+- Embedded Swagger UI for API exploration.
+- Health and readiness endpoints.
 
-### 2.4 Security
-- Optional token-based authentication
-- Configurable admin and read-only access
-- HTTPS support with custom keystore
-- SQL injection protection via prepared statements
+### 2.4 Security & Auditing (Baseline)
+- Optional token-based authentication (admin & read-only tokens).
+- Baseline CRUD audit logging (single & batch inserts, update, delete) capturing before/after & per-field diff.
+- Audit query endpoint (`/audit`) with basic filtering (entity/pk) — roadmap includes export, extended filters.
+- HTTPS support via configuration.
+- SQL injection protection via prepared statements.
 
-### 2.5 Planned Features (Q4 2025)
-- Stateful Workflow Engine for complex, multi-step processes
-- Advanced security with comprehensive audit trails
-- Field-Level Security (FLS) to restrict access to specific data fields
-- Plugin architecture for custom components
-- PWA for offline operation
-- Real-time data via WebSockets
-- Healthcare interoperability via FHIR
-- Reporting and export capabilities
+### 2.5 Planned Features (Q4 2025 Roadmap Snapshot)
+- Stateful Workflow Engine (definitions, instances, transitions, history).
+- Advanced auditing (workflow transitions, CSV export, actor filters, date range).
+- Field-Level Security (FLS) engine + runtime redaction.
+- Studio Builder MVP (canvas, inspector, undo/redo, local draft persistence).
+- Plugin architecture (components, data connectors, actions) + example Signature Pad.
+- PWA offline caching & queued write replay (Nov).
+- Real-time data via WebSockets / MQTT (Nov) and rule-based alerts (Dec Logistics addendum).
+- Healthcare interoperability via FHIR (read-only; Dec).
+- Reporting & export engine (tabular CSV/Excel; Nov).
 
 ## 3. System Architecture
 
-### 3.1 Current Architecture
-The current codebase is a functional MVP with minimal abstractions:
+### 3.1 Current Architecture (Service Layer)
+The current codebase is a functional MVP with intentionally minimal abstractions:
 
-- `ApiServer.java`: Handles HTTP requests and routing
-- `SchemaManager.java`: Manages schema persistence and migrations
-- `JdbcManager.java`: Manages database connections and pooling
-- `ConfigManager.java`: Configuration loading and management
-- `OpenApiGenerator.java`: Generates the OpenAPI specification
+- `ApiServer.java`: HTTP routing & handlers (schema CRUD, entity CRUD, health, audit).
+- `SchemaManager.java`: Schema persistence & migration planning/execution.
+- `JdbcManager.java`: Database connection acquisition & HikariCP lifecycle (active datasource centric).
+- `ConfigManager.java`: Multi-datasource configuration load/save + test result persistence.
+- `OpenApiGenerator.java`: Generates the OpenAPI specification (CRUD endpoints only).
+- `AuditLog` integration (inside handlers) writes rows to `appbana_audit` post-commit; failures are non-fatal.
 
-### 3.2 Planned Refactoring
-A refactoring is underway to improve maintainability and testability:
+### 3.2 Emerging Frontend (Studio) Architecture (Phase A)
+"Studio" comprises two cooperating runtimes:
+- **Builder (design-time)** — Will offer a structured tree editor (Phase B) for page metadata.
+- **Runtime (render-time)** — Walks page metadata (ComponentNode graph) to instantiate registered Web Components.
 
-- Clear package boundaries (api, schema, db, config, openapi, util)
-- Database dialect abstraction for better multi-DB support
-- Improved HTTP layer with standardized request/response handling
-- Better type safety and validation
-- Comprehensive test coverage
+Current state (Oct 1, 2025):
+- Implemented: `BaseElement` abstraction (shadow DOM + minimal state), dynamic component registry, core components (Container / Text / Button), demo metadata file, unknown component fallback.
+- Pending (Phase A exit): recursive renderer implementation, first renderer Vitest test, packaging `/ui/studio` entry.
+- Future phases introduce bindings, actions, expressions, theming, versioning, and plugin loading.
 
-## 4. Angular UI Architecture (Q4 2025)
+### 3.3 Planned Service Refactoring
+Targeted after Phase A renderer completion:
+- Clear package layering (api, schema, db, audit, security, config, openapi, util).
+- Dialect abstraction for multi-DB nuance (identifier quoting, DDL variant generation, pagination syntax).
+- Request/response normalization (typed wrappers, centralized error mapping).
+- FLS redaction & write enforcement hooks.
+- Structured audit service with queue or batch capability (optional reliability enhancement).
 
-The upcoming Angular 21-based UI is structured around:
+## 4. Studio UI Architecture (Replaces Prior Angular Plan)
 
-### 4.1 Workspace Structure
-- Nx monorepo with:
-  - apps/studio: The designer application
-  - libs/runtime: The renderer library
-  - libs/designer: Designer components
-  - libs/ui-schema: Schema models and services
+### 4.1 Component Model
+- Web Components (Custom Elements) registered via a lightweight registry; lazy-import ensures minimal startup cost.
+- Component metadata (future): each component will declare a props schema enabling auto-generated inspector forms.
+- Registry will evolve into a plugin boundary allowing external script modules to register new components.
 
-### 4.2 Key UI Concepts
-- Component Registry: A DI-based registry for UI components
-- Plugin Architecture: Support for custom components and data connectors
-- Material-based styling with CSS variables for theming
-- Token-based authentication with secure storage
-- Runtime FLS enforcement for field visibility/disabling
+### 4.2 Rendering Pipeline (Planned Implementation)
+1. Load page metadata JSON (includes node collection).
+2. Build in-memory index (id → node).
+3. Create root host element and recursively instantiate child components.
+4. Apply static props; future: evaluate bindings inside a sandbox.
+5. Insert unknown component placeholder for unregistered `type` values (forward compatibility & plugin resilience).
 
-### 4.3 Designer and Runtime
-- Designer: Visual interface for building applications
-- Runtime: Renderer that displays applications built with the designer
-- Data binding and event handling between components
-- Settings panel for configuration
+### 4.3 Builder Canvas (Phase B Scope Outline)
+- Tree store normalizing nodes for O(1) access.
+- Selection model (single initially) + keyboard shortcuts (duplicate, delete, search palette, inline edit).
+- Undo/redo via operation log (bounded stack, 100 entries default).
+- Property inspector (auto-generated from component props schema) with immediate re-render.
+- Local draft persistence (`localStorage`) prior to server design endpoints (Phase C).
 
-## 5. Vertical-Specific Features
+### 4.4 Future Frontend Concerns
+- Expression sandbox: deterministic evaluation (whitelisted functions, no global object leaks).
+- Theme token injection: compile theme JSON to scoped CSS variables.
+- Realtime binding: subscription adapters pushing updates to components.
+- Versioning/publish: semantic version snapshots & diff preview before runtime activation.
+- Plugin isolation: optional iframe/realm or capability-based access restrictions.
 
+### 4.5 Historical Note (Angular Plan Deprecated)
+A prior plan targeting an Angular 21 + Nx workspace has been **superseded** by the custom Studio approach for reduced runtime weight and tighter platform alignment. Remaining Angular references in historical documents should be interpreted as legacy and will be phased out. Epics have been re-mapped to Studio phases (see roadmap docs).
+
+## 5. Vertical-Specific Features (Strategic Targets)
 ### 5.1 Healthcare
 - HIPAA-compliant audit trails
 - Field-level security for PHI
@@ -157,23 +177,23 @@ The upcoming Angular 21-based UI is structured around:
 - Audit logging will track all data access and changes.
 - Field-Level Security will control granular data access.
 
-## 8. Future Directions and Extensions
+## 8. Future Directions and Extensions (Updated Emphasis)
+- Workflow Engine integration with UI actions & audit trails.
+- Field-Level Security: runtime redaction + design-time preview mode.
+- Plugin marketplace (signed manifests, integrity verification) — Dec prototype.
+- FHIR connector (Patient, Observation, Encounter read-only) — Dec.
+- Realtime connectors (WebSocket, MQTT) — Nov.
+- Reporting engine (CSV/Excel streaming) — Nov.
+- PWA offline cache + queued mutation replay — Nov.
+- Design versioning & rollback — Dec.
+- Extended audit export & filtering (cursor pagination, actor filter) — Oct/Nov.
 
-- Spring Boot adapter (optional)
-- Docker and Helm packaging
-- PDF report rendering
-- Advanced FHIR capabilities (write operations, SMART on FHIR)
-- Real-time collaboration in the designer
-- DICOM viewer for medical imaging
-- Enhanced pagination, sorting, and filtering for APIs
-- Import/export functionality for schemas and datasources
-
-## 9. Documentation and Resources
-
-- `README.md`: Main project documentation
-- `USER_GUIDE.md`: Step-by-step guide for users
-- `UI_SMOKE.md`: Quick verification test
-- `docs/REFACTOR_PROPOSAL.md`: Technical refactoring plan
-- `docs/STYLE_GUIDE.md`: UI styling guidelines
-- `TODO.md`: Prioritized backlog
-- `OCT_2025_EPICS_STORIES.md`: Detailed user stories for October 2025
+## 9. Documentation and Resources (Updated)
+- `README.md`: Main project documentation & current Phase A progress.
+- `USER_GUIDE.md`: User onboarding and feature walkthrough (legacy builder + datasource UI).
+- `UI_Development_Plan.md`: Deep Studio plan (authoritative for phases & risks).
+- `.github/COPILOT_GUIDE.md`: Assistant-facing snapshot (condensed status + actionable tasks).
+- `AUDIT_LOGGING.md`: Baseline CRUD audit logging spec & roadmap.
+- `TODO.md`: Executable backlog with phase-linked checkboxes.
+- `PRODUCT_PLAN.md` / `Product_AppBana.md`: High-level roadmap & vertical strategy.
+- `OCT_2025_EPICS_STORIES.md`: Epic/story breakdown (Angular references now historical; mapping updated in notes).

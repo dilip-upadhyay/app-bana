@@ -1,6 +1,6 @@
 # AppBana — Metadata-driven UI → API → Database
 
-<!-- Added: High-level feature snapshot -->
+<!-- Updated 2025-10-01: Added Phase A progress + corrections -->
 **Latest feature highlights**
 - Schema editing (rename non‑PK fields with automatic migration)
 - Migration preview (dry-run DDL plan) & migration history per schema
@@ -10,13 +10,13 @@
 - Duplicate field name validation (client-side)
 - Inline JSON import/export of schema definitions
 - New helper script `./run-ui.sh` for UI dev/build/preview
-- **Baseline CRUD Audit Logging** (INSERT / UPDATE / DELETE with before/after & field diff — see `docs/AUDIT_LOGGING.md`, query via `GET /audit`)
-- **Studio Builder (experimental) productivity**: duplicate subtree (Cmd/Ctrl+D), keyboard delete w/ confirm, drag & drop reparent, inline text edit (Enter), search palette (Cmd/Ctrl+P), copy ID (Shift+Cmd/Ctrl+C), persistent expand/collapse — full list in `docs/UI_BUILDER_SHORTCUTS.md`
+- **Baseline CRUD Audit Logging** (INSERT / UPDATE / DELETE + batch insert; before/after & field diff — see `docs/AUDIT_LOGGING.md`, query via `GET /audit`)
+- **Studio Builder productivity (planned)**: shortcuts documented in `docs/UI_BUILDER_SHORTCUTS.md` (foundation features being ported into new Studio)
 
 Metadata-driven MVP: design forms in a minimal UI builder, persist the schema, auto-create/migrate a backing table, and expose runtime CRUD APIs. Implemented with plain Java SE (no heavy frameworks).
 
 Quick summary
-- Frontend: A custom, lightweight UI framework ("Studio") is being developed using TypeScript and native Web Components. It uses `vite` for development and builds. `lit` is used as a temporary helper, with the long-term goal of being replaced by a minimal internal `BaseElement` core.
+- Frontend: A custom, lightweight UI framework ("Studio") is under active development (Phase A). Core pieces landed: `BaseElement`, component registry, demo metadata (`demo-page.json`), placeholder Unknown component. Pending: recursive runtime renderer wiring + first renderer test + /ui/studio packaging.
 - Backend: Java (HttpServer) that persists schemas, auto-creates/migrates tables via JDBC, and exposes generic CRUD endpoints at runtime.
 - DB: H2 embedded (file) by default; JDBC usage allows swapping to Postgres/MySQL/etc.
 - Datasources: built-in UI to add/manage multiple datasources (by name and type) and select the active one at runtime.
@@ -25,52 +25,54 @@ Quick summary
 - New endpoints: `/schema/summaries`, `/schema/{name}/migrations`, `DELETE /schema/{name}`.
 
 Status of repository
-- Fully working MVP backend and enhanced schema builder (edit / delete / migration history).  
-- Basic builder-v1 UI is present; advanced builder-v2 files were removed.
-- Swagger/OpenAPI spec is available at `/openapi.json` and browsable at `/ui/swagger`.
-- Datasource management UI available at `/ui/datasource` with list/activate/delete actions, Test Connection, and a live Status badge with “Last tested” info.
+- Fully working MVP backend and enhanced schema builder (legacy HTML) remain operational.
+- Studio Phase A partially complete (see below). Legacy builder continues to function until Studio Builder MVP (Phase B) is ready.
+- Swagger/OpenAPI spec available at `/openapi.json` and browsable at `/ui/swagger`.
+- Datasource management UI available at `/ui/datasource`.
 - HikariCP pool initialized based on the current active datasource; reconfigured when settings change.
 - Built fat JAR available under `app-bana-service/target/` after building.
-- `.github/COPILOT_GUIDE.md` contains an agent-friendly snapshot of the current state and the development plan.
+- `.github/COPILOT_GUIDE.md` contains an assistant-facing snapshot of current progress & next steps (kept in sync with this README + `docs/UI_Development_Plan.md`).
 - For a step-by-step walkthrough, see `docs/USER_GUIDE.md`.
 
 ## Studio (Custom UI Framework) Status
 Current Phase: A (Foundation — in progress)
 
-Planned phased delivery (summary): A Foundation → B Builder MVP → C Runtime MVP → D Enhancements (expressions/theme) → E Advanced (versioning/plugins/realtime) → F Distribution (PWA/marketplace).
-
-Active Phase A exit criteria:
-- Metadata interfaces (Page, ComponentNode, Theme, Navigation, Binding, Action) in `models/metadata.ts`.
-- Registry bootstrap auto-registers core components.
-- Demo page JSON rendered at `/ui/studio` using runtime renderer.
-- Vitest harness with at least one renderer test passes.
+Phase A Exit Criteria (updated):
+- ✅ Metadata interfaces file (`models/metadata.ts`)
+- ✅ Component registry bootstrap (`core/registry.ts`) with dynamic import of core components
+- ✅ Demo metadata JSON (`src/demo/demo-page.json`) including an unknown component case
+- ✅ Unknown component placeholder (`UnknownElement`)
+- ✅ Base components: Container / Text / Button
+- ❌ Runtime recursive renderer (currently `src/app-renderer.ts` is a stub; next task)
+- ❌ Vitest renderer test (Vitest harness exists; builder tests present; need renderer spec)
+- ❌ Packaged `/ui/studio` entry (pending renderer + simple index wiring)
 
 See full plan: `docs/UI_Development_Plan.md` (authoritative), quick snapshot: `.github/COPILOT_GUIDE.md`.
 
-### Immediate Next (Phase A tasks)
-1. Add metadata model TypeScript file.
-2. Recursive renderer supports children + simple props.
-3. Demo JSON + placeholder component for unknown types.
-4. Vitest setup & first test.
-5. Package demo page into service JAR.
+### Immediate Next (Phase A remaining tasks)
+1. Implement recursive renderer in `app-renderer.ts` (walk nodes, instantiate elements, attach props, resolve children by id).
+2. Add a minimal bootstrap script + HTML (served at `/ui/studio`) loading demo page JSON and invoking renderer.
+3. Write first Vitest test asserting rendered DOM structure (`demo-page.json` → expected node count & text content).
+4. Update build to copy needed studio assets into service JAR (parallel to existing UI assets).
+5. Add contribution doc snippet once renderer API stabilized (component prop schema pattern).
 
 ### Contribution (Components)
-1. Create component in `app-bana-ui/src/components/` extending BaseElement.
-2. Export static definition (type, propsSchema, defaultProps).
-3. Register in `core/registry.ts`.
-4. Add example usage to demo page JSON.
-5. Add/extend test (Vitest).
+1. Create component in `app-bana-ui/src/components/` extending `BaseElement`.
+2. Define behavior in `render()` and optional `styles()`.
+3. Register in `core/registry.ts` (dynamic import guard automatically loads if missing).
+4. Add example usage to demo metadata (during Phase A) or page JSON (later phases).
+5. Add/extend test (Vitest) validating render or behavior.
 
 Tech stack
-- Java 25 (LTS, with virtual threads for HTTP request handling)
-- Frontend: TypeScript, Vite, Lit (as a temporary helper)
+- Java 25 (virtual threads for HTTP request handling)
+- Frontend: TypeScript, Vite, minimal custom Web Components framework (lit retained temporarily for legacy pieces; new code avoids it)
 - H2 (embedded) for development
 - Jackson (jackson-databind) for JSON
 - SLF4J simple for logging
 - HikariCP for JDBC connection pooling
 - Maven build with Shade plugin (uber jar)
 
-Build & run
+## Build & run
 
 ### Backend
 1. Build the entire project (including frontend assets):
@@ -367,29 +369,24 @@ Where to change common settings
 - Code packages now under `com.appbana` (earlier docs referencing `org.example` updated).  
 - See: `com/appbana/ApiServer.java`, `SchemaManager.java`, `JdbcManager.java`.
 
-Key files
+## Key files (updated package paths)
 - `app-bana-service/src/main/java/com/appbana/ApiServer.java` — HTTP handlers
 - `app-bana-service/src/main/java/com/appbana/SchemaManager.java` — schema & migrations
-- src/main/java/org/example/JdbcManager.java — JDBC connection (HikariCP pool; uses active datasource)
-- src/main/java/org/example/ConfigManager.java — loads/saves config; normalizes multi-datasource format
-- src/main/java/org/example/AppConfig.java, DatasourceConfig.java — config models (DatasourceConfig includes pool and last test fields)
-- src/main/java/org/example/model/EntitySchema.java — schema model
-- src/main/resources/ui/builder.html — minimal schema builder
-- src/main/resources/ui/datasource.html — datasource management UI (pool settings, status badge, last tested)
-- src/main/resources/ui/swagger.html — embedded Swagger UI for /openapi.json
+- `app-bana-service/src/main/java/com/appbana/JdbcManager.java` — JDBC + pooling (active datasource)
+- `app-bana-service/src/main/java/com/appbana/ConfigManager.java` — loads/saves config; normalizes multi-datasource format
+- `app-bana-service/src/main/java/com/appbana/AppConfig.java`, `DatasourceConfig.java` — config models
+- `app-bana-service/src/main/java/com/appbana/model/EntitySchema.java` — schema model (relational; non-rel kinds future)
+- Legacy UIs: `app-bana-service/src/main/resources/ui/*.html` (builder, datasource, swagger)
+- Studio core (new): `app-bana-ui/src/core/`, `app-bana-ui/src/models/metadata.ts`, `app-bana-ui/src/demo/demo-page.json`
 
 Notes
-- Editing a schema replays only necessary ALTER statements; preview first for safety.
-- Field order affects display only (not physical ordering in DB).
-- If DB credentials are wrong at startup, the app still starts so you can fix settings via `/ui/datasource`.
-- Identifier quoting uses double-quoted UPPERCASE to avoid reserved word/case issues in H2.
-- Backlog: see `TODO.md` for prioritized next steps and enhancements.
-- New to the project? Start with `USER_GUIDE.md`.
-- UI Styling policy (designer/runtime): see `docs/STYLE_GUIDE.md` (now generalized for custom framework; previous Angular Material specifics removed).
+- Audit logging baseline (including batch insert one-row-per-generated-key) complete; roadmap extensions in `docs/AUDIT_LOGGING.md`.
+- Remaining Phase A tasks intentionally narrow; do not begin Builder MVP features (drag/drop & inspector) until renderer + test are green.
+- Backlog: see `docs/TODO.md` for prioritized next steps and enhancements.
 
 ---
 
-(Angular-specific build/run instructions removed; custom Studio implementation will define new scripts when introduced.)
+(Angular-specific build/run instructions were previously removed; custom Studio implementation supersedes earlier Angular/Nx plan.)
 
 ## Cross-Reference
 - Deep Studio Plan: `docs/UI_Development_Plan.md`

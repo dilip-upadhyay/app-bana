@@ -1,6 +1,7 @@
 # UI Development Plan — Custom UI Core ("Studio")
 
-This document outlines the development plan for AppBana's custom UI framework, codenamed "Studio". This plan supersedes all previous plans, including the one based on Angular.
+<!-- Updated 2025-10-01: Phase A progress annotations -->
+This document outlines the development plan for AppBana's custom UI framework, codenamed "Studio". This plan supersedes all previous plans, including the one based on Angular (legacy references retained elsewhere for anchor compatibility only).
 
 ## 1. Vision & Core Principles
 
@@ -42,20 +43,20 @@ Phases are incremental; each ends with a demonstrable success criterion.
 
 | Area | Status | Notes |
 |------|--------|-------|
-| BaseElement core | Seeded | Lacks diffing / declarative state binding layer |
-| Component registry | Seeded | No plugin discovery or lazy loading yet |
-| Runtime renderer | Seeded (Phase A skeleton) | Only core demo components registered |
-| Metadata model | Partial | Schemas exist; page/theme/navigation/workflow interfaces not yet codified in TS module |
-| Page persistence | Not Implemented | No /runtime/app/... endpoints yet |
-| Builder canvas | Not Implemented | No drag/drop, inspector, selection, undo/redo |
-| Binding system | Not Implemented | Only placeholder ideas in roadmap |
-| Theme tokens | Not Implemented | Style strategy doc only; no runtime application pipeline |
-| Expression sandbox | Not Implemented | Security considerations listed in guide; engine absent |
-| Plugin boundary | Planned | Registry prepared conceptually; contract TBD in Phase E |
-| Non-relational adapters | Planned | Design (doc) only; backend accepts relational models |
-| Tests (UI) | Missing | No Vitest/JSDom harness yet for metadata → DOM assertions |
-| Page versioning/publish | Planned | Roadmap Phase E |
-| Offline/PWA | Planned (Nov) | No service worker scaffolding yet |
+| BaseElement core | ✅ Done | Minimal state + render loop working |
+| Component registry | ✅ Done | Dynamic import ensures lazy core component load |
+| Runtime renderer | ☐ Pending | `app-renderer.ts` stub; recursive walker not implemented |
+| Metadata model | ✅ Initial subset | `PageMeta`, `ComponentNode` minimal; extended workflow/theme/nav still doc-only |
+| Page persistence | Not Implemented | Deferred to Phase C |
+| Builder canvas | Not Implemented | Starts after Phase A exit |
+| Binding system | Not Implemented | Phase C/D |
+| Theme tokens | Not Implemented | Phase D |
+| Expression sandbox | Not Implemented | Phase D (security gating) |
+| Plugin boundary | Planned | Phase E (global registration hook draft) |
+| Non-relational adapters | Planned | Documentation only; backend ignores non-rel kinds |
+| Tests (UI) | ☐ Pending | Vitest configured; first renderer test missing |
+| Page versioning/publish | Planned | Phase E |
+| Offline/PWA | Planned | Phase F (Nov scope) |
 
 ## 6. Gaps & Risks
 
@@ -68,19 +69,23 @@ Phases are incremental; each ends with a demonstrable success criterion.
 | Lack of undo/redo model | Builder UX friction | Maintain operation log + state snapshots (Phase B) |
 | No theming runtime | Inconsistent styling later | Lock token schema before Phase D |
 
-## 7. Immediate Next Actions (Phase A Completion)
+## 7. Immediate Next Actions (Phase A Completion) — Updated
 
 The following concrete tasks complete Phase A and unblock Phase B:
-1. Add `models/metadata.ts` with: PageMeta, ComponentNode (discriminated union), ThemeMeta, NavigationMeta, Binding, Action types.
-2. Implement simple registry bootstrap (`registry.ts`) auto-registering built-ins.
-3. Add `demo-page.json` under `app-bana-ui/src/demo/` and load it in `app-renderer.ts`.
-4. Expand `Renderer` to recursively mount children + basic prop mapping.
-5. Introduce Vitest + single test: load demo metadata → assert DOM structure.
-6. Add error placeholder component for unknown type (helps early plugin dev).
-7. Update backend packaging to copy `demo-page.json` so `/ui/studio` can load in fat JAR.
-8. Document contribution pattern in `README` + `COPILOT_GUIDE` (how to add a component).
+1. Implement recursive renderer in `app-bana-ui/src/app-renderer.ts`:
+   - Build node index (id → node)
+   - Create DOM elements via registry; apply shallow props (e.g., text → attribute or inner text for text component)
+   - Append children depth-first; insert unknown placeholder when type not registered
+2. Add `studio.html` (or `index-studio.html`) + bootstrap script loading demo JSON and invoking renderer (exposed at `/ui/studio`).
+3. Adjust UI build/publish step to copy `studio.html`, `demo-page.json`, and bundled assets into service JAR (parallel to existing legacy UIs).
+4. Write first Vitest test (`Renderer.demo.test.ts`):
+   - Import demo metadata
+   - Invoke renderer into a jsdom container
+   - Assert: container element count, expected text content, presence of unknown placeholder element (`studio-unknown`).
+5. Document component contribution pattern (README + Copilot Guide finalization) after renderer stabilization (prop passing detail).
+6. Update `TODO.md` & `.github/COPILOT_GUIDE.md` to mark renderer & test as DONE once complete.
 
-Exit Criteria Phase A: `npm test` passes with renderer test and `/ui/studio` renders demo page from JSON.
+_Exit Gate Reminder:_ Do **not** begin canvas (selection / undo / drag) until renderer + test + packaging are green.
 
 ## 8. Builder MVP (Phase B) Detailed Scope
 
@@ -184,6 +189,7 @@ Frontend will model `modelKind != relational` (document/apiResource) but backend
 
 ## 20. Changelog (Plan Updates)
 
+- 2025-10-01: Added progress matrix (Section 5) and revised Immediate Next Actions (Section 7) to reflect partial Phase A completion.
 - 2025-09-29: Major expansion — added phases table, status matrix, immediate actions, risk table, and alignment sections.
 
 ---

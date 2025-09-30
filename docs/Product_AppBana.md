@@ -1,8 +1,10 @@
 # AppBana Product Roadmap: From Platform to Industry Leader
 
-**Author:** Product Owner
-**Date:** September 21, 2025
-**Status:** Strategic Plan v1 (Angular plan deprecated; custom in‑house Studio framework adopted)
+**Author:** Product Owner  
+**Date:** September 21, 2025 (Updated: 2025-10-01)  
+**Status:** Strategic Plan v1 (Angular plan deprecated; custom in‑house Studio framework adopted — progress noted below)
+
+> Update (2025-10-01): Studio Phase A partial completion — BaseElement, registry, core components, demo metadata, unknown component placeholder delivered. Remaining Phase A: recursive renderer, Vitest renderer test, /ui/studio packaging.
 
 ## 1. Product Vision
 
@@ -21,17 +23,16 @@ This roadmap is phased to deliver a powerful, enterprise-ready v1 platform by th
 
 ---
 
-### **October 2025: The Enterprise Foundation**
+### **October 2025: The Enterprise Foundation** (Progress inline)
 
-*Goal: Solidify the core enterprise-grade features required by all target verticals.*
-
-| Epic | Key Features | Business Goal |
+| Epic | Key Features (Adjusted for Studio) | Status |
 | :--- | :--- | :--- |
-| **Custom UI Studio Foundation (MVP)** | - Scaffold lightweight in‑house UI Studio workspace (no Angular/Nx).<br>- Implement minimal runtime renderer core (Container/Text/Button) + metadata-driven layout.
-<br>- Designer shell with Settings (token persistence) and live preview area.<br>- Simple request helper injecting X-AppBana-Token.<br>- Styling: token-based CSS variables + minimal utilities (see STYLE_GUIDE.md, framework-agnostic).<br>- Define plugin boundary via Web Components / simple module contract (per UI_Development_Plan.md updated). | Establish the UI platform needed to deliver workflows, security/auditing, and Nov/Dec features. |
-| **Stateful Workflow Engine (MVP)** | - Design & implement a server-side workflow engine.<br>- Model `workflows` in the UI schema for multi-step processes.<br>- Support single-user stateful actions (e.g., save a multi-page form and resume later). | Address the foundational need for process automation in HR and Healthcare. |
-| **Advanced Security & Auditing** | - Implement comprehensive, server-side audit trails for all data access (CRUD) and actions.<br>- Introduce Field-Level Security (FLS) in the metadata backend and UI renderer.<br>- Create a UI for viewing and exporting audit logs. | Achieve baseline compliance for Healthcare (HIPAA) and provide the enterprise-grade security our customers demand. |
-| **Foundational Plugin API** | - Solidify and document the Plugin APIs for custom components and data connectors.<br>- Develop one example custom component (e.g., a "Signature Pad") to prove the model. | Enable extensibility, foster a developer community, and prepare for vertical-specific features. |
+| **Custom UI Studio Foundation (MVP)** | Scaffold minimal Studio workspace (plain TS/JS + Vite) — DONE  <br> Minimal runtime registry + core components Container/Text/Button — DONE  <br> Demo page metadata + unknown component fallback — DONE  <br> Recursive renderer + /ui/studio packaging — PENDING  <br> Vitest renderer test — PENDING  <br> Builder canvas + settings shell — PENDING | PARTIAL |
+| **Stateful Workflow Engine (MVP)** | Definitions, instances, transitions, single-user state resume | NOT STARTED |
+| **Advanced Security & Auditing** | CRUD audit baseline (INSERT/UPDATE/DELETE + batch) — DONE  <br> Workflow transition audit — PENDING  <br> FLS engine + UI redaction/hide/disable — PENDING  <br> Audit export (CSV) + filters (actor/op/date) — PENDING | PARTIAL |
+| **Foundational Plugin API** | Registry contract seed (implicit) — DONE  <br> Signature Pad component example — PENDING  <br> Data connector skeleton — PENDING | PARTIAL |
+
+_The remaining October scope should prioritize completing the renderer/test before expanding Builder canvas features to avoid architectural churn._
 
 ---
 
@@ -188,10 +189,7 @@ To confidently ship a credible v1 by December, each phase must meet the followin
 ---
 
 ## 16. Document Governance
-
-- This roadmap is the authoritative source for Q4 2025. Any deviation requires an update here and corresponding updates to `UI_Development_Plan.md` and `COPILOT_NOTES.md`.
-
----
+- This roadmap now reflects Studio terminology; any Angular workspace references are legacy and retained only for traceability.
 
 ## 17. RoRo Logistics (Wallenius Wilhelmsen) Readiness
 
