@@ -739,19 +739,39 @@ public class ApiServer {
             }
         });
 
-        // CRUD endpoints via router
-        router.post("/api/{entity}", (req, res) -> {
+        router.get("/audit", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
             }
+            String entity = req.query("entity");
+            String pk = req.query("pk");
+            int limit = 50; int offset = 0;
+            try { String ls = req.query("limit"); if (ls!=null) limit = Integer.parseInt(ls); } catch (Exception ignored) {}
+            try { String os = req.query("offset"); if (os!=null) offset = Integer.parseInt(os); } catch (Exception ignored) {}
+            if (limit <=0) limit = 50; if (limit>500) limit = 500; if (offset<0) offset=0;
+            try {
+                Map<String,Object> out = AuditLogService.query(entity, pk, limit, offset);
+                res.json(200, out);
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // CRUD endpoints via router
+        router.post("/api/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
             String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
             Map<String, Object> data = req.readJson(new TypeReference<>() {});
             try {
                 long id = insertRecord(schema, data);
+                // after image
+                Map<String,Object> after = getById(schema, String.valueOf(id));
+                AuditLogService.log("INSERT", schema.getName(), String.valueOf(id), actor, null, after);
                 res.json(201, Map.of("id", id));
             } catch (SQLException e) {
                 LOG.error("Insert failed for entity {}", entity, e);
@@ -760,10 +780,7 @@ public class ApiServer {
         });
         router.post("/api/{entity}/batch", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
-            }
+            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
             String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
@@ -774,6 +791,16 @@ public class ApiServer {
             if (payload.size() > max) { res.json(400, Map.of("error","batch too large","max",max)); return; }
             try {
                 Map<String,Object> out = insertBatch(schema, payload);
+                Object idsObj = out.get("ids");
+                if (idsObj instanceof List<?> idList) {
+                    for (Object idVal : idList) {
+                        if (idVal == null) continue;
+                        try {
+                            Map<String,Object> after = getById(schema, String.valueOf(idVal));
+                            AuditLogService.log("INSERT", schema.getName(), String.valueOf(idVal), actor, null, after);
+                        } catch (Exception ignore) { }
+                    }
+                }
                 res.json(201, out);
             } catch (Exception e) {
                 LOG.error("Batch insert failed for {}", entity, e);
@@ -847,17 +874,17 @@ public class ApiServer {
         });
         router.put("/api/{entity}/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
-            }
+            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
             Map<String, Object> data = req.readJson(new TypeReference<>() {});
             try {
+                Map<String,Object> before = getById(schema, idStr);
                 int updated = updateById(schema, idStr, data);
+                Map<String,Object> after = updated>0? getById(schema, idStr): null;
+                if (updated>0) AuditLogService.log("UPDATE", schema.getName(), idStr, actor, before, after);
                 res.json(200, Map.of("updated", updated));
             } catch (SQLException e) {
                 LOG.error("Update failed for entity {} id {}", entity, idStr, e);
@@ -866,16 +893,15 @@ public class ApiServer {
         });
         router.delete("/api/{entity}/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
-            }
+            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
             try {
+                Map<String,Object> before = getById(schema, idStr);
                 int deleted = deleteById(schema, idStr);
+                if (deleted>0) AuditLogService.log("DELETE", schema.getName(), idStr, actor, before, null);
                 res.json(200, Map.of("deleted", deleted));
             } catch (SQLException e) {
                 LOG.error("Delete failed for entity {} id {}", entity, idStr, e);
