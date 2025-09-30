@@ -15,21 +15,25 @@ export class AppRoot extends LitElement {
     const path = window.location.pathname;
     if (path.includes('/studio')) {
       await ensureCoreRegistered();
-      const host = this.renderRoot.querySelector('#studio-root') as HTMLElement | null;
-      if (host) {
-        renderPage(demoPage as PageMeta, host);
+      if (path.includes('/studio') && !path.includes('/studio/builder')) {
+        const host = this.renderRoot.querySelector('#studio-root') as HTMLElement | null;
+        if (host) {
+          renderPage(demoPage as PageMeta, host);
+        }
       }
     }
   }
 
   render() {
     const path = window.location.pathname;
-    if (path.includes('/builder')) {
+    if (path.includes('/builder') && !path.includes('/studio/builder')) {
       return html`<schema-builder></schema-builder>`;
     } else if (path.includes('/explorer')) {
       return html`<entity-explorer></entity-explorer>`;
     } else if (path.includes('/app')) {
       return html`<app-renderer></app-renderer>`;
+    } else if (path.includes('/studio/builder')) {
+      return html`<studio-builder-shell></studio-builder-shell>`;
     } else if (path.includes('/studio')) {
       return html`<div id="studio-root"></div>`;
     }

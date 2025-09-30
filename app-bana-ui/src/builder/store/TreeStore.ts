@@ -1,0 +1,145 @@
+import type { PageMeta, ComponentNode } from '../../models/metadata';
+
+export interface TreeStoreOptions { persist?: boolean; keyPrefix?: string; historyLimit?: number; }
+
+interface Operation { desc: string; undo: () => void; redo: () => void; }
+
+export class TreeStore {
+  private page: PageMeta;
+  private nodes = new Map<string, ComponentNode>();
+  private selection: string | null = null;
+  private history: Operation[] = [];
+  private future: Operation[] = [];
+  private historyLimit: number;
+  private persist: boolean;
+  private key: string;
+  private listeners = new Set<() => void>();
+
+  static from(page: PageMeta, opts: TreeStoreOptions = {}) { return new TreeStore(page, opts); }
+
+  private constructor(page: PageMeta, opts: TreeStoreOptions) {
+    this.page = structuredClone(page);
+    for (const n of this.page.nodes) this.nodes.set(n.id, structuredClone(n));
+    this.persist = opts.persist ?? true;
+    this.key = (opts.keyPrefix ?? 'studio.draft.') + this.page.id;
+    this.historyLimit = opts.historyLimit ?? 100;
+    if (this.persist) this.loadDraft();
+  }
+
+  onChange(fn: () => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
+  private notify() { for (const fn of this.listeners) fn(); }
+
+  getPage(): PageMeta { return { ...this.page, nodes: Array.from(this.nodes.values()) }; }
+  getRoot(): ComponentNode { return this.require(this.page.rootId); }
+  getSelection(): ComponentNode | null { return this.selection ? this.nodes.get(this.selection)! : null; }
+  getNode(id: string): ComponentNode | undefined { return this.nodes.get(id); }
+  listChildren(id: string): ComponentNode[] { const n = this.require(id); return (n.children||[]).map(cid=>this.require(cid)); }
+
+  select(id: string | null) { if (id && !this.nodes.has(id)) return; this.selection = id; this.save(); this.notify(); }
+
+  addNode(parentId: string, node: ComponentNode, index?: number) {
+    if (this.nodes.has(node.id)) throw new Error('duplicate node id');
+    const parent = this.require(parentId);
+    const beforeChildren = [...(parent.children||[])];
+    const op: Operation = {
+      desc: `add:${node.id}`,
+      undo: () => { parent.children = (parent.children||[]).filter(c=>c!==node.id); this.nodes.delete(node.id); },
+      redo: () => { this.nodes.set(node.id, node); parent.children = parent.children||[]; if (index===undefined||index<0||index>parent.children.length) parent.children.push(node.id); else parent.children.splice(index,0,node.id); }
+    };
+    op.redo();
+    this.pushHistory(op);
+    this.select(node.id);
+  }
+
+  updateProps(id: string, patch: Record<string, any>) {
+    const node = this.require(id);
+    const prev = structuredClone(node.props||{});
+    const next = { ...(node.props||{}), ...patch };
+    const op: Operation = {
+      desc: `update:${id}`,
+      undo: () => { node.props = structuredClone(prev); },
+      redo: () => { node.props = structuredClone(next); }
+    };
+    op.redo();
+    this.pushHistory(op);
+  }
+
+  removeNode(id: string) {
+    if (id === this.page.rootId) return; // cannot remove root
+    const node = this.require(id);
+    // collect subtree
+    const subtreeIds: string[] = [];
+    const collect = (n: ComponentNode) => { subtreeIds.push(n.id); (n.children||[]).forEach(cid=>collect(this.require(cid))); };
+    collect(node);
+    // parent ref removal
+    const parent = this.findParent(id);
+    if (!parent) return;
+    const parentChildrenPrev = [...(parent.children||[])];
+    const removedNodes = subtreeIds.map(i=>[i,this.require(i)] as const);
+    const op: Operation = {
+      desc: `remove:${id}`,
+      undo: () => { parent.children = [...parentChildrenPrev]; for (const [nid,nv] of removedNodes) this.nodes.set(nid, structuredClone(nv)); },
+      redo: () => { parent.children = (parent.children||[]).filter(c=>c!==id); for (const nid of subtreeIds) this.nodes.delete(nid); if (this.selection && subtreeIds.includes(this.selection)) this.selection = parent.id; }
+    };
+    op.redo();
+    this.pushHistory(op);
+  }
+
+  moveNode(id: string, newParentId: string, newIndex?: number) {
+    const node = this.require(id);
+    const oldParent = this.findParent(id);
+    if (!oldParent) return;
+    const newParent = this.require(newParentId);
+    if (this.isAncestor(id, newParentId)) return; // prevent cycles
+    const oldParentChildrenPrev = [...(oldParent.children||[])];
+    const newParentChildrenPrev = [...(newParent.children||[])];
+    const op: Operation = {
+      desc: `move:${id}`,
+      undo: () => { oldParent.children = [...oldParentChildrenPrev]; newParent.children = [...newParentChildrenPrev]; },
+      redo: () => {
+        oldParent.children = (oldParent.children||[]).filter(c=>c!==id);
+        newParent.children = newParent.children||[];
+        if (newIndex===undefined||newIndex<0||newIndex>newParent.children.length) newParent.children.push(id); else newParent.children.splice(newIndex,0,id);
+      }
+    };
+    op.redo();
+    this.pushHistory(op);
+  }
+
+  undo() { const op = this.history.pop(); if (!op) return; op.undo(); this.future.push(op); this.save(false); this.notify(); }
+  redo() { const op = this.future.pop(); if (!op) return; op.redo(); this.history.push(op); this.save(false); this.notify(); }
+
+  serialize(): PageMeta { return this.getPage(); }
+
+  private pushHistory(op: Operation) {
+    this.history.push(op); if (this.history.length > this.historyLimit) this.history.shift();
+    this.future.length = 0; // clear redo stack on new action
+    this.save();
+    this.notify();
+  }
+
+  private require(id: string): ComponentNode { const n = this.nodes.get(id); if (!n) throw new Error('node not found: '+id); return n; }
+  private findParent(id: string): ComponentNode | null {
+    for (const n of this.nodes.values()) if (n.children?.includes(id)) return n; return null;
+  }
+  private isAncestor(ancestorId: string, maybeDesc: string): boolean {
+    // Correct semantics: return true if ancestorId is (strict or same) ancestor of maybeDesc.
+    if (ancestorId === maybeDesc) return true;
+    const ancestor = this.nodes.get(ancestorId);
+    if (!ancestor) return false;
+    for (const cid of ancestor.children || []) {
+      if (cid === maybeDesc) return true;
+      if (this.isAncestor(cid, maybeDesc)) return true;
+    }
+    return false;
+  }
+
+  private save(persist: boolean = true) { if (this.persist && persist) localStorage.setItem(this.key, JSON.stringify(this.serialize())); }
+  private loadDraft() {
+    try { const raw = localStorage.getItem(this.key); if (raw) { const data = JSON.parse(raw) as PageMeta; this.nodes.clear(); for (const n of data.nodes) this.nodes.set(n.id, n); this.page.rootId = data.rootId; } } catch { /* ignore */ }
+  }
+}
+
+// Singleton draft store helper for current demo page
+export let currentStore: TreeStore | null = null;
+export function initStore(page: PageMeta) { currentStore = TreeStore.from(page); return currentStore; }
