@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>AppBana Studio (Demo)</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      body { margin:0; font-family: system-ui, Arial, sans-serif; background:#f8f9fb; color:#222; }
+      header { background:#0f172a; color:#fff; padding:8px 14px; font-size:14px; display:flex; align-items:center; gap:18px; }
+      header a { color:#fff; text-decoration:none; opacity:.9; }
+      header a:hover { opacity:1; }
+      #studio-root { padding:16px; max-width:860px; margin:0 auto; }
+      .badge { background:#475569; color:#fff; border-radius:12px; padding:2px 8px; font-size:11px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>AppBana Studio Demo</strong>
+      <span class="badge">Phase A</span>
+      <a href="/ui/builder">Legacy Builder</a>
+      <a href="/ui/datasource">Datasources</a>
+      <a href="/ui/swagger">Swagger</a>
+    </header>
+    <div id="studio-root">Loading Studio demo…</div>
+    <script type="module" src="/src/studio-entry.ts"></script>
+  </body>
+</html>
+

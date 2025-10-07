@@ -11,4 +11,3 @@
     { "id": "unknown-1", "type": "fancyChart", "props": { "data": [1,2,3] } }
   ]
 }
-
