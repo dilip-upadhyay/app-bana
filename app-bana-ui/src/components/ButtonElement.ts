@@ -14,6 +14,7 @@ export class ButtonElement extends BaseElement {
       case 'danger': return 'danger';
       case 'outline': return 'outline';
       case 'ghost': return 'ghost';
+      case 'success': return 'success';
       case 'primary': default: return 'primary';
     }
   }
@@ -35,6 +36,8 @@ export class ButtonElement extends BaseElement {
       .btn.primary:hover:not(:disabled) { background: var(--color-brand-accent); }
       .btn.danger { background: var(--color-danger); border-color: var(--color-danger); color:#fff; }
       .btn.danger:hover:not(:disabled) { filter:brightness(.92); }
+      .btn.success { background: var(--color-success); border-color: var(--color-success); color:#fff; }
+      .btn.success:hover:not(:disabled) { filter:brightness(.92); }
       .btn.outline { background: transparent; }
       .btn.outline:hover:not(:disabled) { background: var(--color-surface-alt); }
       .btn.ghost { background: transparent; border-color: transparent; }

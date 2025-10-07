@@ -63,6 +63,60 @@ See full plan: `docs/UI_Development_Plan.md` (authoritative), quick snapshot: `.
 4. Add example usage to demo metadata (during Phase A) or page JSON (later phases).
 5. Add/extend test (Vitest) validating render or behavior.
 
+### Adding / Editing Design Tokens
+Design tokens provide a centralized, theme-able set of CSS variables consumed by Studio components (e.g. buttons, containers) and user extensions.
+
+Location & Core API:
+- Store implementation: `app-bana-ui/src/builder/store/TokenStore.ts`
+- UI editor: `studio-token-panel` (rendered inside the Builder Shell)
+- Persistence: localStorage keys `studio.tokens.v1` (values) and `studio.tokens.recent.v1` (MRU list)
+- Undo/Redo: in‑memory history (limit 100) enabling quick experimentation
+
+Default tokens (subset):
+```
+color-brand, color-brand-accent, color-brand-muted,
+color-surface, color-surface-alt, color-border,
+color-text, color-text-secondary, color-danger, color-success,
+radius-sm, radius-md, font-sans
+```
+
+Using tokens in components:
+- Reference via CSS variable: `var(--color-brand)`
+- Provide a semantic alias if needed inside component styles (e.g. `--btn-bg: var(--color-brand)`)
+- Prefer existing semantic tokens (surface / text / border) before introducing new ones.
+
+Editing tokens:
+1. Open Studio Builder (`/ui/studio` → Builder shell) – token panel appears below the canvas.
+2. Modify values inline; changes apply immediately and persist locally.
+3. Use Undo / Redo buttons in the panel to traverse recent changes.
+4. Click Reset to restore defaults (also undoable).
+
+Recent edits highlighting:
+- Most recently changed keys (up to 15) are visually emphasized for contextual awareness.
+
+Programmatic updates (for future automation):
+```ts
+import { updateToken, resetTokens } from '../builder/store/TokenStore';
+updateToken('color-brand', '#0055aa');
+resetTokens();
+```
+
+Adding a new token:
+1. Add entry to `DEFAULT_TOKENS` in `TokenStore.ts`.
+2. Replace any hard-coded colors in component styles with the variable.
+3. (Optional) Add a brief note in this README or `COPILOT_GUIDE.md` if the token is broadly semantic.
+
+Best Practices:
+- Keep token names lowercase, kebab-case.
+- Favor semantic naming (`color-danger`) over raw hue names (`color-red-500`).
+- Avoid removing existing tokens without a migration plan (future: theme snapshots).
+- Do not store transient / calculated values as tokens; keep them in component scope.
+
+Future roadmap:
+- Theme export/import JSON
+- Multi-theme preview switcher
+- Scoped theme application per App/Page metadata
+
 Tech stack
 - Java 25 (virtual threads for HTTP request handling)
 - Frontend: TypeScript, Vite, minimal custom Web Components framework (lit retained temporarily for legacy pieces; new code avoids it)

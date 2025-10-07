@@ -3,6 +3,7 @@ import { customElement } from 'lit/decorators.js';
 import demoPage from '../../demo/demo-page.json';
 import { initStore, currentStore } from '../store/TreeStore';
 import type { PageMeta } from '../../models/metadata';
+import './TokenPanel';
 
 @customElement('studio-builder-shell')
 export class BuilderShell extends LitElement {
@@ -20,9 +21,11 @@ export class BuilderShell extends LitElement {
 
   render() {
     return html`
-      <studio-builder-canvas></studio-builder-canvas>
+      <div class="panel" style="flex:2 1 0; display:flex; flex-direction:column; gap:12px;">
+        <studio-builder-canvas></studio-builder-canvas>
+        <studio-token-panel></studio-token-panel>
+      </div>
       <studio-builder-inspector></studio-builder-inspector>
     `;
   }
 }
-

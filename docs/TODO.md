@@ -11,7 +11,7 @@ This plan is the actionable backlog for October–December 2025. Keep it synchro
   - [x] Recursive runtime renderer (walk nodes, attach props, children).
   - [x] Vitest renderer test (assert demo renders & unknown placeholder used).
   - [x] `/ui/studio` packaging into fat JAR (HTML + bootstrap script fallback when dist missing).
-  - [ ] Builder canvas skeleton (selection + tree mount) & token persistence shell. [O1-S3](OCT_2025_EPICS_STORIES.md#o1-s3-designer-shell--settings)
+  - [x] Builder canvas skeleton (selection + tree mount) & token persistence shell. [O1-S3](OCT_2025_EPICS_STORIES.md#o1-s3-designer-shell--settings)
   - [ ] Basic audit log UI scaffold (list/export stub). [O1-S5](OCT_2025_EPICS_STORIES.md#o1-s5-audit-ui-scaffold)
   - [ ] Styling baseline: tokens (CSS variables) + minimal utility classes per `docs/STYLE_GUIDE.md`.
 - [ ] Server-side Workflow Engine (MVP)
