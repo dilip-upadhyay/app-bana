@@ -22,6 +22,11 @@ public class BatchAuditLogTest {
     @BeforeAll
     static void init() throws Exception {
         SchemaManager.init();
+        // Clean prior state to ensure deterministic audit row count
+        try (java.sql.Connection c = JdbcManager.getConnection(); java.sql.Statement st = c.createStatement()) {
+            try { st.executeUpdate("DELETE FROM appbana_audit WHERE entity='audit_batch'"); } catch (Exception ignore) {}
+            try { st.executeUpdate("DROP TABLE IF EXISTS audit_batch"); } catch (Exception ignore) {}
+        } catch (Exception ignore) { }
         EntitySchema s = new EntitySchema();
         s.setName("audit_batch");
         s.setFields(List.of(field("id","long", true, true), field("name","string", false, false)));
@@ -77,4 +82,3 @@ public class BatchAuditLogTest {
         }
     }
 }
-
