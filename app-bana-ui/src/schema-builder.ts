@@ -495,6 +495,10 @@ export class SchemaBuilder extends LitElement {
           <h3 class="small">Environment</h3>
             <div class="small">Datasources loaded: ${this.datasources.length}</div>
             <div class="small">Schemas loaded: ${this.schemas.length}</div>
+            <div class="small mt">
+              <button @click=${()=>window.open('/ui/datasource','_blank')} class="mini">Manage Datasources ↗</button>
+              <span class="muted">Opens admin page to add / edit / test datasources.</span>
+            </div>
           <div class="divider"></div>
           <h3 class="small">Quick Tips</h3>
           <div class="small muted">Set PK first, then add fields. Duplicate names blocked. Use JSON import/export for rapid iteration.</div>

@@ -21,7 +21,8 @@
 #   2. Ensures required Node version (>=18.17) — installs/uses via nvm if present
 #   3. Installs deps (npm ci if package-lock.json exists else npm install)
 #   4. Runs requested mode
-set -euo pipefail
+# NOTE: Guard array expansions carefully under set -u.
+set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UI_DIR_REL="${UI_DIR:-app-bana-ui}"
@@ -122,14 +123,23 @@ else
 fi
 
 declare -a VITE_ARGS=()
-if [[ -n "${UI_PORT:-}" ]]; then VITE_ARGS+=(--port "${UI_PORT}"); fi
-if [[ -n "${EXTRA_ARGS:-}" ]]; then VITE_ARGS+=(${EXTRA_ARGS}); fi
+[[ -n "${UI_PORT:-}" ]] && VITE_ARGS+=(--port "${UI_PORT}")
+# shellcheck disable=SC2206 # we intentionally word-split EXTRA_ARGS
+[[ -n "${EXTRA_ARGS:-}" ]] && VITE_ARGS+=(${EXTRA_ARGS})
+
+join_args() { # echo joined args for logging only
+  if (( ${#VITE_ARGS[@]} )); then printf '%s ' "${VITE_ARGS[@]}"; fi
+}
 
 case "$ACTION" in
   dev)
     log "Starting Vite dev server..."
-    log "Command: npm run dev -- ${VITE_ARGS[*]:-}"
-    npm run dev -- "${VITE_ARGS[@]}"
+    log "Command: npm run dev -- $(join_args)"
+    if (( ${#VITE_ARGS[@]} )); then
+      npm run dev -- "${VITE_ARGS[@]}"
+    else
+      npm run dev
+    fi
     ;;
   build)
     log "Building production assets..."
@@ -139,7 +149,12 @@ case "$ACTION" in
   preview)
     log "Previewing production build (will build if dist missing)..."
     [[ -d dist ]] || npm run build
-    npm run preview -- "${VITE_ARGS[@]}"
+    log "Command: npm run preview -- $(join_args)"
+    if (( ${#VITE_ARGS[@]} )); then
+      npm run preview -- "${VITE_ARGS[@]}"
+    else
+      npm run preview
+    fi
     ;;
   *)
     err "Unknown action: $ACTION"; usage; exit 1;
