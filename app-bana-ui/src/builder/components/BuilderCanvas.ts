@@ -148,7 +148,7 @@ export class BuilderCanvas extends LitElement {
   private handleDragOver(e: DragEvent, node: ComponentNode) {
     if (!e.dataTransfer) return; if (node.type==='container') { e.preventDefault(); this.dragOverId = node.id; this.requestUpdate(); }
   }
-  private handleDragLeave(e: DragEvent, node: ComponentNode) { if (this.dragOverId===node.id) { this.dragOverId=null; this.requestUpdate(); } }
+  private handleDragLeave(_e: DragEvent, node: ComponentNode) { if (this.dragOverId===node.id) { this.dragOverId=null; this.requestUpdate(); } }
   private handleDrop(e: DragEvent, node: ComponentNode) {
     if (!e.dataTransfer) return; const dragged = e.dataTransfer.getData('text/plain'); if (!dragged) return; if (node.type!=='container') return; if (dragged===node.id) return;
     this.dragOverId=null; currentStore?.moveNode(dragged, node.id); this.requestUpdate(); e.preventDefault();
@@ -159,12 +159,12 @@ export class BuilderCanvas extends LitElement {
     const id = 'n' + Math.random().toString(36).slice(2,7);
     currentStore?.addNode(parentId, { id, type: 'text', props: { text: 'New text' } });
   }
-  private remove(id: string) { currentStore?.removeNode(id); }
+  private deleteNode(id: string) { currentStore?.removeNode(id); }
   private duplicateSelected() {
     if (this.selectedId && this.selectedId !== this.page!.rootId) currentStore?.duplicate(this.selectedId);
   }
 
-  private renderNode(node: ComponentNode) {
+  private renderNode(node: ComponentNode): ReturnType<typeof html> {
     const sel = node.id === this.selectedId;
     const expanded = this.expanded.has(node.id);
     const childCount = node.children?.length || 0;
@@ -184,7 +184,7 @@ export class BuilderCanvas extends LitElement {
         ${isEditing ? html`<input class="inline-edit" .value=${this.editingValue} @input=${(e:Event)=>this.editingValue=(e.target as HTMLInputElement).value} @keydown=${(e:KeyboardEvent)=>{ if(e.key==='Enter'){this.commitEdit();} else if(e.key==='Escape'){ this.cancelEdit(); } }} @blur=${()=>this.commitEdit()} />`
         : html`<span>${node.type==='text' ? (node.props?.text||'<text>') : node.type}</span>`}
         <button class="inline" title="Add child" @click=${(e:Event)=>{e.stopPropagation();this.addChild(node.id);}}>+</button>
-        ${node.id !== this.page!.rootId ? html`<button class="inline" title="Delete" @click=${(e:Event)=>{e.stopPropagation(); if(!node.children?.length || window.confirm('Delete '+node.id+' and its subtree?')) this.remove(node.id);}}>×</button>`:null}
+        ${node.id !== this.page!.rootId ? html`<button class="inline" title="Delete" @click=${(e:Event)=>{e.stopPropagation(); if(!node.children?.length || window.confirm('Delete '+node.id+' and its subtree?')) this.deleteNode(node.id);}}>×</button>`:null}
       </div>
       ${childCount && expanded ? html`<div class="children" role="group">${node.children!.map(cid=>{
         const child = this.page!.nodes.find(n=>n.id===cid)!; return this.renderNode(child);

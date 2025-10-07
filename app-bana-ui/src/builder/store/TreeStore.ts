@@ -40,7 +40,7 @@ export class TreeStore {
   addNode(parentId: string, node: ComponentNode, index?: number) {
     if (this.nodes.has(node.id)) throw new Error('duplicate node id');
     const parent = this.require(parentId);
-    const beforeChildren = [...(parent.children||[])];
+    const _beforeChildren = [...(parent.children||[])];
     const op: Operation = {
       desc: `add:${node.id}`,
       undo: () => { parent.children = (parent.children||[]).filter(c=>c!==node.id); this.nodes.delete(node.id); },
@@ -91,11 +91,11 @@ export class TreeStore {
     if (!oldParent) return;
     const newParent = this.require(newParentId);
     if (this.isAncestor(id, newParentId)) return; // prevent cycles
-    const oldParentChildrenPrev = [...(oldParent.children||[])];
-    const newParentChildrenPrev = [...(newParent.children||[])];
+    const _oldParentChildrenPrev = [...(oldParent.children||[])];
+    const _newParentChildrenPrev = [...(newParent.children||[])];
     const op: Operation = {
       desc: `move:${id}`,
-      undo: () => { oldParent.children = [...oldParentChildrenPrev]; newParent.children = [...newParentChildrenPrev]; },
+      undo: () => { oldParent.children = [..._oldParentChildrenPrev]; newParent.children = [..._newParentChildrenPrev]; },
       redo: () => {
         oldParent.children = (oldParent.children||[]).filter(c=>c!==id);
         newParent.children = newParent.children||[];

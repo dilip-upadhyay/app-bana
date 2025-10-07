@@ -41,10 +41,9 @@ export class BuilderInspector extends LitElement {
         const raw = (e.target as HTMLInputElement).value.trim();
         const parts = raw? raw.split(/\s+/): [];
         // patch via updateProps using synthetic style prop
-        (this.node as any).style = { ...(this.node.style||{}), classes: parts };
-        currentStore?.select(this.node.id); // triggers refresh
+        (this.node as any).style = { ...(this.node!.style||{}), classes: parts };
+        currentStore?.select(this.node!.id); // triggers refresh
       }} />
     `;
   }
 }
-

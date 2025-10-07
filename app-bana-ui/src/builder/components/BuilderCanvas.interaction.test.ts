@@ -63,7 +63,7 @@ describe('BuilderCanvas interactions', () => {
     currentStore!.select('c-sub');
     let confirmCalled = 0;
     const origConfirm = window.confirm;
-    (window as any).confirm = (msg: string)=>{ confirmCalled++; return true; };
+    (window as any).confirm = (_msg: string)=>{ confirmCalled++; return true; };
     key(canvas, 'Delete');
     await nextTick();
     expect(confirmCalled).toBe(1);
