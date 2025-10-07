@@ -8,6 +8,7 @@ import demoPage from './demo/demo-page.json';
 import { ensureCoreRegistered } from './core/registry';
 import { renderPage } from './runtime/renderer/Renderer';
 import { PageMeta } from './models/metadata';
+import './styles/theme.css';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {

@@ -18,27 +18,29 @@ interface ExistingSchemaSummary {
 @customElement('schema-builder')
 export class SchemaBuilder extends LitElement {
   static styles = css`
-    :host { display: block; font-family: system-ui, sans-serif; padding: 16px; }
-    h1 { margin: 0 0 12px; font-size: 20px; }
-    .layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }
-    .panel { background: #fff; border: 1px solid #d0d4db; border-radius: 6px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
-    .panel h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
-    .small { font-size: 12px; color: #555; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { border: 1px solid #e1e4e9; padding: 4px 6px; text-align: left; }
-    th { background:#f5f6f8; }
-    button { cursor: pointer; border-radius: 4px; border: 1px solid #888; background: #f9f9f9; padding: 4px 10px; font-size: 13px; }
-    button.primary { background: #2962ff; color:#fff; border-color:#1e55ea; }
-    button.danger { background:#c62828; color:#fff; border-color:#b71c1c; }
-    button:disabled { opacity:.5; cursor: not-allowed; }
-    input, select { font: inherit; padding: 4px 6px; border:1px solid #b6bcc6; border-radius:4px; width:100%; box-sizing: border-box; }
-    .fields-grid { display: grid; grid-template-columns: 140px 90px 60px 70px 70px 46px; gap:4px; align-items: center; }
-    .fields-grid header { font-size:11px; font-weight:600; text-transform: uppercase; color:#555; }
+    :host { display: block; font-family: var(--font-sans); padding: var(--space-4); }
+    h1 { margin: 0 0 var(--space-3); font-size: var(--text-xl); }
+    .layout { display: grid; grid-template-columns: 300px 1fr; gap: var(--space-4); align-items: start; }
+    .panel { background: var(--color-surface); border:1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); box-shadow: var(--shadow-xs); }
+    .panel h2 { margin: 0 0 var(--space-3); font-size: var(--text-md); font-weight: 600; letter-spacing:.25px; }
+    .small { font-size: var(--text-xs); color: var(--color-text-secondary); }
+    table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+    th, td { border-bottom:1px solid var(--color-border); padding: 4px 6px; text-align: left; }
+    th { background:var(--color-surface-alt); font-size: var(--text-xs); text-transform:uppercase; letter-spacing:.5px; }
+    button { cursor: pointer; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); padding: 4px 10px; font-size: var(--text-sm); line-height:1.3; }
+    button.primary { background: var(--color-brand); color:#fff; border-color: var(--color-brand); }
+    button.primary:hover { background: var(--color-brand-accent); }
+    button.danger { background:var(--color-danger); color:#fff; border-color:var(--color-danger); }
+    button:disabled { opacity:.55; cursor: not-allowed; }
+    input, select, textarea.json { font: inherit; padding: 4px 6px; border:1px solid var(--color-border); border-radius:var(--radius-sm); width:100%; box-sizing: border-box; background: var(--color-surface); color: var(--color-text); }
+    input:focus, select:focus, textarea.json:focus { outline:2px solid var(--color-focus-ring); outline-offset:1px; }
+    .fields-grid { display: grid; grid-template-columns: 160px 110px 60px 50px 50px 50px; gap:4px; align-items: center; }
+    .fields-grid header { font-size: var(--text-xs); font-weight:600; text-transform: uppercase; color:var(--color-text-secondary); }
     .row { display: contents; }
-    .badge { display:inline-block; padding:2px 6px; background:#eef2f8; border-radius:12px; font-size:11px; margin-right:4px; }
-    .active { background:#2962ff; color:#fff; }
+    .badge { display:inline-block; padding:2px 6px; background:var(--color-brand-muted); border-radius:12px; font-size:var(--text-xs); margin-right:4px; color: var(--color-text); }
+    .active { background:var(--color-brand); color:#fff; }
     .schema-row { cursor: pointer; }
-    .schema-row:hover { background:#f2f6ff; }
+    .schema-row:hover { background:var(--color-surface-alt); }
     pre { background:#111; color:#cfd8dc; padding:8px; border-radius:4px; max-height:180px; overflow:auto; font-size:11px; }
     .flex { display:flex; gap:6px; }
     .gap { gap:8px; }
@@ -46,17 +48,16 @@ export class SchemaBuilder extends LitElement {
     .mb { margin-bottom:8px; }
     .mt { margin-top:8px; }
     .nowrap { white-space:nowrap; }
-    .divider { border-top:1px solid #e0e3e8; margin:12px 0; }
-    .muted { color:#777; }
-    .error { color:#b00020; font-size:12px; margin-top:4px; }
-    .dup input { border-color:#b00020; background:#ffecec; }
-    .tag { display:inline-block; background:#eef; padding:2px 6px; border-radius:10px; font-size:11px; margin-right:4px; }
+    .divider { border-top:1px solid var(--color-border); margin:12px 0; }
+    .muted { color:var(--color-text-secondary); }
+    .error { color:var(--color-danger); font-size:var(--text-xs); margin-top:4px; }
+    .dup input { border-color:var(--color-danger); background:var(--color-danger-bg); }
     .toolbar { display:flex; gap:6px; margin-bottom:8px; }
     .reorder-btn { padding:0 4px; font-size:11px; }
-    .danger-outline { background:#fff; color:#c62828; border-color:#c62828; }
-    .pill { background:#2962ff; color:#fff; padding:2px 8px; border-radius:20px; font-size:11px; }
+    .danger-outline { background:transparent; color:var(--color-danger); border-color:var(--color-danger); }
+    .pill { background:var(--color-brand); color:#fff; padding:2px 8px; border-radius:20px; font-size:11px; }
     .mini { font-size:11px; }
-    textarea.json { width:100%; min-height:140px; font-family:monospace; font-size:11px; }
+    textarea.json { min-height:140px; font-family:var(--font-mono); font-size:11px; }
   `;
 
   @state() private datasources: DatasourceDto[] = [];
