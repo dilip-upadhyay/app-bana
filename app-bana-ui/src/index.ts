@@ -4,6 +4,12 @@ import './schema-builder';
 import './app-renderer';
 import './components/StudioWelcome';
 import './components/entity-explorer';
+import './components/app-sidebar';
+import './components/component-gallery';
+import './components/ButtonElement';
+import './components/ContainerElement';
+import './components/TextElement';
+import './components/UnknownElement';
 import demoPage from './demo/demo-page.json';
 import { ensureCoreRegistered } from './core/registry';
 import { renderPage } from './runtime/renderer/Renderer';
@@ -24,6 +30,15 @@ export class AppRoot extends LitElement {
       }
     }
   }
+  connectedCallback(): void {
+    super.connectedCallback();
+    window.addEventListener('popstate', this._onPop);
+  }
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    window.removeEventListener('popstate', this._onPop);
+  }
+  private _onPop = () => { this.requestUpdate(); };
 
   render() {
     const path = window.location.pathname;
@@ -37,6 +52,8 @@ export class AppRoot extends LitElement {
       return html`<studio-builder-shell></studio-builder-shell>`;
     } else if (path.includes('/studio')) {
       return html`<div id="studio-root"></div>`;
+    } else if (path.includes('/gallery')) {
+      return html`<component-gallery></component-gallery>`;
     }
     return html`
       <h1>Welcome to AppBana Studio</h1>

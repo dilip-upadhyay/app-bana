@@ -22,13 +22,16 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): H
     if (unknownCtor) {
       const unk = new unknownCtor();
       (unk as HTMLElement).setAttribute('data-type', node.type);
+      (unk as HTMLElement).setAttribute('id', node.id);
       return unk as HTMLElement;
     }
     const fallback = document.createElement('div');
     fallback.textContent = `Unknown component: ${node.type}`;
+    fallback.setAttribute('id', node.id);
     return fallback;
   }
   const el = new ctor();
+  (el as HTMLElement).setAttribute('id', node.id);
   if (node.props) {
     // Assign props as attributes when they are simple scalars, else direct property
     for (const [k,v] of Object.entries(node.props)) {

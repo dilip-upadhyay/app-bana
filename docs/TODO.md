@@ -8,9 +8,9 @@ This plan is the actionable backlog for October–December 2025. Keep it synchro
   - [x] Scaffold minimal Studio workspace (plain TS/JS + build script). [O1-S1](OCT_2025_EPICS_STORIES.md#o1-s1-scaffold-studio-workspace) *(Adjusted: custom Studio vs Angular)*
   - [x] Implement component registry + core components Container/Text/Button. [O1-S2](OCT_2025_EPICS_STORIES.md#o1-s2-minimal-runtime-renderer)
   - [x] Demo metadata JSON + unknown component placeholder. [O1-S2](OCT_2025_EPICS_STORIES.md#o1-s2-minimal-runtime-renderer)
-  - [ ] Recursive runtime renderer (walk nodes, attach props, children).
-  - [ ] Vitest renderer test (assert demo renders & unknown placeholder used).
-  - [ ] `/ui/studio` packaging into fat JAR (HTML + bootstrap script).
+  - [x] Recursive runtime renderer (walk nodes, attach props, children).
+  - [x] Vitest renderer test (assert demo renders & unknown placeholder used).
+  - [x] `/ui/studio` packaging into fat JAR (HTML + bootstrap script fallback when dist missing).
   - [ ] Builder canvas skeleton (selection + tree mount) & token persistence shell. [O1-S3](OCT_2025_EPICS_STORIES.md#o1-s3-designer-shell--settings)
   - [ ] Basic audit log UI scaffold (list/export stub). [O1-S5](OCT_2025_EPICS_STORIES.md#o1-s5-audit-ui-scaffold)
   - [ ] Styling baseline: tokens (CSS variables) + minimal utility classes per `docs/STYLE_GUIDE.md`.
@@ -76,9 +76,9 @@ Acceptance criteria: see `Product_AppBana.md` §5 December and §17.4.
 - [x] metadata.ts (PageMeta, ComponentNode, ThemeMeta, NavigationMeta, Binding, Action) *(initial subset — will expand later)*
 - [x] registry bootstrap (auto-register core built-ins)
 - [x] demo-page.json created (demo) — packaging pending
-- [ ] Renderer recursive children traversal + prop application
+- [x] Renderer recursive children traversal + prop application
 - [x] Unknown component placeholder element
-- [ ] Vitest harness + first renderer test (harness present; test missing)
+- [x] Vitest harness + first renderer test (harness present; test missing)
 - [ ] README + Copilot Guide component contribution update (partial; finalize after renderer API)
 
 Progress tags: do not advance to Phase B checklist until all above are checked.

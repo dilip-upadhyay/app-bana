@@ -108,9 +108,9 @@ Backend applies `ALTER TABLE ... RENAME COLUMN` if old column exists and new doe
 | Core components (container/text/button) | ✅ Done | Registered lazily |
 | Unknown component placeholder | ✅ Done | Graceful fallback ensures forward compatibility |
 | Demo metadata JSON | ✅ Done | `src/demo/demo-page.json` includes unknown type test |
-| Recursive runtime renderer | ☐ Pending | Implement in `app-renderer.ts` (currently empty) |
-| Vitest renderer test | ☐ Pending | Add test verifying node count & text content |
-| /ui/studio packaging (HTML + bootstrap) | ☐ Pending | Add HTML served by backend + copy step |
+| Recursive runtime renderer | ✅ Done | Implemented in `runtime/renderer/Renderer.ts` + facade `app-renderer.ts` |
+| Vitest renderer test | ✅ Done | Demo + Unknown fallback + Renderer tests pass |
+| /ui/studio packaging (HTML + bootstrap) | ✅ Done | `studio.html` fallback served; dist preferred |
 | Builder canvas skeleton | ☐ Pending | Begins Phase B after renderer/test |
 | Audit UI integration | ☐ Pending | Depends on audit export endpoint |
 
@@ -148,14 +148,14 @@ Current Phase: A (Foundation – in progress)
 | Tests (UI) | Missing | Vitest harness part of Phase A exit |
 
 Immediate Phase A Completion Tasks (must be green before advancing):
-1. Add `models/metadata.ts` (PageMeta, ComponentNode union, ThemeMeta, NavigationMeta, Binding, Action).
-2. Registry bootstrap autoload built-ins.
-3. `demo-page.json` + load in `app-renderer.ts`.
-4. Recursive renderer (children traversal + prop mapping).
-5. Vitest + first renderer test.
-6. Unknown component placeholder.
-7. Copy demo page into packaged JAR for `/ui/studio`.
-8. Update README + this guide with component contribution workflow.
+1. Add `models/metadata.ts` (PageMeta, ComponentNode union, ThemeMeta, NavigationMeta, Binding, Action). ✅
+2. Registry bootstrap autoload built-ins. ✅
+3. `demo-page.json` + load in `app-renderer.ts`. ✅
+4. Recursive renderer (children traversal + prop mapping). ✅
+5. Vitest + first renderer test. ✅
+6. Unknown component placeholder. ✅
+7. Copy demo page into packaged JAR for `/ui/studio`. ✅
+8. Update README + this guide with component contribution workflow. ☐ (outstanding)
 
 Exit Criterion Phase A: `/ui/studio` renders demo JSON page + Vitest suite passes.
 

@@ -941,13 +941,23 @@ public class ApiServer {
             }
         });
         router.get("/ui/studio", (req, res) -> {
-            try (InputStream is = ApiServer.class.getResourceAsStream("/ui/dist/index.html")) {
-                if (is == null) {
-                    res.text(503, "UI build missing. Run ./run-ui.sh build (or npm run build) to generate /ui/dist.", "text/plain; charset=utf-8");
+            // Prefer built SPA index; fallback to static studio.html (Phase A demo) if build not present
+            try (InputStream primary = ApiServer.class.getResourceAsStream("/ui/dist/index.html")) {
+                if (primary != null) {
+                    String html = new String(primary.readAllBytes());
+                    res.text(200, html, "text/html; charset=utf-8");
                     return;
                 }
-                String html = new String(is.readAllBytes());
-                res.text(200, html, "text/html; charset=utf-8");
+            } catch (IOException ioe) {
+                LOG.warn("Failed reading /ui/dist/index.html, attempting fallback studio.html", ioe);
+            }
+            try (InputStream fallback = ApiServer.class.getResourceAsStream("/ui/studio.html")) {
+                if (fallback != null) {
+                    String html = new String(fallback.readAllBytes());
+                    res.text(200, html, "text/html; charset=utf-8");
+                    return;
+                }
+                res.text(503, "Studio UI missing. Run ./run-ui.sh build to generate dist or ensure studio.html packaged.", "text/plain; charset=utf-8");
             } catch (IOException ioe) {
                 LOG.error("Failed to serve /ui/studio", ioe);
                 res.text(500, "Internal Server Error", "text/plain; charset=utf-8");
