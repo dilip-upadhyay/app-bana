@@ -106,6 +106,11 @@ Adding a new token:
 2. Replace any hard-coded colors in component styles with the variable.
 3. (Optional) Add a brief note in this README or `COPILOT_GUIDE.md` if the token is broadly semantic.
 
+Snapshot export/import:
+- Click Export to generate JSON (appears in panel textarea)
+- Copy or modify JSON; use Import to apply (replace) or enable Merge to update existing keys only / add new ones
+- Revisions timeline (expand panel) lists last changes with timestamps (non-persistent across full clears)
+
 Best Practices:
 - Keep token names lowercase, kebab-case.
 - Favor semantic naming (`color-danger`) over raw hue names (`color-red-500`).
@@ -447,4 +452,3 @@ Notes
 - Assistant Snapshot: `.github/COPILOT_GUIDE.md`
 - Implementation Backlog: `docs/TODO.md`
 
----
