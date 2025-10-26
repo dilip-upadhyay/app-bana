@@ -1,0 +1,30 @@
+<h4>Design Tokens</h4>
+<div class="actions" style="margin-bottom:4px;">
+  <button data-action="undo" data-disabled="!undoable" title="Undo (Ctrl+Z)">Undo</button>
+  <button data-action="redo" data-disabled="!redoable" title="Redo (Ctrl+Y)">Redo</button>
+  <button data-action="reset" title="Reset to defaults (undoable)">Reset</button>
+  <button data-action="export">Export</button>
+  <button data-action="copy" data-disabled="!snapshotText">Copy</button>
+  <button data-action="import" data-disabled="!snapshotText">Import</button>
+  <label style="display:inline-flex; align-items:center; gap:4px; font-size:10px;">
+    <input type="checkbox" data-input="importMerge" /> Merge
+  </label>
+</div>
+
+<div data-slot="categories"></div>
+
+<div class="export-box">
+  <textarea class="snapshot" placeholder="Snapshot JSON" data-input="snapshot"></textarea>
+</div>
+
+<details class="rev">
+  <summary>Revision Timeline (<span data-slot="revision-count"></span>)</summary>
+  <ul class="revs" data-slot="revisions"></ul>
+</details>
+
+<div class="actions">
+  <small style="opacity:.7;">Recent changes highlighted • Hover row for diff</small>
+</div>
+
+<div class="sr" aria-live="polite" data-slot="announce"></div>
+

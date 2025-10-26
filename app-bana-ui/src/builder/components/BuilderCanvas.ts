@@ -3,7 +3,6 @@ import { customElement, state } from 'lit/decorators.js';
 import demoPage from '../../demo/demo-page.json';
 import type { PageMeta, ComponentNode } from '../../models/metadata';
 import { initStore, currentStore } from '../store/TreeStore';
-import { renderTemplate } from './BuilderCanvas.template';
 import styles from './BuilderCanvas.css?inline';
 
 @customElement('studio-builder-canvas')
@@ -281,7 +280,170 @@ export class BuilderCanvas extends LitElement {
     }
   }
 
+  private renderNode(node: ComponentNode): any {
+    const sel = node.id === this.selectedId;
+    const expanded = this.expanded.has(node.id);
+    const childCount = node.children?.length || 0;
+    const isEditing = this.editingId === node.id;
+
+    return html`
+      <div
+        class="node ${this.dragOverId === node.id ? 'drag-over' : ''}"
+        data-selected=${sel}
+        role="treeitem"
+        aria-selected=${sel}
+        aria-expanded=${childCount ? String(expanded) : undefined}
+        draggable=${node.id !== this.page!.rootId}
+        @dragstart=${(e: DragEvent) => this.handleDragStart(e, node)}
+        @dragover=${(e: DragEvent) => this.handleDragOver(e, node)}
+        @dragleave=${(e: DragEvent) => this.handleDragLeave(e, node)}
+        @drop=${(e: DragEvent) => this.handleDrop(e, node)}
+        @click=${(e: Event) => { e.stopPropagation(); this.select(node.id); }}>
+
+        ${childCount
+          ? html`<button
+              class="expand-btn"
+              aria-label="${expanded ? 'Collapse' : 'Expand'} ${node.id}"
+              @click=${(e: Event) => { e.stopPropagation(); this.toggleExpand(node.id); }}>
+              ${expanded ? '▾' : '▸'}
+            </button>`
+          : html`<span class="expand-btn" style="opacity:.4;">•</span>`}
+
+        ${isEditing
+          ? html`<input
+              class="inline-edit"
+              .value=${this.editingValue}
+              @input=${(e: Event) => this.editingValue = (e.target as HTMLInputElement).value}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === 'Enter') {
+                  this.commitEdit();
+                } else if (e.key === 'Escape') {
+                  this.cancelEdit();
+                }
+              }}
+              @blur=${() => this.commitEdit()} />`
+          : html`<span>${node.type === 'text' ? (node.props?.text || '<text>') : node.type}</span>`}
+
+        <button
+          class="inline"
+          title="Add child"
+          @click=${(e: Event) => { e.stopPropagation(); this.addChild(node.id); }}>
+          +
+        </button>
+
+        ${node.id !== this.page!.rootId
+          ? html`<button
+              class="inline"
+              title="Delete"
+              @click=${(e: Event) => {
+                e.stopPropagation();
+                if (!node.children?.length || window.confirm('Delete ' + node.id + ' and its subtree?')) {
+                  this.deleteNode(node.id);
+                }
+              }}>
+              ×
+            </button>`
+          : null}
+      </div>
+
+      ${childCount && expanded
+        ? html`<div class="children" role="group">
+            ${node.children!.map(cid => {
+              const child = this.page!.nodes.find(n => n.id === cid)!;
+              return this.renderNode(child);
+            })}
+          </div>`
+        : null}
+    `;
+  }
+
   render() {
-    return renderTemplate.call(this);
+    if (!this.page) return html`<div>Loading...</div>`;
+
+    const root = this.page.nodes.find(n => n.id === this.page!.rootId)!;
+    const paletteList = this.paletteOpen ? this.filteredNodes() : [];
+
+    return html`
+      <div class="toolbar">
+        <button @click=${() => currentStore?.undo()}>Undo</button>
+        <button @click=${() => currentStore?.redo()}>Redo</button>
+        <button
+          ?disabled=${!this.selectedId || this.selectedId === this.page.rootId}
+          @click=${() => this.duplicateSelected()}>
+          Duplicate
+        </button>
+        <button @click=${() => this.openPalette()}>Search (⌘/Ctrl+P)</button>
+      </div>
+
+      <div
+        class="tree"
+        role="tree"
+        aria-label="Component tree"
+        @click=${() => this.select(this.page!.rootId)}>
+        ${this.renderNode(root)}
+      </div>
+
+      ${this.paletteOpen
+        ? html`
+          <div class="palette-backdrop" @click=${() => this.closePalette()}>
+            <div
+              class="palette"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Search nodes"
+              @click=${(e: Event) => e.stopPropagation()}>
+
+              <header id="palette-header">
+                <span>Find Node</span>
+                <button
+                  class="inline"
+                  style="font-size:11px"
+                  @click=${() => this.closePalette()}>
+                  Esc
+                </button>
+              </header>
+
+              <input
+                aria-label="Filter nodes"
+                placeholder="Filter by id / type / text"
+                .value=${this.paletteQuery}
+                @input=${(e: Event) => {
+                  this.paletteQuery = (e.target as HTMLInputElement).value;
+                  this.paletteIndex = 0;
+                }} />
+
+              <ul role="listbox" aria-label="Search results">
+                ${paletteList.map((n, i) => html`
+                  <li
+                    role="option"
+                    aria-selected=${i === this.paletteIndex}
+                    class=${i === this.paletteIndex ? 'active' : ''}
+                    @click=${() => {
+                      this.paletteIndex = i;
+                      this.selectPaletteIndex();
+                    }}>
+                    <span>${n.id}</span>
+                    <span class="badge">${n.type}</span>
+                  </li>
+                `)}
+                ${!paletteList.length
+                  ? html`<li style="opacity:.6; cursor:default;" aria-disabled="true">No matches</li>`
+                  : null}
+              </ul>
+
+              <div style="padding:4px 8px; font-size:10px; border-top:1px solid #e2e8f0; display:flex; justify-content:space-between;">
+                <span>↑↓ navigate • Enter select • Esc close</span>
+                <span>Shift+⌘/Ctrl+C copy ID</span>
+              </div>
+            </div>
+          </div>`
+        : null}
+
+      ${this.toast
+        ? html`<div class="toast" role="status" aria-live="polite">${this.toast}</div>`
+        : null}
+
+      <div class="sr-live" aria-live="polite">${this.toast || ''}</div>
+    `;
   }
 }

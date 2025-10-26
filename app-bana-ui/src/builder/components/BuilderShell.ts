@@ -1,18 +1,14 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import demoPage from '../../demo/demo-page.json';
 import { initStore, currentStore } from '../store/TreeStore';
 import type { PageMeta } from '../../models/metadata';
+import styles from './BuilderShell.css?inline';
 import './TokenPanel';
 
 @customElement('studio-builder-shell')
 export class BuilderShell extends LitElement {
-  static styles = css`
-    :host { display:flex; gap:12px; align-items:stretch; }
-    studio-builder-canvas { flex: 2 1 0; }
-    studio-builder-inspector { flex: 1 1 260px; max-width:320px; }
-    .panel { display:flex; flex-direction:column; }
-  `;
+  static styles = css`${unsafeCSS(styles)}`;
 
   connectedCallback(): void {
     super.connectedCallback();
