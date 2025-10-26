@@ -1,7 +1,8 @@
 # AppBana — Metadata-driven UI → API → Database
 
-<!-- Updated 2025-10-01: Added Phase A progress + corrections -->
+<!-- Updated 2025-10-27: Studio Builder now primary focus - making it extremely powerful and user-friendly -->
 **Latest feature highlights**
+- **🎯 PRIMARY FOCUS: Studio Builder** — Making the visual UI builder extremely powerful and user-friendly with professional-grade UX
 - Schema editing (rename non‑PK fields with automatic migration)
 - Migration preview (dry-run DDL plan) & migration history per schema
 - Schema deletion (optionally drop underlying table)
@@ -11,12 +12,18 @@
 - Inline JSON import/export of schema definitions
 - New helper script `./run-ui.sh` for UI dev/build/preview
 - **Baseline CRUD Audit Logging** (INSERT / UPDATE / DELETE + batch insert; before/after & field diff — see `docs/AUDIT_LOGGING.md`, query via `GET /audit`)
-- **Studio Builder productivity (planned)**: shortcuts documented in `docs/UI_BUILDER_SHORTCUTS.md` (foundation features being ported into new Studio)
+- **Studio Builder productivity**: Full keyboard shortcuts, drag-drop, inline editing, search palette, design token management
 
 Metadata-driven MVP: design forms in a minimal UI builder, persist the schema, auto-create/migrate a backing table, and expose runtime CRUD APIs. Implemented with plain Java SE (no heavy frameworks).
 
+**🚀 STUDIO VISION: The most powerful, intuitive visual builder for metadata-driven applications**
+- **Zero-friction workflow**: Design UI components visually without writing code
+- **Professional UX**: Keyboard-first navigation, command palette, real-time preview
+- **Deep customization**: Live design token editing, component property inspector, flexible layouts
+- **Production-ready**: Export, version, and deploy complete applications from visual designs
+
 Quick summary
-- Frontend: A custom, lightweight UI framework ("Studio") is under active development (Phase A). Core pieces landed: `BaseElement`, component registry, demo metadata (`demo-page.json`), placeholder Unknown component. Pending: recursive runtime renderer wiring + first renderer test + /ui/studio packaging.
+- Frontend: A custom, lightweight UI framework ("Studio") is the PRIMARY DEVELOPMENT FOCUS. Studio Builder provides a professional-grade visual design experience with powerful keyboard shortcuts, drag-drop, component tree navigation, property inspector, and design token management.
 - Backend: Java (HttpServer) that persists schemas, auto-creates/migrates tables via JDBC, and exposes generic CRUD endpoints at runtime.
 - DB: H2 embedded (file) by default; JDBC usage allows swapping to Postgres/MySQL/etc.
 - Datasources: built-in UI to add/manage multiple datasources (by name and type) and select the active one at runtime.
@@ -35,7 +42,7 @@ Status of repository
 - For a step-by-step walkthrough, see `docs/USER_GUIDE.md`.
 
 ## Studio (Custom UI Framework) Status
-Current Phase: A (Foundation — in progress)
+Current Phase: A (Foundation — near completion)
 
 Phase A Exit Criteria (updated):
 - ✅ Metadata interfaces file (`models/metadata.ts`)
@@ -43,18 +50,42 @@ Phase A Exit Criteria (updated):
 - ✅ Demo metadata JSON (`src/demo/demo-page.json`) including an unknown component case
 - ✅ Unknown component placeholder (`UnknownElement`)
 - ✅ Base components: Container / Text / Button
-- ❌ Runtime recursive renderer (currently `src/app-renderer.ts` is a stub; next task)
-- ❌ Vitest renderer test (Vitest harness exists; builder tests present; need renderer spec)
-- ❌ Packaged `/ui/studio` entry (pending renderer + simple index wiring)
+- ✅ Runtime recursive renderer (implemented in `runtime/renderer/Renderer.ts`)
+- ✅ Vitest renderer test (renderer specs with demo page validation)
+- ✅ Builder Shell integration (`studio-entry.ts` loads full builder with canvas, inspector, token panel)
+- ✅ Interactive component tree (selection, expand/collapse, drag-drop for containers, inline text edit)
+- ✅ Keyboard shortcuts (⌘P/Ctrl+P search nodes, ⌘D duplicate, ⌘⇧C copy ID, Delete/Backspace remove, Enter edit text)
+- ✅ Token Store with undo/redo (design tokens editor with history, persistence, recent edits highlighting)
+- ❌ Packaged `/ui/studio` entry (pending final build configuration & JAR integration)
+
+**Studio Builder is now functional in dev mode!** Access at `http://localhost:5173/studio.html` when running `npm run dev`.
+
+**🎯 DEVELOPMENT PRIORITY: All new development focuses on making Studio extremely powerful and user-friendly.**
 
 See full plan: `docs/UI_Development_Plan.md` (authoritative), quick snapshot: `.github/COPILOT_GUIDE.md`.
 
-### Immediate Next (Phase A remaining tasks)
-1. Implement recursive renderer in `app-renderer.ts` (walk nodes, instantiate elements, attach props, resolve children by id).
-2. Add a minimal bootstrap script + HTML (served at `/ui/studio`) loading demo page JSON and invoking renderer.
-3. Write first Vitest test asserting rendered DOM structure (`demo-page.json` → expected node count & text content).
-4. Update build to copy needed studio assets into service JAR (parallel to existing UI assets).
-5. Add contribution doc snippet once renderer API stabilized (component prop schema pattern).
+### Immediate Next (Phase A final tasks → Phase B power features)
+1. ✅ ~~Implement recursive renderer~~ DONE
+2. ✅ ~~Add Builder Shell with canvas/inspector/token panel~~ DONE
+3. ✅ ~~Wire up keyboard shortcuts and component tree interactions~~ DONE
+4. **Phase A Completion:**
+   - Update build configuration to package studio assets into service JAR
+   - Add contribution doc snippet once packaging stabilized
+   - Resolve TypeScript compilation warnings in api-healthcare.ts, api-logistics.ts, and api-interceptors.ts
+5. **Phase B Power User Features (NEW FOCUS):**
+   - Visual WYSIWYG canvas with live component rendering
+   - Click-to-select on rendered components (tree sync)
+   - Multi-select for bulk operations (delete, move, style)
+   - Copy/paste components within and across pages
+   - Component property editor with type-specific controls (color picker, slider, dropdown)
+   - Data binding visual editor (connect to API endpoints)
+   - Action builder (event handlers, navigation, form submission)
+   - Responsive preview modes (mobile/tablet/desktop)
+   - Component library panel with drag-to-add
+   - Template/snippet system for reusable patterns
+   - Theme switcher and dark mode support
+
+See `docs/UI_Development_Plan.md` for detailed Phase B planning.
 
 ### Contribution (Components)
 1. Create component in `app-bana-ui/src/components/` extending `BaseElement`.
@@ -451,4 +482,3 @@ Notes
 - Deep Studio Plan: `docs/UI_Development_Plan.md`
 - Assistant Snapshot: `.github/COPILOT_GUIDE.md`
 - Implementation Backlog: `docs/TODO.md`
-

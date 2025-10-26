@@ -1,5 +1,11 @@
-import { renderDemoIfPresent } from './app-renderer';
+import './builder/components/BuilderShell';
+import './builder/components/BuilderCanvas';
+import './builder/components/BuilderInspector';
 
-// Phase A demo bootstrap
-renderDemoIfPresent();
-
+// Bootstrap the Studio Builder Shell
+const root = document.getElementById('studio-root');
+if (root) {
+  root.innerHTML = '';
+  const shell = document.createElement('studio-builder-shell');
+  root.appendChild(shell);
+}

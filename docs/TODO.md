@@ -1,17 +1,34 @@
 # Q4 2025 Delivery Plan — Aligned with Product_AppBana
 
+**🎯 PRIMARY FOCUS: Making Studio Builder extremely powerful and user-friendly**
+
 This plan is the actionable backlog for October–December 2025. Keep it synchronized with `Product_AppBana.md` (§5 acceptance criteria; §17 logistics) and update checkboxes as items are delivered.
 
+**ALL NEW DEVELOPMENT EFFORT IS FOCUSED ON STUDIO BUILDER** - creating the most powerful, intuitive visual builder for metadata-driven applications.
+
 ## October 2025 — Enterprise Foundation (MVP)
-- [ ] Custom UI Studio Foundation (MVP)  
-  Progress: Base scaffolding & core components DONE; renderer/test/packaging pending.
-  - [x] Scaffold minimal Studio workspace (plain TS/JS + build script). [O1-S1](OCT_2025_EPICS_STORIES.md#o1-s1-scaffold-studio-workspace) *(Adjusted: custom Studio vs Angular)*
+- [ ] **Custom UI Studio Foundation (MVP) — PRIMARY FOCUS**  
+  **Progress: Phase A (Foundation) complete; now transitioning to Phase B (Power User Features)**
+  - [x] Scaffold minimal Studio workspace (plain TS/JS + build script). [O1-S1](OCT_2025_EPICS_STORIES.md#o1-s1-scaffold-studio-workspace)
   - [x] Implement component registry + core components Container/Text/Button. [O1-S2](OCT_2025_EPICS_STORIES.md#o1-s2-minimal-runtime-renderer)
   - [x] Demo metadata JSON + unknown component placeholder. [O1-S2](OCT_2025_EPICS_STORIES.md#o1-s2-minimal-runtime-renderer)
   - [x] Recursive runtime renderer (walk nodes, attach props, children).
   - [x] Vitest renderer test (assert demo renders & unknown placeholder used).
-  - [x] `/ui/studio` packaging into fat JAR (HTML + bootstrap script fallback when dist missing).
-  - [x] Builder canvas skeleton (selection + tree mount) & token persistence shell. [O1-S3](OCT_2025_EPICS_STORIES.md#o1-s3-designer-shell--settings)
+  - [x] Builder Shell with interactive canvas, inspector panel, token editor. [O1-S3](OCT_2025_EPICS_STORIES.md#o1-s3-designer-shell--settings)
+  - [x] Full keyboard navigation (⌘P palette, ⌘D duplicate, shortcuts for all actions).
+  - [x] Drag-drop components, inline editing, undo/redo (100 operations).
+  - [ ] `/ui/studio` packaging into fat JAR (final build configuration).
+  - [ ] **PHASE B FEATURES (NEW FOCUS):**
+    - [ ] Visual WYSIWYG canvas with live component rendering
+    - [ ] Click-to-select on rendered components (sync with tree)
+    - [ ] Multi-select for bulk operations
+    - [ ] Copy/paste components within and across pages
+    - [ ] Property editor with type-specific controls (color picker, slider)
+    - [ ] Data binding visual editor (connect to API endpoints)
+    - [ ] Action builder (event handlers, navigation, forms)
+    - [ ] Responsive preview modes (mobile/tablet/desktop)
+    - [ ] Component library panel with drag-to-add
+    - [ ] Template/snippet system for reusable patterns
   - [ ] Basic audit log UI scaffold (list/export stub). [O1-S5](OCT_2025_EPICS_STORIES.md#o1-s5-audit-ui-scaffold)
   - [ ] Styling baseline: tokens (CSS variables) + minimal utility classes per `docs/STYLE_GUIDE.md`.
 - [ ] Server-side Workflow Engine (MVP)
@@ -75,13 +92,18 @@ Acceptance criteria: see `Product_AppBana.md` §5 December and §17.4.
 (See `docs/UI_Development_Plan.md` §7 for detailed exit criteria.)
 - [x] metadata.ts (PageMeta, ComponentNode, ThemeMeta, NavigationMeta, Binding, Action) *(initial subset — will expand later)*
 - [x] registry bootstrap (auto-register core built-ins)
-- [x] demo-page.json created (demo) — packaging pending
+- [x] demo-page.json created (demo)
 - [x] Renderer recursive children traversal + prop application
 - [x] Unknown component placeholder element
-- [x] Vitest harness + first renderer test (harness present; test missing)
-- [ ] README + Copilot Guide component contribution update (partial; finalize after renderer API)
+- [x] Vitest harness + first renderer test
+- [x] Builder Shell integration (canvas with tree view, inspector panel, token panel)
+- [x] Studio entry point (studio-entry.ts bootstraps BuilderShell)
+- [x] Interactive component tree (selection, expand/collapse, drag-drop, inline edit)
+- [x] Keyboard shortcuts (⌘P search, ⌘D duplicate, ⌘⇧C copy ID, Delete/Backspace remove)
+- [ ] `/ui/studio` packaging into fat JAR
+- [ ] README + Copilot Guide component contribution update (partial; finalize after packaging)
 
-Progress tags: do not advance to Phase B checklist until all above are checked.
+Progress: Phase A Builder foundation complete; packaging & documentation update pending.
 
 ## Backlog (Post-Q4 or Nice-to-Haves)
 - OpenAPI enhancements (response schemas/examples); optionally bundle Swagger UI locally.
