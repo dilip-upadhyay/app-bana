@@ -1,0 +1,65 @@
+<div class="toolbar">
+  <button data-action="undo">Undo</button>
+  <button data-action="redo">Redo</button>
+  <button data-action="duplicate" data-bind="disabled:cannotDuplicate">Duplicate</button>
+  <button data-action="search">Search (⌘/Ctrl+P)</button>
+</div>
+
+<div class="tree" role="tree" aria-label="Component tree" data-action="selectRoot">
+  <div data-slot="tree-content"></div>
+</div>
+
+<div data-slot="palette" style="display: none;">
+  <div class="palette-backdrop" data-action="closePalette">
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Search nodes" data-stop-propagation>
+      <header id="palette-header">
+        <span>Find Node</span>
+        <button class="inline" style="font-size:11px" data-action="closePalette">Esc</button>
+      </header>
+
+      <input
+        data-input="paletteFilter"
+        aria-label="Filter nodes"
+        placeholder="Filter by id / type / text" />
+
+      <ul role="listbox" aria-label="Search results" data-slot="palette-results">
+      </ul>
+
+      <div style="padding:4px 8px; font-size:10px; border-top:1px solid #e2e8f0; display:flex; justify-content:space-between;">
+        <span>↑↓ navigate • Enter select • Esc close</span>
+        <span>Shift+⌘/Ctrl+C copy ID</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div data-slot="toast" style="display: none;">
+  <div class="toast" role="status" aria-live="polite"></div>
+</div>
+
+<div class="sr-live" aria-live="polite" data-slot="sr-live"></div>
+
+<!-- Node template -->
+<template data-template="node">
+  <div class="node"
+    role="treeitem"
+    data-node-id=""
+    data-draggable="true">
+    <button class="expand-btn" data-action="toggleExpand" style="display: none;"></button>
+    <span class="expand-btn" style="opacity:.4; display: none;">•</span>
+    <input class="inline-edit" data-input="nodeEdit" style="display: none;" />
+    <span data-slot="node-label"></span>
+    <button class="inline" title="Add child" data-action="addChild">+</button>
+    <button class="inline" title="Delete" data-action="deleteNode" style="display: none;">×</button>
+  </div>
+  <div class="children" role="group" data-slot="node-children" style="display: none;"></div>
+</template>
+
+<!-- Palette item template -->
+<template data-template="palette-item">
+  <li role="option" data-action="selectPaletteItem">
+    <span data-slot="item-id"></span>
+    <span class="badge" data-slot="item-type"></span>
+  </li>
+</template>
+
