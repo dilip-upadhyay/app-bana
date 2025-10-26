@@ -220,9 +220,62 @@ connectedCallback() {
 - ✅ Observer pattern
 - ✅ Manual subscription/unsubscription
 
+### 9. API Data Binding (Fetch Pattern)
+
+**What it is:** Binding component state to backend API responses using the native Fetch API.
+
+**Usage:**
+```typescript
+@state() private users: User[] = [];
+@state() private isLoading = false;
+@state() private error: string | null = null;
+
+private async loadUsers() {
+  this.isLoading = true;
+  this.error = null;
+  
+  try {
+    const response = await fetch('/api/users', {
+      headers: { 'X-AppBana-Token': this.authToken }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    this.users = await response.json();
+  } catch (e: any) {
+    this.error = e.message;
+  } finally {
+    this.isLoading = false;
+  }
+}
+
+render() {
+  return html`
+    ${this.isLoading ? html`<div>Loading...</div>` : null}
+    ${this.error ? html`<div class="error">${this.error}</div>` : null}
+    ${this.users.map(user => html`<div>${user.name}</div>`)}
+  `;
+}
+```
+
+**Examples in codebase:**
+- **EntityExplorer:** GET queries with filters, POST batch inserts
+- **SchemaBuilder:** GET schemas, POST create/update, DELETE schemas
+
+**Common patterns:**
+- Loading state management (`isLoading`, `error`, `data`)
+- Authentication headers via helper methods
+- URL building with `URLSearchParams`
+- Response parsing with fallback handling
+- Try-catch-finally error boundaries
+
+**See [API_INTEGRATION.md](./API_INTEGRATION.md) for comprehensive documentation on all API calling patterns.**
+
 ## NOT Currently Implemented (Planned for Phase C/D)
 
-### 9. Metadata-Driven Bindings (Phase C)
+### 10. Metadata-Driven Bindings (Phase C)
 
 **Planned:** Bindings defined in JSON metadata that the runtime resolver processes.
 
@@ -248,7 +301,7 @@ connectedCallback() {
 - `expr` - Expression evaluation (Phase D)
 - `data` - Backend data source (Phase D)
 
-### 10. Expression Bindings (Phase D)
+### 11. Expression Bindings (Phase D)
 
 **Planned:** Sandbox-safe expression evaluation.
 
@@ -273,7 +326,7 @@ connectedCallback() {
 - ⏳ Whitelisted functions only
 - ⏳ Error boundary handling
 
-### 11. Data Source Bindings (Phase D)
+### 12. Data Source Bindings (Phase D)
 
 **Planned:** Binding to backend API responses.
 
@@ -291,7 +344,7 @@ connectedCallback() {
 }
 ```
 
-### 12. Real-time Bindings (Phase E)
+### 13. Real-time Bindings (Phase E)
 
 **Planned:** WebSocket/MQTT subscriptions.
 
