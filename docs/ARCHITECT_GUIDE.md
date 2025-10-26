@@ -1,5 +1,6 @@
 # AppBana — Architect and Developer Guide
 
+<!-- Updated 2025-10-26: Component architecture documented -->
 This document provides a comprehensive overview of the AppBana application, intended for architects, developers, and product owners who need to understand the system's design, capabilities, and technical direction.
 
 ## 1. Product Vision & Architecture
@@ -21,7 +22,7 @@ This end-to-end cohesion, from database to UI, is the primary competitive advant
 - **JSON Processing:** Jackson (`jackson-databind`).
 - **Logging:** SLF4J (simple binding).
 - **Build:** Maven (multi-module) with the Shade plugin to create an executable "uber jar" for the service module.
-- **Frontend:** Custom TypeScript + Web Components framework "Studio" (Phase A) using Vite; legacy HTML builders still shipped for schemas & datasources.
+- **Frontend:** TypeScript + Lit Web Components framework "Studio" with 3-file component structure (`.ts`, `.css`, `.html`) using Vite; legacy HTML builders still shipped for schemas & datasources.
 
 ## 2. Key Features and Capabilities
 
@@ -93,36 +94,160 @@ Targeted after Phase A renderer completion:
 - FLS redaction & write enforcement hooks.
 - Structured audit service with queue or batch capability (optional reliability enhancement).
 
-## 4. Studio UI Architecture (Replaces Prior Angular Plan)
+## 4. Studio UI Architecture (3-File Component Pattern)
 
 ### 4.1 Component Model
-- Web Components (Custom Elements) registered via a lightweight registry; lazy-import ensures minimal startup cost.
-- Component metadata (future): each component will declare a props schema enabling auto-generated inspector forms.
-- Registry will evolve into a plugin boundary allowing external script modules to register new components.
 
-### 4.2 Rendering Pipeline (Planned Implementation)
-1. Load page metadata JSON (includes node collection).
-2. Build in-memory index (id → node).
-3. Create root host element and recursively instantiate child components.
-4. Apply static props; future: evaluate bindings inside a sandbox.
-5. Insert unknown component placeholder for unregistered `type` values (forward compatibility & plugin resilience).
+All Studio components follow a clean 3-file structure similar to Angular:
 
-### 4.3 Builder Canvas (Phase B Scope Outline)
-- Tree store normalizing nodes for O(1) access.
-- Selection model (single initially) + keyboard shortcuts (duplicate, delete, search palette, inline edit).
-- Undo/redo via operation log (bounded stack, 100 entries default).
-- Property inspector (auto-generated from component props schema) with immediate re-render.
-- Local draft persistence (`localStorage`) prior to server design endpoints (Phase C).
+**File Structure:**
+```
+ComponentName/
+├── ComponentName.ts    # TypeScript logic, state, and Lit templates
+├── ComponentName.css   # Component styles
+└── ComponentName.html  # Template reference/documentation
+```
 
-### 4.4 Future Frontend Concerns
-- Expression sandbox: deterministic evaluation (whitelisted functions, no global object leaks).
-- Theme token injection: compile theme JSON to scoped CSS variables.
-- Realtime binding: subscription adapters pushing updates to components.
-- Versioning/publish: semantic version snapshots & diff preview before runtime activation.
-- Plugin isolation: optional iframe/realm or capability-based access restrictions.
+**Implementation Pattern:**
+```typescript
+// ComponentName.ts
+import { LitElement, html, css, unsafeCSS } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
+import styles from './ComponentName.css?inline';
 
-### 4.5 Historical Note (Angular Plan Deprecated)
-A prior plan targeting an Angular 21 + Nx workspace has been **superseded** by the custom Studio approach for reduced runtime weight and tighter platform alignment. Remaining Angular references in historical documents should be interpreted as legacy and will be phased out. Epics have been re-mapped to Studio phases (see roadmap docs).
+@customElement('component-name')
+export class ComponentName extends LitElement {
+  static styles = css`${unsafeCSS(styles)}`;
+  
+  @state() private data = '';
+
+  render() {
+    return html`<div class="container">${this.data}</div>`;
+  }
+}
+```
+
+**Key Features:**
+- **Web Components:** Custom Elements registered via a lightweight registry; lazy-import ensures minimal startup cost.
+- **Lit Framework:** Reactive templating with `html` tagged templates and `@state()` decorators.
+- **CSS Modules:** Styles imported as inline strings via Vite's `?inline` query parameter.
+- **TypeScript:** Full type safety with declarations in `vite-env.d.ts`.
+- **Shadow DOM:** Style and DOM encapsulation per component.
+
+### 4.2 Builder Components (Implemented)
+
+**BuilderCanvas** (`builder/components/BuilderCanvas.*`)
+- Interactive tree editor with visual hierarchy
+- Drag-drop node reordering within containers
+- Keyboard shortcuts (Delete, Duplicate, Cmd+D, Cmd+P for palette)
+- Command palette for quick node search/selection
+- Inline text editing (Enter key on text nodes)
+- Local storage for expanded/collapsed state
+
+**BuilderInspector** (`builder/components/BuilderInspector.*`)
+- Property editor for selected nodes
+- Auto-updating form based on node type
+- Text/label editing
+- CSS class management (space-separated)
+
+**BuilderShell** (`builder/components/BuilderShell.*`)
+- Main layout combining canvas and inspector
+- Flexible panel sizing
+- Token panel integration
+
+**TokenPanel** (`builder/components/TokenPanel.*`)
+- Design token editor with category organization
+- Undo/redo with keyboard shortcuts (Cmd+Z, Cmd+Y)
+- Import/export JSON snapshots with merge option
+- Revision timeline showing all changes
+- Highlighted recent edits with before/after diffs
+- Collapsible categories
+
+### 4.3 Application Components (Implemented)
+
+**AppSidebar** (`components/app-sidebar.*`)
+- Navigation with icon-based menu
+- Active route highlighting
+- Client-side routing (pushState)
+- Responsive layout
+
+**ComponentGallery** (`components/component-gallery.*`)
+- Component showcase grid
+- Live component examples
+
+**EntityExplorer** (`components/entity-explorer.*`)
+- Full CRUD interface for any entity
+- Advanced filtering (field:value syntax)
+- Pagination (limit/offset)
+- Search, projection, sorting
+- Batch insert with JSON editor
+- Raw response viewer
+- cURL command generator
+- Authentication token management
+
+### 4.4 CSS Import System
+
+**Vite Configuration:**
+CSS files are imported using the `?inline` suffix to load them as strings:
+```typescript
+import styles from './Component.css?inline';
+```
+
+**Type Declarations (`vite-env.d.ts`):**
+```typescript
+declare module '*.css?inline' {
+  const content: string;
+  export default content;
+}
+```
+
+**Usage in Component:**
+```typescript
+static styles = css`${unsafeCSS(styles)}`;
+```
+
+This approach provides:
+- **Separation of Concerns:** Styles in dedicated `.css` files
+- **Type Safety:** TypeScript knows about CSS imports
+- **Shadow DOM:** Scoped styles per component
+- **Build Optimization:** Vite handles CSS processing and minification
+
+### 4.5 Component Metadata (Future)
+
+Each component will declare a props schema enabling auto-generated inspector forms. Registry will evolve into a plugin boundary allowing external script modules to register new components.
+
+**Planned Structure:**
+```typescript
+interface ComponentMetadata {
+  type: string;
+  displayName: string;
+  icon?: string;
+  category: string;
+  props: PropSchema[];
+  events?: EventSchema[];
+}
+```
+
+### 4.6 Development Workflow
+
+1. **Create Component Files:**
+   - `ComponentName.ts` with logic and templates
+   - `ComponentName.css` with styles
+   - `ComponentName.html` as reference documentation
+
+2. **Import and Register:**
+   - Import CSS with `?inline` suffix
+   - Register component with `@customElement` decorator
+
+3. **Test Component:**
+   - Write Vitest tests for behavior
+   - Test DOM output and interactions
+   - Verify style encapsulation
+
+4. **Document:**
+   - Update `.html` file with usage examples
+   - Document props and events
+   - Add to component gallery if applicable
 
 ## 5. Vertical-Specific Features (Strategic Targets)
 ### 5.1 Healthcare

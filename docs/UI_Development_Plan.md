@@ -1,16 +1,17 @@
 # UI Development Plan — Custom UI Core ("Studio")
 
-<!-- Updated 2025-10-01: Phase A progress annotations -->
+<!-- Updated 2025-10-26: Component architecture update - 3-file structure -->
 This document outlines the development plan for AppBana's custom UI framework, codenamed "Studio". This plan supersedes all previous plans, including the one based on Angular (legacy references retained elsewhere for anchor compatibility only).
 
 ## 1. Vision & Core Principles
 
 The goal is to create a powerful, lightweight, and maintainable no-code/low-code UI development platform that is perfectly tailored to the AppBana backend.
 
-- **Component-Based:** The architecture is built on standard Web Components for maximum interoperability and longevity.
+- **Component-Based:** The architecture is built on Lit Web Components for maximum interoperability and longevity.
 - **Metadata-Driven:** All UIs are rendered from a JSON metadata definition. This separates the "what" from the "how".
 - **TypeScript First:** The entire frontend codebase will be in TypeScript for robustness, maintainability, and excellent tooling.
-- **Minimal Dependencies:** We will avoid large, opinionated frameworks. Dependencies will be chosen carefully for specific tasks (e.g., `vite` for the build tool).
+- **Angular-like Structure:** Each component follows a 3-file pattern (`.ts`, `.css`, `.html`) for better organization and maintainability.
+- **Minimal Dependencies:** We use Lit for Web Components, Vite for build tooling, and avoid large opinionated frameworks.
 - **Extensible:** The framework will be designed from the ground up to support plugins for custom components, data connectors, and actions.
 
 ## 2. Core Components of "Studio"
@@ -22,9 +23,56 @@ The goal is to create a powerful, lightweight, and maintainable no-code/low-code
 ## 3. Technology Stack
 
 - **Language:** TypeScript
-- **Primitive Rendering:** Native Web Components (Custom Elements / Shadow DOM)
+- **Component Library:** Lit (Web Components)
 - **Build/Dev:** Vite
-- **Bootstrap Helper (temporary):** `lit` only for a few legacy pieces; all new work uses `BaseElement` abstractions.
+- **Component Structure:** 3-file pattern per component:
+  - `.ts` - Component logic, state management, and Lit templates
+  - `.css` - Component styles (imported as inline strings via Vite)
+  - `.html` - Template reference/documentation
+- **Type Safety:** TypeScript declarations for CSS imports in `vite-env.d.ts`
+
+## 3.1 Component Architecture
+
+Each component follows a clean separation of concerns:
+
+```
+ComponentName/
+├── ComponentName.ts    # Logic + rendering
+├── ComponentName.css   # Styles
+└── ComponentName.html  # Reference documentation
+```
+
+**Example Component Structure:**
+```typescript
+// ComponentName.ts
+import { LitElement, html, css, unsafeCSS } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
+import styles from './ComponentName.css?inline';
+
+@customElement('component-name')
+export class ComponentName extends LitElement {
+  static styles = css`${unsafeCSS(styles)}`;
+  
+  @state() private data = '';
+
+  render() {
+    return html`<div class="container">${this.data}</div>`;
+  }
+}
+```
+
+**CSS Import:**
+```typescript
+import styles from './Component.css?inline';
+```
+
+**Type Declaration (vite-env.d.ts):**
+```typescript
+declare module '*.css?inline' {
+  const content: string;
+  export default content;
+}
+```
 
 ## 4. Phased Development Plan (Versioned)
 
@@ -43,22 +91,65 @@ Phases are incremental; each ends with a demonstrable success criterion.
 
 | Area | Status | Notes |
 |------|--------|-------|
-| BaseElement core | ✅ Done | Minimal state + render loop working |
+| Component structure | ✅ Done | 3-file pattern implemented across all components |
+| CSS separation | ✅ Done | All styles moved to separate .css files with ?inline imports |
+| Type declarations | ✅ Done | vite-env.d.ts provides CSS import types |
+| BuilderCanvas | ✅ Done | Tree editor with drag-drop, palette, inline editing |
+| BuilderInspector | ✅ Done | Property editor for selected nodes |
+| BuilderShell | ✅ Done | Layout shell combining canvas and inspector |
+| TokenPanel | ✅ Done | Design token editor with undo/redo, categories |
+| AppSidebar | ✅ Done | Navigation with routing |
+| ComponentGallery | ✅ Done | Component showcase |
+| EntityExplorer | ✅ Done | Full CRUD interface with filters, pagination, batch ops |
 | Component registry | ✅ Done | Dynamic import ensures lazy core component load |
 | Runtime renderer | ☐ Pending | `app-renderer.ts` stub; recursive walker not implemented |
 | Metadata model | ✅ Initial subset | `PageMeta`, `ComponentNode` minimal; extended workflow/theme/nav still doc-only |
 | Page persistence | Not Implemented | Deferred to Phase C |
-| Builder canvas | Not Implemented | Starts after Phase A exit |
 | Binding system | Not Implemented | Phase C/D |
 | Theme tokens | Not Implemented | Phase D |
 | Expression sandbox | Not Implemented | Phase D (security gating) |
 | Plugin boundary | Planned | Phase E (global registration hook draft) |
-| Non-relational adapters | Planned | Documentation only; backend ignores non-rel kinds |
 | Tests (UI) | ☐ Pending | Vitest configured; first renderer test missing |
 | Page versioning/publish | Planned | Phase E |
 | Offline/PWA | Planned | Phase F (Nov scope) |
 
-## 6. Gaps & Risks
+## 6. Component Development Guidelines
+
+### 6.1 Creating New Components
+
+1. **Create the TypeScript file** with Lit decorators and state management
+2. **Create the CSS file** with scoped styles for the component
+3. **Create the HTML file** as reference documentation
+4. **Import CSS** using `?inline` suffix
+5. **Apply styles** using `css\`${unsafeCSS(styles)}\``
+6. **Write tests** for the component behavior
+
+### 6.2 Best Practices
+
+- Keep components focused on a single responsibility
+- Use `@state()` for reactive internal state
+- Use `@property()` for public component API
+- Leverage Shadow DOM for style encapsulation
+- Document component props and events in the .html reference file
+- Write comprehensive tests for complex interactions
+
+### 6.3 Builder Component Examples
+
+**BuilderCanvas** - 3 files totaling ~600 lines:
+- Tree editor with keyboard navigation
+- Drag-drop reordering
+- Command palette (Cmd/Ctrl+P)
+- Inline editing (Enter on text nodes)
+- Local storage for expanded state
+
+**TokenPanel** - 3 files totaling ~400 lines:
+- Category-based token organization
+- Undo/redo with keyboard shortcuts
+- Import/export JSON snapshots
+- Revision timeline
+- Highlighted recent changes with diffs
+
+## 7. Gaps & Risks
 
 | Gap | Risk | Mitigation |
 |-----|------|-----------|
@@ -69,7 +160,7 @@ Phases are incremental; each ends with a demonstrable success criterion.
 | Lack of undo/redo model | Builder UX friction | Maintain operation log + state snapshots (Phase B) |
 | No theming runtime | Inconsistent styling later | Lock token schema before Phase D |
 
-## 7. Immediate Next Actions (Phase A Completion) — Updated
+## 8. Immediate Next Actions (Phase A Completion) — Updated
 
 The following concrete tasks complete Phase A and unblock Phase B:
 1. Implement recursive renderer in `app-bana-ui/src/app-renderer.ts`:
@@ -87,15 +178,16 @@ The following concrete tasks complete Phase A and unblock Phase B:
 
 _Exit Gate Reminder:_ Do **not** begin canvas (selection / undo / drag) until renderer + test + packaging are green.
 
-## 8. Builder MVP (Phase B) Detailed Scope
+## 9. Builder MVP (Phase B) Detailed Scope
 
 Features:
-- In-memory tree store (normalized by id).
-- Selection model + keyboard shortcuts (delete, duplicate, move up/down).
-- Property inspector auto-generates form from component schema (field metadata stored per component definition).
-- Local draft persistence (localStorage `studio.draft.<pageId>`).
-- Import/export (JSON download/upload) with validation.
-- Operation log (append-only) powering undo/redo stack (max depth 100).
+- In-memory tree store (normalized by id). ✅ DONE
+- Selection model + keyboard shortcuts (delete, duplicate, move up/down). ✅ DONE
+- Property inspector auto-generates form from component schema (field metadata stored per component definition). ✅ DONE
+- Local draft persistence (localStorage `studio.draft.<pageId>`). ✅ DONE
+- Import/export (JSON download/upload) with validation. ✅ PARTIAL (export done)
+- Operation log (append-only) powering undo/redo stack (max depth 100). ✅ DONE
+- Component separation (3-file structure). ✅ DONE
 
 Non-Goals in Phase B:
 - Server persistence.
@@ -189,6 +281,7 @@ Frontend will model `modelKind != relational` (document/apiResource) but backend
 
 ## 20. Changelog (Plan Updates)
 
+- 2025-10-26: Updated component architecture details (3-file structure) and revised Builder MVP scope.
 - 2025-10-01: Added progress matrix (Section 5) and revised Immediate Next Actions (Section 7) to reflect partial Phase A completion.
 - 2025-09-29: Major expansion — added phases table, status matrix, immediate actions, risk table, and alignment sections.
 
