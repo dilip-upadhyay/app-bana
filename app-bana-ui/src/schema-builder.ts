@@ -1,5 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { api } from './core/api-service.ts';
+import type { ApiError } from './core/api-interceptor.ts';
 import './components/StudioWelcome';
 import type { RelationalField } from './models/schema';
 
@@ -95,18 +97,31 @@ export class SchemaBuilder extends LitElement {
   private async refreshDatasources() {
     this.loadingDs = true;
     try {
-      const r = await fetch('/ui/datasource/list');
+      const r = await fetch('/ui/datasource/list', {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+
       if (r.ok) {
         const list = await r.json();
         // Only relational show for now (filter by type heuristics)
-        this.datasources = (list || []).map((d: any) => ({ name: d.name, type: d.type, jdbcUrl: d.jdbcUrl, driver: d.driver, active: d.active }));
+        this.datasources = (list || []).map((d: any) => ({
+          name: d.name,
+          type: d.type,
+          jdbcUrl: d.jdbcUrl,
+          driver: d.driver,
+          active: d.active
+        }));
         if (!this.createDatasource && this.datasources.length) {
           const active = this.datasources.find(d => d.active) || this.datasources[0];
-            this.createDatasource = active.name;
+          this.createDatasource = active.name;
         }
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error('Error loading datasources:', e);
+      this.datasources = [];
     } finally {
       this.loadingDs = false;
     }

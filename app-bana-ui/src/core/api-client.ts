@@ -93,11 +93,15 @@ export class ApiClient {
     error.response = response;
 
     try {
-      const text = await response.text();
-      try {
-        error.data = JSON.parse(text);
-      } catch {
-        error.data = text;
+      // Clone the response before reading to avoid "body already read" errors
+      const clonedResponse = response.clone();
+      const text = await clonedResponse.text();
+      if (text) {
+        try {
+          error.data = JSON.parse(text);
+        } catch {
+          error.data = text;
+        }
       }
     } catch {
       // Ignore body parsing errors
@@ -289,4 +293,3 @@ export class ApiClient {
 
 // Create default instance
 export const apiClient = new ApiClient();
-
