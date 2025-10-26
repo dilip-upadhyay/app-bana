@@ -1,0 +1,37 @@
+:host {
+  display: block;
+  font: 12px/1.4 system-ui, sans-serif;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+label {
+  display: block;
+  font-size: 11px;
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #334155;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  font: inherit;
+}
+
+.empty {
+  font-style: italic;
+  color: #64748b;
+}
+
