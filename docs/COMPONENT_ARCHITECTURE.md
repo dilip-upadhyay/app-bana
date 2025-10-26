@@ -202,6 +202,109 @@ this.dispatchEvent(new CustomEvent('change', {
 }));
 ```
 
+## Data Binding Patterns
+
+AppBana Studio uses several data binding patterns. See [DATA_BINDING.md](./DATA_BINDING.md) for comprehensive documentation.
+
+### 1. Reactive State (`@state`)
+
+Internal component state with automatic re-renders:
+
+```typescript
+@state() private items = [];
+@state() private isLoading = false;
+```
+
+### 2. Property Binding (`.value=`)
+
+One-way binding from component to DOM:
+
+```typescript
+html`<input .value=${this.text} />`
+```
+
+### 3. Event Binding (`@event`)
+
+Listen to DOM events:
+
+```typescript
+html`<button @click=${this.handleClick}>Click</button>`
+```
+
+### 4. Two-Way Binding
+
+Manual two-way binding with property + event:
+
+```typescript
+html`
+  <input 
+    .value=${this.text}
+    @input=${(e: Event) => this.text = (e.target as HTMLInputElement).value} />
+`
+```
+
+### 5. Conditional Rendering
+
+Show/hide based on state:
+
+```typescript
+html`
+  ${this.isLoading 
+    ? html`<div>Loading...</div>` 
+    : html`<div>${this.data}</div>`}
+`
+```
+
+### 6. List Rendering
+
+Render arrays:
+
+```typescript
+html`
+  <ul>
+    ${this.items.map(item => html`<li>${item.name}</li>`)}
+  </ul>
+`
+```
+
+### 7. Store Pattern
+
+Shared state across components:
+
+```typescript
+// Subscribe to store changes
+connectedCallback() {
+  currentStore?.onChange(() => {
+    this.data = currentStore.getData();
+    this.requestUpdate();
+  });
+}
+```
+
+### Future: Metadata-Driven Bindings (Phase C)
+
+Bindings will be declaratively defined in JSON:
+
+```json
+{
+  "type": "input",
+  "props": {
+    "binding": {
+      "kind": "form",
+      "field": "firstName"
+    }
+  }
+}
+```
+
+Planned binding types:
+- `static` - Literal values
+- `form` - Form field binding
+- `page` - Page parameters
+- `expr` - Expression evaluation (Phase D)
+- `data` - Backend data sources (Phase D)
+- `channel` - Real-time subscriptions (Phase E)
+
 ## Best Practices
 
 ### 1. Keep Components Focused
@@ -318,4 +421,3 @@ If you have old components without the 3-file structure:
 - [Web Components Standards](https://developer.mozilla.org/en-US/docs/Web/Web_Components)
 - [Vite Documentation](https://vitejs.dev/)
 - [TypeScript Handbook](https://www.typescriptlang.org/docs/)
-
