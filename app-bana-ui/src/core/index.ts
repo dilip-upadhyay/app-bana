@@ -5,7 +5,7 @@
 
 // API Client and Interceptors
 export { ApiClient, apiClient } from './api-client.ts';
-export type { ApiClientConfig, QueryParams, RequestConfig } from './api-client.ts';
+export type { ApiClientConfig, QueryParams, RequestConfig, RequestOptions } from './api-client.ts';
 
 export { InterceptorManager } from './api-interceptor.ts';
 export type {
@@ -93,3 +93,7 @@ export {
 // Re-export existing core modules
 export { BaseElement } from './BaseElement.ts';
 export { registry } from './registry.ts';
+
+// Registry exports - for internal use
+export { registerComponent, getComponent, getAllComponentTypes, ensureCoreRegistered } from './registry';
+export type { ComponentConstructor } from './registry';

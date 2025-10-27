@@ -3,7 +3,7 @@
  * Provides a centralized HTTP client with interceptor support
  */
 
-import { InterceptorManager, RequestConfig, ApiError } from './api-interceptor.ts';
+import { InterceptorManager, Interceptor, ApiError } from './api-interceptor';
 
 export interface ApiClientConfig {
   baseUrl?: string;
@@ -13,6 +13,23 @@ export interface ApiClientConfig {
 
 export interface QueryParams {
   [key: string]: string | number | boolean | null | undefined;
+}
+
+export interface RequestConfig {
+  url?: string;
+  method?: string;
+  headers?: HeadersInit;
+  body?: any;
+  params?: QueryParams;
+  [key: string]: any; // Allow additional properties like _retryCount
+}
+
+export interface RequestOptions {
+  url: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  headers?: Record<string, string>;
+  body?: any;
+  params?: QueryParams;
 }
 
 /**
@@ -263,7 +280,7 @@ export class ApiClient {
   /**
    * DELETE request
    */
-  async delete<T = any>(endpoint: string, params?: QueryParams, config?: RequestConfig): Promise<T> {
+  async delete<T = any>(endpoint: string, params?: QueryParams, config?: Omit<RequestConfig, 'params'>): Promise<T> {
     return this.request<T>(endpoint, {
       ...config,
       method: 'DELETE',

@@ -43,6 +43,7 @@ export interface ApiError extends Error {
   statusText?: string;
   response?: Response;
   data?: any;
+  config?: RequestConfig;
 }
 
 /**
@@ -138,4 +139,3 @@ export class InterceptorManager {
     }
   }
 }
-

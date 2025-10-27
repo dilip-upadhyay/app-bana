@@ -5,6 +5,9 @@ export type ComponentConstructor = CustomElementConstructor;
 
 const registry = new Map<string, ComponentConstructor>();
 
+// Export the registry for external use
+export { registry };
+
 export function registerComponent(type: string, ctor: ComponentConstructor) {
   registry.set(type, ctor);
 }

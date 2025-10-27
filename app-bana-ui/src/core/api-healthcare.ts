@@ -16,7 +16,8 @@ export function phiAuditInterceptor(): Interceptor {
     name: 'phiAudit',
     onRequest: (config) => {
       // Mark requests that access PHI
-      const isPHI = config.headers?.['X-PHI-Access'] === 'true' ||
+      const headers = config.headers as Record<string, string> | undefined;
+      const isPHI = headers?.['X-PHI-Access'] === 'true' ||
                     config.url?.includes('/fhir/') ||
                     config.url?.includes('/Patient') ||
                     config.url?.includes('/Observation');
@@ -94,7 +95,7 @@ export function dataRedactionInterceptor(
       }
 
       // Redact fields in response
-      const redact = (obj: any) => {
+      const redact = (obj: any): any => {
         if (Array.isArray(obj)) {
           return obj.map(item => redact(item));
         }
@@ -178,10 +179,11 @@ export function breakGlassInterceptor(
   return {
     name: 'breakGlass',
     onRequest: async (config) => {
-      const isEmergency = config.headers?.['X-Emergency-Access'] === 'true';
+      const headers = config.headers as Record<string, string> | undefined;
+      const isEmergency = headers?.['X-Emergency-Access'] === 'true';
 
       if (isEmergency) {
-        const reason = config.headers?.['X-Emergency-Reason'] || 'No reason provided';
+        const reason = headers?.['X-Emergency-Reason'] || 'No reason provided';
 
         // Log emergency access
         await onBreakGlass(reason, {
@@ -210,7 +212,8 @@ export function encryptionValidator(): Interceptor {
     name: 'encryptionValidator',
     onRequest: (config) => {
       const url = config.url || '';
-      const isPHI = config.headers?.['X-PHI-Access'] === 'true';
+      const headers = config.headers as Record<string, string> | undefined;
+      const isPHI = headers?.['X-PHI-Access'] === 'true';
 
       if (isPHI && url.startsWith('http:') && !url.startsWith('https:')) {
         throw new Error('HIPAA Violation: PHI cannot be transmitted over unencrypted HTTP');
@@ -365,4 +368,3 @@ export function setupHealthcareCompliance(options: {
 
   console.log('[Healthcare Compliance] HIPAA interceptors initialized');
 }
-

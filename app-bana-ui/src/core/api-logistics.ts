@@ -5,6 +5,7 @@
  */
 
 import { Interceptor, ApiError } from './api-interceptor.ts';
+import { apiClient } from './api-client.ts';
 
 /**
  * Offline Queue Interceptor
@@ -51,12 +52,16 @@ export function offlineQueueInterceptor(options: {
 
   const addToQueue = (request: Partial<QueuedRequest>) => {
     const queue = loadQueue();
-    queue.push({
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      retries: 0,
-      timestamp: Date.now(),
-      ...request as QueuedRequest,
-    });
+    const newRequest: QueuedRequest = {
+      url: request.url || '',
+      method: request.method || 'POST',
+      body: request.body,
+      headers: request.headers,
+      id: request.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      retries: request.retries || 0,
+      timestamp: request.timestamp || Date.now(),
+    };
+    queue.push(newRequest);
     saveQueue(queue);
     console.log('[Offline Queue] Added request, queue size:', queue.length);
   };
@@ -184,7 +189,8 @@ export function barcodeValidationInterceptor(options: {
   return {
     name: 'barcodeValidation',
     onRequest: (config) => {
-      const barcode = config.headers?.['X-Barcode-Scan'];
+      const headers = config.headers as Record<string, string> | undefined;
+      const barcode = headers?.['X-Barcode-Scan'];
 
       if (barcode) {
         // Validate barcode format
@@ -417,3 +423,38 @@ export const offlineQueue = {
   },
 };
 
+/**
+ * Retry Interceptor
+ * Automatically retries failed requests with exponential backoff
+ */
+export function retryWithBackoffInterceptor(options: {
+  maxRetries?: number;
+  baseDelayMs?: number;
+} = {}): Interceptor {
+  const {
+    maxRetries = 3,
+    baseDelayMs = 1000,
+  } = options;
+
+  return {
+    name: 'retryWithBackoff',
+    onError: async (error) => {
+      const config = error.config;
+      const retryCount = (config as any)._retryCount || 0;
+
+      if (retryCount >= maxRetries) {
+        throw error;
+      }
+
+      const delay = baseDelayMs * Math.pow(2, retryCount);
+      console.warn(`[Retry ${retryCount + 1}/${maxRetries}] after ${delay}ms:`, error.message);
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+      return apiClient.request({
+        ...config,
+        _retryCount: retryCount + 1,
+      } as any);
+    },
+  };
+}

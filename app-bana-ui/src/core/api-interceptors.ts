@@ -128,16 +128,19 @@ export function cacheInterceptor(options: { ttl?: number; maxSize?: number } = {
     },
     onResponse: (response, data) => {
       if (response.status === 200 && (response.url.includes('GET') || !response.url.includes('POST'))) {
-        // Clean old cache entries if size limit reached
-        if (cache.size >= maxSize) {
-          const firstKey = cache.keys().next().value;
-          cache.delete(firstKey);
-        }
+        const shouldCache = response.status === 200 && (response.url.includes('GET') || !response.url.includes('POST'));
+        if (shouldCache) {
+          // Clean old cache entries if size limit reached
+          if (cache.size >= maxSize) {
+            const firstKey = cache.keys().next().value;
+            if (firstKey) cache.delete(firstKey);
+          }
 
-        cache.set(response.url, {
-          data,
-          timestamp: Date.now(),
-        });
+          cache.set(response.url, {
+            data,
+            timestamp: Date.now(),
+          });
+        }
       }
       return data;
     },
@@ -304,4 +307,3 @@ export function tokenRefreshInterceptor(
     },
   };
 }
-
