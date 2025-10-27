@@ -1,5 +1,37 @@
 # UI Builder Shortcuts & Actions
 
+> **🎯 Learning Path:** New to the builder? Start with [STUDIO_FOCUS_POINTS.md](./STUDIO_FOCUS_POINTS.md) for guided tutorials!
+
+---
+
+## 🎯 Focus Points - Essential Shortcuts
+
+### Beginner Level (Must Know)
+| Action | Shortcut | Why It Matters |
+|--------|----------|----------------|
+| Add Component | Drag from library | **Core skill** - How you build pages |
+| Select Component | Click on canvas | **Essential** - Edit what you see |
+| Delete | `Delete` / `Backspace` | **Quick cleanup** - Remove mistakes |
+| Deselect | `Escape` | **Focus** - Clear selection |
+
+### Intermediate Level (Work Faster)
+| Action | Shortcut | Why It Matters |
+|--------|----------|----------------|
+| Duplicate | `Cmd/Ctrl+D` | **Save time** - Copy patterns |
+| Undo | `Cmd/Ctrl+Z` | **Safety net** - Fix mistakes |
+| Redo | `Cmd/Ctrl+Shift+Z` | **Recover** - Restore changes |
+
+### Advanced Level (Power User)
+| Action | Shortcut | Why It Matters |
+|--------|----------|----------------|
+| Search | `Cmd/Ctrl+P` | **Speed** - Find components fast |
+| Copy ID | `Shift+Cmd/Ctrl+C` | **Development** - For scripting |
+| Inline Edit | `Enter` | **Quick edits** - Change text fast |
+
+---
+
+## 📋 Complete Shortcuts Reference
+
 This quick reference lists currently implemented productivity shortcuts in the Studio Builder.
 
 | Action | Shortcut (macOS) | Shortcut (Windows/Linux) | Toolbar Button | Notes |

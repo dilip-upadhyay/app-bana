@@ -1,6 +1,13 @@
 # AppBana — User Guide
 
-> Updated 2025-10-01: Added Studio (custom Web Components UI) progress note. Angular quickstart section marked as legacy (kept for historical reference). `/ui/studio` route will appear once Phase A renderer is completed.
+> **🎯 Studio UI Builder Focus:**
+> - **Quick Start:** [STUDIO_FOCUS_POINTS.md](./STUDIO_FOCUS_POINTS.md) - 5-minute guided tutorial
+> - **Drag & Drop:** [STUDIO_DRAG_DROP_GUIDE.md](./STUDIO_DRAG_DROP_GUIDE.md) - Visual builder guide
+> - **Shortcuts:** [UI_BUILDER_SHORTCUTS.md](./UI_BUILDER_SHORTCUTS.md) - Keyboard productivity
+
+---
+
+> Updated 2025-10-27: Added Studio focus points and comprehensive learning paths. The Studio UI builder is now production-ready with drag-drop, templates, and 60+ components.
 
 Welcome! This guide walks you through installing, configuring, and using AppBana end to end.
 
@@ -453,4 +460,3 @@ Notes
 - You can also run from the UI workspace after a build:
   - `cd ui && npm run serve:ssr:studio`
 - The Studio app includes Google Material Icons via a link tag in `projects/studio/src/index.html` so `<mat-icon>` ligatures work.
-

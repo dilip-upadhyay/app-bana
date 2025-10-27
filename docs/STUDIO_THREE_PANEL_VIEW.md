@@ -1,5 +1,9 @@
 # Studio Three-Panel View - Implementation Summary
 
+> **🎯 For User Guides:** See [STUDIO_FOCUS_POINTS.md](./STUDIO_FOCUS_POINTS.md) and [STUDIO_DRAG_DROP_GUIDE.md](./STUDIO_DRAG_DROP_GUIDE.md)
+
+---
+
 ## ✅ What We Built
 
 **MAJOR UPDATE: Now a 4-Panel Professional Page Builder!**
