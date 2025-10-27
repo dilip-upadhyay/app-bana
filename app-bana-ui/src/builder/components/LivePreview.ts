@@ -1,6 +1,6 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import { unsafeStatic, html as staticHtml } from 'lit/static-html.js';
 import { currentStore } from '../store/TreeStore';
 import type { ComponentNode, PageMeta } from '../../models/metadata';
 import styles from './LivePreview.css?inline';
@@ -304,61 +304,21 @@ export class LivePreview extends LitElement {
     // Render different node types
     switch (node.type) {
       case 'text':
-        const tag = node.props?.tag || 'p';
+        const tag = unsafeStatic(node.props?.tag || 'p');
         const text = node.props?.text || '';
         const className = `${classes} ${node.props?.className || ''}`;
 
-        // Use conditional rendering for different text tags
-        if (tag === 'h1') {
-          return html`<h1 class="${className}" style="${style}" data-node-id="${node.id}"
+        // Use unsafeStatic for dynamic tag names
+        return staticHtml`<${tag}
+            class="${className}"
+            style="${style}"
+            data-node-id="${node.id}"
             @click=${(e: Event) => this.handleNodeClick(e, node.id)}
             @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
             @mouseleave=${() => this.handleNodeMouseLeave()}
             @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
             @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}>${text}</h1>`;
-        } else if (tag === 'h2') {
-          return html`<h2 class="${className}" style="${style}" data-node-id="${node.id}"
-            @click=${(e: Event) => this.handleNodeClick(e, node.id)}
-            @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-            @mouseleave=${() => this.handleNodeMouseLeave()}
-            @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-            @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}>${text}</h2>`;
-        } else if (tag === 'h3') {
-          return html`<h3 class="${className}" style="${style}" data-node-id="${node.id}"
-            @click=${(e: Event) => this.handleNodeClick(e, node.id)}
-            @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-            @mouseleave=${() => this.handleNodeMouseLeave()}
-            @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-            @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}>${text}</h3>`;
-        } else if (tag === 'h4') {
-          return html`<h4 class="${className}" style="${style}" data-node-id="${node.id}"
-            @click=${(e: Event) => this.handleNodeClick(e, node.id)}
-            @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-            @mouseleave=${() => this.handleNodeMouseLeave()}
-            @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-            @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}>${text}</h4>`;
-        } else if (tag === 'span') {
-          return html`<span class="${className}" style="${style}" data-node-id="${node.id}"
-            @click=${(e: Event) => this.handleNodeClick(e, node.id)}
-            @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-            @mouseleave=${() => this.handleNodeMouseLeave()}
-            @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-            @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}>${text}</span>`;
-        } else {
-          // Default to p
-          return html`<p class="${className}" style="${style}" data-node-id="${node.id}"
-            @click=${(e: Event) => this.handleNodeClick(e, node.id)}
-            @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-            @mouseleave=${() => this.handleNodeMouseLeave()}
-            @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-            @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}>${text}</p>`;
-        }
+            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}>${text}</${tag}>`;
 
       case 'button':
         return html`
