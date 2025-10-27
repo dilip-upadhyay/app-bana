@@ -8,6 +8,7 @@ import './LivePreview';
 import './ComponentLibrary';
 import './PageManager';
 import './BuilderInspector';
+import './AppManager';
 
 @customElement('studio-builder-shell')
 export class BuilderShell extends LitElement {
@@ -27,7 +28,12 @@ export class BuilderShell extends LitElement {
 
   render() {
     return html`
-      <!-- Top: Page Manager -->
+      <!-- Top: App Manager -->
+      <div class="app-manager-panel">
+        <studio-app-manager></studio-app-manager>
+      </div>
+
+      <!-- Second Row: Page Manager -->
       <div class="page-manager-panel">
         <studio-page-manager></studio-page-manager>
       </div>

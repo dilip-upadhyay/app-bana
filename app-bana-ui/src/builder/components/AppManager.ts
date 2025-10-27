@@ -1,0 +1,299 @@
+import { LitElement, html, css, unsafeCSS } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
+import { appStore } from '../store/AppStore';
+import type { AppMeta, AppListItem, CreateAppRequest } from '../../models/app-metadata';
+import styles from './AppManager.css?inline';
+
+@customElement('studio-app-manager')
+export class AppManager extends LitElement {
+  static styles = css`${unsafeCSS(styles)}`;
+
+  @state() private currentApp: AppMeta | undefined;
+  @state() private showCreateModal = false;
+  @state() private showSelectModal = false;
+  @state() private apps: AppListItem[] = [];
+
+  // Form state
+  @state() private formName = '';
+  @state() private formDescription = '';
+  @state() private formTemplate: 'blank' | 'single-page' | 'multi-page' | 'dashboard' = 'single-page';
+
+  connectedCallback() {
+    super.connectedCallback();
+    appStore.onChange(() => this.updateState());
+    this.updateState();
+  }
+
+  private updateState() {
+    this.currentApp = appStore.getCurrentApp();
+    this.apps = appStore.listApps();
+  }
+
+  private handleCreateApp() {
+    this.showCreateModal = true;
+    this.formName = '';
+    this.formDescription = '';
+    this.formTemplate = 'single-page';
+  }
+
+  private handleSelectApp() {
+    this.showSelectModal = true;
+  }
+
+  private handleCloseModal() {
+    this.showCreateModal = false;
+    this.showSelectModal = false;
+  }
+
+  private handleSubmitCreate(e: Event) {
+    e.preventDefault();
+
+    if (!this.formName.trim()) {
+      alert('Please enter an app name');
+      return;
+    }
+
+    const request: CreateAppRequest = {
+      name: this.formName.trim(),
+      description: this.formDescription.trim() || undefined,
+      template: this.formTemplate,
+    };
+
+    try {
+      appStore.createApp(request);
+      this.showCreateModal = false;
+      this.showToast(`✅ Created app: ${request.name}`);
+    } catch (error) {
+      console.error('Failed to create app:', error);
+      alert('Failed to create app. Please try again.');
+    }
+  }
+
+  private handleSelectExistingApp(appId: string) {
+    try {
+      appStore.setCurrentApp(appId);
+      this.showSelectModal = false;
+      const app = appStore.getApp(appId);
+      this.showToast(`✅ Switched to: ${app?.name}`);
+    } catch (error) {
+      console.error('Failed to select app:', error);
+      alert('Failed to select app. Please try again.');
+    }
+  }
+
+  private handleDeleteApp(appId: string, appName: string, e: Event) {
+    e.stopPropagation();
+
+    if (!confirm(`Are you sure you want to delete "${appName}"? This will delete all pages in this app.`)) {
+      return;
+    }
+
+    try {
+      appStore.deleteApp(appId);
+      this.showToast(`🗑️ Deleted app: ${appName}`);
+    } catch (error) {
+      console.error('Failed to delete app:', error);
+      alert(error instanceof Error ? error.message : 'Failed to delete app');
+    }
+  }
+
+  private showToast(message: string) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      background: #111827;
+      color: white;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 10000;
+      animation: slideIn 0.3s ease;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.animation = 'slideOut 0.3s ease';
+      setTimeout(() => document.body.removeChild(toast), 300);
+    }, 3000);
+  }
+
+  private formatDate(timestamp: number): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return date.toLocaleDateString();
+  }
+
+  render() {
+    return html`
+      <div class="app-manager">
+        <div class="app-header">
+          <div class="app-title">
+            <h2>📱 App Manager</h2>
+            ${this.currentApp ? html`
+              <div class="current-app">
+                <span class="app-icon">📦</span>
+                <span class="app-name">${this.currentApp.name}</span>
+                <span class="page-count">${this.currentApp.pages.length} page${this.currentApp.pages.length !== 1 ? 's' : ''}</span>
+              </div>
+            ` : html`
+              <div class="current-app" style="color: #9ca3af;">
+                No app selected
+              </div>
+            `}
+          </div>
+
+          <div class="app-actions">
+            <button class="btn" @click=${this.handleSelectApp}>
+              📂 Open App
+            </button>
+            <button class="btn btn-primary" @click=${this.handleCreateApp}>
+              ➕ New App
+            </button>
+          </div>
+        </div>
+      </div>
+
+      ${this.showCreateModal ? this.renderCreateModal() : ''}
+      ${this.showSelectModal ? this.renderSelectModal() : ''}
+    `;
+  }
+
+  private renderCreateModal() {
+    return html`
+      <div class="modal-overlay" @click=${this.handleCloseModal}>
+        <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h3>Create New App</h3>
+            <button class="modal-close" @click=${this.handleCloseModal}>×</button>
+          </div>
+
+          <form @submit=${this.handleSubmitCreate}>
+            <div class="modal-body">
+              <div class="form-group">
+                <label for="app-name">App Name *</label>
+                <input
+                  id="app-name"
+                  type="text"
+                  placeholder="My Awesome App"
+                  .value=${this.formName}
+                  @input=${(e: Event) => this.formName = (e.target as HTMLInputElement).value}
+                  required
+                />
+                <div class="form-help">A unique name for your application</div>
+              </div>
+
+              <div class="form-group">
+                <label for="app-description">Description</label>
+                <textarea
+                  id="app-description"
+                  placeholder="Describe what this app does..."
+                  .value=${this.formDescription}
+                  @input=${(e: Event) => this.formDescription = (e.target as HTMLTextAreaElement).value}
+                ></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="app-template">Starting Template</label>
+                <select
+                  id="app-template"
+                  .value=${this.formTemplate}
+                  @change=${(e: Event) => this.formTemplate = (e.target as HTMLSelectElement).value as any}
+                >
+                  <option value="blank">Blank - Empty container</option>
+                  <option value="single-page">Single Page - Header + Content + Footer</option>
+                  <option value="dashboard">Dashboard - Sidebar + Content</option>
+                </select>
+                <div class="form-help">Choose a starting template for your first page</div>
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn" @click=${this.handleCloseModal}>
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-primary">
+                Create App
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderSelectModal() {
+    return html`
+      <div class="modal-overlay" @click=${this.handleCloseModal}>
+        <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h3>Select App</h3>
+            <button class="modal-close" @click=${this.handleCloseModal}>×</button>
+          </div>
+
+          <div class="modal-body">
+            ${this.apps.length === 0 ? html`
+              <div class="empty-state">
+                <div class="empty-state-icon">📱</div>
+                <p><strong>No apps yet</strong></p>
+                <p>Create your first app to get started</p>
+              </div>
+            ` : html`
+              <div class="app-list">
+                ${this.apps.map(app => html`
+                  <div
+                    class="app-item ${this.currentApp?.id === app.id ? 'selected' : ''}"
+                    @click=${() => this.handleSelectExistingApp(app.id)}
+                  >
+                    <div class="app-item-content">
+                      <div class="app-item-title">${app.name}</div>
+                      ${app.description ? html`
+                        <div class="app-item-description">${app.description}</div>
+                      ` : ''}
+                      <div class="app-item-meta">
+                        <span>📄 ${app.pageCount} page${app.pageCount !== 1 ? 's' : ''}</span>
+                        <span>🕒 ${this.formatDate(app.updated)}</span>
+                      </div>
+                    </div>
+                    <div class="app-item-actions">
+                      <button
+                        class="icon-btn danger"
+                        @click=${(e: Event) => this.handleDeleteApp(app.id, app.name, e)}
+                        title="Delete app"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                `)}
+              </div>
+            `}
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn" @click=${this.handleCloseModal}>
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'studio-app-manager': AppManager;
+  }
+}
