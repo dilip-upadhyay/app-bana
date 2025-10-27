@@ -27,6 +27,44 @@ export class LivePreview extends LitElement {
     }
   }
 
+  firstUpdated() {
+    // Add global drop listeners to ensure drop events are captured
+    const canvasContent = this.renderRoot.querySelector('.canvas-content');
+    if (canvasContent) {
+      console.log('Adding global drop listeners to canvas-content');
+
+      canvasContent.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        console.log('Canvas dragover');
+      });
+
+      canvasContent.addEventListener('drop', (e) => {
+        console.log('Canvas drop event captured!', e);
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Find the closest element with data-node-id
+        const target = (e as DragEvent).target as HTMLElement;
+        const nodeElement = target.closest('[data-node-id]') as HTMLElement;
+
+        if (nodeElement) {
+          const nodeId = nodeElement.getAttribute('data-node-id');
+          if (nodeId) {
+            console.log('Dropping on node:', nodeId);
+            this.handleDrop(e as DragEvent, nodeId);
+          }
+        } else {
+          // Drop on root
+          const rootId = this.page?.rootId;
+          if (rootId) {
+            console.log('Dropping on root');
+            this.handleDrop(e as DragEvent, rootId);
+          }
+        }
+      });
+    }
+  }
+
   private generateUniqueId(base: string): string {
     let id = base;
     let counter = 1;
@@ -67,6 +105,12 @@ export class LivePreview extends LitElement {
     this.dragOverId = nodeId;
   }
 
+  private handleDragEnter(e: DragEvent, nodeId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Drag enter:', nodeId);
+  }
+
   private handleDragLeave(e: DragEvent) {
     e.stopPropagation();
     const target = e.currentTarget as HTMLElement;
@@ -80,47 +124,62 @@ export class LivePreview extends LitElement {
   }
 
   private handleDrop(e: DragEvent, targetNodeId: string) {
+    console.log('DROP EVENT FIRED!', targetNodeId);
     e.preventDefault();
     e.stopPropagation();
 
-    if (!currentStore) return;
+    if (!currentStore) {
+      console.error('No current store');
+      return;
+    }
 
     try {
       let data: any = null;
 
+      console.log('Attempting to retrieve drag data...');
+
       // Try to get data from dataTransfer first
       if (e.dataTransfer) {
+        console.log('DataTransfer available, types:', e.dataTransfer.types);
         try {
           const jsonData = e.dataTransfer.getData('application/json');
+          console.log('JSON data:', jsonData);
           if (jsonData) {
             data = JSON.parse(jsonData);
           }
         } catch (err) {
+          console.warn('Failed to get application/json:', err);
           // Try text/plain fallback
           try {
             const textData = e.dataTransfer.getData('text/plain');
+            console.log('Text data:', textData);
             if (textData) {
               data = JSON.parse(textData);
             }
           } catch (err2) {
-            console.warn('Failed to parse drag data from dataTransfer');
+            console.warn('Failed to parse text/plain:', err2);
           }
         }
       }
 
       // Fallback to global variable (for Shadow DOM issues)
       if (!data && (window as any).__dragData) {
-        data = (window as any).__dragData;
         console.log('Using global drag data fallback');
+        data = (window as any).__dragData;
       }
 
+      console.log('Final data:', data);
+
       if (!data || data.action !== 'add-component') {
-        console.error('No valid drag data found');
+        console.error('No valid drag data found', data);
+        this.showToast('❌ No drag data found');
         return;
       }
 
       const template = data.template;
       const newId = this.generateUniqueId(template.type || 'element');
+
+      console.log('Creating node:', newId, template);
 
       const newNode: ComponentNode = {
         id: newId,
@@ -130,11 +189,16 @@ export class LivePreview extends LitElement {
       };
 
       const targetNode = this.page?.nodes.find(n => n.id === targetNodeId);
-      if (!targetNode) return;
+      if (!targetNode) {
+        console.error('Target node not found:', targetNodeId);
+        return;
+      }
 
       // Determine parent and index based on drop position
       let parentId = targetNodeId;
       let index: number | undefined = undefined;
+
+      console.log('Drop position:', this.dropPosition);
 
       if (this.dropPosition === 'before' || this.dropPosition === 'after') {
         // Find parent of target
@@ -143,15 +207,21 @@ export class LivePreview extends LitElement {
           parentId = parent.id;
           const targetIndex = parent.children!.indexOf(targetNodeId);
           index = this.dropPosition === 'before' ? targetIndex : targetIndex + 1;
+          console.log('Inserting at parent:', parentId, 'index:', index);
         } else {
           // If no parent found (shouldn't happen), default to inside
           parentId = targetNodeId;
           index = undefined;
+          console.log('No parent found, using inside');
         }
+      } else {
+        console.log('Adding inside:', parentId);
       }
       // else 'inside' - use targetNodeId as parent with undefined index (append)
 
+      console.log('Adding node to store...');
       currentStore.addNode(parentId, newNode, index);
+      console.log('Node added successfully!');
       this.showToast(`✅ Added ${newNode.type}`);
 
       // Clean up global drag data
@@ -368,6 +438,7 @@ export class LivePreview extends LitElement {
         <div class="preview-header">
           <h3>Visual Canvas</h3>
           <div class="preview-actions">
+            <button class="action-btn" @click=${() => this.testAddButton()} title="Test Add Button">➕ Test</button>
             <button class="action-btn" title="Undo">↶</button>
             <button class="action-btn" title="Redo">↷</button>
             <button class="action-btn" title="Preview">👁️</button>
@@ -378,7 +449,28 @@ export class LivePreview extends LitElement {
             ${this.renderNode(rootNode)}
           </div>
         </div>
+        <div style="padding: 12px; background: #f9fafb; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
+          💡 Drag components from the left panel and drop them here. Total nodes: ${this.page.nodes.length}
+        </div>
       </div>
     `;
+  }
+
+  private testAddButton() {
+    console.log('Test button clicked');
+    if (!currentStore) return;
+
+    const newNode: ComponentNode = {
+      id: 'test-button-' + Date.now(),
+      type: 'button',
+      props: { text: 'Test Button', className: 'btn' }
+    };
+
+    const rootId = this.page?.rootId;
+    if (rootId) {
+      console.log('Adding test button to root:', rootId);
+      currentStore.addNode(rootId, newNode);
+      console.log('Test button added!');
+    }
   }
 }

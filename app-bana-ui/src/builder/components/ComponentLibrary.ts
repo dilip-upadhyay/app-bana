@@ -191,7 +191,11 @@ export class ComponentLibrary extends LitElement {
   }
 
   private handleDragStart(e: DragEvent, template: ComponentTemplate) {
-    if (!e.dataTransfer) return;
+    console.log('DRAGSTART EVENT FIRED!', template.label);
+    if (!e.dataTransfer) {
+      console.error('No dataTransfer object!');
+      return;
+    }
 
     e.dataTransfer.effectAllowed = 'copy';
 
@@ -201,6 +205,8 @@ export class ComponentLibrary extends LitElement {
       template: template.template
     });
 
+    console.log('Setting drag data:', data);
+
     e.dataTransfer.setData('application/json', data);
     e.dataTransfer.setData('text/plain', data); // Fallback for some browsers
 
@@ -209,6 +215,8 @@ export class ComponentLibrary extends LitElement {
       action: 'add-component',
       template: template.template
     };
+
+    console.log('Global drag data set:', (window as any).__dragData);
 
     // Create drag image
     const dragImage = document.createElement('div');
@@ -226,6 +234,7 @@ export class ComponentLibrary extends LitElement {
   }
 
   private handleDragEnd() {
+    console.log('DRAGEND EVENT FIRED');
     // Clean up global drag data
     delete (window as any).__dragData;
   }
@@ -261,6 +270,7 @@ export class ComponentLibrary extends LitElement {
               class="component-item"
               draggable="true"
               @dragstart=${(e: DragEvent) => this.handleDragStart(e, template)}
+              @dragend=${() => this.handleDragEnd()}
               title="${template.description}"
             >
               <div class="component-icon">${template.icon}</div>
