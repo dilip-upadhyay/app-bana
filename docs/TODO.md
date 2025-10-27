@@ -90,7 +90,7 @@ Acceptance criteria: see `Product_AppBana.md` §5 December and §17.4.
 
 ## Phase A (Studio Foundation) – Alignment Snapshot
 (See `docs/UI_Development_Plan.md` §7 for detailed exit criteria.)
-- [x] metadata.ts (PageMeta, ComponentNode, ThemeMeta, NavigationMeta, Binding, Action) *(initial subset — will expand later)*
+- [x] metadata.ts (PageMeta, ComponentNode, ThemeMeta, NavigationMeta, Binding, Action)
 - [x] registry bootstrap (auto-register core built-ins)
 - [x] demo-page.json created (demo)
 - [x] Renderer recursive children traversal + prop application
@@ -100,10 +100,13 @@ Acceptance criteria: see `Product_AppBana.md` §5 December and §17.4.
 - [x] Studio entry point (studio-entry.ts bootstraps BuilderShell)
 - [x] Interactive component tree (selection, expand/collapse, drag-drop, inline edit)
 - [x] Keyboard shortcuts (⌘P search, ⌘D duplicate, ⌘⇧C copy ID, Delete/Backspace remove)
+- [x] **THREE-PANEL SPLIT-SCREEN VIEW** (tree + live preview + inspector)
+- [x] **Live WYSIWYG preview** with click-to-select and real-time updates
+- [x] **Responsive preview modes** (desktop/tablet/mobile) with zoom controls
 - [ ] `/ui/studio` packaging into fat JAR
 - [ ] README + Copilot Guide component contribution update (partial; finalize after packaging)
 
-Progress: Phase A Builder foundation complete; packaging & documentation update pending.
+**Progress: Phase A Builder foundation complete with professional three-panel UI! Ready for packaging and Phase B power features.**
 
 ## Backlog (Post-Q4 or Nice-to-Haves)
 - OpenAPI enhancements (response schemas/examples); optionally bundle Swagger UI locally.

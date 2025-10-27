@@ -20,6 +20,8 @@ export function getAllComponentTypes(): string[] {
 // Bootstrap helper so runtime code can ensure core components are registered.
 export function ensureCoreRegistered(): Promise<void> {
   const proms: Promise<any>[] = [];
+
+  // Core components
   if (!registry.has('container')) {
     proms.push(import('../components/ContainerElement.js'));
   }
@@ -32,5 +34,11 @@ export function ensureCoreRegistered(): Promise<void> {
   if (!registry.has('unknown')) {
     proms.push(import('../components/UnknownElement.js'));
   }
+
+  // HTML elements
+  if (!registry.has('header')) {
+    proms.push(import('../components/HTMLElements.js'));
+  }
+
   return Promise.all(proms).then(()=>{});
 }

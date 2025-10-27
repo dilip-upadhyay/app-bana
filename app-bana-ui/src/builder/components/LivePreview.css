@@ -1,0 +1,245 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  background: #f8f9fb;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  gap: 12px;
+}
+
+.toolbar-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.toolbar-btn {
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.toolbar-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.toolbar-btn.active {
+  background: #1e40af;
+  color: #fff;
+  border-color: #1e40af;
+}
+
+.zoom-level {
+  font-size: 11px;
+  color: #64748b;
+  min-width: 40px;
+  text-align: center;
+}
+
+.preview-viewport {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  background:
+    linear-gradient(45deg, #f1f5f9 25%, transparent 25%),
+    linear-gradient(-45deg, #f1f5f9 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #f1f5f9 75%),
+    linear-gradient(-45deg, transparent 75%, #f1f5f9 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+}
+
+.preview-frame {
+  background: #fff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+  min-height: 400px;
+  transition: all 0.3s ease;
+  margin: 0 auto;
+}
+
+.preview-content {
+  padding: 16px;
+}
+
+.error {
+  color: #dc2626;
+  padding: 16px;
+  background: #fee2e2;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+/* Highlight selected component in preview */
+:global(.selected-in-preview) {
+  outline: 2px solid #1e40af !important;
+  outline-offset: 2px !important;
+  position: relative;
+}
+
+:global(.selected-in-preview::after) {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: rgba(30, 64, 175, 0.1);
+  pointer-events: none;
+  border-radius: 2px;
+}
+import { LitElement, html, css, unsafeCSS } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
+import { currentStore } from '../store/TreeStore';
+import type { PageMeta } from '../../models/metadata';
+import { renderPage } from '../../runtime/renderer/Renderer';
+import styles from './LivePreview.css?inline';
+
+@customElement('studio-live-preview')
+export class LivePreview extends LitElement {
+  static styles = css`${unsafeCSS(styles)}`;
+
+  @state() private page: PageMeta | null = null;
+  @state() private selectedId: string | null = null;
+  @state() private scale = 1;
+  @state() private viewMode: 'desktop' | 'tablet' | 'mobile' = 'desktop';
+
+  private previewContainer: HTMLElement | null = null;
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    currentStore?.onChange(() => {
+      this.page = currentStore!.getPage();
+      this.selectedId = currentStore!.getSelection()?.id || null;
+      this.renderPreview();
+    });
+    this.page = currentStore!.getPage();
+  }
+
+  private renderPreview() {
+    if (!this.page || !this.previewContainer) return;
+
+    // Clear previous render
+    this.previewContainer.innerHTML = '';
+
+    // Render the page
+    try {
+      renderPage(this.page, this.previewContainer);
+
+      // Add click handlers to sync selection
+      this.addClickHandlers();
+    } catch (e) {
+      this.previewContainer.innerHTML = `<div class="error">Preview Error: ${(e as Error).message}</div>`;
+    }
+  }
+
+  private addClickHandlers() {
+    if (!this.previewContainer) return;
+
+    // Find all rendered components and add click handlers
+    const allElements = this.previewContainer.querySelectorAll('[data-component-id]');
+    allElements.forEach(el => {
+      const componentId = el.getAttribute('data-component-id');
+      if (componentId) {
+        (el as HTMLElement).style.cursor = 'pointer';
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          currentStore?.select(componentId);
+        });
+
+        // Highlight selected element
+        if (componentId === this.selectedId) {
+          (el as HTMLElement).classList.add('selected-in-preview');
+        } else {
+          (el as HTMLElement).classList.remove('selected-in-preview');
+        }
+      }
+    });
+  }
+
+  private setViewMode(mode: 'desktop' | 'tablet' | 'mobile') {
+    this.viewMode = mode;
+  }
+
+  private zoomIn() {
+    this.scale = Math.min(this.scale + 0.1, 2);
+  }
+
+  private zoomOut() {
+    this.scale = Math.max(this.scale - 0.1, 0.5);
+  }
+
+  private resetZoom() {
+    this.scale = 1;
+  }
+
+  updated() {
+    if (!this.previewContainer) {
+      this.previewContainer = this.renderRoot.querySelector('.preview-content') as HTMLElement;
+      this.renderPreview();
+    }
+  }
+
+  render() {
+    const viewportWidth = {
+      desktop: '100%',
+      tablet: '768px',
+      mobile: '375px'
+    }[this.viewMode];
+
+    return html`
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <button
+            class="toolbar-btn ${this.viewMode === 'desktop' ? 'active' : ''}"
+            @click=${() => this.setViewMode('desktop')}
+            title="Desktop view">
+            🖥️
+          </button>
+          <button
+            class="toolbar-btn ${this.viewMode === 'tablet' ? 'active' : ''}"
+            @click=${() => this.setViewMode('tablet')}
+            title="Tablet view (768px)">
+            📱
+          </button>
+          <button
+            class="toolbar-btn ${this.viewMode === 'mobile' ? 'active' : ''}"
+            @click=${() => this.setViewMode('mobile')}
+            title="Mobile view (375px)">
+            📱
+          </button>
+        </div>
+
+        <div class="toolbar-group">
+          <button class="toolbar-btn" @click=${this.zoomOut} title="Zoom out">−</button>
+          <span class="zoom-level">${Math.round(this.scale * 100)}%</span>
+          <button class="toolbar-btn" @click=${this.zoomIn} title="Zoom in">+</button>
+          <button class="toolbar-btn" @click=${this.resetZoom} title="Reset zoom">⟲</button>
+        </div>
+      </div>
+
+      <div class="preview-viewport">
+        <div
+          class="preview-frame"
+          style="width: ${viewportWidth}; transform: scale(${this.scale}); transform-origin: top center;">
+          <div class="preview-content"></div>
+        </div>
+      </div>
+    `;
+  }
+}
+

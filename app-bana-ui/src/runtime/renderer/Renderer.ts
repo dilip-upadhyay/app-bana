@@ -23,15 +23,18 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): H
       const unk = new unknownCtor();
       (unk as HTMLElement).setAttribute('data-type', node.type);
       (unk as HTMLElement).setAttribute('id', node.id);
+      (unk as HTMLElement).setAttribute('data-component-id', node.id); // For live preview selection
       return unk as HTMLElement;
     }
     const fallback = document.createElement('div');
     fallback.textContent = `Unknown component: ${node.type}`;
     fallback.setAttribute('id', node.id);
+    fallback.setAttribute('data-component-id', node.id); // For live preview selection
     return fallback;
   }
   const el = new ctor();
   (el as HTMLElement).setAttribute('id', node.id);
+  (el as HTMLElement).setAttribute('data-component-id', node.id); // For live preview selection
   if (node.props) {
     // Assign props as attributes when they are simple scalars, else direct property
     for (const [k,v] of Object.entries(node.props)) {

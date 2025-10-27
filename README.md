@@ -42,6 +42,53 @@ Status of repository
 - For a step-by-step walkthrough, see `docs/USER_GUIDE.md`.
 
 ## Studio (Custom UI Framework) Status
+**🎯 PRIMARY FOCUS: Making Studio the most powerful and user-friendly visual builder**
+
+Current Phase: A (Foundation — near completion) → Transitioning to Phase B (Power User Features)
+
+**🎉 MAJOR MILESTONE ACHIEVED: Three-Panel Split-Screen View!**
+
+The Studio Builder now features a **professional three-panel layout** showing all aspects of your design simultaneously:
+- **Left Panel**: Component tree (hierarchical structure) + Design token editor
+- **Center Panel**: Live WYSIWYG preview with real-time rendering, responsive modes (desktop/tablet/mobile), and zoom controls
+- **Right Panel**: Property inspector for editing selected components
+
+**Key Features:**
+- ✅ **Click-to-select** in live preview syncs with tree selection
+- ✅ **Real-time updates** - changes in inspector reflect instantly in both tree and preview
+- ✅ **Responsive preview modes** - test your design at different screen sizes
+- ✅ **Zoom controls** (50%-200%) for detailed editing
+- ✅ **Visual selection highlighting** with blue outline and background
+- ✅ **Professional canvas** with checkered background
+
+See detailed implementation guide: `docs/STUDIO_THREE_PANEL_VIEW.md`
+
+**Studio Vision & Goals:**
+- **Zero-friction workflow**: Design UI components visually without writing code
+- **Professional UX**: Keyboard-first navigation, command palette, real-time preview
+- **Deep customization**: Live design token editing, component property inspector, flexible layouts
+- **Production-ready**: Export, version, and deploy complete applications from visual designs
+
+Quick summary
+- Frontend: A custom, lightweight UI framework ("Studio") is the PRIMARY DEVELOPMENT FOCUS. Studio Builder provides a professional-grade visual design experience with powerful keyboard shortcuts, drag-drop, component tree navigation, property inspector, and design token management.
+- Backend: Java (HttpServer) that persists schemas, auto-creates/migrates tables via JDBC, and exposes generic CRUD endpoints at runtime.
+- DB: H2 embedded (file) by default; JDBC usage allows swapping to Postgres/MySQL/etc.
+- Datasources: built-in UI to add/manage multiple datasources (by name and type) and select the active one at runtime.
+- Pooling: HikariCP connection pool with configurable settings per datasource.
+- OpenAPI: live spec at /openapi.json and an embedded Swagger UI at /ui/swagger.
+- New endpoints: `/schema/summaries`, `/schema/{name}/migrations`, `DELETE /schema/{name}`.
+
+Status of repository
+- Fully working MVP backend and enhanced schema builder (legacy HTML) remain operational.
+- Studio Phase A partially complete (see below). Legacy builder continues to function until Studio Builder MVP (Phase B) is ready.
+- Swagger/OpenAPI spec available at `/openapi.json` and browsable at `/ui/swagger`.
+- Datasource management UI available at `/ui/datasource`.
+- HikariCP pool initialized based on the current active datasource; reconfigured when settings change.
+- Built fat JAR available under `app-bana-service/target/` after building.
+- `.github/COPILOT_GUIDE.md` contains an assistant-facing snapshot of current progress & next steps (kept in sync with this README + `docs/UI_Development_Plan.md`).
+- For a step-by-step walkthrough, see `docs/USER_GUIDE.md`.
+
+## Studio (Custom UI Framework) Status
 Current Phase: A (Foundation — near completion)
 
 Phase A Exit Criteria (updated):

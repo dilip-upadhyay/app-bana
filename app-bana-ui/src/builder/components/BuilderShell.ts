@@ -5,6 +5,9 @@ import { initStore, currentStore } from '../store/TreeStore';
 import type { PageMeta } from '../../models/metadata';
 import styles from './BuilderShell.css?inline';
 import './TokenPanel';
+import './LivePreview';
+import './ComponentLibrary';
+import './PageManager';
 
 @customElement('studio-builder-shell')
 export class BuilderShell extends LitElement {
@@ -17,11 +20,31 @@ export class BuilderShell extends LitElement {
 
   render() {
     return html`
-      <div class="panel" style="flex:2 1 0; display:flex; flex-direction:column; gap:12px;">
+      <!-- Top: Page Manager -->
+      <div class="page-manager-panel">
+        <studio-page-manager></studio-page-manager>
+      </div>
+
+      <!-- Far Left: Component Library -->
+      <div class="library-panel">
+        <studio-component-library></studio-component-library>
+      </div>
+
+      <!-- Left: Component Tree + Token Panel -->
+      <div class="left-panel">
         <studio-builder-canvas></studio-builder-canvas>
         <studio-token-panel></studio-token-panel>
       </div>
-      <studio-builder-inspector></studio-builder-inspector>
+
+      <!-- Center: Live Preview (WYSIWYG Canvas) -->
+      <div class="center-panel">
+        <studio-live-preview></studio-live-preview>
+      </div>
+
+      <!-- Right: Property Inspector -->
+      <div class="right-panel">
+        <studio-builder-inspector></studio-builder-inspector>
+      </div>
     `;
   }
 }
