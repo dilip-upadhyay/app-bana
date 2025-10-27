@@ -83,47 +83,79 @@ export class LivePreview extends LitElement {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!e.dataTransfer || !currentStore) return;
+    if (!currentStore) return;
 
     try {
-      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      let data: any = null;
 
-      if (data.action === 'add-component') {
-        const template = data.template;
-        const newId = this.generateUniqueId(template.type || 'element');
-
-        const newNode: ComponentNode = {
-          id: newId,
-          type: template.type || 'container',
-          props: template.props || {},
-          children: template.children !== undefined ? template.children : undefined
-        };
-
-        const targetNode = this.page?.nodes.find(n => n.id === targetNodeId);
-        if (!targetNode) return;
-
-        // Determine parent and index based on drop position
-        let parentId = targetNodeId;
-        let index: number | undefined = undefined;
-
-        if (this.dropPosition === 'before' || this.dropPosition === 'after') {
-          // Find parent of target
-          const parent = this.page?.nodes.find(n => n.children?.includes(targetNodeId));
-          if (parent) {
-            parentId = parent.id;
-            const targetIndex = parent.children!.indexOf(targetNodeId);
-            index = this.dropPosition === 'before' ? targetIndex : targetIndex + 1;
-          } else {
-            // If no parent found (shouldn't happen), default to inside
-            parentId = targetNodeId;
-            index = undefined;
+      // Try to get data from dataTransfer first
+      if (e.dataTransfer) {
+        try {
+          const jsonData = e.dataTransfer.getData('application/json');
+          if (jsonData) {
+            data = JSON.parse(jsonData);
+          }
+        } catch (err) {
+          // Try text/plain fallback
+          try {
+            const textData = e.dataTransfer.getData('text/plain');
+            if (textData) {
+              data = JSON.parse(textData);
+            }
+          } catch (err2) {
+            console.warn('Failed to parse drag data from dataTransfer');
           }
         }
-        // else 'inside' - use targetNodeId as parent with undefined index (append)
-
-        currentStore.addNode(parentId, newNode, index);
-        this.showToast(`✅ Added ${newNode.type}`);
       }
+
+      // Fallback to global variable (for Shadow DOM issues)
+      if (!data && (window as any).__dragData) {
+        data = (window as any).__dragData;
+        console.log('Using global drag data fallback');
+      }
+
+      if (!data || data.action !== 'add-component') {
+        console.error('No valid drag data found');
+        return;
+      }
+
+      const template = data.template;
+      const newId = this.generateUniqueId(template.type || 'element');
+
+      const newNode: ComponentNode = {
+        id: newId,
+        type: template.type || 'container',
+        props: template.props || {},
+        children: template.children !== undefined ? template.children : undefined
+      };
+
+      const targetNode = this.page?.nodes.find(n => n.id === targetNodeId);
+      if (!targetNode) return;
+
+      // Determine parent and index based on drop position
+      let parentId = targetNodeId;
+      let index: number | undefined = undefined;
+
+      if (this.dropPosition === 'before' || this.dropPosition === 'after') {
+        // Find parent of target
+        const parent = this.page?.nodes.find(n => n.children?.includes(targetNodeId));
+        if (parent) {
+          parentId = parent.id;
+          const targetIndex = parent.children!.indexOf(targetNodeId);
+          index = this.dropPosition === 'before' ? targetIndex : targetIndex + 1;
+        } else {
+          // If no parent found (shouldn't happen), default to inside
+          parentId = targetNodeId;
+          index = undefined;
+        }
+      }
+      // else 'inside' - use targetNodeId as parent with undefined index (append)
+
+      currentStore.addNode(parentId, newNode, index);
+      this.showToast(`✅ Added ${newNode.type}`);
+
+      // Clean up global drag data
+      delete (window as any).__dragData;
     } catch (err) {
       console.error('Drop error:', err);
       this.showToast('❌ Failed to add component');

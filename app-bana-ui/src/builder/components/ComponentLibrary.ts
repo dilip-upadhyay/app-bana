@@ -194,18 +194,40 @@ export class ComponentLibrary extends LitElement {
     if (!e.dataTransfer) return;
 
     e.dataTransfer.effectAllowed = 'copy';
-    e.dataTransfer.setData('application/json', JSON.stringify({
+
+    // Set data in multiple formats to ensure compatibility
+    const data = JSON.stringify({
       action: 'add-component',
       template: template.template
-    }));
+    });
+
+    e.dataTransfer.setData('application/json', data);
+    e.dataTransfer.setData('text/plain', data); // Fallback for some browsers
+
+    // Store in a global variable as backup (for Shadow DOM issues)
+    (window as any).__dragData = {
+      action: 'add-component',
+      template: template.template
+    };
 
     // Create drag image
     const dragImage = document.createElement('div');
-    dragImage.style.cssText = 'padding: 8px 12px; background: #4F46E5; color: white; border-radius: 6px; font-size: 14px;';
+    dragImage.style.cssText = 'padding: 8px 12px; background: #4F46E5; color: white; border-radius: 6px; font-size: 14px; position: absolute; top: -1000px;';
     dragImage.textContent = `${template.icon} ${template.label}`;
     document.body.appendChild(dragImage);
     e.dataTransfer.setDragImage(dragImage, 0, 0);
-    setTimeout(() => document.body.removeChild(dragImage), 0);
+    setTimeout(() => {
+      try {
+        document.body.removeChild(dragImage);
+      } catch (err) {
+        // Ignore if already removed
+      }
+    }, 0);
+  }
+
+  private handleDragEnd() {
+    // Clean up global drag data
+    delete (window as any).__dragData;
   }
 
   render() {
@@ -256,4 +278,3 @@ export class ComponentLibrary extends LitElement {
     `;
   }
 }
-
