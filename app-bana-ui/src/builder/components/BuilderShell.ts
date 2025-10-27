@@ -4,10 +4,10 @@ import demoPage from '../../demo/demo-page.json';
 import { initStore, currentStore } from '../store/TreeStore';
 import type { PageMeta } from '../../models/metadata';
 import styles from './BuilderShell.css?inline';
-import './TokenPanel';
 import './LivePreview';
 import './ComponentLibrary';
 import './PageManager';
+import './BuilderInspector';
 
 @customElement('studio-builder-shell')
 export class BuilderShell extends LitElement {
@@ -25,15 +25,9 @@ export class BuilderShell extends LitElement {
         <studio-page-manager></studio-page-manager>
       </div>
 
-      <!-- Far Left: Component Library -->
+      <!-- Left: Component Library -->
       <div class="library-panel">
         <studio-component-library></studio-component-library>
-      </div>
-
-      <!-- Left: Component Tree + Token Panel -->
-      <div class="left-panel">
-        <studio-builder-canvas></studio-builder-canvas>
-        <studio-token-panel></studio-token-panel>
       </div>
 
       <!-- Center: Live Preview (WYSIWYG Canvas) -->

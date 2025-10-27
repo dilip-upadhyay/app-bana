@@ -1,558 +1,171 @@
 :host {
   display: block;
-}
-
-.page-tabs {
-  display: flex;
-  gap: 4px;
-  background: #f9fafb;
-  padding: 8px 12px;
+  background: white;
   border-bottom: 2px solid #e5e7eb;
-  overflow-x: auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.page-tab {
+.page-manager {
+  position: relative;
+}
+
+.page-info {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 6px 6px 0 0;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.page-tab:hover {
-  background: #f3f4f6;
-}
-
-.page-tab.active {
-  background: #3b82f6;
-  color: white;
-  border-color: #3b82f6;
+  padding: 16px 24px;
 }
 
 .page-name {
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
 }
 
-.delete-btn {
-  background: transparent;
+.templates-btn {
+  padding: 8px 16px;
+  background: #4F46E5;
+  color: white;
   border: none;
-  color: inherit;
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.6;
-  padding: 0 4px;
-}
-
-.delete-btn:hover {
-  opacity: 1;
-}
-
-.new-page-btn {
-  padding: 6px 12px;
-  background: transparent;
-  border: 1px dashed #9ca3af;
   border-radius: 6px;
-  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  font-size: 0.875rem;
   transition: all 0.2s;
-  white-space: nowrap;
 }
 
-.new-page-btn:hover {
-  background: #f3f4f6;
-  border-color: #6b7280;
-  color: #374151;
+.templates-btn:hover {
+  background: #4338ca;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);
 }
 
-.dialog-backdrop {
+.templates-modal {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  animation: fadeIn 0.2s ease;
 }
 
-.dialog {
+.templates-content {
   background: white;
   border-radius: 12px;
-  padding: 1.5rem;
+  max-width: 900px;
   width: 90%;
-  max-width: 500px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
 }
 
-.dialog h3 {
-  margin: 0 0 1.5rem 0;
-  font-size: 1.25rem;
+.templates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.templates-header h2 {
+  margin: 0;
+  font-size: 24px;
   color: #111827;
 }
 
-.dialog label {
-  display: block;
-  margin-bottom: 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #374151;
-}
-
-.dialog input,
-.dialog select {
-  display: block;
-  width: 100%;
-  margin-top: 0.25rem;
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  box-sizing: border-box;
-}
-
-.dialog input:focus,
-.dialog select:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.template-preview {
-  margin: 1.5rem 0;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-}
-
-.preview-box {
-  display: flex;
-  flex-direction: column;
-  height: 200px;
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  overflow: hidden;
-  font-size: 0.75rem;
-}
-
-.preview-header {
-  background: #1e40af;
-  color: white;
-  padding: 0.5rem;
-  text-align: center;
-}
-
-.preview-footer {
-  background: #1f2937;
-  color: white;
-  padding: 0.5rem;
-  text-align: center;
-}
-
-.preview-sidebar {
-  background: #f3f4f6;
-  padding: 0.5rem;
-  width: 60px;
-  border-right: 1px solid #e5e7eb;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.preview-area {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #9ca3af;
-}
-
-.dialog-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  margin-top: 1.5rem;
-}
-
-.btn-cancel,
-.btn-create {
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6b7280;
   cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
   transition: all 0.2s;
 }
 
-.btn-cancel {
-  background: transparent;
-  border: 1px solid #d1d5db;
-  color: #6b7280;
-}
-
-.btn-cancel:hover {
+.close-btn:hover {
   background: #f3f4f6;
+  color: #111827;
 }
 
-.btn-create {
-  background: #3b82f6;
-  border: none;
-  color: white;
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+  padding: 24px;
+  overflow-y: auto;
 }
 
-.btn-create:hover {
-  background: #2563eb;
-}
-import { LitElement, html, css, unsafeCSS } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
-import { currentStore } from '../store/TreeStore';
-import styles from './PageManager.css?inline';
-import type { PageMeta } from '../../models/metadata';
-
-interface Page {
-  id: string;
-  name: string;
-  path: string;
-  meta: PageMeta;
+.template-card {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
 }
 
-@customElement('studio-page-manager')
-export class PageManager extends LitElement {
-  static styles = css`${unsafeCSS(styles)}`;
+.template-card:hover {
+  border-color: #4F46E5;
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(79, 70, 229, 0.2);
+}
 
-  @state() private pages: Page[] = [];
-  @state() private currentPageId: string = '';
-  @state() private showNewPageDialog = false;
-  @state() private newPageName = '';
-  @state() private newPagePath = '';
-  @state() private newPageTemplate = 'blank';
+.template-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
 
-  connectedCallback(): void {
-    super.connectedCallback();
-    this.loadPages();
+.template-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  color: #111827;
+}
+
+.template-card p {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.template-category {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #f3f4f6;
+  color: #4F46E5;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
   }
-
-  private loadPages() {
-    // For now, load from localStorage
-    const saved = localStorage.getItem('studio.pages');
-    if (saved) {
-      this.pages = JSON.parse(saved);
-      if (this.pages.length > 0 && !this.currentPageId) {
-        this.currentPageId = this.pages[0].id;
-      }
-    }
-  }
-
-  private savePages() {
-    localStorage.setItem('studio.pages', JSON.stringify(this.pages));
-  }
-
-  private createBlankPage(): PageMeta {
-    const rootId = 'root-' + Date.now();
-    return {
-      metaVersion: 1,
-      id: 'page-' + Date.now(),
-      name: this.newPageName,
-      path: this.newPagePath,
-      rootId,
-      nodes: [
-        {
-          id: rootId,
-          type: 'container',
-          props: {},
-          children: [],
-          style: { classes: [] }
-        }
-      ]
-    };
-  }
-
-  private createHeaderFooterPage(): PageMeta {
-    const rootId = 'root-' + Date.now();
-    const headerId = 'header-' + Date.now();
-    const mainId = 'main-' + Date.now();
-    const footerId = 'footer-' + Date.now();
-
-    return {
-      metaVersion: 1,
-      id: 'page-' + Date.now(),
-      name: this.newPageName,
-      path: this.newPagePath,
-      rootId,
-      nodes: [
-        {
-          id: rootId,
-          type: 'container',
-          props: { style: 'min-height: 100vh; display: flex; flex-direction: column;' },
-          children: [headerId, mainId, footerId],
-          style: { classes: [] }
-        },
-        {
-          id: headerId,
-          type: 'header',
-          props: {
-            style: 'background: #1e40af; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center;'
-          },
-          children: [],
-          style: { classes: [] }
-        },
-        {
-          id: mainId,
-          type: 'main',
-          props: { style: 'flex: 1; padding: 2rem;' },
-          children: [],
-          style: { classes: [] }
-        },
-        {
-          id: footerId,
-          type: 'footer',
-          props: {
-            style: 'background: #1f2937; color: white; padding: 2rem; text-align: center;'
-          },
-          children: [],
-          style: { classes: [] }
-        }
-      ]
-    };
-  }
-
-  private createSidebarPage(): PageMeta {
-    const rootId = 'root-' + Date.now();
-    const headerId = 'header-' + Date.now();
-    const contentId = 'content-' + Date.now();
-    const sidebarId = 'sidebar-' + Date.now();
-    const mainId = 'main-' + Date.now();
-    const footerId = 'footer-' + Date.now();
-
-    return {
-      metaVersion: 1,
-      id: 'page-' + Date.now(),
-      name: this.newPageName,
-      path: this.newPagePath,
-      rootId,
-      nodes: [
-        {
-          id: rootId,
-          type: 'container',
-          props: { style: 'min-height: 100vh; display: flex; flex-direction: column;' },
-          children: [headerId, contentId, footerId],
-          style: { classes: [] }
-        },
-        {
-          id: headerId,
-          type: 'header',
-          props: {
-            style: 'background: #1e40af; color: white; padding: 1rem 2rem;'
-          },
-          children: [],
-          style: { classes: [] }
-        },
-        {
-          id: contentId,
-          type: 'div',
-          props: { style: 'flex: 1; display: flex;' },
-          children: [sidebarId, mainId],
-          style: { classes: [] }
-        },
-        {
-          id: sidebarId,
-          type: 'aside',
-          props: { style: 'width: 250px; background: #f3f4f6; padding: 1rem; border-right: 1px solid #e5e7eb;' },
-          children: [],
-          style: { classes: [] }
-        },
-        {
-          id: mainId,
-          type: 'main',
-          props: { style: 'flex: 1; padding: 2rem;' },
-          children: [],
-          style: { classes: [] }
-        },
-        {
-          id: footerId,
-          type: 'footer',
-          props: {
-            style: 'background: #1f2937; color: white; padding: 2rem; text-align: center;'
-          },
-          children: [],
-          style: { classes: [] }
-        }
-      ]
-    };
-  }
-
-  private handleCreatePage() {
-    if (!this.newPageName || !this.newPagePath) {
-      alert('Please enter page name and path');
-      return;
-    }
-
-    let pageMeta: PageMeta;
-
-    switch (this.newPageTemplate) {
-      case 'header-footer':
-        pageMeta = this.createHeaderFooterPage();
-        break;
-      case 'sidebar':
-        pageMeta = this.createSidebarPage();
-        break;
-      default:
-        pageMeta = this.createBlankPage();
-    }
-
-    const newPage: Page = {
-      id: pageMeta.id,
-      name: this.newPageName,
-      path: this.newPagePath,
-      meta: pageMeta
-    };
-
-    this.pages = [...this.pages, newPage];
-    this.currentPageId = newPage.id;
-    this.savePages();
-    this.switchToPage(newPage.id);
-    this.closeNewPageDialog();
-  }
-
-  private switchToPage(pageId: string) {
-    const page = this.pages.find(p => p.id === pageId);
-    if (page && currentStore) {
-      // Reinitialize store with the new page
-      const { initStore } = require('../store/TreeStore');
-      initStore(page.meta);
-      this.currentPageId = pageId;
-    }
-  }
-
-  private deletePage(pageId: string) {
-    if (this.pages.length === 1) {
-      alert('Cannot delete the last page');
-      return;
-    }
-
-    if (confirm('Are you sure you want to delete this page?')) {
-      this.pages = this.pages.filter(p => p.id !== pageId);
-      if (this.currentPageId === pageId && this.pages.length > 0) {
-        this.switchToPage(this.pages[0].id);
-      }
-      this.savePages();
-    }
-  }
-
-  private openNewPageDialog() {
-    this.showNewPageDialog = true;
-    this.newPageName = '';
-    this.newPagePath = '/';
-    this.newPageTemplate = 'blank';
-  }
-
-  private closeNewPageDialog() {
-    this.showNewPageDialog = false;
-  }
-
-  render() {
-    const currentPage = this.pages.find(p => p.id === this.currentPageId);
-
-    return html`
-      <div class="page-tabs">
-        ${this.pages.map(page => html`
-          <div
-            class="page-tab ${page.id === this.currentPageId ? 'active' : ''}"
-            @click=${() => this.switchToPage(page.id)}>
-            <span class="page-name">${page.name}</span>
-            <button
-              class="delete-btn"
-              @click=${(e: Event) => {
-                e.stopPropagation();
-                this.deletePage(page.id);
-              }}
-              title="Delete page">
-              ×
-            </button>
-          </div>
-        `)}
-        <button class="new-page-btn" @click=${() => this.openNewPageDialog()} title="Create new page">
-          + New Page
-        </button>
-      </div>
-
-      ${this.showNewPageDialog ? html`
-        <div class="dialog-backdrop" @click=${() => this.closeNewPageDialog()}>
-          <div class="dialog" @click=${(e: Event) => e.stopPropagation()}>
-            <h3>Create New Page</h3>
-
-            <label>
-              Page Name
-              <input
-                type="text"
-                .value=${this.newPageName}
-                @input=${(e: Event) => this.newPageName = (e.target as HTMLInputElement).value}
-                placeholder="e.g., Home, About, Contact"
-              />
-            </label>
-
-            <label>
-              URL Path
-              <input
-                type="text"
-                .value=${this.newPagePath}
-                @input=${(e: Event) => this.newPagePath = (e.target as HTMLInputElement).value}
-                placeholder="e.g., /home, /about"
-              />
-            </label>
-
-            <label>
-              Template
-              <select .value=${this.newPageTemplate} @change=${(e: Event) => this.newPageTemplate = (e.target as HTMLSelectElement).value}>
-                <option value="blank">Blank Page</option>
-                <option value="header-footer">Header + Footer</option>
-                <option value="sidebar">Header + Sidebar + Footer</option>
-              </select>
-            </label>
-
-            <div class="template-preview">
-              ${this.newPageTemplate === 'blank' ? html`
-                <div class="preview-box">
-                  <div class="preview-area" style="background: #f9fafb;">Empty canvas</div>
-                </div>
-              ` : ''}
-
-              ${this.newPageTemplate === 'header-footer' ? html`
-                <div class="preview-box">
-                  <div class="preview-header">Header</div>
-                  <div class="preview-area">Main Content</div>
-                  <div class="preview-footer">Footer</div>
-                </div>
-              ` : ''}
-
-              ${this.newPageTemplate === 'sidebar' ? html`
-                <div class="preview-box">
-                  <div class="preview-header">Header</div>
-                  <div style="display: flex; flex: 1;">
-                    <div class="preview-sidebar">Sidebar</div>
-                    <div class="preview-area">Main Content</div>
-                  </div>
-                  <div class="preview-footer">Footer</div>
-                </div>
-              ` : ''}
-            </div>
-
-            <div class="dialog-actions">
-              <button class="btn-cancel" @click=${() => this.closeNewPageDialog()}>Cancel</button>
-              <button class="btn-create" @click=${() => this.handleCreatePage()}>Create Page</button>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-    `;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

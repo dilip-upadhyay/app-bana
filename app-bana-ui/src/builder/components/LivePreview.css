@@ -1,245 +1,276 @@
 :host {
   display: flex;
   flex-direction: column;
-  background: #f8f9fb;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
-.toolbar {
+.preview-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.preview-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
-  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: white;
 }
 
-.toolbar-group {
+.preview-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.preview-actions {
   display: flex;
-  gap: 4px;
-  align-items: center;
+  gap: 8px;
 }
 
-.toolbar-btn {
-  padding: 6px 10px;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
+.action-btn {
+  padding: 6px 12px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 16px;
   cursor: pointer;
-  font-size: 12px;
   transition: all 0.2s;
 }
 
-.toolbar-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
+.action-btn:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
 }
 
-.toolbar-btn.active {
-  background: #1e40af;
-  color: #fff;
-  border-color: #1e40af;
+.canvas-wrapper {
+  flex: 1;
+  overflow: auto;
+  background: #f9fafb;
+  padding: 24px;
 }
 
-.zoom-level {
-  font-size: 11px;
-  color: #64748b;
-  min-width: 40px;
+.canvas-content {
+  min-height: 100%;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  padding: 24px;
+}
+
+.canvas-element {
+  position: relative;
+  transition: all 0.15s ease;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  min-height: 20px;
+}
+
+.canvas-element:hover {
+  border-color: #93c5fd;
+  background-color: rgba(147, 197, 253, 0.05);
+  cursor: pointer;
+}
+
+.canvas-element.selected {
+  border-color: #4F46E5 !important;
+  background-color: rgba(79, 70, 229, 0.05) !important;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.canvas-element.hovered {
+  outline: 2px dashed #93c5fd;
+  outline-offset: 2px;
+}
+
+.canvas-element.drag-over {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+}
+
+.canvas-element.drop-before::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: -4px;
+  right: -4px;
+  height: 4px;
+  background: #10b981;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+  z-index: 100;
+}
+
+.canvas-element.drop-after::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: -4px;
+  right: -4px;
+  height: 4px;
+  background: #10b981;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+  z-index: 100;
+}
+
+.canvas-element.drop-inside {
+  border: 3px solid #10b981 !important;
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
+}
+
+.empty-container {
+  min-height: 120px;
+  border: 2px dashed #d1d5db !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f9fafb !important;
+  transition: all 0.2s;
+}
+
+.empty-container:hover {
+  border-color: #9ca3af !important;
+  background: #f3f4f6 !important;
+}
+
+.empty-container.drag-over {
+  border-color: #10b981 !important;
+  border-style: solid !important;
+  background: rgba(16, 185, 129, 0.1) !important;
+}
+
+.drop-zone-hint {
+  color: #9ca3af;
+  font-size: 14px;
+  pointer-events: none;
+  user-select: none;
+  padding: 20px;
   text-align: center;
 }
 
-.preview-viewport {
-  flex: 1;
-  overflow: auto;
-  padding: 20px;
+.empty-container.drag-over .drop-zone-hint {
+  color: #10b981;
+  font-weight: 600;
+}
+
+/* Component-specific styles */
+.canvas-element input,
+.canvas-element textarea,
+.canvas-element select,
+.canvas-element button {
+  margin: 4px 0;
+  pointer-events: none; /* Prevent interference with drag-drop */
+}
+
+.canvas-element input[type="text"],
+.canvas-element input[type="email"],
+.canvas-element input[type="password"],
+.canvas-element textarea,
+.canvas-element select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.canvas-element input[type="checkbox"] {
+  width: auto;
+}
+
+.canvas-element button {
+  padding: 8px 16px;
+  background: #4F46E5;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.canvas-element button:hover {
+  background: #4338ca;
+}
+
+.canvas-element img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  pointer-events: none;
+}
+
+.canvas-element a {
+  color: #4F46E5;
+  text-decoration: underline;
+}
+
+/* Flex utilities */
+.flex-row {
   display: flex;
+  flex-direction: row;
+  gap: 1rem;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.card {
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.loading,
+.error {
+  display: flex;
+  align-items: center;
   justify-content: center;
-  background:
-    linear-gradient(45deg, #f1f5f9 25%, transparent 25%),
-    linear-gradient(-45deg, #f1f5f9 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #f1f5f9 75%),
-    linear-gradient(-45deg, transparent 75%, #f1f5f9 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-}
-
-.preview-frame {
-  background: #fff;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  border-radius: 4px;
-  min-height: 400px;
-  transition: all 0.3s ease;
-  margin: 0 auto;
-}
-
-.preview-content {
-  padding: 16px;
+  height: 100%;
+  color: #6b7280;
+  font-size: 14px;
 }
 
 .error {
-  color: #dc2626;
-  padding: 16px;
-  background: #fee2e2;
-  border-radius: 4px;
-  font-size: 13px;
+  color: #ef4444;
 }
 
-/* Highlight selected component in preview */
-:global(.selected-in-preview) {
-  outline: 2px solid #1e40af !important;
-  outline-offset: 2px !important;
-  position: relative;
-}
-
-:global(.selected-in-preview::after) {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  background: rgba(30, 64, 175, 0.1);
-  pointer-events: none;
-  border-radius: 2px;
-}
-import { LitElement, html, css, unsafeCSS } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
-import { currentStore } from '../store/TreeStore';
-import type { PageMeta } from '../../models/metadata';
-import { renderPage } from '../../runtime/renderer/Renderer';
-import styles from './LivePreview.css?inline';
-
-@customElement('studio-live-preview')
-export class LivePreview extends LitElement {
-  static styles = css`${unsafeCSS(styles)}`;
-
-  @state() private page: PageMeta | null = null;
-  @state() private selectedId: string | null = null;
-  @state() private scale = 1;
-  @state() private viewMode: 'desktop' | 'tablet' | 'mobile' = 'desktop';
-
-  private previewContainer: HTMLElement | null = null;
-
-  connectedCallback(): void {
-    super.connectedCallback();
-    currentStore?.onChange(() => {
-      this.page = currentStore!.getPage();
-      this.selectedId = currentStore!.getSelection()?.id || null;
-      this.renderPreview();
-    });
-    this.page = currentStore!.getPage();
+/* Animations */
+@keyframes slideIn {
+  from {
+    transform: translateY(100px);
+    opacity: 0;
   }
-
-  private renderPreview() {
-    if (!this.page || !this.previewContainer) return;
-
-    // Clear previous render
-    this.previewContainer.innerHTML = '';
-
-    // Render the page
-    try {
-      renderPage(this.page, this.previewContainer);
-
-      // Add click handlers to sync selection
-      this.addClickHandlers();
-    } catch (e) {
-      this.previewContainer.innerHTML = `<div class="error">Preview Error: ${(e as Error).message}</div>`;
-    }
-  }
-
-  private addClickHandlers() {
-    if (!this.previewContainer) return;
-
-    // Find all rendered components and add click handlers
-    const allElements = this.previewContainer.querySelectorAll('[data-component-id]');
-    allElements.forEach(el => {
-      const componentId = el.getAttribute('data-component-id');
-      if (componentId) {
-        (el as HTMLElement).style.cursor = 'pointer';
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          currentStore?.select(componentId);
-        });
-
-        // Highlight selected element
-        if (componentId === this.selectedId) {
-          (el as HTMLElement).classList.add('selected-in-preview');
-        } else {
-          (el as HTMLElement).classList.remove('selected-in-preview');
-        }
-      }
-    });
-  }
-
-  private setViewMode(mode: 'desktop' | 'tablet' | 'mobile') {
-    this.viewMode = mode;
-  }
-
-  private zoomIn() {
-    this.scale = Math.min(this.scale + 0.1, 2);
-  }
-
-  private zoomOut() {
-    this.scale = Math.max(this.scale - 0.1, 0.5);
-  }
-
-  private resetZoom() {
-    this.scale = 1;
-  }
-
-  updated() {
-    if (!this.previewContainer) {
-      this.previewContainer = this.renderRoot.querySelector('.preview-content') as HTMLElement;
-      this.renderPreview();
-    }
-  }
-
-  render() {
-    const viewportWidth = {
-      desktop: '100%',
-      tablet: '768px',
-      mobile: '375px'
-    }[this.viewMode];
-
-    return html`
-      <div class="toolbar">
-        <div class="toolbar-group">
-          <button
-            class="toolbar-btn ${this.viewMode === 'desktop' ? 'active' : ''}"
-            @click=${() => this.setViewMode('desktop')}
-            title="Desktop view">
-            🖥️
-          </button>
-          <button
-            class="toolbar-btn ${this.viewMode === 'tablet' ? 'active' : ''}"
-            @click=${() => this.setViewMode('tablet')}
-            title="Tablet view (768px)">
-            📱
-          </button>
-          <button
-            class="toolbar-btn ${this.viewMode === 'mobile' ? 'active' : ''}"
-            @click=${() => this.setViewMode('mobile')}
-            title="Mobile view (375px)">
-            📱
-          </button>
-        </div>
-
-        <div class="toolbar-group">
-          <button class="toolbar-btn" @click=${this.zoomOut} title="Zoom out">−</button>
-          <span class="zoom-level">${Math.round(this.scale * 100)}%</span>
-          <button class="toolbar-btn" @click=${this.zoomIn} title="Zoom in">+</button>
-          <button class="toolbar-btn" @click=${this.resetZoom} title="Reset zoom">⟲</button>
-        </div>
-      </div>
-
-      <div class="preview-viewport">
-        <div
-          class="preview-frame"
-          style="width: ${viewportWidth}; transform: scale(${this.scale}); transform-origin: top center;">
-          <div class="preview-content"></div>
-        </div>
-      </div>
-    `;
+  to {
+    transform: translateY(0);
+    opacity: 1;
   }
 }
 
+@keyframes slideOut {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100px);
+    opacity: 0;
+  }
+}
