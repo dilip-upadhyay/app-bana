@@ -15,7 +15,14 @@ export class BuilderShell extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    if (!currentStore) initStore(demoPage as PageMeta);
+    console.log('[BuilderShell] connectedCallback - currentStore before init:', currentStore);
+    console.log('[BuilderShell] demoPage data:', demoPage);
+    if (!currentStore) {
+      initStore(demoPage as PageMeta);
+      console.log('[BuilderShell] Store initialized, currentStore:', currentStore);
+    }
+    // Force children to re-check the store
+    this.requestUpdate();
   }
 
   render() {

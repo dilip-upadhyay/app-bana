@@ -16,14 +16,28 @@ export class LivePreview extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
+    console.log('[LivePreview] connectedCallback - currentStore:', currentStore);
+
+    // Set up the store listener and initial state
+    this.updateFromStore();
+  }
+
+  private updateFromStore() {
     if (currentStore) {
       currentStore.onChange(() => {
         this.page = currentStore!.getPage();
         this.selectedId = currentStore!.getSelection()?.id || null;
+        console.log('[LivePreview] Store changed, page:', this.page);
         this.requestUpdate();
       });
       this.page = currentStore.getPage();
       this.selectedId = currentStore.getSelection()?.id || null;
+      console.log('[LivePreview] Initial page loaded:', this.page);
+      this.requestUpdate();
+    } else {
+      console.error('[LivePreview] currentStore is null! Will retry...');
+      // Retry after a short delay in case store is being initialized
+      setTimeout(() => this.updateFromStore(), 100);
     }
   }
 
@@ -424,21 +438,34 @@ export class LivePreview extends LitElement {
   }
 
   render() {
+    console.log('[LivePreview] render() called, page:', this.page);
+
     if (!this.page) {
+      console.warn('[LivePreview] No page data, showing loading...');
       return html`<div class="loading">Loading...</div>`;
     }
 
     const rootNode = this.page.nodes.find(n => n.id === this.page!.rootId);
     if (!rootNode) {
+      console.error('[LivePreview] Root node not found, rootId:', this.page.rootId);
       return html`<div class="error">Root node not found</div>`;
     }
+
+    console.log('[LivePreview] Rendering with rootNode:', rootNode);
 
     return html`
       <div class="preview-container">
         <div class="preview-header">
           <h3>Visual Canvas</h3>
           <div class="preview-actions">
-            <button class="action-btn" @click=${() => this.testAddButton()} title="Test Add Button">➕ Test</button>
+            <button
+              class="action-btn test-btn"
+              @click=${() => this.testAddButton()}
+              style="background: #10b981; color: white; font-weight: 600;"
+              title="Click to test if adding components works"
+            >
+              ➕ TEST ADD
+            </button>
             <button class="action-btn" title="Undo">↶</button>
             <button class="action-btn" title="Redo">↷</button>
             <button class="action-btn" title="Preview">👁️</button>
@@ -451,6 +478,8 @@ export class LivePreview extends LitElement {
         </div>
         <div style="padding: 12px; background: #f9fafb; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
           💡 Drag components from the left panel and drop them here. Total nodes: ${this.page.nodes.length}
+          <br>
+          <strong>Debug:</strong> Click the green "TEST ADD" button above to verify the store is working.
         </div>
       </div>
     `;

@@ -17,7 +17,7 @@ export function phiAuditInterceptor(): Interceptor {
     onRequest: (config) => {
       // Mark requests that access PHI
       const headers = config.headers as Record<string, string> | undefined;
-      const isPHI = headers?.['X-PHI-Access'] === 'true' ||
+      const isPHI = (headers && headers['X-PHI-Access'] === 'true') ||
                     config.url?.includes('/fhir/') ||
                     config.url?.includes('/Patient') ||
                     config.url?.includes('/Observation');

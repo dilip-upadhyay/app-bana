@@ -92,8 +92,5 @@ export {
 
 // Re-export existing core modules
 export { BaseElement } from './BaseElement.ts';
-export { registry } from './registry.ts';
-
-// Registry exports - for internal use
-export { registerComponent, getComponent, getAllComponentTypes, ensureCoreRegistered } from './registry';
-export type { ComponentConstructor } from './registry';
+export { registerComponent, getComponent, getAllComponentTypes, ensureCoreRegistered } from './registry.ts';
+export type { ComponentConstructor } from './registry.ts';

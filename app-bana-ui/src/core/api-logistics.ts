@@ -53,11 +53,11 @@ export function offlineQueueInterceptor(options: {
   const addToQueue = (request: Partial<QueuedRequest>) => {
     const queue = loadQueue();
     const newRequest: QueuedRequest = {
+      id: request.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       url: request.url || '',
       method: request.method || 'POST',
       body: request.body,
       headers: request.headers,
-      id: request.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       retries: request.retries || 0,
       timestamp: request.timestamp || Date.now(),
     };
@@ -439,8 +439,7 @@ export function retryWithBackoffInterceptor(options: {
   return {
     name: 'retryWithBackoff',
     onError: async (error) => {
-      const config = error.config;
-      const retryCount = (config as any)._retryCount || 0;
+      const retryCount = ((error.config as any)?._retryCount) || 0;
 
       if (retryCount >= maxRetries) {
         throw error;
@@ -451,8 +450,12 @@ export function retryWithBackoffInterceptor(options: {
 
       await new Promise(resolve => setTimeout(resolve, delay));
 
+      if (!error.config) {
+        throw error;
+      }
+
       return apiClient.request({
-        ...config,
+        ...error.config,
         _retryCount: retryCount + 1,
       } as any);
     },
