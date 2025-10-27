@@ -171,6 +171,27 @@ export class AppManager extends LitElement {
   }
 
   private renderCreateModal() {
+    const templates = [
+      {
+        id: 'blank',
+        icon: '📄',
+        name: 'Blank',
+        description: 'Start from scratch with an empty canvas'
+      },
+      {
+        id: 'single-page',
+        icon: '🌐',
+        name: 'Single Page',
+        description: 'Header, content area, and footer layout'
+      },
+      {
+        id: 'dashboard',
+        icon: '📊',
+        name: 'Dashboard',
+        description: 'Sidebar navigation with content area'
+      },
+    ];
+
     return html`
       <div class="modal-overlay" @click=${this.handleCloseModal}>
         <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
@@ -190,41 +211,46 @@ export class AppManager extends LitElement {
                   .value=${this.formName}
                   @input=${(e: Event) => this.formName = (e.target as HTMLInputElement).value}
                   required
+                  autofocus
                 />
-                <div class="form-help">A unique name for your application</div>
+                <div class="form-help">Give your app a descriptive, memorable name</div>
               </div>
 
               <div class="form-group">
-                <label for="app-description">Description</label>
+                <label for="app-description">Description (Optional)</label>
                 <textarea
                   id="app-description"
-                  placeholder="Describe what this app does..."
+                  placeholder="A powerful CRM system for managing customer relationships..."
                   .value=${this.formDescription}
                   @input=${(e: Event) => this.formDescription = (e.target as HTMLTextAreaElement).value}
                 ></textarea>
+                <div class="form-help">Help others understand what this app does</div>
               </div>
 
               <div class="form-group">
-                <label for="app-template">Starting Template</label>
-                <select
-                  id="app-template"
-                  .value=${this.formTemplate}
-                  @change=${(e: Event) => this.formTemplate = (e.target as HTMLSelectElement).value as any}
-                >
-                  <option value="blank">Blank - Empty container</option>
-                  <option value="single-page">Single Page - Header + Content + Footer</option>
-                  <option value="dashboard">Dashboard - Sidebar + Content</option>
-                </select>
-                <div class="form-help">Choose a starting template for your first page</div>
+                <div class="template-label">Choose a Template</div>
+                <div class="template-options">
+                  ${templates.map(template => html`
+                    <div
+                      class="template-option ${this.formTemplate === template.id ? 'selected' : ''}"
+                      @click=${() => this.formTemplate = template.id as any}
+                    >
+                      <div class="template-icon">${template.icon}</div>
+                      <div class="template-name">${template.name}</div>
+                      <div class="template-description">${template.description}</div>
+                    </div>
+                  `)}
+                </div>
+                <div class="form-help">Templates provide a starting structure you can customize</div>
               </div>
             </div>
 
             <div class="modal-footer">
               <button type="button" class="btn" @click=${this.handleCloseModal}>
-                Cancel
+                ✕ Cancel
               </button>
               <button type="submit" class="btn btn-primary">
-                Create App
+                ✓ Create App
               </button>
             </div>
           </form>
