@@ -430,7 +430,7 @@ export class LivePreview extends LitElement {
             @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
             @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
           >
-            ${hasChildren ? children : html`<div class="drop-zone-hint">Drop components here</div>`}
+            ${hasChildren ? children : html`<div class="drop-zone-hint">📦 Empty - Drop components here</div>`}
           </div>
         `;
     }

@@ -114,7 +114,7 @@ export class PageManager extends LitElement {
     // Generate unique page ID
     const pageId = this.generatePageId(this.formName);
 
-    // Create blank page
+    // Create completely empty page
     const newPage: PageMeta = {
       metaVersion: 1,
       id: pageId,
@@ -125,16 +125,8 @@ export class PageManager extends LitElement {
         {
           id: 'root',
           type: 'container',
-          props: { className: 'page-container' },
-          children: ['welcome-text'],
-        },
-        {
-          id: 'welcome-text',
-          type: 'text',
-          props: {
-            tag: 'h1',
-            text: `Welcome to ${this.formName}`
-          },
+          props: {},
+          children: [],
         },
       ],
     };

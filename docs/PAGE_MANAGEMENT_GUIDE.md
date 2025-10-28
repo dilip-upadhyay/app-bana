@@ -104,9 +104,10 @@ When no app is selected:
    - **Page Name** (required): Descriptive name like "Dashboard"
    - **URL Path** (required): URL path like "/dashboard"
 
-3. **Page Template**
-   - Always creates a blank container with welcome text
-   - Can be customized after creation
+3. **Page Created**
+   - Creates a completely **blank page** with an empty container
+   - No default content added
+   - Ready for you to add any components you need
 
 4. **Page ID Generation**
    - Auto-generated from page name
@@ -229,13 +230,13 @@ E-Commerce App
 **Blank Page:**
 ```
 Container (root)
-└── Text: "Welcome to [Page Name]"
+└── (empty - no children)
 ```
 
 **Customization:**
-- Start with blank template
+- Start with completely empty page
 - Add any components from library
-- Build custom layouts
+- Build custom layouts from scratch
 
 ## 🐛 Troubleshooting
 

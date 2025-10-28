@@ -148,17 +148,22 @@
 }
 
 .drop-zone-hint {
-  color: #9ca3af;
-  font-size: 14px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-style: italic;
   pointer-events: none;
   user-select: none;
   padding: 20px;
   text-align: center;
+  opacity: 0.8;
+  letter-spacing: 0.5px;
 }
 
 .empty-container.drag-over .drop-zone-hint {
   color: #10b981;
   font-weight: 600;
+  font-style: normal;
+  opacity: 1;
 }
 
 /* Component-specific styles */
