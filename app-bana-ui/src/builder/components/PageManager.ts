@@ -1,6 +1,6 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { initStore, currentStore } from '../store/TreeStore';
+import { initStore, initNewPageStore, currentStore } from '../store/TreeStore';
 import { appStore } from '../store/AppStore';
 import type { PageMeta, ComponentNode } from '../../models/metadata';
 import styles from './PageManager.css?inline';
@@ -18,6 +18,9 @@ export class PageManager extends LitElement {
   // Form state
   @state() private formName = '';
   @state() private formPath = '';
+
+  // Track if we're switching to a newly created page
+  private isNewPage = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -79,7 +82,22 @@ export class PageManager extends LitElement {
       this.currentPageId = pageId;
 
       // Reinitialize TreeStore with this page
-      initStore(page);
+      // If this is a newly created page, skip loading any existing draft
+      if (this.isNewPage) {
+        console.log('[PageManager] Initializing NEW page store (skipping draft)');
+        initNewPageStore(page);
+        this.isNewPage = false; // Reset flag
+      } else {
+        console.log('[PageManager] Initializing existing page store (loading draft if exists)');
+        initStore(page);
+      }
+
+      // Re-register onChange listener for the new store
+      if (currentStore) {
+        currentStore.onChange(() => {
+          this.saveCurrentPage();
+        });
+      }
 
       console.log('[PageManager] Switched to page:', pageId, page);
     }
@@ -114,6 +132,8 @@ export class PageManager extends LitElement {
     // Generate unique page ID
     const pageId = this.generatePageId(this.formName);
 
+    console.log('[PageManager] Creating new page with ID:', pageId);
+
     // Create completely empty page
     const newPage: PageMeta = {
       metaVersion: 1,
@@ -131,10 +151,18 @@ export class PageManager extends LitElement {
       ],
     };
 
+    console.log('[PageManager] New page data:', newPage);
+
+    // Clear any existing draft for this page ID (in case it was used before)
+    const draftKey = `studio.draft.${pageId}`;
+    console.log('[PageManager] Clearing existing draft:', draftKey);
+    localStorage.removeItem(draftKey);
+
     // Add page to app
     appStore.addPage(this.currentApp.id, newPage);
 
-    // Switch to new page
+    // Switch to new page - mark as new so we skip draft loading
+    this.isNewPage = true;
     this.currentPageId = pageId;
     this.switchToPage(pageId);
 

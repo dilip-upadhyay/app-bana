@@ -1,6 +1,11 @@
 import type { PageMeta, ComponentNode } from '../../models/metadata';
 
-export interface TreeStoreOptions { persist?: boolean; keyPrefix?: string; historyLimit?: number; }
+export interface TreeStoreOptions {
+  persist?: boolean;
+  keyPrefix?: string;
+  historyLimit?: number;
+  skipDraft?: boolean; // Skip loading draft from localStorage (useful for new pages)
+}
 
 interface Operation { desc: string; undo: () => void; redo: () => void; }
 
@@ -18,16 +23,29 @@ export class TreeStore {
   static from(page: PageMeta, opts: TreeStoreOptions = {}) { return new TreeStore(page, opts); }
 
   private constructor(page: PageMeta, opts: TreeStoreOptions) {
+    console.log('[TreeStore] Constructor called with page:', page.id, 'nodes:', page.nodes.length, 'skipDraft:', opts.skipDraft);
     this.page = structuredClone(page);
     for (const n of this.page.nodes) this.nodes.set(n.id, structuredClone(n));
     this.persist = opts.persist ?? true;
     this.key = (opts.keyPrefix ?? 'studio.draft.') + this.page.id;
     this.historyLimit = opts.historyLimit ?? 100;
-    if (this.persist) this.loadDraft();
+    console.log('[TreeStore] Draft key:', this.key, 'persist:', this.persist);
+
+    // Only load draft if not skipped and persist is enabled
+    if (this.persist && !opts.skipDraft) {
+      console.log('[TreeStore] Loading draft from localStorage...');
+      this.loadDraft();
+      console.log('[TreeStore] After loadDraft, nodes:', this.nodes.size, 'rootId:', this.page.rootId);
+    } else if (opts.skipDraft) {
+      console.log('[TreeStore] Skipping draft load (new page)');
+    }
   }
 
   onChange(fn: () => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
-  private notify() { for (const fn of this.listeners) fn(); }
+  private notify() {
+    console.log('[TreeStore] Notifying', this.listeners.size, 'listeners');
+    for (const fn of this.listeners) fn();
+  }
 
   getPage(): PageMeta { return { ...this.page, nodes: Array.from(this.nodes.values()) }; }
   getRoot(): ComponentNode { return this.require(this.page.rootId); }
@@ -38,16 +56,37 @@ export class TreeStore {
   select(id: string | null) { if (id && !this.nodes.has(id)) return; this.selection = id; this.save(); this.notify(); }
 
   addNode(parentId: string, node: ComponentNode, index?: number) {
-    if (this.nodes.has(node.id)) throw new Error('duplicate node id');
+    console.log('[TreeStore] addNode called:', { parentId, nodeId: node.id, nodeType: node.type, index });
+
+    if (this.nodes.has(node.id)) {
+      console.error('[TreeStore] Duplicate node id:', node.id);
+      throw new Error('duplicate node id: ' + node.id);
+    }
+
     const parent = this.require(parentId);
+    console.log('[TreeStore] Parent node found:', { parentId, parentType: parent.type, parentChildren: parent.children });
+
     const op: Operation = {
       desc: `add:${node.id}`,
-      undo: () => { parent.children = (parent.children||[]).filter(c=>c!==node.id); this.nodes.delete(node.id); },
-      redo: () => { this.nodes.set(node.id, node); parent.children = parent.children||[]; if (index===undefined||index<0||index>parent.children.length) parent.children.push(node.id); else parent.children.splice(index,0,node.id); }
+      undo: () => {
+        parent.children = (parent.children||[]).filter(c=>c!==node.id);
+        this.nodes.delete(node.id);
+      },
+      redo: () => {
+        this.nodes.set(node.id, node);
+        parent.children = parent.children||[];
+        if (index===undefined||index<0||index>parent.children.length) {
+          parent.children.push(node.id);
+        } else {
+          parent.children.splice(index,0,node.id);
+        }
+        console.log('[TreeStore] Node added, parent now has children:', parent.children);
+      }
     };
     op.redo();
     this.pushHistory(op);
     this.select(node.id);
+    console.log('[TreeStore] addNode complete, total nodes:', this.nodes.size);
   }
 
   updateProps(id: string, patch: Record<string, any>) {
@@ -181,12 +220,43 @@ export class TreeStore {
     return false;
   }
 
-  private save(persist: boolean = true) { if (this.persist && persist) localStorage.setItem(this.key, JSON.stringify(this.serialize())); }
+  private save(persist: boolean = true) {
+    if (this.persist && persist) {
+      console.log('[TreeStore] Saving to localStorage, key:', this.key, 'nodes:', this.nodes.size);
+      localStorage.setItem(this.key, JSON.stringify(this.serialize()));
+    }
+  }
+
   private loadDraft() {
-    try { const raw = localStorage.getItem(this.key); if (raw) { const data = JSON.parse(raw) as PageMeta; this.nodes.clear(); for (const n of data.nodes) this.nodes.set(n.id, n); this.page.rootId = data.rootId; } } catch { /* ignore */ }
+    try {
+      const raw = localStorage.getItem(this.key);
+      if (raw) {
+        console.log('[TreeStore] Found draft in localStorage for key:', this.key);
+        const data = JSON.parse(raw) as PageMeta;
+        console.log('[TreeStore] Draft data has', data.nodes.length, 'nodes, rootId:', data.rootId);
+        this.nodes.clear();
+        for (const n of data.nodes) this.nodes.set(n.id, n);
+        this.page.rootId = data.rootId;
+        console.log('[TreeStore] Draft loaded successfully');
+      } else {
+        console.log('[TreeStore] No draft found in localStorage for key:', this.key);
+      }
+    } catch (err) {
+      console.error('[TreeStore] Error loading draft:', err);
+    }
   }
 }
 
 // Singleton draft store helper for current demo page
 export let currentStore: TreeStore | null = null;
-export function initStore(page: PageMeta) { currentStore = TreeStore.from(page); return currentStore; }
+
+export function initStore(page: PageMeta, opts: TreeStoreOptions = {}) {
+  console.log('[initStore] Initializing store for page:', page.id, 'with options:', opts);
+  currentStore = TreeStore.from(page, opts);
+  return currentStore;
+}
+
+export function initNewPageStore(page: PageMeta) {
+  console.log('[initNewPageStore] Initializing store for NEW page:', page.id, '- skipping draft load');
+  return initStore(page, { skipDraft: true });
+}
