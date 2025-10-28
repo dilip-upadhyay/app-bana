@@ -15,6 +15,9 @@ export class LivePreview extends LitElement {
   @state() private dragOverId: string | null = null;
   @state() private dropPosition: 'before' | 'after' | 'inside' | null = null;
 
+  private retryCount = 0;
+  private maxRetries = 10; // Maximum 10 retries (1 second total)
+
   connectedCallback(): void {
     super.connectedCallback();
     console.log('[LivePreview] connectedCallback - currentStore:', currentStore);
@@ -25,6 +28,7 @@ export class LivePreview extends LitElement {
 
   private updateFromStore() {
     if (currentStore) {
+      this.retryCount = 0; // Reset retry count on success
       currentStore.onChange(() => {
         this.page = currentStore!.getPage();
         this.selectedId = currentStore!.getSelection()?.id || null;
@@ -36,9 +40,15 @@ export class LivePreview extends LitElement {
       console.log('[LivePreview] Initial page loaded:', this.page);
       this.requestUpdate();
     } else {
-      console.error('[LivePreview] currentStore is null! Will retry...');
-      // Retry after a short delay in case store is being initialized
-      setTimeout(() => this.updateFromStore(), 100);
+      if (this.retryCount < this.maxRetries) {
+        this.retryCount++;
+        console.warn(`[LivePreview] currentStore is null! Retry ${this.retryCount}/${this.maxRetries}...`);
+        // Retry after a short delay in case store is being initialized
+        setTimeout(() => this.updateFromStore(), 100);
+      } else {
+        console.error('[LivePreview] currentStore is still null after max retries. Giving up.');
+        console.error('[LivePreview] This usually means no pages exist. Create a page to start building.');
+      }
     }
   }
 

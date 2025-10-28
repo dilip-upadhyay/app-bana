@@ -1,14 +1,21 @@
-# 🔧 DEEP FIX: Store Draft Loading Issue
+# 🔧 DEEP FIX: Store Draft Loading Issue & Canvas Clearing
 
-## 🐛 The Root Cause (Finally Found!)
+## 🐛 The Root Causes (Found & Fixed!)
 
-### The Problem
+### Problem 1: Old Page Data on New Page Creation
 When creating a new page, you would see **old page data** instead of the clean empty page. This happened because:
 
 1. **Page IDs are generated from page names** (e.g., "Test" → "test", "My Page" → "my-page")
 2. **Draft data is stored in localStorage** with key: `studio.draft.{pageId}`
 3. **TreeStore constructor ALWAYS loads drafts** if they exist in localStorage
 4. **If you previously had a page with the same name**, the old draft would be loaded!
+
+### Problem 2: Canvas Not Clearing After Page Deletion
+When deleting the last page in an app, the canvas would still show the old page data instead of clearing. This happened because:
+
+1. **TreeStore was not being cleared** when all pages were deleted
+2. **BuilderCanvas component continued to show old store data** even when `currentPageId` was null
+3. **No empty page was being initialized** to replace the deleted content
 
 ### The Flow (Before Fix)
 ```
@@ -90,7 +97,57 @@ private switchToPage(pageId: string) {
 }
 ```
 
-### 5. Comprehensive Debug Logging
+### 5. Clear Store on Page Deletion
+**File:** `PageManager.ts`
+
+When deleting a page, we now:
+1. **Clear the draft from localStorage** for the deleted page
+2. **Initialize an empty store** if no pages remain
+
+```typescript
+private handleDeletePage(pageId: string, pageName: string, e: Event) {
+  // Clear the draft from localStorage before deleting
+  const draftKey = `studio.draft.${pageId}`;
+  localStorage.removeItem(draftKey);
+  
+  appStore.removePage(this.currentApp.id, pageId);
+  
+  // Switch to another page if any exist
+  const remainingPages = this.pages.filter(p => p.id !== pageId);
+  if (remainingPages.length > 0) {
+    this.currentPageId = remainingPages[0].id;
+    this.switchToPage(this.currentPageId);
+  } else {
+    // No pages left - clear current page and store
+    this.currentPageId = null;
+    this.clearStore(); // ← NEW: Clear the canvas!
+  }
+}
+
+private clearStore() {
+  // Clear the current store to ensure canvas is empty
+  if (currentStore) {
+    const emptyPage: PageMeta = {
+      metaVersion: 1,
+      id: 'empty',
+      name: 'Empty',
+      path: '/empty',
+      rootId: 'root',
+      nodes: [
+        {
+          id: 'root',
+          type: 'container',
+          props: {},
+          children: [],
+        },
+      ],
+    };
+    initStore(emptyPage, { persist: false }); // Don't persist this empty state
+  }
+}
+```
+
+### 6. Comprehensive Debug Logging
 
 Added detailed logging throughout to track exactly what's happening:
 
@@ -217,13 +274,22 @@ If any of these are missing, the fix didn't apply correctly.
    - Switch back to "A"
    - Should see page A's content (not page B's)
 
+5. ✅ **Test 5: Delete Last Page** ← NEW!
+   - Create a page with some content
+   - Delete the page (if it's the last page)
+   - Canvas should be completely empty
+   - Should show "📄 No pages yet" message
+   - No old content should remain visible
+
 ## 🎉 Result
 
-**NEW PAGES ARE NOW TRULY CLEAN!**
+**NEW PAGES ARE NOW TRULY CLEAN & CANVAS CLEARS ON DELETION!**
 - ✅ No old draft data loaded
 - ✅ Always start with empty root container
 - ✅ Each page has its own isolated state
 - ✅ Drafts still work for existing pages
+- ✅ Canvas clears completely when last page is deleted
+- ✅ Deleted page drafts are removed from localStorage
 - ✅ Full debug visibility in console
 
 ---

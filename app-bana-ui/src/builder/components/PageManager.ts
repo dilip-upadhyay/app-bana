@@ -66,6 +66,10 @@ export class PageManager extends LitElement {
       this.currentPageId = newPageId;
       if (this.currentPageId) {
         this.switchToPage(this.currentPageId);
+      } else {
+        // No pages available - clear the store
+        this.clearStore();
+        console.log('[PageManager] No pages available - cleared store');
       }
     } else {
       // Current page exists in new app, just refresh it
@@ -180,6 +184,11 @@ export class PageManager extends LitElement {
     }
 
     try {
+      // Clear the draft from localStorage before deleting
+      const draftKey = `studio.draft.${pageId}`;
+      console.log('[PageManager] Clearing draft for deleted page:', draftKey);
+      localStorage.removeItem(draftKey);
+
       appStore.removePage(this.currentApp.id, pageId);
 
       // Switch to another page if any exist
@@ -188,14 +197,39 @@ export class PageManager extends LitElement {
         this.currentPageId = remainingPages[0].id;
         this.switchToPage(this.currentPageId);
       } else {
-        // No pages left - clear current page
+        // No pages left - clear current page and store
         this.currentPageId = null;
-        console.log('[PageManager] No pages left in app');
+        this.clearStore();
+        console.log('[PageManager] No pages left in app - cleared store');
       }
 
       this.showToast(`🗑️ Deleted page: ${pageName}`);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to delete page');
+    }
+  }
+
+  private clearStore() {
+    // Clear the current store to ensure canvas is empty
+    if (currentStore) {
+      console.log('[PageManager] Clearing current store');
+      // Create an empty page to clear the canvas
+      const emptyPage: PageMeta = {
+        metaVersion: 1,
+        id: 'empty',
+        name: 'Empty',
+        path: '/empty',
+        rootId: 'root',
+        nodes: [
+          {
+            id: 'root',
+            type: 'container',
+            props: {},
+            children: [],
+          },
+        ],
+      };
+      initStore(emptyPage, { persist: false });
     }
   }
 
