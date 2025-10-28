@@ -50,8 +50,8 @@ export class PageManager extends LitElement {
 
     // Load all pages for current app
     this.pages = this.currentApp.pages
-      .map(pageId => appStore.loadPage(this.currentApp!.id, pageId))
-      .filter(page => page !== undefined) as PageMeta[];
+      .map((pageId: string) => appStore.loadPage(this.currentApp!.id, pageId))
+      .filter((page): page is PageMeta => page !== undefined);
 
     console.log('[PageManager] Loaded', this.pages.length, 'pages:', this.pages.map(p => p.name));
 
@@ -155,11 +155,6 @@ export class PageManager extends LitElement {
 
     if (!this.currentApp) return;
 
-    if (this.pages.length === 1) {
-      alert('Cannot delete the last page in the app');
-      return;
-    }
-
     if (!confirm(`Delete page "${pageName}"?`)) {
       return;
     }
@@ -167,11 +162,15 @@ export class PageManager extends LitElement {
     try {
       appStore.removePage(this.currentApp.id, pageId);
 
-      // Switch to another page
+      // Switch to another page if any exist
       const remainingPages = this.pages.filter(p => p.id !== pageId);
       if (remainingPages.length > 0) {
         this.currentPageId = remainingPages[0].id;
         this.switchToPage(this.currentPageId);
+      } else {
+        // No pages left - clear current page
+        this.currentPageId = null;
+        console.log('[PageManager] No pages left in app');
       }
 
       this.showToast(`🗑️ Deleted page: ${pageName}`);
@@ -224,6 +223,24 @@ export class PageManager extends LitElement {
       `;
     }
 
+    // If app has 0 pages, show message
+    if (this.pages.length === 0) {
+      return html`
+        <div class="page-manager">
+          <div class="page-tabs">
+            <div class="no-pages-message">
+              <span>📄 No pages yet</span>
+            </div>
+            <button class="new-page-btn" @click=${this.handleCreatePage} title="Create new page">
+              ➕ New Page
+            </button>
+          </div>
+        </div>
+
+        ${this.showCreateModal ? this.renderCreateModal() : ''}
+      `;
+    }
+
     return html`
       <div class="page-manager">
         <div class="page-tabs">
@@ -233,15 +250,13 @@ export class PageManager extends LitElement {
               @click=${() => this.switchToPage(page.id)}
             >
               <span class="page-name">${page.name}</span>
-              ${this.pages.length > 1 ? html`
-                <button
-                  class="delete-page-btn"
-                  @click=${(e: Event) => this.handleDeletePage(page.id, page.name, e)}
-                  title="Delete page"
-                >
-                  ✕
-                </button>
-              ` : ''}
+              <button
+                class="delete-page-btn"
+                @click=${(e: Event) => this.handleDeletePage(page.id, page.name, e)}
+                title="Delete page"
+              >
+                ✕
+              </button>
             </div>
           `)}
 

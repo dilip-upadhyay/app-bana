@@ -54,14 +54,15 @@ The Page Manager in AppBana Studio handles loading, creating, and deleting pages
 
 When you create a new app:
 
-1. **Template Selection**
-   - Choose from: Blank, Single Page, or Dashboard
-   - Initial page is created based on template
+1. **App Creation**
+   - Click "➕ New App" and fill in app details
+   - App is created with **0 pages** (no initial page)
+   - Ready for you to add pages as needed
 
-2. **Initial Page Creation**
-   - App is created with one page (usually "home")
-   - Page is saved to localStorage
-   - Page is automatically loaded and displayed
+2. **Adding Your First Page**
+   - Click "➕ New Page" to create your first page
+   - Fill in page name and URL path
+   - Page is created and displayed
 
 3. **Ready to Edit**
    - You can immediately start adding components
@@ -127,16 +128,17 @@ Path: "/dashboard"
 - Confirmation dialog appears
 
 **Protections**
-- ❌ Cannot delete the last page (apps must have at least 1 page)
 - ⚠️ Confirmation required before deletion
-- ✅ Automatically switches to another page after deletion
+- ✅ Can delete all pages, including the last one
+- ✅ App can have 0 pages after deletion
 
 **Process:**
 1. Click ✕ on a page tab
 2. Confirm deletion dialog
 3. Page removed from app
 4. Page deleted from localStorage
-5. Switches to first remaining page
+5. If pages remain, switches to first remaining page
+6. If no pages left, shows "📄 No pages yet" message
 
 ### Switching Between Pages
 
@@ -257,15 +259,12 @@ Container (root)
 
 ### Cannot Delete Page
 
-**Issue:** Delete button doesn't work
+**Issue:** Delete button doesn't work or shows an error
 
-**Causes:**
-- ❌ Last page in app (cannot delete)
-- ❌ Default page without setting another as default
-
-**Solution:**
-- Create another page first
-- Or keep at least one page in the app
+**Solutions:**
+- ✅ All pages can now be deleted, including the last one
+- ✅ Confirmation dialog must be accepted
+- ✅ App will show "📄 No pages yet" if all pages are deleted
 
 ### Page Changes Not Saving
 
@@ -346,9 +345,10 @@ Feature Pages (10-15)
 - ✅ **Automatic Loading**: Pages load when app is selected
 - ✅ **Auto-Save**: Changes saved automatically
 - ✅ **Easy Creation**: Simple modal for new pages
-- ✅ **Safe Deletion**: Protection against removing last page
+- ✅ **Safe Deletion**: Confirmation required, can delete all pages
 - ✅ **Tab Navigation**: Quick switching between pages
 - ✅ **Persistent Storage**: Everything saved in localStorage
+- ✅ **Zero Pages Support**: Apps can have 0 pages and show helpful message
 
 **Page Lifecycle:**
 ```
@@ -359,7 +359,7 @@ Create → Load → Edit → Save → Switch → Delete
 ```
 
 **Remember:**
-> "Pages automatically load when you select an app. New apps start with one initial page based on your chosen template."
+> "Pages automatically load when you select an app. New apps start with 0 pages - click '➕ New Page' to add your first page!"
 
 ---
 

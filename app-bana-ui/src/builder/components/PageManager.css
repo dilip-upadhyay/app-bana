@@ -20,6 +20,20 @@
   text-align: center;
 }
 
+.no-pages-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f9fafb;
+  border: 2px dashed #e5e7eb;
+  border-radius: 10px;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .page-tabs {
   display: flex;
   gap: 8px;

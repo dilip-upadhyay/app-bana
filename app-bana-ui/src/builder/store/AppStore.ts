@@ -3,8 +3,8 @@
  * Persists to localStorage with hierarchical structure
  */
 
-import type { AppMeta, AppWithPages, CreateAppRequest, UpdateAppRequest, AppListItem } from '../models/app-metadata';
-import type { PageMeta } from '../models/metadata';
+import type { AppMeta, AppWithPages, CreateAppRequest, UpdateAppRequest, AppListItem } from '../../models/app-metadata';
+import type { PageMeta } from '../../models/metadata';
 
 const STORAGE_KEY_PREFIX = 'appbana.apps.';
 const APPS_LIST_KEY = 'appbana.apps.list';
@@ -112,15 +112,9 @@ export class AppStore {
       },
     };
 
-    // Create initial page based on template
-    const initialPage = this.createInitialPage(app, request.template || 'blank');
-    app.pages.push(initialPage.id);
-    app.defaultPage = initialPage.id;
-
-    // Save app and page
+    // Save app (no initial page created)
     this.apps.set(id, app);
     this.saveApp(app);
-    this.savePage(app.id, initialPage);
 
     // Set as current app
     this.currentAppId = app.id;
@@ -163,7 +157,7 @@ export class AppStore {
     }
 
     // Delete all pages
-    app.pages.forEach(pageId => {
+    app.pages.forEach((pageId: string) => {
       this.deletePageFromStorage(appId, pageId);
     });
 
@@ -232,7 +226,7 @@ export class AppStore {
     if (!app) return undefined;
 
     const pages = new Map<string, PageMeta>();
-    app.pages.forEach(pageId => {
+    app.pages.forEach((pageId: string) => {
       const page = this.loadPage(appId, pageId);
       if (page) {
         pages.set(pageId, page);
@@ -271,17 +265,12 @@ export class AppStore {
       throw new Error(`App not found: ${appId}`);
     }
 
-    // Don't allow removing the last page
-    if (app.pages.length === 1) {
-      throw new Error('Cannot remove the last page from an app');
-    }
-
-    // Don't allow removing the default page
+    // If this is the default page, clear it
     if (app.defaultPage === pageId) {
-      throw new Error('Cannot remove the default page. Set another page as default first.');
+      app.defaultPage = undefined;
     }
 
-    app.pages = app.pages.filter(id => id !== pageId);
+    app.pages = app.pages.filter((id: string) => id !== pageId);
     app.updated = Date.now();
     this.saveApp(app);
     this.deletePageFromStorage(appId, pageId);
@@ -463,7 +452,7 @@ export class AppStore {
   clearAll(): void {
     // Clear all app data
     this.apps.forEach(app => {
-      app.pages.forEach(pageId => {
+      app.pages.forEach((pageId: string) => {
         this.deletePageFromStorage(app.id, pageId);
       });
       this.deleteAppFromStorage(app.id);
