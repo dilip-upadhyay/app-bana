@@ -1,7 +1,6 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement } from 'lit/decorators.js';
-import demoPage from '../../demo/demo-page.json';
-import { initStore, currentStore } from '../store/TreeStore';
+import { appStore } from '../store/AppStore';
 import type { PageMeta } from '../../models/metadata';
 import styles from './BuilderShell.css?inline';
 import './LivePreview';
@@ -16,13 +15,16 @@ export class BuilderShell extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    console.log('[BuilderShell] connectedCallback - currentStore before init:', currentStore);
-    console.log('[BuilderShell] demoPage data:', demoPage);
-    if (!currentStore) {
-      initStore(demoPage as PageMeta);
-      console.log('[BuilderShell] Store initialized, currentStore:', currentStore);
+    console.log('[BuilderShell] Initializing...');
+
+    // Check if there's a current app, if not, prompt user to create one
+    const currentApp = appStore.getCurrentApp();
+    if (currentApp) {
+      console.log('[BuilderShell] Current app loaded:', currentApp.name);
+    } else {
+      console.log('[BuilderShell] No app selected - user needs to create or select an app');
     }
-    // Force children to re-check the store
+
     this.requestUpdate();
   }
 
