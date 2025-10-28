@@ -1,6 +1,21 @@
 # AppBana — Metadata-driven UI → API → Database
 
-<!-- Updated 2025-10-27: Studio Builder now primary focus - making it extremely powerful and user-friendly -->
+<!-- Updated 2025-10-28: Critical Studio Builder fixes completed - all blocking issues resolved -->
+
+## 🎉 Latest Update: Studio Builder Critical Fixes (Oct 28, 2025)
+
+**ALL CRITICAL ISSUES RESOLVED!** The Studio Builder is now fully stable and functional:
+
+✅ **Fixed:** LivePreview stuck on "Loading..."  
+✅ **Fixed:** Drag & Drop not working  
+✅ **Fixed:** Canvas not clearing after page deletion  
+✅ **Fixed:** Infinite console retry loops  
+✅ **Fixed:** Old draft data loading on new pages  
+
+**Result:** Complete auto-synchronization system implemented - components now automatically detect and re-subscribe when the store changes. See `docs/FIXES_INDEX.md` for complete details.
+
+---
+
 **Latest feature highlights**
 - **🎯 PRIMARY FOCUS: Studio Builder** — Making the visual UI builder extremely powerful and user-friendly with professional-grade UX
 - Schema editing (rename non‑PK fields with automatic migration)

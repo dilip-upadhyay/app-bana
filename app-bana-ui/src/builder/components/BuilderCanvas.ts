@@ -21,24 +21,55 @@ export class BuilderCanvas extends LitElement {
   @state() private dragOverId: string | null = null;
 
   private toastTimer: any = null;
+  private storeUnsubscribe: (() => void) | null = null;
+  private lastStoreInstance: any = null;
 
   connectedCallback(): void {
     super.connectedCallback();
     if (!currentStore) initStore(demoPage as PageMeta);
-    currentStore!.onChange(() => {
+    this.subscribeToStore();
+    this.restoreExpanded();
+    this.addEventListener('keydown', this.onKeyDown as any);
+    this.setAttribute('tabindex', '0');
+
+    // Check for store changes periodically (in case store is replaced)
+    setInterval(() => {
+      if (currentStore !== this.lastStoreInstance) {
+        console.log('[BuilderCanvas] Store instance changed, re-subscribing...');
+        this.subscribeToStore();
+      }
+    }, 200);
+  }
+
+  private subscribeToStore() {
+    if (!currentStore) return;
+
+    this.lastStoreInstance = currentStore;
+
+    // Unsubscribe from old store if exists
+    if (this.storeUnsubscribe) {
+      this.storeUnsubscribe();
+    }
+
+    // Subscribe to new store
+    this.storeUnsubscribe = currentStore.onChange(() => {
       this.page = currentStore!.getPage();
       this.selectedId = currentStore!.getSelection()?.id || null;
       this.requestUpdate();
     });
-    this.page = currentStore!.getPage();
-    this.restoreExpanded();
-    this.addEventListener('keydown', this.onKeyDown as any);
-    this.setAttribute('tabindex', '0');
+
+    this.page = currentStore.getPage();
+    this.selectedId = currentStore.getSelection()?.id || null;
+    this.requestUpdate();
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this.removeEventListener('keydown', this.onKeyDown as any);
+    if (this.storeUnsubscribe) {
+      this.storeUnsubscribe();
+      this.storeUnsubscribe = null;
+    }
   }
 
   private onKeyDown = (e: KeyboardEvent) => {

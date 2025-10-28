@@ -248,8 +248,15 @@ When loading an app with no pages:
 
 ## Related Files Modified
 - `/Users/dilipupadhyay/git/app-bana/app-bana-ui/src/builder/components/PageManager.ts` - Added clearStore() method and call it in loadPages()
-- `/Users/dilipupadhyay/git/app-bana/app-bana-ui/src/builder/components/LivePreview.ts` - Added retry limit to prevent infinite loops
+- `/Users/dilipupadhyay/git/app-bana/app-bana-ui/src/builder/components/LivePreview.ts` - Added retry limit to prevent infinite loops + auto-resubscription
+- `/Users/dilipupadhyay/git/app-bana/app-bana-ui/src/builder/components/BuilderCanvas.ts` - Added auto-resubscription
 - `/Users/dilipupadhyay/git/app-bana/docs/STORE_DRAFT_FIX.md` - Updated documentation
+
+## Related Issues & Fixes
+- **Infinite Retry Loop** - See FIX_INFINITE_RETRY_LOOP.md
+- **LivePreview Loading Forever** - See FIX_LIVEPREVIEW_LOADING_FOREVER.md
+- **Drag & Drop Not Working** - See FIX_LIVEPREVIEW_LOADING_FOREVER.md
+- **Complete Summary** - See COMPLETE_FIX_SUMMARY.md
 
 ## Build Status
 ✅ **Build successful** - No compilation errors

@@ -25,6 +25,14 @@ This document summarizes all fixes applied to resolve canvas clearing and infini
 **Fix:** Clear localStorage draft when deleting a page  
 **Files:** `PageManager.ts`
 
+### 4. ✅ Live Preview Loading Forever & Drag-Drop Not Working (NEW!)
+**Symptoms:** 
+- Live Preview stuck showing "Loading..." even with pages loaded
+- Drag & drop not working (no DROP event fired)
+**Root Cause:** Components subscribed to old store instance, didn't detect when store was replaced
+**Fix:** Automatic re-subscription - components check every 200ms if store instance changed
+**Files:** `LivePreview.ts`, `BuilderCanvas.ts`
+
 ## Code Changes Summary
 
 ### PageManager.ts (3 changes)
@@ -64,9 +72,9 @@ const draftKey = `studio.draft.${pageId}`;
 localStorage.removeItem(draftKey); // ← NEW
 ```
 
-### LivePreview.ts (1 change)
+### LivePreview.ts (2 changes)
 
-#### Change: Add retry limit
+#### Change 1: Add retry limit
 ```typescript
 private retryCount = 0;
 private maxRetries = 10;
@@ -88,6 +96,83 @@ private updateFromStore() {
 }
 ```
 
+#### Change 2: Automatic re-subscription (NEW!)
+```typescript
+private storeUnsubscribe: (() => void) | null = null;
+private lastStoreInstance: any = null;
+
+connectedCallback() {
+  this.updateFromStore();
+  
+  // Check for store changes every 200ms
+  setInterval(() => {
+    if (currentStore !== this.lastStoreInstance) {
+      console.log('[LivePreview] Store instance changed, re-subscribing...');
+      this.updateFromStore();
+    }
+  }, 200);
+}
+
+private updateFromStore() {
+  if (currentStore) {
+    this.lastStoreInstance = currentStore;
+    
+    // Unsubscribe from old store
+    if (this.storeUnsubscribe) {
+      this.storeUnsubscribe();
+    }
+    
+    // Subscribe to new store
+    this.storeUnsubscribe = currentStore.onChange(() => {
+      this.page = currentStore!.getPage();
+      this.requestUpdate();
+    });
+    
+    this.page = currentStore.getPage();
+    this.requestUpdate();
+  }
+}
+```
+
+### BuilderCanvas.ts (1 change - NEW!)
+
+#### Automatic re-subscription
+```typescript
+private storeUnsubscribe: (() => void) | null = null;
+private lastStoreInstance: any = null;
+
+connectedCallback() {
+  if (!currentStore) initStore(demoPage);
+  this.subscribeToStore();
+  
+  // Check for store changes every 200ms
+  setInterval(() => {
+    if (currentStore !== this.lastStoreInstance) {
+      console.log('[BuilderCanvas] Store instance changed, re-subscribing...');
+      this.subscribeToStore();
+    }
+  }, 200);
+}
+
+private subscribeToStore() {
+  if (!currentStore) return;
+  
+  this.lastStoreInstance = currentStore;
+  
+  if (this.storeUnsubscribe) {
+    this.storeUnsubscribe();
+  }
+  
+  this.storeUnsubscribe = currentStore.onChange(() => {
+    this.page = currentStore!.getPage();
+    this.requestUpdate();
+  });
+  
+  this.page = currentStore.getPage();
+  this.requestUpdate();
+}
+```
+
 ## Test Scenarios
 
 ### ✅ Scenario 1: Delete Last Page
@@ -105,6 +190,19 @@ private updateFromStore() {
 2. Delete page "test"
 3. Create new page "test"
 4. **Result:** New page is empty (no old draft loaded)
+
+### ✅ Scenario 4: Live Preview Shows Page (NEW!)
+1. Create app with empty page
+2. Open in studio
+3. **Before:** Live Preview shows "Loading..." forever
+4. **After:** Live Preview shows empty container with drop zones
+
+### ✅ Scenario 5: Drag & Drop Works (NEW!)
+1. Open page in studio
+2. Drag Grid component from library
+3. Drop on canvas
+4. **Before:** No drop event, nothing happens
+5. **After:** Drop event fires, Grid added to page
 
 ## Console Output (After Fix)
 
@@ -136,11 +234,15 @@ private updateFromStore() {
 | Draft cleanup | ❌ Orphaned data | ✅ Cleaned on delete |
 | Developer UX | ❌ Confusing errors | ✅ Clear messages |
 | Store state | ❌ Can be null | ✅ Always initialized |
+| Live Preview | ❌ Loading forever | ✅ Shows page properly |
+| Drag & Drop | ❌ Doesn't work | ✅ Works perfectly |
+| Store sync | ❌ Stale subscriptions | ✅ Auto re-subscribes |
 
 ## Documentation
 
 - **FIX_CANVAS_NOT_CLEARING.md** - Detailed canvas clearing fix
 - **FIX_INFINITE_RETRY_LOOP.md** - Detailed retry loop fix  
+- **FIX_LIVEPREVIEW_LOADING_FOREVER.md** - Detailed LivePreview & drag-drop fix (NEW!)
 - **STORE_DRAFT_FIX.md** - Overall store and draft management
 - **This file** - Complete summary of all fixes
 

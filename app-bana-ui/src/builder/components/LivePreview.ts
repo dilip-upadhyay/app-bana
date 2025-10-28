@@ -17,6 +17,8 @@ export class LivePreview extends LitElement {
 
   private retryCount = 0;
   private maxRetries = 10; // Maximum 10 retries (1 second total)
+  private storeUnsubscribe: (() => void) | null = null;
+  private lastStoreInstance: any = null;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -24,17 +26,43 @@ export class LivePreview extends LitElement {
 
     // Set up the store listener and initial state
     this.updateFromStore();
+
+    // Check for store changes periodically (in case store is replaced)
+    setInterval(() => {
+      if (currentStore !== this.lastStoreInstance) {
+        console.log('[LivePreview] Store instance changed, re-subscribing...');
+        this.updateFromStore();
+      }
+    }, 200);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    // Clean up subscription
+    if (this.storeUnsubscribe) {
+      this.storeUnsubscribe();
+      this.storeUnsubscribe = null;
+    }
   }
 
   private updateFromStore() {
     if (currentStore) {
       this.retryCount = 0; // Reset retry count on success
-      currentStore.onChange(() => {
+      this.lastStoreInstance = currentStore;
+
+      // Unsubscribe from old store if exists
+      if (this.storeUnsubscribe) {
+        this.storeUnsubscribe();
+      }
+
+      // Subscribe to new store
+      this.storeUnsubscribe = currentStore.onChange(() => {
         this.page = currentStore!.getPage();
         this.selectedId = currentStore!.getSelection()?.id || null;
         console.log('[LivePreview] Store changed, page:', this.page);
         this.requestUpdate();
       });
+
       this.page = currentStore.getPage();
       this.selectedId = currentStore.getSelection()?.id || null;
       console.log('[LivePreview] Initial page loaded:', this.page);

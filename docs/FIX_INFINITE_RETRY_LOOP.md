@@ -141,10 +141,19 @@ OR (if store initializes properly):
 
 ## Files Changed
 1. `PageManager.ts` - Call `clearStore()` when no pages available
-2. `LivePreview.ts` - Add retry limit with helpful error message
+2. `LivePreview.ts` - Add retry limit with helpful error message + auto-resubscription
+
+## Additional Fixes Applied
+After fixing the infinite retry loop, we discovered that even with the store initialized, components weren't receiving updates because they were subscribed to old store instances. See **FIX_LIVEPREVIEW_LOADING_FOREVER.md** for details on the auto-resubscription mechanism.
+
+## Related Documentation
+- **FIX_CANVAS_NOT_CLEARING.md** - Canvas clearing fix
+- **FIX_LIVEPREVIEW_LOADING_FOREVER.md** - Component auto-sync fix
+- **COMPLETE_FIX_SUMMARY.md** - All fixes summary
+- **STORE_DRAFT_FIX.md** - Overall store management
 
 ---
 **Date:** October 28, 2025  
 **Status:** ✅ FIXED  
-**Related:** FIX_CANVAS_NOT_CLEARING.md
+**Related:** FIX_CANVAS_NOT_CLEARING.md, FIX_LIVEPREVIEW_LOADING_FOREVER.md
 
