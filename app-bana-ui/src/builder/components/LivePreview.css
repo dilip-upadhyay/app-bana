@@ -94,6 +94,37 @@
   background-color: rgba(16, 185, 129, 0.1) !important;
 }
 
+/* Grid Cell Specific Styles */
+.grid-cell {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.grid-cell:hover {
+  border-color: #6366f1 !important;
+  background-color: #eef2ff !important;
+}
+
+.grid-cell.selected {
+  border-color: #4F46E5 !important;
+  background-color: rgba(79, 70, 229, 0.1) !important;
+}
+
+.grid-cell.drag-over {
+  border-color: #10b981 !important;
+  background-color: #d1fae5 !important;
+  border-style: solid !important;
+}
+
+.grid-cell .drop-zone-hint {
+  color: #9ca3af;
+  font-size: 12px;
+  text-align: center;
+  padding: 20px;
+  user-select: none;
+  pointer-events: none;
+}
+
 .canvas-element.drop-before::before {
   content: '';
   position: absolute;

@@ -10,6 +10,7 @@ interface ComponentTemplate {
   category: string;
   description: string;
   template: Partial<ComponentNode>;
+  configurable?: boolean; // Grid and other components that need configuration
 }
 
 const COMPONENT_TEMPLATES: ComponentTemplate[] = [
@@ -43,8 +44,18 @@ const COMPONENT_TEMPLATES: ComponentTemplate[] = [
     label: 'Grid',
     icon: '⊞',
     category: 'Layout',
-    description: 'CSS Grid container',
-    template: { type: 'container', props: { className: 'grid', style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;' }, children: [] }
+    description: 'CSS Grid container with visible cells',
+    template: {
+      type: 'container',
+      props: {
+        className: 'grid',
+        style: 'display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; min-height: 200px;',
+        'data-grid-rows': '2',
+        'data-grid-cols': '3'
+      },
+      children: []
+    },
+    configurable: true  // Mark this as configurable
   },
   {
     type: 'section',
@@ -164,6 +175,10 @@ export class ComponentLibrary extends LitElement {
 
   @state() private selectedCategory: string = 'All';
   @state() private searchQuery: string = '';
+  @state() private showGridConfig = false;
+  @state() private gridRows = 2;
+  @state() private gridCols = 3;
+  @state() private pendingGridTemplate: ComponentTemplate | null = null;
 
   private get categories(): string[] {
     const cats = new Set<string>(['All']);
@@ -190,8 +205,40 @@ export class ComponentLibrary extends LitElement {
     return filtered;
   }
 
+  private handleComponentClick(template: ComponentTemplate) {
+    // For configurable components like Grid, show config dialog
+    if (template.configurable && template.type === 'grid') {
+      this.pendingGridTemplate = template;
+      this.showGridConfig = true;
+      return;
+    }
+
+    // For other components, trigger immediate add via drag data
+    this.addComponentToCanvas(template);
+  }
+
+  private addComponentToCanvas(template: ComponentTemplate, customProps?: any) {
+    // Dispatch custom event that LivePreview can listen to
+    const event = new CustomEvent('add-component', {
+      detail: {
+        template: customProps ? { ...template.template, props: { ...template.template.props, ...customProps } } : template.template
+      },
+      bubbles: true,
+      composed: true
+    });
+    this.dispatchEvent(event);
+  }
+
   private handleDragStart(e: DragEvent, template: ComponentTemplate) {
     console.log('DRAGSTART EVENT FIRED!', template.label);
+
+    // For configurable components, don't allow drag - require click instead
+    if (template.configurable) {
+      e.preventDefault();
+      console.log('Grid is configurable - use click instead of drag');
+      return;
+    }
+
     if (!e.dataTransfer) {
       console.error('No dataTransfer object!');
       return;
@@ -239,6 +286,53 @@ export class ComponentLibrary extends LitElement {
     delete (window as any).__dragData;
   }
 
+  private handleGridConfigSubmit() {
+    if (!this.pendingGridTemplate) return;
+
+    // Create grid cells as children
+    const cells: Partial<ComponentNode>[] = [];
+    for (let i = 0; i < this.gridRows * this.gridCols; i++) {
+      cells.push({
+        id: `cell-${i}`,
+        type: 'container',
+        props: {
+          className: 'grid-cell',
+          style: `min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;`,
+          'data-cell-index': String(i)
+        },
+        children: []
+      });
+    }
+
+    // Create configured grid template
+    const gridTemplate = {
+      ...this.pendingGridTemplate.template,
+      props: {
+        ...this.pendingGridTemplate.template.props,
+        style: `display: grid; grid-template-columns: repeat(${this.gridCols}, 1fr); gap: 1rem;`,
+        'data-grid-rows': String(this.gridRows),
+        'data-grid-cols': String(this.gridCols)
+      },
+      children: cells
+    };
+
+    // Add to canvas
+    this.addComponentToCanvas({ ...this.pendingGridTemplate, template: gridTemplate });
+
+    // Reset
+    this.showGridConfig = false;
+    this.pendingGridTemplate = null;
+    this.gridRows = 2;
+    this.gridCols = 3;
+  }
+
+  private handleGridConfigCancel() {
+    this.showGridConfig = false;
+    this.pendingGridTemplate = null;
+    this.gridRows = 2;
+    this.gridCols = 3;
+  }
+
   render() {
     return html`
       <div class="library-container">
@@ -267,14 +361,16 @@ export class ComponentLibrary extends LitElement {
         <div class="components-grid">
           ${this.filteredComponents.map(template => html`
             <div
-              class="component-item"
-              draggable="true"
+              class="component-item ${template.configurable ? 'configurable' : ''}"
+              draggable="${!template.configurable}"
               @dragstart=${(e: DragEvent) => this.handleDragStart(e, template)}
               @dragend=${() => this.handleDragEnd()}
-              title="${template.description}"
+              @click=${() => template.configurable ? this.handleComponentClick(template) : null}
+              title="${template.description}${template.configurable ? ' (Click to configure)' : ''}"
             >
               <div class="component-icon">${template.icon}</div>
               <div class="component-label">${template.label}</div>
+              ${template.configurable ? html`<div class="config-badge">⚙️</div>` : ''}
             </div>
           `)}
         </div>
@@ -282,6 +378,55 @@ export class ComponentLibrary extends LitElement {
         ${this.filteredComponents.length === 0 ? html`
           <div class="empty-state">
             <p>No components found</p>
+          </div>
+        ` : ''}
+
+        ${this.showGridConfig ? html`
+          <div class="modal-backdrop" @click=${this.handleGridConfigCancel}>
+            <div class="modal-dialog" @click=${(e: Event) => e.stopPropagation()}>
+              <div class="modal-header">
+                <h3>⊞ Configure Grid</h3>
+                <button class="close-btn" @click=${this.handleGridConfigCancel}>×</button>
+              </div>
+              <div class="modal-body">
+                <div class="form-group">
+                  <label>Rows:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    .value=${String(this.gridRows)}
+                    @input=${(e: Event) => this.gridRows = parseInt((e.target as HTMLInputElement).value) || 2}
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Columns:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    .value=${String(this.gridCols)}
+                    @input=${(e: Event) => this.gridCols = parseInt((e.target as HTMLInputElement).value) || 3}
+                  />
+                </div>
+                <div class="grid-preview">
+                  <p>Preview: ${this.gridRows} × ${this.gridCols} grid</p>
+                  <div
+                    style="display: grid; grid-template-columns: repeat(${this.gridCols}, 1fr); gap: 4px; margin-top: 8px;"
+                  >
+                    ${Array.from({ length: this.gridRows * this.gridCols }).map((_, i) => html`
+                      <div style="aspect-ratio: 1; background: #e5e7eb; border-radius: 2px; font-size: 10px; display: flex; align-items: center; justify-content: center; color: #6b7280;">
+                        ${i + 1}
+                      </div>
+                    `)}
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-secondary" @click=${this.handleGridConfigCancel}>Cancel</button>
+                <button class="btn btn-primary" @click=${this.handleGridConfigSubmit}>Create Grid</button>
+              </div>
+            </div>
           </div>
         ` : ''}
       </div>

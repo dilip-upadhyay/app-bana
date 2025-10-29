@@ -34,6 +34,9 @@ export class LivePreview extends LitElement {
         this.updateFromStore();
       }
     }, 200);
+
+    // Listen for add-component events from ComponentLibrary (for configured components like Grid)
+    window.addEventListener('add-component', this.handleAddComponentEvent as EventListener);
   }
 
   disconnectedCallback(): void {
@@ -43,6 +46,32 @@ export class LivePreview extends LitElement {
       this.storeUnsubscribe();
       this.storeUnsubscribe = null;
     }
+    window.removeEventListener('add-component', this.handleAddComponentEvent as EventListener);
+  }
+
+  private handleAddComponentEvent = (e: CustomEvent) => {
+    console.log('[LivePreview] Add component event received:', e.detail);
+    const { template } = e.detail;
+
+    // Add to root by default
+    const rootId = this.page?.rootId || 'root';
+    this.addComponentToNode(rootId, template);
+  }
+
+  private addComponentToNode(parentId: string, template: any) {
+    if (!currentStore) return;
+
+    const newId = this.generateUniqueId(template.type || 'element');
+
+    const newNode: ComponentNode = {
+      id: newId,
+      type: template.type || 'container',
+      props: template.props || {},
+      children: template.children || []
+    };
+
+    console.log('[LivePreview] Adding component to node:', parentId, newNode);
+    currentStore.addNode(parentId, newNode);
   }
 
   private updateFromStore() {
