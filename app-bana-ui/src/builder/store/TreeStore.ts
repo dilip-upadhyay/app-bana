@@ -89,6 +89,77 @@ export class TreeStore {
     console.log('[TreeStore] addNode complete, total nodes:', this.nodes.size);
   }
 
+  // Add a node tree (node with pre-existing children nodes)
+  addNodeTree(parentId: string, nodeTree: any, index?: number): string {
+    console.log('[TreeStore] addNodeTree called:', { parentId, nodeId: nodeTree.id, nodeType: nodeTree.type, hasChildren: !!nodeTree.children });
+
+    // First, recursively process all children to get their IDs
+    const childIds: string[] = [];
+    if (nodeTree.children && Array.isArray(nodeTree.children) && nodeTree.children.length > 0) {
+      // Check if children are objects (nodes to add) or just IDs
+      const firstChild = nodeTree.children[0];
+      if (typeof firstChild === 'object' && firstChild !== null && firstChild.id) {
+        console.log('[TreeStore] Processing child nodes recursively');
+        // Children are node objects, add them recursively
+        for (const childTree of nodeTree.children) {
+          // Add each child tree, with nodeTree.id as parent (but we'll add the node itself later)
+          // For now, just collect and add them to the map
+          const childId = this.addChildNodeTree(childTree);
+          childIds.push(childId);
+        }
+      } else {
+        // Children are already IDs
+        childIds.push(...nodeTree.children);
+      }
+    }
+
+    // Now create the node with child IDs
+    const node: ComponentNode = {
+      id: nodeTree.id,
+      type: nodeTree.type || 'container',
+      props: nodeTree.props || {},
+      children: childIds
+    };
+
+    // Add this node using the regular addNode method
+    this.addNode(parentId, node, index);
+
+    return node.id;
+  }
+
+  // Helper to recursively add child nodes without parent linkage first
+  private addChildNodeTree(nodeTree: any): string {
+    console.log('[TreeStore] addChildNodeTree called:', nodeTree.id);
+
+    // Recursively process grandchildren
+    const grandchildIds: string[] = [];
+    if (nodeTree.children && Array.isArray(nodeTree.children) && nodeTree.children.length > 0) {
+      const firstGrandchild = nodeTree.children[0];
+      if (typeof firstGrandchild === 'object' && firstGrandchild !== null && firstGrandchild.id) {
+        for (const grandchildTree of nodeTree.children) {
+          const grandchildId = this.addChildNodeTree(grandchildTree);
+          grandchildIds.push(grandchildId);
+        }
+      } else {
+        grandchildIds.push(...nodeTree.children);
+      }
+    }
+
+    // Create the node
+    const node: ComponentNode = {
+      id: nodeTree.id,
+      type: nodeTree.type || 'container',
+      props: nodeTree.props || {},
+      children: grandchildIds
+    };
+
+    // Add directly to nodes map (no parent linkage yet)
+    this.nodes.set(node.id, node);
+    console.log('[TreeStore] Child node added to map:', node.id);
+
+    return node.id;
+  }
+
   updateProps(id: string, patch: Record<string, any>) {
     const node = this.require(id);
     const prev = structuredClone(node.props||{});

@@ -63,15 +63,18 @@ export class LivePreview extends LitElement {
 
     const newId = this.generateUniqueId(template.type || 'element');
 
-    const newNode: ComponentNode = {
+    // Create node tree structure with proper ID
+    const nodeTree = {
       id: newId,
       type: template.type || 'container',
       props: template.props || {},
       children: template.children || []
     };
 
-    console.log('[LivePreview] Adding component to node:', parentId, newNode);
-    currentStore.addNode(parentId, newNode);
+    console.log('[LivePreview] Adding component tree to node:', parentId, nodeTree);
+
+    // Use addNodeTree which handles recursive children
+    currentStore.addNodeTree(parentId, nodeTree);
   }
 
   private updateFromStore() {
