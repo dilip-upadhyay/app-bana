@@ -37,6 +37,9 @@ export class LivePreview extends LitElement {
 
     // Listen for add-component events from ComponentLibrary (for configured components like Grid)
     window.addEventListener('add-component', this.handleAddComponentEvent as EventListener);
+
+    // Listen for keyboard events (Delete/Backspace to remove selected component)
+    window.addEventListener('keydown', this.handleKeyDown);
   }
 
   disconnectedCallback(): void {
@@ -47,6 +50,21 @@ export class LivePreview extends LitElement {
       this.storeUnsubscribe = null;
     }
     window.removeEventListener('add-component', this.handleAddComponentEvent as EventListener);
+    window.removeEventListener('keydown', this.handleKeyDown);
+  }
+
+  private handleKeyDown = (e: KeyboardEvent) => {
+    // Delete or Backspace key to remove selected component
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedId) {
+      // Don't delete if user is typing in an input
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      e.preventDefault();
+      this.handleDeleteSelected();
+    }
   }
 
   private handleAddComponentEvent = (e: CustomEvent) => {
@@ -333,6 +351,44 @@ export class LivePreview extends LitElement {
     this.hoveredId = null;
   }
 
+  private handleDeleteSelected() {
+    if (!this.selectedId || !currentStore || !this.page) {
+      return;
+    }
+
+    // Don't allow deleting the root node
+    if (this.selectedId === this.page.rootId) {
+      this.showToast('❌ Cannot delete root container');
+      return;
+    }
+
+    const node = this.page.nodes.find(n => n.id === this.selectedId);
+    if (!node) {
+      return;
+    }
+
+    // Check if node has children
+    const hasChildren = node.children && node.children.length > 0;
+
+    if (hasChildren) {
+      // Confirm deletion of node with children
+      const confirmed = confirm(`Delete "${node.id}" and all its children?`);
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    console.log('[LivePreview] Deleting node:', this.selectedId);
+
+    try {
+      currentStore.removeNode(this.selectedId);
+      this.showToast(`🗑️ Deleted ${node.type}`);
+    } catch (err) {
+      console.error('[LivePreview] Failed to delete node:', err);
+      this.showToast('❌ Failed to delete component');
+    }
+  }
+
   private showToast(message: string) {
     // Simple toast notification
     const toast = document.createElement('div');
@@ -360,6 +416,7 @@ export class LivePreview extends LitElement {
     const isSelected = node.id === this.selectedId;
     const isHovered = node.id === this.hoveredId;
     const isDragOver = node.id === this.dragOverId;
+    const isRoot = node.id === this.page?.rootId;
 
     const classes = [
       'canvas-element',
@@ -368,6 +425,17 @@ export class LivePreview extends LitElement {
       isDragOver ? 'drag-over' : '',
       isDragOver && this.dropPosition ? `drop-${this.dropPosition}` : ''
     ].filter(Boolean).join(' ');
+
+    // Delete icon overlay for selected non-root components
+    const deleteOverlay = isSelected && !isRoot ? html`
+      <button
+        class="delete-overlay"
+        @click=${(e: Event) => { e.stopPropagation(); this.handleDeleteSelected(); }}
+        title="Delete (Del key)"
+      >
+        🗑️
+      </button>
+    ` : '';
 
     const style = node.props?.style || '';
 
@@ -392,36 +460,42 @@ export class LivePreview extends LitElement {
 
       case 'button':
         return html`
-          <button
-            class="${classes} ${node.props?.className || ''}"
-            style="${style}"
-            data-node-id="${node.id}"
-            @click=${(e: Event) => this.handleNodeClick(e, node.id)}
-            @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-            @mouseleave=${() => this.handleNodeMouseLeave()}
-            @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-            @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-          >
-            ${node.props?.text || node.props?.label || 'Button'}
-          </button>
+          <div style="position: relative; display: inline-block;">
+            ${deleteOverlay}
+            <button
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              data-node-id="${node.id}"
+              @click=${(e: Event) => this.handleNodeClick(e, node.id)}
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            >
+              ${node.props?.text || node.props?.label || 'Button'}
+            </button>
+          </div>
         `;
 
       case 'input':
         return html`
-          <input
-            type="${node.props?.type || 'text'}"
-            class="${classes} ${node.props?.className || ''}"
-            style="${style}"
-            placeholder="${node.props?.placeholder || ''}"
-            data-node-id="${node.id}"
-            @click=${(e: Event) => this.handleNodeClick(e, node.id)}
-            @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-            @mouseleave=${() => this.handleNodeMouseLeave()}
-            @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-            @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-          />
+          <div style="position: relative; display: inline-block;">
+            ${deleteOverlay}
+            <input
+              type="${node.props?.type || 'text'}"
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              placeholder="${node.props?.placeholder || ''}"
+              data-node-id="${node.id}"
+              @click=${(e: Event) => this.handleNodeClick(e, node.id)}
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            />
+          </div>
         `;
 
       case 'textarea':
@@ -500,6 +574,7 @@ export class LivePreview extends LitElement {
             @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
             @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
           >
+            ${deleteOverlay}
             ${hasChildren ? children : html`<div class="drop-zone-hint">📦 Empty - Drop components here</div>`}
           </div>
         `;
@@ -527,6 +602,16 @@ export class LivePreview extends LitElement {
         <div class="preview-header">
           <h3>Visual Canvas</h3>
           <div class="preview-actions">
+            ${this.selectedId && this.selectedId !== this.page.rootId ? html`
+              <button
+                class="action-btn delete-btn"
+                @click=${() => this.handleDeleteSelected()}
+                style="background: #ef4444; color: white; font-weight: 600;"
+                title="Delete selected component (Delete key)"
+              >
+                🗑️ Delete
+              </button>
+            ` : ''}
             <button
               class="action-btn test-btn"
               @click=${() => this.testAddButton()}
@@ -546,9 +631,11 @@ export class LivePreview extends LitElement {
           </div>
         </div>
         <div style="padding: 12px; background: #f9fafb; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
-          💡 Drag components from the left panel and drop them here. Total nodes: ${this.page.nodes.length}
+          💡 <strong>Tip:</strong> Drag components from the left panel and drop them here.
           <br>
-          <strong>Debug:</strong> Click the green "TEST ADD" button above to verify the store is working.
+          🗑️ <strong>Delete:</strong> Select a component and press <kbd>Delete</kbd> or <kbd>Backspace</kbd> key, or click the 🗑️ button.
+          <br>
+          <strong>Total nodes:</strong> ${this.page.nodes.length}
         </div>
       </div>
     `;
