@@ -44,18 +44,24 @@ const COMPONENT_TEMPLATES: ComponentTemplate[] = [
     label: 'Grid',
     icon: '⊞',
     category: 'Layout',
-    description: 'CSS Grid container with visible cells',
+    description: 'Drag to add 2×3 grid (configure after drop)',
     template: {
       type: 'container',
       props: {
         className: 'grid',
-        style: 'display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; min-height: 200px;',
+        style: 'display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;',
         'data-grid-rows': '2',
         'data-grid-cols': '3'
       },
-      children: []
-    },
-    configurable: true  // Mark this as configurable
+      children: [
+        { id: 'cell-0', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '0' }, children: [] },
+        { id: 'cell-1', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '1' }, children: [] },
+        { id: 'cell-2', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '2' }, children: [] },
+        { id: 'cell-3', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '3' }, children: [] },
+        { id: 'cell-4', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '4' }, children: [] },
+        { id: 'cell-5', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '5' }, children: [] }
+      ]
+    }
   },
   {
     type: 'section',
@@ -232,12 +238,6 @@ export class ComponentLibrary extends LitElement {
   private handleDragStart(e: DragEvent, template: ComponentTemplate) {
     console.log('DRAGSTART EVENT FIRED!', template.label);
 
-    // For configurable components, don't allow drag - require click instead
-    if (template.configurable) {
-      e.preventDefault();
-      console.log('Grid is configurable - use click instead of drag');
-      return;
-    }
 
     if (!e.dataTransfer) {
       console.error('No dataTransfer object!');
@@ -361,16 +361,14 @@ export class ComponentLibrary extends LitElement {
         <div class="components-grid">
           ${this.filteredComponents.map(template => html`
             <div
-              class="component-item ${template.configurable ? 'configurable' : ''}"
-              draggable="${!template.configurable}"
+              class="component-item"
+              draggable="true"
               @dragstart=${(e: DragEvent) => this.handleDragStart(e, template)}
               @dragend=${() => this.handleDragEnd()}
-              @click=${() => template.configurable ? this.handleComponentClick(template) : null}
-              title="${template.description}${template.configurable ? ' (Click to configure)' : ''}"
+              title="${template.description}"
             >
               <div class="component-icon">${template.icon}</div>
               <div class="component-label">${template.label}</div>
-              ${template.configurable ? html`<div class="config-badge">⚙️</div>` : ''}
             </div>
           `)}
         </div>
