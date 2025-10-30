@@ -19,6 +19,12 @@ export class PageManager extends LitElement {
   @state() private formName = '';
   @state() private formPath = '';
 
+  // Template selection state
+  @state() private includeNav = false;
+  @state() private includeSidenav = false;
+  @state() private includeFooter = false;
+  @state() private includeMain = true; // Always include main by default
+
   // Track if we're switching to a newly created page
   private isNewPage = false;
 
@@ -115,6 +121,12 @@ export class PageManager extends LitElement {
   }
 
   private handleCreatePage() {
+    // Reset template selections
+    this.includeNav = false;
+    this.includeSidenav = false;
+    this.includeFooter = false;
+    this.includeMain = true;
+
     this.showCreateModal = true;
     this.formName = '';
     this.formPath = '/new-page';
@@ -123,6 +135,24 @@ export class PageManager extends LitElement {
   private handleCloseModal() {
     this.showCreateModal = false;
     this.showTemplateModal = false;
+  }
+
+  private handleNextToTemplate(e: Event) {
+    e.preventDefault();
+
+    if (!this.formName.trim()) {
+      alert('Please enter a page name');
+      return;
+    }
+
+    // Move to template selection
+    this.showCreateModal = false;
+    this.showTemplateModal = true;
+  }
+
+  private handleBackToBasicInfo() {
+    this.showTemplateModal = false;
+    this.showCreateModal = true;
   }
 
   private handleSubmitCreate(e: Event) {
@@ -138,22 +168,8 @@ export class PageManager extends LitElement {
 
     console.log('[PageManager] Creating new page with ID:', pageId);
 
-    // Create completely empty page
-    const newPage: PageMeta = {
-      metaVersion: 1,
-      id: pageId,
-      name: this.formName.trim(),
-      path: this.formPath.trim() || `/${pageId}`,
-      rootId: 'root',
-      nodes: [
-        {
-          id: 'root',
-          type: 'container',
-          props: {},
-          children: [],
-        },
-      ],
-    };
+    // Build page structure based on template selections
+    const newPage = this.buildPageFromTemplate(pageId);
 
     console.log('[PageManager] New page data:', newPage);
 
@@ -207,6 +223,131 @@ export class PageManager extends LitElement {
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to delete page');
     }
+  }
+
+  private buildPageFromTemplate(pageId: string): PageMeta {
+    const nodes: ComponentNode[] = [];
+    const rootChildren: string[] = [];
+
+    // Build the page structure based on template selections
+    let nodeCounter = 1;
+
+    // Add Nav section if selected
+    if (this.includeNav) {
+      const navId = `nav-${nodeCounter++}`;
+      nodes.push({
+        id: navId,
+        type: 'container',
+        props: {
+          className: 'nav-container',
+          style: 'display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: #1f2937; color: white; min-height: 60px;',
+          'data-section': 'nav'
+        },
+        children: []
+      });
+      rootChildren.push(navId);
+    }
+
+    // Create main content wrapper (if sidenav is included, we need a flex layout)
+    if (this.includeSidenav) {
+      const contentWrapperId = `content-wrapper-${nodeCounter++}`;
+      const contentWrapperChildren: string[] = [];
+
+      // Add Sidenav
+      const sidenavId = `sidenav-${nodeCounter++}`;
+      nodes.push({
+        id: sidenavId,
+        type: 'container',
+        props: {
+          className: 'sidenav-container',
+          style: 'width: 250px; background: #f3f4f6; padding: 1rem; min-height: 400px; border-right: 1px solid #e5e7eb;',
+          'data-section': 'sidenav'
+        },
+        children: []
+      });
+      contentWrapperChildren.push(sidenavId);
+
+      // Add Main section
+      if (this.includeMain) {
+        const mainId = `main-${nodeCounter++}`;
+        nodes.push({
+          id: mainId,
+          type: 'container',
+          props: {
+            className: 'main-container',
+            style: 'flex: 1; padding: 2rem; min-height: 400px;',
+            'data-section': 'main'
+          },
+          children: []
+        });
+        contentWrapperChildren.push(mainId);
+      }
+
+      // Add the content wrapper
+      nodes.push({
+        id: contentWrapperId,
+        type: 'container',
+        props: {
+          className: 'content-wrapper',
+          style: 'display: flex; flex: 1;'
+        },
+        children: contentWrapperChildren
+      });
+      rootChildren.push(contentWrapperId);
+    } else {
+      // No sidenav, just add main directly
+      if (this.includeMain) {
+        const mainId = `main-${nodeCounter++}`;
+        nodes.push({
+          id: mainId,
+          type: 'container',
+          props: {
+            className: 'main-container',
+            style: 'padding: 2rem; min-height: 400px;',
+            'data-section': 'main'
+          },
+          children: []
+        });
+        rootChildren.push(mainId);
+      }
+    }
+
+    // Add Footer section if selected
+    if (this.includeFooter) {
+      const footerId = `footer-${nodeCounter++}`;
+      nodes.push({
+        id: footerId,
+        type: 'container',
+        props: {
+          className: 'footer-container',
+          style: 'padding: 2rem; background: #1f2937; color: white; text-align: center; min-height: 80px;',
+          'data-section': 'footer'
+        },
+        children: []
+      });
+      rootChildren.push(footerId);
+    }
+
+    // Create root container
+    const rootNode: ComponentNode = {
+      id: 'root',
+      type: 'container',
+      props: {
+        style: 'display: flex; flex-direction: column; min-height: 100vh;'
+      },
+      children: rootChildren
+    };
+
+    nodes.unshift(rootNode); // Add root at the beginning
+
+    return {
+      metaVersion: 1,
+      id: pageId,
+      name: this.formName.trim(),
+      path: this.formPath.trim() || `/${pageId}`,
+      rootId: 'root',
+      nodes
+    };
   }
 
   private clearStore() {
@@ -321,6 +462,7 @@ export class PageManager extends LitElement {
       </div>
 
       ${this.showCreateModal ? this.renderCreateModal() : ''}
+      ${this.showTemplateModal ? this.renderTemplateModal() : ''}
     `;
   }
 
@@ -329,11 +471,11 @@ export class PageManager extends LitElement {
       <div class="modal-overlay" @click=${this.handleCloseModal}>
         <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
           <div class="modal-header">
-            <h3>📄 Create New Page</h3>
+            <h3>📄 Create New Page - Step 1</h3>
             <button class="modal-close" @click=${this.handleCloseModal}>×</button>
           </div>
 
-          <form @submit=${this.handleSubmitCreate}>
+          <form @submit=${this.handleNextToTemplate}>
             <div class="modal-body">
               <div class="form-group">
                 <label for="page-name">Page Name *</label>
@@ -366,6 +508,93 @@ export class PageManager extends LitElement {
             <div class="modal-footer">
               <button type="button" class="btn" @click=${this.handleCloseModal}>
                 Cancel
+              </button>
+              <button type="submit" class="btn btn-primary">
+                Next →
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderTemplateModal() {
+    return html`
+      <div class="modal-overlay" @click=${this.handleCloseModal}>
+        <div class="modal modal-wide" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h3>🎨 Choose Page Sections - Step 2</h3>
+            <button class="modal-close" @click=${this.handleCloseModal}>×</button>
+          </div>
+
+          <form @submit=${this.handleSubmitCreate}>
+            <div class="modal-body">
+              <p class="template-help">Select the sections you want to include in your page:</p>
+
+              <div class="template-options">
+                <div class="template-option ${this.includeNav ? 'selected' : ''}"
+                     @click=${() => this.includeNav = !this.includeNav}>
+                  <div class="option-icon">🧭</div>
+                  <div class="option-content">
+                    <h4>Navigation Bar</h4>
+                    <p>Top navigation with logo and menu</p>
+                  </div>
+                  <div class="option-checkbox">
+                    ${this.includeNav ? '✓' : ''}
+                  </div>
+                </div>
+
+                <div class="template-option ${this.includeSidenav ? 'selected' : ''}"
+                     @click=${() => this.includeSidenav = !this.includeSidenav}>
+                  <div class="option-icon">📁</div>
+                  <div class="option-content">
+                    <h4>Side Navigation</h4>
+                    <p>Left sidebar for secondary navigation</p>
+                  </div>
+                  <div class="option-checkbox">
+                    ${this.includeSidenav ? '✓' : ''}
+                  </div>
+                </div>
+
+                <div class="template-option selected disabled">
+                  <div class="option-icon">📄</div>
+                  <div class="option-content">
+                    <h4>Main Content</h4>
+                    <p>Primary content area (always included)</p>
+                  </div>
+                  <div class="option-checkbox">✓</div>
+                </div>
+
+                <div class="template-option ${this.includeFooter ? 'selected' : ''}"
+                     @click=${() => this.includeFooter = !this.includeFooter}>
+                  <div class="option-icon">📝</div>
+                  <div class="option-content">
+                    <h4>Footer</h4>
+                    <p>Bottom footer section</p>
+                  </div>
+                  <div class="option-checkbox">
+                    ${this.includeFooter ? '✓' : ''}
+                  </div>
+                </div>
+              </div>
+
+              <div class="template-preview">
+                <h4>Preview:</h4>
+                <div class="preview-layout">
+                  ${this.includeNav ? html`<div class="preview-section nav">Nav</div>` : ''}
+                  <div class="preview-content">
+                    ${this.includeSidenav ? html`<div class="preview-section sidenav">Sidenav</div>` : ''}
+                    <div class="preview-section main">Main</div>
+                  </div>
+                  ${this.includeFooter ? html`<div class="preview-section footer">Footer</div>` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn" @click=${this.handleBackToBasicInfo}>
+                ← Back
               </button>
               <button type="submit" class="btn btn-primary">
                 Create Page
