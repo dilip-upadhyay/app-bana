@@ -58,7 +58,8 @@ December 2025 (Leadership)     → Healthcare domination + Platform maturity
 | Phase | Timeline | Focus | Status |
 |-------|----------|-------|--------|
 | **A** | Oct (Week 1-2) | Studio Foundation: metadata, registry, core components | ✅ DONE |
-| **B** | Oct (Week 3-4) | Builder MVP: canvas, inspector, keyboard shortcuts | 🔄 IN PROGRESS |
+| **B** | Oct (Week 3-4) | Builder MVP: canvas, inspector, keyboard shortcuts | ✅ DONE |
+| **B.1** | Oct 30 - Nov 15 | Page Manager Enhancements: templates, duplicate, validation | 🔄 IN PROGRESS |
 | **C** | Oct-Nov | Renderer + bindings: data flow, actions | ⏳ NEXT |
 | **D** | Nov | Advanced Features: workflows, plugins, realtime | ⏳ PLANNED |
 | **E** | Dec | Healthcare MVP + Marketplace | ⏳ PLANNED |
@@ -75,7 +76,8 @@ December 2025 (Leadership)     → Healthcare domination + Platform maturity
 
 | Epic | Key Features | Status | Business Impact |
 |------|-------------|--------|-----------------|
-| **Studio UI Foundation (Phase A→B)** | BaseElement + registry + core components + recursive renderer | 🔄 In Progress | Establish visual builder foundation for all future features |
+| **Studio UI Foundation (Phase A→B)** | BaseElement + registry + core components + recursive renderer | ✅ DONE | Establish visual builder foundation for all future features |
+| **Page Manager Enhancements (Phase B.1)** | Pre-built templates + duplicate + validation + metadata | 🔄 In Progress | Reduce page creation time by 80% (30 min → 5 min) |
 | **Baseline CRUD Audit** | INSERT/UPDATE/DELETE tracking + before/after snapshots + field diff | ✅ DONE | Compliance: audit trail for regulated industries |
 | **Stateful Workflow Engine (MVP)** | Workflow definitions, instances, state transitions, history | ⏳ Pending | Enable HR/Healthcare approval processes |
 | **Advanced Schema Management** | Migration preview, migration history, safe ALTER statements | ✅ DONE | Risk mitigation for schema changes |
@@ -352,6 +354,98 @@ December (Leadership) — Depends on Oct + Nov
 - Keyboard-first workflow
 - Undo/redo stack
 - Local draft persistence
+
+### October-November: Page Manager Enhancements
+
+**Objective:** Improve page creation workflow for faster development
+
+**Priority:** HIGH (Current bottleneck in user workflow)
+
+**Key Enhancements:**
+
+1. **Pre-built Page Templates** 🎨
+   - **Status:** ⏳ PLANNED
+   - **Description:** Add 6+ ready-to-use page templates beyond basic sections
+   - **Templates to Include:**
+     - Login Page (email, password, button, remember me)
+     - Dashboard (header, sidebar, KPI cards, charts)
+     - Contact Form (name, email, message, submit)
+     - Landing Page (hero, features, CTA, testimonials)
+     - Profile Page (avatar, bio, stats, edit button)
+     - Data Table Page (search, filters, table, pagination)
+   - **Implementation:** Extend `buildPageFromTemplate()` with full component trees
+   - **Business Value:** Reduce page creation time from 30 min → 5 min
+   - **Effort:** 2-3 days
+
+2. **Template Preview Images** 🖼️
+   - **Status:** ⏳ PLANNED
+   - **Description:** Replace checkbox UI with visual thumbnail previews
+   - **Features:**
+     - 300x200px preview images for each template
+     - Hover to highlight, click to select
+     - Show template name + component count
+   - **Implementation:** CSS grid gallery, lazy-load images
+   - **Business Value:** Visual decision-making, better UX
+   - **Effort:** 1 day
+
+3. **Duplicate Existing Page** 📋
+   - **Status:** ⏳ PLANNED
+   - **Description:** Clone an existing page as starting point
+   - **Features:**
+     - Right-click page tab → "Duplicate"
+     - Auto-generate new ID and name (e.g., "Dashboard Copy")
+     - Preserve all components, properties, and layout
+     - Option to clear data bindings
+   - **Implementation:** Deep clone page metadata, update IDs
+   - **Business Value:** Reuse successful designs, faster iteration
+   - **Effort:** 1 day
+
+4. **Import Page from JSON** 📥
+   - **Status:** ⏳ PLANNED
+   - **Description:** Import page structure from JSON file or URL
+   - **Features:**
+     - File upload or paste JSON
+     - Validate schema before import
+     - Merge with existing app or replace
+     - Support for external template libraries
+   - **Implementation:** JSON validation, ID conflict resolution
+   - **Business Value:** Enable template marketplace, team sharing
+   - **Effort:** 1-2 days
+
+5. **Enhanced Validation** ✅
+   - **Status:** ⏳ PLANNED
+   - **Description:** Prevent errors during page creation
+   - **Validations:**
+     - Check if page path already exists (show warning)
+     - Validate page name (no special chars, max length)
+     - Ensure URL path starts with "/"
+     - Prevent duplicate page IDs
+   - **Implementation:** Add validation layer in `handleSubmitCreate()`
+   - **Business Value:** Reduce user errors, better data integrity
+   - **Effort:** 1 day
+
+6. **Page Metadata & Properties** 📝
+   - **Status:** ⏳ PLANNED
+   - **Description:** Add optional metadata to pages
+   - **Fields:**
+     - Description (helps team understand page purpose)
+     - Tags (e.g., "public", "authenticated", "admin")
+     - Icon (emoji or icon name for visual identification)
+     - Created/modified timestamps
+     - Author tracking
+   - **Implementation:** Extend `PageMeta` interface, update UI forms
+   - **Business Value:** Better organization for large apps (20+ pages)
+   - **Effort:** 1-2 days
+
+**Total Effort:** 7-11 days  
+**Priority Order:** 1 → 3 → 5 → 2 → 6 → 4  
+**Target Completion:** November 15, 2025
+
+**Success Metrics:**
+- ⏱️ Reduce average page creation time by 80% (30 min → 5 min)
+- 📊 80% of new pages use templates (vs. blank)
+- 🔁 50% reduction in page recreation (duplicate feature adoption)
+- ✅ Zero validation errors after enhancement #5 deployed
 
 ### November: PWA & Real-Time
 
