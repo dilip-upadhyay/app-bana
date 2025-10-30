@@ -186,7 +186,10 @@ export class PageManager extends LitElement {
     this.currentPageId = pageId;
     this.switchToPage(pageId);
 
+    // Close both modals
     this.showCreateModal = false;
+    this.showTemplateModal = false;
+
     this.showToast(`✅ Created page: ${this.formName}`);
   }
 
