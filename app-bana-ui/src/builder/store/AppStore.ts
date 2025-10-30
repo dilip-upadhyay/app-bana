@@ -300,6 +300,91 @@ export class AppStore {
   }
 
   /**
+   * Duplicate an existing page
+   */
+  duplicatePage(appId: string, pageId: string): PageMeta {
+    const app = this.apps.get(appId);
+    if (!app) {
+      throw new Error(`App not found: ${appId}`);
+    }
+
+    // Load the source page
+    const sourcePage = this.loadPage(appId, pageId);
+    if (!sourcePage) {
+      throw new Error(`Page not found: ${pageId}`);
+    }
+
+    // Generate new unique ID
+    const newId = this.generateUniquePageId(app, sourcePage.id);
+    
+    // Generate new name (e.g., "Dashboard" -> "Dashboard Copy")
+    const newName = this.generateCopyName(app, sourcePage.name);
+
+    // Deep clone the page with new ID and name
+    const duplicatedPage: PageMeta = {
+      ...sourcePage,
+      id: newId,
+      name: newName,
+      // Deep clone nodes array to avoid reference issues
+      nodes: JSON.parse(JSON.stringify(sourcePage.nodes)),
+    };
+
+    // Add the duplicated page to the app
+    this.addPage(appId, duplicatedPage);
+
+    return duplicatedPage;
+  }
+
+  /**
+   * Generate a unique page ID based on source ID
+   */
+  private generateUniquePageId(app: AppMeta, sourceId: string): string {
+    let counter = 1;
+    let newId = `${sourceId}-copy`;
+
+    while (app.pages.includes(newId)) {
+      counter++;
+      newId = `${sourceId}-copy-${counter}`;
+    }
+
+    return newId;
+  }
+
+  /**
+   * Generate a copy name (e.g., "Dashboard" -> "Dashboard Copy")
+   */
+  private generateCopyName(app: AppMeta, sourceName: string): string {
+    // Check if name already ends with " Copy" or " Copy N"
+    const copyPattern = /^(.+?)( Copy)?( \d+)?$/;
+    const match = sourceName.match(copyPattern);
+    
+    if (!match) {
+      return `${sourceName} Copy`;
+    }
+
+    const baseName = match[1];
+    
+    // Find all pages with similar names
+    const existingNames = new Set(
+      app.pages.map(pageId => {
+        const page = this.loadPage(app.id, pageId);
+        return page?.name;
+      }).filter(Boolean)
+    );
+
+    // Try "Name Copy", "Name Copy 2", "Name Copy 3", etc.
+    let newName = `${baseName} Copy`;
+    let counter = 2;
+    
+    while (existingNames.has(newName)) {
+      newName = `${baseName} Copy ${counter}`;
+      counter++;
+    }
+
+    return newName;
+  }
+
+  /**
    * Delete a page from storage
    */
   private deletePageFromStorage(appId: string, pageId: string): void {

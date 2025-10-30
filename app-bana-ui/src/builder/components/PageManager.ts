@@ -28,6 +28,12 @@ export class PageManager extends LitElement {
   // Pre-built template selection
   @state() private selectedTemplate: 'custom' | 'login' | 'dashboard' | 'contact' | 'landing' | 'profile' | 'data-table' = 'custom';
 
+  // Context menu state
+  @state() private contextMenuVisible = false;
+  @state() private contextMenuPageId: string | null = null;
+  @state() private contextMenuX = 0;
+  @state() private contextMenuY = 0;
+
   // Track if we're switching to a newly created page
   private isNewPage = false;
 
@@ -237,6 +243,59 @@ export class PageManager extends LitElement {
       alert(error instanceof Error ? error.message : 'Failed to delete page');
     }
   }
+
+  private handleContextMenu = (e: MouseEvent, pageId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    this.contextMenuVisible = true;
+    this.contextMenuPageId = pageId;
+    this.contextMenuX = e.clientX;
+    this.contextMenuY = e.clientY;
+
+    // Close context menu when clicking anywhere
+    const closeMenu = () => {
+      this.contextMenuVisible = false;
+      document.removeEventListener('click', closeMenu);
+    };
+    
+    // Delay to prevent immediate closure
+    setTimeout(() => {
+      document.addEventListener('click', closeMenu);
+    }, 10);
+  };
+
+  private handleDuplicatePage = (e: Event) => {
+    e.stopPropagation();
+    
+    if (!this.currentApp || !this.contextMenuPageId) return;
+
+    const pageId = this.contextMenuPageId;
+    const page = this.pages.find(p => p.id === pageId);
+    
+    if (!page) {
+      console.error('[PageManager] Page not found for duplication:', pageId);
+      return;
+    }
+
+    try {
+      // Use AppStore's duplicatePage method
+      const duplicatedPage = appStore.duplicatePage(this.currentApp.id, pageId);
+      
+      // Switch to the duplicated page
+      this.isNewPage = true;
+      this.currentPageId = duplicatedPage.id;
+      this.switchToPage(duplicatedPage.id);
+      
+      this.showToast(`📋 Duplicated "${page.name}" as "${duplicatedPage.name}"`);
+      
+      // Close context menu
+      this.contextMenuVisible = false;
+    } catch (error) {
+      console.error('[PageManager] Failed to duplicate page:', error);
+      alert(error instanceof Error ? error.message : 'Failed to duplicate page');
+    }
+  };
 
   /**
    * Build pre-built page templates with full component trees
@@ -1238,6 +1297,7 @@ export class PageManager extends LitElement {
             <div
               class="page-tab ${this.currentPageId === page.id ? 'active' : ''}"
               @click=${() => this.switchToPage(page.id)}
+              @contextmenu=${(e: MouseEvent) => this.handleContextMenu(e, page.id)}
             >
               <span class="page-name">${page.name}</span>
               <button
@@ -1258,6 +1318,7 @@ export class PageManager extends LitElement {
 
       ${this.showCreateModal ? this.renderCreateModal() : ''}
       ${this.showTemplateModal ? this.renderTemplateModal() : ''}
+      ${this.contextMenuVisible ? this.renderContextMenu() : ''}
     `;
   }
 
@@ -1460,6 +1521,35 @@ export class PageManager extends LitElement {
               ← Back
             </button>
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderContextMenu() {
+    if (!this.contextMenuPageId) return html``;
+
+    const page = this.pages.find(p => p.id === this.contextMenuPageId);
+    if (!page) return html``;
+
+    return html`
+      <div 
+        class="context-menu" 
+        style="left: ${this.contextMenuX}px; top: ${this.contextMenuY}px;"
+      >
+        <div class="context-menu-item" @click=${this.handleDuplicatePage}>
+          <span class="context-menu-icon">📋</span>
+          <span class="context-menu-label">Duplicate</span>
+        </div>
+        <div 
+          class="context-menu-item danger" 
+          @click=${(e: Event) => {
+            this.contextMenuVisible = false;
+            this.handleDeletePage(page.id, page.name, e);
+          }}
+        >
+          <span class="context-menu-icon">🗑️</span>
+          <span class="context-menu-label">Delete</span>
         </div>
       </div>
     `;
