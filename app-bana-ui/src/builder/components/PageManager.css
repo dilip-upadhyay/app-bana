@@ -217,6 +217,12 @@
   letter-spacing: -0.5px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .modal-close {
   background: #f3f4f6;
   border: none;
@@ -232,6 +238,7 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .modal-close:hover {
@@ -247,7 +254,7 @@
 }
 
 .modal-wide {
-  max-width: 700px;
+  max-width: 900px;
 }
 
 .template-help {
@@ -257,9 +264,9 @@
 }
 
 .template-options {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
   margin-bottom: 24px;
 }
 
@@ -405,7 +412,7 @@
   padding: 20px 32px;
   border-top: 2px solid #f3f4f6;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 12px;
   background: #fafbfc;
 }

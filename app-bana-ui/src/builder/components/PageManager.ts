@@ -155,8 +155,8 @@ export class PageManager extends LitElement {
     this.showCreateModal = true;
   }
 
-  private handleSubmitCreate(e: Event) {
-    e.preventDefault();
+  private handleSubmitCreate(e?: Event) {
+    if (e) e.preventDefault();
 
     if (!this.currentApp || !this.formName.trim()) {
       alert('Please enter a page name');
@@ -525,82 +525,82 @@ export class PageManager extends LitElement {
         <div class="modal modal-wide" @click=${(e: Event) => e.stopPropagation()}>
           <div class="modal-header">
             <h3>🎨 Choose Page Sections - Step 2</h3>
-            <button class="modal-close" @click=${this.handleCloseModal}>×</button>
+            <div class="header-actions">
+              <button type="button" class="btn btn-primary" @click=${this.handleSubmitCreate}>
+                ✓ Create Page
+              </button>
+              <button class="modal-close" @click=${this.handleCloseModal}>×</button>
+            </div>
           </div>
 
-          <form @submit=${this.handleSubmitCreate}>
-            <div class="modal-body">
-              <p class="template-help">Select the sections you want to include in your page:</p>
+          <div class="modal-body">
+            <p class="template-help">Select the sections you want to include in your page:</p>
 
-              <div class="template-options">
-                <div class="template-option ${this.includeNav ? 'selected' : ''}"
-                     @click=${() => this.includeNav = !this.includeNav}>
-                  <div class="option-icon">🧭</div>
-                  <div class="option-content">
-                    <h4>Navigation Bar</h4>
-                    <p>Top navigation with logo and menu</p>
-                  </div>
-                  <div class="option-checkbox">
-                    ${this.includeNav ? '✓' : ''}
-                  </div>
+            <div class="template-options">
+              <div class="template-option ${this.includeNav ? 'selected' : ''}"
+                   @click=${() => this.includeNav = !this.includeNav}>
+                <div class="option-icon">🧭</div>
+                <div class="option-content">
+                  <h4>Navigation Bar</h4>
+                  <p>Top navigation with logo and menu</p>
                 </div>
-
-                <div class="template-option ${this.includeSidenav ? 'selected' : ''}"
-                     @click=${() => this.includeSidenav = !this.includeSidenav}>
-                  <div class="option-icon">📁</div>
-                  <div class="option-content">
-                    <h4>Side Navigation</h4>
-                    <p>Left sidebar for secondary navigation</p>
-                  </div>
-                  <div class="option-checkbox">
-                    ${this.includeSidenav ? '✓' : ''}
-                  </div>
-                </div>
-
-                <div class="template-option selected disabled">
-                  <div class="option-icon">📄</div>
-                  <div class="option-content">
-                    <h4>Main Content</h4>
-                    <p>Primary content area (always included)</p>
-                  </div>
-                  <div class="option-checkbox">✓</div>
-                </div>
-
-                <div class="template-option ${this.includeFooter ? 'selected' : ''}"
-                     @click=${() => this.includeFooter = !this.includeFooter}>
-                  <div class="option-icon">📝</div>
-                  <div class="option-content">
-                    <h4>Footer</h4>
-                    <p>Bottom footer section</p>
-                  </div>
-                  <div class="option-checkbox">
-                    ${this.includeFooter ? '✓' : ''}
-                  </div>
+                <div class="option-checkbox">
+                  ${this.includeNav ? '✓' : ''}
                 </div>
               </div>
 
-              <div class="template-preview">
-                <h4>Preview:</h4>
-                <div class="preview-layout">
-                  ${this.includeNav ? html`<div class="preview-section nav">Nav</div>` : ''}
-                  <div class="preview-content">
-                    ${this.includeSidenav ? html`<div class="preview-section sidenav">Sidenav</div>` : ''}
-                    <div class="preview-section main">Main</div>
-                  </div>
-                  ${this.includeFooter ? html`<div class="preview-section footer">Footer</div>` : ''}
+              <div class="template-option ${this.includeSidenav ? 'selected' : ''}"
+                   @click=${() => this.includeSidenav = !this.includeSidenav}>
+                <div class="option-icon">📁</div>
+                <div class="option-content">
+                  <h4>Side Navigation</h4>
+                  <p>Left sidebar for secondary navigation</p>
+                </div>
+                <div class="option-checkbox">
+                  ${this.includeSidenav ? '✓' : ''}
+                </div>
+              </div>
+
+              <div class="template-option selected disabled">
+                <div class="option-icon">📄</div>
+                <div class="option-content">
+                  <h4>Main Content</h4>
+                  <p>Primary content area (always included)</p>
+                </div>
+                <div class="option-checkbox">✓</div>
+              </div>
+
+              <div class="template-option ${this.includeFooter ? 'selected' : ''}"
+                   @click=${() => this.includeFooter = !this.includeFooter}>
+                <div class="option-icon">📝</div>
+                <div class="option-content">
+                  <h4>Footer</h4>
+                  <p>Bottom footer section</p>
+                </div>
+                <div class="option-checkbox">
+                  ${this.includeFooter ? '✓' : ''}
                 </div>
               </div>
             </div>
 
-            <div class="modal-footer">
-              <button type="button" class="btn" @click=${this.handleBackToBasicInfo}>
-                ← Back
-              </button>
-              <button type="submit" class="btn btn-primary">
-                Create Page
-              </button>
+            <div class="template-preview">
+              <h4>Preview:</h4>
+              <div class="preview-layout">
+                ${this.includeNav ? html`<div class="preview-section nav">Nav</div>` : ''}
+                <div class="preview-content">
+                  ${this.includeSidenav ? html`<div class="preview-section sidenav">Sidenav</div>` : ''}
+                  <div class="preview-section main">Main</div>
+                </div>
+                ${this.includeFooter ? html`<div class="preview-section footer">Footer</div>` : ''}
+              </div>
             </div>
-          </form>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn" @click=${this.handleBackToBasicInfo}>
+              ← Back
+            </button>
+          </div>
         </div>
       </div>
     `;
