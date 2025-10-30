@@ -137,39 +137,26 @@ export class PageManager extends LitElement {
   }
 
   private handleCloseModal() {
-    console.log('[PageManager] handleCloseModal called');
     this.showCreateModal = false;
     this.showTemplateModal = false;
   }
 
   private handleNextToTemplate = (e: Event) => {
-    console.log('[PageManager] handleNextToTemplate START');
     e.preventDefault();
     e.stopPropagation();
-    console.log('[PageManager] preventDefault called');
-    console.log('[PageManager] Current state:', { 
-      formName: this.formName, 
-      formPath: this.formPath,
-      showCreateModal: this.showCreateModal,
-      showTemplateModal: this.showTemplateModal
-    });
 
     if (!this.formName.trim()) {
       alert('Please enter a page name');
       return;
     }
-
-    console.log('[PageManager] Validation passed, moving to template selection');
     
     // Move to template selection using setTimeout to ensure clean state transition
     this.showCreateModal = false;
     
     // Use setTimeout to ensure the first modal is fully unmounted before showing the second
     setTimeout(() => {
-      console.log('[PageManager] Setting showTemplateModal to true');
       this.showTemplateModal = true;
       this.requestUpdate();
-      console.log('[PageManager] Template modal should now be visible');
     }, 50);
   }
 
