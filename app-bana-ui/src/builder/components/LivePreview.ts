@@ -622,7 +622,7 @@ export class LivePreview extends LitElement {
             </button>
             <button class="action-btn" title="Undo">↶</button>
             <button class="action-btn" title="Redo">↷</button>
-            <button class="action-btn" title="Preview">👁️</button>
+            <button class="action-btn" @click=${this.handlePreview} title="Preview page in runtime">👁️</button>
           </div>
         </div>
         <div class="canvas-wrapper">
@@ -639,6 +639,41 @@ export class LivePreview extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  private handlePreview = () => {
+    if (!this.page) {
+      alert('No page loaded to preview');
+      return;
+    }
+
+    // Get current app context from AppStore
+    // We need to import it dynamically since it's not in the imports at the top
+    import('../store/AppStore').then(({ appStore }) => {
+      const currentApp = appStore.getCurrentApp();
+      
+      if (!currentApp) {
+        alert('No app selected. Please create or select an app first.');
+        return;
+      }
+
+      // Create runtime state with full app context
+      const runtimeState = {
+        appId: currentApp.id,
+        pageId: this.page!.id,
+        mode: 'preview' as const
+      };
+
+      // Encode state for URL (base64 encoded JSON)
+      const stateParam = btoa(JSON.stringify(runtimeState));
+      const previewUrl = `/index.html?state=${stateParam}`;
+      
+      console.log('[LivePreview] Opening preview with state:', runtimeState);
+      window.open(previewUrl, '_blank');
+    }).catch((error) => {
+      console.error('[LivePreview] Error loading AppStore:', error);
+      alert('Error opening preview. Check console for details.');
+    });
   }
 
   private testAddButton() {

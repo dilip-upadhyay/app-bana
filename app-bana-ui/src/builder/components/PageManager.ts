@@ -1012,6 +1012,8 @@ export class PageManager extends LitElement {
   }
 
   private buildPageFromTemplate(pageId: string): PageMeta {
+    console.log('[PageManager] buildPageFromTemplate - formName:', this.formName, 'formPath:', this.formPath);
+    
     // Check if using a pre-built template
     if (this.selectedTemplate !== 'custom') {
       return this.buildPrebuiltTemplate(pageId, this.selectedTemplate);
