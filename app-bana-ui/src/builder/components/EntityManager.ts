@@ -30,12 +30,14 @@ export class EntityManager extends LitElement {
       background: white;
       border-bottom: 1px solid #e5e7eb;
       gap: 1rem;
+      flex-wrap: wrap;
     }
 
     .header-left {
       display: flex;
       align-items: center;
       gap: 1rem;
+      flex-shrink: 0;
     }
 
     .header-title {
@@ -57,8 +59,9 @@ export class EntityManager extends LitElement {
     /* Search & Actions */
     .search-box {
       flex: 1;
-      max-width: 400px;
+      max-width: 300px;
       position: relative;
+      margin-right: 1rem;
     }
 
     .search-input {
@@ -157,8 +160,9 @@ export class EntityManager extends LitElement {
     /* Entity Grid */
     .entity-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      grid-template-columns: 1fr;
       gap: 1rem;
+      max-width: 100%;
     }
 
     /* Entity Card */
@@ -167,9 +171,12 @@ export class EntityManager extends LitElement {
       border: 2px solid #e5e7eb;
       border-radius: 12px;
       padding: 1.25rem;
+      padding-right: 3.5rem;
       cursor: pointer;
       transition: all 0.2s;
       position: relative;
+      max-width: 100%;
+      box-sizing: border-box;
     }
 
     .entity-card:hover {
@@ -254,7 +261,7 @@ export class EntityManager extends LitElement {
       right: 1rem;
       display: flex;
       gap: 0.5rem;
-      opacity: 0;
+      opacity: 0.6;
       transition: opacity 0.2s;
     }
 
@@ -284,6 +291,15 @@ export class EntityManager extends LitElement {
       width: 14px;
       height: 14px;
       color: #6b7280;
+    }
+
+    .icon-btn-danger:hover {
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+
+    .icon-btn-danger:hover svg {
+      color: #dc2626;
     }
 
     /* Modal */
@@ -526,6 +542,9 @@ export class EntityManager extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    
+    // Load current app initially
+    this.currentApp = appStore.getCurrentApp();
     this.loadEntities();
     
     // Subscribe to app changes
@@ -707,6 +726,12 @@ export class EntityManager extends LitElement {
     this.selectedEntityId = this.selectedEntityId === entityId ? null : entityId;
   }
 
+  private handleEditEntity(entityId: string) {
+    // TODO: Implement edit entity functionality
+    // For now, show a toast message
+    this.showToast('Edit entity feature coming soon!', 'error');
+  }
+
   private async handleDeleteEntity(entityId: string) {
     if (!this.currentApp) return;
 
@@ -875,6 +900,15 @@ export class EntityManager extends LitElement {
         <div class="entity-actions" @click=${(e: Event) => e.stopPropagation()}>
           <button
             class="icon-btn"
+            @click=${() => this.handleEditEntity(entity.id)}
+            title="Edit entity"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+          <button
+            class="icon-btn icon-btn-danger"
             @click=${() => this.handleDeleteEntity(entity.id)}
             title="Delete entity"
           >

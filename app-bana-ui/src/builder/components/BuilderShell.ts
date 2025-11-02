@@ -15,6 +15,10 @@ export class BuilderShell extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
   @state() private activeLeftTab: 'components' | 'entities' = 'components';
+  @state() private leftPanelWidth = 300; // Default width in pixels
+  private isResizing = false;
+  private startX = 0;
+  private startWidth = 0;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -28,10 +32,69 @@ export class BuilderShell extends LitElement {
       console.log('[BuilderShell] No app selected - user needs to create or select an app');
     }
 
+    // Load saved panel width from localStorage
+    const savedWidth = localStorage.getItem('builder-left-panel-width');
+    if (savedWidth) {
+      this.leftPanelWidth = parseInt(savedWidth, 10);
+    }
+
     this.requestUpdate();
   }
 
+  private handleResizeStart = (e: MouseEvent) => {
+    this.isResizing = true;
+    this.startX = e.clientX;
+    this.startWidth = this.leftPanelWidth;
+
+    // Prevent text selection during drag
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Add global mouse move and mouse up listeners
+    document.addEventListener('mousemove', this.handleResizeMove);
+    document.addEventListener('mouseup', this.handleResizeEnd);
+
+    // Add cursor style to body during resize
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  private readonly handleResizeMove = (e: MouseEvent) => {
+    if (!this.isResizing) return;
+
+    e.preventDefault();
+    
+    const delta = e.clientX - this.startX;
+    const newWidth = this.startWidth + delta;
+
+    // Constrain width between 200px and 800px
+    if (newWidth >= 200 && newWidth <= 800) {
+      this.leftPanelWidth = newWidth;
+      this.requestUpdate();
+    }
+  }
+
+  private readonly handleResizeEnd = () => {
+    if (this.isResizing) {
+      this.isResizing = false;
+
+      // Restore cursor and user-select
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      // Save to localStorage
+      localStorage.setItem('builder-left-panel-width', this.leftPanelWidth.toString());
+
+      // Remove global listeners
+      document.removeEventListener('mousemove', this.handleResizeMove);
+      document.removeEventListener('mouseup', this.handleResizeEnd);
+    }
+  }
+
   render() {
+    // Set CSS custom property for dynamic width
+    this.style.setProperty('--left-panel-width', `${this.leftPanelWidth}px`);
+    
     return html`
       <!-- Top: App Manager -->
       <div class="app-manager-panel">
@@ -63,6 +126,12 @@ export class BuilderShell extends LitElement {
             : html`<studio-entity-manager></studio-entity-manager>`
           }
         </div>
+        <!-- Resize Handle -->
+        <div 
+          class="resize-handle"
+          @mousedown=${this.handleResizeStart}
+          title="Drag to resize panel"
+        ></div>
       </div>
 
       <!-- Center: Live Preview (WYSIWYG Canvas) -->
