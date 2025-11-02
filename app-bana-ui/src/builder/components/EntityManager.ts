@@ -639,6 +639,7 @@ export class EntityManager extends LitElement {
   @state() private formData: Partial<EntityMeta> = this.getEmptyEntityForm();
   @state() private showSQLPreview = false;
   @state() private showFieldEditor = false;
+  @state() private editingEntityId: string | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -702,6 +703,7 @@ export class EntityManager extends LitElement {
   private handleCloseModal() {
     this.showCreateModal = false;
     this.formData = this.getEmptyEntityForm();
+    this.editingEntityId = null;
   }
 
   private handleFormInput(e: Event) {
@@ -812,47 +814,80 @@ export class EntityManager extends LitElement {
     this.loading = true;
 
     try {
-      // Create entity ID from name (lowercase, no spaces)
-      const entityId = (this.formData.name as string).toLowerCase().replace(/\s+/g, '-');
+      if (this.editingEntityId) {
+        // Update existing entity
+        const entityIndex = this.entities.findIndex(e => e.id === this.editingEntityId);
+        if (entityIndex === -1) {
+          this.showToast('Entity not found', 'error');
+          this.loading = false;
+          return;
+        }
 
-      // Check if entity already exists
-      if (this.entities.some(e => e.id === entityId)) {
-        this.showToast('Entity with this name already exists', 'error');
-        this.loading = false;
-        return;
+        const updatedEntity: EntityMeta = {
+          ...this.entities[entityIndex],
+          name: this.formData.name || this.entities[entityIndex].name,
+          displayName: this.formData.displayName || this.entities[entityIndex].displayName,
+          description: this.formData.description || '',
+          icon: this.formData.icon || '📦',
+          datasource: this.formData.datasource || 'default',
+          fields: this.formData.fields || [],
+          relationships: this.formData.relationships || [],
+          updated: Date.now(),
+        };
+
+        const updatedEntities = [...this.entities];
+        updatedEntities[entityIndex] = updatedEntity;
+
+        appStore.updateApp(this.currentApp.id, {
+          entities: updatedEntities,
+        });
+
+        this.loadEntities();
+        this.showToast(`Entity "${updatedEntity.displayName}" updated!`, 'success');
+        this.handleCloseModal();
+      } else {
+        // Create new entity
+        const entityId = this.formData.name!.toLowerCase().replaceAll(/\s+/g, '-');
+
+        // Check if entity already exists
+        if (this.entities.some(e => e.id === entityId)) {
+          this.showToast('Entity with this name already exists', 'error');
+          this.loading = false;
+          return;
+        }
+
+        // Create entity metadata
+        const newEntity: EntityMeta = {
+          id: entityId,
+          name: this.formData.name || entityId,
+          displayName: this.formData.displayName || entityId,
+          description: this.formData.description || '',
+          icon: this.formData.icon || '📦',
+          datasource: this.formData.datasource || 'default',
+          fields: this.formData.fields || [],
+          relationships: this.formData.relationships || [],
+          created: Date.now(),
+          updated: Date.now(),
+        };
+
+        // Add entity to app
+        const updatedEntities = [...this.entities, newEntity];
+        appStore.updateApp(this.currentApp.id, {
+          entities: updatedEntities,
+        });
+
+        // Reload entities
+        this.loadEntities();
+
+        // Show success
+        this.showToast(`Entity "${newEntity.displayName}" created!`, 'success');
+
+        // Close modal
+        this.handleCloseModal();
       }
-
-      // Create entity metadata
-      const newEntity: EntityMeta = {
-        id: entityId,
-        name: this.formData.name || entityId,
-        displayName: this.formData.displayName || entityId,
-        description: this.formData.description || '',
-        icon: this.formData.icon || '📦',
-        datasource: this.formData.datasource || 'default',
-        fields: [],
-        relationships: [],
-        created: Date.now(),
-        updated: Date.now(),
-      };
-
-      // Add entity to app
-      const updatedEntities = [...this.entities, newEntity];
-      appStore.updateApp(this.currentApp.id, {
-        entities: updatedEntities,
-      });
-
-      // Reload entities
-      this.loadEntities();
-
-      // Show success
-      this.showToast(`Entity "${newEntity.displayName}" created!`, 'success');
-
-      // Close modal
-      this.handleCloseModal();
     } catch (error) {
-      console.error('Failed to create entity:', error);
-      this.showToast('Failed to create entity', 'error');
+      console.error('Failed to save entity:', error);
+      this.showToast('Failed to save entity', 'error');
     } finally {
       this.loading = false;
     }
@@ -863,9 +898,26 @@ export class EntityManager extends LitElement {
   }
 
   private handleEditEntity(entityId: string) {
-    // TODO: Implement edit entity functionality
-    // For now, show a toast message
-    this.showToast('Edit entity feature coming soon!', 'error');
+    const entity = this.entities.find(e => e.id === entityId);
+    if (!entity) {
+      this.showToast('Entity not found', 'error');
+      return;
+    }
+
+    // Load entity data into form
+    this.editingEntityId = entityId;
+    this.formData = {
+      name: entity.name,
+      displayName: entity.displayName,
+      description: entity.description,
+      icon: entity.icon,
+      datasource: entity.datasource,
+      fields: entity.fields || [],
+      relationships: entity.relationships || [],
+    };
+    
+    // Open modal in edit mode
+    this.showCreateModal = true;
   }
 
   private async handleDeleteEntity(entityId: string) {
@@ -1058,11 +1110,12 @@ export class EntityManager extends LitElement {
   }
 
   private renderCreateModal() {
+    const isEditMode = !!this.editingEntityId;
     return html`
       <div class="modal-overlay">
         <div class="modal">
           <div class="modal-header">
-            <h2 class="modal-title">Create New Entity</h2>
+            <h2 class="modal-title">${isEditMode ? 'Edit Entity' : 'Create New Entity'}</h2>
             <button class="icon-btn" @click=${this.handleCloseModal}>
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -1080,8 +1133,9 @@ export class EntityManager extends LitElement {
                 placeholder="e.g., customer, order, product"
                 .value=${this.formData.name || ''}
                 @input=${this.handleFormInput}
+                ?disabled=${isEditMode}
               />
-              <div class="form-hint">Technical name (lowercase, no spaces)</div>
+              <div class="form-hint">${isEditMode ? 'Entity name cannot be changed' : 'Technical name (lowercase, no spaces)'}</div>
             </div>
 
             <div class="form-group">
@@ -1234,7 +1288,10 @@ export class EntityManager extends LitElement {
               @click=${this.handleSaveEntity}
               ?disabled=${this.loading}
             >
-              ${this.loading ? 'Creating...' : 'Create Entity'}
+              ${this.loading 
+                ? (isEditMode ? 'Updating...' : 'Creating...') 
+                : (isEditMode ? 'Update Entity' : 'Create Entity')
+              }
             </button>
           </div>
         </div>
