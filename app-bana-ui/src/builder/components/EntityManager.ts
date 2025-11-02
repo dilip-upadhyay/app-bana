@@ -526,6 +526,105 @@ export class EntityManager extends LitElement {
       border-radius: 4px;
       font-size: 0.875rem;
     }
+
+    /* Fields Section */
+    .fields-section {
+      margin-top: 1.5rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      background: #f9fafb;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    .section-header:hover {
+      background: #f3f4f6;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .section-toggle {
+      color: #6b7280;
+      font-size: 0.875rem;
+    }
+
+    .section-content {
+      padding: 1rem;
+      background: white;
+    }
+
+    .empty-message {
+      padding: 2rem;
+      text-align: center;
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    .fields-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .field-item {
+      padding: 0.75rem;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+    }
+
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .field-input {
+      flex: 2;
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 0.875rem;
+    }
+
+    .field-select {
+      flex: 1;
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      background: white;
+    }
+
+    .field-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.875rem;
+      color: #6b7280;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .field-checkbox input[type="checkbox"] {
+      cursor: pointer;
+    }
   `;
 
   @state() private currentApp: AppMeta | undefined;
@@ -539,6 +638,7 @@ export class EntityManager extends LitElement {
   // Form state for creating new entity
   @state() private formData: Partial<EntityMeta> = this.getEmptyEntityForm();
   @state() private showSQLPreview = false;
+  @state() private showFieldEditor = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -612,6 +712,42 @@ export class EntityManager extends LitElement {
 
   private toggleSQLPreview() {
     this.showSQLPreview = !this.showSQLPreview;
+  }
+
+  private toggleFieldEditor() {
+    this.showFieldEditor = !this.showFieldEditor;
+  }
+
+  private handleAddField() {
+    const fieldNum = (this.formData.fields?.length || 0) + 1;
+    const newField: EntityField = {
+      id: `field_${Date.now()}`,
+      name: `field${fieldNum}`,
+      type: 'text',
+      required: false,
+      unique: false,
+      display: {
+        label: `Field ${fieldNum}`,
+        placeholder: `Enter field ${fieldNum}...`,
+      },
+    };
+    
+    this.formData = {
+      ...this.formData,
+      fields: [...(this.formData.fields || []), newField],
+    };
+  }
+
+  private handleRemoveField(index: number) {
+    const fields = [...(this.formData.fields || [])];
+    fields.splice(index, 1);
+    this.formData = { ...this.formData, fields };
+  }
+
+  private handleFieldChange(index: number, field: string, value: any) {
+    const fields = [...(this.formData.fields || [])];
+    fields[index] = { ...fields[index], [field]: value };
+    this.formData = { ...this.formData, fields };
   }
 
   private renderSQLPreview() {
@@ -997,6 +1133,77 @@ export class EntityManager extends LitElement {
                   <option value="default">Default</option>
                 </select>
               </div>
+            </div>
+
+            <!-- Fields Section -->
+            <div class="fields-section">
+              <div class="section-header" @click=${this.toggleFieldEditor}>
+                <span class="section-title">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Fields (${this.formData.fields?.length || 0})
+                </span>
+                <span class="section-toggle">${this.showFieldEditor ? '▼' : '▶'}</span>
+              </div>
+              ${this.showFieldEditor ? html`
+                <div class="section-content">
+                  ${(this.formData.fields || []).length === 0 ? html`
+                    <div class="empty-message">No fields added yet</div>
+                  ` : html`
+                    <div class="fields-list">
+                      ${(this.formData.fields || []).map((field, index) => html`
+                        <div class="field-item">
+                          <div class="field-row">
+                            <input
+                              type="text"
+                              class="field-input"
+                              placeholder="Field name"
+                              .value=${field.name}
+                              @input=${(e: Event) => this.handleFieldChange(index, 'name', (e.target as HTMLInputElement).value)}
+                            />
+                            <select
+                              class="field-select"
+                              .value=${field.type}
+                              @change=${(e: Event) => this.handleFieldChange(index, 'type', (e.target as HTMLSelectElement).value)}
+                            >
+                              <option value="text">Text</option>
+                              <option value="number">Number</option>
+                              <option value="email">Email</option>
+                              <option value="phone">Phone</option>
+                              <option value="date">Date</option>
+                              <option value="boolean">Boolean</option>
+                              <option value="currency">Currency</option>
+                              <option value="reference">Reference</option>
+                            </select>
+                            <label class="field-checkbox">
+                              <input
+                                type="checkbox"
+                                .checked=${field.required}
+                                @change=${(e: Event) => this.handleFieldChange(index, 'required', (e.target as HTMLInputElement).checked)}
+                              />
+                              Required
+                            </label>
+                            <button
+                              class="icon-btn icon-btn-danger"
+                              @click=${() => this.handleRemoveField(index)}
+                              title="Remove field"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      `)}
+                    </div>
+                  `}
+                  <button class="btn btn-secondary" @click=${this.handleAddField}>
+                    <span>+</span>
+                    <span>Add Field</span>
+                  </button>
+                </div>
+              ` : ''}
             </div>
 
             <!-- SQL Preview Section -->
