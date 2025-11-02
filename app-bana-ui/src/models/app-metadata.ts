@@ -4,6 +4,7 @@
  */
 
 import type { PageMeta } from './metadata';
+import type { EntityMeta, NavigationMeta } from './entity-metadata';
 
 /**
  * Application metadata
@@ -21,6 +22,11 @@ export interface AppMeta {
   // Pages in this app
   pages: string[];               // Array of page IDs
   defaultPage?: string;          // Default/home page ID
+
+  // Entities (business objects)
+  entities?: EntityMeta[];       // Entity definitions for this app
+  schemas?: string[];            // Schema names linked to this app
+  navigation?: NavigationMeta;   // Navigation structure
 
   // App-wide settings
   theme?: AppTheme;              // Visual theme settings
@@ -85,5 +91,8 @@ export interface UpdateAppRequest {
   theme?: AppTheme;
   routes?: AppRoutes;
   defaultPage?: string;
+  entities?: EntityMeta[];
+  schemas?: string[];
+  navigation?: NavigationMeta;
 }
 

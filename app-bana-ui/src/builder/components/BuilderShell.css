@@ -29,6 +29,45 @@
   padding: 12px 0 12px 12px;
 }
 
+.left-panel-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.left-panel-tabs .tab {
+  flex: 1;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.left-panel-tabs .tab:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.left-panel-tabs .tab.active {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.left-panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .center-panel {
   grid-area: preview;
   display: flex;

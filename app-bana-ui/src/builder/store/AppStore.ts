@@ -79,6 +79,10 @@ export class AppStore {
     return () => this.listeners.delete(fn);
   }
 
+  subscribe(fn: () => void): () => void {
+    return this.onChange(fn);
+  }
+
   private notify() {
     this.listeners.forEach(fn => fn());
   }
