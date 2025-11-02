@@ -8,7 +8,8 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
 import type { AppMeta } from '../../models/app-metadata';
-import type { EntityMeta } from '../../models/entity-metadata';
+import type { EntityMeta, EntityField, EntityRelationship } from '../../models/entity-metadata';
+import { EntitySchemaConverter } from '../../core/EntitySchemaConverter';
 
 @customElement('studio-entity-manager')
 export class EntityManager extends LitElement {
@@ -441,6 +442,74 @@ export class EntityManager extends LitElement {
     .toast.error {
       border-left: 4px solid #ef4444;
     }
+
+    /* SQL Preview */
+    .sql-preview-section {
+      margin-top: 1.5rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .sql-preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      background: #f9fafb;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    .sql-preview-header:hover {
+      background: #f3f4f6;
+    }
+
+    .sql-preview-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .sql-preview-toggle {
+      color: #6b7280;
+      font-size: 0.875rem;
+    }
+
+    .sql-preview-body {
+      padding: 1rem;
+      background: #1f2937;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .sql-preview-code {
+      margin: 0;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: #e5e7eb;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .preview-placeholder {
+      padding: 2rem;
+      text-align: center;
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    .preview-error {
+      padding: 1rem;
+      background: #fef2f2;
+      color: #dc2626;
+      border-radius: 4px;
+      font-size: 0.875rem;
+    }
   `;
 
   @state() private currentApp: AppMeta | undefined;
@@ -453,6 +522,7 @@ export class EntityManager extends LitElement {
 
   // Form state for creating new entity
   @state() private formData: Partial<EntityMeta> = this.getEmptyEntityForm();
+  @state() private showSQLPreview = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -519,6 +589,57 @@ export class EntityManager extends LitElement {
     const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
     const { name, value } = target;
     this.formData = { ...this.formData, [name]: value };
+  }
+
+  private toggleSQLPreview() {
+    this.showSQLPreview = !this.showSQLPreview;
+  }
+
+  private renderSQLPreview() {
+    if (!this.formData.name) {
+      return html`
+        <div class="preview-placeholder">
+          Enter entity details above to see the SQL preview
+        </div>
+      `;
+    }
+
+    try {
+      const entityId = this.formData.name.toLowerCase().replaceAll(/\s+/g, '-');
+      
+      const tempEntity: EntityMeta = {
+        id: entityId,
+        name: this.formData.name || entityId,
+        displayName: this.formData.displayName || entityId,
+        description: this.formData.description || '',
+        icon: this.formData.icon || '📦',
+        datasource: this.formData.datasource || 'default',
+        fields: [],
+        relationships: [],
+        rules: [],
+        permissions: {
+          roles: {
+            admin: { create: true, read: true, update: true, delete: true },
+            user: { create: false, read: true, update: false, delete: false }
+          },
+          auditLog: true
+        },
+        softDelete: true,
+        versioning: true
+      };
+
+      const sql = EntitySchemaConverter.generateDDL(tempEntity);
+      
+      return html`
+        <pre class="sql-preview-code">${sql}</pre>
+      `;
+    } catch (error) {
+      return html`
+        <div class="preview-error">
+          Error generating SQL: ${error instanceof Error ? error.message : 'Unknown error'}
+        </div>
+      `;
+    }
   }
 
   private async handleSaveEntity() {
@@ -842,6 +963,24 @@ export class EntityManager extends LitElement {
                   <option value="default">Default</option>
                 </select>
               </div>
+            </div>
+
+            <!-- SQL Preview Section -->
+            <div class="sql-preview-section">
+              <div class="sql-preview-header" @click=${this.toggleSQLPreview}>
+                <span class="sql-preview-title">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                  </svg>
+                  SQL Preview
+                </span>
+                <span class="sql-preview-toggle">${this.showSQLPreview ? '▼' : '▶'}</span>
+              </div>
+              ${this.showSQLPreview ? html`
+                <div class="sql-preview-body">
+                  ${this.renderSQLPreview()}
+                </div>
+              ` : ''}
             </div>
           </div>
 
