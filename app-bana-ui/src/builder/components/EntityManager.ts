@@ -769,8 +769,8 @@ export class EntityManager extends LitElement {
         description: this.formData.description || '',
         icon: this.formData.icon || '📦',
         datasource: this.formData.datasource || 'default',
-        fields: [],
-        relationships: [],
+        fields: this.formData.fields || [],
+        relationships: this.formData.relationships || [],
         rules: [],
         permissions: {
           roles: {
@@ -1059,8 +1059,8 @@ export class EntityManager extends LitElement {
 
   private renderCreateModal() {
     return html`
-      <div class="modal-overlay" @click=${this.handleCloseModal}>
-        <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
+      <div class="modal-overlay">
+        <div class="modal">
           <div class="modal-header">
             <h2 class="modal-title">Create New Entity</h2>
             <button class="icon-btn" @click=${this.handleCloseModal}>
