@@ -663,7 +663,23 @@ export class EntityManager extends LitElement {
       description: '',
       icon: '📦',
       datasource: 'default',
-      fields: [],
+      fields: [
+        // Always include id field as primary key
+        {
+          id: 'field_id',
+          name: 'id',
+          type: 'autoincrement',
+          required: true,
+          unique: true,
+          indexed: true,
+          display: {
+            label: 'ID',
+            helpText: 'Primary key (auto-generated)',
+            readOnly: true,
+            showInForm: false, // Don't show in create/edit forms
+          },
+        },
+      ],
       relationships: [],
     };
   }
@@ -1239,11 +1255,10 @@ export class EntityManager extends LitElement {
               </div>
               ${this.showFieldEditor ? html`
                 <div class="section-content">
-                  ${(this.formData.fields || []).length === 0 ? html`
-                    <div class="empty-message">No fields added yet</div>
-                  ` : html`
-                    <div class="fields-list">
-                      ${(this.formData.fields || []).map((field, index) => html`
+                  <div class="fields-list">
+                      ${(this.formData.fields || []).map((field, index) => {
+                        const isIdField = field.name === 'id';
+                        return html`
                         <div class="field-item">
                           <div class="field-row">
                             <input
@@ -1251,13 +1266,18 @@ export class EntityManager extends LitElement {
                               class="field-input"
                               placeholder="Field name"
                               .value=${field.name}
+                              ?disabled=${isIdField}
                               @input=${(e: Event) => this.handleFieldChange(index, 'name', (e.target as HTMLInputElement).value)}
+                              title=${isIdField ? 'Primary key field cannot be renamed' : ''}
                             />
                             <select
                               class="field-select"
                               .value=${field.type}
+                              ?disabled=${isIdField}
                               @change=${(e: Event) => this.handleFieldChange(index, 'type', (e.target as HTMLSelectElement).value)}
+                              title=${isIdField ? 'Primary key type cannot be changed' : ''}
                             >
+                              <option value="autoincrement">Auto Increment</option>
                               <option value="text">Text</option>
                               <option value="number">Number</option>
                               <option value="email">Email</option>
@@ -1271,24 +1291,37 @@ export class EntityManager extends LitElement {
                               <input
                                 type="checkbox"
                                 .checked=${field.required}
+                                ?disabled=${isIdField}
                                 @change=${(e: Event) => this.handleFieldChange(index, 'required', (e.target as HTMLInputElement).checked)}
                               />
                               Required
                             </label>
-                            <button
-                              class="icon-btn icon-btn-danger"
-                              @click=${() => this.handleRemoveField(index)}
-                              title="Remove field"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
+                            ${isIdField ? html`
+                              <button
+                                class="icon-btn"
+                                disabled
+                                title="Primary key cannot be removed"
+                                style="opacity: 0.3; cursor: not-allowed;"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                              </button>
+                            ` : html`
+                              <button
+                                class="icon-btn icon-btn-danger"
+                                @click=${() => this.handleRemoveField(index)}
+                                title="Remove field"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            `}
                           </div>
                         </div>
-                      `)}
-                    </div>
-                  `}
+                      `})}
+                  </div>
                   <button class="btn btn-secondary" @click=${this.handleAddField}>
                     <span>+</span>
                     <span>Add Field</span>
@@ -1354,6 +1387,32 @@ export class EntityManager extends LitElement {
                               ${this.entities.map(entity => html`
                                 <option value="${entity.id}">${entity.displayName}</option>
                               `)}
+                            </select>
+                          </div>
+                          <div class="field-row" style="margin-bottom: 0.5rem;">
+                            <select
+                              class="field-select"
+                              .value=${rel.fromField || ''}
+                              @change=${(e: Event) => this.handleRelationshipChange(index, 'fromField', (e.target as HTMLSelectElement).value)}
+                            >
+                              <option value="">From field (this entity)...</option>
+                              <option value="id">id (autoincrement)</option>
+                              ${(this.formData.fields || []).filter(f => f.name !== 'id').map(field => html`
+                                <option value="${field.name}">${field.name} (${field.type})</option>
+                              `)}
+                            </select>
+                            <select
+                              class="field-select"
+                              .value=${rel.toField || 'id'}
+                              @change=${(e: Event) => this.handleRelationshipChange(index, 'toField', (e.target as HTMLSelectElement).value)}
+                            >
+                              <option value="id">id (primary key - default)</option>
+                              ${rel.toEntity ? (() => {
+                                const targetEntity = this.entities.find(e => e.id === rel.toEntity);
+                                return targetEntity?.fields?.filter(f => f.name !== 'id').map(field => html`
+                                  <option value="${field.name}">${field.name} (${field.type})</option>
+                                `) || [];
+                              })() : ''}
                             </select>
                           </div>
                           <div class="field-row">
