@@ -639,6 +639,7 @@ export class EntityManager extends LitElement {
   @state() private formData: Partial<EntityMeta> = this.getEmptyEntityForm();
   @state() private showSQLPreview = false;
   @state() private showFieldEditor = false;
+  @state() private showRelationshipEditor = false;
   @state() private editingEntityId: string | null = null;
 
   connectedCallback() {
@@ -750,6 +751,42 @@ export class EntityManager extends LitElement {
     const fields = [...(this.formData.fields || [])];
     fields[index] = { ...fields[index], [field]: value };
     this.formData = { ...this.formData, fields };
+  }
+
+  // Relationship editor methods
+  private toggleRelationshipEditor() {
+    this.showRelationshipEditor = !this.showRelationshipEditor;
+  }
+
+  private handleAddRelationship() {
+    const relNum = (this.formData.relationships?.length || 0) + 1;
+    const newRelationship: EntityRelationship = {
+      id: `rel_${Date.now()}`,
+      name: `relationship${relNum}`,
+      type: 'one-to-many',
+      fromEntity: this.formData.name || '',
+      toEntity: '',
+      cascadeDelete: false,
+      required: false,
+      displayName: `Relationship ${relNum}`,
+    };
+    
+    this.formData = {
+      ...this.formData,
+      relationships: [...(this.formData.relationships || []), newRelationship],
+    };
+  }
+
+  private handleRemoveRelationship(index: number) {
+    const relationships = [...(this.formData.relationships || [])];
+    relationships.splice(index, 1);
+    this.formData = { ...this.formData, relationships };
+  }
+
+  private handleRelationshipChange(index: number, field: string, value: any) {
+    const relationships = [...(this.formData.relationships || [])];
+    relationships[index] = { ...relationships[index], [field]: value };
+    this.formData = { ...this.formData, relationships };
   }
 
   private renderSQLPreview() {
@@ -1255,6 +1292,95 @@ export class EntityManager extends LitElement {
                   <button class="btn btn-secondary" @click=${this.handleAddField}>
                     <span>+</span>
                     <span>Add Field</span>
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Relationships Section -->
+            <div class="fields-section">
+              <div class="section-header" @click=${this.toggleRelationshipEditor}>
+                <span class="section-title">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  Relationships (${this.formData.relationships?.length || 0})
+                </span>
+                <span class="section-toggle">${this.showRelationshipEditor ? '▼' : '▶'}</span>
+              </div>
+              ${this.showRelationshipEditor ? html`
+                <div class="section-content">
+                  ${(this.formData.relationships || []).length === 0 ? html`
+                    <div class="empty-message">No relationships defined yet</div>
+                  ` : html`
+                    <div class="fields-list">
+                      ${(this.formData.relationships || []).map((rel, index) => html`
+                        <div class="field-item">
+                          <div class="field-row" style="margin-bottom: 0.5rem;">
+                            <input
+                              type="text"
+                              class="field-input"
+                              placeholder="Relationship name (e.g., orders, customer)"
+                              .value=${rel.name}
+                              @input=${(e: Event) => this.handleRelationshipChange(index, 'name', (e.target as HTMLInputElement).value)}
+                            />
+                            <button
+                              class="icon-btn icon-btn-danger"
+                              @click=${() => this.handleRemoveRelationship(index)}
+                              title="Remove relationship"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div class="field-row" style="margin-bottom: 0.5rem;">
+                            <select
+                              class="field-select"
+                              .value=${rel.type}
+                              @change=${(e: Event) => this.handleRelationshipChange(index, 'type', (e.target as HTMLSelectElement).value)}
+                            >
+                              <option value="one-to-one">One-to-One</option>
+                              <option value="one-to-many">One-to-Many</option>
+                              <option value="many-to-one">Many-to-One</option>
+                              <option value="many-to-many">Many-to-Many</option>
+                            </select>
+                            <select
+                              class="field-select"
+                              .value=${rel.toEntity}
+                              @change=${(e: Event) => this.handleRelationshipChange(index, 'toEntity', (e.target as HTMLSelectElement).value)}
+                            >
+                              <option value="">Select target entity...</option>
+                              ${this.entities.map(entity => html`
+                                <option value="${entity.id}">${entity.displayName}</option>
+                              `)}
+                            </select>
+                          </div>
+                          <div class="field-row">
+                            <label class="field-checkbox">
+                              <input
+                                type="checkbox"
+                                .checked=${rel.required || false}
+                                @change=${(e: Event) => this.handleRelationshipChange(index, 'required', (e.target as HTMLInputElement).checked)}
+                              />
+                              Required
+                            </label>
+                            <label class="field-checkbox">
+                              <input
+                                type="checkbox"
+                                .checked=${rel.cascadeDelete || false}
+                                @change=${(e: Event) => this.handleRelationshipChange(index, 'cascadeDelete', (e.target as HTMLInputElement).checked)}
+                              />
+                              Cascade Delete
+                            </label>
+                          </div>
+                        </div>
+                      `)}
+                    </div>
+                  `}
+                  <button class="btn btn-secondary" @click=${this.handleAddRelationship}>
+                    <span>+</span>
+                    <span>Add Relationship</span>
                   </button>
                 </div>
               ` : ''}
