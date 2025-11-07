@@ -276,6 +276,42 @@ export interface EntityPermissions {
 }
 
 /**
+ * Datasource-specific configuration for entities
+ */
+export interface EntityDatasourceConfig {
+  // REST API configuration
+  api?: {
+    endpoint: string;         // REST endpoint (e.g., "/api/users")
+    idField?: string;         // ID field name (e.g., "userId" not "id")
+    readOnly?: boolean;       // Can't create/update/delete
+    responseTransform?: string; // JavaScript to transform response
+    requestTransform?: string;  // JavaScript to transform request
+    headers?: Record<string, string>; // Custom headers
+  };
+  
+  // File-based configuration
+  file?: {
+    filePath?: string;        // Path to JSON/CSV file
+    format?: 'json' | 'csv' | 'excel';
+    sheetName?: string;       // For Excel files
+  };
+  
+  // Caching configuration (for external APIs)
+  cache?: {
+    enabled: boolean;
+    ttlSeconds: number;       // Cache TTL
+    strategy?: 'memory' | 'localstorage' | 'redis';
+  };
+  
+  // Sync strategy (for offline-first)
+  sync?: {
+    strategy: 'realtime' | 'batch' | 'manual';
+    intervalSeconds?: number; // Sync every N seconds
+    conflictResolution?: 'client-wins' | 'server-wins' | 'manual';
+  };
+}
+
+/**
  * Entity metadata (business object definition)
  * This is the core abstraction that represents a business concept
  */
@@ -302,8 +338,14 @@ export interface EntityMeta {
   // Permissions
   permissions?: EntityPermissions;
   
-  // Database configuration
+  // Data Source configuration (ENHANCED - Multi-datasource support)
   datasource: string;         // Datasource name (default: 'default')
+  datasourceType?: string;    // Datasource type: 'h2', 'postgres', 'rest-api', 'mongodb', etc.
+  
+  // Datasource-specific configuration
+  datasourceConfig?: EntityDatasourceConfig;
+  
+  // Database configuration (for relational DBs)
   tableName?: string;         // Database table name (auto-generated from name if not provided)
   schema?: string;            // Database schema (for multi-schema DBs)
   

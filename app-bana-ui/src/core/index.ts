@@ -94,3 +94,25 @@ export {
 export { BaseElement } from './BaseElement.ts';
 export { registerComponent, getComponent, getAllComponentTypes, ensureCoreRegistered } from './registry.ts';
 export type { ComponentConstructor } from './registry.ts';
+
+// Universal Datasource Adapters (NEW)
+export type {
+  DataSourceType,
+  DataSourceAdapter,
+  QueryParams as AdapterQueryParams,
+  QueryResult,
+  Filter,
+  Sort,
+  Aggregation,
+  DatasourceCapabilities,
+  ConnectionTestResult
+} from './DataSourceAdapter';
+export { BaseAdapter } from './DataSourceAdapter';
+
+export { AdapterRegistry, adapterRegistry, registerAdapter } from './AdapterRegistry';
+export { RestApiAdapter, JsonFileAdapter } from './adapters';
+export type { RestApiConfig, JsonFileConfig } from './adapters';
+export { registerBuiltInAdapters } from './adapter-bootstrap';
+
+// Entity Schema Converter
+export { EntitySchemaConverter } from './EntitySchemaConverter';
