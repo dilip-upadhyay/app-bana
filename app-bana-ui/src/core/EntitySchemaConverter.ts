@@ -330,6 +330,7 @@ export class EntitySchemaConverter {
     
     let sql = `CREATE TABLE ${tableName} (\n`;
     
+    // Generate field definitions
     const fieldDefs = schema.fields.map(field => {
       const sqlType = EntityFieldTypeHelper.toSQLType(field.type as any);
       let def = `  ${field.name} ${sqlType}`;
@@ -342,7 +343,51 @@ export class EntitySchemaConverter {
     });
     
     sql += fieldDefs.join(',\n');
+    
+    // Generate FOREIGN KEY constraints from relationships
+    if (entity.relationships && entity.relationships.length > 0) {
+      const foreignKeyDefs = entity.relationships
+        .filter(rel => this.shouldAddForeignKey(rel, entity.id))
+        .map(rel => {
+          const fromField = rel.fromField || `${rel.toEntity}Id`;
+          const toField = rel.toField || 'id';
+          const cascadeDelete = rel.cascadeDelete ? ' ON DELETE CASCADE' : '';
+          
+          return `  FOREIGN KEY (${fromField}) REFERENCES ${rel.toEntity}(${toField})${cascadeDelete}`;
+        });
+      
+      if (foreignKeyDefs.length > 0) {
+        sql += ',\n' + foreignKeyDefs.join(',\n');
+      }
+    }
+    
     sql += '\n);';
+    
+    // Generate junction tables for many-to-many relationships
+    if (entity.relationships) {
+      const manyToManyRels = entity.relationships.filter(rel => 
+        rel.type === 'many-to-many' && rel.fromEntity === entity.id
+      );
+      
+      if (manyToManyRels.length > 0) {
+        sql += '\n\n-- Junction tables for many-to-many relationships\n';
+        
+        for (const rel of manyToManyRels) {
+          const junctionTable = rel.junctionTable || `${entity.name}_${rel.toEntity}`;
+          const fromField = rel.junctionFromField || `${entity.name}Id`;
+          const toField = rel.junctionToField || `${rel.toEntity}Id`;
+          const cascadeDelete = rel.cascadeDelete ? ' ON DELETE CASCADE' : '';
+          
+          sql += `\nCREATE TABLE ${junctionTable} (\n`;
+          sql += `  id VARCHAR(255) NOT NULL PRIMARY KEY AUTO_INCREMENT,\n`;
+          sql += `  ${fromField} BIGINT NOT NULL,\n`;
+          sql += `  ${toField} BIGINT NOT NULL,\n`;
+          sql += `  FOREIGN KEY (${fromField}) REFERENCES ${entity.name}(id)${cascadeDelete},\n`;
+          sql += `  FOREIGN KEY (${toField}) REFERENCES ${rel.toEntity}(id)${cascadeDelete}\n`;
+          sql += ');';
+        }
+      }
+    }
     
     return sql;
   }
