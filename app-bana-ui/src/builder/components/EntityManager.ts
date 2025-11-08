@@ -891,7 +891,7 @@ export class EntityManager extends LitElement {
         const updatedEntities = [...this.entities];
         updatedEntities[entityIndex] = updatedEntity;
 
-        appStore.updateApp(this.currentApp.id, {
+        await appStore.updateApp(this.currentApp.id, {
           entities: updatedEntities,
         });
 
@@ -925,7 +925,7 @@ export class EntityManager extends LitElement {
 
         // Add entity to app
         const updatedEntities = [...this.entities, newEntity];
-        appStore.updateApp(this.currentApp.id, {
+        await appStore.updateApp(this.currentApp.id, {
           entities: updatedEntities,
         });
 
@@ -985,7 +985,7 @@ export class EntityManager extends LitElement {
 
     try {
       const updatedEntities = this.entities.filter(e => e.id !== entityId);
-      appStore.updateApp(this.currentApp.id, {
+      await appStore.updateApp(this.currentApp.id, {
         entities: updatedEntities,
       });
 

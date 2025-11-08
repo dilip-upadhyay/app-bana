@@ -21,6 +21,10 @@ public class Main {
             } catch (Exception initErr) {
                 LOG.warn("DB initialization failed: {}. Server will still start so you can fix datasource via /ui/datasource.", initErr.toString());
             }
+
+            // initialize app metadata directory
+            AppManager.initialize();
+
             // start HTTP API server (port configurable via -Dappbana.port or APPBANA_PORT)
             int port = Integer.getInteger("appbana.port",
                     parseIntOrDefault(System.getenv("APPBANA_PORT"), 8080));

@@ -122,11 +122,11 @@ export class PageManager extends LitElement {
     }
   }
 
-  private saveCurrentPage() {
+  private async saveCurrentPage() {
     if (!this.currentApp || !this.currentPageId || !currentStore) return;
 
     const page = currentStore.getPage();
-    appStore.savePage(this.currentApp.id, page);
+    await appStore.savePage(this.currentApp.id, page);
   }
 
   private handleCreatePage() {
@@ -171,7 +171,7 @@ export class PageManager extends LitElement {
     this.showCreateModal = true;
   }
 
-  private handleSubmitCreate(e?: Event) {
+  private async handleSubmitCreate(e?: Event) {
     if (e) e.preventDefault();
 
     if (!this.currentApp || !this.formName.trim()) {
@@ -195,7 +195,7 @@ export class PageManager extends LitElement {
     localStorage.removeItem(draftKey);
 
     // Add page to app
-    appStore.addPage(this.currentApp.id, newPage);
+    await appStore.addPage(this.currentApp.id, newPage);
 
     // Switch to new page - mark as new so we skip draft loading
     this.isNewPage = true;
@@ -209,7 +209,7 @@ export class PageManager extends LitElement {
     this.showToast(`✅ Created page: ${this.formName}`);
   }
 
-  private handleDeletePage(pageId: string, pageName: string, e: Event) {
+  private async handleDeletePage(pageId: string, pageName: string, e: Event) {
     e.stopPropagation();
 
     if (!this.currentApp) return;
@@ -224,7 +224,7 @@ export class PageManager extends LitElement {
       console.log('[PageManager] Clearing draft for deleted page:', draftKey);
       localStorage.removeItem(draftKey);
 
-      appStore.removePage(this.currentApp.id, pageId);
+      await appStore.removePage(this.currentApp.id, pageId);
 
       // Switch to another page if any exist
       const remainingPages = this.pages.filter(p => p.id !== pageId);
@@ -265,7 +265,7 @@ export class PageManager extends LitElement {
     }, 10);
   };
 
-  private handleDuplicatePage = (e: Event) => {
+  private handleDuplicatePage = async (e: Event) => {
     e.stopPropagation();
     
     if (!this.currentApp || !this.contextMenuPageId) return;
@@ -277,10 +277,9 @@ export class PageManager extends LitElement {
       console.error('[PageManager] Page not found for duplication:', pageId);
       return;
     }
-
     try {
       // Use AppStore's duplicatePage method
-      const duplicatedPage = appStore.duplicatePage(this.currentApp.id, pageId);
+      const duplicatedPage = await appStore.duplicatePage(this.currentApp.id, pageId);
       
       // Switch to the duplicated page
       this.isNewPage = true;
@@ -295,7 +294,7 @@ export class PageManager extends LitElement {
       console.error('[PageManager] Failed to duplicate page:', error);
       alert(error instanceof Error ? error.message : 'Failed to duplicate page');
     }
-  };
+  }
 
   /**
    * Build pre-built page templates with full component trees

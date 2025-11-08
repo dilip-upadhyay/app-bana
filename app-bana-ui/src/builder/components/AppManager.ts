@@ -45,7 +45,7 @@ export class AppManager extends LitElement {
     this.showSelectModal = false;
   }
 
-  private handleSubmitCreate(e: Event) {
+  private async handleSubmitCreate(e: Event) {
     e.preventDefault();
 
     if (!this.formName.trim()) {
@@ -60,7 +60,7 @@ export class AppManager extends LitElement {
     };
 
     try {
-      appStore.createApp(request);
+      await appStore.createApp(request);
       this.showCreateModal = false;
       this.showToast(`✅ Created app: ${request.name}`);
     } catch (error) {
@@ -81,7 +81,7 @@ export class AppManager extends LitElement {
     }
   }
 
-  private handleDeleteApp(appId: string, appName: string, e: Event) {
+  private async handleDeleteApp(appId: string, appName: string, e: Event) {
     e.stopPropagation();
 
     if (!confirm(`Are you sure you want to delete "${appName}"? This will delete all pages in this app.`)) {
@@ -89,7 +89,7 @@ export class AppManager extends LitElement {
     }
 
     try {
-      appStore.deleteApp(appId);
+      await appStore.deleteApp(appId);
       this.showToast(`🗑️ Deleted app: ${appName}`);
     } catch (error) {
       console.error('Failed to delete app:', error);

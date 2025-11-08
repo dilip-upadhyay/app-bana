@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.*;
 import com.appbana.model.EntitySchema;
+import com.appbana.model.AppMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -432,6 +433,145 @@ public class ApiServer {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
+
+        // ==================== APP ENDPOINTS ====================
+        
+        // List all apps
+        router.get("/apps", (req, res) -> {
+            try {
+                List<Map<String, Object>> apps = AppManager.listApps();
+                res.json(200, apps);
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Get app by ID
+        router.get("/apps/{id}", (req, res) -> {
+            String appId = req.pathParam("id");
+            try {
+                AppMetadata app = AppManager.getApp(appId);
+                if (app == null) {
+                    res.json(404, Map.of("error", "App not found: " + appId));
+                    return;
+                }
+                res.json(200, app);
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Get app with all pages
+        router.get("/apps/{id}/full", (req, res) -> {
+            String appId = req.pathParam("id");
+            try {
+                Map<String, Object> appWithPages = AppManager.getAppWithPages(appId);
+                if (appWithPages == null) {
+                    res.json(404, Map.of("error", "App not found: " + appId));
+                    return;
+                }
+                res.json(200, appWithPages);
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Create new app
+        router.post("/apps", (req, res) -> {
+            try {
+                AppMetadata app = req.readJson(new TypeReference<AppMetadata>(){});
+                if (app.getName() == null || app.getName().isEmpty()) {
+                    res.json(400, Map.of("error", "App name is required"));
+                    return;
+                }
+                if (app.getId() == null || app.getId().isEmpty()) {
+                    res.json(400, Map.of("error", "App ID is required"));
+                    return;
+                }
+                AppMetadata created = AppManager.createApp(app);
+                res.json(201, created);
+            } catch (IllegalStateException e) {
+                res.json(409, Map.of("error", e.getMessage()));
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Update app
+        router.put("/apps/{id}", (req, res) -> {
+            String appId = req.pathParam("id");
+            try {
+                AppMetadata updates = req.readJson(new TypeReference<AppMetadata>(){});
+                AppMetadata updated = AppManager.updateApp(appId, updates);
+                res.json(200, updated);
+            } catch (IllegalArgumentException e) {
+                res.json(404, Map.of("error", e.getMessage()));
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Delete app
+        router.delete("/apps/{id}", (req, res) -> {
+            String appId = req.pathParam("id");
+            try {
+                boolean deleted = AppManager.deleteApp(appId);
+                if (!deleted) {
+                    res.json(404, Map.of("error", "App not found: " + appId));
+                    return;
+                }
+                res.json(200, Map.of("status", "deleted", "id", appId));
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Get page from app
+        router.get("/apps/{appId}/pages/{pageId}", (req, res) -> {
+            String appId = req.pathParam("appId");
+            String pageId = req.pathParam("pageId");
+            try {
+                Map<String, Object> page = AppManager.getPage(appId, pageId);
+                if (page == null) {
+                    res.json(404, Map.of("error", "Page not found: " + appId + "/" + pageId));
+                    return;
+                }
+                res.json(200, page);
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Save page to app
+        router.put("/apps/{appId}/pages/{pageId}", (req, res) -> {
+            String appId = req.pathParam("appId");
+            String pageId = req.pathParam("pageId");
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> page = req.readJson(new TypeReference<Map<String, Object>>(){});
+                AppManager.savePage(appId, pageId, page);
+                res.json(200, Map.of("status", "saved", "appId", appId, "pageId", pageId));
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Delete page from app
+        router.delete("/apps/{appId}/pages/{pageId}", (req, res) -> {
+            String appId = req.pathParam("appId");
+            String pageId = req.pathParam("pageId");
+            try {
+                boolean deleted = AppManager.deletePage(appId, pageId);
+                if (!deleted) {
+                    res.json(404, Map.of("error", "Page not found: " + appId + "/" + pageId));
+                    return;
+                }
+                res.json(200, Map.of("status", "deleted", "appId", appId, "pageId", pageId));
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
         router.get("/ui/datasource/config", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {

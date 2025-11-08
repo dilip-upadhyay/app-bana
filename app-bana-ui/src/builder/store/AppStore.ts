@@ -1,19 +1,22 @@
 /**
  * App Store - Manages applications and their pages
- * Persists to localStorage with hierarchical structure
+ * **UPDATED**: Now persists to backend REST API at /apps instead of localStorage
+ * 
+ * Backend storage: app-bana-service/apps/{appId}/app.json
+ * Pages storage: app-bana-service/apps/{appId}/pages/{pageId}.json
  */
 
 import type { AppMeta, AppWithPages, CreateAppRequest, UpdateAppRequest, AppListItem } from '../../models/app-metadata';
 import type { PageMeta } from '../../models/metadata';
+import { apiClient } from '../../core/api-client';
 
-const STORAGE_KEY_PREFIX = 'appbana.apps.';
-const APPS_LIST_KEY = 'appbana.apps.list';
-const CURRENT_APP_KEY = 'appbana.current.app';
+const CURRENT_APP_KEY = 'appbana.current.app'; // Only current app ID stored in localStorage
 
 export class AppStore {
   private apps: Map<string, AppMeta> = new Map();
   private currentAppId: string | null = null;
   private listeners = new Set<() => void>();
+  private loading = false;
 
   constructor() {
     this.loadApps();
@@ -22,10 +25,69 @@ export class AppStore {
   // ==================== Lifecycle ====================
 
   /**
-   * Load all apps from localStorage
+   * Load all apps from backend
    */
-  private loadApps() {
+  private async loadApps() {
+    if (this.loading) return;
+    this.loading = true;
+
     try {
+      // Load apps list from backend
+      const appsList = await apiClient.get<AppListItem[]>('/apps');
+      
+      // Populate apps map with summary data
+      this.apps.clear();
+      for (const appSummary of appsList) {
+        // Store just the summary initially, full data loaded on demand
+        const app: AppMeta = {
+          id: appSummary.id,
+          name: appSummary.name,
+          description: appSummary.description,
+          version: '1.0.0',
+          created: Date.now(),
+          updated: appSummary.updated,
+          pages: [], // Will be loaded when needed
+        };
+        this.apps.set(app.id, app);
+      }
+
+      // Load current app ID from localStorage
+      const currentId = localStorage.getItem(CURRENT_APP_KEY);
+      if (currentId && this.apps.has(currentId)) {
+        this.currentAppId = currentId;
+        // Load full app data for current app
+        await this.loadFullApp(currentId);
+      }
+    } catch (error) {
+      console.error('[AppStore] Failed to load apps from backend:', error);
+      // Fallback: try to load from localStorage (migration path)
+      this.loadAppsFromLocalStorage();
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  /**
+   * Load full app data including pages list (not page content)
+   */
+  private async loadFullApp(appId: string): Promise<void> {
+    try {
+      const fullApp = await apiClient.get<AppMeta>(`/apps/${appId}`);
+      this.apps.set(appId, fullApp);
+    } catch (error) {
+      console.error(`[AppStore] Failed to load full app ${appId}:`, error);
+    }
+  }
+
+  /**
+   * Fallback: Load from localStorage (for migration)
+   * @deprecated Will be removed once all apps are migrated to backend
+   */
+  private loadAppsFromLocalStorage() {
+    try {
+      const STORAGE_KEY_PREFIX = 'appbana.apps.';
+      const APPS_LIST_KEY = 'appbana.apps.list';
+      
       const appsList = localStorage.getItem(APPS_LIST_KEY);
       if (appsList) {
         const appIds: string[] = JSON.parse(appsList);
@@ -38,38 +100,13 @@ export class AppStore {
         });
       }
 
-      // Load current app ID
       const currentId = localStorage.getItem(CURRENT_APP_KEY);
       if (currentId && this.apps.has(currentId)) {
         this.currentAppId = currentId;
       }
     } catch (error) {
-      console.error('[AppStore] Failed to load apps:', error);
+      console.error('[AppStore] Failed to load apps from localStorage:', error);
     }
-  }
-
-  /**
-   * Save apps list to localStorage
-   */
-  private saveAppsList() {
-    const appIds = Array.from(this.apps.keys());
-    localStorage.setItem(APPS_LIST_KEY, JSON.stringify(appIds));
-  }
-
-  /**
-   * Save a single app to localStorage
-   */
-  private saveApp(app: AppMeta) {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}${app.id}`, JSON.stringify(app));
-    this.saveAppsList();
-  }
-
-  /**
-   * Delete app from localStorage
-   */
-  private deleteAppFromStorage(appId: string) {
-    localStorage.removeItem(`${STORAGE_KEY_PREFIX}${appId}`);
-    this.saveAppsList();
   }
 
   // ==================== Events ====================
@@ -90,9 +127,9 @@ export class AppStore {
   // ==================== App Management ====================
 
   /**
-   * Create a new app
+   * Create a new app (async - saves to backend)
    */
-  createApp(request: CreateAppRequest): AppMeta {
+  async createApp(request: CreateAppRequest): Promise<AppMeta> {
     const id = this.generateAppId(request.name);
     const now = Date.now();
 
@@ -116,22 +153,24 @@ export class AppStore {
       },
     };
 
-    // Save app (no initial page created)
-    this.apps.set(id, app);
-    this.saveApp(app);
+    // Save to backend
+    const created = await apiClient.post<AppMeta>('/apps', app);
+
+    // Update local cache
+    this.apps.set(created.id, created);
 
     // Set as current app
-    this.currentAppId = app.id;
-    localStorage.setItem(CURRENT_APP_KEY, app.id);
+    this.currentAppId = created.id;
+    localStorage.setItem(CURRENT_APP_KEY, created.id);
 
     this.notify();
-    return app;
+    return created;
   }
 
   /**
-   * Update an existing app
+   * Update an existing app (async - saves to backend)
    */
-  updateApp(appId: string, updates: UpdateAppRequest): AppMeta {
+  async updateApp(appId: string, updates: UpdateAppRequest): Promise<AppMeta> {
     const app = this.apps.get(appId);
     if (!app) {
       throw new Error(`App not found: ${appId}`);
@@ -145,29 +184,29 @@ export class AppStore {
       updated: Date.now(),
     };
 
-    this.apps.set(appId, updatedApp);
-    this.saveApp(updatedApp);
+    // Save to backend
+    const saved = await apiClient.put<AppMeta>(`/apps/${appId}`, updatedApp);
+
+    // Update local cache
+    this.apps.set(appId, saved);
     this.notify();
-    return updatedApp;
+    return saved;
   }
 
   /**
-   * Delete an app and all its pages
+   * Delete an app and all its pages (async - deletes from backend)
    */
-  deleteApp(appId: string): void {
+  async deleteApp(appId: string): Promise<void> {
     const app = this.apps.get(appId);
     if (!app) {
       throw new Error(`App not found: ${appId}`);
     }
 
-    // Delete all pages
-    app.pages.forEach((pageId: string) => {
-      this.deletePageFromStorage(appId, pageId);
-    });
+    // Backend will recursively delete app directory and all pages
+    await apiClient.delete(`/apps/${appId}`);
 
-    // Delete app
+    // Update local cache
     this.apps.delete(appId);
-    this.deleteAppFromStorage(appId);
 
     // If this was the current app, select another
     if (this.currentAppId === appId) {
@@ -223,19 +262,23 @@ export class AppStore {
   }
 
   /**
-   * Get app with all pages loaded
+   * Get app with all pages loaded (async - loads from backend)
    */
-  getAppWithPages(appId: string): AppWithPages | undefined {
+  async getAppWithPages(appId: string): Promise<AppWithPages | undefined> {
     const app = this.apps.get(appId);
     if (!app) return undefined;
 
     const pages = new Map<string, PageMeta>();
-    app.pages.forEach((pageId: string) => {
-      const page = this.loadPage(appId, pageId);
+    
+    // Load all pages in parallel
+    const pagePromises = app.pages.map(async (pageId: string) => {
+      const page = await this.loadPage(appId, pageId);
       if (page) {
         pages.set(pageId, page);
       }
     });
+    
+    await Promise.all(pagePromises);
 
     return { app, pages };
   }
@@ -243,27 +286,33 @@ export class AppStore {
   // ==================== Page Management ====================
 
   /**
-   * Add a page to an app
+   * Add a page to an app (async - saves to backend)
    */
-  addPage(appId: string, page: PageMeta): void {
+  async addPage(appId: string, page: PageMeta): Promise<void> {
     const app = this.apps.get(appId);
     if (!app) {
       throw new Error(`App not found: ${appId}`);
     }
 
     if (!app.pages.includes(page.id)) {
+      // Save page to backend
+      await apiClient.put(`/apps/${appId}/pages/${page.id}`, page);
+
+      // Update app pages list
       app.pages.push(page.id);
       app.updated = Date.now();
-      this.saveApp(app);
-      this.savePage(appId, page);
+      await apiClient.put(`/apps/${appId}`, app);
+
+      // Update local cache
+      this.apps.set(appId, app);
       this.notify();
     }
   }
 
   /**
-   * Remove a page from an app
+   * Remove a page from an app (async - deletes from backend)
    */
-  removePage(appId: string, pageId: string): void {
+  async removePage(appId: string, pageId: string): Promise<void> {
     const app = this.apps.get(appId);
     if (!app) {
       throw new Error(`App not found: ${appId}`);
@@ -274,21 +323,26 @@ export class AppStore {
       app.defaultPage = undefined;
     }
 
+    // Delete page from backend
+    await apiClient.delete(`/apps/${appId}/pages/${pageId}`);
+
+    // Update app pages list
     app.pages = app.pages.filter((id: string) => id !== pageId);
     app.updated = Date.now();
-    this.saveApp(app);
-    this.deletePageFromStorage(appId, pageId);
+    await apiClient.put(`/apps/${appId}`, app);
+
+    // Update local cache
+    this.apps.set(appId, app);
     this.notify();
   }
 
   /**
-   * Load a page from storage
+   * Load a page from backend
    */
-  loadPage(appId: string, pageId: string): PageMeta | undefined {
+  async loadPage(appId: string, pageId: string): Promise<PageMeta | undefined> {
     try {
-      const key = `${STORAGE_KEY_PREFIX}${appId}.page.${pageId}`;
-      const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : undefined;
+      const page = await apiClient.get<PageMeta>(`/apps/${appId}/pages/${pageId}`);
+      return page;
     } catch (error) {
       console.error(`[AppStore] Failed to load page ${pageId}:`, error);
       return undefined;
@@ -296,24 +350,23 @@ export class AppStore {
   }
 
   /**
-   * Save a page to storage
+   * Save a page to backend
    */
-  savePage(appId: string, page: PageMeta): void {
-    const key = `${STORAGE_KEY_PREFIX}${appId}.page.${page.id}`;
-    localStorage.setItem(key, JSON.stringify(page));
+  async savePage(appId: string, page: PageMeta): Promise<void> {
+    await apiClient.put(`/apps/${appId}/pages/${page.id}`, page);
   }
 
   /**
-   * Duplicate an existing page
+   * Duplicate an existing page (async - saves to backend)
    */
-  duplicatePage(appId: string, pageId: string): PageMeta {
+  async duplicatePage(appId: string, pageId: string): Promise<PageMeta> {
     const app = this.apps.get(appId);
     if (!app) {
       throw new Error(`App not found: ${appId}`);
     }
 
-    // Load the source page
-    const sourcePage = this.loadPage(appId, pageId);
+    // Load the source page (await the promise)
+    const sourcePage = await this.loadPage(appId, pageId);
     if (!sourcePage) {
       throw new Error(`Page not found: ${pageId}`);
     }
@@ -322,7 +375,7 @@ export class AppStore {
     const newId = this.generateUniquePageId(app, sourcePage.id);
     
     // Generate new name (e.g., "Dashboard" -> "Dashboard Copy")
-    const newName = this.generateCopyName(app, sourcePage.name);
+    const newName = await this.generateCopyName(app, sourcePage.name);
 
     // Deep clone the page with new ID and name
     const duplicatedPage: PageMeta = {
@@ -330,11 +383,11 @@ export class AppStore {
       id: newId,
       name: newName,
       // Deep clone nodes array to avoid reference issues
-      nodes: JSON.parse(JSON.stringify(sourcePage.nodes)),
+      nodes: structuredClone(sourcePage.nodes),
     };
 
     // Add the duplicated page to the app
-    this.addPage(appId, duplicatedPage);
+    await this.addPage(appId, duplicatedPage);
 
     return duplicatedPage;
   }
@@ -357,10 +410,10 @@ export class AppStore {
   /**
    * Generate a copy name (e.g., "Dashboard" -> "Dashboard Copy")
    */
-  private generateCopyName(app: AppMeta, sourceName: string): string {
+  private async generateCopyName(app: AppMeta, sourceName: string): Promise<string> {
     // Check if name already ends with " Copy" or " Copy N"
     const copyPattern = /^(.+?)( Copy)?( \d+)?$/;
-    const match = sourceName.match(copyPattern);
+    const match = copyPattern.exec(sourceName);
     
     if (!match) {
       return `${sourceName} Copy`;
@@ -368,12 +421,15 @@ export class AppStore {
 
     const baseName = match[1];
     
+    // Load all pages to get their names
+    const pagePromises = app.pages.map(pageId => this.loadPage(app.id, pageId));
+    const pages = await Promise.all(pagePromises);
+    
     // Find all pages with similar names
     const existingNames = new Set(
-      app.pages.map(pageId => {
-        const page = this.loadPage(app.id, pageId);
-        return page?.name;
-      }).filter(Boolean)
+      pages
+        .filter(page => page !== undefined)
+        .map(page => page!.name)
     );
 
     // Try "Name Copy", "Name Copy 2", "Name Copy 3", etc.
@@ -386,14 +442,6 @@ export class AppStore {
     }
 
     return newName;
-  }
-
-  /**
-   * Delete a page from storage
-   */
-  private deletePageFromStorage(appId: string, pageId: string): void {
-    const key = `${STORAGE_KEY_PREFIX}${appId}.page.${pageId}`;
-    localStorage.removeItem(key);
   }
 
   // ==================== Helpers ====================
@@ -414,7 +462,6 @@ export class AppStore {
     }
     return uniqueId;
   }
-
   /**
    * Create initial page based on template
    */
@@ -536,16 +583,15 @@ export class AppStore {
   }
 
   /**
-   * Clear all data (for testing)
+   * Clear all data (for testing) - async, deletes from backend
    */
-  clearAll(): void {
-    // Clear all app data
-    this.apps.forEach(app => {
-      app.pages.forEach((pageId: string) => {
-        this.deletePageFromStorage(app.id, pageId);
-      });
-      this.deleteAppFromStorage(app.id);
-    });
+  async clearAll(): Promise<void> {
+    // Delete all apps from backend
+    const deletePromises = Array.from(this.apps.keys()).map(appId => 
+      this.deleteApp(appId)
+    );
+    
+    await Promise.all(deletePromises);
 
     this.apps.clear();
     this.currentAppId = null;
@@ -556,4 +602,3 @@ export class AppStore {
 
 // Global instance
 export const appStore = new AppStore();
-
