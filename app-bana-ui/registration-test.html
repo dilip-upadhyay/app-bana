@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Registration Test - AppBana</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .page-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .page-header {
+      text-align: center;
+      color: white;
+      margin-bottom: 3rem;
+    }
+
+    .page-header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .page-header p {
+      font-size: 1.2rem;
+      opacity: 0.9;
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .info-panel {
+      background: white;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .info-panel h2 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      color: #333;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 0.5rem;
+    }
+
+    .info-panel h3 {
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+      color: #555;
+      font-size: 1.1rem;
+    }
+
+    .info-panel ul {
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .info-panel li {
+      margin-bottom: 0.5rem;
+      line-height: 1.6;
+    }
+
+    .code-block {
+      background: #f5f5f5;
+      padding: 1rem;
+      border-radius: 4px;
+      border-left: 3px solid #667eea;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      margin: 1rem 0;
+      overflow-x: auto;
+    }
+
+    .code-block code {
+      display: block;
+      white-space: pre;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: #667eea;
+      color: white;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-right: 0.5rem;
+    }
+
+    .test-buttons {
+      margin-top: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .test-button {
+      padding: 0.6rem 1.2rem;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .test-button:hover {
+      background: #5568d3;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .feature-list {
+      background: #f8f9fa;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 1rem 0;
+    }
+
+    .feature-list li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .feature-list li:last-child {
+      border-bottom: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <header class="page-header">
+      <h1>🚀 User Registration Test</h1>
+      <p>Testing AppBana's Universal Datasource Adapter System</p>
+    </header>
+
+    <div class="content-grid">
+      <!-- Registration Form -->
+      <div>
+        <user-registration-form></user-registration-form>
+      </div>
+
+      <!-- Info Panel -->
+      <div class="info-panel">
+        <h2>📋 What's Being Tested</h2>
+        
+        <div class="feature-list">
+          <ul>
+            <li><strong>Entity Abstraction:</strong> User entity defined with EntityMeta</li>
+            <li><strong>Datasource Adapter:</strong> JsonFileAdapter with LocalStorage</li>
+            <li><strong>CRUD Operations:</strong> Create, Read, Query, Delete</li>
+            <li><strong>Validation:</strong> Client-side validation from entity metadata</li>
+            <li><strong>Persistence:</strong> Data survives page refresh</li>
+          </ul>
+        </div>
+
+        <h3>🧪 Console Test Commands</h3>
+        <p>Open browser console (F12) and try these:</p>
+
+        <div class="code-block">
+          <code>// View entity definition
+UserEntity
+
+// List all registered users
+await userRegistrationDemo.listUsers()
+
+// Register a test user
+await userRegistrationDemo.registerTestUser()
+
+// Register multiple users
+await userRegistrationDemo.registerMultipleUsers()
+
+// Find user by email
+await userRegistrationDemo.findByEmail('john.doe@example.com')
+
+// Run full demo
+await userRegistrationDemo.runFullDemo()
+
+// Clear all users
+await userRegistrationDemo.clearAll()</code>
+        </div>
+
+        <h3>💾 Check LocalStorage</h3>
+        <ol>
+          <li>Open DevTools (F12)</li>
+          <li>Go to <strong>Application</strong> tab</li>
+          <li>Expand <strong>Local Storage</strong></li>
+          <li>Look for <code>app-bana-users</code></li>
+        </ol>
+
+        <h3>🎯 Key Features Demonstrated</h3>
+        <ul>
+          <li><span class="badge">Entity Abstraction</span> Business-friendly field types</li>
+          <li><span class="badge">Universal Adapter</span> Works with any datasource</li>
+          <li><span class="badge">Offline-First</span> LocalStorage persistence</li>
+          <li><span class="badge">Metadata-Driven</span> Validation from entity def</li>
+          <li><span class="badge">Type-Safe</span> Full TypeScript support</li>
+        </ul>
+
+        <h3>🔗 Quick Actions</h3>
+        <div class="test-buttons">
+          <button class="test-button" onclick="openConsole()">Open Console</button>
+          <button class="test-button" onclick="runListUsers()">List Users</button>
+          <button class="test-button" onclick="runTestUser()">Add Test User</button>
+          <button class="test-button" onclick="runClearAll()">Clear All</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Helper functions for quick actions
+    function openConsole() {
+      alert('Press F12 to open the browser console');
+    }
+
+    async function runListUsers() {
+      try {
+        const users = await userRegistrationDemo.listUsers();
+        console.log('Users:', users);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    }
+
+    async function runTestUser() {
+      try {
+        const user = await userRegistrationDemo.registerTestUser();
+        alert(`✅ Test user registered! ID: ${user.id}`);
+      } catch (error) {
+        alert(`❌ Error: ${error.message}`);
+      }
+    }
+
+    async function runClearAll() {
+      if (confirm('Are you sure you want to clear all users?')) {
+        await userRegistrationDemo.clearAll();
+        alert('✅ All users cleared');
+      }
+    }
+  </script>
+
+  <script type="module" src="/src/demo/registration-test-entry.ts"></script>
+</body>
+</html>

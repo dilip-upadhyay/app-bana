@@ -6,11 +6,51 @@ AppBana is a **metadata-driven platform** that generates end-to-end functionalit
 ## Technology Stack
 - **Backend**: Java 25 LTS with virtual threads, JDK HttpServer (default) or Tomcat, H2 embedded database, HikariCP, Jackson, Maven multi-module build
 - **Frontend**: TypeScript 5.2.2+, Lit 3.1.4 Web Components, Vite 5.3.1+ dev server, Vitest 1.5.0+ testing
-- **Architecture**: Shadow DOM component system, custom element registry, metadata-driven rendering, dual-layer abstraction (Entity → Schema)
+- **Architecture**: Shadow DOM component system, custom element registry, metadata-driven rendering, dual-layer abstraction (Entity → Schema), universal datasource adapters
 
 ## Critical Development Patterns
 
-### 1. Dual-Layer Abstraction (NEW - Nov 2025)
+### 1. Universal Datasource Adapter System (NEW - Nov 8, 2025)
+**Entities can now work with ANY backend** - not just databases:
+```
+EntityMeta (Business Definition)
+    ↓ Choose Datasource Type
+REST API | SQL DB | NoSQL | Files | LocalStorage
+    ↓ DataSourceAdapter Interface
+Universal CRUD Operations
+```
+
+**Key Files**:
+- `src/core/DataSourceAdapter.ts`: Universal CRUD interface (590 lines)
+- `src/core/AdapterRegistry.ts`: Singleton adapter registry (255 lines)
+- `src/core/adapters/RestApiAdapter.ts`: External REST APIs with auth, rate limiting (396 lines)
+- `src/core/adapters/JsonFileAdapter.ts`: File/LocalStorage/SessionStorage (334 lines)
+- `src/core/adapter-bootstrap.ts`: Auto-registers 7+ datasource types
+- `src/core/ADAPTER_GUIDE.md`: Comprehensive usage guide (500+ lines)
+
+**Adapter Pattern**:
+```typescript
+// Get adapter from registry
+const adapter = AdapterRegistry.getInstance().create('rest-api', config);
+await adapter.connect(config);
+
+// Universal CRUD
+const result = await adapter.query('users', {
+  filters: [{ field: 'status', operator: 'eq', value: 'active' }],
+  sort: [{ field: 'createdAt', desc: true }],
+  limit: 10
+});
+```
+
+**Supported Datasources**:
+- SQL: `h2`, `postgres`, `mysql`, `oracle`, `mssql`, `sqlite`, `mariadb`
+- NoSQL: `mongodb`, `dynamodb`, `cassandra`, `couchdb`, `redis`
+- APIs: `rest-api`, `graphql`, `soap`, `grpc`, `odata`
+- Files: `json-file`, `csv-file`, `excel-file`, `xml-file`
+- Browser: `in-memory`, `localstorage`, `sessionstorage`
+- Cloud: `salesforce`, `google-sheets`, `airtable`, `s3`
+
+### 2. Dual-Layer Abstraction (Nov 2025)
 **Entity Abstraction Layer** sits above the technical schema layer:
 ```
 Business User View (EntityMeta)
@@ -23,12 +63,14 @@ Database Tables
 **Key Files**:
 - `src/models/entity-metadata.ts`: 30+ business-friendly field types (text, email, phone, currency, reference, etc.)
 - `src/core/EntitySchemaConverter.ts`: Converts EntityMeta ↔ RelationalSchema
+- `src/core/backend-sync.ts`: Syncs EntityMeta to backend `/api/schema` endpoint (NEW - Nov 8)
 - `src/builder/components/EntityManager.ts`: Visual entity CRUD with relationship editor (1500+ lines)
 
 **Entity Auto-includes**:
 - Every entity gets `id` field (autoincrement, primary key) - PROTECTED, cannot modify/delete
 - Soft delete: `deleted` boolean field (if enabled)
 - Versioning: `version` int field (if enabled)
+- `datasourceType` and `datasourceConfig` fields for adapter selection (NEW)
 
 **Relationships**:
 - Visual relationship editor with 4 types: one-to-one, one-to-many, many-to-one, many-to-many
@@ -36,39 +78,60 @@ Database Tables
 - Junction tables auto-created for many-to-many relationships
 - Field mapping: fromField → toField (defaults to `{entityName}Id` → `id`)
 
-### 2. Component System (3-File Pattern)
-### 2. Component System (3-File Pattern)
-All UI components follow this structure:
+**Backend Sync** (NEW):
 ```typescript
-// MyComponent.ts
-import { customElement } from 'lit/decorators.js';
-import { html } from 'lit';
-import { BaseElement } from '../core/BaseElement';
-import styles from './MyComponent.css?inline';
+import { syncEntityToBackend, previewBackendSchema } from '../core/backend-sync';
+
+// Preview SQL without creating table
+const sqlStatements = await previewBackendSchema(userEntity);
+
+// Create table in backend database
+await syncEntityToBackend(userEntity);
+```
+
+### 3. Component System (Lit vs BaseElement)
+Two component patterns exist - **prefer Lit for new components**:
+
+**Lit Components** (Modern, Preferred):
+```typescript
+import { html, LitElement, css } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
 
 @customElement('my-component')
-export class MyComponent extends BaseElement {
-  static styles = styles;
+export class MyComponent extends LitElement {
+  static readonly styles = css`/* scoped styles */`;
+  
+  @state()
+  private data: any;
   
   render() {
-    return html`<div>Content</div>`;
+    return html`<div>${this.data}</div>`;
   }
 }
 ```
-- **MyComponent.ts**: Logic + template (extends `BaseElement`)
-- **MyComponent.css**: Scoped Shadow DOM styles (imported with `?inline`)
-- **MyComponent.html**: Reference template (optional, for large templates)
 
-### 3. Component Registration
-### 3. Component Registration
+**BaseElement Components** (Legacy):
+```typescript
+import { BaseElement } from '../core/BaseElement';
+
+@customElement('my-component')
+export class MyComponent extends BaseElement {
+  static styles = styles; // CSS string
+  
+  protected render(): string {
+    return `<div>Content</div>`; // Returns HTML string
+  }
+}
+```
+
+### 4. Component Registration
 All components must register in `src/core/registry.ts`:
 ```typescript
 registerComponent('my-component', () => import('../components/MyComponent'));
 ```
 The registry uses dynamic imports for lazy-loading. Call `ensureCoreRegistered()` before using components.
 
-### 4. Metadata Structure
-### 4. Metadata Structure
+### 5. Metadata Structure
 Core interfaces in `src/models/metadata.ts`:
 ```typescript
 interface ComponentNode {
@@ -90,14 +153,6 @@ interface PageMeta {
 }
 ```
 **Common Error**: Using `components` property instead of `nodes` in PageMeta.
-
-### 5. BaseElement Pattern
-### 5. BaseElement Pattern
-All custom elements extend `BaseElement` from `src/core/BaseElement.ts`:
-- **Shadow DOM**: Automatically attached, provides style encapsulation
-- **Reactive State**: Use `setState(newState)` to trigger re-renders
-- **Lifecycle**: Override `connectedCallback()`, `disconnectedCallback()`
-- **Styles**: Return CSS string from static `styles` property
 
 ### 6. API Client Pattern
 Use `ApiClient` from `src/core/api-client.ts` for all HTTP requests:
@@ -171,11 +226,14 @@ Key state management:
 - **Core Framework**: `src/core/BaseElement.ts`, `src/core/registry.ts`
 - **Metadata Types**: `src/models/metadata.ts`, `src/models/entity-metadata.ts`
 - **Entity System**: `src/core/EntitySchemaConverter.ts`, `src/builder/components/EntityManager.ts`
+- **Datasource Adapters**: `src/core/DataSourceAdapter.ts`, `src/core/AdapterRegistry.ts`, `src/core/adapters/`
+- **Backend Sync**: `src/core/backend-sync.ts` (EntityMeta → Backend schema converter)
 - **API Client**: `src/core/api-client.ts`
 - **Studio Builder**: `src/builder/components/PageManager.ts`, `BuilderCanvas.ts`
 - **Architecture Docs**: `docs/01-ARCHITECTURE.md`, `docs/02-DEVELOPMENT_GUIDE.md`
 - **Roadmap**: `docs/03-ROADMAP.md`
-- **Session Summaries**: `docs/SESSION_SUMMARY_NOV05_2025.md` (latest work)
+- **Session Summaries**: `docs/SESSION_SUMMARY_NOV05_2025.md`, `docs/ADAPTER_IMPLEMENTATION_COMPLETE.md`
+- **Test Apps**: `registration-test.html` (User registration with LocalStorage adapter)
 
 ## Common Pitfalls
 1. **Forgetting `rootId`**: PageMeta requires `rootId` field pointing to root node
@@ -202,7 +260,9 @@ Key state management:
 - **Comments**: Document complex logic, avoid obvious comments
 
 ## Integration Points
-- **Metadata → Backend**: POST to `/api/schema` to create entities
+- **Metadata → Backend**: POST to `/api/schema` to create entities (use `backend-sync.ts`)
 - **Backend → Frontend**: GET from `/api/{entity}` for CRUD operations
 - **Studio → Runtime**: PageMeta serialized to JSON, loaded by Renderer
 - **Registry → Components**: Dynamic imports ensure lazy-loading
+- **Adapters → Data**: Universal interface for SQL/NoSQL/REST/Files via DataSourceAdapter
+
