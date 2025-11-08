@@ -11,6 +11,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': 'http://localhost:8080',
+      '/apps': 'http://localhost:8080',
       '/schema': 'http://localhost:8080',
       '/openapi.json': 'http://localhost:8080',
       '/ui/datasource': 'http://localhost:8080',

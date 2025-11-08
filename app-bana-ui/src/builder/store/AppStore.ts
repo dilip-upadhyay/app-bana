@@ -168,8 +168,7 @@ export class AppStore {
           darkMode: false,
         },
         routes: {
-          baseUrl: `/${id}`,
-          mode: 'hash',
+          basePath: `/${id}`,
         },
       };
 

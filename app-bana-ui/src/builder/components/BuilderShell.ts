@@ -9,12 +9,13 @@ import './PageManager';
 import './BuilderInspector';
 import './AppManager';
 import './EntityManager';
+import './AiChatBuilder';
 
 @customElement('studio-builder-shell')
 export class BuilderShell extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
-  @state() private activeLeftTab: 'components' | 'entities' = 'components';
+  @state() private activeLeftTab: 'components' | 'entities' | 'ai-builder' = 'components';
   @state() private leftPanelWidth = 300; // Default width in pixels
   private isResizing = false;
   private startX = 0;
@@ -91,6 +92,16 @@ export class BuilderShell extends LitElement {
     }
   }
 
+  private renderLeftPanelContent() {
+    if (this.activeLeftTab === 'components') {
+      return html`<studio-component-library></studio-component-library>`;
+    }
+    if (this.activeLeftTab === 'entities') {
+      return html`<studio-entity-manager></studio-entity-manager>`;
+    }
+    return html`<ai-chat-builder></ai-chat-builder>`;
+  }
+
   render() {
     // Set CSS custom property for dynamic width
     this.style.setProperty('--left-panel-width', `${this.leftPanelWidth}px`);
@@ -106,7 +117,7 @@ export class BuilderShell extends LitElement {
         <studio-page-manager></studio-page-manager>
       </div>
 
-      <!-- Left: Tabbed Panel (Component Library or Entity Manager) -->
+      <!-- Left: Tabbed Panel (Component Library or Entity Manager or AI Builder) -->
       <div class="library-panel">
         <div class="left-panel-tabs">
           <button 
@@ -119,12 +130,14 @@ export class BuilderShell extends LitElement {
             @click=${() => this.activeLeftTab = 'entities'}>
             Entities
           </button>
+          <button 
+            class="tab ${this.activeLeftTab === 'ai-builder' ? 'active' : ''}"
+            @click=${() => this.activeLeftTab = 'ai-builder'}>
+            🤖 AI Builder
+          </button>
         </div>
         <div class="left-panel-content">
-          ${this.activeLeftTab === 'components' 
-            ? html`<studio-component-library></studio-component-library>`
-            : html`<studio-entity-manager></studio-entity-manager>`
-          }
+          ${this.renderLeftPanelContent()}
         </div>
         <!-- Resize Handle -->
         <div 

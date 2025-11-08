@@ -43,5 +43,10 @@ export function ensureCoreRegistered(): Promise<void> {
     proms.push(import('../components/HTMLElements.js'));
   }
 
+  // Builder components
+  if (!registry.has('ai-chat-builder')) {
+    proms.push(import('../builder/components/AiChatBuilder.js'));
+  }
+
   return Promise.all(proms).then(()=>{});
 }

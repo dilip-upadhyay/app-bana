@@ -49,9 +49,8 @@ export interface AppTheme {
  * Routing configuration
  */
 export interface AppRoutes {
-  baseUrl?: string;              // Base URL path (e.g., "/app")
-  mode?: 'hash' | 'history';     // Routing mode
-  notFoundPage?: string;         // 404 page ID
+  basePath?: string;                      // Base URL path (e.g., "/app")
+  pageRoutes?: Record<string, string>;    // Page ID -> route path mapping
 }
 
 /**

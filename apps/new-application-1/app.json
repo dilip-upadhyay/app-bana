@@ -1,0 +1,18 @@
+{
+  "id" : "new-application-1",
+  "name" : "New Application",
+  "description" : "Custom application",
+  "version" : "1.0.0",
+  "created" : 1762629871837,
+  "updated" : 1762629871843,
+  "pages" : [ ],
+  "theme" : {
+    "primaryColor" : "#2563eb",
+    "secondaryColor" : "#64748b",
+    "fontFamily" : "system-ui, -apple-system, sans-serif",
+    "darkMode" : false
+  },
+  "routes" : {
+    "basePath" : "/new-application-1"
+  }
+}

@@ -434,6 +434,25 @@ public class ApiServer {
             }
         });
 
+        // ==================== AI GENERATION ENDPOINT ====================
+        
+        // AI-powered app generation
+        router.post("/api/ai/generate", (req, res) -> {
+            try {
+                AiAppGeneratorService.GenerationRequest genReq = req.readJson(new TypeReference<>(){});
+                if (genReq.description == null || genReq.description.trim().isEmpty()) {
+                    res.json(400, Map.of("error", "description is required"));
+                    return;
+                }
+                
+                AiAppGeneratorService.GenerationResult result = AiAppGeneratorService.generateApp(genReq);
+                res.json(200, result);
+            } catch (Exception e) {
+                LOG.error("AI generation failed", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
         // ==================== APP ENDPOINTS ====================
         
         // List all apps

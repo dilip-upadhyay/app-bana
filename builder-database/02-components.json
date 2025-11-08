@@ -287,6 +287,31 @@
       },
       "children": false,
       "note": "Automatically used when component type not found in registry"
+    },
+    {
+      "type": "ai-chat-builder",
+      "name": "AiChatBuilder",
+      "category": "Builder Tools",
+      "file": "src/builder/components/AiChatBuilder.ts",
+      "baseClass": "LitElement",
+      "description": "AI-powered chat interface for building applications with natural language",
+      "shadowDOM": true,
+      "props": {},
+      "features": [
+        "Natural language app generation",
+        "Interactive chat UI",
+        "Preview generated metadata",
+        "Confirm and create apps",
+        "5 built-in templates"
+      ],
+      "events": [
+        {
+          "name": "app-created",
+          "detail": "{ appId: string }",
+          "description": "Fired when app created"
+        }
+      ],
+      "children": false
     }
   ],
 
