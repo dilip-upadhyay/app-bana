@@ -1,0 +1,140 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-08T00:00:00Z",
+  "description": "Core architectural concepts and patterns in AppBana",
+  
+  "architecture": {
+    "name": "Metadata-Driven Platform",
+    "description": "Single source of truth generates end-to-end functionality",
+    "dataFlow": [
+      "Entity Definition (Business Layer)",
+      "Schema (Technical Layer)",
+      "Database Table",
+      "REST CRUD APIs",
+      "UI Pages (Runtime)"
+    ],
+    "principle": "Changes to metadata propagate automatically through all layers"
+  },
+
+  "dualLayerAbstraction": {
+    "description": "Business-friendly entity layer sits above technical schema layer",
+    "layers": [
+      {
+        "name": "Entity Abstraction Layer",
+        "file": "src/models/entity-metadata.ts",
+        "purpose": "Business users define entities with friendly field types",
+        "examples": ["text", "email", "phone", "currency", "reference"]
+      },
+      {
+        "name": "Technical Schema Layer",
+        "file": "src/core/EntitySchemaConverter.ts",
+        "purpose": "Converts entities to relational schema with foreign keys",
+        "generates": ["SQL DDL", "Foreign Keys", "Junction Tables"]
+      }
+    ]
+  },
+
+  "persistence": {
+    "type": "Backend Filesystem",
+    "migratedFrom": "localStorage",
+    "migrationDate": "2025-11-01",
+    "structure": {
+      "apps": "apps/{appId}/app.json",
+      "pages": "apps/{appId}/pages/{pageId}.json"
+    },
+    "autoLinking": {
+      "enabled": true,
+      "description": "Backend automatically maintains app.pages[] array",
+      "implementedDate": "2025-11-08",
+      "mechanism": [
+        "AppManager.savePage() adds pageId to app.pages[]",
+        "AppManager.deletePage() removes pageId from app.pages[]"
+      ]
+    }
+  },
+
+  "stateManagement": {
+    "pattern": "Singleton AppStore",
+    "file": "app-bana-ui/src/builder/store/AppStore.ts",
+    "description": "Single source of truth for all app state",
+    "keyMethods": [
+      "getCurrentApp()",
+      "createApp(request)",
+      "addPage(appId, page)",
+      "loadPage(appId, pageId)",
+      "updateApp(appId, updates)",
+      "subscribe(callback)",
+      "isLoading()"
+    ],
+    "usage": "import { appStore } from '../store/AppStore';"
+  },
+
+  "componentSystem": {
+    "framework": "Lit Web Components",
+    "shadowDOM": true,
+    "registry": "src/core/registry.ts",
+    "lazyLoading": true,
+    "patterns": [
+      {
+        "name": "Lit Components (Preferred)",
+        "baseClass": "LitElement",
+        "decorator": "@customElement('tag-name')",
+        "reactivity": "@state() decorator"
+      },
+      {
+        "name": "BaseElement (Legacy)",
+        "baseClass": "BaseElement",
+        "decorator": "@customElement('tag-name')",
+        "rendering": "string-based HTML"
+      }
+    ]
+  },
+
+  "metadataStructure": {
+    "PageMeta": {
+      "file": "src/models/metadata.ts",
+      "required": ["id", "name", "path", "rootId", "nodes"],
+      "description": "Defines complete page structure",
+      "rootId": "MUST point to root ComponentNode"
+    },
+    "ComponentNode": {
+      "file": "src/models/metadata.ts",
+      "required": ["id", "type"],
+      "optional": ["props", "children", "style"],
+      "children": "Array of child node IDs (string[])"
+    },
+    "EntityMeta": {
+      "file": "src/models/entity-metadata.ts",
+      "required": ["name", "fields"],
+      "autoIncludes": ["id field (protected)", "datasourceType", "datasourceConfig"],
+      "optional": ["deleted (soft delete)", "version (versioning)"]
+    }
+  },
+
+  "buildProcess": {
+    "backend": {
+      "language": "Java 21 LTS",
+      "buildTool": "Maven",
+      "command": "mvn clean package",
+      "server": "JDK HttpServer",
+      "port": 8080,
+      "output": "app-bana-service/target/app-bana-service-1.0-SNAPSHOT.jar"
+    },
+    "frontend": {
+      "language": "TypeScript 5.2.2+",
+      "buildTool": "Vite 5.3.1+",
+      "devCommand": "npm run dev",
+      "buildCommand": "npm run build",
+      "devPort": 5173,
+      "output": "app-bana-service/src/main/resources/ui/dist/"
+    }
+  },
+
+  "apiClient": {
+    "file": "src/core/api-client.ts",
+    "pattern": "Centralized HTTP client",
+    "baseURL": "http://localhost:8080",
+    "methods": ["get", "post", "put", "delete"],
+    "usage": "import { apiClient } from './api-client';"
+  }
+}

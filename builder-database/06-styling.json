@@ -1,0 +1,113 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-08T00:00:00Z",
+  "description": "Design tokens, theme system, and styling patterns",
+  
+  "designTokens": {
+    "file": "src/styles/tokens.css",
+    "usage": "CSS custom properties (CSS variables)",
+    "scoping": "Global :root level, available to all components"
+  },
+
+  "colorTokens": {
+    "brand": [
+      {"name": "--color-brand", "description": "Primary brand color"},
+      {"name": "--color-brand-accent", "description": "Brand hover/active state"},
+      {"name": "--color-brand-muted", "description": "Subtle brand background"}
+    ],
+    "semantic": [
+      {"name": "--color-success", "description": "Success states"},
+      {"name": "--color-danger", "description": "Error/destructive states"},
+      {"name": "--color-warning", "description": "Warning states"},
+      {"name": "--color-info", "description": "Informational states"}
+    ],
+    "neutral": [
+      {"name": "--color-text", "description": "Primary text color"},
+      {"name": "--color-text-muted", "description": "Secondary text color"},
+      {"name": "--color-surface", "description": "Background surface"},
+      {"name": "--color-surface-alt", "description": "Alternate surface (hover)"},
+      {"name": "--color-border", "description": "Border color"}
+    ]
+  },
+
+  "typographyTokens": {
+    "fontFamilies": [
+      {"name": "--font-sans", "default": "system-ui, -apple-system, sans-serif"},
+      {"name": "--font-mono", "default": "Consolas, Monaco, monospace"}
+    ],
+    "fontSizes": [
+      {"name": "--text-xs", "value": "0.75rem"},
+      {"name": "--text-sm", "value": "0.875rem"},
+      {"name": "--text-md", "value": "1rem"},
+      {"name": "--text-lg", "value": "1.125rem"},
+      {"name": "--text-xl", "value": "1.25rem"},
+      {"name": "--text-2xl", "value": "1.5rem"}
+    ],
+    "lineHeights": [
+      {"name": "--line-height-tight", "value": "1.2"},
+      {"name": "--line-height-normal", "value": "1.5"},
+      {"name": "--line-height-loose", "value": "1.8"}
+    ]
+  },
+
+  "spacingTokens": {
+    "scale": [
+      {"name": "--spacing-xs", "value": "0.25rem"},
+      {"name": "--spacing-sm", "value": "0.5rem"},
+      {"name": "--spacing-md", "value": "1rem"},
+      {"name": "--spacing-lg", "value": "1.5rem"},
+      {"name": "--spacing-xl", "value": "2rem"},
+      {"name": "--spacing-2xl", "value": "3rem"}
+    ]
+  },
+
+  "borderTokens": {
+    "radius": [
+      {"name": "--radius-sm", "value": "0.25rem"},
+      {"name": "--radius-md", "value": "0.5rem"},
+      {"name": "--radius-lg", "value": "1rem"},
+      {"name": "--radius-full", "value": "9999px"}
+    ],
+    "width": [
+      {"name": "--border-thin", "value": "1px"},
+      {"name": "--border-medium", "value": "2px"},
+      {"name": "--border-thick", "value": "4px"}
+    ]
+  },
+
+  "transitionTokens": [
+    {"name": "--transition-fast", "value": "150ms ease"},
+    {"name": "--transition-normal", "value": "250ms ease"},
+    {"name": "--transition-slow", "value": "350ms ease"}
+  ],
+
+  "shadowTokens": [
+    {"name": "--shadow-sm", "value": "0 1px 2px rgba(0,0,0,0.05)"},
+    {"name": "--shadow-md", "value": "0 4px 6px rgba(0,0,0,0.1)"},
+    {"name": "--shadow-lg", "value": "0 10px 15px rgba(0,0,0,0.1)"}
+  ],
+
+  "componentStyling": {
+    "pattern": "Shadow DOM with scoped styles",
+    "cssImport": "import styles from './Component.css?inline';",
+    "litPattern": "static styles = css`${unsafeCSS(styles)}`;",
+    "baseElementPattern": "protected styles(): string { return `/* CSS */`; }",
+    "tokenUsage": "Use CSS custom properties: background: var(--color-brand);"
+  },
+
+  "themeSystem": {
+    "darkMode": "Not yet implemented",
+    "customThemes": "Not yet implemented",
+    "tokenOverride": "Components can override tokens via inline styles"
+  },
+
+  "responsiveDesign": {
+    "breakpoints": {
+      "sm": "640px",
+      "md": "768px",
+      "lg": "1024px",
+      "xl": "1280px"
+    },
+    "approach": "Mobile-first with min-width media queries"
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-08T00:00:00Z",
+  "description": "Page templates, structure, and page building patterns",
+  
+  "pageStructure": {
+    "interface": "PageMeta",
+    "file": "src/models/metadata.ts",
+    "required": ["id", "name", "path", "rootId", "nodes"],
+    "optional": ["metaVersion", "type"],
+    "rootId": "MUST point to ID of root ComponentNode",
+    "nodes": "Array of ComponentNode objects (tree structure)"
+  },
+
+  "pageTemplates": [
+    {
+      "name": "Login Page",
+      "description": "User login form with email/password",
+      "file": "src/builder/components/PageManager.ts",
+      "method": "buildLoginTemplate()",
+      "components": ["container", "text (heading)", "text (email)", "text (password)", "button (login)"],
+      "layout": "Vertical centered container with form fields"
+    },
+    {
+      "name": "Dashboard Page",
+      "description": "Overview dashboard with metrics cards",
+      "file": "src/builder/components/PageManager.ts",
+      "method": "buildDashboardTemplate()",
+      "components": ["container", "text (welcome)", "app-grid", "multiple containers (cards)"],
+      "layout": "Header with welcome text, 3-column grid of metric cards"
+    },
+    {
+      "name": "Contact Form",
+      "description": "Contact form with name, email, message fields",
+      "file": "src/builder/components/PageManager.ts",
+      "method": "buildContactFormTemplate()",
+      "components": ["container", "text (heading)", "text fields", "button (submit)"],
+      "layout": "Vertical form with submit button"
+    },
+    {
+      "name": "Landing Page",
+      "description": "Marketing landing page with hero section",
+      "file": "src/builder/components/PageManager.ts",
+      "method": "buildLandingTemplate()",
+      "components": ["container", "text (hero heading)", "text (subheading)", "button (CTA)", "app-grid (features)"],
+      "layout": "Hero section + features grid"
+    },
+    {
+      "name": "Profile Page",
+      "description": "User profile with avatar and info",
+      "file": "src/builder/components/PageManager.ts",
+      "method": "buildProfileTemplate()",
+      "components": ["container", "text (name)", "text (email)", "text (bio)", "button (edit)"],
+      "layout": "Vertical layout with user information"
+    },
+    {
+      "name": "Data Table",
+      "description": "Tabular data display with columns",
+      "file": "src/builder/components/PageManager.ts",
+      "method": "buildDataTableTemplate()",
+      "components": ["container", "text (heading)", "app-grid (table)", "button (add new)"],
+      "layout": "Table header + grid layout for rows"
+    },
+    {
+      "name": "Blank Canvas",
+      "description": "Empty page with single root container",
+      "components": ["container (root only)"],
+      "layout": "Single empty container for custom building"
+    }
+  ],
+
+  "pageCreationFlow": {
+    "file": "src/builder/components/PageManager.ts",
+    "steps": [
+      "User clicks 'New Page' button",
+      "Modal shows: Basic Info step (name, path)",
+      "User proceeds to Template Selection step",
+      "User chooses template or Blank Canvas",
+      "PageManager generates ComponentNode tree",
+      "AppStore.addPage() saves to backend",
+      "Backend auto-links page to app.pages[]"
+    ]
+  },
+
+  "componentNodeStructure": {
+    "interface": "ComponentNode",
+    "file": "src/models/metadata.ts",
+    "required": ["id", "type"],
+    "optional": ["props", "children", "style"],
+    "children": "Array of child node IDs (string[])",
+    "example": {
+      "id": "root",
+      "type": "container",
+      "props": {
+        "layout": "vertical",
+        "gap": "md",
+        "padding": "lg"
+      },
+      "children": ["child1", "child2"]
+    }
+  },
+
+  "pageStorage": {
+    "backend": "apps/{appId}/pages/{pageId}.json",
+    "format": "Pretty-printed JSON (4-space indent)",
+    "autoLinking": "Backend automatically adds pageId to app.pages[]"
+  },
+
+  "pageRouting": {
+    "pattern": "Path-based routing",
+    "pathFormat": "/{pageName}",
+    "examples": [
+      {"/": "Home page"},
+      {"/login": "Login page"},
+      {"/dashboard": "Dashboard page"}
+    ]
+  },
+
+  "runtimeRendering": {
+    "file": "src/runtime/renderer/",
+    "method": "renderPage(pageMeta: PageMeta)",
+    "process": [
+      "Load PageMeta from backend",
+      "Find root node by rootId",
+      "Recursively render tree",
+      "Create DOM elements from ComponentNode",
+      "Set properties and styles",
+      "Append children"
+    ]
+  }
+}

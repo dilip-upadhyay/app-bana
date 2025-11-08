@@ -1,0 +1,151 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-08T00:00:00Z",
+  "description": "Universal datasource adapter system for connecting to any backend",
+  
+  "adapterSystem": {
+    "interface": "DataSourceAdapter",
+    "file": "src/core/DataSourceAdapter.ts",
+    "registry": "src/core/AdapterRegistry.ts (singleton)",
+    "bootstrap": "src/core/adapter-bootstrap.ts (auto-registers adapters)",
+    "guide": "src/core/ADAPTER_GUIDE.md (500+ lines documentation)"
+  },
+
+  "adapters": {
+    "sql": [
+      {"type": "h2", "name": "H2 Database", "file": "src/core/adapters/H2Adapter.ts", "embedded": true, "production": false},
+      {"type": "postgres", "name": "PostgreSQL", "config": ["host", "port", "database", "user", "password"]},
+      {"type": "mysql", "name": "MySQL/MariaDB", "config": ["host", "port", "database", "user", "password"]},
+      {"type": "sqlite", "name": "SQLite", "config": ["file"], "embedded": true},
+      {"type": "mssql", "name": "Microsoft SQL Server", "config": ["host", "port", "database", "user", "password"]},
+      {"type": "oracle", "name": "Oracle Database", "config": ["host", "port", "serviceName", "user", "password"]},
+      {"type": "mariadb", "name": "MariaDB", "config": ["host", "port", "database", "user", "password"]}
+    ],
+    "nosql": [
+      {"type": "mongodb", "name": "MongoDB", "config": ["connectionString", "database"]},
+      {"type": "dynamodb", "name": "AWS DynamoDB", "config": ["region", "accessKeyId", "secretAccessKey"]},
+      {"type": "cassandra", "name": "Apache Cassandra", "config": ["contactPoints", "keyspace"]},
+      {"type": "couchdb", "name": "CouchDB", "config": ["url", "database"]},
+      {"type": "redis", "name": "Redis", "config": ["host", "port", "password"], "keyValue": true}
+    ],
+    "api": [
+      {
+        "type": "rest-api",
+        "name": "REST API",
+        "file": "src/core/adapters/RestApiAdapter.ts",
+        "config": ["baseURL", "headers", "auth"],
+        "features": ["Rate limiting", "Retry logic", "Request/response transformation", "Authentication (Bearer, Basic, API Key)"]
+      },
+      {"type": "graphql", "name": "GraphQL API", "config": ["endpoint", "headers", "auth"]},
+      {"type": "soap", "name": "SOAP/WSDL", "config": ["wsdlUrl", "username", "password"]},
+      {"type": "grpc", "name": "gRPC", "config": ["endpoint", "protoFile"]},
+      {"type": "odata", "name": "OData", "config": ["serviceUrl", "auth"]}
+    ],
+    "file": [
+      {
+        "type": "json-file",
+        "name": "JSON File/LocalStorage",
+        "file": "src/core/adapters/JsonFileAdapter.ts",
+        "config": ["storageType (localstorage | sessionstorage | file)", "storageKey | filePath"],
+        "features": ["In-memory operations", "Browser storage", "File system (Node.js)"]
+      },
+      {"type": "csv-file", "name": "CSV File", "config": ["filePath", "delimiter", "hasHeader"]},
+      {"type": "excel-file", "name": "Excel File", "config": ["filePath", "sheetName"]},
+      {"type": "xml-file", "name": "XML File", "config": ["filePath", "rootElement"]}
+    ],
+    "browser": [
+      {"type": "localstorage", "name": "Browser LocalStorage", "config": ["storageKey"], "persistent": true},
+      {"type": "sessionstorage", "name": "Browser SessionStorage", "config": ["storageKey"], "persistent": false},
+      {"type": "in-memory", "name": "In-Memory Store", "config": [], "persistent": false, "testing": true}
+    ],
+    "cloud": [
+      {"type": "salesforce", "name": "Salesforce", "config": ["instanceUrl", "accessToken", "apiVersion"]},
+      {"type": "google-sheets", "name": "Google Sheets", "config": ["spreadsheetId", "apiKey | oauth"]},
+      {"type": "airtable", "name": "Airtable", "config": ["apiKey", "baseId", "tableName"]},
+      {"type": "s3", "name": "Amazon S3", "config": ["bucket", "region", "accessKeyId", "secretAccessKey"]}
+    ]
+  },
+
+  "adapterInterface": {
+    "methods": [
+      {"name": "connect", "params": ["config"], "returns": "Promise<void>", "description": "Initialize connection"},
+      {"name": "disconnect", "params": [], "returns": "Promise<void>", "description": "Close connection"},
+      {"name": "query", "params": ["entityName", "QueryOptions"], "returns": "Promise<QueryResult>", "description": "Read records"},
+      {"name": "create", "params": ["entityName", "data"], "returns": "Promise<any>", "description": "Create record"},
+      {"name": "update", "params": ["entityName", "id", "data"], "returns": "Promise<void>", "description": "Update record"},
+      {"name": "delete", "params": ["entityName", "id"], "returns": "Promise<void>", "description": "Delete record"},
+      {"name": "getCapabilities", "params": [], "returns": "AdapterCapabilities", "description": "Get supported features"}
+    ]
+  },
+
+  "queryOptions": {
+    "filters": [
+      {"field": "status", "operator": "eq", "value": "active"},
+      {"field": "age", "operator": "gt", "value": 18},
+      {"field": "name", "operator": "contains", "value": "John"}
+    ],
+    "operators": ["eq", "ne", "gt", "gte", "lt", "lte", "in", "contains", "startsWith", "endsWith"],
+    "sort": [
+      {"field": "createdAt", "desc": true}
+    ],
+    "pagination": {
+      "limit": 10,
+      "offset": 0
+    }
+  },
+
+  "adapterCapabilities": {
+    "properties": [
+      {"name": "supportsTransactions", "type": "boolean"},
+      {"name": "supportsJoins", "type": "boolean"},
+      {"name": "supportsAggregation", "type": "boolean"},
+      {"name": "supportsFullTextSearch", "type": "boolean"},
+      {"name": "maxBatchSize", "type": "number"},
+      {"name": "queryOperators", "type": "string[]"}
+    ]
+  },
+
+  "registryUsage": {
+    "singleton": "AdapterRegistry.getInstance()",
+    "register": "registry.register(type, adapterClass)",
+    "create": "registry.create(type, config)",
+    "list": "registry.list()",
+    "example": [
+      "import { AdapterRegistry } from '../core/AdapterRegistry';",
+      "const registry = AdapterRegistry.getInstance();",
+      "const adapter = registry.create('rest-api', {",
+      "  baseURL: 'https://api.example.com',",
+      "  headers: { 'Authorization': 'Bearer token' }",
+      "});",
+      "await adapter.connect(config);",
+      "const result = await adapter.query('users', { limit: 10 });"
+    ]
+  },
+
+  "entityDatasourceConfig": {
+    "location": "EntityMeta.datasourceType and EntityMeta.datasourceConfig",
+    "purpose": "Each entity can use different datasource",
+    "example": {
+      "entityName": "User",
+      "datasourceType": "postgres",
+      "datasourceConfig": {
+        "host": "localhost",
+        "port": 5432,
+        "database": "myapp",
+        "user": "admin",
+        "password": "secret"
+      }
+    }
+  },
+
+  "testAdapter": {
+    "file": "registration-test.html",
+    "example": "User registration form with LocalStorage adapter",
+    "demonstrates": [
+      "JsonFileAdapter with localstorage",
+      "CRUD operations (create user)",
+      "Form validation",
+      "Success/error handling"
+    ]
+  }
+}

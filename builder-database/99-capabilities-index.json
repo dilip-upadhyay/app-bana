@@ -1,0 +1,127 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-08T00:00:00Z",
+  "description": "Quick reference index for all AppBana capabilities",
+  
+  "summary": {
+    "totalComponents": 13,
+    "totalFieldTypes": 38,
+    "totalDatasources": 25,
+    "totalPageTemplates": 7,
+    "totalApiEndpoints": 30
+  },
+
+  "quickReference": {
+    "components": {
+      "file": "02-components.json",
+      "count": 13,
+      "categories": ["Layout", "Form", "Display", "Navigation", "Data"],
+      "mostUsed": ["container", "button", "text", "app-grid"]
+    },
+    "entities": {
+      "file": "03-entities.json",
+      "fieldTypeCount": 38,
+      "relationshipTypes": 4,
+      "autoIncludes": ["id (protected)"],
+      "keyFiles": ["src/models/entity-metadata.ts", "src/core/EntitySchemaConverter.ts"]
+    },
+    "pages": {
+      "file": "04-pages.json",
+      "templateCount": 7,
+      "templates": ["Login", "Dashboard", "Contact Form", "Landing Page", "Profile", "Data Table", "Blank Canvas"],
+      "keyFiles": ["src/builder/components/PageManager.ts", "src/models/metadata.ts"]
+    },
+    "datasources": {
+      "file": "05-datasources.json",
+      "adapterCount": 25,
+      "categories": ["SQL (7)", "NoSQL (5)", "API (5)", "File (4)", "Browser (3)", "Cloud (4)"],
+      "keyFiles": ["src/core/DataSourceAdapter.ts", "src/core/AdapterRegistry.ts"]
+    },
+    "styling": {
+      "file": "06-styling.json",
+      "system": "CSS Custom Properties (Design Tokens)",
+      "categories": ["Colors", "Typography", "Spacing", "Borders", "Transitions", "Shadows"],
+      "keyFiles": ["src/styles/tokens.css"]
+    },
+    "validation": {
+      "file": "07-validation.json",
+      "types": ["Text", "Numeric", "Selection", "Custom"],
+      "formats": ["email", "phone", "url", "ssn", "zip", "creditcard"],
+      "keyFiles": ["src/models/entity-metadata.ts"]
+    },
+    "api": {
+      "file": "08-api-endpoints.json",
+      "endpointCount": 30,
+      "categories": ["Apps (5)", "Pages (3)", "Schema (5)", "CRUD (5)", "Audit (1)", "Datasources (5)", "OpenAPI (2)"],
+      "baseURL": "http://localhost:8080",
+      "keyFiles": ["app-bana-service/src/main/java/com/appbana/ApiServer.java"]
+    }
+  },
+
+  "architectureOverview": {
+    "file": "01-core-concepts.json",
+    "pattern": "Metadata-Driven",
+    "dataFlow": "Entity → Schema → Database → REST API → UI",
+    "persistence": "Backend Filesystem (apps/{appId}/)",
+    "stateManagement": "Singleton AppStore",
+    "components": "Lit Web Components with Shadow DOM"
+  },
+
+  "buildingAnApp": {
+    "steps": [
+      "1. Define entities (03-entities.json) with fields and relationships",
+      "2. Choose datasources (05-datasources.json) for each entity",
+      "3. Create pages (04-pages.json) using templates or blank canvas",
+      "4. Add components (02-components.json) to pages",
+      "5. Apply styling (06-styling.json) using design tokens",
+      "6. Add validation (07-validation.json) to entity fields",
+      "7. Backend auto-generates (08-api-endpoints.json) REST APIs",
+      "8. Runtime renders pages from metadata"
+    ]
+  },
+
+  "aiAgentUsage": {
+    "chatInterface": "AI reads capability files to understand possibilities",
+    "userInput": "User describes app requirements in natural language",
+    "aiGeneration": "AI generates valid metadata conforming to schemas",
+    "validation": "Metadata validated against TypeScript interfaces",
+    "creation": "AppStore API called to create app/pages/entities",
+    "example": [
+      "User: 'Create a blog with posts and comments'",
+      "AI: Reads 03-entities.json → understands field types",
+      "AI: Reads 03-entities.json → finds relationship patterns",
+      "AI: Generates Post entity (title:text, content:longtext, author:text)",
+      "AI: Generates Comment entity (content:text, author:text)",
+      "AI: Creates one-to-many relationship (Post → Comments)",
+      "AI: Reads 04-pages.json → finds CRUD templates",
+      "AI: Creates pages: PostList, PostDetail, CreatePost, CreateComment",
+      "AI: Calls appStore.createApp() with generated metadata",
+      "Result: Complete blog app created from natural language"
+    ]
+  },
+
+  "updateProtocol": {
+    "trigger": "When codebase changes",
+    "action": "Update relevant capability file(s)",
+    "versionBump": "Increment version number (1.0.0 → 1.0.1)",
+    "timestamp": "Update lastUpdated field",
+    "indexUpdate": "Update this file (99-capabilities-index.json) with summary",
+    "example": "New component added → Update 02-components.json → Update summary here"
+  },
+
+  "fileLocations": {
+    "database": "builder-database/",
+    "readme": "builder-database/README.md",
+    "capabilities": [
+      "01-core-concepts.json",
+      "02-components.json",
+      "03-entities.json",
+      "04-pages.json",
+      "05-datasources.json",
+      "06-styling.json",
+      "07-validation.json",
+      "08-api-endpoints.json"
+    ],
+    "index": "99-capabilities-index.json"
+  }
+}

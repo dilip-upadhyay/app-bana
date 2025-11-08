@@ -1,0 +1,144 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-08T00:00:00Z",
+  "description": "Validation rules, patterns, and error handling",
+  
+  "fieldValidation": {
+    "file": "src/models/entity-metadata.ts",
+    "interface": "EntityFieldValidation",
+    "types": [
+      {
+        "category": "Text Validation",
+        "rules": [
+          {"name": "minLength", "type": "number", "description": "Minimum character length"},
+          {"name": "maxLength", "type": "number", "description": "Maximum character length"},
+          {"name": "pattern", "type": "string (regex)", "description": "Regular expression pattern"},
+          {"name": "format", "type": "enum", "values": ["email", "phone", "url", "ssn", "zip", "creditcard"]}
+        ]
+      },
+      {
+        "category": "Numeric Validation",
+        "rules": [
+          {"name": "min", "type": "number", "description": "Minimum value"},
+          {"name": "max", "type": "number", "description": "Maximum value"},
+          {"name": "step", "type": "number", "description": "Increment step (e.g., 0.01)"}
+        ]
+      },
+      {
+        "category": "Selection Validation",
+        "rules": [
+          {"name": "allowedValues", "type": "string[]", "description": "Whitelist of valid values"}
+        ]
+      },
+      {
+        "category": "Custom Validation",
+        "rules": [
+          {"name": "customMessage", "type": "string", "description": "Custom error message"},
+          {"name": "customRule", "type": "string (JS expression)", "description": "JavaScript validation expression"}
+        ]
+      }
+    ]
+  },
+
+  "builtInFormats": {
+    "email": {
+      "pattern": "^[^@]+@[^@]+\\.[^@]+$",
+      "message": "Please enter a valid email address"
+    },
+    "phone": {
+      "pattern": "^\\+?[1-9]\\d{1,14}$",
+      "message": "Please enter a valid phone number"
+    },
+    "url": {
+      "pattern": "^https?://[^\\s]+$",
+      "message": "Please enter a valid URL"
+    },
+    "ssn": {
+      "pattern": "^\\d{3}-\\d{2}-\\d{4}$",
+      "message": "Please enter SSN in format: 123-45-6789"
+    },
+    "zip": {
+      "pattern": "^\\d{5}(-\\d{4})?$",
+      "message": "Please enter a valid ZIP code"
+    }
+  },
+
+  "validationExamples": [
+    {
+      "field": "username",
+      "type": "text",
+      "validation": {
+        "minLength": 3,
+        "maxLength": 50,
+        "pattern": "^[a-zA-Z0-9_]+$",
+        "customMessage": "Username must be 3-50 characters, alphanumeric and underscore only"
+      }
+    },
+    {
+      "field": "age",
+      "type": "number",
+      "validation": {
+        "min": 18,
+        "max": 120,
+        "customMessage": "Age must be between 18 and 120"
+      }
+    },
+    {
+      "field": "status",
+      "type": "status",
+      "validation": {
+        "allowedValues": ["active", "inactive", "pending"],
+        "customMessage": "Status must be active, inactive, or pending"
+      }
+    }
+  ],
+
+  "clientSideValidation": {
+    "components": "Form components implement validation",
+    "example": "UserRegistrationForm.ts",
+    "timing": ["onChange", "onBlur", "onSubmit"],
+    "feedback": "Inline error messages below fields"
+  },
+
+  "serverSideValidation": {
+    "location": "Backend API endpoints",
+    "enforcement": "CHECK constraints in DDL",
+    "example": [
+      "ALTER TABLE users ADD CONSTRAINT status_check",
+      "CHECK (status IN ('active', 'inactive', 'pending'));"
+    ]
+  },
+
+  "errorHandling": {
+    "frontend": {
+      "pattern": "try-catch with user-friendly messages",
+      "display": "Browser alerts (TODO: toast notifications)",
+      "example": [
+        "try {",
+        "  await apiClient.post('/api/users', userData);",
+        "  alert('User created successfully');",
+        "} catch (error) {",
+        "  alert('Failed to create user: ' + error.message);",
+        "}"
+      ]
+    },
+    "backend": {
+      "pattern": "try-catch with HTTP status codes",
+      "logging": "System.out (TODO: proper logger)",
+      "statusCodes": {
+        "200": "Success",
+        "400": "Bad Request (validation error)",
+        "404": "Not Found",
+        "500": "Internal Server Error"
+      }
+    }
+  },
+
+  "futureEnhancements": [
+    "Toast notification system",
+    "Field-level validation feedback",
+    "Async validation (e.g., username uniqueness check)",
+    "Cross-field validation (e.g., password confirmation)",
+    "Conditional validation (based on other field values)"
+  ]
+}

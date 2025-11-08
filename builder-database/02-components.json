@@ -1,0 +1,323 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-08T00:00:00Z",
+  "description": "All available UI components in AppBana with properties and usage examples",
+  
+  "categories": [
+    "Layout Components",
+    "Form Components",
+    "Display Components",
+    "Navigation Components",
+    "Data Components"
+  ],
+
+  "components": [
+    {
+      "type": "container",
+      "name": "ContainerElement",
+      "category": "Layout Components",
+      "file": "src/components/ContainerElement.ts",
+      "description": "Generic container for grouping child components with layout control",
+      "baseClass": "BaseElement",
+      "props": {
+        "layout": {
+          "type": "string",
+          "values": ["vertical", "horizontal", "grid"],
+          "default": "vertical",
+          "description": "Layout direction for children"
+        },
+        "gap": {
+          "type": "string",
+          "values": ["sm", "md", "lg"],
+          "default": "md",
+          "description": "Spacing between children"
+        },
+        "padding": {
+          "type": "string",
+          "values": ["none", "sm", "md", "lg"],
+          "default": "md",
+          "description": "Internal padding"
+        },
+        "align": {
+          "type": "string",
+          "values": ["start", "center", "end", "stretch"],
+          "default": "stretch",
+          "description": "Cross-axis alignment"
+        }
+      },
+      "children": true,
+      "example": {
+        "id": "container1",
+        "type": "container",
+        "props": {
+          "layout": "vertical",
+          "gap": "md",
+          "padding": "lg"
+        },
+        "children": ["child1", "child2"]
+      }
+    },
+    {
+      "type": "button",
+      "name": "ButtonElement",
+      "category": "Form Components",
+      "file": "src/components/ButtonElement.ts",
+      "description": "Interactive button with variants and sizes",
+      "baseClass": "BaseElement",
+      "props": {
+        "label": {
+          "type": "string",
+          "default": "Button",
+          "description": "Button text"
+        },
+        "variant": {
+          "type": "string",
+          "values": ["primary", "danger", "success", "outline", "ghost"],
+          "default": "primary",
+          "description": "Visual style variant"
+        },
+        "size": {
+          "type": "string",
+          "values": ["sm", "md", "lg"],
+          "default": "md",
+          "description": "Button size"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable button interaction"
+        }
+      },
+      "children": false,
+      "events": ["click"],
+      "example": {
+        "id": "btn1",
+        "type": "button",
+        "props": {
+          "label": "Submit",
+          "variant": "primary",
+          "size": "md"
+        }
+      }
+    },
+    {
+      "type": "text",
+      "name": "TextElement",
+      "category": "Display Components",
+      "file": "src/components/TextElement.ts",
+      "description": "Text display with typography variants",
+      "baseClass": "BaseElement",
+      "props": {
+        "content": {
+          "type": "string",
+          "default": "",
+          "description": "Text content to display"
+        },
+        "variant": {
+          "type": "string",
+          "values": ["heading", "subheading", "body", "caption", "label"],
+          "default": "body",
+          "description": "Typography style"
+        },
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"],
+          "default": "left",
+          "description": "Text alignment"
+        },
+        "color": {
+          "type": "string",
+          "description": "Custom text color (CSS color value)"
+        }
+      },
+      "children": false,
+      "example": {
+        "id": "text1",
+        "type": "text",
+        "props": {
+          "content": "Welcome to AppBana",
+          "variant": "heading",
+          "align": "center"
+        }
+      }
+    },
+    {
+      "type": "app-grid",
+      "name": "GridElement",
+      "category": "Layout Components",
+      "file": "src/components/GridElement.ts",
+      "description": "Responsive grid layout with column control",
+      "baseClass": "LitElement",
+      "props": {
+        "columns": {
+          "type": "number",
+          "default": 2,
+          "description": "Number of grid columns"
+        },
+        "gap": {
+          "type": "string",
+          "default": "16px",
+          "description": "Gap between grid items"
+        }
+      },
+      "children": true,
+      "example": {
+        "id": "grid1",
+        "type": "app-grid",
+        "props": {
+          "columns": 3,
+          "gap": "24px"
+        },
+        "children": ["item1", "item2", "item3"]
+      }
+    },
+    {
+      "type": "user-registration-form",
+      "name": "UserRegistrationForm",
+      "category": "Form Components",
+      "file": "src/components/UserRegistrationForm.ts",
+      "description": "Complete user registration form with validation and datasource integration",
+      "baseClass": "LitElement",
+      "props": {
+        "datasourceType": {
+          "type": "string",
+          "default": "localstorage",
+          "description": "Target datasource for user data"
+        },
+        "datasourceConfig": {
+          "type": "object",
+          "description": "Datasource configuration object"
+        }
+      },
+      "children": false,
+      "fields": ["username", "email", "password", "confirmPassword"],
+      "validation": ["required", "email format", "password match"],
+      "example": {
+        "id": "regForm1",
+        "type": "user-registration-form",
+        "props": {
+          "datasourceType": "localstorage",
+          "datasourceConfig": {
+            "storageKey": "users"
+          }
+        }
+      }
+    },
+    {
+      "type": "component-gallery",
+      "name": "ComponentGallery",
+      "category": "Navigation Components",
+      "file": "src/components/component-gallery.ts",
+      "description": "Visual component library browser for Studio Builder",
+      "baseClass": "LitElement",
+      "props": {},
+      "children": false,
+      "usage": "Studio Builder only",
+      "features": ["Drag-drop support", "Category filtering", "Component preview"]
+    },
+    {
+      "type": "entity-explorer",
+      "name": "EntityExplorer",
+      "category": "Data Components",
+      "file": "src/components/entity-explorer.ts",
+      "description": "Browse and manage entities in Studio Builder",
+      "baseClass": "LitElement",
+      "props": {},
+      "children": false,
+      "usage": "Studio Builder only",
+      "features": ["Entity CRUD", "Field editor", "Relationship editor", "SQL preview"]
+    },
+    {
+      "type": "app-sidebar",
+      "name": "AppSidebar",
+      "category": "Navigation Components",
+      "file": "src/components/app-sidebar.ts",
+      "description": "Application sidebar navigation",
+      "baseClass": "LitElement",
+      "props": {
+        "items": {
+          "type": "array",
+          "description": "Navigation items array"
+        }
+      },
+      "children": false
+    },
+    {
+      "type": "header",
+      "name": "HeaderElement",
+      "category": "Layout Components",
+      "file": "src/components/HTMLElements.ts",
+      "description": "Semantic HTML header element",
+      "baseClass": "HTMLElement wrapper",
+      "props": {},
+      "children": true
+    },
+    {
+      "type": "footer",
+      "name": "FooterElement",
+      "category": "Layout Components",
+      "file": "src/components/HTMLElements.ts",
+      "description": "Semantic HTML footer element",
+      "baseClass": "HTMLElement wrapper",
+      "props": {},
+      "children": true
+    },
+    {
+      "type": "section",
+      "name": "SectionElement",
+      "category": "Layout Components",
+      "file": "src/components/HTMLElements.ts",
+      "description": "Semantic HTML section element",
+      "baseClass": "HTMLElement wrapper",
+      "props": {},
+      "children": true
+    },
+    {
+      "type": "unknown",
+      "name": "UnknownElement",
+      "category": "Display Components",
+      "file": "src/components/UnknownElement.ts",
+      "description": "Placeholder for unregistered component types",
+      "baseClass": "BaseElement",
+      "props": {
+        "actualType": {
+          "type": "string",
+          "description": "The unknown component type name"
+        }
+      },
+      "children": false,
+      "note": "Automatically used when component type not found in registry"
+    }
+  ],
+
+  "registrationPattern": {
+    "file": "src/core/registry.ts",
+    "method": "registerComponent(type, constructor)",
+    "lazyLoading": true,
+    "bootstrap": "ensureCoreRegistered()",
+    "example": "registerComponent('my-component', () => import('../components/MyComponent'));"
+  },
+
+  "componentStructure": {
+    "baseElement": {
+      "file": "src/core/BaseElement.ts",
+      "pattern": "String-based HTML rendering",
+      "lifecycle": ["connectedCallback", "attributeChangedCallback", "render", "styles"],
+      "usage": "Legacy - prefer Lit for new components"
+    },
+    "litElement": {
+      "library": "Lit 3.1.4",
+      "pattern": "Tagged template literals with html``",
+      "reactivity": "@state() decorator",
+      "lifecycle": ["connectedCallback", "render"],
+      "usage": "Preferred for new components"
+    }
+  },
+
+  "stylingPatterns": {
+    "cssImports": "Always use ?inline suffix: import styles from './Component.css?inline';",
+    "shadowDOM": true,
+    "designTokens": "Use CSS custom properties from design system",
+    "scoping": "All styles are scoped to component via Shadow DOM"
+  }
+}
