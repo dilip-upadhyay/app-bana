@@ -1,0 +1,9 @@
+{
+  "id" : "test-auto-link",
+  "name" : "Test Auto Link",
+  "description" : "Testing automatic page linking",
+  "version" : "1.0.0",
+  "created" : 1762604177586,
+  "updated" : 1762604344185,
+  "pages" : [ "dashboard" ]
+}

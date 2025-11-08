@@ -258,6 +258,7 @@ public class AppManager {
 
     /**
      * Save page metadata
+     * Automatically adds page to app's pages array if not already present
      */
     public static void savePage(String appId, String pageId, Map<String, Object> page) throws IOException {
         Path pagesDir = getPagesDirectory(appId);
@@ -265,11 +266,27 @@ public class AppManager {
 
         Path pageFile = getPagePath(appId, pageId);
         mapper.writeValue(pageFile.toFile(), page);
+        
+        // Auto-update app's pages array (if page not already in list)
+        try {
+            AppMetadata app = getApp(appId);
+            if (app != null && !app.getPages().contains(pageId)) {
+                app.getPages().add(pageId);
+                app.setUpdated(System.currentTimeMillis());
+                saveApp(app);
+                System.out.println("[AppManager] Added page '" + pageId + "' to app '" + appId + "' pages list");
+            }
+        } catch (Exception e) {
+            System.err.println("[AppManager] Warning: Failed to update app pages list: " + e.getMessage());
+            // Continue - page file was saved successfully
+        }
+        
         System.out.println("[AppManager] Saved page: " + appId + "/" + pageId);
     }
 
     /**
      * Delete page
+     * Automatically removes page from app's pages array
      */
     public static boolean deletePage(String appId, String pageId) throws IOException {
         Path pageFile = getPagePath(appId, pageId);
@@ -277,6 +294,21 @@ public class AppManager {
             return false;
         }
         Files.delete(pageFile);
+        
+        // Auto-update app's pages array (remove deleted page)
+        try {
+            AppMetadata app = getApp(appId);
+            if (app != null && app.getPages().contains(pageId)) {
+                app.getPages().remove(pageId);
+                app.setUpdated(System.currentTimeMillis());
+                saveApp(app);
+                System.out.println("[AppManager] Removed page '" + pageId + "' from app '" + appId + "' pages list");
+            }
+        } catch (Exception e) {
+            System.err.println("[AppManager] Warning: Failed to update app pages list: " + e.getMessage());
+            // Continue - page file was deleted successfully
+        }
+        
         System.out.println("[AppManager] Deleted page: " + appId + "/" + pageId);
         return true;
     }

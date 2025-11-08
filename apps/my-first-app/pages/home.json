@@ -1,0 +1,21 @@
+{
+  "rootId" : "root",
+  "path" : "/",
+  "name" : "Home Page",
+  "id" : "home",
+  "nodes" : [ {
+    "style" : {
+      "padding" : "20px"
+    },
+    "id" : "root",
+    "type" : "container",
+    "children" : [ "text-1" ]
+  }, {
+    "props" : {
+      "text" : "Welcome to My First App",
+      "tag" : "h1"
+    },
+    "id" : "text-1",
+    "type" : "text"
+  } ]
+}

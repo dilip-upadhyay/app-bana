@@ -124,47 +124,70 @@ export class AppStore {
     this.listeners.forEach(fn => fn());
   }
 
+  /**
+   * Get loading state
+   */
+  isLoading(): boolean {
+    return this.loading;
+  }
+
+  /**
+   * Set loading state and notify listeners
+   */
+  private setLoading(loading: boolean) {
+    if (this.loading !== loading) {
+      this.loading = loading;
+      this.notify();
+    }
+  }
+
   // ==================== App Management ====================
 
   /**
    * Create a new app (async - saves to backend)
    */
   async createApp(request: CreateAppRequest): Promise<AppMeta> {
-    const id = this.generateAppId(request.name);
-    const now = Date.now();
+    this.setLoading(true);
+    
+    try {
+      const id = this.generateAppId(request.name);
+      const now = Date.now();
 
-    const app: AppMeta = {
-      id,
-      name: request.name,
-      description: request.description,
-      version: '1.0.0',
-      created: now,
-      updated: now,
-      pages: [],
-      theme: {
-        primaryColor: '#2563eb',
-        secondaryColor: '#64748b',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        darkMode: false,
-      },
-      routes: {
-        baseUrl: `/${id}`,
-        mode: 'hash',
-      },
-    };
+      const app: AppMeta = {
+        id,
+        name: request.name,
+        description: request.description,
+        version: '1.0.0',
+        created: now,
+        updated: now,
+        pages: [],
+        theme: {
+          primaryColor: '#2563eb',
+          secondaryColor: '#64748b',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          darkMode: false,
+        },
+        routes: {
+          baseUrl: `/${id}`,
+          mode: 'hash',
+        },
+      };
 
-    // Save to backend
-    const created = await apiClient.post<AppMeta>('/apps', app);
+      // Save to backend
+      const created = await apiClient.post<AppMeta>('/apps', app);
 
-    // Update local cache
-    this.apps.set(created.id, created);
+      // Update local cache
+      this.apps.set(created.id, created);
 
-    // Set as current app
-    this.currentAppId = created.id;
-    localStorage.setItem(CURRENT_APP_KEY, created.id);
+      // Set as current app
+      this.currentAppId = created.id;
+      localStorage.setItem(CURRENT_APP_KEY, created.id);
 
-    this.notify();
-    return created;
+      this.notify();
+      return created;
+    } finally {
+      this.setLoading(false);
+    }
   }
 
   /**

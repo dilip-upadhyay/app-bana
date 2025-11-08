@@ -1,0 +1,18 @@
+{
+  "id" : "dashboard",
+  "name" : "Dashboard Updated",
+  "path" : "/dashboard",
+  "rootId" : "root",
+  "nodes" : [ {
+    "id" : "root",
+    "type" : "container",
+    "children" : [ "title" ]
+  }, {
+    "id" : "title",
+    "type" : "text",
+    "props" : {
+      "tag" : "h1",
+      "text" : "Updated Dashboard"
+    }
+  } ]
+}
