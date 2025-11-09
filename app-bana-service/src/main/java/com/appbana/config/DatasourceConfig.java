@@ -1,4 +1,4 @@
-package com.appbana;
+package com.appbana.config;
 
 public class DatasourceConfig {
     private String name;

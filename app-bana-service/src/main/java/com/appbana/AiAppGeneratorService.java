@@ -1,6 +1,15 @@
 package com.appbana;
 
+import com.appbana.ai.AiProvider;
+import com.appbana.ai.AiProviderFactory;
+import com.appbana.ai.AiSystemPrompts;
+import com.appbana.config.AppConfig;
+import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -11,10 +20,126 @@ import java.util.regex.Pattern;
  */
 public class AiAppGeneratorService {
     
+    private static final Logger LOG = LoggerFactory.getLogger(AiAppGeneratorService.class);
+    private static final ObjectMapper mapper = new ObjectMapper();
+    
     /**
      * Generate app from natural language description
+     * Uses AI if configured, otherwise falls back to template-based generation
      */
     public static GenerationResult generateApp(GenerationRequest request) {
+        // Try AI generation first
+        AppConfig config = getConfig();
+        if (AiProviderFactory.isAiEnabled(config)) {
+            try {
+                LOG.info("Attempting AI generation with provider: {}", config.getAiProvider());
+                return generateWithAi(request, config);
+            } catch (Exception e) {
+                LOG.error("AI generation failed, falling back to templates", e);
+            }
+        }
+        
+        // Fall back to template-based generation
+        LOG.info("Using template-based generation");
+        return generateFromTemplates(request);
+    }
+    
+    /**
+     * Generate app using AI provider
+     */
+    private static GenerationResult generateWithAi(GenerationRequest request, AppConfig config) throws Exception {
+        AiProvider provider = AiProviderFactory.createProvider(config);
+        
+        String systemPrompt = AiSystemPrompts.APP_GENERATION_PROMPT;
+        String userPrompt = request.description;
+        
+        LOG.info("Calling AI provider: {}", provider.getProviderName());
+        String jsonResponse = provider.generateAppStructure(userPrompt, systemPrompt);
+        
+        LOG.debug("AI response: {}", jsonResponse);
+        
+        // Parse AI JSON response
+        return parseAiResponse(jsonResponse);
+    }
+    
+    /**
+     * Parse AI-generated JSON into GenerationResult
+     */
+    private static GenerationResult parseAiResponse(String jsonResponse) throws Exception {
+        JsonNode root = mapper.readTree(jsonResponse);
+        
+        GenerationResult result = new GenerationResult();
+        result.success = true;
+        result.appName = root.get("appName").asText();
+        result.appDescription = root.get("appDescription").asText();
+        
+        // Parse entities
+        result.entities = new ArrayList<>();
+        JsonNode entitiesNode = root.get("entities");
+        if (entitiesNode != null && entitiesNode.isArray()) {
+            for (JsonNode entityNode : entitiesNode) {
+                String entityName = entityNode.get("name").asText();
+                List<EntitySchema.Field> fields = new ArrayList<>();
+                
+                JsonNode fieldsNode = entityNode.get("fields");
+                if (fieldsNode != null && fieldsNode.isArray()) {
+                    for (JsonNode fieldNode : fieldsNode) {
+                        String fieldName = fieldNode.get("name").asText();
+                        String fieldType = fieldNode.get("type").asText();
+                        boolean required = fieldNode.get("required").asBoolean(false);
+                        
+                        EntitySchema.Field field = new EntitySchema.Field();
+                        field.setName(fieldName);
+                        field.setType(fieldType);
+                        field.setRequired(required);
+                        field.setPrimaryKey(false);
+                        field.setAutoIncrement(false);
+                        
+                        fields.add(field);
+                    }
+                }
+                
+                result.entities.add(new EntitySchema(entityName, fields));
+            }
+        }
+        
+        // Parse relationships
+        result.relationships = new ArrayList<>();
+        JsonNode relationshipsNode = root.get("relationships");
+        if (relationshipsNode != null && relationshipsNode.isArray()) {
+            for (JsonNode relNode : relationshipsNode) {
+                result.relationships.add(relNode.asText());
+            }
+        }
+        
+        // Parse suggested pages
+        result.suggestedPages = new ArrayList<>();
+        JsonNode pagesNode = root.get("suggestedPages");
+        if (pagesNode != null && pagesNode.isArray()) {
+            for (JsonNode pageNode : pagesNode) {
+                result.suggestedPages.add(pageNode.asText());
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Get config with fallback to defaults
+     */
+    private static AppConfig getConfig() {
+        try {
+            return ConfigManager.getConfig();
+        } catch (Exception e) {
+            LOG.warn("ConfigManager not available, using defaults");
+            return new AppConfig();
+        }
+    }
+    
+    /**
+     * Generate app from templates (original regex-based logic)
+     */
+    private static GenerationResult generateFromTemplates(GenerationRequest request) {
         String input = request.description.toLowerCase();
         
         // Parse intent

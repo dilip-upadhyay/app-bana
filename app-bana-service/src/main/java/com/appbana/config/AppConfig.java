@@ -1,4 +1,4 @@
-package com.appbana;
+package com.appbana.config;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +28,21 @@ public class AppConfig {
 
     // Web server implementation: "jdk" (default) or "tomcat"
     private String serverType; // null => default to "jdk"
+
+    // AI Provider Configuration
+    private String aiProvider;         // "openai", "anthropic", or "ollama"
+    
+    // OpenAI settings
+    private String openaiApiKey;       // API key (or use OPENAI_API_KEY env var)
+    private String openaiModel = "gpt-4o-mini"; // default model
+    
+    // Anthropic settings
+    private String anthropicApiKey;    // API key (or use ANTHROPIC_API_KEY env var)
+    private String anthropicModel = "claude-3-5-sonnet-20241022"; // default model
+    
+    // Ollama settings (local AI)
+    private String ollamaUrl = "http://localhost:11434"; // Ollama server URL
+    private String ollamaModel = "llama3.1"; // default model
 
     public String getJdbcUrl() { return jdbcUrl; }
     public void setJdbcUrl(String jdbcUrl) { this.jdbcUrl = jdbcUrl; }
@@ -76,4 +91,32 @@ public class AppConfig {
 
     public String getServerType() { return serverType; }
     public void setServerType(String serverType) { this.serverType = serverType; }
+
+    // AI Configuration Getters/Setters
+    public String getAiProvider() { return aiProvider; }
+    public void setAiProvider(String aiProvider) { this.aiProvider = aiProvider; }
+
+    public String getOpenaiApiKey() {
+        // Try config first, then environment variable
+        return openaiApiKey != null ? openaiApiKey : System.getenv("OPENAI_API_KEY");
+    }
+    public void setOpenaiApiKey(String openaiApiKey) { this.openaiApiKey = openaiApiKey; }
+
+    public String getOpenaiModel() { return openaiModel; }
+    public void setOpenaiModel(String openaiModel) { this.openaiModel = openaiModel; }
+
+    public String getAnthropicApiKey() {
+        // Try config first, then environment variable
+        return anthropicApiKey != null ? anthropicApiKey : System.getenv("ANTHROPIC_API_KEY");
+    }
+    public void setAnthropicApiKey(String anthropicApiKey) { this.anthropicApiKey = anthropicApiKey; }
+
+    public String getAnthropicModel() { return anthropicModel; }
+    public void setAnthropicModel(String anthropicModel) { this.anthropicModel = anthropicModel; }
+
+    public String getOllamaUrl() { return ollamaUrl; }
+    public void setOllamaUrl(String ollamaUrl) { this.ollamaUrl = ollamaUrl; }
+
+    public String getOllamaModel() { return ollamaModel; }
+    public void setOllamaModel(String ollamaModel) { this.ollamaModel = ollamaModel; }
 }

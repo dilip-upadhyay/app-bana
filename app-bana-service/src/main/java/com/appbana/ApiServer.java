@@ -1,5 +1,10 @@
 package com.appbana;
 
+import com.appbana.ai.AiProvider;
+import com.appbana.ai.AiProviderFactory;
+import com.appbana.config.AppConfig;
+import com.appbana.config.ConfigManager;
+import com.appbana.config.DatasourceConfig;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.*;
@@ -436,6 +441,8 @@ public class ApiServer {
 
         // ==================== AI GENERATION ENDPOINT ====================
         
+        // ==================== AI ENDPOINTS ====================
+        
         // AI-powered app generation
         router.post("/api/ai/generate", (req, res) -> {
             try {
@@ -451,6 +458,112 @@ public class ApiServer {
                 LOG.error("AI generation failed", e);
                 res.json(500, Map.of("error", e.getMessage()));
             }
+        });
+        
+        // Get AI configuration
+        router.get("/api/ai/config", (req, res) -> {
+            try {
+                AppConfig config = ConfigManager.getConfig();
+                Map<String, Object> aiConfig = Map.of(
+                    "provider", config.getAiProvider() != null ? config.getAiProvider() : "",
+                    "openaiModel", config.getOpenaiModel(),
+                    "anthropicModel", config.getAnthropicModel(),
+                    "ollamaUrl", config.getOllamaUrl(),
+                    "ollamaModel", config.getOllamaModel(),
+                    "isEnabled", AiProviderFactory.isAiEnabled(config),
+                    "hasOpenaiKey", config.getOpenaiApiKey() != null && !config.getOpenaiApiKey().isEmpty(),
+                    "hasAnthropicKey", config.getAnthropicApiKey() != null && !config.getAnthropicApiKey().isEmpty()
+                );
+                res.json(200, aiConfig);
+            } catch (Exception e) {
+                LOG.error("Failed to get AI config", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        
+        // Update AI configuration
+        router.put("/api/ai/config", (req, res) -> {
+            try {
+                Map<String, Object> updates = req.readJson(new TypeReference<>(){});
+                AppConfig config = ConfigManager.getConfig();
+                
+                if (updates.containsKey("provider")) {
+                    config.setAiProvider((String) updates.get("provider"));
+                }
+                if (updates.containsKey("openaiApiKey")) {
+                    config.setOpenaiApiKey((String) updates.get("openaiApiKey"));
+                }
+                if (updates.containsKey("openaiModel")) {
+                    config.setOpenaiModel((String) updates.get("openaiModel"));
+                }
+                if (updates.containsKey("anthropicApiKey")) {
+                    config.setAnthropicApiKey((String) updates.get("anthropicApiKey"));
+                }
+                if (updates.containsKey("anthropicModel")) {
+                    config.setAnthropicModel((String) updates.get("anthropicModel"));
+                }
+                if (updates.containsKey("ollamaUrl")) {
+                    config.setOllamaUrl((String) updates.get("ollamaUrl"));
+                }
+                if (updates.containsKey("ollamaModel")) {
+                    config.setOllamaModel((String) updates.get("ollamaModel"));
+                }
+                
+                ConfigManager.saveConfig(config);
+                res.json(200, Map.of("success", true, "message", "AI configuration updated"));
+            } catch (Exception e) {
+                LOG.error("Failed to update AI config", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        
+        // Test AI connection
+        router.post("/api/ai/test", (req, res) -> {
+            try {
+                AppConfig config = ConfigManager.getConfig();
+                
+                if (!AiProviderFactory.isAiEnabled(config)) {
+                    res.json(400, Map.of("success", false, "message", "AI provider not configured"));
+                    return;
+                }
+                
+                AiProvider provider = AiProviderFactory.createProvider(config);
+                boolean connected = provider.testConnection();
+                
+                res.json(200, Map.of(
+                    "success", connected,
+                    "provider", provider.getProviderName(),
+                    "message", connected ? "Connection successful" : "Connection failed"
+                ));
+            } catch (Exception e) {
+                LOG.error("AI connection test failed", e);
+                res.json(500, Map.of("success", false, "message", e.getMessage()));
+            }
+        });
+        
+        // List available AI providers
+        router.get("/api/ai/providers", (req, res) -> {
+            List<Map<String, Object>> providers = List.of(
+                Map.of(
+                    "id", "openai",
+                    "name", "OpenAI",
+                    "description", "GPT-4 and other OpenAI models (requires API key)",
+                    "models", List.of("gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo")
+                ),
+                Map.of(
+                    "id", "anthropic",
+                    "name", "Anthropic",
+                    "description", "Claude 3.5 Sonnet and other Anthropic models (requires API key)",
+                    "models", List.of("claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307")
+                ),
+                Map.of(
+                    "id", "ollama",
+                    "name", "Ollama",
+                    "description", "Local AI models (requires Ollama installation)",
+                    "models", List.of("llama3.1", "llama3.2", "mistral", "codellama", "phi3")
+                )
+            );
+            res.json(200, providers);
         });
 
         // ==================== APP ENDPOINTS ====================
@@ -723,7 +836,13 @@ public class ApiServer {
                 cfgNow.getDatasources().add(ds);
             }
             cfgNow.setActiveDatasource(name);
-            ConfigManager.saveConfig(cfgNow);
+            try {
+                ConfigManager.saveConfig(cfgNow);
+            } catch (java.io.IOException e) {
+                LOG.error("Failed to save config", e);
+                res.json(500, Map.of("error", "Failed to save configuration: " + e.getMessage()));
+                return;
+            }
             res.text(200, "Datasource configuration saved.", "application/json");
         });
         router.post("/ui/datasource/test", (req, res) -> {
@@ -802,7 +921,11 @@ public class ApiServer {
                     toPersist.setLastTestDbProduct(null);
                     toPersist.setLastTestDbVersion(null);
                     toPersist.setLastTestElapsedMs(elapsed);
-                    ConfigManager.saveConfig(ConfigManager.getConfig());
+                    try {
+                        ConfigManager.saveConfig(ConfigManager.getConfig());
+                    } catch (java.io.IOException ioe) {
+                        LOG.error("Failed to save test results", ioe);
+                    }
                 }
                 res.json(200, out);
             }
@@ -820,7 +943,13 @@ public class ApiServer {
             boolean exists = cfgNow.getDatasources().stream().anyMatch(d -> name.equals(d.getName()));
             if (!exists) { res.json(404, Map.of("error","not found")); return; }
             cfgNow.setActiveDatasource(name);
-            ConfigManager.saveConfig(cfgNow);
+            try {
+                ConfigManager.saveConfig(cfgNow);
+            } catch (java.io.IOException e) {
+                LOG.error("Failed to save config", e);
+                res.json(500, Map.of("error", "Failed to save configuration: " + e.getMessage()));
+                return;
+            }
             res.text(200, "Activated", "application/json");
         });
         router.post("/ui/datasource/delete", (req, res) -> {
@@ -838,7 +967,13 @@ public class ApiServer {
                 if (!cfgNow.getDatasources().isEmpty()) cfgNow.setActiveDatasource(cfgNow.getDatasources().getFirst().getName());
                 else cfgNow.setActiveDatasource(null);
             }
-            ConfigManager.saveConfig(cfgNow);
+            try {
+                ConfigManager.saveConfig(cfgNow);
+            } catch (java.io.IOException e) {
+                LOG.error("Failed to save config", e);
+                res.json(500, Map.of("error", "Failed to save configuration: " + e.getMessage()));
+                return;
+            }
             res.text(200, "Deleted", "application/json");
         });
         router.get("/ui/datasource/health", (req, res) -> {
