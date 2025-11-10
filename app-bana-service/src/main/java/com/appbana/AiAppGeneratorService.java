@@ -288,14 +288,23 @@ public class AiAppGeneratorService {
                     LOG.info("[AI] Attempting AI generation with provider: {}", config.getAiProvider());
                     GenerationResult aiResult = generateWithAi(request, config);
                     LOG.info("[AI] AI GenerationResult: {}", aiResult);
-                    return aiResult;
+                    
+                    // Validate AI result before returning
+                    if (AiResultValidator.validateAiResult(aiResult, request)) {
+                        LOG.info("[AI] AI result validated successfully");
+                        return aiResult;
+                    } else {
+                        LOG.warn("[AI] AI result validation failed, will use templates as fallback");
+                    }
                 } catch (Exception e) {
-                    LOG.error("[AI] AI generation failed, falling back to templates", e);
+                    LOG.error("[AI] AI generation failed with exception: {}", e.getMessage(), e);
                 }
+            } else {
+                LOG.warn("[AI] AI provider not enabled, will use template-based generation");
             }
 
             // Fall back to template-based generation
-            LOG.info("[AI] Using template-based generation");
+            LOG.info("[AI] Using template-based generation as fallback");
             GenerationResult templateResult = generateFromTemplates(request);
             LOG.info("[AI] Template-based GenerationResult: {}", templateResult);
             return templateResult;
