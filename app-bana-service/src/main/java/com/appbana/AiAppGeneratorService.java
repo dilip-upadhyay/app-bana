@@ -521,14 +521,12 @@ public class AiAppGeneratorService {
             }
         }
         
-        // Parse detailed page metadata
+        // Parse detailed pages metadata
         result.pages = new ArrayList<>();
-        JsonNode detailedPagesNode = root.get("pages");
-        if (detailedPagesNode != null && detailedPagesNode.isArray()) {
-            for (JsonNode pageNode : detailedPagesNode) {
-                if (pageNode.isObject()) {
-                    result.pages.add(mapper.convertValue(pageNode, Map.class));
-                }
+        JsonNode pagesMetaNode = root.get("pages");
+        if (pagesMetaNode != null && pagesMetaNode.isArray()) {
+            for (JsonNode pageNode : pagesMetaNode) {
+                result.pages.add(mapper.convertValue(pageNode, Map.class));
             }
         }
         

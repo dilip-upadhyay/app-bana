@@ -261,52 +261,99 @@ Generate ONLY valid JSON (no markdown, no explanations):
 
 ```json
 {
-  "appName": "Blog Application",
-  "appDescription": "A blog with posts and comments",
+  "appName": "Project Management App",
+  "appDescription": "Project management system with projects, tasks, and team members",
   "entities": [
     {
-      "name": "Post",
+      "name": "Project",
       "fields": [
-        {"name": "title", "type": "text", "required": true},
-        {"name": "content", "type": "longtext", "required": true},
-        {"name": "author", "type": "text", "required": true},
-        {"name": "publishedAt", "type": "datetime", "required": false},
+        {"name": "name", "type": "text", "required": true},
+        {"name": "description", "type": "longtext", "required": false},
+        {"name": "startDate", "type": "date", "required": true},
+        {"name": "endDate", "type": "date", "required": false},
         {"name": "status", "type": "status", "required": true}
       ]
     },
     {
-      "name": "Comment",
+      "name": "Task",
       "fields": [
-        {"name": "content", "type": "text", "required": true},
-        {"name": "author", "type": "text", "required": true},
-        {"name": "postId", "type": "long", "required": true}
+        {"name": "title", "type": "text", "required": true},
+        {"name": "description", "type": "longtext", "required": false},
+        {"name": "status", "type": "status", "required": true},
+        {"name": "dueDate", "type": "date", "required": false},
+        {"name": "projectId", "type": "long", "required": true},
+        {"name": "assignedTo", "type": "long", "required": false}
+      ]
+    },
+    {
+      "name": "TeamMember",
+      "fields": [
+        {"name": "name", "type": "text", "required": true},
+        {"name": "email", "type": "email", "required": true},
+        {"name": "role", "type": "text", "required": true}
       ]
     }
   ],
   "relationships": [
-    "Comment.postId → Post.id (many-to-one, CASCADE DELETE)"
+    "Task.projectId → Project.id (many-to-one, CASCADE DELETE)",
+    "Task.assignedTo → TeamMember.id (many-to-one, SET NULL)"
   ],
-  "suggestedPages": [
-    {"name": "Posts List", "type": "list", "entity": "Post"},
-    {"name": "Post Detail", "type": "detail", "entity": "Post"},
-    {"name": "Create Post", "type": "form", "entity": "Post"},
-    {"name": "Dashboard", "type": "dashboard"}
+  "pages": [
+    {
+      "id": "project-list",
+      "name": "Project List",
+      "type": "data-table",
+      "entity": "Project",
+      "columns": ["name", "status", "startDate", "endDate"],
+      "actions": ["view", "edit", "delete", "create"]
+    },
+    {
+      "id": "project-detail",
+      "name": "Project Detail",
+      "type": "profile",
+      "entity": "Project",
+      "fields": ["name", "description", "status", "startDate", "endDate"],
+      "relatedLists": ["tasks"]
+    },
+    {
+      "id": "task-board",
+      "name": "Task Board",
+      "type": "board",
+      "entity": "Task",
+      "groupBy": "status",
+      "fields": ["title", "dueDate", "assignedTo"],
+      "actions": ["view", "edit", "move"]
+    },
+    {
+      "id": "team-directory",
+      "name": "Team Directory",
+      "type": "data-table",
+      "entity": "TeamMember",
+      "columns": ["name", "email", "role"],
+      "actions": ["view", "edit", "delete", "create"]
+    }
   ]
 }
 ```
 
 ## Critical Rules
 
-1. **Every entity automatically gets an "id" field** (don't include it in your fields array)
-2. **Use foreign key fields for relationships**:
+1. **Use the EXACT app name and domain from the user's request**:
+   - If user says "project management app", use "Project Management App" as appName
+   - DO NOT substitute with generic names like "Task Manager" or "Blog Application"
+   - Description should match the user's terminology and requirements precisely
+2. **Every entity automatically gets an "id" field** (don't include it in your fields array)
+3. **Use foreign key fields for relationships**:
    - one-to-many: Child has `parentId` field (type: "long" or "reference")
    - many-to-many: Don't create junction tables yourself (system auto-generates)
-3. **Choose appropriate field types** from the comprehensive list above:
+4. **Choose appropriate field types** from the comprehensive list above:
    - Use EXACT type names as listed (e.g., "longtext", not "long_text")
    - Match field types to use cases (currency for money, email for emails, etc.)
-4. **Set required: true for mandatory fields** (name, email, title, etc.)
-5. **Suggest 3-7 pages** matching the app's purpose
-6. **Include page types and linked entities** in suggestedPages
+5. **Set required: true for mandatory fields** (name, email, title, etc.)
+6. **Generate detailed page metadata in a "pages" array**:
+   - Each page MUST have: id, name, type, entity, fields/columns, actions
+   - Include 3-7 pages matching the app's purpose
+   - Use page types: data-table, form, profile, dashboard, board, calendar, etc.
 7. **Ask follow-up questions** when:
    - Request is too vague ("build an app")
    - Complex domain needs clarification (e-commerce, CRM)
