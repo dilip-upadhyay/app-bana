@@ -29,7 +29,8 @@ public class AiAppGeneratorService {
      * Uses AI if configured, otherwise falls back to template-based generation
      */
     public static GenerationResult generateApp(GenerationRequest request) {
-        // Support explicit actions: if request.action is provided, handle it directly
+        // Enhanced logging for debugging
+        LOG.info("[AI] Incoming GenerationRequest: action={}, description={}, options={}", request != null ? request.action : null, request != null ? request.description : null, request != null ? request.options : null);
         try {
             // If no explicit action, ask the AI to classify the user's intent into an action+options JSON
             if ((request == null || request.action == null) && request != null && request.description != null) {
@@ -41,15 +42,15 @@ public class AiAppGeneratorService {
                         if (classification.containsKey("options") && classification.get("options") instanceof Map) {
                             request.options = (Map<String, Object>) classification.get("options");
                         }
-                        LOG.info("AI classified action: {} with options: {}", request.action, request.options);
+                        LOG.info("[AI] AI classified action: {} with options: {}", request.action, request.options);
                     }
                 } catch (Exception e) {
-                    LOG.warn("Action classification failed: {}", e.getMessage());
+                    LOG.warn("[AI] Action classification failed: {}", e.getMessage());
                 }
             }
             if (request != null && request.action != null) {
                 String action = request.action.trim().toLowerCase();
-                LOG.info("Handling action request: {}", action);
+                LOG.info("[AI] Handling action request: {}", action);
                 switch (action) {
                     case "listapps":
                     case "list_apps":
@@ -59,6 +60,7 @@ public class AiAppGeneratorService {
                         List<Map<String, Object>> apps = AppManager.listApps();
                         listResult.payload = new HashMap<>();
                         listResult.payload.put("apps", apps);
+                        LOG.info("[AI] Returning apps list: {}", apps);
                         return listResult;
                     case "loadapp":
                     case "load_app":
@@ -71,6 +73,7 @@ public class AiAppGeneratorService {
                         if (appId == null || appId.isEmpty()) {
                             loadResult.success = false;
                             loadResult.error = "appId option is required for loadApp";
+                            LOG.warn("[AI] loadApp missing appId");
                             return loadResult;
                         }
                         try {
@@ -78,15 +81,18 @@ public class AiAppGeneratorService {
                             if (appWithPages == null) {
                                 loadResult.success = false;
                                 loadResult.error = "App not found: " + appId;
+                                LOG.warn("[AI] App not found: {}", appId);
                             } else {
                                 loadResult.success = true;
                                 loadResult.payload = new HashMap<>();
                                 loadResult.payload.put("app", appWithPages.get("app"));
                                 loadResult.payload.put("pages", appWithPages.get("pages"));
+                                LOG.info("[AI] Loaded app: {}", appId);
                             }
                         } catch (Exception e) {
                             loadResult.success = false;
                             loadResult.error = "Failed to load app: " + e.getMessage();
+                            LOG.error("[AI] Failed to load app: {}", e.getMessage());
                         }
                         return loadResult;
                     case "deleteapp":
@@ -100,6 +106,7 @@ public class AiAppGeneratorService {
                         if (appToDelete == null || appToDelete.isEmpty()) {
                             delResult.success = false;
                             delResult.error = "appId option is required for deleteApp";
+                            LOG.warn("[AI] deleteApp missing appId");
                             return delResult;
                         }
                         try {
@@ -107,14 +114,16 @@ public class AiAppGeneratorService {
                             delResult.success = deleted;
                             delResult.payload = new HashMap<>();
                             delResult.payload.put("deleted", deleted);
+                            LOG.info("[AI] Deleted app: {}", appToDelete);
                         } catch (Exception e) {
                             delResult.success = false;
                             delResult.error = "Failed to delete app: " + e.getMessage();
+                            LOG.error("[AI] Failed to delete app: {}", e.getMessage());
                         }
                         return delResult;
                     default:
                         // fall through to AI/template generation
-                        LOG.info("Unknown action '{}', falling back to generation flow", action);
+                        LOG.info("[AI] Unknown action '{}', falling back to generation flow", action);
                 }
             }
 
@@ -122,20 +131,25 @@ public class AiAppGeneratorService {
             AppConfig config = getConfig();
             if (AiProviderFactory.isAiEnabled(config)) {
                 try {
-                    LOG.info("Attempting AI generation with provider: {}", config.getAiProvider());
-                    return generateWithAi(request, config);
+                    LOG.info("[AI] Attempting AI generation with provider: {}", config.getAiProvider());
+                    GenerationResult aiResult = generateWithAi(request, config);
+                    LOG.info("[AI] AI GenerationResult: {}", aiResult);
+                    return aiResult;
                 } catch (Exception e) {
-                    LOG.error("AI generation failed, falling back to templates", e);
+                    LOG.error("[AI] AI generation failed, falling back to templates", e);
                 }
             }
 
             // Fall back to template-based generation
-            LOG.info("Using template-based generation");
-            return generateFromTemplates(request);
+            LOG.info("[AI] Using template-based generation");
+            GenerationResult templateResult = generateFromTemplates(request);
+            LOG.info("[AI] Template-based GenerationResult: {}", templateResult);
+            return templateResult;
         } catch (Exception ex) {
             GenerationResult err = new GenerationResult();
             err.success = false;
             err.error = ex.getMessage();
+            LOG.error("[AI] Generation failed: {}", ex.getMessage());
             return err;
         }
     }
@@ -150,13 +164,14 @@ public class AiAppGeneratorService {
         String systemPrompt = AiSystemPrompts.getAppGenerationPrompt();
         String userPrompt = request.description;
         
-        LOG.info("Calling AI provider: {} with enhanced builder-database prompt", provider.getProviderName());
+        LOG.info("[AI] Calling AI provider: {} with enhanced builder-database prompt", provider.getProviderName());
         String jsonResponse = provider.generateAppStructure(userPrompt, systemPrompt);
-        
-        LOG.debug("AI response: {}", jsonResponse);
-        
-        // Parse AI JSON response
-        return parseAiResponse(jsonResponse);
+        LOG.info("[AI] Raw AI response: {}", jsonResponse);
+        String sanitized = sanitizeAiJson(jsonResponse);
+        LOG.info("[AI] Sanitized AI response: {}", sanitized);
+        GenerationResult result = parseAiResponse(jsonResponse);
+        LOG.info("[AI] Parsed GenerationResult: {}", result);
+        return result;
     }
 
     /**
