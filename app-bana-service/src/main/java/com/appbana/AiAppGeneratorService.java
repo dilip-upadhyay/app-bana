@@ -121,6 +121,160 @@ public class AiAppGeneratorService {
                             LOG.error("[AI] Failed to delete app: {}", e.getMessage());
                         }
                         return delResult;
+                    case "listpages":
+                    case "list_pages":
+                    case "list-pages":
+                    case "getapppages":
+                    case "get_app_pages":
+                    case "get-app-pages": {
+                        String foundAppId = null;
+                        if (request.options != null && request.options.containsKey("appId")) {
+                            foundAppId = String.valueOf(request.options.get("appId"));
+                        } else if (request.options != null && request.options.containsKey("appName")) {
+                            // Find appId by name
+                            String appName = String.valueOf(request.options.get("appName"));
+                            List<Map<String, Object>> appList = AppManager.listApps();
+                            for (Map<String, Object> app : appList) {
+                                if (appName.equalsIgnoreCase(String.valueOf(app.get("name")))) {
+                                    foundAppId = String.valueOf(app.get("id"));
+                                    break;
+                                }
+                            }
+                        }
+                        GenerationResult pageResult = new GenerationResult();
+                        if (foundAppId == null || foundAppId.isEmpty()) {
+                            pageResult.success = false;
+                            pageResult.error = "appId or appName is required for listPages";
+                            LOG.warn("[AI] listPages missing appId/appName");
+                            return pageResult;
+                        }
+                        try {
+                            Map<String, Object> appWithPages = AppManager.getAppWithPages(foundAppId);
+                            if (appWithPages == null) {
+                                pageResult.success = false;
+                                pageResult.error = "App not found: " + foundAppId;
+                                LOG.warn("[AI] App not found: {}", foundAppId);
+                            } else {
+                                List<?> pages = (List<?>) appWithPages.get("pages");
+                                pageResult.success = true;
+                                pageResult.payload = new HashMap<>();
+                                pageResult.payload.put("appId", foundAppId);
+                                pageResult.payload.put("pageCount", pages != null ? pages.size() : 0);
+                                pageResult.payload.put("pages", pages);
+                                LOG.info("[AI] App {} has {} pages", foundAppId, pages != null ? pages.size() : 0);
+                            }
+                        } catch (Exception e) {
+                            pageResult.success = false;
+                            pageResult.error = "Failed to list pages: " + e.getMessage();
+                            LOG.error("[AI] Failed to list pages: {}", e.getMessage());
+                        }
+                        return pageResult;
+                    }
+                    case "createpage": {
+                        // Stub: create a new page in the app
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "createPage not yet implemented";
+                        return result;
+                    }
+                    case "deletepage": {
+                        // Stub: delete a page from the app
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "deletePage not yet implemented";
+                        return result;
+                    }
+                    case "listentities": {
+                        // Stub: list all entities in the app
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "listEntities not yet implemented";
+                        return result;
+                    }
+                    case "getentitydetails": {
+                        // Stub: get details for a specific entity
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "getEntityDetails not yet implemented";
+                        return result;
+                    }
+                    case "addentity": {
+                        // Stub: add a new entity to the app
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "addEntity not yet implemented";
+                        return result;
+                    }
+                    case "deleteentity": {
+                        // Stub: delete an entity from the app
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "deleteEntity not yet implemented";
+                        return result;
+                    }
+                    case "updateentity": {
+                        // Stub: update an entity in the app
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "updateEntity not yet implemented";
+                        return result;
+                    }
+                    case "listcomponents": {
+                        // Stub: list available UI components
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "listComponents not yet implemented";
+                        return result;
+                    }
+                    case "getappsummary": {
+                        // Stub: return app summary
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "getAppSummary not yet implemented";
+                        return result;
+                    }
+                    case "exportapp": {
+                        // Stub: export app metadata
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "exportApp not yet implemented";
+                        return result;
+                    }
+                    case "importapp": {
+                        // Stub: import app metadata
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "importApp not yet implemented";
+                        return result;
+                    }
+                    case "cloneapp": {
+                        // Stub: clone an app
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "cloneApp not yet implemented";
+                        return result;
+                    }
+                    case "getpagedetails": {
+                        // Stub: get details for a specific page
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "getPageDetails not yet implemented";
+                        return result;
+                    }
+                    case "previewpage": {
+                        // Stub: render a live preview of a page
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "previewPage not yet implemented";
+                        return result;
+                    }
+                    case "runvalidation": {
+                        // Stub: validate app/page/entity
+                        GenerationResult result = new GenerationResult();
+                        result.success = false;
+                        result.error = "runValidation not yet implemented";
+                        return result;
+                    }
                     default:
                         // fall through to AI/template generation
                         LOG.info("[AI] Unknown action '{}', falling back to generation flow", action);
@@ -239,46 +393,30 @@ public class AiAppGeneratorService {
         String lower = userText == null ? "" : userText.toLowerCase();
         Map<String, Object> fallback = new HashMap<>();
 
-        if (lower.matches(".*\\b(show|list|display|all)\\b.*\\bapps?\\b.*") || lower.matches(".*\\bmy apps\\b.*")) {
-            fallback.put("action", "listApps");
-            fallback.put("options", new HashMap<>());
-            LOG.info("Intent heuristics matched listApps for input: {}", userText);
-            return fallback;
-        }
-
-        // load/open app - try to extract an app id-like token
-        if (lower.matches(".*\\b(open|load|show)\\b.*\\bapp\\b.*")) {
-            // simple extraction: look for last token after 'app'
-            String[] tokens = userText.split("\\s+");
-            String appId = null;
-            for (int i = 0; i < tokens.length - 1; i++) {
-                if (tokens[i].equalsIgnoreCase("app")) {
-                    appId = tokens[i+1].replaceAll("[^A-Za-z0-9_\\-]", "");
-                }
+        LOG.info("[AI] classifyAction: userText='{}'", userText);
+        LOG.info("[AI] classifyAction: lower='{}'", lower);
+        // Heuristic: page count or list pages for an app
+        boolean isPageCountQuery = lower.matches(".*(how many|count|number of) pages.*(in|for|of) .*") || lower.matches(".*show pages.*(in|for|of) .*") || lower.matches(".*list pages.*(in|for|of) .*");
+        LOG.info("[AI] classifyAction: isPageCountQuery={}", isPageCountQuery);
+        if (isPageCountQuery) {
+            // Try to extract app name
+            String appName = null;
+            Pattern p = Pattern.compile("(in|for|of) ([A-Za-z0-9 _-]+)");
+            java.util.regex.Matcher m = p.matcher(userText);
+            if (m.find()) {
+                appName = m.group(2).trim();
+                LOG.info("[AI] classifyAction: extracted appName='{}'", appName);
+            } else {
+                LOG.info("[AI] classifyAction: appName not found in userText");
             }
-            fallback.put("action", "loadApp");
-            Map<String,Object> opts = new HashMap<>();
-            if (appId != null && !appId.isEmpty()) opts.put("appId", appId);
-            fallback.put("options", opts);
-            LOG.info("Intent heuristics matched loadApp (appId={}) for input: {}", appId, userText);
-            return fallback;
-        }
-
-        // delete app
-        if (lower.matches(".*\\b(delete|remove)\\b.*\\bapp\\b.*")) {
-            String[] tokens = userText.split("\\s+");
-            String appId = null;
-            for (int i = 0; i < tokens.length - 1; i++) {
-                if (tokens[i].equalsIgnoreCase("app")) {
-                    appId = tokens[i+1].replaceAll("[^A-Za-z0-9_\\-]", "");
-                }
-            }
-            fallback.put("action", "deleteApp");
-            Map<String,Object> opts = new HashMap<>();
-            if (appId != null && !appId.isEmpty()) opts.put("appId", appId);
-            fallback.put("options", opts);
-            LOG.info("Intent heuristics matched deleteApp (appId={}) for input: {}", appId, userText);
-            return fallback;
+            Map<String, Object> opts = new HashMap<>();
+            if (appName != null && !appName.isEmpty()) opts.put("appName", appName);
+            Map<String, Object> result = new HashMap<>();
+            result.put("action", "listPages");
+            result.put("options", opts);
+            LOG.info("[AI] classifyAction: returning listPages action with options={}", opts);
+            // Always return here for page-count queries
+            return result;
         }
 
         // default: generateApp
@@ -379,6 +517,17 @@ public class AiAppGeneratorService {
                 } else if (pageNode.isObject()) {
                     // Detailed object format
                     result.suggestedPages.add(mapper.writeValueAsString(pageNode));
+                }
+            }
+        }
+        
+        // Parse detailed page metadata
+        result.pages = new ArrayList<>();
+        JsonNode detailedPagesNode = root.get("pages");
+        if (detailedPagesNode != null && detailedPagesNode.isArray()) {
+            for (JsonNode pageNode : detailedPagesNode) {
+                if (pageNode.isObject()) {
+                    result.pages.add(mapper.convertValue(pageNode, Map.class));
                 }
             }
         }
@@ -700,6 +849,7 @@ public class AiAppGeneratorService {
         public List<EntitySchema> entities;
         public List<String> relationships;
         public List<String> suggestedPages;
+        public List<Map<String, Object>> pages; // <-- Add detailed page metadata
         public String error;
         // Generic payload for action results (e.g., listApps -> { apps: [...] })
         public Map<String, Object> payload;

@@ -1,0 +1,49 @@
+{
+  "id" : "page-1762804018106-fg8z4fbr9",
+  "name" : "Posts List (Data Table)",
+  "path" : "/posts-list-data-table",
+  "rootId" : "root-1762804018106",
+  "nodes" : [ {
+    "id" : "root-1762804018106",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "children" : [ "header-1762804018106", "table-1762804018106" ]
+  }, {
+    "id" : "header-1762804018106",
+    "type" : "container",
+    "props" : {
+      "layout" : "horizontal",
+      "justifyContent" : "space-between",
+      "alignItems" : "center"
+    },
+    "children" : [ "heading-1762804018106", "button-1762804018106" ]
+  }, {
+    "id" : "heading-1762804018106",
+    "type" : "text",
+    "props" : {
+      "content" : "Post List",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "button-1762804018106",
+    "type" : "button",
+    "props" : {
+      "label" : "Add New",
+      "variant" : "primary"
+    }
+  }, {
+    "id" : "table-1762804018106",
+    "type" : "app-grid",
+    "props" : {
+      "columns" : "1",
+      "gap" : "sm"
+    },
+    "children" : [ ]
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "list"
+}

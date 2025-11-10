@@ -1,0 +1,36 @@
+{
+  "id" : "page-1762804018141-mitmbwhe1",
+  "name" : "Post Detail (Profile)",
+  "path" : "/post-detail-profile",
+  "rootId" : "root-1762804018141",
+  "nodes" : [ {
+    "id" : "root-1762804018141",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "children" : [ "heading-1762804018141", "content-1762804018141" ]
+  }, {
+    "id" : "heading-1762804018141",
+    "type" : "text",
+    "props" : {
+      "content" : "Post Details",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "content-1762804018141",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "md",
+      "padding" : "lg",
+      "background" : "#fff",
+      "borderRadius" : "8px"
+    },
+    "children" : [ ]
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "detail"
+}
