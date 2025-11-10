@@ -106,3 +106,10 @@ All generated metadata must conform to TypeScript interfaces:
 ## Version History
 
 - **1.0.0** (Nov 8, 2025) - Initial database creation with 8 capability files
+
+## Breaking Changes / Important Notes (Nov 10, 2025)
+
+- API: `GET /apps` now returns a wrapped response: `{ "apps": [ ... ] }` (not a raw array). Update generated clients to read `response.apps`.
+- Frontend: `AppStore.setCurrentApp()` is asynchronous and loads the full app (entities/pages). Callers should `await appStore.setCurrentApp(appId)` before reading entities/pages.
+
+If you generate client code or agent flows from these capability files, ensure examples use the wrapper and await `setCurrentApp()` where applicable.
