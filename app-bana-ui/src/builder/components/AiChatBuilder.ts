@@ -867,7 +867,7 @@ export class AiChatBuilder extends LitElement {
               description: result.appDescription
             },
             generatedEntities: result.entities || [],
-            generatedPages: result.suggestedPages || [],
+            generatedPages: result.pages || result.suggestedPages || [],
             action: 'confirm'
           }
         );
