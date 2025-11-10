@@ -13,7 +13,7 @@ interface ChatMessage {
     generatedApp?: any;
     generatedEntities?: EntityMeta[];
     generatedPages?: any[];
-    action?: 'preview' | 'create' | 'confirm' | 'follow-up' | 'clarify';
+    action?: 'preview' | 'create' | 'confirm' | 'follow-up' | 'clarify' | 'list' | 'app' | 'delete';
     followUpQuestions?: string[];
     pendingGeneration?: any;
   };
@@ -686,6 +686,72 @@ export class AiChatBuilder extends LitElement {
 
   private async processUserInput(input: string) {
     try {
+      // Quick local intent detection for simple commands to avoid AI asking unnecessary follow-ups
+      const lower = input.trim().toLowerCase();
+      // List apps
+      if (/\b(show|list|display|all)\b.*\bapps?\b/.test(lower) || /\bmy apps\b/.test(lower)) {
+        // Send explicit action to backend
+        const response = await fetch('/api/ai/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'listApps' })
+        });
+        if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+        const result = await response.json();
+        if (result.success && result.payload && result.payload.apps) {
+          this.addAssistantMessage(`I found ${result.payload.apps.length} apps.`, {
+            generatedApp: { payload: result.payload },
+            action: 'list'
+          });
+        } else {
+          this.addAssistantMessage(result.error || 'No apps found.');
+        }
+        return;
+      }
+
+      // Open/load an app by name/id: try to extract an id-like token
+      const openMatch = lower.match(/\b(open|load|show)\b.*\bapp\b\s*([A-Za-z0-9_\-]+)/);
+      if (openMatch) {
+        const appId = openMatch[2];
+        const response = await fetch('/api/ai/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'loadApp', options: { appId } })
+        });
+        if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+        const result = await response.json();
+        if (result.success && result.payload && result.payload.app) {
+          this.addAssistantMessage(`Loaded app: ${result.payload.app.name || appId}`, {
+            action: 'app',
+            generatedApp: result.payload.app,
+            generatedPages: result.payload.pages || []
+          });
+        } else {
+          this.addAssistantMessage(result.error || `Failed to load app ${appId}`);
+        }
+        return;
+      }
+
+      // Delete an app by id/name
+      const deleteMatch = lower.match(/\b(delete|remove)\b.*\bapp\b\s*([A-Za-z0-9_\-]+)/);
+      if (deleteMatch) {
+        const appId = deleteMatch[2];
+        if (!confirm(`Delete app ${appId}? This cannot be undone.`)) return;
+        const response = await fetch('/api/ai/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'deleteApp', options: { appId } })
+        });
+        if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+        const result = await response.json();
+        if (result.success) {
+          this.addAssistantMessage(`App ${appId} deleted.`);
+        } else {
+          this.addAssistantMessage(result.error || `Failed to delete app ${appId}`);
+        }
+        return;
+      }
+
       // Check conversation state
       if (this.conversationState.phase === 'ready-to-create') {
         // User is responding to confirmation - check for modify request
@@ -727,6 +793,47 @@ export class AiChatBuilder extends LitElement {
       const result = await response.json();
 
       if (result.success) {
+        // If backend returned an action payload (listApps, loadApp, deleteApp), handle UI rendering
+        if (result.payload) {
+          if (result.payload.apps) {
+            // Show list of apps with actions
+            this.addAssistantMessage(
+              `I found ${result.payload.apps.length} apps.`,
+              {
+                pendingGeneration: result,
+                action: 'list',
+                generatedPages: [],
+                generatedEntities: [],
+                followUpQuestions: [] as any,
+                // include payload so renderMessageMetadata can show buttons
+                // store under generatedApp for reuse in metadata rendering
+                generatedApp: { payload: result.payload }
+              }
+            );
+            return;
+          }
+
+          if (result.payload.app) {
+            // Show app details with option to open
+            const app = result.payload.app;
+            this.addAssistantMessage(
+              `Loaded app: ${app.name || app.id}`,
+              {
+                action: 'app',
+                generatedApp: app,
+                generatedPages: result.payload.pages || []
+              }
+            );
+            return;
+          }
+
+          if (result.payload.deleted !== undefined) {
+            const deleted = !!result.payload.deleted;
+            this.addAssistantMessage(deleted ? 'App deleted successfully.' : 'Failed to delete app.');
+            return;
+          }
+        }
+
         // Check if AI is asking follow-up questions
         if (result.followUpQuestions && result.followUpQuestions.length > 0) {
           this.conversationState.phase = 'gathering-info';
@@ -1325,6 +1432,47 @@ export class AiChatBuilder extends LitElement {
     }
 
     // Render confirmation preview
+    // Render action-based metadata (list/app)
+    if (action === 'list' && generatedApp && generatedApp.payload && generatedApp.payload.apps) {
+      const apps: any[] = generatedApp.payload.apps;
+      return html`
+        <div class="message-metadata">
+          <div class="preview-card">
+            <h4>📚 Apps (${apps.length})</h4>
+            <ul class="preview-list">
+              ${apps.map(a => html`
+                <li style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem;">
+                  <div style="flex:1">
+                    <strong>${a.name}</strong>
+                    <div style="font-size:var(--text-xs,0.75rem); color:var(--color-text-muted,#6b7280);">${a.description || ''}</div>
+                  </div>
+                  <div style="display:flex; gap:0.5rem;">
+                    <button class="btn" @click=${() => this.handleLoadAppFromPayload(a.id)}>Open</button>
+                    <button class="btn" @click=${() => this.handleDeleteAppFromPayload(a.id)}>Delete</button>
+                  </div>
+                </li>
+              `)}
+            </ul>
+          </div>
+        </div>
+      `;
+    }
+
+    if (action === 'app' && generatedApp) {
+      const app = generatedApp;
+      return html`
+        <div class="message-metadata">
+          <div class="preview-card">
+            <h4>📦 ${app.name || 'Application'}</h4>
+            <p style="margin:0.5rem 0; color:var(--color-text-muted,#6b7280); font-size:var(--text-sm,0.875rem);">${app.description || ''}</p>
+            <div class="action-buttons">
+              <button class="btn primary" @click=${() => this.handleLoadAppFromPayload(app.id)}>Open App</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     return html`
       <div class="message-metadata">
         <div class="preview-card">
@@ -1407,6 +1555,37 @@ export class AiChatBuilder extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  private async handleLoadAppFromPayload(appId: string) {
+    try {
+      this.addSystemMessage(`Loading app ${appId}...`);
+      // Try to set current app via AppStore; if it fails, dispatch event for host to handle
+      try {
+        await appStore.setCurrentApp(appId);
+        this.addAssistantMessage(`✅ App loaded: ${appId}`);
+        this.dispatchEvent(new CustomEvent('app-loaded', { detail: { appId }, bubbles: true, composed: true }));
+      } catch (e) {
+        console.warn('[AiChatBuilder] appStore.setCurrentApp failed, dispatching event instead', e);
+        this.dispatchEvent(new CustomEvent('app-load-request', { detail: { appId }, bubbles: true, composed: true }));
+        this.addAssistantMessage(`✅ App load requested: ${appId}`);
+      }
+    } catch (error) {
+      console.error('[AiChatBuilder] Failed to load app from payload:', error);
+      this.addAssistantMessage(`Failed to load app ${appId}: ${error}`);
+    }
+  }
+
+  private async handleDeleteAppFromPayload(appId: string) {
+    if (!confirm(`Delete app ${appId}? This cannot be undone.`)) return;
+    try {
+      this.addSystemMessage(`Deleting app ${appId}...`);
+      await appStore.deleteApp(appId);
+      this.addAssistantMessage(`✅ App deleted: ${appId}`);
+    } catch (error) {
+      console.error('[AiChatBuilder] Failed to delete app from payload:', error);
+      this.addAssistantMessage(`Failed to delete app ${appId}: ${error}`);
+    }
   }
 
   private renderLoading() {

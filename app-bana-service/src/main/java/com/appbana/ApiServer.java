@@ -447,7 +447,9 @@ public class ApiServer {
         router.post("/api/ai/generate", (req, res) -> {
             try {
                 AiAppGeneratorService.GenerationRequest genReq = req.readJson(new TypeReference<>(){});
-                if (genReq.description == null || genReq.description.trim().isEmpty()) {
+                // Allow action-only requests (e.g., { action: "listApps" })
+                if ((genReq.description == null || genReq.description.trim().isEmpty()) 
+                        && (genReq.action == null || genReq.action.trim().isEmpty())) {
                     res.json(400, Map.of("error", "description is required"));
                     return;
                 }

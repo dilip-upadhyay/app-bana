@@ -29,20 +29,115 @@ public class AiAppGeneratorService {
      * Uses AI if configured, otherwise falls back to template-based generation
      */
     public static GenerationResult generateApp(GenerationRequest request) {
-        // Try AI generation first
-        AppConfig config = getConfig();
-        if (AiProviderFactory.isAiEnabled(config)) {
-            try {
-                LOG.info("Attempting AI generation with provider: {}", config.getAiProvider());
-                return generateWithAi(request, config);
-            } catch (Exception e) {
-                LOG.error("AI generation failed, falling back to templates", e);
+        // Support explicit actions: if request.action is provided, handle it directly
+        try {
+            // If no explicit action, ask the AI to classify the user's intent into an action+options JSON
+            if ((request == null || request.action == null) && request != null && request.description != null) {
+                try {
+                    Map<String, Object> classification = classifyAction(request.description);
+                    if (classification != null && classification.containsKey("action")) {
+                        Object a = classification.get("action");
+                        if (a != null) request.action = String.valueOf(a);
+                        if (classification.containsKey("options") && classification.get("options") instanceof Map) {
+                            request.options = (Map<String, Object>) classification.get("options");
+                        }
+                        LOG.info("AI classified action: {} with options: {}", request.action, request.options);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Action classification failed: {}", e.getMessage());
+                }
             }
+            if (request != null && request.action != null) {
+                String action = request.action.trim().toLowerCase();
+                LOG.info("Handling action request: {}", action);
+                switch (action) {
+                    case "listapps":
+                    case "list_apps":
+                    case "list-apps":
+                        GenerationResult listResult = new GenerationResult();
+                        listResult.success = true;
+                        List<Map<String, Object>> apps = AppManager.listApps();
+                        listResult.payload = new HashMap<>();
+                        listResult.payload.put("apps", apps);
+                        return listResult;
+                    case "loadapp":
+                    case "load_app":
+                    case "load-app":
+                        String appId = null;
+                        if (request.options != null && request.options.containsKey("appId")) {
+                            appId = String.valueOf(request.options.get("appId"));
+                        }
+                        GenerationResult loadResult = new GenerationResult();
+                        if (appId == null || appId.isEmpty()) {
+                            loadResult.success = false;
+                            loadResult.error = "appId option is required for loadApp";
+                            return loadResult;
+                        }
+                        try {
+                            Map<String, Object> appWithPages = AppManager.getAppWithPages(appId);
+                            if (appWithPages == null) {
+                                loadResult.success = false;
+                                loadResult.error = "App not found: " + appId;
+                            } else {
+                                loadResult.success = true;
+                                loadResult.payload = new HashMap<>();
+                                loadResult.payload.put("app", appWithPages.get("app"));
+                                loadResult.payload.put("pages", appWithPages.get("pages"));
+                            }
+                        } catch (Exception e) {
+                            loadResult.success = false;
+                            loadResult.error = "Failed to load app: " + e.getMessage();
+                        }
+                        return loadResult;
+                    case "deleteapp":
+                    case "delete_app":
+                    case "delete-app":
+                        String appToDelete = null;
+                        if (request.options != null && request.options.containsKey("appId")) {
+                            appToDelete = String.valueOf(request.options.get("appId"));
+                        }
+                        GenerationResult delResult = new GenerationResult();
+                        if (appToDelete == null || appToDelete.isEmpty()) {
+                            delResult.success = false;
+                            delResult.error = "appId option is required for deleteApp";
+                            return delResult;
+                        }
+                        try {
+                            boolean deleted = AppManager.deleteApp(appToDelete);
+                            delResult.success = deleted;
+                            delResult.payload = new HashMap<>();
+                            delResult.payload.put("deleted", deleted);
+                        } catch (Exception e) {
+                            delResult.success = false;
+                            delResult.error = "Failed to delete app: " + e.getMessage();
+                        }
+                        return delResult;
+                    default:
+                        // fall through to AI/template generation
+                        LOG.info("Unknown action '{}', falling back to generation flow", action);
+                }
+            }
+
+            // Try AI generation first
+            AppConfig config = getConfig();
+            if (AiProviderFactory.isAiEnabled(config)) {
+                try {
+                    LOG.info("Attempting AI generation with provider: {}", config.getAiProvider());
+                    return generateWithAi(request, config);
+                } catch (Exception e) {
+                    LOG.error("AI generation failed, falling back to templates", e);
+                }
+            }
+
+            // Fall back to template-based generation
+            LOG.info("Using template-based generation");
+            return generateFromTemplates(request);
+        } catch (Exception ex) {
+            GenerationResult err = new GenerationResult();
+            err.success = false;
+            err.error = ex.getMessage();
+            return err;
         }
-        
-        // Fall back to template-based generation
-        LOG.info("Using template-based generation");
-        return generateFromTemplates(request);
     }
     
     /**
@@ -62,6 +157,120 @@ public class AiAppGeneratorService {
         
         // Parse AI JSON response
         return parseAiResponse(jsonResponse);
+    }
+
+    /**
+     * Ask the AI to classify a free-text user request into an action + options JSON
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> classifyAction(String userText) throws Exception {
+        AppConfig config = getConfig();
+        if (!AiProviderFactory.isAiEnabled(config)) return null;
+        AiProvider provider = AiProviderFactory.createProvider(config);
+
+        String systemPrompt = AiSystemPrompts.getActionClassifierPrompt();
+        String jsonResponse = provider.generateAppStructure(userText, systemPrompt);
+        LOG.debug("Raw classifier response: {}", jsonResponse);
+        String sanitized = sanitizeAiJson(jsonResponse);
+        LOG.debug("Sanitized classifier JSON: {}", sanitized);
+
+        Map<String, Object> parsed = null;
+        try {
+            parsed = mapper.readValue(sanitized, Map.class);
+        } catch (Exception e) {
+            LOG.warn("Failed to parse action classification JSON: {}", e.getMessage());
+            parsed = null;
+        }
+
+        // Validate parsed result
+        if (parsed != null && parsed.containsKey("action")) {
+            Object a = parsed.get("action");
+            if (a != null) {
+                String act = String.valueOf(a).trim();
+                // normalize action names
+                switch (act.toLowerCase()) {
+                    case "listapps":
+                    case "list_apps":
+                    case "list-apps":
+                    case "list":
+                        parsed.put("action", "listApps");
+                        return parsed;
+                    case "loadapp":
+                    case "load_app":
+                    case "load-app":
+                    case "open":
+                        parsed.put("action", "loadApp");
+                        return parsed;
+                    case "deleteapp":
+                    case "delete_app":
+                    case "delete-app":
+                    case "delete":
+                        parsed.put("action", "deleteApp");
+                        return parsed;
+                    case "generateapp":
+                    case "generate_app":
+                    case "generate-app":
+                    case "generate":
+                        parsed.put("action", "generateApp");
+                        return parsed;
+                    default:
+                        // unknown action - we'll fallback to heuristics below
+                        LOG.info("Classifier returned unknown action '{}', falling back to heuristics", act);
+                }
+            }
+        }
+
+        // If classifier failed or returned nothing useful, use simple heuristics as a fallback
+        String lower = userText == null ? "" : userText.toLowerCase();
+        Map<String, Object> fallback = new HashMap<>();
+
+        if (lower.matches(".*\\b(show|list|display|all)\\b.*\\bapps?\\b.*") || lower.matches(".*\\bmy apps\\b.*")) {
+            fallback.put("action", "listApps");
+            fallback.put("options", new HashMap<>());
+            LOG.info("Intent heuristics matched listApps for input: {}", userText);
+            return fallback;
+        }
+
+        // load/open app - try to extract an app id-like token
+        if (lower.matches(".*\\b(open|load|show)\\b.*\\bapp\\b.*")) {
+            // simple extraction: look for last token after 'app'
+            String[] tokens = userText.split("\\s+");
+            String appId = null;
+            for (int i = 0; i < tokens.length - 1; i++) {
+                if (tokens[i].equalsIgnoreCase("app")) {
+                    appId = tokens[i+1].replaceAll("[^A-Za-z0-9_\\-]", "");
+                }
+            }
+            fallback.put("action", "loadApp");
+            Map<String,Object> opts = new HashMap<>();
+            if (appId != null && !appId.isEmpty()) opts.put("appId", appId);
+            fallback.put("options", opts);
+            LOG.info("Intent heuristics matched loadApp (appId={}) for input: {}", appId, userText);
+            return fallback;
+        }
+
+        // delete app
+        if (lower.matches(".*\\b(delete|remove)\\b.*\\bapp\\b.*")) {
+            String[] tokens = userText.split("\\s+");
+            String appId = null;
+            for (int i = 0; i < tokens.length - 1; i++) {
+                if (tokens[i].equalsIgnoreCase("app")) {
+                    appId = tokens[i+1].replaceAll("[^A-Za-z0-9_\\-]", "");
+                }
+            }
+            fallback.put("action", "deleteApp");
+            Map<String,Object> opts = new HashMap<>();
+            if (appId != null && !appId.isEmpty()) opts.put("appId", appId);
+            fallback.put("options", opts);
+            LOG.info("Intent heuristics matched deleteApp (appId={}) for input: {}", appId, userText);
+            return fallback;
+        }
+
+        // default: generateApp
+        fallback.put("action", "generateApp");
+        fallback.put("options", new HashMap<>());
+        LOG.info("No classifier match; defaulting to generateApp for input: {}", userText);
+        return fallback;
     }
     
     /**
@@ -167,7 +376,7 @@ public class AiAppGeneratorService {
      * Handles triple-backtick fenced blocks (```json ... ```), and
      * falls back to extracting the first {...} or [...] block found.
      */
-    private static String sanitizeAiJson(String raw) {
+    public static String sanitizeAiJson(String raw) {
         if (raw == null) return null;
         String s = raw.trim();
 
@@ -461,6 +670,8 @@ public class AiAppGeneratorService {
         public String description;
         public String userId;
         public Map<String, Object> options;
+        // Optional action (listApps, loadApp, deleteApp, etc.)
+        public String action;
         public Map<String, Object> conversationContext;
         public String mode;
     }
@@ -475,6 +686,8 @@ public class AiAppGeneratorService {
         public List<String> relationships;
         public List<String> suggestedPages;
         public String error;
+        // Generic payload for action results (e.g., listApps -> { apps: [...] })
+        public Map<String, Object> payload;
     }
     
     private static class AppIntent {
