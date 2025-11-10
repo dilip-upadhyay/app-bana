@@ -1,78 +1,244 @@
 package com.appbana.ai;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 /**
  * System prompts for AI providers
  * Teaches AI about AppBana capabilities and output format
+ * References builder-database for comprehensive, up-to-date capabilities
  */
 public class AiSystemPrompts {
     
+    private static final Logger LOG = LoggerFactory.getLogger(AiSystemPrompts.class);
+    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final String BUILDER_DB_PATH = "builder-database";
+    
     /**
-     * Comprehensive system prompt for app generation
-     * Based on builder-database schema
+     * Get enhanced system prompt with builder database context
+     * Dynamically loads capabilities from builder-database files
      */
-    public static final String APP_GENERATION_PROMPT = """
+    public static String getAppGenerationPrompt() {
+        StringBuilder prompt = new StringBuilder();
+        
+        // Start with base instructions
+        prompt.append(BASE_APP_GENERATION_PROMPT);
+        
+        // Inject builder database content
+        prompt.append("\n\n## COMPREHENSIVE CAPABILITY REFERENCE\n\n");
+        prompt.append("The following is extracted from AppBana's builder-database - the authoritative source of all platform capabilities:\n\n");
+        
+        try {
+            // Load capabilities index
+            String indexContent = loadBuilderDatabaseFile("99-capabilities-index.json");
+            if (indexContent != null) {
+                JsonNode index = mapper.readTree(indexContent);
+                prompt.append("### Quick Reference Summary:\n");
+                prompt.append(formatCapabilitiesSummary(index));
+                prompt.append("\n\n");
+            }
+            
+            // Load entity field types (most important for generation)
+            String entitiesContent = loadBuilderDatabaseFile("03-entities.json");
+            if (entitiesContent != null) {
+                JsonNode entities = mapper.readTree(entitiesContent);
+                prompt.append("### Complete Field Types Reference:\n");
+                prompt.append(formatFieldTypes(entities));
+                prompt.append("\n\n");
+            }
+            
+            // Load page templates
+            String pagesContent = loadBuilderDatabaseFile("04-pages.json");
+            if (pagesContent != null) {
+                JsonNode pages = mapper.readTree(pagesContent);
+                prompt.append("### Available Page Templates:\n");
+                prompt.append(formatPageTemplates(pages));
+                prompt.append("\n\n");
+            }
+            
+            // Load components
+            String componentsContent = loadBuilderDatabaseFile("02-components.json");
+            if (componentsContent != null) {
+                JsonNode components = mapper.readTree(componentsContent);
+                prompt.append("### Available UI Components:\n");
+                prompt.append(formatComponentsSummary(components));
+                prompt.append("\n\n");
+            }
+            
+            LOG.info("Successfully loaded builder database content into AI prompt");
+        } catch (Exception e) {
+            LOG.warn("Failed to load builder database content, using base prompt only: {}", e.getMessage());
+        }
+        
+        // Add closing instructions
+        prompt.append(GENERATION_INSTRUCTIONS);
+        
+        return prompt.toString();
+    }
+    
+    /**
+     * Load content from builder-database file
+     */
+    private static String loadBuilderDatabaseFile(String filename) {
+        try {
+            Path filePath = Paths.get(BUILDER_DB_PATH, filename);
+            if (!Files.exists(filePath)) {
+                // Try from project root
+                filePath = Paths.get("..", BUILDER_DB_PATH, filename);
+                if (!Files.exists(filePath)) {
+                    LOG.warn("Builder database file not found: {}", filename);
+                    return null;
+                }
+            }
+            return Files.readString(filePath);
+        } catch (IOException e) {
+            LOG.warn("Failed to read builder database file {}: {}", filename, e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Format capabilities summary from index
+     */
+    private static String formatCapabilitiesSummary(JsonNode index) {
+        StringBuilder sb = new StringBuilder();
+        JsonNode summary = index.get("summary");
+        if (summary != null) {
+            sb.append("- **Total Components**: ").append(summary.get("totalComponents").asInt()).append("\n");
+            sb.append("- **Total Field Types**: ").append(summary.get("totalFieldTypes").asInt()).append("\n");
+            sb.append("- **Total Page Templates**: ").append(summary.get("totalPageTemplates").asInt()).append("\n");
+            sb.append("- **Total Datasources**: ").append(summary.get("totalDatasources").asInt()).append("\n");
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * Format field types from entities database
+     */
+    private static String formatFieldTypes(JsonNode entities) {
+        StringBuilder sb = new StringBuilder();
+        JsonNode fieldTypes = entities.get("fieldTypes");
+        if (fieldTypes != null && fieldTypes.isArray()) {
+            for (JsonNode category : fieldTypes) {
+                String categoryName = category.get("category").asText();
+                sb.append("**").append(categoryName).append("**:\n");
+                
+                JsonNode fields = category.get("fields");
+                if (fields != null && fields.isArray()) {
+                    for (JsonNode field : fields) {
+                        String type = field.get("type").asText();
+                        String description = field.get("description").asText();
+                        String sqlType = field.has("sqlType") ? field.get("sqlType").asText() : "";
+                        
+                        sb.append("  - `").append(type).append("`: ").append(description);
+                        if (!sqlType.isEmpty()) {
+                            sb.append(" (SQL: ").append(sqlType).append(")");
+                        }
+                        sb.append("\n");
+                    }
+                }
+                sb.append("\n");
+            }
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * Format page templates from pages database
+     */
+    private static String formatPageTemplates(JsonNode pages) {
+        StringBuilder sb = new StringBuilder();
+        JsonNode templates = pages.get("pageTemplates");
+        if (templates != null && templates.isArray()) {
+            for (JsonNode template : templates) {
+                String name = template.get("name").asText();
+                String description = template.get("description").asText();
+                
+                sb.append("- **").append(name).append("**: ").append(description).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * Format components summary
+     */
+    private static String formatComponentsSummary(JsonNode components) {
+        StringBuilder sb = new StringBuilder();
+        JsonNode categories = components.get("categories");
+        if (categories != null && categories.isArray()) {
+            sb.append("Available in categories: ");
+            for (int i = 0; i < categories.size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(categories.get(i).asText());
+            }
+            sb.append("\n");
+        }
+        
+        JsonNode comps = components.get("components");
+        if (comps != null && comps.isArray()) {
+            sb.append("\nMost commonly used:\n");
+            // Show first 10 components
+            int count = Math.min(10, comps.size());
+            for (int i = 0; i < count; i++) {
+                JsonNode comp = comps.get(i);
+                sb.append("  - `").append(comp.get("type").asText()).append("`: ")
+                  .append(comp.get("description").asText()).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * Base system prompt (static part)
+     * References builder-database as the source of truth
+     */
+    private static final String BASE_APP_GENERATION_PROMPT = """
 You are an expert app architect for AppBana, a metadata-driven platform. Your task is to analyze user requests and generate complete application structures.
 
-## AppBana Capabilities
+**IMPORTANT**: All capabilities listed below come from AppBana's builder-database - the authoritative, machine-readable reference of the platform. Use these exact field types, page templates, and patterns.
+""";
+    
+    /**
+     * Generation instructions (static part)
+     */
+    private static final String GENERATION_INSTRUCTIONS = """
 
-### Field Types (38 available):
-**Basic Types**: text, longtext, number, decimal, boolean, date, datetime, time
-**Contact**: email, phone, url, address
-**Rich Types**: currency, percentage, rating, color, json
-**ID/Reference**: uuid, reference (foreign key), file, image
-**Status/Choice**: status (enum), tags, country, language
-**Computed**: formula, autoincrement
+## Interactive Mode
 
-### Relationship Types:
-- one-to-one: User hasOne Profile (profile.userId → user.id)
-- one-to-many: Post hasMany Comments (comment.postId → post.id)
-- many-to-one: Comment belongsTo Post (inverse of one-to-many)
-- many-to-many: User belongsToMany Roles (via user_roles junction table)
+When the user's request is vague or could benefit from clarification, you can ask follow-up questions:
 
-### Page Templates (7 available):
-- Login Page: Authentication form
-- Dashboard: Cards, metrics, charts
-- Data Table: List view with sorting/filtering
-- Profile: Detail view for single record
-- Contact Form: Create/edit form
-- Settings: Configuration panel
-- Blank Canvas: Empty page for custom design
+```json
+{
+  "needsMoreInfo": true,
+  "followUpQuestions": [
+    "What specific fields should the Product entity have?",
+    "Do you need user authentication?",
+    "Should orders track shipping information?"
+  ],
+  "partialStructure": {
+    "appName": "E-commerce Store",
+    "entities": ["Product", "Order"]
+  }
+}
+```
+
+When you have enough information, generate the complete structure.
 
 ## Your Task
 
-Analyze the user's app description and generate a JSON response with:
+Analyze the user's app description and either:
+1. **Ask follow-up questions** if the request is vague or complex
+2. **Generate complete structure** if you have enough information
 
-1. **appName**: Short, descriptive name (e.g., "Blog Application")
-2. **appDescription**: One sentence summary
-3. **entities**: Array of entity objects, each with:
-   - name: PascalCase (e.g., "BlogPost", "User")
-   - fields: Array of field objects:
-     - name: camelCase (e.g., "firstName", "publishedAt")
-     - type: One of the 38 field types above
-     - required: boolean (true for mandatory fields)
-     - Automatically includes "id" field (type: "long", primaryKey: true, autoIncrement: true)
-4. **relationships**: Array of relationship descriptions (human-readable)
-5. **suggestedPages**: Array of recommended page names with templates
-
-## Rules
-
-1. **Every entity automatically gets an "id" field** (don't include it in your fields array)
-2. **Use foreign key fields for relationships**:
-   - one-to-many: Child has `parentId` field (type: "long" or "reference")
-   - many-to-many: Don't create junction tables yourself (system auto-generates)
-3. **Choose appropriate field types**:
-   - Email addresses → "email" (validates format)
-   - Phone numbers → "phone" (validates format)
-   - Money amounts → "currency" (formats with $)
-   - Percentages → "percentage" (formats with %)
-   - Dates without time → "date"
-   - Dates with time → "datetime"
-   - Long text (>255 chars) → "longtext"
-   - Short text → "text"
-4. **Set required: true for mandatory fields** (name, email, title, etc.)
-5. **Suggest 3-5 pages** matching the app's purpose
-
-## Output Format
+## Complete Structure Format
 
 Generate ONLY valid JSON (no markdown, no explanations):
 
@@ -104,15 +270,52 @@ Generate ONLY valid JSON (no markdown, no explanations):
     "Comment.postId → Post.id (many-to-one, CASCADE DELETE)"
   ],
   "suggestedPages": [
-    "Posts List (Data Table)",
-    "Post Detail (Profile)",
-    "Create Post (Form)"
+    {"name": "Posts List", "type": "list", "entity": "Post"},
+    {"name": "Post Detail", "type": "detail", "entity": "Post"},
+    {"name": "Create Post", "type": "form", "entity": "Post"},
+    {"name": "Dashboard", "type": "dashboard"}
   ]
 }
 ```
 
-Now analyze the user's request and generate the app structure.
+## Critical Rules
+
+1. **Every entity automatically gets an "id" field** (don't include it in your fields array)
+2. **Use foreign key fields for relationships**:
+   - one-to-many: Child has `parentId` field (type: "long" or "reference")
+   - many-to-many: Don't create junction tables yourself (system auto-generates)
+3. **Choose appropriate field types** from the comprehensive list above:
+   - Use EXACT type names as listed (e.g., "longtext", not "long_text")
+   - Match field types to use cases (currency for money, email for emails, etc.)
+4. **Set required: true for mandatory fields** (name, email, title, etc.)
+5. **Suggest 3-7 pages** matching the app's purpose
+6. **Include page types and linked entities** in suggestedPages
+7. **Ask follow-up questions** when:
+   - Request is too vague ("build an app")
+   - Complex domain needs clarification (e-commerce, CRM)
+   - User mentions "something like..." without details
+   - Multiple valid interpretations exist
+8. **Use builder-database references**: All capabilities above are from builder-database JSON files - consider them the source of truth
+
+## Relationship Types
+
+From builder-database (03-entities.json):
+- **one-to-one**: User hasOne Profile (profile.userId → user.id)
+- **one-to-many**: Post hasMany Comments (comment.postId → post.id)
+- **many-to-one**: Comment belongsTo Post (inverse of one-to-many)
+- **many-to-many**: User belongsToMany Roles (via junction table, auto-generated)
+
+Now analyze the user's request and respond accordingly.
 """;
+
+    /**
+     * Legacy static prompt for backward compatibility
+     * @deprecated Since 2.0, use getAppGenerationPrompt() for builder-database integration
+     */
+    @Deprecated(since = "2.0", forRemoval = false)
+    public static final String APP_GENERATION_PROMPT = BASE_APP_GENERATION_PROMPT + 
+        "\n\n[Builder database not loaded - using base prompt]\n\n" + 
+        GENERATION_INSTRUCTIONS;
 
     private AiSystemPrompts() {
         // Utility class, no instantiation

@@ -8,6 +8,7 @@ import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,10 +51,11 @@ public class AiAppGeneratorService {
     private static GenerationResult generateWithAi(GenerationRequest request, AppConfig config) throws Exception {
         AiProvider provider = AiProviderFactory.createProvider(config);
         
-        String systemPrompt = AiSystemPrompts.APP_GENERATION_PROMPT;
+        // Use enhanced prompt with builder-database integration
+        String systemPrompt = AiSystemPrompts.getAppGenerationPrompt();
         String userPrompt = request.description;
         
-        LOG.info("Calling AI provider: {}", provider.getProviderName());
+        LOG.info("Calling AI provider: {} with enhanced builder-database prompt", provider.getProviderName());
         String jsonResponse = provider.generateAppStructure(userPrompt, systemPrompt);
         
         LOG.debug("AI response: {}", jsonResponse);
@@ -66,10 +68,40 @@ public class AiAppGeneratorService {
      * Parse AI-generated JSON into GenerationResult
      */
     private static GenerationResult parseAiResponse(String jsonResponse) throws Exception {
-        JsonNode root = mapper.readTree(jsonResponse);
+        // Sanitize AI output: strip markdown code fences and extract the JSON block
+        String sanitized = sanitizeAiJson(jsonResponse);
+        JsonNode root = mapper.readTree(sanitized);
         
         GenerationResult result = new GenerationResult();
+        
+        // Check if AI is asking for more information
+        if (root.has("needsMoreInfo") && root.get("needsMoreInfo").asBoolean()) {
+            result.success = true;
+            result.needsMoreInfo = true;
+            
+            // Parse follow-up questions
+            result.followUpQuestions = new ArrayList<>();
+            JsonNode questionsNode = root.get("followUpQuestions");
+            if (questionsNode != null && questionsNode.isArray()) {
+                for (JsonNode questionNode : questionsNode) {
+                    result.followUpQuestions.add(questionNode.asText());
+                }
+            }
+            
+            // Store partial structure if provided
+            if (root.has("partialStructure")) {
+                JsonNode partialNode = root.get("partialStructure");
+                if (partialNode.has("appName")) {
+                    result.appName = partialNode.get("appName").asText();
+                }
+            }
+            
+            return result;
+        }
+        
+        // Parse complete app structure
         result.success = true;
+        result.needsMoreInfo = false;
         result.appName = root.get("appName").asText();
         result.appDescription = root.get("appDescription").asText();
         
@@ -112,16 +144,67 @@ public class AiAppGeneratorService {
             }
         }
         
-        // Parse suggested pages
+        // Parse suggested pages (now with more detail)
         result.suggestedPages = new ArrayList<>();
         JsonNode pagesNode = root.get("suggestedPages");
         if (pagesNode != null && pagesNode.isArray()) {
             for (JsonNode pageNode : pagesNode) {
-                result.suggestedPages.add(pageNode.asText());
+                if (pageNode.isTextual()) {
+                    // Simple string format (legacy)
+                    result.suggestedPages.add(pageNode.asText());
+                } else if (pageNode.isObject()) {
+                    // Detailed object format
+                    result.suggestedPages.add(mapper.writeValueAsString(pageNode));
+                }
             }
         }
         
         return result;
+    }
+
+    /**
+     * Attempt to extract a clean JSON substring from AI output.
+     * Handles triple-backtick fenced blocks (```json ... ```), and
+     * falls back to extracting the first {...} or [...] block found.
+     */
+    private static String sanitizeAiJson(String raw) {
+        if (raw == null) return null;
+        String s = raw.trim();
+
+        // If there are triple-backtick fences, extract content between the first and last fence
+        int firstFence = s.indexOf("```");
+        int lastFence = s.lastIndexOf("```");
+        if (firstFence != -1 && lastFence != -1 && lastFence > firstFence) {
+            String inside = s.substring(firstFence + 3, lastFence).trim();
+            // If the block starts with a language hint like "json", remove it
+            if (inside.startsWith("json")) {
+                inside = inside.substring(4).trim();
+            }
+            return inside.trim();
+        }
+
+        // Otherwise try to find a JSON object or array by locating the first { or [ and the matching last } or ]
+        int firstBrace = s.indexOf('{');
+        int firstBracket = s.indexOf('[');
+        int start = -1;
+        char endChar = 0;
+        if (firstBrace != -1 && (firstBracket == -1 || firstBrace < firstBracket)) {
+            start = firstBrace;
+            endChar = '}';
+        } else if (firstBracket != -1) {
+            start = firstBracket;
+            endChar = ']';
+        }
+
+        if (start != -1) {
+            int end = s.lastIndexOf(endChar);
+            if (end != -1 && end >= start) {
+                return s.substring(start, end + 1).trim();
+            }
+        }
+
+        // Fall back to returning the raw trimmed string
+        return s;
     }
     
     /**
@@ -373,14 +456,19 @@ public class AiAppGeneratorService {
     
     // Request/Response models
     
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class GenerationRequest {
         public String description;
         public String userId;
         public Map<String, Object> options;
+        public Map<String, Object> conversationContext;
+        public String mode;
     }
     
     public static class GenerationResult {
         public boolean success;
+        public boolean needsMoreInfo;
+        public List<String> followUpQuestions;
         public String appName;
         public String appDescription;
         public List<EntitySchema> entities;
