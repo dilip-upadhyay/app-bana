@@ -69,9 +69,9 @@ export class AppManager extends LitElement {
     }
   }
 
-  private handleSelectExistingApp(appId: string) {
+  private async handleSelectExistingApp(appId: string) {
     try {
-      appStore.setCurrentApp(appId);
+      await appStore.setCurrentApp(appId);
       this.showSelectModal = false;
       const app = appStore.getApp(appId);
       this.showToast(`✅ Switched to: ${app?.name}`);

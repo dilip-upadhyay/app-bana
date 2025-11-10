@@ -724,7 +724,7 @@ export class AiChatBuilder extends LitElement {
       });
 
       // Set as current app using the REAL ID from backend
-      appStore.setCurrentApp(createdApp.id);
+      await appStore.setCurrentApp(createdApp.id);
 
       // Add entities to app
       if (generatedEntities && generatedEntities.length > 0) {

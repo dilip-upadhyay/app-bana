@@ -33,7 +33,11 @@ export class AppStore {
 
     try {
       // Load apps list from backend
-      const appsList = await apiClient.get<AppListItem[]>('/apps');
+      console.log('[AppStore] Loading apps from backend...');
+      const response = await apiClient.get<{apps: AppListItem[]}>('/apps');
+      console.log('[AppStore] Backend response:', response);
+      const appsList = response.apps || [];
+      console.log('[AppStore] Apps list:', appsList.length, 'apps');
       
       // Populate apps map with summary data
       this.apps.clear();
@@ -50,6 +54,9 @@ export class AppStore {
         };
         this.apps.set(app.id, app);
       }
+
+      console.log('[AppStore] Loaded', this.apps.size, 'apps into cache');
+      this.notify();
 
       // Load current app ID from localStorage
       const currentId = localStorage.getItem(CURRENT_APP_KEY);
@@ -261,12 +268,16 @@ export class AppStore {
   /**
    * Set current app
    */
-  setCurrentApp(appId: string): void {
+  async setCurrentApp(appId: string): Promise<void> {
     if (!this.apps.has(appId)) {
       throw new Error(`App not found: ${appId}`);
     }
     this.currentAppId = appId;
     localStorage.setItem(CURRENT_APP_KEY, appId);
+    
+    // Load full app data with entities from backend
+    await this.loadFullApp(appId);
+    
     this.notify();
   }
 
