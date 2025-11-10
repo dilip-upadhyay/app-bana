@@ -1,0 +1,3 @@
+{
+  "description": "Create a restaurant management system. It should have entities for Restaurant, MenuItem, Order, and Customer. Each restaurant has a name, address, cuisine type, and phone number. MenuItems belong to restaurants and have name, description, price, and category. Orders track customer, restaurant, items ordered, total amount, and delivery status. Customers have name, email, phone, and address. Generate pages for restaurant list, menu management, order tracking dashboard, and customer directory with full page metadata."
+}

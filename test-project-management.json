@@ -1,0 +1,3 @@
+{
+  "description": "Create a project management application with Projects, Tasks, Team Members, and Comments. Projects have name, description, start date, end date, and status. Tasks belong to projects and have title, description, priority, status, due date, and assigned team member. Team Members have name, email, role, and department. Comments can be added to tasks with content, author, and timestamp. Include pages for project dashboard, task board, team directory, and project timeline."
+}
