@@ -13,7 +13,7 @@
         "method": "GET",
         "path": "/apps",
         "description": "List all apps (summary info)",
-        "response": "[{id, name, description, version, created, updated, pageCount}]",
+        "response": "{ apps: [{id, name, description, version, created, updated, pageCount}] }",
         "status": 200
       },
       {
@@ -261,7 +261,8 @@
     "methods": ["get", "post", "put", "delete"],
     "usage": "import { apiClient } from './api-client';",
     "example": [
-      "const apps = await apiClient.get('/apps');",
+      "const result = await apiClient.get<{apps: AppListItem[]}>('/apps');",
+      "const apps = result.apps || [];",
       "const created = await apiClient.post('/apps', appData);",
       "await apiClient.put('/apps/my-app', updates);",
       "await apiClient.delete('/apps/my-app');"

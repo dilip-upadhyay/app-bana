@@ -374,7 +374,7 @@ ls app-bana-service/apps/test-app/app.json
 **2. Test App Retrieval**:
 ```bash
 curl http://localhost:8080/apps
-# Should return: [{"id":"test-app","name":"Test App",...}]
+# Should return: { "apps": [{"id":"test-app","name":"Test App",...}] }
 
 curl http://localhost:8080/apps/test-app
 # Should return full AppMetadata

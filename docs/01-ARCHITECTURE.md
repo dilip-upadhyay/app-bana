@@ -230,19 +230,19 @@ window.open(`/index.html?state=${encoded}`);
 
 **Key Methods:**
 ```typescript
-// App operations
-createApp(request: CreateAppRequest): AppMeta
-updateApp(appId: string, updates: UpdateAppRequest): AppMeta
-deleteApp(appId: string): void
+// App operations (async, REST-backed)
+createApp(request: CreateAppRequest): Promise<AppMeta>
+updateApp(appId: string, updates: UpdateAppRequest): Promise<AppMeta>
+deleteApp(appId: string): Promise<void>
 getApp(appId: string): AppMeta | undefined
-setCurrentApp(appId: string): void
+setCurrentApp(appId: string): Promise<void> // Loads full app data (entities/pages)
 listApps(): AppListItem[]
 
-// Page operations
-addPage(appId: string, page: PageMeta): void
-removePage(appId: string, pageId: string): void
-loadPage(appId: string, pageId: string): PageMeta | undefined
-savePage(appId: string, page: PageMeta): void
+// Page operations (async where they hit backend)
+addPage(appId: string, page: PageMeta): Promise<void>
+removePage(appId: string, pageId: string): Promise<void>
+loadPage(appId: string, pageId: string): Promise<PageMeta | undefined>
+savePage(appId: string, page: PageMeta): Promise<void>
 ```
 
 ### Architecture Gaps & Roadmap

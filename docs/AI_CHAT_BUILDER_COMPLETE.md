@@ -191,8 +191,8 @@ await appStore.createApp({
   description: generatedApp.description
 });
 
-// Set as current
-appStore.setCurrentApp(generatedApp.id);
+// Set as current (async: loads full app data with entities/pages)
+await appStore.setCurrentApp(generatedApp.id);
 
 // Add entities
 await appStore.updateApp(generatedApp.id, {
