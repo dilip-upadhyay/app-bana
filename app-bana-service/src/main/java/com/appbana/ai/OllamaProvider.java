@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Ollama provider for local AI models (Llama 3, Mistral, etc.)
@@ -22,7 +23,12 @@ public class OllamaProvider implements AiProvider {
     public OllamaProvider(String baseUrl, String model) {
         this.baseUrl = baseUrl != null && !baseUrl.isBlank() ? baseUrl : "http://localhost:11434";
         this.model = model != null && !model.isBlank() ? model : "llama3.1";
-        this.client = new OkHttpClient();
+        // Increase timeout for Ollama since it runs locally and can be slower
+        this.client = new OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(180, TimeUnit.SECONDS)  // 3 minutes for generation
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .build();
     }
     
     @Override

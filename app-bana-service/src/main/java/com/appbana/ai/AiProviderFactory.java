@@ -27,8 +27,9 @@ public class AiProviderFactory {
         switch (provider) {
             case "openai":
                 String openaiKey = config.getOpenaiApiKey();
+                LOG.info("OpenAI key check: {}", openaiKey != null ? "key found (length: " + openaiKey.length() + ")" : "key is null");
                 if (openaiKey == null || openaiKey.isBlank()) {
-                    throw new IllegalArgumentException("OpenAI API key not configured. Set openaiApiKey in config.json or OPENAI_API_KEY environment variable");
+                    throw new IllegalArgumentException("OpenAI API key not configured. Set openaiApiKey in config.json or OPEN_AI_KEY/OPENAI_API_KEY environment variable");
                 }
                 LOG.info("Using OpenAI provider with model: {}", config.getOpenaiModel());
                 return new OpenAiProvider(openaiKey, config.getOpenaiModel());

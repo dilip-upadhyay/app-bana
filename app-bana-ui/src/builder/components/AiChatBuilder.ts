@@ -38,6 +38,7 @@ export class AiChatBuilder extends LitElement {
     }
 
     .header {
+      position: relative;
       padding: 1rem 1.5rem;
       border-bottom: 1px solid var(--color-border, #e5e7eb);
       background: var(--color-surface-alt, #f9fafb);
@@ -342,15 +343,280 @@ export class AiChatBuilder extends LitElement {
       border-color: var(--color-brand, #3b82f6);
       background: var(--color-brand-muted, #eff6ff);
     }
+
+    /* Settings Button */
+    .settings-btn {
+      position: absolute;
+      top: 1rem;
+      right: 1.5rem;
+      padding: 0.5rem;
+      background: white;
+      border: 1px solid var(--color-border, #e5e7eb);
+      border-radius: 0.375rem;
+      cursor: pointer;
+      font-size: 1.25rem;
+      transition: all 150ms;
+    }
+
+    .settings-btn:hover {
+      background: var(--color-surface-alt, #f9fafb);
+      border-color: var(--color-brand, #3b82f6);
+    }
+
+    /* Settings Modal */
+    .settings-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .settings-content {
+      background: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .settings-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--color-border, #e5e7eb);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .settings-header h3 {
+      margin: 0;
+      font-size: var(--text-lg, 1.125rem);
+      color: var(--color-text, #111827);
+    }
+
+    .close-btn {
+      padding: 0.25rem;
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--color-text-muted, #6b7280);
+      line-height: 1;
+    }
+
+    .close-btn:hover {
+      color: var(--color-text, #111827);
+    }
+
+    .settings-body {
+      padding: 1.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-size: var(--text-sm, 0.875rem);
+      font-weight: 500;
+      color: var(--color-text, #111827);
+    }
+
+    .form-group select,
+    .form-group input {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid var(--color-border, #e5e7eb);
+      border-radius: 0.375rem;
+      font-size: var(--text-sm, 0.875rem);
+      font-family: inherit;
+    }
+
+    .form-group select:focus,
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--color-brand, #3b82f6);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-group input[type="password"] {
+      font-family: monospace;
+    }
+
+    .form-help {
+      margin-top: 0.25rem;
+      font-size: var(--text-xs, 0.75rem);
+      color: var(--color-text-muted, #6b7280);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: var(--text-xs, 0.75rem);
+      font-weight: 500;
+    }
+
+    .status-badge.success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .status-badge.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .status-badge.info {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .settings-footer {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--color-border, #e5e7eb);
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 0.5rem;
+    }
   `;
 
   @state() private messages: ChatMessage[] = [];
   @state() private inputValue = '';
   @state() private isProcessing = false;
+  @state() private showSettings = false;
+  @state() private aiConfig: any = null;
+  @state() private aiProviders: any[] = [];
+  @state() private isLoadingConfig = false;
+  @state() private isSavingConfig = false;
+  @state() private isTestingConnection = false;
+  @state() private testResult: { success: boolean; message: string } | null = null;
 
   connectedCallback() {
     super.connectedCallback();
     this.addSystemMessage('Welcome! I can help you build applications using natural language. Describe the app you want to create.');
+    this.loadAIConfiguration();
+  }
+
+  private async loadAIConfiguration() {
+    try {
+      // Load current AI configuration
+      const configResponse = await fetch('/api/ai/config');
+      if (configResponse.ok) {
+        this.aiConfig = await configResponse.json();
+      }
+
+      // Load available AI providers
+      const providersResponse = await fetch('/api/ai/providers');
+      if (providersResponse.ok) {
+        this.aiProviders = await providersResponse.json();
+      }
+    } catch (error) {
+      console.error('[AiChatBuilder] Failed to load AI configuration:', error);
+    }
+  }
+
+  private async openSettings() {
+    this.showSettings = true;
+    this.testResult = null;
+    await this.loadAIConfiguration();
+  }
+
+  private closeSettings() {
+    this.showSettings = false;
+    this.testResult = null;
+  }
+
+  private async saveAIConfiguration() {
+    if (!this.aiConfig) return;
+
+    this.isSavingConfig = true;
+    try {
+      const response = await fetch('/api/ai/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.aiConfig)
+      });
+
+      if (response.ok) {
+        this.addSystemMessage('✅ AI configuration saved successfully!');
+        this.closeSettings();
+      } else {
+        const error = await response.json();
+        alert(`Failed to save configuration: ${error.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('[AiChatBuilder] Failed to save AI configuration:', error);
+      alert('Failed to save configuration');
+    } finally {
+      this.isSavingConfig = false;
+    }
+  }
+
+  private async testAIConnection() {
+    this.isTestingConnection = true;
+    this.testResult = null;
+
+    try {
+      const response = await fetch('/api/ai/test', {
+        method: 'POST'
+      });
+
+      const result = await response.json();
+      this.testResult = {
+        success: result.success,
+        message: result.message || (result.success ? 'Connection successful!' : 'Connection failed')
+      };
+    } catch (error) {
+      console.error('[AiChatBuilder] Connection test failed:', error);
+      this.testResult = {
+        success: false,
+        message: 'Connection test failed: ' + (error as Error).message
+      };
+    } finally {
+      this.isTestingConnection = false;
+    }
+  }
+
+  private updateConfigField(field: string, value: any) {
+    this.aiConfig = {
+      ...this.aiConfig,
+      [field]: value
+    };
   }
 
   private addSystemMessage(content: string) {
@@ -499,6 +765,9 @@ export class AiChatBuilder extends LitElement {
       <div class="header">
         <h2>🤖 AI App Builder</h2>
         <p>Describe your app idea and I'll build it for you</p>
+        <button class="settings-btn" @click=${this.openSettings} title="AI Settings">
+          ⚙️
+        </button>
       </div>
 
       <div class="chat-container">
@@ -531,6 +800,8 @@ export class AiChatBuilder extends LitElement {
           </button>
         </div>
       </div>
+
+      ${this.showSettings ? this.renderSettingsModal() : ''}
     `;
   }
 
@@ -653,6 +924,184 @@ export class AiChatBuilder extends LitElement {
       <div class="loading">
         <div class="spinner"></div>
         <span>AI is thinking...</span>
+      </div>
+    `;
+  }
+
+  private renderSettingsModal() {
+    if (!this.aiConfig) {
+      return html`
+        <div class="settings-modal" @click=${this.closeSettings}>
+          <div class="settings-content" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="settings-header">
+              <h3>⚙️ AI Settings</h3>
+              <button class="close-btn" @click=${this.closeSettings}>×</button>
+            </div>
+            <div class="settings-body">
+              <p>Loading configuration...</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    const selectedProvider = this.aiProviders.find(p => p.id === this.aiConfig.provider);
+    const availableModels = selectedProvider?.models || [];
+
+    return html`
+      <div class="settings-modal" @click=${this.closeSettings}>
+        <div class="settings-content" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="settings-header">
+            <h3>⚙️ AI Settings</h3>
+            <button class="close-btn" @click=${this.closeSettings}>×</button>
+          </div>
+
+          <div class="settings-body">
+            ${this.aiConfig.isEnabled ? html`
+              <div class="status-badge success">
+                ✓ AI Enabled
+              </div>
+            ` : html`
+              <div class="status-badge info">
+                ℹ AI Not Configured
+              </div>
+            `}
+
+            <div class="form-group">
+              <label for="ai-provider">AI Provider</label>
+              <select
+                id="ai-provider"
+                .value=${this.aiConfig.provider || ''}
+                @change=${(e: Event) => this.updateConfigField('provider', (e.target as HTMLSelectElement).value)}
+              >
+                <option value="">-- Select Provider --</option>
+                ${this.aiProviders.map(provider => html`
+                  <option value=${provider.id}>${provider.name}</option>
+                `)}
+              </select>
+              <div class="form-help">
+                ${selectedProvider?.description || 'Choose an AI provider to enable app generation'}
+              </div>
+            </div>
+
+            ${this.aiConfig.provider === 'openai' ? html`
+              <div class="form-group">
+                <label for="openai-key">OpenAI API Key</label>
+                <input
+                  type="password"
+                  id="openai-key"
+                  .value=${this.aiConfig.openaiApiKey || ''}
+                  @input=${(e: Event) => this.updateConfigField('openaiApiKey', (e.target as HTMLInputElement).value)}
+                  placeholder="sk-..."
+                />
+                <div class="form-help">
+                  ${this.aiConfig.hasOpenaiKey ? '✓ API key configured' : 'Enter your OpenAI API key'}
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="openai-model">Model</label>
+                <select
+                  id="openai-model"
+                  .value=${this.aiConfig.openaiModel || 'gpt-4o-mini'}
+                  @change=${(e: Event) => this.updateConfigField('openaiModel', (e.target as HTMLSelectElement).value)}
+                >
+                  ${availableModels.map((model: string) => html`
+                    <option value=${model}>${model}</option>
+                  `)}
+                </select>
+              </div>
+            ` : ''}
+
+            ${this.aiConfig.provider === 'anthropic' ? html`
+              <div class="form-group">
+                <label for="anthropic-key">Anthropic API Key</label>
+                <input
+                  type="password"
+                  id="anthropic-key"
+                  .value=${this.aiConfig.anthropicApiKey || ''}
+                  @input=${(e: Event) => this.updateConfigField('anthropicApiKey', (e.target as HTMLInputElement).value)}
+                  placeholder="sk-ant-..."
+                />
+                <div class="form-help">
+                  ${this.aiConfig.hasAnthropicKey ? '✓ API key configured' : 'Enter your Anthropic API key'}
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="anthropic-model">Model</label>
+                <select
+                  id="anthropic-model"
+                  .value=${this.aiConfig.anthropicModel || 'claude-3-5-sonnet-20241022'}
+                  @change=${(e: Event) => this.updateConfigField('anthropicModel', (e.target as HTMLSelectElement).value)}
+                >
+                  ${availableModels.map((model: string) => html`
+                    <option value=${model}>${model}</option>
+                  `)}
+                </select>
+              </div>
+            ` : ''}
+
+            ${this.aiConfig.provider === 'ollama' ? html`
+              <div class="form-group">
+                <label for="ollama-url">Ollama URL</label>
+                <input
+                  type="text"
+                  id="ollama-url"
+                  .value=${this.aiConfig.ollamaUrl || 'http://localhost:11434'}
+                  @input=${(e: Event) => this.updateConfigField('ollamaUrl', (e.target as HTMLInputElement).value)}
+                  placeholder="http://localhost:11434"
+                />
+                <div class="form-help">
+                  Local Ollama server URL
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="ollama-model">Model</label>
+                <select
+                  id="ollama-model"
+                  .value=${this.aiConfig.ollamaModel || 'llama3.1'}
+                  @change=${(e: Event) => this.updateConfigField('ollamaModel', (e.target as HTMLSelectElement).value)}
+                >
+                  ${availableModels.map((model: string) => html`
+                    <option value=${model}>${model}</option>
+                  `)}
+                </select>
+              </div>
+            ` : ''}
+
+            ${this.testResult ? html`
+              <div class="status-badge ${this.testResult.success ? 'success' : 'error'}">
+                ${this.testResult.success ? '✓' : '✗'} ${this.testResult.message}
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="settings-footer">
+            <div class="btn-group">
+              <button
+                class="btn"
+                @click=${this.testAIConnection}
+                ?disabled=${!this.aiConfig.provider || this.isTestingConnection}
+              >
+                ${this.isTestingConnection ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
+            <div class="btn-group">
+              <button class="btn" @click=${this.closeSettings}>
+                Cancel
+              </button>
+              <button
+                class="btn primary"
+                @click=${this.saveAIConfiguration}
+                ?disabled=${this.isSavingConfig}
+              >
+                ${this.isSavingConfig ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
   }

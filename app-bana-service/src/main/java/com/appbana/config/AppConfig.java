@@ -97,8 +97,17 @@ public class AppConfig {
     public void setAiProvider(String aiProvider) { this.aiProvider = aiProvider; }
 
     public String getOpenaiApiKey() {
-        // Try config first, then environment variable
-        return openaiApiKey != null ? openaiApiKey : System.getenv("OPENAI_API_KEY");
+        // Try config first, then environment variables (multiple naming variations)
+        if (openaiApiKey != null) return openaiApiKey;
+        
+        // Check all possible environment variable names
+        String envKey = System.getenv("OPEN_API_KEY");  // User's variable name
+        if (envKey != null) return envKey;
+        
+        envKey = System.getenv("OPEN_AI_KEY");  // Alternative
+        if (envKey != null) return envKey;
+        
+        return System.getenv("OPENAI_API_KEY");  // Standard OpenAI convention
     }
     public void setOpenaiApiKey(String openaiApiKey) { this.openaiApiKey = openaiApiKey; }
 

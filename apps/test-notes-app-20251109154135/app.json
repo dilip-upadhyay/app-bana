@@ -1,0 +1,18 @@
+{
+  "id" : "test-notes-app-20251109154135",
+  "name" : "Notes App",
+  "description" : "Simple notes app",
+  "version" : "1.0.0",
+  "created" : 1762683095886,
+  "updated" : 1762683095895,
+  "pages" : [ ],
+  "theme" : {
+    "primaryColor" : "#2563eb",
+    "secondaryColor" : "#64748b",
+    "fontFamily" : "system-ui",
+    "darkMode" : false
+  },
+  "routes" : {
+    "basePath" : "/test-notes-app-20251109154135"
+  }
+}

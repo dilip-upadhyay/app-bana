@@ -572,7 +572,7 @@ public class ApiServer {
         router.get("/apps", (req, res) -> {
             try {
                 List<Map<String, Object>> apps = AppManager.listApps();
-                res.json(200, apps);
+                res.json(200, Map.of("apps", apps));
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
             }
