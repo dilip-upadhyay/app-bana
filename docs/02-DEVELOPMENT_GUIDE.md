@@ -26,17 +26,34 @@
 
 ### For Backend-Only Development
 
+**IMPORTANT FOR WINDOWS**: Always build from project root, run from service directory.
+
 ```bash
-# Clone and build
+# Clone and build (FROM PROJECT ROOT)
 git clone <repo-url>
 cd app-bana
-./app-bana-service/mvnw clean package -DskipTests
+mvn clean package -DskipTests
 
-# Run server
-java -jar app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar
+# Run server (CHANGE TO SERVICE DIRECTORY)
+cd app-bana-service
+java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
 
 # Visit
 open http://localhost:8080
+```
+
+**Windows PowerShell:**
+```powershell
+# Build from root
+cd c:\Users\dilip\git\app-bana
+mvn clean package -DskipTests
+
+# Run from service directory
+cd app-bana-service
+java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
+
+# If port locked, kill Java first:
+Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
 **What's available:**
@@ -703,6 +720,66 @@ curl http://localhost:8080/api/person
 ---
 
 ## Troubleshooting
+
+### Backend JAR Execution Issues (Windows)
+
+**Error: `Could not find or load main class com.appbana.Main`**
+
+**Cause**: Running from wrong directory or JAR not fully built
+
+**Solution**:
+```powershell
+# Step 1: ALWAYS build from project root
+cd c:\Users\dilip\git\app-bana
+mvn clean package -DskipTests
+
+# Step 2: Change to service directory
+cd app-bana-service
+
+# Step 3: Run JAR
+java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
+```
+
+**Error: `Failed to delete app-bana-1.0-SNAPSHOT-fat.jar` during build**
+
+**Cause**: Server is still running from previous session
+
+**Solution**:
+```powershell
+# Kill all Java processes
+Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# Then rebuild
+mvn clean package -DskipTests
+```
+
+**Error: `Unable to access jarfile target\app-bana-1.0-SNAPSHOT-fat.jar`**
+
+**Cause**: Wrong working directory
+
+**Solution**:
+```powershell
+# Ensure you're in app-bana-service directory
+cd app-bana-service
+java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
+```
+
+**Error: `H2 database locked` or `appbana.lock.db` issues**
+
+**Cause**: Another instance is using the database
+
+**Solution**:
+```powershell
+# Kill all Java processes
+Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# Delete lock file (optional)
+Remove-Item app-bana-service\data\appbana.lock.db -Force
+
+# Restart server
+cd app-bana-service
+java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
+```
 
 ### Java Build Issues
 

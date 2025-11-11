@@ -56,7 +56,7 @@ export class PageManager extends LitElement {
     this.loadPages();
   }
 
-  private loadPages() {
+  private async loadPages() {
     if (!this.currentApp) {
       this.pages = [];
       this.currentPageId = null;
@@ -67,8 +67,10 @@ export class PageManager extends LitElement {
     console.log('[PageManager] Loading pages for app:', this.currentApp.name, 'Pages:', this.currentApp.pages);
 
     // Load all pages for current app
-    this.pages = this.currentApp.pages
-      .map((pageId: string) => appStore.loadPage(this.currentApp!.id, pageId))
+    const pagePromises = this.currentApp.pages.map((pageId: string) => 
+      appStore.loadPage(this.currentApp!.id, pageId)
+    );
+    this.pages = (await Promise.all(pagePromises))
       .filter((page): page is PageMeta => page !== undefined);
 
     console.log('[PageManager] Loaded', this.pages.length, 'pages:', this.pages.map(p => p.name));
@@ -93,10 +95,10 @@ export class PageManager extends LitElement {
     }
   }
 
-  private switchToPage(pageId: string) {
+  private async switchToPage(pageId: string) {
     if (!this.currentApp) return;
 
-    const page = appStore.loadPage(this.currentApp.id, pageId);
+    const page = await appStore.loadPage(this.currentApp.id, pageId);
     if (page) {
       this.currentPageId = pageId;
 

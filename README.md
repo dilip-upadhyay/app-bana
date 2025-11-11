@@ -25,6 +25,37 @@ All documentation has been consolidated into **3 comprehensive reference documen
 - 🗺️ [Product Roadmap](docs/03-ROADMAP.md#q4-2025-delivery-phases)
 - 🔑 [Keyboard Shortcuts](docs/02-DEVELOPMENT_GUIDE.md#keyboard-shortcuts)
 
+### ⚡ Quick Start (Windows)
+
+**Option 1: Using Scripts (Recommended)**
+```powershell
+# Backend only
+.\start-backend.bat
+
+# Full stack (backend + frontend)
+.\start-fullstack.bat
+```
+
+**Option 2: Manual Start**
+```powershell
+# Build (from project root)
+cd c:\Users\dilip\git\app-bana
+mvn clean package -DskipTests
+
+# Start backend (from service directory)
+cd app-bana-service
+java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
+
+# Start frontend (separate terminal)
+cd app-bana-ui
+npm run dev
+
+# Open browser
+start http://localhost:5173/studio.html
+```
+
+**Troubleshooting**: See [Backend JAR Execution Issues](docs/02-DEVELOPMENT_GUIDE.md#backend-jar-execution-issues-windows)
+
 ---
 
 ## 🎉 Latest Updates

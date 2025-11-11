@@ -246,27 +246,54 @@ User Request → AI Provider → Parse JSON → Validate Result
 
 ## Quick Start Commands for Tomorrow
 
+**IMPORTANT**: Always build from project root first, then navigate to service directory to run JAR.
+
 ```powershell
-# Terminal 1: Backend
-cd c:\Users\dilip\git\app-bana\app-bana-service
+# Terminal 1: Build Backend (ALWAYS FROM PROJECT ROOT)
+cd c:\Users\dilip\git\app-bana
+mvn clean package -DskipTests
+
+# Terminal 2: Start Backend (FROM SERVICE DIRECTORY)
+cd app-bana-service
 java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
 
-# Terminal 2: Frontend Dev Server
+# If port 8080 is locked, kill Java process first:
+Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# Terminal 3: Frontend Dev Server
 cd c:\Users\dilip\git\app-bana\app-bana-ui
 npm run dev
 
-# Terminal 3: Testing
+# Terminal 4: Testing
 cd c:\Users\dilip\git\app-bana
 
 # Test AI generation
 Invoke-WebRequest -Uri "http://localhost:8080/api/ai/generate" `
   -Method POST `
   -Body (Get-Content test-project-management.json -Raw) `
-  -ContentType "application/json" | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json -Depth 10
+  -ContentType "application/json" `
+  -TimeoutSec 90 | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json -Depth 10
 
 # Open browser
 start http://localhost:5173/studio.html
 ```
+
+### Backend Start Troubleshooting
+
+**Problem**: `Error: Could not find or load main class com.appbana.Main`  
+**Cause**: Running `java -jar` from wrong directory or JAR not fully built  
+**Solution**:
+1. Always build from project root: `cd c:\Users\dilip\git\app-bana; mvn clean package -DskipTests`
+2. Change to service directory: `cd app-bana-service`
+3. Run JAR: `java -jar target\app-bana-1.0-SNAPSHOT-fat.jar`
+
+**Problem**: `Failed to delete app-bana-1.0-SNAPSHOT-fat.jar`  
+**Cause**: Server is still running  
+**Solution**: `Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force`
+
+**Problem**: `Error: Unable to access jarfile`  
+**Cause**: Wrong working directory  
+**Solution**: Ensure you're in `app-bana-service` directory when running `java -jar`
 
 ## Notes for Tomorrow
 

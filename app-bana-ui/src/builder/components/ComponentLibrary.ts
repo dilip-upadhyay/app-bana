@@ -53,15 +53,9 @@ const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         'data-grid-rows': '2',
         'data-grid-cols': '3'
       },
-      children: [
-        { id: 'cell-0', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '0' }, children: [] },
-        { id: 'cell-1', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '1' }, children: [] },
-        { id: 'cell-2', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '2' }, children: [] },
-        { id: 'cell-3', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '3' }, children: [] },
-        { id: 'cell-4', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '4' }, children: [] },
-        { id: 'cell-5', type: 'container', props: { className: 'grid-cell', style: 'min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;', 'data-cell-index': '5' }, children: [] }
-      ]
-    }
+      children: [] // Grid cells will be added dynamically when dropped
+    },
+    configurable: true
   },
   {
     type: 'section',
@@ -289,11 +283,16 @@ export class ComponentLibrary extends LitElement {
   private handleGridConfigSubmit() {
     if (!this.pendingGridTemplate) return;
 
-    // Create grid cells as children
-    const cells: Partial<ComponentNode>[] = [];
+    // Generate unique IDs for cells
+    const timestamp = Date.now();
+    const cellIds: string[] = [];
+    const cellNodes: ComponentNode[] = [];
+
     for (let i = 0; i < this.gridRows * this.gridCols; i++) {
-      cells.push({
-        id: `cell-${i}`,
+      const cellId = `cell-${timestamp}-${i}`;
+      cellIds.push(cellId);
+      cellNodes.push({
+        id: cellId,
         type: 'container',
         props: {
           className: 'grid-cell',
@@ -304,8 +303,8 @@ export class ComponentLibrary extends LitElement {
       });
     }
 
-    // Create configured grid template
-    const gridTemplate = {
+    // Create configured grid template with child IDs
+    const gridTemplate: Partial<ComponentNode> = {
       ...this.pendingGridTemplate.template,
       props: {
         ...this.pendingGridTemplate.template.props,
@@ -313,11 +312,19 @@ export class ComponentLibrary extends LitElement {
         'data-grid-rows': String(this.gridRows),
         'data-grid-cols': String(this.gridCols)
       },
-      children: cells
+      children: cellIds
     };
 
-    // Add to canvas
-    this.addComponentToCanvas({ ...this.pendingGridTemplate, template: gridTemplate });
+    // Dispatch event with grid and all cells
+    const event = new CustomEvent('add-component', {
+      detail: {
+        template: gridTemplate,
+        additionalNodes: cellNodes // Pass the cell nodes separately
+      },
+      bubbles: true,
+      composed: true
+    });
+    this.dispatchEvent(event);
 
     // Reset
     this.showGridConfig = false;
