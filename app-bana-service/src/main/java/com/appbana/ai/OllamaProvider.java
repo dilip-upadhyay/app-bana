@@ -1,11 +1,11 @@
 package com.appbana.ai;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -58,7 +58,7 @@ public class OllamaProvider implements AiProvider {
             }
             
             String responseBody = response.body().string();
-            Map<String, Object> responseMap = MAPPER.readValue(responseBody, Map.class);
+            Map<String, Object> responseMap = MAPPER.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
             
             String generatedText = (String) responseMap.get("response");
             

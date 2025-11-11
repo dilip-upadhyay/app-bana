@@ -1,0 +1,28 @@
+{
+  "id" : "page-1762865097986-2tw848w1j",
+  "name" : "Ticket Detail",
+  "path" : "/ticket-detail",
+  "rootId" : "root-1762865097986",
+  "nodes" : [ {
+    "id" : "root-1762865097986",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl",
+      "maxWidth" : "1200px",
+      "margin" : "0 auto"
+    },
+    "children" : [ "heading-1762865097986" ]
+  }, {
+    "id" : "heading-1762865097986",
+    "type" : "text",
+    "props" : {
+      "content" : "New Page",
+      "tag" : "h1",
+      "style" : "heading"
+    }
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "profile"
+}

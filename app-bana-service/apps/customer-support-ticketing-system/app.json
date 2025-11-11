@@ -1,13 +1,13 @@
 {
-  "id" : "library-management-system",
-  "name" : "Library Management System",
-  "description" : "Library management system for managing books, authors, members, and borrowings",
+  "id" : "customer-support-ticketing-system",
+  "name" : "Customer Support Ticketing System",
+  "description" : "A system to manage customer support tickets, customers, and support agents.",
   "version" : "1.0.0",
-  "created" : 1762805974269,
-  "updated" : 1762805974356,
-  "pages" : [ ],
+  "created" : 1762865097896,
+  "updated" : 1762865098109,
+  "pages" : [ "page-1762865097941-52cdkgggp", "page-1762865097986-2tw848w1j", "page-1762865098024-768cv8kra", "page-1762865098055-u7kobs6x1", "page-1762865098086-ke6iv4s6k" ],
   "entities" : [ {
-    "name" : "Book",
+    "name" : "Ticket",
     "fields" : [ {
       "name" : "title",
       "type" : "text",
@@ -23,8 +23,8 @@
       "order" : null,
       "existingName" : null
     }, {
-      "name" : "ISBN",
-      "type" : "text",
+      "name" : "description",
+      "type" : "longtext",
       "primaryKey" : false,
       "autoIncrement" : false,
       "length" : null,
@@ -37,8 +37,8 @@
       "order" : null,
       "existingName" : null
     }, {
-      "name" : "publicationYear",
-      "type" : "number",
+      "name" : "status",
+      "type" : "status",
       "primaryKey" : false,
       "autoIncrement" : false,
       "length" : null,
@@ -51,7 +51,35 @@
       "order" : null,
       "existingName" : null
     }, {
-      "name" : "authorId",
+      "name" : "priority",
+      "type" : "status",
+      "primaryKey" : false,
+      "autoIncrement" : false,
+      "length" : null,
+      "required" : true,
+      "min" : null,
+      "max" : null,
+      "pattern" : null,
+      "label" : null,
+      "placeholder" : null,
+      "order" : null,
+      "existingName" : null
+    }, {
+      "name" : "creationDate",
+      "type" : "datetime",
+      "primaryKey" : false,
+      "autoIncrement" : false,
+      "length" : null,
+      "required" : true,
+      "min" : null,
+      "max" : null,
+      "pattern" : null,
+      "label" : null,
+      "placeholder" : null,
+      "order" : null,
+      "existingName" : null
+    }, {
+      "name" : "customerId",
       "type" : "long",
       "primaryKey" : false,
       "autoIncrement" : false,
@@ -64,28 +92,9 @@
       "placeholder" : null,
       "order" : null,
       "existingName" : null
-    } ],
-    "datasourceName" : null,
-    "modelKind" : null
-  }, {
-    "name" : "Author",
-    "fields" : [ {
-      "name" : "name",
-      "type" : "text",
-      "primaryKey" : false,
-      "autoIncrement" : false,
-      "length" : null,
-      "required" : true,
-      "min" : null,
-      "max" : null,
-      "pattern" : null,
-      "label" : null,
-      "placeholder" : null,
-      "order" : null,
-      "existingName" : null
     }, {
-      "name" : "biography",
-      "type" : "longtext",
+      "name" : "assignedAgentId",
+      "type" : "long",
       "primaryKey" : false,
       "autoIncrement" : false,
       "length" : null,
@@ -101,7 +110,7 @@
     "datasourceName" : null,
     "modelKind" : null
   }, {
-    "name" : "Member",
+    "name" : "Customer",
     "fields" : [ {
       "name" : "name",
       "type" : "text",
@@ -131,7 +140,26 @@
       "order" : null,
       "existingName" : null
     }, {
-      "name" : "membershipNumber",
+      "name" : "phone",
+      "type" : "phone",
+      "primaryKey" : false,
+      "autoIncrement" : false,
+      "length" : null,
+      "required" : false,
+      "min" : null,
+      "max" : null,
+      "pattern" : null,
+      "label" : null,
+      "placeholder" : null,
+      "order" : null,
+      "existingName" : null
+    } ],
+    "datasourceName" : null,
+    "modelKind" : null
+  }, {
+    "name" : "Agent",
+    "fields" : [ {
+      "name" : "name",
       "type" : "text",
       "primaryKey" : false,
       "autoIncrement" : false,
@@ -145,27 +173,8 @@
       "order" : null,
       "existingName" : null
     }, {
-      "name" : "joinDate",
-      "type" : "datetime",
-      "primaryKey" : false,
-      "autoIncrement" : false,
-      "length" : null,
-      "required" : true,
-      "min" : null,
-      "max" : null,
-      "pattern" : null,
-      "label" : null,
-      "placeholder" : null,
-      "order" : null,
-      "existingName" : null
-    } ],
-    "datasourceName" : null,
-    "modelKind" : null
-  }, {
-    "name" : "Borrowing",
-    "fields" : [ {
-      "name" : "memberId",
-      "type" : "long",
+      "name" : "email",
+      "type" : "email",
       "primaryKey" : false,
       "autoIncrement" : false,
       "length" : null,
@@ -178,54 +187,12 @@
       "order" : null,
       "existingName" : null
     }, {
-      "name" : "bookId",
-      "type" : "long",
+      "name" : "phone",
+      "type" : "phone",
       "primaryKey" : false,
       "autoIncrement" : false,
       "length" : null,
-      "required" : true,
-      "min" : null,
-      "max" : null,
-      "pattern" : null,
-      "label" : null,
-      "placeholder" : null,
-      "order" : null,
-      "existingName" : null
-    }, {
-      "name" : "borrowDate",
-      "type" : "datetime",
-      "primaryKey" : false,
-      "autoIncrement" : false,
-      "length" : null,
-      "required" : true,
-      "min" : null,
-      "max" : null,
-      "pattern" : null,
-      "label" : null,
-      "placeholder" : null,
-      "order" : null,
-      "existingName" : null
-    }, {
-      "name" : "dueDate",
-      "type" : "datetime",
-      "primaryKey" : false,
-      "autoIncrement" : false,
-      "length" : null,
-      "required" : true,
-      "min" : null,
-      "max" : null,
-      "pattern" : null,
-      "label" : null,
-      "placeholder" : null,
-      "order" : null,
-      "existingName" : null
-    }, {
-      "name" : "returnStatus",
-      "type" : "status",
-      "primaryKey" : false,
-      "autoIncrement" : false,
-      "length" : null,
-      "required" : true,
+      "required" : false,
       "min" : null,
       "max" : null,
       "pattern" : null,
@@ -244,6 +211,6 @@
     "darkMode" : false
   },
   "routes" : {
-    "basePath" : "/library-management-system"
+    "basePath" : "/customer-support-ticketing-system"
   }
 }

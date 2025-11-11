@@ -2,6 +2,7 @@ package com.appbana.api;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,12 +20,10 @@ public class Router {
 
     private static class Route {
         final String method;
-        final String pattern;
         final List<String> parts;
         final BiConsumer<HttpRequest, HttpResponse> handler;
         Route(String method, String pattern, BiConsumer<HttpRequest,HttpResponse> handler) {
             this.method = method.toUpperCase(Locale.ROOT);
-            this.pattern = pattern;
             this.parts = split(pattern);
             this.handler = handler;
         }
@@ -38,6 +37,18 @@ public class Router {
     public Router delete(String path, BiConsumer<HttpRequest,HttpResponse> h) { routes.add(new Route("DELETE", path, h)); return this; }
 
     public void handle(HttpExchange ex) throws IOException {
+        // Add CORS headers for all requests
+        Headers headers = ex.getResponseHeaders();
+        headers.add("Access-Control-Allow-Origin", "*");
+        headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        
+        // Handle preflight OPTIONS requests
+        if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
+            ex.sendResponseHeaders(204, -1);
+            return;
+        }
+        
         String method = ex.getRequestMethod().toUpperCase(Locale.ROOT);
         URI uri = ex.getRequestURI();
         String path = uri.getPath();

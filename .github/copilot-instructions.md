@@ -4,137 +4,287 @@
 AppBana is a **metadata-driven platform** that generates end-to-end functionality from a single source of truth. The core flow: `Entity Definition (Business Layer) → Schema (Technical Layer) → Database Table → REST CRUD APIs → UI Pages (Runtime)`. Changes to metadata propagate automatically through all layers.
 
 ## Technology Stack
-- **Backend**: Java 21 LTS (corrected from 25), JDK HttpServer (default) or Tomcat, H2 embedded database, HikariCP, Jackson, Maven multi-module build
-- **Frontend**: TypeScript 5.2.2+, Lit 3.1.4 Web Components, Vite 5.3.1+ dev server, Vitest 1.5.0+ testing
-- **Architecture**: Shadow DOM component system, custom element registry, metadata-driven rendering, dual-layer abstraction (Entity → Schema), universal datasource adapters
-- **Persistence**: Backend filesystem (apps/{appId}/app.json + pages/{pageId}.json) - migrated from localStorage Nov 2025
+- **Backend**: Java 21 LTS, JDK HttpServer with CORS support, H2 embedded database, HikariCP, Jackson, Maven multi-module
+- **Frontend**: TypeScript 5.2.2+, Lit 3.1.4 Web Components, Vite 5.3.1+ dev server, Shadow DOM component system
+- **Architecture**: Metadata-driven rendering, dual-layer abstraction (Entity → Schema), universal datasource adapters
+- **Persistence**: Backend filesystem (`app-bana-service/apps/{appId}/app.json` + `pages/{pageId}.json`)
 
-## Critical Development Patterns
+## Critical Development Workflows
 
-### 1. Universal Datasource Adapter System (NEW - Nov 8, 2025)
-**Entities can now work with ANY backend** - not just databases:
+### Starting the Application (CRITICAL)
+**Windows**: Always use helper scripts, NEVER manual commands
+```powershell
+# Terminal 1: Backend (runs continuously on port 8080)
+.\start-backend.bat
+
+# Terminal 2: Frontend dev server (SEPARATE terminal!)
+cd app-bana-ui
+npm run dev                    # Vite dev server on port 5173
+
+# Terminal 3: API testing (NEVER use Terminal 1!)
+Invoke-WebRequest -Uri "http://localhost:8080/apps"
 ```
-EntityMeta (Business Definition)
-    ↓ Choose Datasource Type
-REST API | SQL DB | NoSQL | Files | LocalStorage
-    ↓ DataSourceAdapter Interface
-Universal CRUD Operations
+
+**⚠️ CRITICAL RULES**:
+1. Backend runs in its own terminal showing server logs continuously
+2. **NEVER** run PowerShell commands in the backend terminal - it exits the server!
+3. Always use `.\start-backend.bat` (not manual `java -jar` commands)
+4. JAR file: `app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar` (note: `-fat.jar` suffix)
+
+### CORS Configuration (NEW - Nov 11, 2025)
+Backend now includes CORS headers in `app-bana-service/src/main/java/com/appbana/api/Router.java`:
+```java
+// In handle(HttpExchange ex) method:
+Headers headers = ex.getResponseHeaders();
+headers.add("Access-Control-Allow-Origin", "*");
+headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+// Handle preflight OPTIONS requests
+if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
+    ex.sendResponseHeaders(204, -1);
+    return;
+}
+```
+This enables frontend (port 5173) to call backend APIs (port 8080) during development.
+
+## Key Files to Know
+
+**Backend (Java)**:
+- `app-bana-service/src/main/java/com/appbana/ApiServer.java` - HTTP routes, /apps endpoints
+- `app-bana-service/src/main/java/com/appbana/AppManager.java` - App/page CRUD with auto-linking
+- `app-bana-service/src/main/java/com/appbana/api/Router.java` - Custom HTTP router with CORS
+- `app-bana-service/src/main/java/com/appbana/ai/AiSystemPrompts.java` - AI generation prompts
+- `app-bana-service/src/main/java/com/appbana/AiResultValidator.java` - Validates AI responses
+
+**Frontend (TypeScript)**:
+- `app-bana-ui/src/builder/store/AppStore.ts` - Global state singleton (use `appStore` import)
+- `app-bana-ui/src/builder/components/AiChatBuilder.ts` - AI chat interface with app generation
+- `app-bana-ui/src/runtime/shell/AppRuntimeShell.ts` - App preview/runtime shell (NEW - Nov 11)
+- `app-bana-ui/src/index.ts` - App loader, handles `/index.html?state=...` preview URLs
+- `app-bana-ui/src/core/registry.ts` - Component registration + lazy loading
+
+**Storage** (Backend filesystem):
+- `app-bana-service/apps/{appId}/app.json` - App metadata
+- `app-bana-service/apps/{appId}/pages/{pageId}.json` - Page metadata with ComponentNode trees
+
+## Project-Specific Conventions
+
+### PageMeta Structure (CRITICAL)
+```typescript
+interface PageMeta {
+  id: string;
+  name: string;
+  rootId: string;              // MUST match root node's ID in nodes array
+  nodes: ComponentNode[];      // Component tree structure
+  metaVersion: string;
+  type: string;                // 'list' | 'detail' | 'form' | 'dashboard' | etc.
+}
 ```
 
-**Key Files**:
-- `src/core/DataSourceAdapter.ts`: Universal CRUD interface (590 lines)
-- `src/core/AdapterRegistry.ts`: Singleton adapter registry (255 lines)
-- `src/core/adapters/RestApiAdapter.ts`: External REST APIs with auth, rate limiting (396 lines)
-- `src/core/adapters/JsonFileAdapter.ts`: File/LocalStorage/SessionStorage (334 lines)
-- `src/core/adapter-bootstrap.ts`: Auto-registers 7+ datasource types
-# AppBana — Quick AI Agent Instructions
+**Common Bug**: AI-generated pages had mismatched `rootId` vs root node ID due to multiple `Date.now()` calls.
+**Solution**: Generate timestamp once, pass `rootId` to node builder (fixed Nov 11 in `AiChatBuilder.ts:1025-1046`)
 
-These brief instructions give an AI coding agent what it needs to be productive in AppBana.
+### API Response Wrapping
+Backend wraps list responses:
+```java
+// GET /apps returns:
+{ "apps": [AppListItem, ...] }
 
-High level: metadata-first platform — EntityMeta -> Schema -> DDL/DB -> auto-generated REST CRUD -> runtime UI. Backend is Java (JDK HttpServer), frontend is TypeScript + Lit (Vite dev).
+// GET /apps/{id} returns full app object directly
+{ "id": "...", "name": "...", "entities": [...], "pages": [...] }
+```
+Frontend expects this format in `AppStore.loadApps()` and `loadAppById()`.
 
-Key files to know (jump-to):
-- `app-bana-service/src/main/java/com/appbana/ApiServer.java` — HTTP routes, /apps endpoints
-- `apps/` — repo-backed app persistence: `apps/{appId}/app.json` and `pages/{pageId}.json`
-- `app-bana-ui/src/builder/store/AppStore.ts` — single source of truth for apps/pages/entities (use its methods: `createApp`, `setCurrentApp`, `getCurrentApp`, `updateApp`)
-- `app-bana-ui/src/builder/components/EntityManager.ts` — entity editor & SQL preview
-- `app-bana-ui/src/core/registry.ts` — component registration + lazy imports (call `ensureCoreRegistered()` before use)
-- `app-bana-ui/src/core/DataSourceAdapter.ts` and `src/core/adapters/` — universal datasource adapters (RestApi, JsonFile, SQL, NoSQL)
+### Component Registration Pattern
+```typescript
+// In component file:
+@customElement('my-component')
+export class MyComponent extends LitElement { ... }
 
-Project-specific conventions (important):
-- API list response is wrapped: `GET /apps` returns `{ apps: AppListItem[] }` (frontend expects this)
-- `PageMeta` uses `nodes` (not `components`) and requires `rootId` — breaking this breaks page loading
-- Prefer Lit components; legacy `BaseElement` components exist and return HTML strings
-- CSS imports use `?inline` so they are bundled into components
-- `AppStore.setCurrentApp()` must load full app (entities/pages) — components subscribe to `appStore` for reactivity
+// In registry.ts:
+if (!registry.has('my-component')) {
+  proms.push(import('../components/MyComponent.js'));
+}
 
-Dev & run shortcuts (tested):
-- **Backend (Windows)**: `.\start-backend.bat` (builds + runs on port 8080) - **USE THIS, NOT manual java commands**
-- **Backend (Manual)**: `mvn clean package -DskipTests` then `cd app-bana-service; java -jar target\app-bana-1.0-SNAPSHOT-fat.jar`
-- **Frontend (dev)**: `cd app-bana-ui` then `npm run dev` (Vite on 5173). Studio UI: `/studio.html`
-- **Full-stack**: Run `.\start-backend.bat` in one terminal, then `cd app-bana-ui; npm run dev` in a SEPARATE terminal
+// Before using component:
+await ensureCoreRegistered();
+```
 
-**CRITICAL**: Always use SEPARATE terminals for backend and testing:
-- Terminal 1: Backend (runs continuously, shows server logs)
-- Terminal 2: API testing with `Invoke-WebRequest` or frontend dev server
-- **NEVER** test API calls in the same terminal running the backend - it will exit the server!
+### CSS Import Pattern
+Always use `?inline` suffix to bundle CSS into component:
 
-Integration points to watch:
-- OpenAI: config via `config.json` or env vars (`OPEN_API_KEY`, `OPEN_AI_KEY`, `OPENAI_API_KEY`). AI provider selection in `config.json` (`openai` vs `ollama`).
-- Adapters: `AdapterRegistry` instantiates adapters from `src/core/adapters/` — follow `adapter-bootstrap.ts` for registration
-- Backend persistence: editing files under `apps/` is the source of truth; `ApiServer` and `AppManager` read/write these files
+### CSS Import Pattern
+Always use `?inline` suffix to bundle CSS into component:
+```typescript
+import styles from './MyComponent.css?inline';
 
-Debugging tips & quick checks:
-- If UI shows no apps: **Open NEW terminal** and run `Invoke-WebRequest -Uri "http://localhost:8080/apps"` to ensure it returns `{ apps: [...] }`
-- If entities missing: `Invoke-WebRequest -Uri "http://localhost:8080/apps/{appId}"` to confirm `entities` present
-- Watch frontend console for `[AppStore]` logs (AppStore contains helpful debug logs when loading apps)
-- Backend logs print to the terminal running the JAR; **do NOT run commands in that terminal**
+@customElement('my-component')
+export class MyComponent extends LitElement {
+  static readonly styles = unsafeCSS(styles);  // Note: unsafeCSS, not css``
+}
+```
 
-If anything here is unclear or you'd like extra examples (common PR patterns, preferred tests to add, or a short checklist for reviewing AI-generated changes), tell me which area to expand.
+## AI App Generation (Recent Fixes - Nov 11, 2025)
 
+### Known Issues Fixed
+1. **AI Template Substitution** - AI would return generic apps ("Task Manager") instead of user's domain
+   - **Fix**: Enhanced `AiSystemPrompts.java` with explicit anti-substitution rules
+   - **Validation**: New `AiResultValidator.java` rejects poor AI responses
 
-**Issue**: Lint warnings in backend (System.out, try-with-resources)
-- **Cause**: Rapid prototyping prioritized over code cleanliness
-- **Impact**: Non-blocking, code is functionally correct
-- **Status**: ⚠️ Tech debt, cleanup deferred
+2. **Pages Not Creating** - Frontend used `result.suggestedPages` (strings) not `result.pages` (full metadata)
+   - **Fix**: `AiChatBuilder.ts` now prefers `result.pages` over `suggestedPages`
+
+3. **Root Node Mismatch** - `rootId` didn't match root node's actual ID due to multiple `Date.now()` calls
+   - **Fix**: Generate timestamp once, pass to node builder (lines 1025-1046 in `AiChatBuilder.ts`)
+
+### AI Generation Flow
+```
+User Request → AI Provider → Parse JSON → AiResultValidator.validateAiResult()
+                                               ↓
+                                       Valid? → Return AI Result
+                                       Invalid → Template Fallback
+```
+
+## App Preview/Runtime System (COMPLETED Phase 1 - Nov 11, 2025)
+
+### Architecture
+```
+Studio (Builder) → Preview Button (👁️) → /index.html?state={base64}
+                                              ↓
+                                    AppRuntimeShell Component
+                                    (header + tabs + page renderer)
+```
+
+### Current State
+✅ **Phase 1 Complete**:
+- `AppRuntimeShell.ts` - Full app preview shell with header, navigation tabs
+- CORS enabled in backend `Router.java` (allows frontend → backend API calls)
+- Preview button in `LivePreview.ts` toolbar (eye icon)
+- URL-based state encoding/decoding
+
+❌ **Not Yet Implemented** (Phases 2-6):
+- Data binding (components don't fetch real data from APIs)
+- Form handling (forms render but don't submit)
+- Action handlers (buttons don't trigger actions)
+- See `docs/APP_PREVIEW_ANALYSIS.md` for full roadmap
+
+### Testing Preview
+1. Open `http://localhost:5173/studio.html`
+2. Load an app from AI chat or app list
+3. Click page in left sidebar
+4. Click 👁️ (eye icon) in LivePreview toolbar
+5. New tab opens with app header, page tabs, and rendered content
 
 ## Documentation Reference
 
-**Primary Docs** (comprehensive, up-to-date):
-- `docs/01-ARCHITECTURE.md` - System design, tech stack, architecture decisions
+**Primary Docs** (comprehensive):
+- `docs/01-ARCHITECTURE.md` - System design, tech stack decisions
 - `docs/02-DEVELOPMENT_GUIDE.md` - Build, run, develop, keyboard shortcuts
-- `docs/03-ROADMAP.md` - Product vision, Q4 2025 delivery plan
+- `docs/APP_PREVIEW_ANALYSIS.md` - Runtime/preview system roadmap (8-day implementation plan)
 
-**Session Summaries** (implementation details):
-- `docs/E2E_TEST_RESULTS_NOV08_2025.md` - Backend persistence testing
-- `docs/APP_PAGE_RELATIONSHIP.md` - Auto-linking architecture
-- `docs/BACKEND_APP_PERSISTENCE_COMPLETE.md` - Persistence implementation
-- `docs/SESSION_SUMMARY_NOV05_2025.md` - Relationship editor implementation
-- `docs/ENTITY_MANAGER_SQL_PREVIEW_COMPLETE.md` - SQL preview feature
-- `docs/APP_PREVIEW_ANALYSIS.md` - **Runtime/preview system status & roadmap (Nov 11, 2025)**
+**Session Summaries** (chronological implementation details):
+- `docs/SESSION_SUMMARY_NOV11_2025.md` - AI fixes, Runtime Shell Phase 1, CORS, rootId bug
 
 **Guides**:
 - `app-bana-ui/src/core/ADAPTER_GUIDE.md` - Datasource adapter usage (500+ lines)
-- `app-bana-ui/README.md` - Component architecture, adding components
+- `builder-database/README.md` - AI-readable capability reference
 
-## Runtime/Preview System Status (CRITICAL - Nov 11, 2025)
+## Builder Database (AI App Generator Reference)
 
-**Current State**: ⚠️ Preview infrastructure exists but INCOMPLETE - needs full runtime implementation
+**Location**: `builder-database/` directory  
+**Purpose**: Machine-readable reference of ALL AppBana capabilities for AI agents
 
-**What EXISTS**:
-- ✅ Runtime renderer (static page rendering)
-- ✅ Runtime state models (`AppRuntimeState`, URL encoding)
-- ✅ Preview launch system (opens `/index.html?state=...`)
-- ✅ Studio LivePreview (WYSIWYG editing canvas - separate from app runtime)
+**Structure**:
+```
+builder-database/
+├── 01-core-concepts.json     # Architecture, patterns
+├── 02-components.json        # UI components (13 types)
+├── 03-entities.json          # Field types (38 types), relationships
+├── 04-pages.json             # Page templates (7 templates)
+├── 05-datasources.json       # Datasource adapters (25 types)
+├── 08-api-endpoints.json     # REST API reference
+└── 99-capabilities-index.json # Quick lookup
+```
 
-**What's MISSING (Critical Gaps)**:
-- ❌ **No full app runtime component** - Pages render but no app chrome (header, navigation, "Back to Studio")
-- ❌ **No data binding** - Components render statically, don't fetch real data from backend APIs
-- ❌ **No form handling** - Forms render but don't submit, validate, or save data
-- ❌ **No page navigation** - Can't switch between pages in preview/runtime mode
-- ❌ **No action handlers** - Buttons don't trigger actions (navigate, API calls, etc.)
+**Update Protocol**: When adding components/field types/page templates, update corresponding JSON + increment version + update capabilities index.
 
-**Implementation Roadmap** (see `docs/APP_PREVIEW_ANALYSIS.md`):
-- **Phase 1 (Day 1-2)**: Core runtime shell with navigation 🎯 **NEXT PRIORITY**
-  - Create `AppRuntimeShell.ts` component with header, nav tabs, page renderer
-  - Enable page switching in preview mode
-  - Add "Back to Studio" and preview mode UI
-- **Phase 2 (Day 3-4)**: Data binding system - connect components to backend APIs
-- **Phase 3 (Day 5)**: Form handling - submission, validation, CRUD operations
-- **Phase 4 (Day 6)**: Action system - button clicks, navigation, API calls
-- **Phase 5 (Day 7-8)**: Polish - search, filters, pagination, modals, toasts
-- **Phase 6 (Future)**: Authentication & security
+## Common Debugging Scenarios
 
-**Key Distinction**:
-- `LivePreview` (in Studio) = WYSIWYG editing canvas for page design
-- `AppRuntimeShell` (NOT YET BUILT) = Full functional app preview/production runtime
+### "Root node not found" Error
+**Cause**: `PageMeta.rootId` doesn't match any node's ID in `nodes` array  
+**Fix**: Verify `rootId` value matches first node's `id` in page JSON file
 
-**File Locations**:
-- Runtime infrastructure: `app-bana-ui/src/runtime/` (renderer exists, shell needs to be built)
-- Preview launch: `app-bana-ui/src/builder/components/LivePreview.ts` (handlePreview method)
-- App loader: `app-bana-ui/src/index.ts` (loadAppRuntime exists but incomplete)
+### CORS Error in Preview
+**Symptom**: `Access to fetch at 'http://localhost:8080/apps/...' from origin 'http://localhost:5173' has been blocked by CORS policy`  
+**Fix**: Backend `Router.java` should have CORS headers (added Nov 11). Rebuild backend if missing.
 
-**When working on preview/runtime features**, always reference `docs/APP_PREVIEW_ANALYSIS.md` for complete analysis and implementation plan.
+### Backend Exits Immediately
+**Cause**: Running PowerShell commands in backend's terminal  
+**Fix**: Use separate terminal for testing. Backend terminal shows logs only.
+
+### AI Generates Wrong App Domain
+**Cause**: AI substituting generic templates  
+**Check**: `AiResultValidator.java` should be rejecting these (added Nov 11)  
+**Logs**: Look for `[AI Validation]` messages in backend logs
+
+### Frontend Build Warnings (Dynamic Imports)
+**Message**: "C:/Users/.../ButtonElement.ts is dynamically imported... but also statically imported"  
+**Status**: ⚠️ Expected warning, doesn't affect functionality (lazy loading + static imports coexist)
+
+## PowerShell Commands Reference
+
+```powershell
+# Check if backend port is in use
+Get-NetTCPConnection -LocalPort 8080 -State Listen
+
+# Kill backend process (if stuck)
+Get-NetTCPConnection -LocalPort 8080 | Select-Object -ExpandProperty OwningProcess | Stop-Process -Force
+
+# Test backend API (from separate terminal!)
+Invoke-WebRequest -Uri "http://localhost:8080/apps" | Select-Object StatusCode, @{N='Content';E={$_.Content | ConvertFrom-Json | ConvertTo-Json -Depth 5}}
+
+# Check CORS headers
+Invoke-WebRequest -Uri "http://localhost:8080/apps" -Method OPTIONS | Select-Object -ExpandProperty Headers
+```
+
+## Key File Locations
+
+```
+app-bana/
+├── app-bana-service/          # Backend (Java)
+│   ├── apps/                  # App storage (filesystem)
+│   └── src/main/java/com/appbana/
+│       ├── ApiServer.java     # Main server, routes
+│       ├── AppManager.java    # App/page CRUD
+│       ├── api/Router.java    # HTTP router + CORS
+│       └── ai/                # AI generation system
+│
+├── app-bana-ui/               # Frontend (TypeScript + Lit)
+│   └── src/
+│       ├── builder/           # Studio builder components
+│       │   ├── store/AppStore.ts          # Global state
+│       │   └── components/
+│       │       ├── AiChatBuilder.ts       # AI chat interface
+│       │       ├── PageManager.ts         # Page CRUD
+│       │       └── EntityManager.ts       # Entity CRUD
+│       ├── runtime/           # App preview/runtime
+│       │   └── shell/
+│       │       ├── AppRuntimeShell.ts     # Preview shell (NEW)
+│       │       └── AppRuntimeShell.css
+│       └── core/
+│           ├── registry.ts    # Component registration
+│           └── adapters/      # Datasource adapters
+│
+├── builder-database/          # AI capability reference
+├── docs/                      # Documentation
+└── start-backend.bat          # Backend startup script
+```
+
+---
+
+**Last Updated**: November 11, 2025  
+**Major Changes**: CORS support, AppRuntimeShell (Phase 1), AI validation layer, rootId bug fixes
 
 ## Quick Reference
 

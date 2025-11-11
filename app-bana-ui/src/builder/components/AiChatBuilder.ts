@@ -1018,10 +1018,11 @@ export class AiChatBuilder extends LitElement {
 
   private buildPageStructure(name: string, path: string, type: string, entityName?: string): any {
     const pageId = `page-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-    const rootId = `root-${Date.now()}`;
+    const timestamp = Date.now(); // Generate once for consistency
+    const rootId = `root-${timestamp}`;
 
     // Build component nodes based on page type
-    const nodes = this.buildNodesForPageType(type, entityName);
+    const nodes = this.buildNodesForPageType(type, entityName, rootId); // Pass rootId
 
     return {
       id: pageId,
@@ -1034,14 +1035,15 @@ export class AiChatBuilder extends LitElement {
     };
   }
 
-  private buildNodesForPageType(type: string, entityName?: string): ComponentNode[] {
-    const rootId = `root-${Date.now()}`;
-    const headingId = `heading-${Date.now()}`;
+  private buildNodesForPageType(type: string, entityName?: string, rootId?: string): ComponentNode[] {
+    const timestamp = Date.now();
+    const actualRootId = rootId || `root-${timestamp}`; // Use passed rootId or generate
+    const headingId = `heading-${timestamp}`;
     
     // Base structure - all pages have a root container
     const nodes: ComponentNode[] = [
       {
-        id: rootId,
+        id: actualRootId,
         type: 'container',
         props: {
           layout: 'vertical',

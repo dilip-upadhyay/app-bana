@@ -1,5 +1,6 @@
 package com.appbana.ai;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -56,9 +57,10 @@ public class AnthropicProvider implements AiProvider {
             }
             
             String responseBody = response.body().string();
-            Map<String, Object> responseMap = MAPPER.readValue(responseBody, Map.class);
+            Map<String, Object> responseMap = MAPPER.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
             
             // Extract content from response
+            @SuppressWarnings("unchecked")
             List<Map<String, Object>> content = (List<Map<String, Object>>) responseMap.get("content");
             String text = (String) content.get(0).get("text");
             
