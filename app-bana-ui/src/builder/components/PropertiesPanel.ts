@@ -15,6 +15,7 @@ export class PropertiesPanel extends LitElement {
   @state() private minHeight: string = '';
   @state() private maxWidth: string = '';
   @state() private maxHeight: string = '';
+  @state() private editingProps: Record<string, any> = {};
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -34,6 +35,9 @@ export class PropertiesPanel extends LitElement {
     this.selectedNode = selection;
 
     if (selection) {
+      // Copy current props for editing
+      this.editingProps = { ...(selection.props || {}) };
+      
       // Parse current dimensions from style
       const style = selection.props?.style || '';
       this.width = this.extractStyleValue(style, 'width') || '';
@@ -100,6 +104,38 @@ export class PropertiesPanel extends LitElement {
     this.updateDimensions();
   }
 
+  private updateProperty(key: string, value: any) {
+    if (!this.selectedNode || !currentStore) return;
+    
+    // Update local state
+    this.editingProps = { ...this.editingProps, [key]: value };
+    
+    // Update the node in the store
+    currentStore.updateProps(this.selectedNode.id, { [key]: value });
+  }
+
+  private getCommonProperties(): string[] {
+    if (!this.selectedNode) return [];
+    
+    const type = this.selectedNode.type;
+    
+    // Define common editable properties by component type
+    const propertyMap: Record<string, string[]> = {
+      'text-input': ['label', 'placeholder', 'name', 'value', 'required', 'disabled'],
+      'textarea': ['label', 'placeholder', 'name', 'value', 'rows', 'required', 'disabled'],
+      'button': ['label', 'variant', 'disabled'],
+      'text': ['content'],
+      'heading': ['level', 'content'],
+      'link': ['href', 'text', 'target'],
+      'image': ['src', 'alt', 'width', 'height'],
+      'checkbox': ['label', 'name', 'checked', 'disabled'],
+      'radio': ['label', 'name', 'value', 'checked', 'disabled'],
+      'select': ['label', 'name', 'options', 'value', 'disabled'],
+    };
+    
+    return propertyMap[type] || [];
+  }
+
   render() {
     if (!this.selectedNode) {
       return html`
@@ -125,6 +161,9 @@ export class PropertiesPanel extends LitElement {
         </div>
 
         <div class="panel-body">
+          <!-- Component Properties Section -->
+          ${this.renderComponentProperties()}
+
           <!-- Dimensions Section -->
           <div class="section">
             <h4>📏 Dimensions</h4>
@@ -229,6 +268,131 @@ export class PropertiesPanel extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  private renderComponentProperties() {
+    const commonProps = this.getCommonProperties();
+    
+    if (commonProps.length === 0) {
+      return html``;
+    }
+
+    return html`
+      <div class="section">
+        <h4>🔧 Component Properties</h4>
+        
+        ${commonProps.map(propKey => {
+          const currentValue = this.editingProps[propKey] ?? '';
+          const propType = this.getPropertyType(propKey);
+          
+          if (propType === 'boolean') {
+            return html`
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    .checked=${currentValue === true || currentValue === 'true'}
+                    @change=${(e: Event) => {
+                      const checked = (e.target as HTMLInputElement).checked;
+                      this.updateProperty(propKey, checked);
+                    }}
+                  />
+                  <span>${this.formatPropertyLabel(propKey)}</span>
+                </label>
+              </div>
+            `;
+          }
+          
+          if (propType === 'number') {
+            return html`
+              <div class="form-group">
+                <label>${this.formatPropertyLabel(propKey)}</label>
+                <input
+                  type="number"
+                  .value=${String(currentValue)}
+                  @input=${(e: Event) => {
+                    const value = (e.target as HTMLInputElement).value;
+                    this.updateProperty(propKey, value ? Number(value) : '');
+                  }}
+                  placeholder=${this.getPropertyPlaceholder(propKey)}
+                />
+              </div>
+            `;
+          }
+          
+          if (propType === 'textarea') {
+            return html`
+              <div class="form-group">
+                <label>${this.formatPropertyLabel(propKey)}</label>
+                <textarea
+                  .value=${String(currentValue)}
+                  @input=${(e: Event) => {
+                    const value = (e.target as HTMLTextAreaElement).value;
+                    this.updateProperty(propKey, value);
+                  }}
+                  placeholder=${this.getPropertyPlaceholder(propKey)}
+                  rows="3"
+                ></textarea>
+              </div>
+            `;
+          }
+          
+          // Default: text input
+          return html`
+            <div class="form-group">
+              <label>${this.formatPropertyLabel(propKey)}</label>
+              <input
+                type="text"
+                .value=${String(currentValue)}
+                @input=${(e: Event) => {
+                  const value = (e.target as HTMLInputElement).value;
+                  this.updateProperty(propKey, value);
+                }}
+                placeholder=${this.getPropertyPlaceholder(propKey)}
+              />
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  private getPropertyType(propKey: string): 'text' | 'number' | 'boolean' | 'textarea' {
+    const booleanProps = ['required', 'disabled', 'checked'];
+    const numberProps = ['rows', 'level', 'width', 'height'];
+    const textareaProps = ['content', 'options'];
+    
+    if (booleanProps.includes(propKey)) return 'boolean';
+    if (numberProps.includes(propKey)) return 'number';
+    if (textareaProps.includes(propKey)) return 'textarea';
+    return 'text';
+  }
+
+  private formatPropertyLabel(propKey: string): string {
+    // Convert camelCase to Title Case with spaces
+    return propKey
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, str => str.toUpperCase())
+      .trim();
+  }
+
+  private getPropertyPlaceholder(propKey: string): string {
+    const placeholders: Record<string, string> = {
+      'label': 'Enter label text',
+      'placeholder': 'Enter placeholder text',
+      'name': 'field-name',
+      'value': 'default value',
+      'href': 'https://example.com',
+      'text': 'Link text',
+      'src': 'image-url',
+      'alt': 'Image description',
+      'content': 'Enter content',
+      'options': 'option1,option2,option3',
+      'rows': '3',
+      'level': '1-6',
+    };
+    
+    return placeholders[propKey] || '';
   }
 }
 
