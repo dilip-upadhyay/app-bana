@@ -1,0 +1,22 @@
+{
+  "metaVersion" : 1,
+  "id" : "gtty",
+  "name" : "gtty",
+  "path" : "/new-page",
+  "rootId" : "root",
+  "nodes" : [ {
+    "id" : "root",
+    "type" : "container",
+    "props" : {
+      "style" : "display: flex; flex-direction: column; min-height: 100vh;"
+    },
+    "children" : [ "text" ]
+  }, {
+    "id" : "text",
+    "type" : "text",
+    "props" : {
+      "text" : "Text content",
+      "tag" : "p"
+    }
+  } ]
+}

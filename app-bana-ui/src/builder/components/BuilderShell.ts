@@ -6,7 +6,7 @@ import styles from './BuilderShell.css?inline';
 import './LivePreview';
 import './ComponentLibrary';
 import './PageManager';
-import './BuilderInspector';
+import './PropertiesPanel';
 import './AppManager';
 import './EntityManager';
 import './AiChatBuilder';
@@ -154,7 +154,7 @@ export class BuilderShell extends LitElement {
 
       <!-- Right: Property Inspector -->
       <div class="right-panel">
-        <studio-builder-inspector></studio-builder-inspector>
+        <studio-properties-panel></studio-properties-panel>
       </div>
     `;
   }

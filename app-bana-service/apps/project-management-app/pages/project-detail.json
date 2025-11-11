@@ -64,7 +64,15 @@
     "props" : {
       "className" : "table"
     },
-    "children" : [ ]
+    "children" : [ "input" ]
+  }, {
+    "id" : "input",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "Enter text...",
+      "className" : "input"
+    }
   } ],
   "metaVersion" : "1.0.0",
   "type" : "profile"

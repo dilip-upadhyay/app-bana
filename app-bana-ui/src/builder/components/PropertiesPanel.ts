@@ -4,6 +4,7 @@ import { currentStore } from '../store/TreeStore';
 import type { ComponentNode } from '../../models/metadata';
 import styles from './PropertiesPanel.css?inline';
 
+// Property editor panel for selected components
 @customElement('studio-properties-panel')
 export class PropertiesPanel extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
@@ -20,6 +21,7 @@ export class PropertiesPanel extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
 
+    console.log('[PropertiesPanel] Component connected, currentStore:', currentStore);
     if (currentStore) {
       currentStore.onChange(() => {
         this.updateSelectedNode();
@@ -32,6 +34,7 @@ export class PropertiesPanel extends LitElement {
     if (!currentStore) return;
 
     const selection = currentStore.getSelection();
+    console.log('[PropertiesPanel] updateSelectedNode called, selection:', selection);
     this.selectedNode = selection;
 
     if (selection) {
@@ -46,6 +49,9 @@ export class PropertiesPanel extends LitElement {
       this.minHeight = this.extractStyleValue(style, 'min-height') || '';
       this.maxWidth = this.extractStyleValue(style, 'max-width') || '';
       this.maxHeight = this.extractStyleValue(style, 'max-height') || '';
+    } else {
+      // Clear state when nothing is selected
+      this.editingProps = {};
     }
   }
 

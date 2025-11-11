@@ -11,7 +11,7 @@
       "gap" : "lg",
       "padding" : "xl"
     },
-    "children" : [ "header-1762887878565" ]
+    "children" : [ "input-1", "header-1762887878565", "input" ]
   }, {
     "id" : "header-1762887878565",
     "type" : "container",
@@ -34,6 +34,22 @@
     "props" : {
       "label" : "Add New",
       "variant" : "primary"
+    }
+  }, {
+    "id" : "input",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "Enter text...",
+      "className" : "input"
+    }
+  }, {
+    "id" : "input-1",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "Enter text...",
+      "className" : "input"
     }
   } ],
   "metaVersion" : "1.0.0",

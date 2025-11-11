@@ -4,8 +4,8 @@
   "description" : "Project management system with projects, tasks, and team members",
   "version" : "1.0.0",
   "created" : 1762887878492,
-  "updated" : 1762887878684,
-  "pages" : [ "project-list", "project-detail", "task-board", "team-member-directory" ],
+  "updated" : 1762891676755,
+  "pages" : [ "project-list", "project-detail", "task-board", "team-member-directory", "gtty" ],
   "entities" : [ {
     "name" : "Project",
     "fields" : [ {
