@@ -10,10 +10,13 @@ import './components/ButtonElement';
 import './components/ContainerElement';
 import './components/TextElement';
 import './components/UnknownElement';
+import './runtime/shell/AppRuntimeShell';
 import demoPage from './demo/demo-page.json';
 import { ensureCoreRegistered } from './core/registry';
 import { renderPage } from './runtime/renderer/Renderer';
 import { PageMeta } from './models/metadata';
+import { decodeRuntimeState } from './models/runtime-state';
+import type { AppRuntimeState } from './models/runtime-state';
 import './styles/theme.css';
 
 @customElement('app-root')
@@ -53,87 +56,61 @@ export class AppRoot extends LitElement {
    */
   private async loadAppRuntime(stateParam: string) {
     await ensureCoreRegistered();
-    const host = this.renderRoot.querySelector('#app-runtime') as HTMLElement | null;
+    const host = this.renderRoot.querySelector('#app-runtime');
     if (!host) return;
 
     try {
-      // Decode runtime state
-      const state = JSON.parse(atob(stateParam));
-      console.log('[AppRoot] Loading app runtime with state:', state);
+      // Decode compact runtime state from URL parameter
+      const compactState = decodeRuntimeState(stateParam);
+      console.log('[AppRoot] Loading app runtime with compact state:', compactState);
 
-      // Load app from localStorage
-      const appJson = localStorage.getItem(`appbana.apps.${state.appId}`);
-      if (!appJson) {
-        host.innerHTML = `<div style="padding: 2rem; color: red;">App not found: ${state.appId}</div>`;
-        return;
+      // Load app from backend API
+      const response = await fetch(`http://localhost:8080/apps/${compactState.appId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load app: ${response.statusText}`);
       }
 
-      const app = JSON.parse(appJson);
-      console.log('[AppRoot] Loaded app:', app.name, 'with', app.pages?.length || 0, 'page IDs');
-      console.log('[AppRoot] Page IDs:', app.pages);
+      const app = await response.json();
+      console.log('[AppRoot] Loaded app:', app.name, 'with', app.pages?.length || 0, 'pages');
 
-      // Load all pages from storage (they're stored separately)
-      const pages: PageMeta[] = [];
-      for (const pageId of (app.pages || [])) {
-        const pageKey = `appbana.apps.${state.appId}.page.${pageId}`;
-        const pageJson = localStorage.getItem(pageKey);
-        if (pageJson) {
-          const page = JSON.parse(pageJson);
-          pages.push(page);
-          console.log('[AppRoot] Loaded page:', page.name, '(ID:', page.id, ')');
+      // Build full runtime state
+      const currentPageId = compactState.pageId || app.defaultPage || app.pages?.[0]?.id || '';
+      const fullRuntimeState: AppRuntimeState = {
+        app,
+        pages: app.pages || [],
+        currentPageId,
+        navigation: {
+          history: [currentPageId],
+          canGoBack: false,
+          canGoForward: false
+        },
+        mode: compactState.mode || 'preview',
+        context: {
+          timestamp: Date.now(),
+          studioUrl: '/studio.html'
         }
-      }
+      };
 
-      // Find the target page
-      const pageId = state.pageId || app.defaultPage || pages[0]?.id;
-      console.log('[AppRoot] Looking for page ID:', pageId);
+      // Create and mount the AppRuntimeShell component
+      const shell = document.createElement('app-runtime-shell');
+      (shell as any).runtimeState = fullRuntimeState;
       
-      const targetPage = pages.find((p: PageMeta) => p.id === pageId);
-      console.log('[AppRoot] Found page:', targetPage);
+      // Clear existing content and mount shell
+      host.innerHTML = '';
+      host.appendChild(shell);
 
-      if (!targetPage) {
-        const pageList = pages.map((p: PageMeta) => `${p.name || 'Unnamed'} (ID: ${p.id})`).join('<br>') || 'No pages found';
-        host.innerHTML = `
-          <div style="padding: 2rem; color: red;">
-            <h3>Page not found: ${pageId}</h3>
-            <p><strong>Available pages in app:</strong></p>
-            <div style="padding-left: 1rem; margin-top: 0.5rem;">${pageList}</div>
-          </div>
-        `;
-        return;
-      }
-
-      // Render the page with full context
-      console.log('[AppRoot] Rendering page:', targetPage.name);
-      
-      // Create navigation links with updated state
-      const navLinks = pages.map((p: PageMeta) => {
-        const newState = { ...state, pageId: p.id };
-        const newStateParam = btoa(JSON.stringify(newState));
-        return `<a href="?state=${newStateParam}" style="color: ${p.id === pageId ? '#60a5fa' : '#9ca3af'}; text-decoration: none; padding: 0.5rem 1rem; border-radius: 4px; ${p.id === pageId ? 'background: rgba(96, 165, 250, 0.1);' : ''}">${p.name}</a>`;
-      }).join('');
-      
-      // Add app header with navigation
-      host.innerHTML = `
-        <div style="background: #1f2937; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #374151;">
-          <div style="display: flex; align-items: center; gap: 1rem;">
-            <strong style="font-size: 1.2rem;">📱 ${app.name}</strong>
-            ${state.mode === 'preview' ? '<span style="padding: 0.25rem 0.5rem; background: #059669; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">PREVIEW</span>' : ''}
-          </div>
-          <div style="display: flex; gap: 0.5rem;">
-            ${navLinks}
-          </div>
-        </div>
-        <div id="page-content" style="flex: 1; overflow: auto;"></div>
-      `;
-
-      const pageContent = host.querySelector('#page-content') as HTMLElement;
-      if (pageContent) {
-        renderPage(targetPage, pageContent);
-      }
+      console.log('[AppRoot] App runtime shell mounted successfully');
     } catch (error) {
       console.error('[AppRoot] Error loading app runtime:', error);
-      host.innerHTML = `<div style="padding: 2rem; color: red;">Error loading app: ${(error as Error).message}</div>`;
+      host.innerHTML = `
+        <div style="padding: 2rem; color: red; font-family: sans-serif;">
+          <h2>Error Loading App</h2>
+          <p>${(error as Error).message}</p>
+          <button onclick="globalThis.location.href='/studio.html'" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            Go to Studio
+          </button>
+        </div>
+      `;
     }
   }
 

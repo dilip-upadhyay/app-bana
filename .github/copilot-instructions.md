@@ -49,9 +49,15 @@ Project-specific conventions (important):
 - `AppStore.setCurrentApp()` must load full app (entities/pages) — components subscribe to `appStore` for reactivity
 
 Dev & run shortcuts (tested):
-- Backend: `mvn clean package -DskipTests` then `java -jar app-bana-service/target/app-bana-service-1.0-SNAPSHOT.jar` (port 8080)
-- Frontend (dev): `cd app-bana-ui` then `npm run dev` (Vite on 5173). Studio UI: `/studio.html`
-- Full-stack local dev: build backend JAR, run it; in parallel run Vite dev server for HMR
+- **Backend (Windows)**: `.\start-backend.bat` (builds + runs on port 8080) - **USE THIS, NOT manual java commands**
+- **Backend (Manual)**: `mvn clean package -DskipTests` then `cd app-bana-service; java -jar target\app-bana-1.0-SNAPSHOT-fat.jar`
+- **Frontend (dev)**: `cd app-bana-ui` then `npm run dev` (Vite on 5173). Studio UI: `/studio.html`
+- **Full-stack**: Run `.\start-backend.bat` in one terminal, then `cd app-bana-ui; npm run dev` in a SEPARATE terminal
+
+**CRITICAL**: Always use SEPARATE terminals for backend and testing:
+- Terminal 1: Backend (runs continuously, shows server logs)
+- Terminal 2: API testing with `Invoke-WebRequest` or frontend dev server
+- **NEVER** test API calls in the same terminal running the backend - it will exit the server!
 
 Integration points to watch:
 - OpenAI: config via `config.json` or env vars (`OPEN_API_KEY`, `OPEN_AI_KEY`, `OPENAI_API_KEY`). AI provider selection in `config.json` (`openai` vs `ollama`).
@@ -59,10 +65,10 @@ Integration points to watch:
 - Backend persistence: editing files under `apps/` is the source of truth; `ApiServer` and `AppManager` read/write these files
 
 Debugging tips & quick checks:
-- If UI shows no apps: curl `http://localhost:8080/apps` and ensure it returns `{ apps: [...] }`
-- If entities missing: curl `http://localhost:8080/apps/{appId}` to confirm `entities` present
+- If UI shows no apps: **Open NEW terminal** and run `Invoke-WebRequest -Uri "http://localhost:8080/apps"` to ensure it returns `{ apps: [...] }`
+- If entities missing: `Invoke-WebRequest -Uri "http://localhost:8080/apps/{appId}"` to confirm `entities` present
 - Watch frontend console for `[AppStore]` logs (AppStore contains helpful debug logs when loading apps)
-- Backend logs print to the terminal running the JAR; use `Invoke-WebRequest` / `curl` to reproduce API calls
+- Backend logs print to the terminal running the JAR; **do NOT run commands in that terminal**
 
 If anything here is unclear or you'd like extra examples (common PR patterns, preferred tests to add, or a short checklist for reviewing AI-generated changes), tell me which area to expand.
 

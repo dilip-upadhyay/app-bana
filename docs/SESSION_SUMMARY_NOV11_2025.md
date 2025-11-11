@@ -136,15 +136,64 @@ generatedPages: result.pages || result.suggestedPages || [],
 ### Configuration
 1. ✅ `config.json` - Copied to `app-bana-service/` directory (server looks there, not root)
 
+## Backend Startup Troubleshooting (Critical Lesson)
+
+### Issue: Backend Wouldn't Start Properly
+**Symptoms**:
+- Running `java -jar` from wrong directory → ClassNotFoundException
+- Maven shade plugin requires specific build sequence
+- Backend would start then immediately exit
+- Testing in same terminal as backend would kill the server
+
+### Root Causes:
+1. **Directory confusion**: Must build from root, run from `app-bana-service/`
+2. **JAR naming**: File is `app-bana-1.0-SNAPSHOT-fat.jar` (not `app-bana-service-*.jar`)
+3. **Terminal interference**: Running commands in backend's terminal exits the server
+
+### ✅ Correct Procedure:
+
+**Use the helper script (RECOMMENDED)**:
+```powershell
+.\start-backend.bat
+```
+
+**Or manually** (if script unavailable):
+```powershell
+# Terminal 1: Backend
+mvn clean package -DskipTests          # From project root
+cd app-bana-service
+java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
+
+# Terminal 2: Testing (SEPARATE terminal)
+Invoke-WebRequest -Uri "http://localhost:8080/apps"
+```
+
+**CRITICAL RULES**:
+1. ✅ Always use `.\start-backend.bat` for backend startup
+2. ✅ Backend runs in Terminal 1 (shows server logs continuously)
+3. ✅ API testing in Terminal 2 (separate from backend)
+4. ❌ NEVER run commands in backend's terminal - it exits the server!
+
+### Helper Scripts Created:
+- `start-backend.bat` - One-click backend startup (kills Java → builds → runs)
+- `start-fullstack.bat` - Starts backend + frontend in separate windows
+
+### Documentation Updated:
+- `.github/copilot-instructions.md` - Added Windows startup instructions with warnings
+- `docs/02-DEVELOPMENT_GUIDE.md` - Added troubleshooting section
+- `README.md` - Added Quick Start for Windows
+
 ## Current Status
 
 ### ✅ Completed
 - Enhanced AI prompt with explicit rules
 - Created validation layer to reject poor AI responses
 - Updated generation flow to use validation
-- Fixed frontend to use detailed pages array
+- Fixed frontend to use `result.pages` instead of `result.suggestedPages`
 - Backend built successfully (`mvn clean package`)
 - Config file in correct location
+- **Documentation updated with correct backend startup procedures**
+- **Helper scripts created for Windows**
 
 ### ⚠️ Not Yet Tested
 - Backend **rebuilt but validation not tested** (need to restart server and test with prompts)
@@ -244,37 +293,133 @@ User Request → AI Provider → Parse JSON → Validate Result
 
 **Key Improvement**: Validation gate prevents accepting low-quality AI responses that substitute domains or omit page metadata.
 
+## Phase 1: App Runtime Shell Implementation (NEW - Nov 11 Evening)
+
+### Goal: Enable Full App Preview with Navigation
+
+After fixing AI generation, pivoted to implementing app preview/runtime functionality. Previous system only had basic page rendering - no app chrome, navigation, or interactive features.
+
+### What Was Built
+
+#### 1. AppRuntimeShell Component
+**File**: `app-bana-ui/src/runtime/shell/AppRuntimeShell.ts` (180+ lines)
+
+**Features**:
+- ✅ App header with name and logo
+- ✅ PREVIEW badge for preview mode
+- ✅ "Back to Studio" button (navigates to studio with app context)
+- ✅ Page navigation tabs (multi-page support)
+- ✅ Current page rendering area
+- ✅ Error handling with user-friendly messages
+- ✅ URL state management (updates URL on page navigation)
+
+**Key Methods**:
+- `initializeRuntime()` - Sets up runtime state and loads initial page
+- `navigateToPage(pageId)` - Switches between pages, updates URL
+- `renderPageContent()` - Uses core Renderer to display page
+- `handleBackToStudio()` - Returns to studio with app ID in URL
+
+#### 2. Professional Styling
+**File**: `app-bana-ui/src/runtime/shell/AppRuntimeShell.css` (150+ lines)
+
+**Design**:
+- Clean, professional header with app branding
+- Tab-based navigation with active state highlighting
+- Responsive layout (works on mobile/desktop)
+- CSS custom properties for theming
+- Smooth transitions and hover effects
+
+#### 3. Updated App Loader
+**File**: `app-bana-ui/src/index.ts`
+
+**Changes**:
+- Replaced basic page renderer with full AppRuntimeShell
+- Loads apps from backend API (not localStorage)
+- Decodes compact URL state → builds full runtime state
+- Creates and mounts AppRuntimeShell component dynamically
+
+**Flow**:
+```
+URL: /index.html?state={base64}
+  ↓
+Decode compact state (appId, pageId, mode)
+  ↓
+Fetch app from backend: GET /apps/{appId}
+  ↓
+Build full runtime state (app, pages, navigation, context)
+  ↓
+Create <app-runtime-shell> and pass state
+  ↓
+Shell renders header, tabs, and current page
+```
+
+#### 4. Component Registration
+**File**: `app-bana-ui/src/core/registry.ts`
+
+Added AppRuntimeShell to lazy-loading registry for optimal bundle size.
+
+### Integration with Existing Code
+
+**Preview Launch** (already existed in `LivePreview.ts`):
+```typescript
+private handlePreview = () => {
+  const runtimeState = {
+    appId: currentApp.id,
+    pageId: this.page!.id,
+    mode: 'preview' as const
+  };
+  const stateParam = btoa(JSON.stringify(runtimeState));
+  const previewUrl = `/index.html?state=${stateParam}`;
+  window.open(previewUrl, '_blank');
+}
+```
+
+This button was already implemented - we just built the **receiving end** (AppRuntimeShell) that makes preview actually work.
+
+### Build Results
+
+```
+✓ Frontend built successfully with Vite
+✓ No TypeScript compilation errors
+✓ AppRuntimeShell bundled: assets/index.js (60.17 kB)
+✓ Studio bundle: assets/studio.js (186.35 kB)
+```
+
+### What's Working
+
+- ✅ AppRuntimeShell component created with full navigation
+- ✅ Professional styling with preview mode UI
+- ✅ URL-based state encoding/decoding
+- ✅ Backend API integration for loading apps
+- ✅ Component registration in registry
+- ✅ Frontend builds successfully
+
+### What's NOT Working Yet (Remaining Phases)
+
+- ❌ **Data binding** - Components render but don't fetch real data from APIs
+- ❌ **Form handling** - Forms render but don't submit or validate
+- ❌ **Action handlers** - Buttons don't trigger actions (navigate, API calls)
+- ❌ **Search/filters** - No data manipulation features
+- ❌ **Authentication** - No login or user context
+
+See `docs/APP_PREVIEW_ANALYSIS.md` for complete roadmap (6 phases, 8-day implementation).
+
 ## Quick Start Commands for Tomorrow
 
-**IMPORTANT**: Always build from project root first, then navigate to service directory to run JAR.
+**IMPORTANT**: Always use `.\start-backend.bat` for backend startup, and use SEPARATE terminals!
 
 ```powershell
-# Terminal 1: Build Backend (ALWAYS FROM PROJECT ROOT)
-cd c:\Users\dilip\git\app-bana
-mvn clean package -DskipTests
+# Terminal 1: Backend (Runs continuously)
+.\start-backend.bat
 
-# Terminal 2: Start Backend (FROM SERVICE DIRECTORY)
-cd app-bana-service
-java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
-
-# If port 8080 is locked, kill Java process first:
-Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force
-
-# Terminal 3: Frontend Dev Server
-cd c:\Users\dilip\git\app-bana\app-bana-ui
+# Terminal 2: Frontend Dev Server (SEPARATE terminal)
+cd app-bana-ui
 npm run dev
 
-# Terminal 4: Testing
-cd c:\Users\dilip\git\app-bana
+# Terminal 3: API Testing (NEVER use Terminal 1!)
+Invoke-WebRequest -Uri "http://localhost:8080/apps" | Select-Object StatusCode
 
-# Test AI generation
-Invoke-WebRequest -Uri "http://localhost:8080/api/ai/generate" `
-  -Method POST `
-  -Body (Get-Content test-project-management.json -Raw) `
-  -ContentType "application/json" `
-  -TimeoutSec 90 | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json -Depth 10
-
-# Open browser
+# Browser
 start http://localhost:5173/studio.html
 ```
 
@@ -283,12 +428,12 @@ start http://localhost:5173/studio.html
 **Problem**: `Error: Could not find or load main class com.appbana.Main`  
 **Cause**: Running `java -jar` from wrong directory or JAR not fully built  
 **Solution**:
-1. Always build from project root: `cd c:\Users\dilip\git\app-bana; mvn clean package -DskipTests`
-2. Change to service directory: `cd app-bana-service`
-3. Run JAR: `java -jar target\app-bana-1.0-SNAPSHOT-fat.jar`
+1. **Use the helper script**: `.\start-backend.bat` (RECOMMENDED)
+2. Or manually: Build from root → run from service dir
 
-**Problem**: `Failed to delete app-bana-1.0-SNAPSHOT-fat.jar`  
-**Cause**: Server is still running  
+**Problem**: Backend starts then immediately exits
+**Cause**: Testing commands in same terminal as backend
+**Solution**: Always use SEPARATE terminals (see "Quick Start Commands" above)  
 **Solution**: `Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force`
 
 **Problem**: `Error: Unable to access jarfile`  

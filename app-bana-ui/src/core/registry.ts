@@ -48,5 +48,10 @@ export function ensureCoreRegistered(): Promise<void> {
     proms.push(import('../builder/components/AiChatBuilder.js'));
   }
 
+  // Runtime components
+  if (!registry.has('app-runtime-shell')) {
+    proms.push(import('../runtime/shell/AppRuntimeShell.js'));
+  }
+
   return Promise.all(proms).then(()=>{});
 }
