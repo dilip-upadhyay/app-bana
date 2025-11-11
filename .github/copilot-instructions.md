@@ -85,10 +85,50 @@ If anything here is unclear or you'd like extra examples (common PR patterns, pr
 - `docs/BACKEND_APP_PERSISTENCE_COMPLETE.md` - Persistence implementation
 - `docs/SESSION_SUMMARY_NOV05_2025.md` - Relationship editor implementation
 - `docs/ENTITY_MANAGER_SQL_PREVIEW_COMPLETE.md` - SQL preview feature
+- `docs/APP_PREVIEW_ANALYSIS.md` - **Runtime/preview system status & roadmap (Nov 11, 2025)**
 
 **Guides**:
 - `app-bana-ui/src/core/ADAPTER_GUIDE.md` - Datasource adapter usage (500+ lines)
 - `app-bana-ui/README.md` - Component architecture, adding components
+
+## Runtime/Preview System Status (CRITICAL - Nov 11, 2025)
+
+**Current State**: ⚠️ Preview infrastructure exists but INCOMPLETE - needs full runtime implementation
+
+**What EXISTS**:
+- ✅ Runtime renderer (static page rendering)
+- ✅ Runtime state models (`AppRuntimeState`, URL encoding)
+- ✅ Preview launch system (opens `/index.html?state=...`)
+- ✅ Studio LivePreview (WYSIWYG editing canvas - separate from app runtime)
+
+**What's MISSING (Critical Gaps)**:
+- ❌ **No full app runtime component** - Pages render but no app chrome (header, navigation, "Back to Studio")
+- ❌ **No data binding** - Components render statically, don't fetch real data from backend APIs
+- ❌ **No form handling** - Forms render but don't submit, validate, or save data
+- ❌ **No page navigation** - Can't switch between pages in preview/runtime mode
+- ❌ **No action handlers** - Buttons don't trigger actions (navigate, API calls, etc.)
+
+**Implementation Roadmap** (see `docs/APP_PREVIEW_ANALYSIS.md`):
+- **Phase 1 (Day 1-2)**: Core runtime shell with navigation 🎯 **NEXT PRIORITY**
+  - Create `AppRuntimeShell.ts` component with header, nav tabs, page renderer
+  - Enable page switching in preview mode
+  - Add "Back to Studio" and preview mode UI
+- **Phase 2 (Day 3-4)**: Data binding system - connect components to backend APIs
+- **Phase 3 (Day 5)**: Form handling - submission, validation, CRUD operations
+- **Phase 4 (Day 6)**: Action system - button clicks, navigation, API calls
+- **Phase 5 (Day 7-8)**: Polish - search, filters, pagination, modals, toasts
+- **Phase 6 (Future)**: Authentication & security
+
+**Key Distinction**:
+- `LivePreview` (in Studio) = WYSIWYG editing canvas for page design
+- `AppRuntimeShell` (NOT YET BUILT) = Full functional app preview/production runtime
+
+**File Locations**:
+- Runtime infrastructure: `app-bana-ui/src/runtime/` (renderer exists, shell needs to be built)
+- Preview launch: `app-bana-ui/src/builder/components/LivePreview.ts` (handlePreview method)
+- App loader: `app-bana-ui/src/index.ts` (loadAppRuntime exists but incomplete)
+
+**When working on preview/runtime features**, always reference `docs/APP_PREVIEW_ANALYSIS.md` for complete analysis and implementation plan.
 
 ## Quick Reference
 
