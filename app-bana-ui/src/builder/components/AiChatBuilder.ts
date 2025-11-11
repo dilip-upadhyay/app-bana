@@ -970,19 +970,22 @@ export class AiChatBuilder extends LitElement {
     const pageType = pageSuggestion.type || this.guessPageType(pageName);
     const entityName = pageSuggestion.entity || this.extractEntityName(pageName, entities);
     
+    // Find the full entity object
+    const entity = entityName ? entities.find(e => e.name === entityName) : undefined;
+    
     // Use AI-provided ID if available, otherwise generate one
     const pageId = pageSuggestion.id || `page-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
     // Generate page path
     const pagePath = this.generatePagePath(pageName);
 
-    // Build page structure based on type
-    const pageStructure = this.buildPageStructure(pageName, pagePath, pageType, entityName, pageId);
+    // Build page structure based on type, passing full entity
+    const pageStructure = this.buildPageStructure(pageName, pagePath, pageType, entity, pageId);
 
     // Add page to app via AppStore
     await appStore.addPage(appId, pageStructure);
 
-    console.log('[AiChatBuilder] Created page:', pageName, 'Type:', pageType, 'ID:', pageId);
+    console.log('[AiChatBuilder] Created page:', pageName, 'Type:', pageType, 'Entity:', entityName, 'ID:', pageId);
   }
 
   private guessPageType(pageName: string): string {
@@ -1019,13 +1022,13 @@ export class AiChatBuilder extends LitElement {
       .replaceAll(/[^a-z0-9-]/g, '');
   }
 
-  private buildPageStructure(name: string, path: string, type: string, entityName?: string, pageId?: string): any {
+  private buildPageStructure(name: string, path: string, type: string, entity?: EntityMeta, pageId?: string): any {
     const actualPageId = pageId || `page-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     const timestamp = Date.now(); // Generate once for consistency
     const rootId = `root-${timestamp}`;
 
-    // Build component nodes based on page type
-    const nodes = this.buildNodesForPageType(type, entityName, rootId); // Pass rootId
+    // Build component nodes based on page type, passing entity
+    const nodes = this.buildNodesForPageType(type, entity, rootId);
 
     return {
       id: actualPageId,
@@ -1038,7 +1041,7 @@ export class AiChatBuilder extends LitElement {
     };
   }
 
-  private buildNodesForPageType(type: string, entityName?: string, rootId?: string): ComponentNode[] {
+  private buildNodesForPageType(type: string, entity?: EntityMeta, rootId?: string): ComponentNode[] {
     const timestamp = Date.now();
     const actualRootId = rootId || `root-${timestamp}`; // Use passed rootId or generate
     const headingId = `heading-${timestamp}`;
@@ -1064,18 +1067,18 @@ export class AiChatBuilder extends LitElement {
         return this.buildLoginNodes();
       
       case 'dashboard':
-        return this.buildDashboardNodes(entityName);
+        return this.buildDashboardNodes(entity);
       
       case 'list':
       case 'data-table':  // AI often uses 'data-table' for list pages
-        return this.buildListNodes(entityName);
+        return this.buildListNodes(entity);
       
       case 'form':
-        return this.buildFormNodes(entityName);
+        return this.buildFormNodes(entity);
       
       case 'detail':
       case 'profile':  // AI often uses 'profile' for detail pages
-        return this.buildDetailNodes(entityName);
+        return this.buildDetailNodes(entity);
       
       default:
         // Blank page - just root container with heading
@@ -1136,7 +1139,7 @@ export class AiChatBuilder extends LitElement {
     ];
   }
 
-  private buildDashboardNodes(entityName?: string): ComponentNode[] {
+  private buildDashboardNodes(entity?: EntityMeta): ComponentNode[] {
     const rootId = `root-${Date.now()}`;
     const headingId = `heading-${Date.now()}`;
     const gridId = `grid-${Date.now()}`;
@@ -1144,7 +1147,7 @@ export class AiChatBuilder extends LitElement {
     const card2Id = `card2-${Date.now()}`;
     const card3Id = `card3-${Date.now()}`;
 
-    const title = entityName ? `${entityName} Dashboard` : 'Dashboard';
+    const title = entity ? `${entity.name} Dashboard` : 'Dashboard';
 
     return [
       {
@@ -1200,14 +1203,23 @@ export class AiChatBuilder extends LitElement {
     ];
   }
 
-  private buildListNodes(entityName?: string): ComponentNode[] {
+  private buildListNodes(entity?: EntityMeta): ComponentNode[] {
     const rootId = `root-${Date.now()}`;
     const headerId = `header-${Date.now()}`;
     const headingId = `heading-${Date.now()}`;
     const buttonId = `button-${Date.now()}`;
     const tableId = `table-${Date.now()}`;
 
-    const title = entityName ? `${entityName} List` : 'Items';
+    const title = entity ? `${entity.name} List` : 'Items';
+
+    // If entity has fields, create a simple list display
+    const children: string[] = [];
+    if (entity && entity.fields) {
+      entity.fields.slice(0, 5).forEach((field, idx) => {
+        const fieldId = `field-${Date.now()}-${idx}`;
+        children.push(fieldId);
+      });
+    }
 
     return [
       {
@@ -1234,20 +1246,37 @@ export class AiChatBuilder extends LitElement {
       },
       {
         id: tableId,
-        type: 'app-grid',
-        props: { columns: '1', gap: 'sm' },
-        children: []
-      }
+        type: 'container',
+        props: { 
+          layout: 'vertical', 
+          gap: 'sm',
+          padding: 'md',
+          background: '#fff',
+          borderRadius: '8px'
+        },
+        children: entity && entity.fields ? entity.fields.slice(0, 5).map((field, idx) => {
+          const fieldId = `field-${Date.now()}-${idx}`;
+          return fieldId;
+        }) : []
+      },
+      ...(entity && entity.fields ? entity.fields.slice(0, 5).map((field, idx) => ({
+        id: `field-${Date.now()}-${idx}`,
+        type: 'text',
+        props: { 
+          content: `${field.name}: (${field.type})`,
+          tag: 'p'
+        }
+      })) : [])
     ];
   }
 
-  private buildFormNodes(entityName?: string): ComponentNode[] {
+  private buildFormNodes(entity?: EntityMeta): ComponentNode[] {
     const rootId = `root-${Date.now()}`;
     const headingId = `heading-${Date.now()}`;
     const formId = `form-${Date.now()}`;
     const buttonId = `button-${Date.now()}`;
 
-    const title = entityName ? `Create ${entityName}` : 'Create Item';
+    const title = entity ? `Create ${entity.name}` : 'Create Item';
 
     return [
       {
@@ -1265,8 +1294,16 @@ export class AiChatBuilder extends LitElement {
         id: formId,
         type: 'container',
         props: { layout: 'vertical', gap: 'md' },
-        children: []
+        children: entity && entity.fields ? entity.fields.map((field, idx) => `input-${Date.now()}-${idx}`) : []
       },
+      ...(entity && entity.fields ? entity.fields.map((field, idx) => ({
+        id: `input-${Date.now()}-${idx}`,
+        type: 'text',
+        props: { 
+          content: `${field.name} (${field.type})${field.required ? ' *' : ''}`,
+          tag: 'p'
+        }
+      })) : []),
       {
         id: buttonId,
         type: 'button',
@@ -1275,12 +1312,12 @@ export class AiChatBuilder extends LitElement {
     ];
   }
 
-  private buildDetailNodes(entityName?: string): ComponentNode[] {
+  private buildDetailNodes(entity?: EntityMeta): ComponentNode[] {
     const rootId = `root-${Date.now()}`;
     const headingId = `heading-${Date.now()}`;
     const contentId = `content-${Date.now()}`;
 
-    const title = entityName ? `${entityName} Details` : 'Details';
+    const title = entity ? `${entity.name} Details` : 'Details';
 
     return [
       {
@@ -1298,8 +1335,16 @@ export class AiChatBuilder extends LitElement {
         id: contentId,
         type: 'container',
         props: { layout: 'vertical', gap: 'md', padding: 'lg', background: '#fff', borderRadius: '8px' },
-        children: []
-      }
+        children: entity && entity.fields ? entity.fields.map((field, idx) => `detail-${Date.now()}-${idx}`) : []
+      },
+      ...(entity && entity.fields ? entity.fields.map((field, idx) => ({
+        id: `detail-${Date.now()}-${idx}`,
+        type: 'text',
+        props: { 
+          content: `${field.name}: (${field.type})`,
+          tag: 'p'
+        }
+      })) : [])
     ];
   }
 
