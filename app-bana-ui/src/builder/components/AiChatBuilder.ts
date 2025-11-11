@@ -1067,12 +1067,14 @@ export class AiChatBuilder extends LitElement {
         return this.buildDashboardNodes(entityName);
       
       case 'list':
+      case 'data-table':  // AI often uses 'data-table' for list pages
         return this.buildListNodes(entityName);
       
       case 'form':
         return this.buildFormNodes(entityName);
       
       case 'detail':
+      case 'profile':  // AI often uses 'profile' for detail pages
         return this.buildDetailNodes(entityName);
       
       default:
