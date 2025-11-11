@@ -389,6 +389,12 @@ public class AiAppGeneratorService {
                     case "delete":
                         parsed.put("action", "deleteApp");
                         return parsed;
+                    case "listpages":
+                    case "list_pages":
+                    case "list-pages":
+                    case "pages":
+                        parsed.put("action", "listPages");
+                        return parsed;
                     case "generateapp":
                     case "generate_app":
                     case "generate-app":

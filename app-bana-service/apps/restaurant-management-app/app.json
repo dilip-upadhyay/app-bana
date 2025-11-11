@@ -4,8 +4,8 @@
   "description" : "A comprehensive system for managing restaurant operations including menus, orders, and customer reservations.",
   "version" : "1.0.0",
   "created" : 1762889183734,
-  "updated" : 1762889183942,
-  "pages" : [ "menu-list", "order-list", "customer-list", "reservation-list", "order-detail", "customer-detail" ],
+  "updated" : 1762889952516,
+  "pages" : [ "order-list", "customer-list", "reservation-list", "customer-detail", "menus" ],
   "entities" : [ {
     "name" : "MenuItem",
     "fields" : [ {

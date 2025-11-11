@@ -1,0 +1,61 @@
+{
+  "metaVersion" : 1,
+  "id" : "menus",
+  "name" : "Menus",
+  "path" : "/menus",
+  "rootId" : "root",
+  "nodes" : [ {
+    "id" : "root",
+    "type" : "container",
+    "props" : {
+      "style" : "min-height: 100vh; background: #f9fafb; padding: 2rem;"
+    },
+    "children" : [ "table-wrapper-1", "select", "input" ]
+  }, {
+    "id" : "table-wrapper-1",
+    "type" : "container",
+    "props" : {
+      "style" : "max-width: 1200px; margin: 0 auto; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+    },
+    "children" : [ "table-header-1", "search-1", "table-placeholder-1" ]
+  }, {
+    "id" : "table-header-1",
+    "type" : "text",
+    "props" : {
+      "tag" : "h1",
+      "text" : "\uD83D\uDCCA Data Table",
+      "style" : "margin: 0 0 2rem 0; font-size: 28px; font-weight: 700;"
+    }
+  }, {
+    "id" : "search-1",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "\uD83D\uDD0D Search...",
+      "style" : "width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; margin-bottom: 1.5rem;"
+    }
+  }, {
+    "id" : "table-placeholder-1",
+    "type" : "text",
+    "props" : {
+      "tag" : "div",
+      "text" : "<div style=\"padding: 3rem; text-align: center; border: 2px dashed #e5e7eb; border-radius: 8px; color: #9ca3af;\">Add data binding to populate table rows...</div>",
+      "style" : ""
+    }
+  }, {
+    "id" : "select",
+    "type" : "select",
+    "props" : {
+      "className" : "select"
+    },
+    "children" : [ ]
+  }, {
+    "id" : "input",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "Enter text...",
+      "className" : "input"
+    }
+  } ]
+}
