@@ -1,0 +1,73 @@
+{
+  "id" : "reservation-list",
+  "name" : "Reservation List",
+  "path" : "/reservation-list",
+  "rootId" : "root-1762889183873",
+  "nodes" : [ {
+    "id" : "root-1762889183873",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "children" : [ "header-1762889183873", "table-1762889183873" ]
+  }, {
+    "id" : "header-1762889183873",
+    "type" : "container",
+    "props" : {
+      "layout" : "horizontal",
+      "justifyContent" : "space-between",
+      "alignItems" : "center"
+    },
+    "children" : [ "heading-1762889183873", "button-1762889183873" ]
+  }, {
+    "id" : "heading-1762889183873",
+    "type" : "text",
+    "props" : {
+      "content" : "Reservation List",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "button-1762889183873",
+    "type" : "button",
+    "props" : {
+      "label" : "Add New",
+      "variant" : "primary"
+    }
+  }, {
+    "id" : "table-1762889183873",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "sm",
+      "padding" : "md",
+      "background" : "#fff",
+      "borderRadius" : "8px"
+    },
+    "children" : [ "field-1762889183873-0", "field-1762889183873-1", "field-1762889183873-2" ]
+  }, {
+    "id" : "field-1762889183873-0",
+    "type" : "text",
+    "props" : {
+      "content" : "reservationDate: (datetime)",
+      "tag" : "p"
+    }
+  }, {
+    "id" : "field-1762889183873-1",
+    "type" : "text",
+    "props" : {
+      "content" : "numberOfGuests: (number)",
+      "tag" : "p"
+    }
+  }, {
+    "id" : "field-1762889183873-2",
+    "type" : "text",
+    "props" : {
+      "content" : "customerId: (long)",
+      "tag" : "p"
+    }
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "data-table"
+}

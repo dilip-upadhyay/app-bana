@@ -89,12 +89,14 @@ public class AiSystemPrompts {
     public static String getActionClassifierPrompt() {
         StringBuilder p = new StringBuilder();
         p.append("You are an intent classifier for the AppBana agent.\n");
-        p.append("Map the user's free-text request into a JSON object with fields: action (one of: listApps, loadApp, deleteApp, generateApp) and options (object).\n");
+        p.append("Map the user's free-text request into a JSON object with fields: action (one of: listApps, loadApp, deleteApp, listPages, generateApp) and options (object).\n");
         p.append("Only return valid JSON. Examples:\n");
         p.append("1) User: 'Show me all my apps' -> { \"action\": \"listApps\", \"options\": {} }\n");
         p.append("2) User: 'Open app my-first-app' -> { \"action\": \"loadApp\", \"options\": { \"appId\": \"my-first-app\" } }\n");
         p.append("3) User: 'Delete app old-app' -> { \"action\": \"deleteApp\", \"options\": { \"appId\": \"old-app\" } }\n");
-        p.append("4) User: 'Create a blog app with posts and comments' -> { \"action\": \"generateApp\", \"options\": {} }\n");
+        p.append("4) User: 'List pages' or 'Show pages' -> { \"action\": \"listPages\", \"options\": {} }\n");
+        p.append("5) User: 'Create a blog app with posts and comments' -> { \"action\": \"generateApp\", \"options\": {} }\n");
+        p.append("IMPORTANT: 'list pages' means list pages of the CURRENT app, not list of apps. Use listPages action.\n");
         p.append("If the user asks for generation, set action=generateApp and leave options empty unless they provide explicit parameters.\n");
         p.append("Return only the JSON object, no additional text.\n");
         return p.toString();

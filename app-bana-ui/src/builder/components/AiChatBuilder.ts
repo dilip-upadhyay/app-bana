@@ -13,7 +13,7 @@ interface ChatMessage {
     generatedApp?: any;
     generatedEntities?: EntityMeta[];
     generatedPages?: any[];
-    action?: 'preview' | 'create' | 'confirm' | 'follow-up' | 'clarify' | 'list' | 'app' | 'delete';
+    action?: 'preview' | 'create' | 'confirm' | 'follow-up' | 'clarify' | 'list' | 'app' | 'delete' | 'pages';
     followUpQuestions?: string[];
     pendingGeneration?: any;
   };
@@ -793,7 +793,7 @@ export class AiChatBuilder extends LitElement {
       const result = await response.json();
 
       if (result.success) {
-        // If backend returned an action payload (listApps, loadApp, deleteApp), handle UI rendering
+        // If backend returned an action payload (listApps, loadApp, deleteApp, listPages), handle UI rendering
         if (result.payload) {
           if (result.payload.apps) {
             // Show list of apps with actions
@@ -808,6 +808,23 @@ export class AiChatBuilder extends LitElement {
                 // include payload so renderMessageMetadata can show buttons
                 // store under generatedApp for reuse in metadata rendering
                 generatedApp: { payload: result.payload }
+              }
+            );
+            return;
+          }
+
+          if (result.payload.pages) {
+            // Show list of pages for the app
+            const pages = result.payload.pages;
+            const pageCount = result.payload.pageCount || pages.length;
+            const appId = result.payload.appId;
+            
+            this.addAssistantMessage(
+              `This app has ${pageCount} page${pageCount === 1 ? '' : 's'}:`,
+              {
+                action: 'pages',
+                generatedPages: pages,
+                generatedApp: { id: appId }
               }
             );
             return;
@@ -883,6 +900,9 @@ export class AiChatBuilder extends LitElement {
   }
 
   private buildConversationContext(currentInput: string): any {
+    // Get currently selected app from AppStore
+    const currentApp = appStore.getCurrentApp();
+    
     return {
       phase: this.conversationState.phase,
       userIntent: this.conversationState.userIntent,
@@ -890,7 +910,16 @@ export class AiChatBuilder extends LitElement {
       questionsAsked: this.conversationState.questionsAsked,
       currentAppName: this.conversationState.appName,
       currentEntities: this.conversationState.entities,
-      currentPages: this.conversationState.pages
+      currentPages: this.conversationState.pages,
+      // Include currently selected app context
+      currentAppId: currentApp?.id,
+      currentAppContext: currentApp ? {
+        id: currentApp.id,
+        name: currentApp.name,
+        description: currentApp.description,
+        entityCount: currentApp.entities?.length || 0,
+        pageCount: currentApp.pages?.length || 0
+      } : null
     };
   }
 
@@ -1520,6 +1549,26 @@ export class AiChatBuilder extends LitElement {
             <div class="action-buttons">
               <button class="btn primary" @click=${() => this.handleLoadAppFromPayload(app.id)}>Open App</button>
             </div>
+          </div>
+        </div>
+      `;
+    }
+
+    if (action === 'pages' && generatedPages) {
+      return html`
+        <div class="message-metadata">
+          <div class="preview-card">
+            <h4>📄 Pages (${generatedPages.length})</h4>
+            <ul class="preview-list">
+              ${generatedPages.map((page: any) => html`
+                <li>
+                  <strong>${page.name || page.id}</strong>
+                  <div style="font-size:var(--text-xs,0.75rem); color:var(--color-text-muted,#6b7280);">
+                    Type: ${page.type || 'unknown'} • ${page.nodes?.length || 0} components
+                  </div>
+                </li>
+              `)}
+            </ul>
           </div>
         </div>
       `;

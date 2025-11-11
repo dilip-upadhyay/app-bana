@@ -1,0 +1,80 @@
+{
+  "id" : "customer-list",
+  "name" : "Customer List",
+  "path" : "/customer-list",
+  "rootId" : "root-1762889183847",
+  "nodes" : [ {
+    "id" : "root-1762889183847",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "children" : [ "header-1762889183847", "table-1762889183847" ]
+  }, {
+    "id" : "header-1762889183847",
+    "type" : "container",
+    "props" : {
+      "layout" : "horizontal",
+      "justifyContent" : "space-between",
+      "alignItems" : "center"
+    },
+    "children" : [ "heading-1762889183847", "button-1762889183847" ]
+  }, {
+    "id" : "heading-1762889183847",
+    "type" : "text",
+    "props" : {
+      "content" : "Customer List",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "button-1762889183847",
+    "type" : "button",
+    "props" : {
+      "label" : "Add New",
+      "variant" : "primary"
+    }
+  }, {
+    "id" : "table-1762889183847",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "sm",
+      "padding" : "md",
+      "background" : "#fff",
+      "borderRadius" : "8px"
+    },
+    "children" : [ "field-1762889183847-0", "field-1762889183847-1", "field-1762889183847-2", "field-1762889183847-3" ]
+  }, {
+    "id" : "field-1762889183847-0",
+    "type" : "text",
+    "props" : {
+      "content" : "name: (text)",
+      "tag" : "p"
+    }
+  }, {
+    "id" : "field-1762889183847-1",
+    "type" : "text",
+    "props" : {
+      "content" : "email: (email)",
+      "tag" : "p"
+    }
+  }, {
+    "id" : "field-1762889183847-2",
+    "type" : "text",
+    "props" : {
+      "content" : "phone: (phone)",
+      "tag" : "p"
+    }
+  }, {
+    "id" : "field-1762889183847-3",
+    "type" : "text",
+    "props" : {
+      "content" : "reservationCount: (number)",
+      "tag" : "p"
+    }
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "data-table"
+}

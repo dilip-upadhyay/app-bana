@@ -140,6 +140,10 @@ public class AiAppGeneratorService {
                                     break;
                                 }
                             }
+                        } else if (request.conversationContext != null && request.conversationContext.containsKey("currentAppId")) {
+                            // Use currently selected app from conversation context
+                            foundAppId = String.valueOf(request.conversationContext.get("currentAppId"));
+                            LOG.info("[AI] Using currentAppId from conversation context: {}", foundAppId);
                         }
                         GenerationResult pageResult = new GenerationResult();
                         if (foundAppId == null || foundAppId.isEmpty()) {
