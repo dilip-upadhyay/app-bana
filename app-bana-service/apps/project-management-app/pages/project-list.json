@@ -1,0 +1,41 @@
+{
+  "id" : "project-list",
+  "name" : "Project List",
+  "path" : "/project-list",
+  "rootId" : "root-1762887878565",
+  "nodes" : [ {
+    "id" : "root-1762887878565",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "children" : [ "header-1762887878565" ]
+  }, {
+    "id" : "header-1762887878565",
+    "type" : "container",
+    "props" : {
+      "layout" : "horizontal",
+      "justifyContent" : "space-between",
+      "alignItems" : "center"
+    },
+    "children" : [ "heading-1762887878565", "button-1762887878565" ]
+  }, {
+    "id" : "heading-1762887878565",
+    "type" : "text",
+    "props" : {
+      "content" : "Project List",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "button-1762887878565",
+    "type" : "button",
+    "props" : {
+      "label" : "Add New",
+      "variant" : "primary"
+    }
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "data-table"
+}
