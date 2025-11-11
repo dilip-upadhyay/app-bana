@@ -969,17 +969,20 @@ export class AiChatBuilder extends LitElement {
     const pageName = pageSuggestion.name || pageSuggestion;
     const pageType = pageSuggestion.type || this.guessPageType(pageName);
     const entityName = pageSuggestion.entity || this.extractEntityName(pageName, entities);
+    
+    // Use AI-provided ID if available, otherwise generate one
+    const pageId = pageSuggestion.id || `page-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
     // Generate page path
     const pagePath = this.generatePagePath(pageName);
 
     // Build page structure based on type
-    const pageStructure = this.buildPageStructure(pageName, pagePath, pageType, entityName);
+    const pageStructure = this.buildPageStructure(pageName, pagePath, pageType, entityName, pageId);
 
     // Add page to app via AppStore
     await appStore.addPage(appId, pageStructure);
 
-    console.log('[AiChatBuilder] Created page:', pageName, 'Type:', pageType);
+    console.log('[AiChatBuilder] Created page:', pageName, 'Type:', pageType, 'ID:', pageId);
   }
 
   private guessPageType(pageName: string): string {
@@ -1016,8 +1019,8 @@ export class AiChatBuilder extends LitElement {
       .replaceAll(/[^a-z0-9-]/g, '');
   }
 
-  private buildPageStructure(name: string, path: string, type: string, entityName?: string): any {
-    const pageId = `page-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  private buildPageStructure(name: string, path: string, type: string, entityName?: string, pageId?: string): any {
+    const actualPageId = pageId || `page-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     const timestamp = Date.now(); // Generate once for consistency
     const rootId = `root-${timestamp}`;
 
@@ -1025,7 +1028,7 @@ export class AiChatBuilder extends LitElement {
     const nodes = this.buildNodesForPageType(type, entityName, rootId); // Pass rootId
 
     return {
-      id: pageId,
+      id: actualPageId,
       name,
       path,
       rootId,

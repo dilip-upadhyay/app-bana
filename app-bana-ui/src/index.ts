@@ -64,8 +64,8 @@ export class AppRoot extends LitElement {
       const compactState = decodeRuntimeState(stateParam);
       console.log('[AppRoot] Loading app runtime with compact state:', compactState);
 
-      // Load app from backend API
-      const response = await fetch(`http://localhost:8080/apps/${compactState.appId}`);
+      // Load app WITH FULL PAGES from backend API
+      const response = await fetch(`http://localhost:8080/apps/${compactState.appId}/full`);
       if (!response.ok) {
         throw new Error(`Failed to load app: ${response.statusText}`);
       }
