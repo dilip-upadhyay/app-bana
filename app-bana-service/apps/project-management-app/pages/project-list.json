@@ -33,7 +33,8 @@
     "type" : "button",
     "props" : {
       "label" : "Add New",
-      "variant" : "primary"
+      "variant" : "primary",
+      "disabled" : false
     }
   }, {
     "id" : "input",

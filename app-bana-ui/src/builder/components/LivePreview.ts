@@ -463,13 +463,12 @@ export class LivePreview extends LitElement {
 
       case 'button':
         return html`
-          <div style="position: relative; display: inline-block;">
+          <div style="position: relative; display: inline-block; width: max-content;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
             <button
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
               data-node-id="${node.id}"
-              @click=${(e: Event) => this.handleNodeClick(e, node.id)}
               @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
               @mouseleave=${() => this.handleNodeMouseLeave()}
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
@@ -483,7 +482,7 @@ export class LivePreview extends LitElement {
 
       case 'input':
         return html`
-          <div style="position: relative; display: inline-block;">
+          <div style="position: relative; display: inline-block; width: max-content;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
             <input
               type="${node.props?.type || 'text'}"
@@ -491,7 +490,6 @@ export class LivePreview extends LitElement {
               style="${style}"
               placeholder="${node.props?.placeholder || ''}"
               data-node-id="${node.id}"
-              @click=${(e: Event) => this.handleNodeClick(e, node.id)}
               @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
               @mouseleave=${() => this.handleNodeMouseLeave()}
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
