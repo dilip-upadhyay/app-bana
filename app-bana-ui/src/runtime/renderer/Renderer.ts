@@ -16,6 +16,12 @@ export function renderPage(page: PageMeta, container: HTMLElement) {
 }
 
 function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): HTMLElement {
+  if (node.type === 'table') {
+    // Minimal preview: show selected columns only
+    // Use ES module import
+    // import { renderTablePreview } from './TablePreview';
+    return requireTablePreview(node);
+  }
   let ctor = getComponent(node.type);
   if (!ctor) {
     const unknownCtor = getComponent('unknown');
@@ -54,4 +60,10 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): H
   }
   if (node.style?.classes) (el as HTMLElement).classList.add(...node.style.classes);
   return el as HTMLElement;
+}
+
+// ES module import workaround for browser
+import { renderTablePreview } from './TablePreview';
+function requireTablePreview(node: ComponentNode): HTMLElement {
+  return renderTablePreview(node);
 }
