@@ -1,13 +1,22 @@
-import { LitElement, html, css, unsafeCSS } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { currentStore } from '../store/TreeStore';
 import type { ComponentNode } from '../../models/metadata';
-import styles from './PropertiesPanel.css?inline';
+// import styles from './PropertiesPanel.css?inline';
+
+console.log('[PropertiesPanel] Module loaded!');
 
 // Property editor panel for selected components
 @customElement('studio-properties-panel')
 export class PropertiesPanel extends LitElement {
-  static styles = css`${unsafeCSS(styles)}`;
+  static readonly styles = css`
+    :host {
+      display: block;
+      padding: 16px;
+      height: 100%;
+      overflow-y: auto;
+    }
+  `;
 
   @state() private selectedNode: ComponentNode | null = null;
   @state() private width: string = '';

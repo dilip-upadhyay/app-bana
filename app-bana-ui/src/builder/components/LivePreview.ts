@@ -109,7 +109,6 @@ export class LivePreview extends LitElement {
       this.storeUnsubscribe = currentStore.onChange(() => {
         this.page = currentStore!.getPage();
         this.selectedId = currentStore!.getSelection()?.id || null;
-        console.log('[LivePreview] Store changed, page:', this.page);
         this.requestUpdate();
       });
 
@@ -582,7 +581,6 @@ export class LivePreview extends LitElement {
   }
 
   render() {
-    console.log('[LivePreview] render() called, page:', this.page);
 
     if (!this.page) {
       console.warn('[LivePreview] No page data, showing loading...');
@@ -594,8 +592,6 @@ export class LivePreview extends LitElement {
       console.error('[LivePreview] Root node not found, rootId:', this.page.rootId);
       return html`<div class="error">Root node not found</div>`;
     }
-
-    console.log('[LivePreview] Rendering with rootNode:', rootNode);
 
     return html`
       <div class="preview-container">
