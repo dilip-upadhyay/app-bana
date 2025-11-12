@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { currentStore } from '../store/TreeStore';
+import { appStore } from '../store/AppStore';
 import type { ComponentNode } from '../../models/metadata';
 // import styles from './PropertiesPanel.css?inline';
 
@@ -216,10 +217,12 @@ export class PropertiesPanel extends LitElement {
 
   private renderComponentProperties() {
     if (this.selectedNode?.type === 'table') {
-      // Get entity list from appStore (not from page)
-  type FieldMeta = { name: string; displayName?: string; type?: string; label?: string };
+      // Use singleton appStore for robust, reactive entity access
+      type FieldMeta = { name: string; displayName?: string; type?: string; label?: string };
       type EntityMeta = { name: string; displayName?: string; fields?: FieldMeta[] };
-      const entities: EntityMeta[] = window['appStore']?.currentApp?.entities || [];
+      // Import appStore at top of file: import { appStore } from '../store/AppStore';
+      const currentApp = appStore.getCurrentApp();
+      const entities: EntityMeta[] = currentApp?.entities || [];
       const selectedEntity: EntityMeta | undefined = entities.find((e: EntityMeta) => e.name === this.editingProps.entity);
       const fields: FieldMeta[] = selectedEntity?.fields || [];
       const selectedFields: FieldMeta[] = this.editingProps.fields || [];

@@ -15,7 +15,26 @@
     "id" : "table",
     "type" : "table",
     "props" : {
-      "className" : "table"
+      "className" : "table",
+      "entity" : "MenuItem",
+      "fields" : [ {
+        "name" : "name",
+        "label" : "name"
+      }, {
+        "name" : "description",
+        "label" : "description"
+      }, {
+        "name" : "price",
+        "label" : "price"
+      }, {
+        "name" : "category",
+        "label" : "category"
+      }, {
+        "name" : "isAvailable",
+        "label" : "isAvailable"
+      } ],
+      "sort" : "name",
+      "actions" : [ "view" ]
     },
     "children" : [ ]
   } ]
