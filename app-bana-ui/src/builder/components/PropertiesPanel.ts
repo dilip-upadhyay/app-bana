@@ -201,6 +201,60 @@ export class PropertiesPanel extends LitElement {
   }
 
   private renderComponentProperties() {
+    // Special case: Table entity mapping UI
+    if (this.selectedNode?.type === 'table') {
+      // Get entity list from appStore (or currentStore.page)
+      const entities = (window['appStore']?.currentApp?.entities || currentStore?.getPage()?.entities) || [];
+      const selectedEntity = entities.find(e => e.name === this.editingProps.entity);
+      const fields = selectedEntity ? selectedEntity.fields : [];
+      const selectedFields = this.editingProps.fields || [];
+      return html`
+        <div class="section">
+          <h4>🔗 Table Entity Mapping</h4>
+          <div class="form-group">
+            <label>Entity</label>
+            <select @change=${(e: Event) => this.updateProperty('entity', (e.target as HTMLSelectElement).value)}>
+              <option value="">-- Select Entity --</option>
+              ${entities.map(entity => html`<option value="${entity.name}" ?selected=${entity.name === this.editingProps.entity}>${entity.displayName || entity.name}</option>`)}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Fields</label>
+            <div style="max-height:160px;overflow:auto;border:1px solid #eee;padding:4px;">
+              ${fields.map(field => html`
+                <label style="display:block;font-size:13px;padding:2px 0;">
+                  <input type="checkbox"
+                    .checked=${selectedFields.some((f: any) => f.name === field.name)}
+                    @change=${(e: Event) => {
+                      const checked = (e.target as HTMLInputElement).checked;
+                      let newFields = Array.isArray(selectedFields) ? [...selectedFields] : [];
+                      if (checked) newFields.push({ name: field.name, label: field.displayName || field.name });
+                      else newFields = newFields.filter((f: any) => f.name !== field.name);
+                      this.updateProperty('fields', newFields);
+                    }}
+                  /> ${field.displayName || field.name} (${field.type})
+                </label>
+              `)}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Sort</label>
+            <input type="text" value="${this.editingProps.sort || ''}" @input=${(e: Event) => this.updateProperty('sort', (e.target as HTMLInputElement).value)} />
+          </div>
+          <div class="form-group">
+            <label>Page Size</label>
+            <input type="number" min="1" value="${this.editingProps.pageSize || 25}" @input=${(e: Event) => this.updateProperty('pageSize', Number((e.target as HTMLInputElement).value))} />
+          </div>
+          <div class="form-group">
+            <label>Actions</label>
+            <label><input type="checkbox" .checked=${(this.editingProps.actions || []).includes('edit')} @change=${(e: Event) => this.toggleAction('edit', e)} /> Edit</label>
+            <label><input type="checkbox" .checked=${(this.editingProps.actions || []).includes('delete')} @change=${(e: Event) => this.toggleAction('delete', e)} /> Delete</label>
+            <label><input type="checkbox" .checked=${(this.editingProps.actions || []).includes('view')} @change=${(e: Event) => this.toggleAction('view', e)} /> View</label>
+          </div>
+        </div>
+      `;
+    }
+    
     const commonProps = this.getCommonProperties();
     
     if (commonProps.length === 0) {
@@ -285,6 +339,15 @@ export class PropertiesPanel extends LitElement {
         })}
       </div>
     `;
+  }
+
+  private toggleAction(action: string, e: Event) {
+    if (!this.selectedNode || !currentStore) return;
+    const checked = (e.target as HTMLInputElement).checked;
+    let actions = Array.isArray(this.editingProps.actions) ? [...this.editingProps.actions] : [];
+    if (checked) actions.push(action);
+    else actions = actions.filter((a: string) => a !== action);
+    this.updateProperty('actions', actions);
   }
 
   private getPropertyType(propKey: string): 'text' | 'number' | 'boolean' | 'textarea' {

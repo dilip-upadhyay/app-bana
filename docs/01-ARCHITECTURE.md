@@ -1130,3 +1130,31 @@ This design prioritizes **simplicity**, **enterprise readiness**, and **vertical
 **Related Documents:**
 - `02-DEVELOPMENT_GUIDE.md` - Development setup, building, testing
 - `03-ROADMAP.md` - Product roadmap and feature delivery timeline
+
+## Table Component Entity Mapping (Nov 2025)
+
+The Table component supports metadata-driven entity binding. Each Table node can specify:
+- `entity`: The backend entity to bind to (e.g., "customer")
+- `fields`: Array of columns to display (name, label, type)
+- `sort`, `filter`, `pageSize`: Options for sorting, filtering, and pagination
+- `actions`: Supported row actions (edit, delete, view)
+
+**Example Table Node Metadata:**
+```json
+{
+  "id": "table-123",
+  "type": "table",
+  "props": {
+    "entity": "customer",
+    "fields": [
+      { "name": "id", "label": "ID" },
+      { "name": "firstName", "label": "First Name" },
+      { "name": "lastName", "label": "Last Name" }
+    ],
+    "sort": "-createdAt",
+    "pageSize": 25,
+    "actions": ["edit", "delete"]
+  },
+  "children": []
+}
+```

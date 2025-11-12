@@ -1,0 +1,31 @@
+{
+  "metaVersion" : 1,
+  "id" : "table",
+  "name" : "table",
+  "path" : "/new-page",
+  "rootId" : "root",
+  "nodes" : [ {
+    "id" : "root",
+    "type" : "container",
+    "props" : {
+      "style" : "display: flex; flex-direction: column; min-height: 100vh;"
+    },
+    "children" : [ "main-1" ]
+  }, {
+    "id" : "main-1",
+    "type" : "container",
+    "props" : {
+      "className" : "main-container",
+      "style" : "padding: 2rem; min-height: 400px;",
+      "data-section" : "main"
+    },
+    "children" : [ "table" ]
+  }, {
+    "id" : "table",
+    "type" : "table",
+    "props" : {
+      "className" : "table"
+    },
+    "children" : [ ]
+  } ]
+}
