@@ -870,6 +870,11 @@ The **Studio Builder** is AppBana's visual editor for designing pages without co
 
 **Access:** `http://localhost:5173/studio` (dev) or `/studio` (prod)
 
+**Update (Nov 13, 2025):**
+- PropertiesPanel now supports editing properties for all component types
+- Selection logic in LivePreview is robust and works for all components
+- If PropertiesPanel does not update, ensure TreeStore is initialized before panel renders
+
 ### 3-Level User Guide
 
 #### 🟢 Beginner (5 Minutes)

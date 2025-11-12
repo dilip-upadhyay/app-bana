@@ -381,6 +381,15 @@ Schema changes → manually update forms
 
 ---
 
+# AppBana Documentation Hub
+
+**Major Update (Nov 13, 2025):**
+- PropertiesPanel now supports editing properties for all component types (container, button, input, etc.)
+- Selection logic in LivePreview is robust—any component is selectable, even if focused
+- TreeStore singleton initialization is now reliable; PropertiesPanel waits for store before subscribing
+- End-to-end workflow for visual editing is complete: drag, drop, select, edit properties, delete
+- AI Chat Builder and metadata-driven flow are fully integrated and stable
+
 ```
 docs/
 ├── 📄 README.md (this file)        ← START HERE
