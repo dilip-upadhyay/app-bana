@@ -5,6 +5,7 @@ import type { ComponentNode } from '../../models/metadata';
 // import styles from './PropertiesPanel.css?inline';
 
 console.log('[PropertiesPanel] Module loaded!');
+console.log('[PropertiesPanel] currentStore:', currentStore);
 
 // Property editor panel for selected components
 @customElement('studio-properties-panel')
@@ -27,10 +28,26 @@ export class PropertiesPanel extends LitElement {
   @state() private maxHeight: string = '';
   @state() private editingProps: Record<string, any> = {};
 
+  private storePollTimer: any = null;
+
   connectedCallback(): void {
     super.connectedCallback();
+    // Poll for currentStore until available
+    if (!currentStore) {
+      this.storePollTimer = setInterval(() => {
+        if (currentStore) {
+          clearInterval(this.storePollTimer);
+          this.storePollTimer = null;
+          this.subscribeToStore();
+        }
+      }, 100);
+    } else {
+      this.subscribeToStore();
+    }
+  }
 
-    console.log('[PropertiesPanel] Component connected, currentStore:', currentStore);
+  private subscribeToStore() {
+    console.log('[PropertiesPanel] Subscribing to currentStore:', currentStore);
     if (currentStore) {
       currentStore.onChange(() => {
         this.updateSelectedNode();
@@ -178,108 +195,6 @@ export class PropertiesPanel extends LitElement {
         <div class="panel-body">
           <!-- Component Properties Section -->
           ${this.renderComponentProperties()}
-
-          <!-- Dimensions Section -->
-          <div class="section">
-            <h4>📏 Dimensions</h4>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Width</label>
-                <input
-                  type="text"
-                  .value=${this.width}
-                  @input=${(e: Event) => this.width = (e.target as HTMLInputElement).value}
-                  @change=${() => this.updateDimensions()}
-                  placeholder="auto, 100px, 50%"
-                />
-              </div>
-              <div class="form-group">
-                <label>Height</label>
-                <input
-                  type="text"
-                  .value=${this.height}
-                  @input=${(e: Event) => this.height = (e.target as HTMLInputElement).value}
-                  @change=${() => this.updateDimensions()}
-                  placeholder="auto, 100px, 50%"
-                />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Min Width</label>
-                <input
-                  type="text"
-                  .value=${this.minWidth}
-                  @input=${(e: Event) => this.minWidth = (e.target as HTMLInputElement).value}
-                  @change=${() => this.updateDimensions()}
-                  placeholder="100px"
-                />
-              </div>
-              <div class="form-group">
-                <label>Min Height</label>
-                <input
-                  type="text"
-                  .value=${this.minHeight}
-                  @input=${(e: Event) => this.minHeight = (e.target as HTMLInputElement).value}
-                  @change=${() => this.updateDimensions()}
-                  placeholder="50px"
-                />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Max Width</label>
-                <input
-                  type="text"
-                  .value=${this.maxWidth}
-                  @input=${(e: Event) => this.maxWidth = (e.target as HTMLInputElement).value}
-                  @change=${() => this.updateDimensions()}
-                  placeholder="none, 500px"
-                />
-              </div>
-              <div class="form-group">
-                <label>Max Height</label>
-                <input
-                  type="text"
-                  .value=${this.maxHeight}
-                  @input=${(e: Event) => this.maxHeight = (e.target as HTMLInputElement).value}
-                  @change=${() => this.updateDimensions()}
-                  placeholder="none, 300px"
-                />
-              </div>
-            </div>
-
-            <!-- Quick Size Buttons -->
-            <div class="quick-sizes">
-              <h5>Quick Sizes</h5>
-              <div class="button-group">
-                <button @click=${() => this.handleQuickSize('100%', 'auto')}>Full Width</button>
-                <button @click=${() => this.handleQuickSize('50%', 'auto')}>Half Width</button>
-                <button @click=${() => this.handleQuickSize('auto', 'auto')}>Auto</button>
-              </div>
-              <div class="button-group">
-                <button @click=${() => this.handleQuickSize('200px', '200px')}>200x200</button>
-                <button @click=${() => this.handleQuickSize('300px', '200px')}>300x200</button>
-                <button @click=${() => this.handleQuickSize('400px', '300px')}>400x300</button>
-              </div>
-              <button class="clear-btn" @click=${() => this.handleClearDimensions()}>Clear All</button>
-            </div>
-          </div>
-
-          <!-- Info Section -->
-          <div class="section info">
-            <h5>💡 Tips</h5>
-            <ul>
-              <li>Use <code>px</code> for fixed sizes (e.g., 200px)</li>
-              <li>Use <code>%</code> for relative sizes (e.g., 50%)</li>
-              <li>Use <code>auto</code> for automatic sizing</li>
-              <li>Use <code>rem</code> or <code>em</code> for responsive sizing</li>
-              <li>Min/Max values constrain the size</li>
-            </ul>
-          </div>
         </div>
       </div>
     `;
