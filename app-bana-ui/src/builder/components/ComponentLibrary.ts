@@ -230,7 +230,6 @@ export class ComponentLibrary extends LitElement {
   }
 
   private handleDragStart(e: DragEvent, template: ComponentTemplate) {
-    console.log('DRAGSTART EVENT FIRED!', template.label);
 
 
     if (!e.dataTransfer) {
@@ -246,7 +245,6 @@ export class ComponentLibrary extends LitElement {
       template: template.template
     });
 
-    console.log('Setting drag data:', data);
 
     e.dataTransfer.setData('application/json', data);
     e.dataTransfer.setData('text/plain', data); // Fallback for some browsers
@@ -257,7 +255,6 @@ export class ComponentLibrary extends LitElement {
       template: template.template
     };
 
-    console.log('Global drag data set:', (window as any).__dragData);
 
     // Create drag image
     const dragImage = document.createElement('div');
@@ -275,7 +272,6 @@ export class ComponentLibrary extends LitElement {
   }
 
   private handleDragEnd() {
-    console.log('DRAGEND EVENT FIRED');
     // Clean up global drag data
     delete (window as any).__dragData;
   }

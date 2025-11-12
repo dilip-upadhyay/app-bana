@@ -23,27 +23,21 @@ export class TreeStore {
   static from(page: PageMeta, opts: TreeStoreOptions = {}) { return new TreeStore(page, opts); }
 
   private constructor(page: PageMeta, opts: TreeStoreOptions) {
-    console.log('[TreeStore] Constructor called with page:', page.id, 'nodes:', page.nodes.length, 'skipDraft:', opts.skipDraft);
     this.page = structuredClone(page);
     for (const n of this.page.nodes) this.nodes.set(n.id, structuredClone(n));
     this.persist = opts.persist ?? true;
     this.key = (opts.keyPrefix ?? 'studio.draft.') + this.page.id;
     this.historyLimit = opts.historyLimit ?? 100;
-    console.log('[TreeStore] Draft key:', this.key, 'persist:', this.persist);
 
     // Only load draft if not skipped and persist is enabled
     if (this.persist && !opts.skipDraft) {
-      console.log('[TreeStore] Loading draft from localStorage...');
       this.loadDraft();
-      console.log('[TreeStore] After loadDraft, nodes:', this.nodes.size, 'rootId:', this.page.rootId);
     } else if (opts.skipDraft) {
-      console.log('[TreeStore] Skipping draft load (new page)');
     }
   }
 
   onChange(fn: () => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   private notify() {
-    console.log('[TreeStore] Notifying', this.listeners.size, 'listeners');
     for (const fn of this.listeners) fn();
   }
 
@@ -51,7 +45,6 @@ export class TreeStore {
   getRoot(): ComponentNode { return this.require(this.page.rootId); }
   getSelection(): ComponentNode | null {
     const sel = this.selection ? this.nodes.get(this.selection)! : null;
-    console.log('[TreeStore] getSelection called, selection:', this.selection, sel);
     return sel;
   }
   getNode(id: string): ComponentNode | undefined { return this.nodes.get(id); }
@@ -60,13 +53,11 @@ export class TreeStore {
   select(id: string | null) {
     if (id && !this.nodes.has(id)) return;
     this.selection = id;
-    console.log('[TreeStore] select called, id:', id, 'selection:', this.selection);
     this.save();
     this.notify();
   }
 
   addNode(parentId: string, node: ComponentNode, index?: number) {
-    console.log('[TreeStore] addNode called:', { parentId, nodeId: node.id, nodeType: node.type, index });
 
     if (this.nodes.has(node.id)) {
       console.error('[TreeStore] Duplicate node id:', node.id);
@@ -74,7 +65,6 @@ export class TreeStore {
     }
 
     const parent = this.require(parentId);
-    console.log('[TreeStore] Parent node found:', { parentId, parentType: parent.type, parentChildren: parent.children });
 
     const op: Operation = {
       desc: `add:${node.id}`,

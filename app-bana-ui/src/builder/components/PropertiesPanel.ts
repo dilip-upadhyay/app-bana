@@ -4,8 +4,6 @@ import { currentStore } from '../store/TreeStore';
 import type { ComponentNode } from '../../models/metadata';
 // import styles from './PropertiesPanel.css?inline';
 
-console.log('[PropertiesPanel] Module loaded!');
-console.log('[PropertiesPanel] currentStore:', currentStore);
 
 // Property editor panel for selected components
 @customElement('studio-properties-panel')
@@ -34,17 +32,14 @@ export class PropertiesPanel extends LitElement {
 
   constructor() {
     super();
-    console.log('[PropertiesPanel] constructor called');
   }
 
   connectedCallback(): void {
     super.connectedCallback();
-    console.log('[PropertiesPanel] connectedCallback called');
     this.subscribeToLatestStore();
     // Periodically check for store changes
     this.storePollTimer = setInterval(() => {
       if (currentStore !== this.lastStoreInstance) {
-        console.log('[PropertiesPanel] Store instance changed, re-subscribing...');
         this.subscribeToLatestStore();
       }
     }, 200);
@@ -73,15 +68,13 @@ export class PropertiesPanel extends LitElement {
         this.updateSelectedNode();
       });
       this.updateSelectedNode();
-      console.log('[PropertiesPanel] Subscribed to new currentStore:', currentStore);
     }
   }
 
   private updateSelectedNode() {
     if (!currentStore) return;
-    const selection = currentStore.getSelection();
-    console.log('[PropertiesPanel] updateSelectedNode called, selection:', selection?.type, selection);
-    this.selectedNode = selection;
+  const selection = currentStore.getSelection();
+  this.selectedNode = selection;
 
     if (selection) {
       // Copy current props for editing
@@ -222,7 +215,6 @@ export class PropertiesPanel extends LitElement {
   }
 
   private renderComponentProperties() {
-    console.log('[PropertiesPanel] Selected node:', this.selectedNode?.type, this.selectedNode?.props);
     if (this.selectedNode?.type === 'table') {
       // Get entity list from appStore (not from page)
   type FieldMeta = { name: string; displayName?: string; type?: string; label?: string };

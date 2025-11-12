@@ -22,7 +22,6 @@ export class LivePreview extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    console.log('[LivePreview] connectedCallback - currentStore:', currentStore);
 
     // Set up the store listener and initial state
     this.updateFromStore();

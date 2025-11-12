@@ -33,11 +33,6 @@ export class AppStore {
 
     try {
       // Load apps list from backend
-      console.log('[AppStore] Loading apps from backend...');
-      const response = await apiClient.get<{apps: AppListItem[]}>('/apps');
-      console.log('[AppStore] Backend response:', response);
-      const appsList = response.apps || [];
-      console.log('[AppStore] Apps list:', appsList.length, 'apps');
       
       // Populate apps map with summary data
       this.apps.clear();
@@ -55,7 +50,6 @@ export class AppStore {
         this.apps.set(app.id, app);
       }
 
-      console.log('[AppStore] Loaded', this.apps.size, 'apps into cache');
       this.notify();
 
       // Load current app ID from localStorage
