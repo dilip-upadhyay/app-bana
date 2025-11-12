@@ -49,11 +49,21 @@ export class TreeStore {
 
   getPage(): PageMeta { return { ...this.page, nodes: Array.from(this.nodes.values()) }; }
   getRoot(): ComponentNode { return this.require(this.page.rootId); }
-  getSelection(): ComponentNode | null { return this.selection ? this.nodes.get(this.selection)! : null; }
+  getSelection(): ComponentNode | null {
+    const sel = this.selection ? this.nodes.get(this.selection)! : null;
+    console.log('[TreeStore] getSelection called, selection:', this.selection, sel);
+    return sel;
+  }
   getNode(id: string): ComponentNode | undefined { return this.nodes.get(id); }
   listChildren(id: string): ComponentNode[] { const n = this.require(id); return (n.children||[]).map(cid=>this.require(cid)); }
 
-  select(id: string | null) { if (id && !this.nodes.has(id)) return; this.selection = id; this.save(); this.notify(); }
+  select(id: string | null) {
+    if (id && !this.nodes.has(id)) return;
+    this.selection = id;
+    console.log('[TreeStore] select called, id:', id, 'selection:', this.selection);
+    this.save();
+    this.notify();
+  }
 
   addNode(parentId: string, node: ComponentNode, index?: number) {
     console.log('[TreeStore] addNode called:', { parentId, nodeId: node.id, nodeType: node.type, index });

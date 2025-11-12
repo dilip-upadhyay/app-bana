@@ -28,39 +28,59 @@ export class PropertiesPanel extends LitElement {
   @state() private maxHeight: string = '';
   @state() private editingProps: Record<string, any> = {};
 
+  private lastStoreInstance: any = null;
+  private storeUnsubscribe: (() => void) | null = null;
   private storePollTimer: any = null;
+
+  constructor() {
+    super();
+    console.log('[PropertiesPanel] constructor called');
+  }
 
   connectedCallback(): void {
     super.connectedCallback();
-    // Poll for currentStore until available
-    if (!currentStore) {
-      this.storePollTimer = setInterval(() => {
-        if (currentStore) {
-          clearInterval(this.storePollTimer);
-          this.storePollTimer = null;
-          this.subscribeToStore();
-        }
-      }, 100);
-    } else {
-      this.subscribeToStore();
+    console.log('[PropertiesPanel] connectedCallback called');
+    this.subscribeToLatestStore();
+    // Periodically check for store changes
+    this.storePollTimer = setInterval(() => {
+      if (currentStore !== this.lastStoreInstance) {
+        console.log('[PropertiesPanel] Store instance changed, re-subscribing...');
+        this.subscribeToLatestStore();
+      }
+    }, 200);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.storeUnsubscribe) {
+      this.storeUnsubscribe();
+      this.storeUnsubscribe = null;
+    }
+    if (this.storePollTimer) {
+      clearInterval(this.storePollTimer);
+      this.storePollTimer = null;
     }
   }
 
-  private subscribeToStore() {
-    console.log('[PropertiesPanel] Subscribing to currentStore:', currentStore);
+  private subscribeToLatestStore() {
+    if (this.storeUnsubscribe) {
+      this.storeUnsubscribe();
+      this.storeUnsubscribe = null;
+    }
     if (currentStore) {
-      currentStore.onChange(() => {
+      this.lastStoreInstance = currentStore;
+      this.storeUnsubscribe = currentStore.onChange(() => {
         this.updateSelectedNode();
       });
       this.updateSelectedNode();
+      console.log('[PropertiesPanel] Subscribed to new currentStore:', currentStore);
     }
   }
 
   private updateSelectedNode() {
     if (!currentStore) return;
-
     const selection = currentStore.getSelection();
-    console.log('[PropertiesPanel] updateSelectedNode called, selection:', selection);
+    console.log('[PropertiesPanel] updateSelectedNode called, selection:', selection?.type, selection);
     this.selectedNode = selection;
 
     if (selection) {
@@ -169,6 +189,7 @@ export class PropertiesPanel extends LitElement {
   }
 
   render() {
+    console.log('[PropertiesPanel] render called, selectedNode:', this.selectedNode?.type, this.selectedNode);
     if (!this.selectedNode) {
       return html`
         <div class="panel-container">
@@ -201,13 +222,15 @@ export class PropertiesPanel extends LitElement {
   }
 
   private renderComponentProperties() {
-    // Special case: Table entity mapping UI
+    console.log('[PropertiesPanel] Selected node:', this.selectedNode?.type, this.selectedNode?.props);
     if (this.selectedNode?.type === 'table') {
-      // Get entity list from appStore (or currentStore.page)
-      const entities = (window['appStore']?.currentApp?.entities || currentStore?.getPage()?.entities) || [];
-      const selectedEntity = entities.find(e => e.name === this.editingProps.entity);
-      const fields = selectedEntity ? selectedEntity.fields : [];
-      const selectedFields = this.editingProps.fields || [];
+      // Get entity list from appStore (not from page)
+  type FieldMeta = { name: string; displayName?: string; type?: string; label?: string };
+      type EntityMeta = { name: string; displayName?: string; fields?: FieldMeta[] };
+      const entities: EntityMeta[] = window['appStore']?.currentApp?.entities || [];
+      const selectedEntity: EntityMeta | undefined = entities.find((e: EntityMeta) => e.name === this.editingProps.entity);
+      const fields: FieldMeta[] = selectedEntity?.fields || [];
+      const selectedFields: FieldMeta[] = this.editingProps.fields || [];
       return html`
         <div class="section">
           <h4>🔗 Table Entity Mapping</h4>
@@ -215,21 +238,21 @@ export class PropertiesPanel extends LitElement {
             <label>Entity</label>
             <select @change=${(e: Event) => this.updateProperty('entity', (e.target as HTMLSelectElement).value)}>
               <option value="">-- Select Entity --</option>
-              ${entities.map(entity => html`<option value="${entity.name}" ?selected=${entity.name === this.editingProps.entity}>${entity.displayName || entity.name}</option>`)}
+              ${entities.map((entity: EntityMeta) => html`<option value="${entity.name}" ?selected=${entity.name === this.editingProps.entity}>${entity.displayName || entity.name}</option>`)}
             </select>
           </div>
           <div class="form-group">
             <label>Fields</label>
             <div style="max-height:160px;overflow:auto;border:1px solid #eee;padding:4px;">
-              ${fields.map(field => html`
+              ${fields.map((field: FieldMeta) => html`
                 <label style="display:block;font-size:13px;padding:2px 0;">
                   <input type="checkbox"
-                    .checked=${selectedFields.some((f: any) => f.name === field.name)}
+                    .checked=${selectedFields.some((f: FieldMeta) => f.name === field.name)}
                     @change=${(e: Event) => {
                       const checked = (e.target as HTMLInputElement).checked;
                       let newFields = Array.isArray(selectedFields) ? [...selectedFields] : [];
                       if (checked) newFields.push({ name: field.name, label: field.displayName || field.name });
-                      else newFields = newFields.filter((f: any) => f.name !== field.name);
+                      else newFields = newFields.filter((f: FieldMeta) => f.name !== field.name);
                       this.updateProperty('fields', newFields);
                     }}
                   /> ${field.displayName || field.name} (${field.type})

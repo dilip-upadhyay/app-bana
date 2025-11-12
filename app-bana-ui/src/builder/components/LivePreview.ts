@@ -339,7 +339,8 @@ export class LivePreview extends LitElement {
 
   private handleNodeClick(e: Event, nodeId: string) {
     e.stopPropagation();
-    console.log('[LivePreview] handleNodeClick called, nodeId:', nodeId);
+    const node = currentStore?.getNode(nodeId);
+    console.log('[LivePreview] handleNodeClick:', nodeId, node?.type, node);
     if (currentStore) {
       currentStore.select(nodeId);
       console.log('[LivePreview] After select, currentStore.getSelection():', currentStore.getSelection());
