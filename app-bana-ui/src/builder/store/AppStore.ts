@@ -27,13 +27,14 @@ export class AppStore {
   /**
    * Load all apps from backend
    */
-  private async loadApps() {
+  public async loadApps() {
     if (this.loading) return;
     this.loading = true;
 
     try {
       // Load apps list from backend
-      
+      const response = await apiClient.get<{apps: AppListItem[]}>('/apps');
+      const appsList = response.apps || [];
       // Populate apps map with summary data
       this.apps.clear();
       for (const appSummary of appsList) {

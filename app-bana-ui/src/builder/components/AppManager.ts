@@ -11,6 +11,8 @@ export class AppManager extends LitElement {
   @state() private currentApp: AppMeta | undefined;
   @state() private showCreateModal = false;
   @state() private showSelectModal = false;
+  @state() private isLoadingApps = false;
+  @state() private appsLoadError: string | null = null;
   @state() private apps: AppListItem[] = [];
 
   // Form state
@@ -37,7 +39,20 @@ export class AppManager extends LitElement {
   }
 
   private handleSelectApp() {
-    this.showSelectModal = true;
+    this.isLoadingApps = true;
+    this.appsLoadError = null;
+    appStore.loadApps()
+      .then(() => {
+        this.isLoadingApps = false;
+        this.showSelectModal = true;
+        this.updateState();
+      })
+      .catch((err) => {
+        this.isLoadingApps = false;
+        this.appsLoadError = 'Failed to load apps. Please try again.';
+        this.showSelectModal = true;
+        this.updateState();
+      });
   }
 
   private handleCloseModal() {
@@ -267,9 +282,19 @@ export class AppManager extends LitElement {
             <h3>Select App</h3>
             <button class="modal-close" @click=${this.handleCloseModal}>×</button>
           </div>
-
           <div class="modal-body">
-            ${this.apps.length === 0 ? html`
+            ${this.isLoadingApps ? html`
+              <div class="empty-state">
+                <div class="empty-state-icon">⏳</div>
+                <p><strong>Loading apps...</strong></p>
+              </div>
+            ` : this.appsLoadError ? html`
+              <div class="empty-state">
+                <div class="empty-state-icon">❌</div>
+                <p><strong>${this.appsLoadError}</strong></p>
+                <button class="btn" @click=${this.handleSelectApp}>Retry</button>
+              </div>
+            ` : this.apps.length === 0 ? html`
               <div class="empty-state">
                 <div class="empty-state-icon">📱</div>
                 <p><strong>No apps yet</strong></p>
@@ -306,7 +331,6 @@ export class AppManager extends LitElement {
               </div>
             `}
           </div>
-
           <div class="modal-footer">
             <button class="btn" @click=${this.handleCloseModal}>
               Close
