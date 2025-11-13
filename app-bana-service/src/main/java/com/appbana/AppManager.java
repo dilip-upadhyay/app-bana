@@ -130,9 +130,8 @@ public class AppManager {
         if (app == null) {
             return null;
         }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("app", app);
+        // Convert AppMetadata to Map
+        Map<String, Object> appMap = mapper.convertValue(app, Map.class);
 
         // Load all pages
         List<Map<String, Object>> pages = new ArrayList<>();
@@ -142,7 +141,6 @@ public class AppManager {
                     .filter(p -> p.toString().endsWith(".json"))
                     .forEach(pageFile -> {
                         try {
-                            @SuppressWarnings("unchecked")
                             Map<String, Object> page = mapper.readValue(pageFile.toFile(), Map.class);
                             pages.add(page);
                         } catch (IOException e) {
@@ -150,9 +148,8 @@ public class AppManager {
                         }
                     });
         }
-        result.put("pages", pages);
-
-        return result;
+        appMap.put("pages", pages);
+        return appMap;
     }
 
     /**

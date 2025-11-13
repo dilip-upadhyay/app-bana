@@ -2,8 +2,9 @@ import { LitElement, html, unsafeCSS } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { AppRuntimeState } from '../../models/runtime-state.js';
 import { PageMeta } from '../../models/metadata.js';
-import { renderPage } from '../renderer/Renderer.js';
+import { renderPageTemplate } from '../renderer/Renderer.js';
 import shellStyles from './AppRuntimeShell.css?inline';
+import { ensureCoreRegistered } from '../../core/registry.js';
 
 /**
  * AppRuntimeShell - Main container for app preview/production runtime
@@ -30,9 +31,9 @@ export class AppRuntimeShell extends LitElement {
   @state()
   private error: string | null = null;
 
-  connectedCallback() {
+  async connectedCallback() {
     super.connectedCallback();
-    
+    await ensureCoreRegistered();
     if (this.runtimeState) {
       this.initializeRuntime();
     }
@@ -76,27 +77,12 @@ export class AppRuntimeShell extends LitElement {
     url.searchParams.set('pageId', pageId);
     globalThis.history.pushState({}, '', url.toString());
 
-    // Re-render page content
-    this.renderPageContent();
+  // No imperative re-render; Lit will update reactively.
   }
 
-  private renderPageContent() {
-    if (!this.currentPage) return;
+  // Remove direct DOM manipulation. Page content is rendered via Lit's template.
 
-    const contentArea = this.shadowRoot?.querySelector('.runtime-content');
-    if (!contentArea) return;
-
-    // Clear existing content
-    contentArea.innerHTML = '';
-
-    try {
-      // Use the Renderer to render the page
-      renderPage(this.currentPage, contentArea as HTMLElement);
-    } catch (err) {
-      console.error('Error rendering page:', err);
-      this.error = `Failed to render page: ${err}`;
-    }
-  }
+  // Removed duplicate render() method. Only one render() should exist below.
 
   private handleBackToStudio() {
     // Navigate back to studio with current app
@@ -168,7 +154,7 @@ export class AppRuntimeShell extends LitElement {
               <p>${this.error}</p>
             </div>
           ` : ''}
-          <!-- Page content will be rendered here by renderPageContent() -->
+    ${this.currentPage ? renderPageTemplate(this.currentPage) : html`<div>Loading...</div>`}
         </main>
       </div>
     `;

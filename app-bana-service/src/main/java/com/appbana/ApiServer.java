@@ -599,26 +599,12 @@ public class ApiServer {
         router.get("/apps/{id}/full", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                Map<String, Object> appWithPages = AppManager.getAppWithPages(appId);
-                if (appWithPages == null) {
+                Map<String, Object> appObject = AppManager.getAppWithPages(appId);
+                if (appObject == null) {
                     res.json(404, Map.of("error", "App not found: " + appId));
                     return;
                 }
-                // If appWithPages contains only 'app', unwrap it
-                if (appWithPages.containsKey("app") && appWithPages.size() == 1) {
-                    res.json(200, appWithPages.get("app"));
-                } else {
-                    // If it contains pages, merge into a single object
-                    Object appObj = appWithPages.get("app");
-                    Object pagesObj = appWithPages.get("pages");
-                    if (appObj instanceof Map) {
-                        Map<String, Object> merged = new HashMap<>((Map) appObj);
-                        merged.put("pages", pagesObj);
-                        res.json(200, merged);
-                    } else {
-                        res.json(200, appWithPages);
-                    }
-                }
+                res.json(200, appObject);
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
             }
