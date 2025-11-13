@@ -269,6 +269,21 @@ export class PropertiesPanel extends LitElement {
             <label><input type="checkbox" .checked=${(this.editingProps.actions || []).includes('delete')} @change=${(e: Event) => this.toggleAction('delete', e)} /> Delete</label>
             <label><input type="checkbox" .checked=${(this.editingProps.actions || []).includes('view')} @change=${(e: Event) => this.toggleAction('view', e)} /> View</label>
           </div>
+          <div class="form-group">
+            <label>Theme</label>
+            <select @change=${(e: Event) => this.updateProperty('theme', (e.target as HTMLSelectElement).value)}>
+              ${['default','minimal','dark','striped','compact','soft','auto','custom'].map(t => html`<option value="${t}" ?selected=${(this.editingProps.theme||'default')===t}>${t}</option>`)}
+            </select>
+          </div>
+          ${ (this.editingProps.theme === 'custom') ? html`
+            <div class="form-group">
+              <label>Custom Theme Tokens (JSON)</label>
+              <textarea rows="8"
+                @input=${(e: Event) => this.handleCustomThemeInput(e)}
+                placeholder='{ "headerBg": "#1e293b", "rowHoverBg": "#f1f5f9" }'>${this.serializeThemeTokens()}</textarea>
+              <small style="display:block;font-size:11px;color:#64748b;margin-top:4px;">Keys: headerBg, headerColor, rowEvenBg, rowOddBg, rowHoverBg, cellColor, borderColor, paginationBg, containerBg</small>
+            </div>
+          `: ''}
         </div>
       `;
     }
@@ -404,6 +419,16 @@ export class PropertiesPanel extends LitElement {
     };
     
     return placeholders[propKey] || '';
+  }
+
+  private serializeThemeTokens(): string {
+    try { return JSON.stringify(this.editingProps.themeTokens || {}, null, 2); } catch { return '{}'; }
+  }
+  private handleCustomThemeInput(e: Event) {
+    const raw = (e.target as HTMLTextAreaElement).value;
+    let parsed: Record<string,string> = {};
+    try { parsed = JSON.parse(raw); } catch { /* ignore parse errors; keep previous tokens */ }
+    this.updateProperty('themeTokens', parsed);
   }
 }
 

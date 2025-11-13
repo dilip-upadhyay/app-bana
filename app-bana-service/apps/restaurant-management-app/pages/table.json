@@ -34,7 +34,8 @@
         "label" : "isAvailable"
       } ],
       "sort" : "name",
-      "actions" : [ "view", "edit", "delete" ]
+      "actions" : [ "view", "edit", "delete" ],
+      "theme" : "compact"
     },
     "children" : [ ]
   } ]
