@@ -275,6 +275,27 @@ export class PropertiesPanel extends LitElement {
             <label><input type="checkbox" .checked=${(this.editingProps.actions || []).includes('view')} @change=${(e: Event) => this.toggleAction('view', e)} /> View</label>
           </div>
           <div class="form-group">
+            <label>View Mode</label>
+            <select @change=${(e: Event) => this.updateProperty('viewMode', (e.target as HTMLSelectElement).value)}>
+              ${['dynamic','custom'].map(m => html`<option value="${m}" ?selected=${(this.editingProps.viewMode||'dynamic')===m}>${m}</option>`)}
+            </select>
+            <small style="display:block;font-size:11px;color:#64748b;margin-top:4px;">dynamic: auto-generate form from selected fields; custom: define explicit field list.</small>
+          </div>
+          ${(() => {
+            const mode = this.editingProps.viewMode || 'dynamic';
+            if (mode !== 'custom') return '';
+            const raw = this.editingProps.viewFormFieldsRaw || (this.editingProps.viewFormFields ? JSON.stringify(this.editingProps.viewFormFields, null, 2) : '[]');
+            return html`<div class="form-group">
+              <label>Custom View Form Fields (JSON Array)</label>
+              <textarea rows="6" @input=${(e: Event) => {
+                const val = (e.target as HTMLTextAreaElement).value;
+                this.updateProperty('viewFormFieldsRaw', val);
+                try { const parsed = JSON.parse(val); if (Array.isArray(parsed)) this.updateProperty('viewFormFields', parsed); } catch {}
+              }} placeholder='[ { "name": "price", "label": "Price" }, { "name": "description", "label": "Description", "type": "textarea" } ]'>${raw}</textarea>
+              <small style="display:block;font-size:11px;color:#64748b;margin-top:4px;">Each item: { name, label?, type? }. Types supported: text, textarea, number (read-only for now).</small>
+            </div>`;
+          })()}
+          <div class="form-group">
             <label>Bulk Actions</label>
             <label><input type="checkbox" .checked=${(this.editingProps.bulkActions || []).includes('delete')} @change=${(e: Event) => this.toggleBulkAction('delete', e)} /> Delete</label>
             <label><input type="checkbox" .checked=${(this.editingProps.bulkActions || []).includes('export')} @change=${(e: Event) => this.toggleBulkAction('export', e)} /> Export</label>

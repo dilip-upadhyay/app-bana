@@ -23,6 +23,8 @@ export class StudioTableLive extends LitElement {
   @state() private pendingDeleteIds: string[] = [];
   @state() private toastOpen: boolean = false;
   @state() private toastMessage: string = '';
+  @state() private viewOpen: boolean = false;
+  @state() private viewRow: any = null;
 
   public static readonly styles = css`
     .table-container {
@@ -305,6 +307,28 @@ export class StudioTableLive extends LitElement {
       font-size: 0.8rem;
     }
     .snackbar button:hover { background: #0f172a; }
+    /* View Form Modal */
+    .view-modal-card {
+      background:#ffffff;
+      color:#0f172a;
+      border-radius:14px;
+      border:1px solid #e2e8f0;
+      box-shadow:0 24px 70px rgba(0,0,0,0.25);
+      width:min(640px,95vw);
+      padding:1.2rem 1.25rem 1.4rem;
+      display:flex;
+      flex-direction:column;
+      gap:1rem;
+      transform:translateY(10px);opacity:0;animation:slideUp 180ms ease-out forwards;
+      max-height:80vh;overflow:auto;
+    }
+    .view-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:0.75rem 1rem; }
+    .view-field { display:flex; flex-direction:column; gap:4px; background:#f8fafc; border:1px solid #e2e8f0; padding:8px 10px; border-radius:8px; }
+    .view-field label { font-size:0.7rem; font-weight:600; letter-spacing:0.03em; color:#475569; text-transform:uppercase; }
+    .view-value { font-size:0.85rem; color:#1e293b; word-break:break-word; white-space:pre-wrap; }
+    .view-modal-header { display:flex; justify-content:space-between; align-items:center; }
+    .close-btn { background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:0.75rem; }
+    .close-btn:hover { background:#f1f5f9; }
   `;
 
   // Use lifecycle without returning a Promise type per lint rule; wrap async logic
@@ -471,7 +495,7 @@ export class StudioTableLive extends LitElement {
         ${multiSelect ? html`<td><input type="checkbox" aria-label="Select row" .checked=${checked} @change=${(e: Event) => this.onRowSelectChange(id, e)}></td>` : ''}
         ${fields.map((f: any) => html`<td>${row[f.name] ?? ''}</td>`)}
         ${actions.length > 0 ? html`<td class="table-actions">
-          ${actions.map((action: string) => html`<button aria-label="${action} row" @click=${() => alert(action + ' not implemented yet.')}>${action.charAt(0).toUpperCase() + action.slice(1)}</button>`)}
+          ${actions.map((action: string) => html`<button aria-label="${action} row" @click=${() => this.handleRowAction(action, row)}>${action.charAt(0).toUpperCase() + action.slice(1)}</button>`)}
         </td>` : ''}
       </tr>`;
     });
@@ -600,6 +624,19 @@ export class StudioTableLive extends LitElement {
           <button @click=${() => { this.toastOpen = false; this.toastMessage = ''; }}>Dismiss</button>
         </div>
       ` : ''}
+      ${this.viewOpen ? html`
+        <div class="modal-overlay" role="presentation" @click=${() => this.closeViewForm()}>
+          <div class="view-modal-card" role="dialog" aria-modal="true" aria-labelledby="viewFormTitle" tabindex="0" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="view-modal-header">
+              <h3 id="viewFormTitle" style="margin:0;font-size:1rem;">Row Details</h3>
+              <button class="close-btn" @click=${() => this.closeViewForm()} aria-label="Close view form">Close</button>
+            </div>
+            <div class="view-form-grid">
+              ${this.renderViewFields()}
+            </div>
+          </div>
+        </div>
+      `: ''}
     </div>`;
   }
 
@@ -629,6 +666,27 @@ export class StudioTableLive extends LitElement {
   private readonly onClearSelection = () => {
     this.selectedIds = new Set<string>();
   };
+
+  private readonly handleRowAction = (action: string, row: any) => {
+    if (action === 'view') {
+      this.openViewForm(row);
+      return;
+    }
+    // Placeholder for other actions (edit/delete) - can be implemented later
+    alert(action + ' not implemented yet.');
+  };
+
+  private openViewForm(row: any) {
+    this.viewRow = row;
+    this.viewOpen = true;
+    // Dispatch event for external listeners
+    this.dispatchEvent(new CustomEvent('row-view', { detail: { row }, bubbles: true, composed: true }));
+  }
+
+  private closeViewForm() {
+    this.viewOpen = false;
+    this.viewRow = null;
+  }
 
   private readonly onBulkAction = async (action: string) => {
     const ids = Array.from(this.selectedIds);
@@ -711,5 +769,23 @@ export class StudioTableLive extends LitElement {
       lines.push(headers.map(h => esc(row[h])).join(','));
     }
     return lines.join('\n');
+  }
+
+  private renderViewFields() {
+    if (!this.viewRow) return html``;
+    const mode = (this.node?.props?.viewMode || 'dynamic');
+    let fieldDefs: any[] = [];
+    if (mode === 'custom' && Array.isArray(this.node?.props?.viewFormFields) && this.node.props.viewFormFields.length > 0) {
+      fieldDefs = this.node.props.viewFormFields;
+    } else {
+      // dynamic: use selected table fields
+      fieldDefs = Array.isArray(this.node?.props?.fields) ? this.node.props.fields.map((f: any) => ({ name: f.name, label: f.label || f.name })) : [];
+    }
+    if (!fieldDefs.length) return html`<div style="font-size:0.85rem;color:#64748b;">No fields defined for view.</div>`;
+    return fieldDefs.map(fd => {
+      const label = fd.label || fd.name;
+      const value = this.viewRow[fd.name];
+      return html`<div class="view-field"><label>${label}</label><div class="view-value">${value == null ? '' : String(value)}</div></div>`;
+    });
   }
 }
