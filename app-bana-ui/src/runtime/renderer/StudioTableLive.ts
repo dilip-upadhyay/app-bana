@@ -15,6 +15,8 @@ export class StudioTableLive extends LitElement {
   @state() private total: number = 0;
   @state() private filters: Record<string,string> = {};
   @state() private effectiveTheme: string = 'default';
+  @state() private runtimeThemeOverride: string | null = null;
+  @state() private runtimeThemeTokens: Record<string,string> | null = null;
 
   public static readonly styles = css`
     .table-container {
@@ -242,9 +244,29 @@ export class StudioTableLive extends LitElement {
       this.error = 'No entity or columns selected.';
       return;
     }
-    // Resolve effective theme (supports 'auto' selection)
-    const rawTheme = (this.node.props.theme || 'default').toLowerCase();
-    if (rawTheme === 'auto') {
+    this.loadRuntimeThemeOverrides();
+    const rawTheme = (this.runtimeThemeOverride ?? this.node.props.theme ?? 'default').toLowerCase();
+    this.applyTheme(rawTheme);
+    this.pageSize = this.node.props.pageSize || 25;
+    await this.loadPage(1);
+  }
+
+  private loadRuntimeThemeOverrides() {
+    const key = `table-theme-${this.node?.id}`;
+    try {
+      const saved = globalThis.localStorage?.getItem(key);
+      if (saved) {
+        const obj = JSON.parse(saved);
+        if (obj?.theme) this.runtimeThemeOverride = String(obj.theme);
+        if (obj?.tokens && typeof obj.tokens === 'object') this.runtimeThemeTokens = obj.tokens as Record<string,string>;
+      }
+    } catch (e) {
+      console.error('Failed to load theme overrides', e);
+    }
+  }
+
+  private applyTheme(theme: string) {
+    if (theme === 'auto') {
       const mm = globalThis.matchMedia ? globalThis.matchMedia('(prefers-color-scheme: dark)') : null;
       this.effectiveTheme = mm?.matches ? 'dark' : 'default';
       if (mm) {
@@ -255,10 +277,8 @@ export class StudioTableLive extends LitElement {
         mm.addEventListener('change', listener);
       }
     } else {
-      this.effectiveTheme = rawTheme;
+      this.effectiveTheme = theme;
     }
-    this.pageSize = this.node.props.pageSize || 25;
-    await this.loadPage(1);
   }
 
   private async loadPage(page: number) {
@@ -320,6 +340,14 @@ export class StudioTableLive extends LitElement {
           ${[10,25,50,100].map(size => html`<option value=${size} ?selected=${size===this.pageSize}>${size}</option>`)}
         </select>
       </label>
+      <label style="font-size:0.75rem;color:#475569;display:flex;align-items:center;gap:4px;">Theme:
+        <select @change=${this.onThemeChange} aria-label="Select theme">
+          ${['default','minimal','dark','striped','compact','soft','auto','custom'].map(t => html`<option value=${t} ?selected=${(this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase()===t}>${t}</option>`)}
+        </select>
+      </label>
+      ${((this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase()==='custom') ? html`
+        <button @click=${this.promptCustomTokens} aria-label="Edit custom theme" style="padding:4px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;color:#1e293b;">Edit Tokens</button>
+      `: ''}
     </div>`;
   }
 
@@ -349,8 +377,8 @@ export class StudioTableLive extends LitElement {
   }
 
   private computeCustomStyle(rawTheme: string): string {
-    if (rawTheme !== 'custom' || !this.node?.props?.themeTokens || typeof this.node.props.themeTokens !== 'object') return '';
-    const map: Record<string,string> = this.node.props.themeTokens;
+    if (rawTheme !== 'custom') return '';
+    const map: Record<string,string> = this.runtimeThemeTokens ?? (this.node?.props?.themeTokens as Record<string,string>) ?? {};
     const tokenToVar: Record<string,string> = {
       headerBg: '--tbl-header-bg',
       headerColor: '--tbl-header-color',
@@ -366,6 +394,51 @@ export class StudioTableLive extends LitElement {
     for (const [k,v] of Object.entries(map)) if (v && tokenToVar[k]) parts.push(`${tokenToVar[k]}:${v}`);
     return parts.join(';');
   }
+
+  private readonly onThemeChange = (e: Event) => {
+    const theme = String((e.target as HTMLSelectElement).value).toLowerCase();
+    this.runtimeThemeOverride = theme;
+    // Persist selection
+    try {
+      const key = `table-theme-${this.node?.id}`;
+      const payload = { theme, tokens: this.runtimeThemeTokens };
+      globalThis.localStorage?.setItem(key, JSON.stringify(payload));
+    } catch {}
+    // Resolve effective theme for 'auto' or explicit
+    this.applyTheme(theme);
+    this.requestUpdate();
+  };
+
+  private readonly promptCustomTokens = () => {
+    const existing = JSON.stringify(this.runtimeThemeTokens ?? this.node?.props?.themeTokens ?? {
+      headerBg: 'linear-gradient(90deg,#1e293b,#2563eb)',
+      headerColor: '#ffffff',
+      rowEvenBg: '#f8fafc',
+      rowOddBg: '#ffffff',
+      rowHoverBg: '#f1f5f9',
+      cellColor: '#334155',
+      borderColor: '#e2e8f0',
+      paginationBg: 'rgba(255,255,255,0.75)',
+      containerBg: 'linear-gradient(135deg,#e2e8f0,#f8fafc)'
+    }, null, 2);
+    const input = globalThis.prompt?.('Paste JSON theme tokens (keys: headerBg, headerColor, rowEvenBg, rowOddBg, rowHoverBg, cellColor, borderColor, paginationBg, containerBg):', existing);
+    if (input == null) return;
+    try {
+      const obj = JSON.parse(input);
+      if (obj && typeof obj === 'object') {
+        this.runtimeThemeTokens = obj as Record<string,string>;
+        // Persist
+        const key = `table-theme-${this.node?.id}`;
+        const payload = { theme: 'custom', tokens: this.runtimeThemeTokens };
+        globalThis.localStorage?.setItem(key, JSON.stringify(payload));
+        this.requestUpdate();
+      }
+    } catch (err) {
+      console.error('Invalid custom tokens JSON', err);
+      this.error = 'Invalid custom tokens JSON.';
+      setTimeout(() => { this.error = ''; this.requestUpdate(); }, 3000);
+    }
+  };
 
   render() {
     if (this.loading) return html`<div>Loading table data...</div>`;
