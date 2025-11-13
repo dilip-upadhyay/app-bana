@@ -214,7 +214,7 @@ export class StudioTableLive extends LitElement {
       const entity = this.node.props.entity;
       const fields = Array.isArray(this.node.props.fields) ? this.node.props.fields.map((f: any) => f.name) : [];
       const sort = this.node.props.sort || '';
-      const result = await fetchTableData(entity, fields, { pageSize: this.pageSize, sort, page });
+      const result = await fetchTableData(entity, fields, { pageSize: this.pageSize, sort, page, filters: this.filters });
       this.data = result;
       this.total = typeof result.total === 'number' ? result.total : (result.rows?.length || 0);
       this.page = page;
@@ -243,6 +243,8 @@ export class StudioTableLive extends LitElement {
   private onFilterInput(fieldName: string, e: Event) {
     const value = (e.target as HTMLInputElement).value;
     this.filters = { ...this.filters, [fieldName]: value };
+    // Reset to first page and re-fetch server-side filtered data
+    this.loadPage(1);
   }
 
   render() {
@@ -256,18 +258,7 @@ export class StudioTableLive extends LitElement {
           Object.fromEntries(fields.map((f: any) => [f.name, 'Sample 2'])),
           Object.fromEntries(fields.map((f: any) => [f.name, 'Sample 3']))
         ];
-
-    // Client-side filtering; for large datasets/back-end filtering extend API later
     const activeFilters = Object.entries(this.filters).filter(([_,v]) => v && v.trim() !== '');
-    const filteredRows = activeFilters.length > 0
-      ? rows.filter((row: any) => {
-          return activeFilters.every(([key, val]) => {
-            const cell = row[key];
-            if (cell === null || cell === undefined) return false;
-            return String(cell).toLowerCase().includes(val.toLowerCase());
-          });
-        })
-      : rows;
     const totalPages = Math.max(1, Math.ceil(this.total / this.pageSize));
     const startIdx = (this.page - 1) * this.pageSize + 1;
     const endIdx = Math.min(this.total, this.page * this.pageSize);
@@ -304,7 +295,7 @@ export class StudioTableLive extends LitElement {
             </tr>
           </thead>
           <tbody>
-            ${filteredRows.map((row: any) => html`
+            ${rows.map((row: any) => html`
               <tr>
                 ${fields.map((field: any) => html`<td>${row[field.name] ?? ''}</td>`)}
                 ${actions.length > 0 ? html`<td class="table-actions">
@@ -315,7 +306,7 @@ export class StudioTableLive extends LitElement {
           </tbody>
         </table>
         </div>
-        ${activeFilters.length > 0 ? html`<div style="margin-top:0.5rem;font-size:0.7rem;color:#475569;">Filtered ${filteredRows.length} of ${rows.length} rows (page scope)</div>`: ''}
+  ${activeFilters.length > 0 ? html`<div style="margin-top:0.5rem;font-size:0.7rem;color:#475569;">Applied ${activeFilters.length} filter(s) server-side. Showing page rows ${startIdx}-${endIdx} of ${this.total}.</div>`: ''}
       </div>
     `;
   }

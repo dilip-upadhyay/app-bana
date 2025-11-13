@@ -322,6 +322,7 @@ export interface TableFetchOptions {
   sort?: string;
   page?: number; // 1-based page number
   offset?: number; // explicit override if provided (takes precedence over page)
+  filters?: Record<string,string>; // per-column filters (exact match server-side)
 }
 
 /**
@@ -339,6 +340,16 @@ export async function fetchTableData(entity: string, fields: string[], options: 
     offset,
     sort: options.sort || ''
   };
+  if (options.filters) {
+    const filterPairs: string[] = [];
+    for (const [k,v] of Object.entries(options.filters)) {
+      if (v && v.trim() !== '') {
+        // backend expects raw value; encode to be safe
+        filterPairs.push(`${encodeURIComponent(k)}:${encodeURIComponent(v.trim())}`);
+      }
+    }
+    if (filterPairs.length > 0) params.filter = filterPairs.join(',');
+  }
   const base = (globalThis.location && globalThis.location.port === '5173') ? 'http://localhost:8080' : '';
   return apiClient.get(`${base}/api/${entity}`, params);
 }
