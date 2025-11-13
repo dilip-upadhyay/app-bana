@@ -3,7 +3,7 @@
  * Provides a centralized HTTP client with interceptor support
  */
 
-import { InterceptorManager, Interceptor, ApiError } from './api-interceptor';
+import { InterceptorManager, ApiError } from './api-interceptor';
 
 export interface ApiClientConfig {
   baseUrl?: string;
@@ -39,9 +39,9 @@ export interface RequestOptions {
 export class ApiClient {
   private baseUrl: string;
   private defaultHeaders: Record<string, string>;
-  private timeout: number;
-  private interceptors: InterceptorManager;
-  private abortControllers: Map<string, AbortController>;
+  private readonly timeout: number;
+  private readonly interceptors: InterceptorManager;
+  private readonly abortControllers: Map<string, AbortController>;
 
   constructor(config: ApiClientConfig = {}) {
     this.baseUrl = config.baseUrl || '';
@@ -90,11 +90,11 @@ export class ApiClient {
     if (!params) return url;
 
     const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
+    for (const [key, value] of Object.entries(params)) {
       if (value !== null && value !== undefined && value !== '') {
         searchParams.set(key, String(value));
       }
-    });
+    }
 
     const queryString = searchParams.toString();
     return queryString ? `${url}?${queryString}` : url;
@@ -125,6 +125,23 @@ export class ApiClient {
     }
 
     return error;
+  }
+
+  private async applyErrorResponse(response: Response, skipInterceptors?: boolean): Promise<never> {
+    const error = await this.createApiError(response);
+    if (!skipInterceptors) {
+      await this.interceptors.applyErrorInterceptors(error);
+    }
+    throw error;
+  }
+
+  private async parseResponse(response: Response): Promise<any> {
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('application/json')) {
+      return response.json();
+    }
+    const text = await response.text();
+    try { return JSON.parse(text); } catch { return text; }
   }
 
   /**
@@ -160,64 +177,23 @@ export class ApiClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
-      // Make the request
-      const response = await fetch(requestConfig.url!, {
-        ...requestConfig,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      // Handle error responses
-      if (!response.ok) {
-        const error = await this.createApiError(response);
-        if (!skipInterceptors) {
-          await this.interceptors.applyErrorInterceptors(error);
-        }
-        throw error;
-      }
-
-      // Parse response
-      const contentType = response.headers.get('content-type');
-      let data: any;
-
-      if (contentType?.includes('application/json')) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = text;
-        }
-      }
-
-      // Apply response interceptors
-      if (!skipInterceptors) {
-        data = await this.interceptors.applyResponseInterceptors(response, data);
-      }
-
+      const response = await fetch(requestConfig.url!, { ...requestConfig, signal: controller.signal });
+      if (!response.ok) await this.applyErrorResponse(response, skipInterceptors);
+      let data = await this.parseResponse(response);
+      if (!skipInterceptors) data = await this.interceptors.applyResponseInterceptors(response, data);
       return data as T;
-
     } catch (error: any) {
-      clearTimeout(timeoutId);
-
       // Handle abort/timeout
       if (error.name === 'AbortError') {
         const timeoutError = new Error('Request timeout') as ApiError;
-        if (!skipInterceptors) {
-          await this.interceptors.applyErrorInterceptors(timeoutError);
-        }
+        if (!skipInterceptors) await this.interceptors.applyErrorInterceptors(timeoutError);
         throw timeoutError;
       }
-
-      // Handle other errors
       const apiError = error as ApiError;
-      if (!skipInterceptors && !apiError.status) {
-        await this.interceptors.applyErrorInterceptors(apiError);
-      }
-
+      if (!skipInterceptors && !apiError.status) await this.interceptors.applyErrorInterceptors(apiError);
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -303,7 +279,9 @@ export class ApiClient {
    * Cancel all pending requests
    */
   cancelAll(): void {
-    this.abortControllers.forEach(controller => controller.abort());
+    for (const controller of this.abortControllers.values()) {
+      controller.abort();
+    }
     this.abortControllers.clear();
   }
 }
@@ -331,11 +309,16 @@ export interface TableFetchOptions {
  */
 export async function fetchTableData(entity: string, fields: string[], options: TableFetchOptions = {}) {
   const limit = options.pageSize || 25;
-  const offset = (typeof options.offset === 'number')
-    ? options.offset
-    : ((options.page && options.page > 0) ? (options.page - 1) * limit : 0);
+  let offset = 0;
+  if (typeof options.offset === 'number') {
+    offset = options.offset;
+  } else if (options.page && options.page > 0) {
+    offset = (options.page - 1) * limit;
+  }
+  // Always include 'id' field for stable selection/keying even if not displayed
+  const requestFields = Array.from(new Set(['id', ...fields]));
   const params: Record<string, any> = {
-    fields: fields.join(','),
+    fields: requestFields.join(','),
     limit,
     offset,
     sort: options.sort || ''
@@ -350,6 +333,6 @@ export async function fetchTableData(entity: string, fields: string[], options: 
     }
     if (filterPairs.length > 0) params.filter = filterPairs.join(',');
   }
-  const base = (globalThis.location && globalThis.location.port === '5173') ? 'http://localhost:8080' : '';
+  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
   return apiClient.get(`${base}/api/${entity}`, params);
 }
