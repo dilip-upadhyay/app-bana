@@ -17,6 +17,7 @@ export class StudioTableLive extends LitElement {
   @state() private effectiveTheme: string = 'default';
   @state() private runtimeThemeOverride: string | null = null;
   @state() private runtimeThemeTokens: Record<string,string> | null = null;
+  @state() private selectedIds: Set<string> = new Set<string>();
 
   public static readonly styles = css`
     .table-container {
@@ -296,6 +297,8 @@ export class StudioTableLive extends LitElement {
       this.data = result;
       this.total = typeof result.total === 'number' ? result.total : (result.rows?.length || 0);
       this.page = page;
+      // Clear selection on page/fetch change
+      this.selectedIds = new Set<string>();
     } catch (err: any) {
       this.error = err?.message || 'Failed to fetch table data.';
     } finally {
@@ -351,15 +354,18 @@ export class StudioTableLive extends LitElement {
     </div>`;
   }
 
-  private buildHeader(fields: any[], actions: string[]) {
+  private buildHeader(fields: any[], actions: string[], multiSelect: boolean, rowsOnPage: any[]) {
+    const allChecked = multiSelect && rowsOnPage.length > 0 && rowsOnPage.every(r => this.selectedIds.has(String(this.getRowId(r))));
     return html`<tr>
+      ${multiSelect ? html`<th><input type="checkbox" aria-label="Select all on page" .checked=${allChecked} @change=${this.onSelectAllChange}></th>` : ''}
       ${fields.map((f: any) => html`<th>${f.label || f.name}</th>`)}
       ${actions.length > 0 ? html`<th>Actions</th>` : ''}
     </tr>`;
   }
 
-  private buildFilterRow(fields: any[], actions: string[]) {
+  private buildFilterRow(fields: any[], actions: string[], multiSelect: boolean) {
     return html`<tr class="filter-row">
+      ${multiSelect ? html`<th></th>` : ''}
       ${fields.map((f: any) => html`<th>
         <input type="text" aria-label="Filter ${f.label || f.name}" placeholder="Filter..." @input=${(e: Event) => this.onFilterInput(f.name, e)} .value=${this.filters[f.name] || ''}>
       </th>`)}
@@ -367,13 +373,18 @@ export class StudioTableLive extends LitElement {
     </tr>`;
   }
 
-  private buildBody(rows: any[], fields: any[], actions: string[]) {
-    return rows.map((row: any) => html`<tr>
-      ${fields.map((f: any) => html`<td>${row[f.name] ?? ''}</td>`)}
-      ${actions.length > 0 ? html`<td class="table-actions">
-        ${actions.map((action: string) => html`<button aria-label="${action} row" @click=${() => alert(action + ' not implemented yet.')}>${action.charAt(0).toUpperCase() + action.slice(1)}</button>`)}
-      </td>` : ''}
-    </tr>`);
+  private buildBody(rows: any[], fields: any[], actions: string[], multiSelect: boolean) {
+    return rows.map((row: any) => {
+      const id = String(this.getRowId(row));
+      const checked = this.selectedIds.has(id);
+      return html`<tr>
+        ${multiSelect ? html`<td><input type="checkbox" aria-label="Select row" .checked=${checked} @change=${(e: Event) => this.onRowSelectChange(id, e)}></td>` : ''}
+        ${fields.map((f: any) => html`<td>${row[f.name] ?? ''}</td>`)}
+        ${actions.length > 0 ? html`<td class="table-actions">
+          ${actions.map((action: string) => html`<button aria-label="${action} row" @click=${() => alert(action + ' not implemented yet.')}>${action.charAt(0).toUpperCase() + action.slice(1)}</button>`)}
+        </td>` : ''}
+      </tr>`;
+    });
   }
 
   private computeCustomStyle(rawTheme: string): string {
@@ -443,7 +454,8 @@ export class StudioTableLive extends LitElement {
   render() {
     if (this.loading) return html`<div>Loading table data...</div>`;
     const fields = Array.isArray(this.node?.props?.fields) ? this.node.props.fields : [];
-    const actions: string[] = this.node?.props?.actions || [];
+  const actions: string[] = this.node?.props?.actions || [];
+  const multiSelect: boolean = Boolean(this.node?.props?.multiSelect);
     const rows = (this.data?.rows && this.data.rows.length > 0)
       ? this.data.rows
       : [1,2,3].map(i => Object.fromEntries(fields.map((f: any) => [f.name, `Sample ${i}`])));
@@ -454,21 +466,64 @@ export class StudioTableLive extends LitElement {
     const rawTheme = (this.node?.props?.theme || 'default').toLowerCase();
     const themeClass = ['table-container', `table-theme-${this.effectiveTheme}`].join(' ');
     const customStyle = this.computeCustomStyle(rawTheme);
+    const bulkActions: string[] = Array.isArray(this.node?.props?.bulkActions) ? this.node.props.bulkActions : ['delete','export'];
+    const selectedCount = this.selectedIds.size;
     return html`<div class="${themeClass}" style="${customStyle}">
       ${this.error ? html`<div class="table-error" style="background:#fef2f2;color:#b91c1c;border:1px solid #fee2e2;">Showing sample data (${this.error})</div>` : ''}
       ${this.buildPagination(startIdx, endIdx, totalPages)}
+      ${multiSelect && selectedCount > 0 ? html`
+        <div class="bulk-bar" role="region" aria-label="Bulk actions">
+          <div style="font-size:0.8rem;color:#475569;">Selected ${selectedCount} row(s)</div>
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            ${bulkActions.map(a => html`<button @click=${() => this.onBulkAction(a)} aria-label="${a} selected">${a.charAt(0).toUpperCase() + a.slice(1)}</button>`)}
+            <button @click=${this.onClearSelection} aria-label="Clear selection">Clear</button>
+          </div>
+        </div>
+      ` : ''}
       <div class="table-wrapper" role="region" aria-label="Data table scroll region">
         <table class="table-live">
           <thead>
-            ${this.buildHeader(fields, actions)}
-            ${this.buildFilterRow(fields, actions)}
+            ${this.buildHeader(fields, actions, multiSelect, rows)}
+            ${this.buildFilterRow(fields, actions, multiSelect)}
           </thead>
           <tbody>
-            ${this.buildBody(rows, fields, actions)}
+            ${this.buildBody(rows, fields, actions, multiSelect)}
           </tbody>
         </table>
       </div>
       ${activeFilters.length > 0 ? html`<div style="margin-top:0.5rem;font-size:0.7rem;color:#475569;">Applied ${activeFilters.length} filter(s). Showing rows ${startIdx}-${endIdx} of ${this.total}.</div>`: ''}
     </div>`;
   }
+
+  private getRowId(row: any): string | number {
+    const key = (this.node?.props?.idField || 'id');
+    return row[key];
+  }
+
+  private readonly onRowSelectChange = (id: string, e: Event) => {
+    const checked = (e.target as HTMLInputElement).checked;
+    const next = new Set(this.selectedIds);
+    if (checked) next.add(id); else next.delete(id);
+    this.selectedIds = next;
+  };
+
+  private readonly onSelectAllChange = (e: Event) => {
+    const checked = (e.target as HTMLInputElement).checked;
+    const rows = (this.data?.rows && this.data.rows.length > 0) ? this.data.rows : [];
+    const next = new Set(this.selectedIds);
+    for (const row of rows as any[]) {
+      const id = String(this.getRowId(row));
+      if (checked) next.add(id); else next.delete(id);
+    }
+    this.selectedIds = next;
+  };
+
+  private readonly onClearSelection = () => {
+    this.selectedIds = new Set<string>();
+  };
+
+  private readonly onBulkAction = (action: string) => {
+    const detail = { action, selectedIds: Array.from(this.selectedIds), entity: this.node?.props?.entity };
+    this.dispatchEvent(new CustomEvent('bulk-action', { detail, bubbles: true, composed: true }));
+  };
 }

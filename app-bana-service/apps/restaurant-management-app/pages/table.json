@@ -35,7 +35,9 @@
       } ],
       "sort" : "name",
       "actions" : [ "view", "edit", "delete" ],
-      "theme" : "compact"
+      "theme" : "compact",
+      "bulkActions" : [ "delete", "export" ],
+      "multiSelect" : true
     },
     "children" : [ ]
   } ]

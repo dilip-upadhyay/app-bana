@@ -3,7 +3,6 @@ import { customElement, state } from 'lit/decorators.js';
 import { currentStore } from '../store/TreeStore';
 import { appStore } from '../store/AppStore';
 import type { ComponentNode } from '../../models/metadata';
-// import styles from './PropertiesPanel.css?inline';
 
 
 // Property editor panel for selected components
@@ -78,8 +77,8 @@ export class PropertiesPanel extends LitElement {
   this.selectedNode = selection;
 
     if (selection) {
-      // Copy current props for editing
-      this.editingProps = { ...(selection.props || {}) };
+  // Copy current props for editing
+  this.editingProps = selection.props ? { ...selection.props } : {};
       
       // Parse current dimensions from style
       const style = selection.props?.style || '';
@@ -97,7 +96,7 @@ export class PropertiesPanel extends LitElement {
 
   private extractStyleValue(style: string, property: string): string {
     const regex = new RegExp(`${property}:\\s*([^;]+)`, 'i');
-    const match = style.match(regex);
+    const match = regex.exec(style);
     return match ? match[1].trim() : '';
   }
 
@@ -108,12 +107,12 @@ export class PropertiesPanel extends LitElement {
     let newStyle = currentStyle;
 
     // Remove old dimension properties
-    newStyle = newStyle.replace(/width:\s*[^;]+;?/gi, '');
-    newStyle = newStyle.replace(/height:\s*[^;]+;?/gi, '');
-    newStyle = newStyle.replace(/min-width:\s*[^;]+;?/gi, '');
-    newStyle = newStyle.replace(/min-height:\s*[^;]+;?/gi, '');
-    newStyle = newStyle.replace(/max-width:\s*[^;]+;?/gi, '');
-    newStyle = newStyle.replace(/max-height:\s*[^;]+;?/gi, '');
+  newStyle = newStyle.replaceAll(/width:\s*[^;]+;?/gi, '');
+  newStyle = newStyle.replaceAll(/height:\s*[^;]+;?/gi, '');
+  newStyle = newStyle.replaceAll(/min-width:\s*[^;]+;?/gi, '');
+  newStyle = newStyle.replaceAll(/min-height:\s*[^;]+;?/gi, '');
+  newStyle = newStyle.replaceAll(/max-width:\s*[^;]+;?/gi, '');
+  newStyle = newStyle.replaceAll(/max-height:\s*[^;]+;?/gi, '');
 
     // Add new dimensions
     const dimensions: string[] = [];
@@ -264,10 +263,21 @@ export class PropertiesPanel extends LitElement {
             <input type="number" min="1" value="${this.editingProps.pageSize || 25}" @input=${(e: Event) => this.updateProperty('pageSize', Number((e.target as HTMLInputElement).value))} />
           </div>
           <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" .checked=${Boolean(this.editingProps.multiSelect)} @change=${(e: Event) => this.updateProperty('multiSelect', (e.target as HTMLInputElement).checked)} />
+              <span>Enable Multi-select</span>
+            </label>
+          </div>
+          <div class="form-group">
             <label>Actions</label>
             <label><input type="checkbox" .checked=${(this.editingProps.actions || []).includes('edit')} @change=${(e: Event) => this.toggleAction('edit', e)} /> Edit</label>
             <label><input type="checkbox" .checked=${(this.editingProps.actions || []).includes('delete')} @change=${(e: Event) => this.toggleAction('delete', e)} /> Delete</label>
             <label><input type="checkbox" .checked=${(this.editingProps.actions || []).includes('view')} @change=${(e: Event) => this.toggleAction('view', e)} /> View</label>
+          </div>
+          <div class="form-group">
+            <label>Bulk Actions</label>
+            <label><input type="checkbox" .checked=${(this.editingProps.bulkActions || []).includes('delete')} @change=${(e: Event) => this.toggleBulkAction('delete', e)} /> Delete</label>
+            <label><input type="checkbox" .checked=${(this.editingProps.bulkActions || []).includes('export')} @change=${(e: Event) => this.toggleBulkAction('export', e)} /> Export</label>
           </div>
           <div class="form-group">
             <label>Theme</label>
@@ -383,6 +393,15 @@ export class PropertiesPanel extends LitElement {
     this.updateProperty('actions', actions);
   }
 
+  private toggleBulkAction(action: string, e: Event) {
+    if (!this.selectedNode || !currentStore) return;
+    const checked = (e.target as HTMLInputElement).checked;
+    let actions = Array.isArray(this.editingProps.bulkActions) ? [...this.editingProps.bulkActions] : [];
+    if (checked) actions.push(action);
+    else actions = actions.filter((a: string) => a !== action);
+    this.updateProperty('bulkActions', actions);
+  }
+
   private getPropertyType(propKey: string): 'text' | 'number' | 'boolean' | 'textarea' {
     const booleanProps = ['required', 'disabled', 'checked'];
     const numberProps = ['rows', 'level', 'width', 'height'];
@@ -397,7 +416,7 @@ export class PropertiesPanel extends LitElement {
   private formatPropertyLabel(propKey: string): string {
     // Convert camelCase to Title Case with spaces
     return propKey
-      .replace(/([A-Z])/g, ' $1')
+      .replaceAll(/([A-Z])/g, ' $1')
       .replace(/^./, str => str.toUpperCase())
       .trim();
   }
