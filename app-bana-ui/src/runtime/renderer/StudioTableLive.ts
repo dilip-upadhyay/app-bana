@@ -328,6 +328,14 @@ export class StudioTableLive extends LitElement {
     .view-field { display:flex; flex-direction:column; gap:4px; background:#f8fafc; border:1px solid #e2e8f0; padding:8px 10px; border-radius:8px; }
     .view-field label { font-size:0.7rem; font-weight:600; letter-spacing:0.03em; color:#475569; text-transform:uppercase; }
     .view-value { font-size:0.85rem; color:#1e293b; word-break:break-word; white-space:pre-wrap; }
+  /* Inline Cell Editing */
+  .cell { position: relative; cursor: pointer; }
+  .cell.editing { background: #fff7ed !important; outline: 2px solid #fdba74; }
+  .inline-editor { width:100%; box-sizing:border-box; font-size:0.75rem; padding:4px 6px; border:1px solid #fbbf24; border-radius:4px; background:#ffffff; color:#1e293b; }
+  .inline-editor:focus { outline:2px solid #f59e0b; }
+  .inline-edit-actions { position:absolute; top:2px; right:4px; display:flex; gap:2px; }
+  .inline-edit-actions button { padding:2px 6px; font-size:10px; border-radius:4px; border:1px solid #e2e8f0; background:#fff; cursor:pointer; }
+  .inline-edit-actions button:hover { background:#f1f5f9; }
     .view-modal-header { display:flex; justify-content:space-between; align-items:center; }
     .close-btn { background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:0.75rem; }
     .close-btn:hover { background:#f1f5f9; }
@@ -495,7 +503,7 @@ export class StudioTableLive extends LitElement {
       const checked = this.selectedIds.has(id);
       return html`<tr>
         ${multiSelect ? html`<td><input type="checkbox" aria-label="Select row" .checked=${checked} @change=${(e: Event) => this.onRowSelectChange(id, e)}></td>` : ''}
-        ${fields.map((f: any) => html`<td>${row[f.name] ?? ''}</td>`)}
+        ${fields.map((f: any) => html`<td class="cell" @dblclick=${() => this.startInlineCellEdit(id, f.name, row[f.name])}>${this.renderCellContent(id, f.name, row[f.name])}</td>`)}
         ${actions.length > 0 ? html`<td class="table-actions">
           ${actions.map((action: string) => html`<button aria-label="${action} row" @click=${() => this.handleRowAction(action, row)}>${action.charAt(0).toUpperCase() + action.slice(1)}</button>`)}
         </td>` : ''}
@@ -670,6 +678,71 @@ export class StudioTableLive extends LitElement {
   private readonly onClearSelection = () => {
     this.selectedIds = new Set<string>();
   };
+
+  // Inline cell editing state helpers
+  @state() private inlineEditing: { rowId: string; field: string } | null = null;
+  @state() private inlineDraft: any = '';
+
+  private startInlineCellEdit(rowId: string, field: string, currentValue: any) {
+    // Prevent editing id field or while modal edit active
+    if (field === (this.node?.props?.idField || 'id') || this.editMode) return;
+    this.inlineEditing = { rowId, field };
+    this.inlineDraft = currentValue ?? '';
+    // Dispatch edit start
+    this.dispatchEvent(new CustomEvent('cell-edit-start', { detail: { rowId, field }, bubbles: true, composed: true }));
+  }
+
+  private cancelInlineEdit() {
+    if (this.inlineEditing) {
+      const { rowId, field } = this.inlineEditing;
+      this.dispatchEvent(new CustomEvent('cell-edit-cancel', { detail: { rowId, field }, bubbles: true, composed: true }));
+    }
+    this.inlineEditing = null;
+    this.inlineDraft = '';
+  }
+
+  private async commitInlineEdit() {
+    if (!this.inlineEditing) return;
+    const { rowId, field } = this.inlineEditing;
+    const entity = this.node?.props?.entity;
+    if (!entity) { this.cancelInlineEdit(); return; }
+    try {
+      await updateRow(entity, rowId, { [field]: this.inlineDraft });
+      // Update local data
+      if (Array.isArray(this.data?.rows)) {
+        const idx = this.data.rows.findIndex((r: any) => String(this.getRowId(r)) === rowId);
+        if (idx >= 0) this.data.rows[idx][field] = this.inlineDraft;
+      }
+      this.showToast('Cell updated');
+      this.dispatchEvent(new CustomEvent('cell-edit-save', { detail: { rowId, field, value: this.inlineDraft }, bubbles: true, composed: true }));
+    } catch (e) {
+      this.error = (e as any)?.message || 'Update failed.';
+      setTimeout(() => { this.error = ''; this.requestUpdate(); }, 3000);
+    } finally {
+      this.inlineEditing = null;
+      this.inlineDraft = '';
+      this.requestUpdate();
+    }
+  }
+
+  private onInlineEditorKey(e: KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); this.commitInlineEdit(); }
+    else if (e.key === 'Escape') { e.preventDefault(); this.cancelInlineEdit(); }
+  }
+
+  private renderCellContent(rowId: string, field: string, value: any) {
+  const editing = this.inlineEditing?.rowId === rowId && this.inlineEditing?.field === field;
+    if (!editing) {
+      return html`<div>${value == null ? '' : String(value)}</div>`;
+    }
+    return html`<div class="inline-cell-wrapper">
+      <input class="inline-editor" .value=${this.inlineDraft} @input=${(e: Event) => this.inlineDraft = (e.target as HTMLInputElement).value} @keydown=${(e: KeyboardEvent) => this.onInlineEditorKey(e)} />
+      <div class="inline-edit-actions">
+        <button @click=${() => this.commitInlineEdit()} aria-label="Save cell">✔</button>
+        <button @click=${() => this.cancelInlineEdit()} aria-label="Cancel cell edit">✖</button>
+      </div>
+    </div>`;
+  }
 
   private readonly handleRowAction = (action: string, row: any) => {
     if (action === 'view') {
