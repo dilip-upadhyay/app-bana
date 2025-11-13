@@ -13,9 +13,9 @@ export class StudioTableLive extends LitElement {
 
   public static readonly styles = css`
     .table-container {
-      background: linear-gradient(135deg, #e0e7ef 0%, #f8fafc 100%);
-      border-radius: 16px;
-      box-shadow: 0 4px 24px rgba(30,41,59,0.08);
+      background: linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%);
+      border-radius: 18px;
+      box-shadow: 0 6px 28px rgba(30,41,59,0.10);
       padding: 2.5rem 2rem;
       margin: 2.5rem 0;
       display: flex;
@@ -27,14 +27,14 @@ export class StudioTableLive extends LitElement {
       border-collapse: separate;
       border-spacing: 0;
       background: #fff;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      border-radius: 14px;
       overflow: hidden;
       font-size: 15px;
       transition: box-shadow 0.2s;
     }
     .table-live th {
-      background: linear-gradient(90deg, #1e293b 0%, #2563eb 100%);
+      background: linear-gradient(90deg, #1e293b 0%, #1d4ed8 50%, #2563eb 100%);
       color: #fff;
       font-weight: 700;
       padding: 16px 18px;
@@ -46,22 +46,20 @@ export class StudioTableLive extends LitElement {
     .table-live td {
       padding: 14px 18px;
       border-bottom: 1px solid #e2e8f0;
-      background: #f8fafc;
+      background: #ffffff;
+      color: #334155;
       transition: background 0.2s;
       font-size: 15px;
     }
-    .table-live tr:last-child td {
+    .table-live tbody tr:last-child td {
       border-bottom: none;
     }
     .table-live tbody tr:hover td {
-      background: #e0e7ef;
+      background: #f1f5f9;
     }
-    .table-live th:first-child, .table-live td:first-child {
-      border-top-left-radius: 12px;
-    }
-    .table-live th:last-child, .table-live td:last-child {
-      border-top-right-radius: 12px;
-    }
+    .table-live thead th:first-child { border-top-left-radius: 14px; }
+    .table-live thead th:last-child { border-top-right-radius: 14px; }
+    .table-live tbody tr:nth-child(even) td { background: #f8fafc; }
     .table-actions button {
       margin-right: 8px;
       padding: 7px 16px;
@@ -81,6 +79,10 @@ export class StudioTableLive extends LitElement {
     .table-actions button:hover {
       background: #1e40af;
       box-shadow: 0 2px 8px rgba(30,64,175,0.12);
+    }
+    .table-actions button:focus-visible {
+      outline: 3px solid #93c5fd;
+      outline-offset: 2px;
     }
     .table-error {
       color: #ef4444;
@@ -147,7 +149,7 @@ export class StudioTableLive extends LitElement {
               <tr>
                 ${fields.map((field: any) => html`<td>${row[field.name] ?? ''}</td>`)}
                 ${actions.length > 0 ? html`<td class="table-actions">
-                  ${actions.map((action: string) => html`<button @click=${() => alert(action + ' not implemented yet.')}>${action.charAt(0).toUpperCase() + action.slice(1)}</button>`)}
+                  ${actions.map((action: string) => html`<button aria-label="${action} row" @click=${() => alert(action + ' not implemented yet.')}>${action.charAt(0).toUpperCase() + action.slice(1)}</button>`)}
                 </td>` : ''}
               </tr>
             `)}
