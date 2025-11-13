@@ -18,6 +18,9 @@ export class StudioTableLive extends LitElement {
   @state() private runtimeThemeOverride: string | null = null;
   @state() private runtimeThemeTokens: Record<string,string> | null = null;
   @state() private selectedIds: Set<string> = new Set<string>();
+  @state() private confirmOpen: boolean = false;
+  @state() private confirmMessage: string = '';
+  @state() private pendingDeleteIds: string[] = [];
 
   public static readonly styles = css`
     .table-container {
@@ -233,11 +236,56 @@ export class StudioTableLive extends LitElement {
         position: static;
       }
     }
+    /* Confirmation Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 120ms ease-out;
+    }
+    .modal-card {
+      background: #ffffff;
+      color: #0f172a;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.20);
+      padding: 1rem 1rem 0.75rem;
+      width: min(420px, 90vw);
+      transform: translateY(8px);
+      opacity: 0;
+      animation: slideUp 160ms ease-out forwards;
+      outline: none;
+    }
+    .modal-title { font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; color: #1e293b; }
+    .modal-message { font-size: 0.95rem; color: #334155; margin-bottom: 1rem; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+    .btn-secondary {
+      padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #1e293b; font-weight: 600; cursor: pointer;
+    }
+    .btn-secondary:hover { background: #f1f5f9; }
+    .btn-danger {
+      padding: 6px 12px; border-radius: 6px; border: 1px solid #ef4444; background: #ef4444; color: #fff; font-weight: 700; cursor: pointer;
+    }
+    .btn-danger:hover { background: #dc2626; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   `;
 
   // Use lifecycle without returning a Promise type per lint rule; wrap async logic
   firstUpdated() {
     this.initializeTable();
+  }
+
+  protected updated(): void {
+    if (this.confirmOpen) {
+      const card = this.shadowRoot?.getElementById('confirmCard') as HTMLElement | null;
+      card?.focus?.();
+    }
   }
 
   private async initializeTable() {
@@ -492,6 +540,18 @@ export class StudioTableLive extends LitElement {
         </table>
       </div>
       ${activeFilters.length > 0 ? html`<div style="margin-top:0.5rem;font-size:0.7rem;color:#475569;">Applied ${activeFilters.length} filter(s). Showing rows ${startIdx}-${endIdx} of ${this.total}.</div>`: ''}
+      ${this.confirmOpen ? html`
+        <div class="modal-overlay" role="presentation" @click=${this.closeConfirm}>
+          <div id="confirmCard" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" tabindex="0" @click=${(e: Event) => e.stopPropagation()}>
+            <div id="confirmTitle" class="modal-title">Confirm Delete</div>
+            <div class="modal-message">${this.confirmMessage}</div>
+            <div class="modal-actions">
+              <button class="btn-secondary" @click=${this.closeConfirm} aria-label="Cancel delete">Cancel</button>
+              <button class="btn-danger" @click=${this.executePendingDelete} aria-label="Confirm delete">Delete</button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
     </div>`;
   }
 
@@ -530,11 +590,16 @@ export class StudioTableLive extends LitElement {
     if (!entity || ids.length === 0) return;
     try {
       if (action === 'delete') {
-  await bulkDelete(entity, ids);
-        // optimistic refresh
+        const shouldConfirm = this.node?.props?.confirmDelete !== false;
+        if (shouldConfirm) {
+          this.pendingDeleteIds = ids;
+          this.confirmMessage = `Delete ${ids.length} selected ${entity} record(s)? This cannot be undone.`;
+          this.confirmOpen = true;
+          return;
+        }
+        await bulkDelete(entity, ids);
         await this.loadPage(this.page);
         this.selectedIds = new Set<string>();
-        // Optional: show ephemeral status
         this.error = '';
       } else if (action === 'export') {
         const res = await bulkExport(entity, ids);
@@ -555,6 +620,29 @@ export class StudioTableLive extends LitElement {
     } catch (e) {
       this.error = (e as any)?.message || 'Bulk operation failed.';
       setTimeout(() => { this.error = ''; this.requestUpdate(); }, 3000);
+    }
+  };
+
+  private readonly closeConfirm = () => {
+    this.confirmOpen = false;
+    this.confirmMessage = '';
+    this.pendingDeleteIds = [];
+  };
+
+  private readonly executePendingDelete = async () => {
+    const entity = this.node?.props?.entity;
+    const ids = this.pendingDeleteIds;
+    if (!entity || ids.length === 0) { this.closeConfirm(); return; }
+    try {
+      await bulkDelete(entity, ids);
+      await this.loadPage(this.page);
+      this.selectedIds = new Set<string>();
+      this.error = '';
+    } catch (e) {
+      this.error = (e as any)?.message || 'Bulk delete failed.';
+      setTimeout(() => { this.error = ''; this.requestUpdate(); }, 3000);
+    } finally {
+      this.closeConfirm();
     }
   };
 

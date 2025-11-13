@@ -280,6 +280,12 @@ export class PropertiesPanel extends LitElement {
             <label><input type="checkbox" .checked=${(this.editingProps.bulkActions || []).includes('export')} @change=${(e: Event) => this.toggleBulkAction('export', e)} /> Export</label>
           </div>
           <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" .checked=${this.editingProps.confirmDelete !== false} @change=${(e: Event) => this.updateProperty('confirmDelete', (e.target as HTMLInputElement).checked)} />
+              <span>Confirm before bulk delete</span>
+            </label>
+          </div>
+          <div class="form-group">
             <label>Theme</label>
             <select @change=${(e: Event) => this.updateProperty('theme', (e.target as HTMLSelectElement).value)}>
               ${['default','minimal','dark','striped','compact','soft','auto','custom'].map(t => html`<option value="${t}" ?selected=${(this.editingProps.theme||'default')===t}>${t}</option>`)}
