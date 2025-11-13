@@ -21,6 +21,8 @@ export class StudioTableLive extends LitElement {
   @state() private confirmOpen: boolean = false;
   @state() private confirmMessage: string = '';
   @state() private pendingDeleteIds: string[] = [];
+  @state() private toastOpen: boolean = false;
+  @state() private toastMessage: string = '';
 
   public static readonly styles = css`
     .table-container {
@@ -274,6 +276,35 @@ export class StudioTableLive extends LitElement {
     .btn-danger:hover { background: #dc2626; }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes slideUp { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    /* Snackbar */
+    .snackbar {
+      position: fixed;
+      right: 20px;
+      top: 20px;
+      z-index: 1100;
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      animation: slideUp 160ms ease-out;
+    }
+    .snackbar button {
+      margin-left: 0.5rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #1e293b;
+      color: #f8fafc;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .snackbar button:hover { background: #0f172a; }
   `;
 
   // Use lifecycle without returning a Promise type per lint rule; wrap async logic
@@ -286,6 +317,17 @@ export class StudioTableLive extends LitElement {
       const card = this.shadowRoot?.getElementById('confirmCard') as HTMLElement | null;
       card?.focus?.();
     }
+  }
+
+  private showToast(message: string) {
+    this.toastMessage = message;
+    this.toastOpen = true;
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+      this.toastOpen = false;
+      this.toastMessage = '';
+      this.requestUpdate();
+    }, 3000);
   }
 
   private async initializeTable() {
@@ -552,6 +594,12 @@ export class StudioTableLive extends LitElement {
           </div>
         </div>
       ` : ''}
+      ${this.toastOpen ? html`
+        <div class="snackbar" role="status" aria-live="polite">
+          <span>${this.toastMessage}</span>
+          <button @click=${() => { this.toastOpen = false; this.toastMessage = ''; }}>Dismiss</button>
+        </div>
+      ` : ''}
     </div>`;
   }
 
@@ -601,6 +649,7 @@ export class StudioTableLive extends LitElement {
         await this.loadPage(this.page);
         this.selectedIds = new Set<string>();
         this.error = '';
+        this.showToast(`Deleted ${ids.length} ${entity} record(s).`);
       } else if (action === 'export') {
         const res = await bulkExport(entity, ids);
         const rows = Array.isArray(res?.rows) ? res.rows : [];
@@ -638,6 +687,7 @@ export class StudioTableLive extends LitElement {
       await this.loadPage(this.page);
       this.selectedIds = new Set<string>();
       this.error = '';
+      this.showToast(`Deleted ${ids.length} ${entity} record(s).`);
     } catch (e) {
       this.error = (e as any)?.message || 'Bulk delete failed.';
       setTimeout(() => { this.error = ''; this.requestUpdate(); }, 3000);
