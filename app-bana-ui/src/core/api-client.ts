@@ -317,16 +317,28 @@ export const apiClient = new ApiClient();
  * @param fields string[]
  * @param options { pageSize?: number, sort?: string }
  */
-export async function fetchTableData(entity: string, fields: string[], options: { pageSize?: number, sort?: string } = {}) {
-  // Uses existing advanced list endpoint: /api/{entity}?fields=a,b&limit=25&sort=name
+export interface TableFetchOptions {
+  pageSize?: number;
+  sort?: string;
+  page?: number; // 1-based page number
+  offset?: number; // explicit override if provided (takes precedence over page)
+}
+
+/**
+ * Fetch table data for an entity and selected fields with pagination support.
+ * Uses existing advanced list endpoint: /api/{entity}?fields=a,b&limit=25&offset=0&sort=name
+ */
+export async function fetchTableData(entity: string, fields: string[], options: TableFetchOptions = {}) {
   const limit = options.pageSize || 25;
+  const offset = (typeof options.offset === 'number')
+    ? options.offset
+    : ((options.page && options.page > 0) ? (options.page - 1) * limit : 0);
   const params: Record<string, any> = {
     fields: fields.join(','),
     limit,
-    offset: 0,
+    offset,
     sort: options.sort || ''
   };
-  // In Vite dev (port 5173) backend runs on 8080; use absolute URL to avoid 404 on dev server
   const base = (globalThis.location && globalThis.location.port === '5173') ? 'http://localhost:8080' : '';
   return apiClient.get(`${base}/api/${entity}`, params);
 }
