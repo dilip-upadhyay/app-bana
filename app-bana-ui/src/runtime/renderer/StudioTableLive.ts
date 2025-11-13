@@ -1,7 +1,7 @@
 // StudioTableLive.ts - Lit component for runtime table rendering with live data
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { fetchTableData } from '../../core/api-client';
+import { fetchTableData, bulkDelete, bulkExport } from '../../core/api-client';
 import type { ComponentNode } from '../../models/metadata';
 
 @customElement('studio-table-live')
@@ -522,8 +522,56 @@ export class StudioTableLive extends LitElement {
     this.selectedIds = new Set<string>();
   };
 
-  private readonly onBulkAction = (action: string) => {
-    const detail = { action, selectedIds: Array.from(this.selectedIds), entity: this.node?.props?.entity };
-    this.dispatchEvent(new CustomEvent('bulk-action', { detail, bubbles: true, composed: true }));
+  private readonly onBulkAction = async (action: string) => {
+    const ids = Array.from(this.selectedIds);
+    const entity = this.node?.props?.entity;
+    // Fire event regardless, to allow external listeners
+    this.dispatchEvent(new CustomEvent('bulk-action', { detail: { action, selectedIds: ids, entity }, bubbles: true, composed: true }));
+    if (!entity || ids.length === 0) return;
+    try {
+      if (action === 'delete') {
+  await bulkDelete(entity, ids);
+        // optimistic refresh
+        await this.loadPage(this.page);
+        this.selectedIds = new Set<string>();
+        // Optional: show ephemeral status
+        this.error = '';
+      } else if (action === 'export') {
+        const res = await bulkExport(entity, ids);
+        const rows = Array.isArray(res?.rows) ? res.rows : [];
+        if (rows.length > 0) {
+          const csv = this.toCsv(rows);
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${entity}-export-${new Date().toISOString().slice(0,19).replaceAll(/[:T]/g,'-')}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }
+      }
+    } catch (e) {
+      this.error = (e as any)?.message || 'Bulk operation failed.';
+      setTimeout(() => { this.error = ''; this.requestUpdate(); }, 3000);
+    }
   };
+
+  private toCsv(rows: any[]): string {
+    if (!rows.length) return '';
+    const headers = Object.keys(rows[0]);
+    const esc = (v: any) => {
+      if (v == null) return '';
+      const s = String(v);
+      const needsQuote = /[",\n]/.test(s);
+      const q = s.replaceAll('"', '""');
+      return needsQuote ? `"${q}"` : q;
+    };
+    const lines = [headers.join(',')];
+    for (const row of rows) {
+      lines.push(headers.map(h => esc(row[h])).join(','));
+    }
+    return lines.join('\n');
+  }
 }

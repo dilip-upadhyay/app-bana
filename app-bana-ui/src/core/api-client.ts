@@ -336,3 +336,15 @@ export async function fetchTableData(entity: string, fields: string[], options: 
   const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
   return apiClient.get(`${base}/api/${entity}`, params);
 }
+
+/** Bulk delete records by ids */
+export async function bulkDelete(entity: string, ids: (string|number)[]) {
+  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  return apiClient.post(`${base}/api/${entity}/bulk-delete`, { ids });
+}
+
+/** Bulk export records by ids; returns { count, rows } */
+export async function bulkExport(entity: string, ids: (string|number)[]) {
+  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  return apiClient.post(`${base}/api/${entity}/bulk-export`, { ids });
+}

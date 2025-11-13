@@ -1205,6 +1205,65 @@ public class ApiServer {
             }
         });
 
+        // Bulk delete: POST to accept JSON body { ids: [..] } for safety across proxies
+        router.post("/api/{entity}/bulk-delete", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            Map<String,Object> body = req.readJson(new TypeReference<>(){});
+            Object idsObj = body != null ? body.get("ids") : null;
+            if (!(idsObj instanceof List<?> ids)) { res.json(400, Map.of("error","ids array required")); return; }
+            int max = 1000; if (ids.size() > max) { res.json(400, Map.of("error","too many ids","max",max)); return; }
+            int deletedCount = 0;
+            List<Object> deletedIds = new ArrayList<>();
+            for (Object idVal : ids) {
+                if (idVal == null) continue;
+                String idStr = String.valueOf(idVal);
+                try {
+                    Map<String,Object> before = getById(schema, idStr);
+                    int d = deleteById(schema, idStr);
+                    if (d>0) {
+                        deletedCount += d;
+                        deletedIds.add(idVal);
+                        AuditLogService.log("DELETE", schema.getName(), idStr, actor, before, null);
+                    }
+                } catch (SQLException e) {
+                    LOG.warn("Bulk delete failed for {} id {}: {}", entity, idStr, e.getMessage());
+                }
+            }
+            res.json(200, Map.of("deleted", deletedCount, "ids", deletedIds));
+        });
+
+        // Bulk export: POST with { ids: [..] } returns rows
+        router.post("/api/{entity}/bulk-export", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+            }
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            Map<String,Object> body = req.readJson(new TypeReference<>(){});
+            Object idsObj = body != null ? body.get("ids") : null;
+            if (!(idsObj instanceof List<?> ids)) { res.json(400, Map.of("error","ids array required")); return; }
+            int max = 5000; if (ids.size() > max) { res.json(400, Map.of("error","too many ids","max",max)); return; }
+            List<Map<String,Object>> rows = new ArrayList<>();
+            for (Object idVal : ids) {
+                if (idVal == null) continue;
+                String idStr = String.valueOf(idVal);
+                try {
+                    Map<String,Object> row = getById(schema, idStr);
+                    if (row != null) rows.add(row);
+                } catch (SQLException e) {
+                    LOG.warn("Bulk export failed for {} id {}: {}", entity, idStr, e.getMessage());
+                }
+            }
+            res.json(200, Map.of("count", rows.size(), "rows", rows));
+        });
+
         // Serve static UI pages for servlet containers
         router.get("/ui/builder", (req, res) -> {
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/builder.html")) {
