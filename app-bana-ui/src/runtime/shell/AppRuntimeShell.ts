@@ -31,16 +31,21 @@ export class AppRuntimeShell extends LitElement {
   @state()
   private error: string | null = null;
 
+  // Guard to avoid scheduling a second update inside updated()
+  private _initialized: boolean = false;
+
   async connectedCallback() {
     super.connectedCallback();
     await ensureCoreRegistered();
-    if (this.runtimeState) {
+    // Initialization happens once when runtimeState is first available
+    if (this.runtimeState && !this._initialized) {
       this.initializeRuntime();
     }
   }
 
-  updated(changedProperties: Map<string, any>) {
-    if (changedProperties.has('runtimeState') && this.runtimeState) {
+  willUpdate(changed: Map<string, any>) {
+    // If runtimeState is set later (after element connected) run initialization once
+    if (changed.has('runtimeState') && this.runtimeState && !this._initialized) {
       this.initializeRuntime();
     }
   }
@@ -53,11 +58,8 @@ export class AppRuntimeShell extends LitElement {
 
     // Set initial page
     const initialPageId = this.runtimeState.currentPageId || this.runtimeState.pages[0]?.id;
-    if (initialPageId) {
-      this.navigateToPage(initialPageId);
-    } else {
-      this.error = 'No pages found in app';
-    }
+    if (initialPageId) this.navigateToPage(initialPageId); else this.error = 'No pages found in app';
+    this._initialized = true;
   }
 
   private navigateToPage(pageId: string) {
