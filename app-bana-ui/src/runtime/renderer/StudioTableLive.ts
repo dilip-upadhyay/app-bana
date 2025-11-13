@@ -1,7 +1,7 @@
 // StudioTableLive.ts - Lit component for runtime table rendering with live data
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { fetchTableData, bulkDelete, bulkExport } from '../../core/api-client';
+import { fetchTableData, bulkDelete, bulkExport, updateRow } from '../../core/api-client';
 import type { ComponentNode } from '../../models/metadata';
 
 @customElement('studio-table-live')
@@ -25,6 +25,8 @@ export class StudioTableLive extends LitElement {
   @state() private toastMessage: string = '';
   @state() private viewOpen: boolean = false;
   @state() private viewRow: any = null;
+  @state() private editMode: boolean = false;
+  @state() private editValues: Record<string,any> = {};
 
   public static readonly styles = css`
     .table-container {
@@ -629,7 +631,9 @@ export class StudioTableLive extends LitElement {
           <div class="view-modal-card" role="dialog" aria-modal="true" aria-labelledby="viewFormTitle" tabindex="0" @click=${(e: Event) => e.stopPropagation()}>
             <div class="view-modal-header">
               <h3 id="viewFormTitle" style="margin:0;font-size:1rem;">Row Details</h3>
-              <button class="close-btn" @click=${() => this.closeViewForm()} aria-label="Close view form">Close</button>
+              <div style="display:flex;gap:0.5rem;align-items:center;">
+                ${this.renderViewHeaderButtons()}
+              </div>
             </div>
             <div class="view-form-grid">
               ${this.renderViewFields()}
@@ -679,6 +683,8 @@ export class StudioTableLive extends LitElement {
   private openViewForm(row: any) {
     this.viewRow = row;
     this.viewOpen = true;
+    this.editMode = false;
+    this.editValues = { ...row };
     // Dispatch event for external listeners
     this.dispatchEvent(new CustomEvent('row-view', { detail: { row }, bubbles: true, composed: true }));
   }
@@ -686,6 +692,8 @@ export class StudioTableLive extends LitElement {
   private closeViewForm() {
     this.viewOpen = false;
     this.viewRow = null;
+    this.editMode = false;
+    this.editValues = {};
   }
 
   private readonly onBulkAction = async (action: string) => {
@@ -784,8 +792,101 @@ export class StudioTableLive extends LitElement {
     if (!fieldDefs.length) return html`<div style="font-size:0.85rem;color:#64748b;">No fields defined for view.</div>`;
     return fieldDefs.map(fd => {
       const label = fd.label || fd.name;
-      const value = this.viewRow[fd.name];
-      return html`<div class="view-field"><label>${label}</label><div class="view-value">${value == null ? '' : String(value)}</div></div>`;
+      const rawValue = this.viewRow[fd.name];
+      const type = fd.type || this.inferValueType(rawValue);
+      if (this.editMode) return this.renderEditableField(fd, label, type);
+      const display = this.formatDisplayValue(type, rawValue);
+      return html`<div class="view-field"><label>${label}</label><div class="view-value">${display}</div></div>`;
     });
+  }
+
+  private renderEditableField(fd: any, label: string, type: string) {
+    const current = this.editValues[fd.name];
+    if (type === 'textarea') {
+      return html`<div class="view-field"><label>${label}</label><textarea style="resize:vertical;min-height:70px;font-size:0.8rem;" .value=${current ?? ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLTextAreaElement).value)}></textarea></div>`;
+    }
+    if (type === 'date') {
+      return html`<div class="view-field"><label>${label}</label><input type="date" .value=${this.toDateInputValue(current)} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLInputElement).value)}></div>`;
+    }
+    if (type === 'number') {
+      return html`<div class="view-field"><label>${label}</label><input type="number" .value=${current ?? ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLInputElement).value)}></div>`;
+    }
+    return html`<div class="view-field"><label>${label}</label><input type="text" .value=${current ?? ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLInputElement).value)}></div>`;
+  }
+
+  private formatDisplayValue(type: string, rawValue: any) {
+    if (type === 'date') return this.formatDate(rawValue);
+    if (rawValue == null) return '';
+    return String(rawValue);
+  }
+
+  private renderViewHeaderButtons() {
+    if (this.editMode) {
+      return [
+        html`<button class="close-btn" @click=${() => this.cancelEdit()} aria-label="Cancel editing">Cancel</button>`,
+        html`<button class="btn-secondary" style="font-size:0.75rem;" @click=${() => this.saveEdit()} aria-label="Save changes">Save</button>`,
+        html`<button class="close-btn" @click=${() => this.closeViewForm()} aria-label="Close view form">Close</button>`
+      ];
+    }
+    return [
+      html`<button class="close-btn" @click=${() => this.startEdit()} aria-label="Start editing">Edit</button>`,
+      html`<button class="close-btn" @click=${() => this.closeViewForm()} aria-label="Close view form">Close</button>`
+    ];
+  }
+
+  private inferValueType(v: any): string {
+    if (v == null) return 'text';
+    if (typeof v === 'number') return 'number';
+    if (typeof v === 'string') {
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) return 'date';
+      if (v.length > 120) return 'textarea';
+    }
+    return 'text';
+  }
+
+  private formatDate(v: any): string {
+    if (!v) return '';
+  try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toLocaleString(); } catch {}
+    return String(v);
+  }
+
+  private toDateInputValue(v: any): string {
+    if (!v) return '';
+  try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0,10); } catch {}
+    return '';
+  }
+
+  private onEditInput(field: string, value: any) {
+    this.editValues = { ...this.editValues, [field]: value };
+  }
+
+  private startEdit() {
+    this.editMode = true;
+  }
+
+  private cancelEdit() {
+    this.editMode = false;
+    this.editValues = { ...this.viewRow };
+  }
+
+  private async saveEdit() {
+    const entity = this.node?.props?.entity;
+    if (!entity || !this.viewRow) { this.editMode = false; return; }
+    const id = String(this.getRowId(this.viewRow));
+    try {
+      await updateRow(entity, id, this.editValues);
+      // Update local dataset row
+      if (Array.isArray(this.data?.rows)) {
+        const idx = this.data.rows.findIndex((r: any) => String(this.getRowId(r)) === id);
+        if (idx >= 0) this.data.rows[idx] = { ...this.data.rows[idx], ...this.editValues };
+      }
+      this.viewRow = { ...this.viewRow, ...this.editValues };
+      this.editMode = false;
+      this.showToast('Changes saved.');
+      this.requestUpdate();
+    } catch (e) {
+      this.error = (e as any)?.message || 'Update failed.';
+      setTimeout(() => { this.error = ''; this.requestUpdate(); }, 3000);
+    }
   }
 }
