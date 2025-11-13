@@ -2,6 +2,8 @@
 import { PageMeta, ComponentNode } from '../../models/metadata';
 import { getComponent } from '../../core/registry';
 import { html, TemplateResult } from 'lit';
+// Ensure table live component is registered for runtime rendering
+import './StudioTableLive';
 /**
  * Returns a Lit html template for a PageMeta tree using the component registry.
  * Used for Lit-based reactive rendering.

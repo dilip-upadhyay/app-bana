@@ -114,6 +114,7 @@ export class StudioTableLive extends LitElement {
       const sort = this.node.props.sort || '';
       this.data = await fetchTableData(entity, fields, { pageSize, sort });
     } catch (err: any) {
+      // Store error but allow render() to fallback to sample rows
       this.error = err?.message || 'Failed to fetch table data.';
     } finally {
       this.loading = false;
@@ -121,7 +122,6 @@ export class StudioTableLive extends LitElement {
   }
 
   render() {
-    if (this.error) return html`<div class="table-error">${this.error}</div>`;
     if (this.loading) return html`<div>Loading table data...</div>`;
     const fields = Array.isArray(this.node?.props?.fields) ? this.node.props.fields : [];
     const actions = this.node?.props?.actions || [];
@@ -134,6 +134,7 @@ export class StudioTableLive extends LitElement {
         ];
     return html`
       <div class="table-container">
+        ${this.error ? html`<div class="table-error" style="background:#fef2f2;color:#b91c1c;border:1px solid #fee2e2;">Showing sample data (${this.error})</div>` : ''}
         <table class="table-live">
           <thead>
             <tr>

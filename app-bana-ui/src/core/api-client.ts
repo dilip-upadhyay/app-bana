@@ -318,11 +318,15 @@ export const apiClient = new ApiClient();
  * @param options { pageSize?: number, sort?: string }
  */
 export async function fetchTableData(entity: string, fields: string[], options: { pageSize?: number, sort?: string } = {}) {
-  // Example endpoint: /api/data/{entity}?fields=field1,field2&pageSize=25&sort=name
+  // Uses existing advanced list endpoint: /api/{entity}?fields=a,b&limit=25&sort=name
+  const limit = options.pageSize || 25;
   const params: Record<string, any> = {
     fields: fields.join(','),
-    pageSize: options.pageSize || 25,
+    limit,
+    offset: 0,
     sort: options.sort || ''
   };
-  return apiClient.get(`/api/data/${entity}`, params);
+  // In Vite dev (port 5173) backend runs on 8080; use absolute URL to avoid 404 on dev server
+  const base = (globalThis.location && globalThis.location.port === '5173') ? 'http://localhost:8080' : '';
+  return apiClient.get(`${base}/api/${entity}`, params);
 }
