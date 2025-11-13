@@ -13,6 +13,7 @@ export class StudioTableLive extends LitElement {
   @state() private page: number = 1;
   @state() private pageSize: number = 25;
   @state() private total: number = 0;
+  @state() private filters: Record<string,string> = {};
 
   public static readonly styles = css`
     .table-container {
@@ -60,6 +61,28 @@ export class StudioTableLive extends LitElement {
       z-index: 10;
       /* Ensure header covers cell content during scroll */
       background-clip: padding-box;
+    }
+    .filter-row th {
+      background: #f1f5f9;
+      border-bottom: 2px solid #e2e8f0;
+      padding: 6px 10px;
+      position: sticky;
+      top: 56px; /* below main header row (approx header height) */
+      z-index: 9;
+    }
+    .filter-row input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+      font-size: 13px;
+      background: #fff;
+      color: #334155;
+    }
+    .filter-row input:focus {
+      outline: 2px solid #93c5fd;
+      outline-offset: 1px;
     }
     .table-live td {
       padding: 14px 18px;
@@ -217,6 +240,11 @@ export class StudioTableLive extends LitElement {
     }
   }
 
+  private onFilterInput(fieldName: string, e: Event) {
+    const value = (e.target as HTMLInputElement).value;
+    this.filters = { ...this.filters, [fieldName]: value };
+  }
+
   render() {
     if (this.loading) return html`<div>Loading table data...</div>`;
     const fields = Array.isArray(this.node?.props?.fields) ? this.node.props.fields : [];
@@ -228,6 +256,18 @@ export class StudioTableLive extends LitElement {
           Object.fromEntries(fields.map((f: any) => [f.name, 'Sample 2'])),
           Object.fromEntries(fields.map((f: any) => [f.name, 'Sample 3']))
         ];
+
+    // Client-side filtering; for large datasets/back-end filtering extend API later
+    const activeFilters = Object.entries(this.filters).filter(([_,v]) => v && v.trim() !== '');
+    const filteredRows = activeFilters.length > 0
+      ? rows.filter((row: any) => {
+          return activeFilters.every(([key, val]) => {
+            const cell = row[key];
+            if (cell === null || cell === undefined) return false;
+            return String(cell).toLowerCase().includes(val.toLowerCase());
+          });
+        })
+      : rows;
     const totalPages = Math.max(1, Math.ceil(this.total / this.pageSize));
     const startIdx = (this.page - 1) * this.pageSize + 1;
     const endIdx = Math.min(this.total, this.page * this.pageSize);
@@ -256,9 +296,15 @@ export class StudioTableLive extends LitElement {
               ${fields.map((field: any) => html`<th>${field.label || field.name}</th>`)}
               ${actions.length > 0 ? html`<th>Actions</th>` : ''}
             </tr>
+            <tr class="filter-row">
+              ${fields.map((field: any) => html`<th>
+                <input type="text" aria-label="Filter ${field.label || field.name}" placeholder="Filter..." @input=${(e: Event) => this.onFilterInput(field.name, e)} .value=${this.filters[field.name] || ''}>
+              </th>`)}
+              ${actions.length > 0 ? html`<th></th>` : ''}
+            </tr>
           </thead>
           <tbody>
-            ${rows.map((row: any) => html`
+            ${filteredRows.map((row: any) => html`
               <tr>
                 ${fields.map((field: any) => html`<td>${row[field.name] ?? ''}</td>`)}
                 ${actions.length > 0 ? html`<td class="table-actions">
@@ -269,6 +315,7 @@ export class StudioTableLive extends LitElement {
           </tbody>
         </table>
         </div>
+        ${activeFilters.length > 0 ? html`<div style="margin-top:0.5rem;font-size:0.7rem;color:#475569;">Filtered ${filteredRows.length} of ${rows.length} rows (page scope)</div>`: ''}
       </div>
     `;
   }
