@@ -310,3 +310,19 @@ export class ApiClient {
 
 // Create default instance
 export const apiClient = new ApiClient();
+
+/**
+ * Fetch table data for entity and fields
+ * @param entity string
+ * @param fields string[]
+ * @param options { pageSize?: number, sort?: string }
+ */
+export async function fetchTableData(entity: string, fields: string[], options: { pageSize?: number, sort?: string } = {}) {
+  // Example endpoint: /api/data/{entity}?fields=field1,field2&pageSize=25&sort=name
+  const params: Record<string, any> = {
+    fields: fields.join(','),
+    pageSize: options.pageSize || 25,
+    sort: options.sort || ''
+  };
+  return apiClient.get(`/api/data/${entity}`, params);
+}

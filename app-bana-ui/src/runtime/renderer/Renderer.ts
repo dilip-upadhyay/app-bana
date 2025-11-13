@@ -17,10 +17,16 @@ export function renderPage(page: PageMeta, container: HTMLElement) {
 
 function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): HTMLElement {
   if (node.type === 'table') {
-    // Minimal preview: show selected columns only
-    // Use ES module import
-    // import { renderTablePreview } from './TablePreview';
-    return requireTablePreview(node);
+    // Runtime rendering: live data if in runtime, else preview
+    if (window.location.pathname.includes('preview') || window.location.pathname.includes('runtime')) {
+      // Use Lit component for robust async rendering
+      const el = document.createElement('studio-table-live');
+      (el as any).node = node;
+      return el;
+    } else {
+      // Minimal preview
+      return requireTablePreview(node);
+    }
   }
   let ctor = getComponent(node.type);
   if (!ctor) {
