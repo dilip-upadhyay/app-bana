@@ -378,9 +378,41 @@ export class AiChatBuilder extends LitElement {
 
   private async processUserInput(input: string) {
     try {
-      // ...existing processUserInput logic...
-      // (Restored logic omitted for brevity)
-      // The full method body should be here, ending with the closing brace below.
+      // Prepare the payload for backend AI
+      const payload = {
+        description: input,
+        messages: this.messages.map(m => ({ role: m.role, content: m.content }))
+      };
+
+      const response = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        this.addAssistantMessage(error.error || 'AI backend error.');
+        return;
+      }
+
+      const result = await response.json();
+      if (result && result.payload && result.payload.smallTalk) {
+        this.addAssistantMessage(result.payload.reply || 'Small talk response.');
+      } else if (result && result.success) {
+        if (result.needsMoreInfo && Array.isArray(result.followUpQuestions)) {
+          const questions = result.followUpQuestions.map((q, i) => `4AC ${q}`).join('\n');
+          this.addAssistantMessage(
+            `I need a bit more info to help you:\n${questions}`
+          );
+        } else if (result.payload?.reply) {
+          this.addAssistantMessage(result.payload.reply);
+        } else {
+          this.addAssistantMessage('AI generated response.');
+        }
+      } else {
+        this.addAssistantMessage(result.error || 'AI did not return a valid response.');
+      }
     } catch (error) {
       console.error('[AiChatBuilder] Error processing input:', error);
       this.addAssistantMessage('Sorry, I encountered an error processing your request. Please try again.');
