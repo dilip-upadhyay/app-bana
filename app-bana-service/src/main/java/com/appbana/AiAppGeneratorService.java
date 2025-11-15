@@ -34,7 +34,14 @@ public class AiAppGeneratorService {
         try {
             // Small talk detection (before intent classification)
             if (request != null && request.description != null) {
-                String smallTalkReply = com.appbana.ai.SmallTalkEngine.getSmallTalkResponse(request.description);
+                // Use request.userId if available, else fallback to 'default'
+                String userId = "default";
+                if (request.options != null && request.options.containsKey("userId")) {
+                    userId = String.valueOf(request.options.get("userId"));
+                } else if (request.conversationContext != null && request.conversationContext.containsKey("userId")) {
+                    userId = String.valueOf(request.conversationContext.get("userId"));
+                }
+                String smallTalkReply = com.appbana.ai.SmallTalkEngine.getSmallTalkResponse(request.description, userId);
                 if (smallTalkReply != null) {
                     GenerationResult result = new GenerationResult();
                     result.success = true;
@@ -42,8 +49,8 @@ public class AiAppGeneratorService {
                     result.payload.put("smallTalk", true);
                     result.payload.put("reply", smallTalkReply);
                     LOG.info("[AI] Small talk detected, responding: {}", smallTalkReply);
-                    // Record in agent memory (demo: use 'default' user)
-                    com.appbana.ai.AgentMemoryService.record("default", request.description, smallTalkReply);
+                    // Record in agent memory
+                    com.appbana.ai.AgentMemoryService.record(userId, request.description, smallTalkReply);
                     return result;
                 }
             }

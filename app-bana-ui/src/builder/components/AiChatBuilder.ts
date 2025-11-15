@@ -379,8 +379,10 @@ export class AiChatBuilder extends LitElement {
   private async processUserInput(input: string) {
     try {
       // Prepare the payload for backend AI
+      const userId = 'default'; // Replace with actual user/session ID if available
       const payload = {
         description: input,
+        options: { userId },
         messages: this.messages.map(m => ({ role: m.role, content: m.content }))
       };
 

@@ -84,14 +84,27 @@ public class SmallTalkEngine {
     /**
      * Returns a small talk response using OpenAI if enabled, otherwise falls back to legacy patterns.
      */
-    public static String getSmallTalkResponse(String input) {
+    public static String getSmallTalkResponse(String input, String userId) {
+        String lower = input == null ? "" : input.toLowerCase();
+        // If the input contains app creation intent, do NOT treat as small talk
+        if (lower.contains("create an app") || lower.contains("build an app") || lower.contains("generate app") || lower.contains("make an app") || lower.contains("app for me") || lower.contains("app that") || lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("generate app")) {
+            return null;
+        }
         // Check if AI provider is enabled
         com.appbana.config.AppConfig config = com.appbana.config.ConfigManager.getConfig();
         if (com.appbana.ai.AiProviderFactory.isAiEnabled(config)) {
             try {
                 com.appbana.ai.AiProvider provider = com.appbana.ai.AiProviderFactory.createProvider(config);
+                // Fetch structured conversation history
+                java.util.List<com.appbana.ai.AgentMemoryService.MemoryEntry> history = com.appbana.ai.AgentMemoryService.getHistory(userId);
+                java.util.List<String> messages = new java.util.ArrayList<>();
+                for (com.appbana.ai.AgentMemoryService.MemoryEntry entry : history) {
+                    messages.add("User: " + entry.input);
+                    messages.add("Assistant: " + entry.response);
+                }
+                messages.add("User: " + input);
                 // Playful, friendly system prompt for small talk
-                String systemPrompt = "You are a playful, friendly AI assistant for app creators. Respond to the user's message in a natural, human-like way. Keep it light, fun, and helpful.";
+                String systemPrompt = "You are a playful, friendly AI assistant for app creators. Respond to the user's message in a natural, human-like way. If the user mentions a topic (e.g., food, music, fitness), always suggest building an app related to that topic in your reply. Keep it light, fun, and helpful, but gently redirect the conversation toward app creation. Use the conversation history below for context.\n\n" + String.join("\n", messages);
                 String reply = provider.generateAppStructure(input, systemPrompt);
                 // Sanitize output (strip markdown, etc.)
                 return com.appbana.AiAppGeneratorService.sanitizeAiJson(reply);
