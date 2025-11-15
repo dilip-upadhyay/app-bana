@@ -15,3 +15,4 @@
 ### Builder database & docs refresh
 - Bump the builder database index (`99-capabilities-index.json`) to `1.0.1`, update the `lastUpdated` timestamp, and summarize the new table-focused capabilities under `recentEnhancements`.
 - Update `docs/README.md` to link to this page so future contributors can find the latest runtime updates.
+- Add a `studio-table-live` entry to `builder-database/02-components.json` covering its props, events, and runtime behaviors so AI agents can model the metadata-driven table experience.
