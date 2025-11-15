@@ -10,12 +10,22 @@ import type { AppMeta, AppWithPages, CreateAppRequest, UpdateAppRequest, AppList
 import type { PageMeta } from '../../models/metadata';
 import { apiClient } from '../../core/api-client';
 
+export type ConversationTelemetryType = 'greeting' | 'idea' | 'decision';
+
+export interface ConversationTelemetryEvent {
+  type: ConversationTelemetryType;
+  persona: string;
+  detail: Record<string, any>;
+  timestamp: number;
+}
+
 const CURRENT_APP_KEY = 'appbana.current.app'; // Only current app ID stored in localStorage
 
 export class AppStore {
   private apps: Map<string, AppMeta> = new Map();
   private currentAppId: string | null = null;
   private listeners = new Set<() => void>();
+  private telemetryListeners = new Set<(event: ConversationTelemetryEvent) => void>();
   private loading = false;
 
   constructor() {
@@ -124,6 +134,21 @@ export class AppStore {
 
   private notify() {
     this.listeners.forEach(fn => fn());
+  }
+
+  onTelemetry(fn: (event: ConversationTelemetryEvent) => void): () => void {
+    this.telemetryListeners.add(fn);
+    return () => this.telemetryListeners.delete(fn);
+  }
+
+  recordTelemetry(event: Omit<ConversationTelemetryEvent, 'timestamp'>): ConversationTelemetryEvent {
+    const envelope: ConversationTelemetryEvent = {
+      ...event,
+      timestamp: Date.now()
+    };
+    console.info('[AppStore] Telemetry', envelope);
+    this.telemetryListeners.forEach(listener => listener(envelope));
+    return envelope;
   }
 
   /**

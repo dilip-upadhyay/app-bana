@@ -436,6 +436,47 @@
           "description": "Fired when app created"
         }
       ],
+      "conversationalPolicy": {
+        "states": [
+          "initial",
+          "idea-suggest",
+          "gathering-info",
+          "confirming-details",
+          "ready-to-create",
+          "creating"
+        ],
+        "persona": {
+          "friendly": {
+            "greeting": "Hey there! I’m your AI copilot for Studio. Tell me what you want to build or ask for ideas and I’ll pick a helpful direction.",
+            "ideaIntro": "I can take the lead and map a complete metadata path. Here are three ideas tuned for Studio:",
+            "ideaLead": "Let me know which one resonates or describe your problem and I’ll choose the best route.",
+            "decisionLead": "Here’s what I’ll build next—just say yes and I’ll get started."
+          }
+        },
+        "ideaCatalog": [
+          {
+            "title": "Team Ops Command Center",
+            "description": "Dashboards, approvals, and action cards for distributed operations teams."
+          },
+          {
+            "title": "Client Success Portal",
+            "description": "CRM-style tables, guided forms, and alerts so teams can manage every customer journey."
+          },
+          {
+            "title": "Resource Scheduler",
+            "description": "Booking workflows, capacity planning, and notifications tied to your data model."
+          }
+        ],
+        "heuristics": {
+          "greetingPattern": "^(hi|hello|hey|greetings|yo)([.!]?\\s*)$",
+          "ideaPromptPattern": "(what should i build|suggest (?:an|some)? app|ideas (?:for|to build)|decide what to build|choose (?:an|a)? app)"
+        },
+        "telemetry": {
+          "events": ["greeting", "idea", "decision"],
+          "destination": "AppStore.recordTelemetry",
+          "payload": ["persona", "phase", "detail"]
+        }
+      },
       "children": false
     }
   ],

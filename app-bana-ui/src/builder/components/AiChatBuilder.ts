@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { appStore } from '../store/AppStore';
+import { appStore, type ConversationTelemetryType } from '../store/AppStore';
 import type { EntityMeta } from '../../models/entity-metadata';
 import type { ComponentNode } from '../../models/metadata';
 
@@ -19,8 +19,10 @@ interface ChatMessage {
   };
 }
 
+type ConversationPhase = 'initial' | 'idea-suggest' | 'gathering-info' | 'confirming-details' | 'ready-to-create' | 'creating';
+
 interface ConversationState {
-  phase: 'initial' | 'gathering-info' | 'confirming-details' | 'ready-to-create' | 'creating';
+  phase: ConversationPhase;
   userIntent?: string;
   appName?: string;
   appDescription?: string;
@@ -29,6 +31,34 @@ interface ConversationState {
   followUpAnswers: Record<string, string>;
   questionsAsked: string[];
 }
+
+const personaPrompts = {
+  friendly: {
+    greeting: 'Hey there! I’m your AI copilot for Studio. Tell me what you want to build or ask for ideas and I’ll pick a helpful direction.',
+    ideaIntro: 'I can take the lead and map a complete metadata path. Here are three ideas tuned for Studio:',
+    ideaLead: 'Let me know which one resonates or describe your problem and I’ll choose the best route.',
+    decisionLead: 'Here’s what I’ll build next—just say yes and I’ll get started.'
+  }
+} as const;
+
+const ideaCatalog = [
+  {
+    title: 'Team Ops Command Center',
+    description: 'Dashboards, approvals, and action cards for distributed operations teams.'
+  },
+  {
+    title: 'Client Success Portal',
+    description: 'CRM-style tables, guided forms, and alerts so teams can manage every customer journey.'
+  },
+  {
+    title: 'Resource Scheduler',
+    description: 'Booking workflows, capacity planning, and notifications tied to your data model.'
+  }
+];
+
+const greetingPattern = /^(hi|hello|hey|greetings|yo)([.!]?\s*)$/;
+const ideaPromptPattern = /(what should i build|suggest (?:an|some)? app|ideas (?:for|to build)|decide what to build|choose (?:an|a)? app)/;
+type PersonaKey = keyof typeof personaPrompts['friendly'];
 
 /**
  * AI Chat Builder - Chat-based interface for building apps with AI
@@ -543,6 +573,7 @@ export class AiChatBuilder extends LitElement {
     followUpAnswers: {},
     questionsAsked: []
   };
+  private assistantPersona: keyof typeof personaPrompts = 'friendly';
 
   connectedCallback() {
     super.connectedCallback();
@@ -684,40 +715,59 @@ export class AiChatBuilder extends LitElement {
     }
   }
 
+  private getPersonaText(key: PersonaKey): string {
+    const persona = personaPrompts[this.assistantPersona] || personaPrompts.friendly;
+    return persona[key];
+  }
+
+  private formatIdeaSuggestions(): string {
+    return ideaCatalog.map((idea, index) => `${index + 1}. ${idea.title}: ${idea.description}`).join('\n');
+  }
+
+  private updateConversationState(changes: Partial<ConversationState>) {
+    this.conversationState = { ...this.conversationState, ...changes };
+  }
+
+  private transitionPhase(phase: ConversationPhase) {
+    this.updateConversationState({ phase });
+  }
+
+  private recordConversationTelemetry(type: ConversationTelemetryType, detail: Record<string, any> = {}) {
+    appStore.recordTelemetry({
+      type,
+      persona: this.assistantPersona,
+      detail: { phase: this.conversationState.phase, ...detail }
+    });
+  }
+
+  private handleGreetingIntent(lower: string): boolean {
+    if (!greetingPattern.test(lower)) return false;
+    this.recordConversationTelemetry('greeting', { input: lower });
+    this.addAssistantMessage(this.getPersonaText('greeting'));
+    this.transitionPhase('idea-suggest');
+    return true;
+  }
+
+  private handleIdeaIntent(lower: string): boolean {
+    if (!ideaPromptPattern.test(lower)) return false;
+    this.recordConversationTelemetry('idea', { input: lower });
+    this.addAssistantMessage(
+      `${this.getPersonaText('ideaIntro')}\n${this.formatIdeaSuggestions()}\n${this.getPersonaText('ideaLead')}`
+    );
+    this.transitionPhase('idea-suggest');
+    return true;
+  }
+
   private async processUserInput(input: string) {
     try {
       // Quick local intent detection for simple commands to avoid AI asking unnecessary follow-ups
       const lower = input.trim().toLowerCase();
-      const simpleGreeting = /^(hi|hello|hey|greetings|yo)([.!]?\s*)$/;
-      const ideaPrompt = /(what should i build|suggest (an|some)? app|ideas (for|to build)|decide what to build|choose (an|a)? app)/;
 
-      if (simpleGreeting.test(lower)) {
-        this.addAssistantMessage(
-          `Hey there! I'm your AI copilot for Studio. Tell me what you'd like to build or ask for a suggestion and I'll pick the most helpful path.`
-        );
+      if (this.handleGreetingIntent(lower)) {
         return;
       }
 
-      if (ideaPrompt.test(lower)) {
-        const ideas = [
-          {
-            title: 'Team Ops Command Center',
-            description: 'Dashboards, approvals, and action cards for distributed operations teams.'
-          },
-          {
-            title: 'Client Success Portal',
-            description: 'CRM-style tables and guided forms so teams can manage every customer journey.'
-          },
-          {
-            title: 'Resource Scheduler',
-            description: 'Booking workflows, capacity insights, and alerts tied to your data model.'
-          }
-        ];
-        this.addAssistantMessage(
-          `I can take the lead and figure out what to build. Here are three app ideas tailored for metadata-driven experiences:\n` +
-          `${ideas.map((idea, i) => `${i + 1}. ${idea.title}: ${idea.description}`).join('\n')}\n` +
-          `Let me know which one resonates or describe your problem and I'll choose the best route.`
-        );
+      if (this.handleIdeaIntent(lower)) {
         return;
       }
 
@@ -798,7 +848,7 @@ export class AiChatBuilder extends LitElement {
             `• Change relationships\n` +
             `• Add different page types`
           );
-          this.conversationState.phase = 'gathering-info';
+          this.transitionPhase('gathering-info');
           return;
         }
       }
@@ -886,8 +936,10 @@ export class AiChatBuilder extends LitElement {
 
         // Check if AI is asking follow-up questions
         if (result.followUpQuestions && result.followUpQuestions.length > 0) {
-          this.conversationState.phase = 'gathering-info';
-          this.conversationState.userIntent = input;
+          this.updateConversationState({
+            phase: 'gathering-info',
+            userIntent: input
+          });
           
           this.addAssistantMessage(
             `I have a few questions to make your app better:\n\n${result.followUpQuestions.map((q: string, i: number) => `${i + 1}. ${q}`).join('\n')}`,
@@ -901,15 +953,18 @@ export class AiChatBuilder extends LitElement {
         }
 
         // Store conversation state
-        this.conversationState.appName = result.appName;
-        this.conversationState.appDescription = result.appDescription;
-        this.conversationState.entities = result.entities || [];
-        this.conversationState.pages = result.suggestedPages || [];
-        this.conversationState.phase = 'ready-to-create';
+        this.updateConversationState({
+          appName: result.appName,
+          appDescription: result.appDescription,
+          entities: result.entities || [],
+          pages: result.suggestedPages || [],
+          phase: 'ready-to-create'
+        });
+        this.recordConversationTelemetry('decision', { appName: result.appName, description: result.appDescription });
 
         // Show detailed preview with confirmation
         this.addAssistantMessage(
-          `I've prepared your app "${result.appName}". Here's what I'll create:`,
+          `${this.getPersonaText('decisionLead')}\nI've prepared your app "${result.appName}". Here's what I'll create:`,
           {
             generatedApp: {
               id: `app-${Date.now()}`,
@@ -960,7 +1015,7 @@ export class AiChatBuilder extends LitElement {
     if (!message.metadata) return;
 
     this.isProcessing = true;
-    this.conversationState.phase = 'creating';
+    this.transitionPhase('creating');
 
     try {
       const { generatedApp, generatedEntities, generatedPages } = message.metadata;
@@ -1020,7 +1075,7 @@ export class AiChatBuilder extends LitElement {
     } catch (error) {
       console.error('[AiChatBuilder] Error creating app:', error);
       this.addAssistantMessage(`❌ Failed to create application: ${error}`);
-      this.conversationState.phase = 'ready-to-create'; // Allow retry
+      this.transitionPhase('ready-to-create'); // Allow retry
     } finally {
       this.isProcessing = false;
     }

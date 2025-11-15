@@ -154,6 +154,16 @@ localStorage['appbana.current.app'] = 'app1';
 - **Scalability:** Supports apps with 50+ pages efficiently
 - **Version control:** Easy to export/import individual pages
 
+### Conversational Orchestration
+
+`AiChatBuilder` now drives a finite-state conversation loop that keeps friendly greetings, idea suggestions, and confirmation sequences separate from heavier backend metadata generation. Key elements:
+
+- **Phases:** `initial`, `idea-suggest`, `gathering-info`, `confirming-details`, `ready-to-create`, and `creating` guide how prompts and telemetry are rendered and when the UI solicits follow-ups.
+- **Persona prompts:** Friendly strings (see `builder-database/02-components.json` `conversationalPolicy`) power the greeting invite, idea intro/lead, and decision notice so the assistant feels consistent.
+- **Heuristics:** Lightweight regex checks detect greetings ("hi/hello/greetings") and idea requests ("what should I build", "suggest an app") before hitting `/api/ai/generate`, keeping the experience snappy.
+- **Telemetry:** `AppStore.recordTelemetry` captures `greeting`, `idea`, and `decision` events along with the current persona and phase so we can measure how frequently the assistant successfully guides a user through each transition.
+- **Alignment:** Documented prompts, idea catalog entries, and telemetry expectations in `builder-database/02-components.json` keep AI agents and future services aware of this conversational protocol.
+
 ### Studio Components
 
 #### 1. AppManager (`src/builder/components/AppManager.ts`)
