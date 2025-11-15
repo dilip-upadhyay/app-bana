@@ -1,3 +1,6 @@
+// ...existing code...
+
+// Remove duplicate/stray class and misplaced code above imports
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore, type ConversationTelemetryType } from '../store/AppStore';
@@ -56,7 +59,7 @@ const ideaCatalog = [
   }
 ];
 
-const greetingPattern = /^(hi|hello|hey|greetings|yo)([.!]?\s*)$/;
+const greetingPattern = /^(hi|hello|hey|greetings|yo|how are you|howdy|good morning|good afternoon|good evening|what's up|sup|hola|bonjour|namaste|nice to meet you|pleased to meet you|how do you do|how are things|how are you doing|how are things going|how is it going|how's it going|how's life|how's everything|how's your day|how's your week|how's your morning|how's your afternoon|how's your evening)([.!]?\s*)?$/i;
 const ideaPromptPattern = /(what should i build|suggest (?:an|some)? app|ideas (?:for|to build)|decide what to build|choose (?:an|a)? app)/;
 type PersonaKey = keyof typeof personaPrompts['friendly'];
 
@@ -575,6 +578,34 @@ export class AiChatBuilder extends LitElement {
   };
   private assistantPersona: keyof typeof personaPrompts = 'friendly';
 
+  private smallTalkPatterns: Array<{ pattern: RegExp; reply: string | ((...args: any[]) => string) }> = [
+    { pattern: /weather|forecast|rain|sunny|cloudy|temperature|climate/, reply: "I'm not connected to live weather, but I can help you build a weather app or show you how to track forecasts!" },
+    { pattern: /joke|funny|laugh/, reply: "Why did the developer go broke? Because he used up all his cache! 😄" },
+    { pattern: /time|clock|what time is it/, reply: () => `It's ${new Date().toLocaleTimeString()}. Need a time-tracking app?` },
+    { pattern: /date|day|what day is it/, reply: () => `Today is ${new Date().toLocaleDateString()}. Want a calendar app?` },
+    { pattern: /who are you|what are you|your name/, reply: "I'm your friendly AI copilot for Studio! Here to help you build apps and answer questions." },
+    { pattern: /how old are you/, reply: "I'm as old as the latest commit!" },
+    { pattern: /tell me something|fact/, reply: "Did you know? The first computer bug was an actual moth stuck in a relay!" }
+  ];
+
+    private handleSmallTalkIntent(lower: string): boolean {
+      for (const { pattern, reply } of this.smallTalkPatterns) {
+        if (pattern.test(lower)) {
+          this.recordConversationTelemetry('smallTalk', { input: lower });
+          let response: string;
+          if (typeof reply === 'function') {
+            response = reply(lower);
+          } else {
+            response = reply;
+          }
+          this.addAssistantMessage(response);
+          this.transitionPhase('idea-suggest');
+          return true;
+        }
+      }
+      return false;
+    }
+
   connectedCallback() {
     super.connectedCallback();
     this.addSystemMessage('Welcome! I can help you build applications using natural language. Describe the app you want to create.');
@@ -743,7 +774,28 @@ export class AiChatBuilder extends LitElement {
   private handleGreetingIntent(lower: string): boolean {
     if (!greetingPattern.test(lower)) return false;
     this.recordConversationTelemetry('greeting', { input: lower });
-    this.addAssistantMessage(this.getPersonaText('greeting'));
+    let reply = this.getPersonaText('greeting');
+    // Add custom responses for common greetings
+    if (/how are you|how are things|how are you doing|how's it going|how's life|how's everything|how's your day|how's your week|how's your morning|how's your afternoon|how's your evening/.test(lower)) {
+      reply = `I'm doing great! How can I help you build today?`;
+    } else if (/good morning/.test(lower)) {
+      reply = `Good morning! Ready to create something amazing?`;
+    } else if (/good afternoon/.test(lower)) {
+      reply = `Good afternoon! What would you like to build?`;
+    } else if (/good evening/.test(lower)) {
+      reply = `Good evening! Let's make your app idea a reality.`;
+    } else if (/what's up|sup/.test(lower)) {
+      reply = `Not much, just here to help you build apps!`;
+    } else if (/hola/.test(lower)) {
+      reply = `¡Hola! Ready to build something awesome?`;
+    } else if (/bonjour/.test(lower)) {
+      reply = `Bonjour! Let's get started on your app.`;
+    } else if (/namaste/.test(lower)) {
+      reply = `Namaste! How can I assist you today?`;
+    } else if (/nice to meet you|pleased to meet you|how do you do/.test(lower)) {
+      reply = `Nice to meet you too! What would you like to create?`;
+    }
+    this.addAssistantMessage(reply);
     this.transitionPhase('idea-suggest');
     return true;
   }
@@ -764,6 +816,10 @@ export class AiChatBuilder extends LitElement {
       const lower = input.trim().toLowerCase();
 
       if (this.handleGreetingIntent(lower)) {
+        return;
+      }
+
+      if (this.handleSmallTalkIntent(lower)) {
         return;
       }
 

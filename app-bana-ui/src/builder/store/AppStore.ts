@@ -10,7 +10,7 @@ import type { AppMeta, AppWithPages, CreateAppRequest, UpdateAppRequest, AppList
 import type { PageMeta } from '../../models/metadata';
 import { apiClient } from '../../core/api-client';
 
-export type ConversationTelemetryType = 'greeting' | 'idea' | 'decision';
+export type ConversationTelemetryType = 'greeting' | 'idea' | 'decision' | 'smallTalk';
 
 export interface ConversationTelemetryEvent {
   type: ConversationTelemetryType;
