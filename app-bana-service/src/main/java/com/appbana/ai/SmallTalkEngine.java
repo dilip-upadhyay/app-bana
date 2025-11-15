@@ -11,6 +11,16 @@ public class SmallTalkEngine {
     private static final List<SmallTalkPattern> patterns = new ArrayList<>();
 
     static {
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you dance|dance|dancing", Pattern.CASE_INSENSITIVE), "I can't dance, but I can help you build a dance app or playlist!"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you sing|sing|singing|song|music", Pattern.CASE_INSENSITIVE), "I can't sing, but I can help you create a music app or playlist!"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you cook|cook|cooking|chef|recipe", Pattern.CASE_INSENSITIVE), "I can't cook, but I can help you build a recipe or meal planner app!"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you draw|draw|drawing|sketch|art", Pattern.CASE_INSENSITIVE), "I can't draw, but I can help you design a creative art app!"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you joke|joke|make me laugh|funny|laugh", Pattern.CASE_INSENSITIVE), "Why did the computer go to art school? To learn how to draw its curtains!"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you code|code|coding|program|programming", Pattern.CASE_INSENSITIVE), "Coding is my superpower! Want to build something together?"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you help|help|assist|support", Pattern.CASE_INSENSITIVE), "I'm always here to help you build apps and solve problems!"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you play|play|playing|game|games", Pattern.CASE_INSENSITIVE), "I can't play games, but I can help you create one! What's your favorite genre?"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you teach|teach|teacher|learn|student", Pattern.CASE_INSENSITIVE), "I can teach you about app building, or learn from you!"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you listen|listen|listening|hear|hearing", Pattern.CASE_INSENSITIVE), "I listen to every idea you share!"));
         patterns.add(new SmallTalkPattern(Pattern.compile("can you swim|swim", Pattern.CASE_INSENSITIVE), "I can't swim, but I can help you build a swimming tracker app!"));
         patterns.add(new SmallTalkPattern(Pattern.compile("can you run|run|running", Pattern.CASE_INSENSITIVE), "I can't run, but my code is pretty fast! Want a running log app?"));
         patterns.add(new SmallTalkPattern(Pattern.compile("can you paint|paint|painting", Pattern.CASE_INSENSITIVE), "I can't paint, but I can help you design a beautiful UI or art gallery app!"));
@@ -71,7 +81,26 @@ public class SmallTalkEngine {
         patterns.add(new SmallTalkPattern(Pattern.compile("can you be my dream|dream|wish|hope|love|life|everything", Pattern.CASE_INSENSITIVE), "Your dreams are my mission—let's make them real!"));
     }
 
+    /**
+     * Returns a small talk response using OpenAI if enabled, otherwise falls back to legacy patterns.
+     */
     public static String getSmallTalkResponse(String input) {
+        // Check if AI provider is enabled
+        com.appbana.config.AppConfig config = com.appbana.config.ConfigManager.getConfig();
+        if (com.appbana.ai.AiProviderFactory.isAiEnabled(config)) {
+            try {
+                com.appbana.ai.AiProvider provider = com.appbana.ai.AiProviderFactory.createProvider(config);
+                // Playful, friendly system prompt for small talk
+                String systemPrompt = "You are a playful, friendly AI assistant for app creators. Respond to the user's message in a natural, human-like way. Keep it light, fun, and helpful.";
+                String reply = provider.generateAppStructure(input, systemPrompt);
+                // Sanitize output (strip markdown, etc.)
+                return com.appbana.AiAppGeneratorService.sanitizeAiJson(reply);
+            } catch (Exception e) {
+                // Log and fallback to legacy patterns
+                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class).warn("OpenAI small talk failed, falling back to legacy patterns: {}", e.getMessage());
+            }
+        }
+        // Legacy fallback: hardcoded patterns
         for (SmallTalkPattern p : patterns) {
             if (p.pattern.matcher(input).find()) {
                 return p.reply;
