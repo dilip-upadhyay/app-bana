@@ -275,14 +275,14 @@ public class ApiServer {
     }
 
     public static com.appbana.api.Router buildRouter() {
-            // Agent memory endpoints
-            router.get("/api/agent/memory", com.appbana.api.AgentMemoryApi.getMemoryHandler());
-            router.post("/api/agent/memory/clear", com.appbana.api.AgentMemoryApi.getClearMemoryHandler());
-            router.get("/api/agent/preferences", com.appbana.api.AgentMemoryApi.getPreferencesHandler());
-            router.post("/api/agent/preferences", com.appbana.api.AgentMemoryApi.setPreferenceHandler());
-            router.get("/api/agent/feedback", com.appbana.api.AgentMemoryApi.getFeedbackHandler());
-            router.post("/api/agent/feedback", com.appbana.api.AgentMemoryApi.recordFeedbackHandler());
         com.appbana.api.Router router = new com.appbana.api.Router();
+        // Agent memory endpoints
+        router.get("/api/agent/memory", com.appbana.api.AgentMemoryApi.memoryHandler());
+        router.post("/api/agent/memory/clear", com.appbana.api.AgentMemoryApi.clearMemoryHandler());
+        router.get("/api/agent/preferences", com.appbana.api.AgentMemoryApi.preferencesHandler());
+        router.post("/api/agent/preferences", com.appbana.api.AgentMemoryApi.setPreferenceHandler());
+        router.get("/api/agent/feedback", com.appbana.api.AgentMemoryApi.feedbackHandler());
+        router.post("/api/agent/feedback", com.appbana.api.AgentMemoryApi.recordFeedbackHandler());
         router.get("/health", (req, res) -> res.json(200, Map.of("status", "UP")));
         router.get("/ready", (req, res) -> {
             long start = System.currentTimeMillis();

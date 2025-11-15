@@ -401,10 +401,16 @@ export class AiChatBuilder extends LitElement {
         this.addAssistantMessage(result.payload.reply || 'Small talk response.');
       } else if (result && result.success) {
         if (result.needsMoreInfo && Array.isArray(result.followUpQuestions)) {
-          const questions = result.followUpQuestions.map((q, i) => `4AC ${q}`).join('\n');
-          this.addAssistantMessage(
-            `I need a bit more info to help you:\n${questions}`
-          );
+          // If the user's input is a greeting or personal question, use persona response
+          const lowerInput = input.toLowerCase();
+          if (/who are you|your name|what are you|how old are you|where are you from|hobby|hobbies/.test(lowerInput)) {
+            this.addAssistantMessage(this.getPersonaText('greeting') + ' I am GitHub Copilot, your Studio sidekick! My hobby is helping you build apps and making you smile.');
+          } else {
+            const questions = result.followUpQuestions.map((q) => `• ${q}`).join('\n');
+            this.addAssistantMessage(
+              `Great! To help you better, could you answer a few quick questions?\n${questions}`
+            );
+          }
         } else if (result.payload?.reply) {
           this.addAssistantMessage(result.payload.reply);
         } else {

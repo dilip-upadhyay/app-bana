@@ -1,6 +1,8 @@
 package com.appbana.api;
 
+import com.appbana.ApiServer;
 import com.appbana.ai.AgentMemoryService;
+import com.appbana.api.Router;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -21,71 +23,68 @@ import java.util.Map;
 public class AgentMemoryApi {
     private static final ObjectMapper M = new ObjectMapper();
 
-    public static HttpHandler getMemoryHandler() {
-        return exchange -> {
-            String userId = getQueryParam(exchange, "userId", "default");
+    // BiConsumer-based handlers for Router
+    public static java.util.function.BiConsumer<Router.HttpRequest, Router.HttpResponse> memoryHandler() {
+        return (req, res) -> {
+            String userId = req.query("userId");
+            if (userId == null) userId = "default";
             var history = AgentMemoryService.getHistory(userId);
-            ApiServer.sendJson(exchange, 200, history);
+            res.json(200, history);
         };
     }
 
-    public static HttpHandler getClearMemoryHandler() {
-        return exchange -> {
-            String userId = getQueryParam(exchange, "userId", "default");
+    public static java.util.function.BiConsumer<Router.HttpRequest, Router.HttpResponse> clearMemoryHandler() {
+        return (req, res) -> {
+            String userId = req.query("userId");
+            if (userId == null) userId = "default";
             AgentMemoryService.clearHistory(userId);
-            ApiServer.sendJson(exchange, 200, Map.of("ok", true));
+            res.json(200, Map.of("ok", true));
         };
     }
 
-    public static HttpHandler getPreferencesHandler() {
-        return exchange -> {
-            String userId = getQueryParam(exchange, "userId", "default");
+    public static java.util.function.BiConsumer<Router.HttpRequest, Router.HttpResponse> preferencesHandler() {
+        return (req, res) -> {
+            String userId = req.query("userId");
+            if (userId == null) userId = "default";
             var prefs = AgentMemoryService.getAllPreferences(userId);
-            ApiServer.sendJson(exchange, 200, prefs);
+            res.json(200, prefs);
         };
     }
 
-    public static HttpHandler setPreferenceHandler() {
-        return exchange -> {
-            String userId = getQueryParam(exchange, "userId", "default");
-            Map<String, Object> body = M.readValue(exchange.getRequestBody(), Map.class);
+    public static java.util.function.BiConsumer<Router.HttpRequest, Router.HttpResponse> setPreferenceHandler() {
+        return (req, res) -> {
+            String userId = req.query("userId");
+            if (userId == null) userId = "default";
+            Map<String, Object> body = req.readJson(new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
             String key = (String) body.get("key");
             Object value = body.get("value");
             AgentMemoryService.setPreference(userId, key, value);
-            ApiServer.sendJson(exchange, 200, Map.of("ok", true));
+            res.json(200, Map.of("ok", true));
         };
     }
 
-    public static HttpHandler getFeedbackHandler() {
-        return exchange -> {
-            String userId = getQueryParam(exchange, "userId", "default");
+    public static java.util.function.BiConsumer<Router.HttpRequest, Router.HttpResponse> feedbackHandler() {
+        return (req, res) -> {
+            String userId = req.query("userId");
+            if (userId == null) userId = "default";
             var feedback = AgentMemoryService.getFeedback(userId);
-            ApiServer.sendJson(exchange, 200, feedback);
+            res.json(200, feedback);
         };
     }
 
-    public static HttpHandler recordFeedbackHandler() {
-        return exchange -> {
-            String userId = getQueryParam(exchange, "userId", "default");
-            Map<String, Object> body = M.readValue(exchange.getRequestBody(), Map.class);
+    public static java.util.function.BiConsumer<Router.HttpRequest, Router.HttpResponse> recordFeedbackHandler() {
+        return (req, res) -> {
+            String userId = req.query("userId");
+            if (userId == null) userId = "default";
+            Map<String, Object> body = req.readJson(new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
             String input = (String) body.get("input");
             String response = (String) body.get("response");
             boolean positive = Boolean.TRUE.equals(body.get("positive"));
             String comment = (String) body.getOrDefault("comment", "");
             AgentMemoryService.recordFeedback(userId, input, response, positive, comment);
-            ApiServer.sendJson(exchange, 200, Map.of("ok", true));
+            res.json(200, Map.of("ok", true));
         };
     }
 
-    private static String getQueryParam(HttpExchange exchange, String key, String def) {
-        String query = exchange.getRequestURI().getQuery();
-        if (query == null) return def;
-        for (String part : query.split("&")) {
-            int i = part.indexOf('=');
-            if (i > 0 && part.substring(0, i).equals(key)) {
-                return part.substring(i + 1);
-            }
-        }
-        return def;
-    }
+    // Old HttpHandler-based methods can be removed if not used elsewhere
 }
