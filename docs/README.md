@@ -2,9 +2,12 @@
 
 **Welcome! Start here for comprehensive AppBana documentation.**
 
-> **Updated:** October 31, 2025  
-> **Status:** NEW! Strategic Plan + Core Documentation + Implementation Roadmap  
+> **Updated:** November 15, 2025  
+> **Status:** StudioTableLive, bulk actions, runtime themes + AI builder references added  
 > **Next Update:** November 30, 2025
+
+### Fresh Additions
+- **[TABLE-LIVE-ENHANCEMENTS.md](./TABLE-LIVE-ENHANCEMENTS.md)** — Recap of the latest pagination, theming, bulk actions, view/edit, and inline cell editing features plus instructions for updating the builder database.
 
 ---
 
@@ -383,7 +386,7 @@ Schema changes → manually update forms
 
 # AppBana Documentation Hub
 
-**Major Update (Nov 13, 2025):**
+**Major Update (Nov 15, 2025):**
 - PropertiesPanel now supports editing properties for all component types (container, button, input, etc.)
 - Selection logic in LivePreview is robust—any component is selectable, even if focused
 - TreeStore singleton initialization is now reliable; PropertiesPanel waits for store before subscribing
