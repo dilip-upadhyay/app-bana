@@ -32,6 +32,21 @@ public class AiAppGeneratorService {
         // Enhanced logging for debugging
         LOG.info("[AI] Incoming GenerationRequest: action={}, description={}, options={}", request != null ? request.action : null, request != null ? request.description : null, request != null ? request.options : null);
         try {
+            // Small talk detection (before intent classification)
+            if (request != null && request.description != null) {
+                String smallTalkReply = com.appbana.ai.SmallTalkEngine.getSmallTalkResponse(request.description);
+                if (smallTalkReply != null) {
+                    GenerationResult result = new GenerationResult();
+                    result.success = true;
+                    result.payload = new HashMap<>();
+                    result.payload.put("smallTalk", true);
+                    result.payload.put("reply", smallTalkReply);
+                    LOG.info("[AI] Small talk detected, responding: {}", smallTalkReply);
+                    // Record in agent memory (demo: use 'default' user)
+                    com.appbana.ai.AgentMemoryService.record("default", request.description, smallTalkReply);
+                    return result;
+                }
+            }
             // If no explicit action, ask the AI to classify the user's intent into an action+options JSON
             if ((request == null || request.action == null) && request != null && request.description != null) {
                 try {
