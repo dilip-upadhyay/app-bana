@@ -147,6 +147,12 @@ builder-database/
 
 **Update Protocol**: When adding components/field types/page templates, update corresponding JSON + increment version + update capabilities index.
 
+## Conversational Builder Alignment
+
+- **Persona Reference**: Studio now follows the `Studio Conversational LAN` (see `docs/STUDIO-CONVERSATIONAL-LAN.md`) so AI builders should greet users, offer guided ideas, and narrate metadata decisions.
+- **AiChatBuilder Focus**: Keep `/api/ai/generate` calls focused on structured intent flows; handle greetings, idea suggestions, and simple directives client-side before backend generation.
+- **Builder Database Sync**: When introducing new conversational cues (greetings, ideas, persona states), capture them in `builder-database/02-components.json` so AI agents understand the policy that drives the UI builder.
+
 ## Common Debugging Scenarios
 
 ### Backend Exits Immediately

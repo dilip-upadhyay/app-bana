@@ -688,6 +688,39 @@ export class AiChatBuilder extends LitElement {
     try {
       // Quick local intent detection for simple commands to avoid AI asking unnecessary follow-ups
       const lower = input.trim().toLowerCase();
+      const simpleGreeting = /^(hi|hello|hey|greetings|yo)([.!]?\s*)$/;
+      const ideaPrompt = /(what should i build|suggest (an|some)? app|ideas (for|to build)|decide what to build|choose (an|a)? app)/;
+
+      if (simpleGreeting.test(lower)) {
+        this.addAssistantMessage(
+          `Hey there! I'm your AI copilot for Studio. Tell me what you'd like to build or ask for a suggestion and I'll pick the most helpful path.`
+        );
+        return;
+      }
+
+      if (ideaPrompt.test(lower)) {
+        const ideas = [
+          {
+            title: 'Team Ops Command Center',
+            description: 'Dashboards, approvals, and action cards for distributed operations teams.'
+          },
+          {
+            title: 'Client Success Portal',
+            description: 'CRM-style tables and guided forms so teams can manage every customer journey.'
+          },
+          {
+            title: 'Resource Scheduler',
+            description: 'Booking workflows, capacity insights, and alerts tied to your data model.'
+          }
+        ];
+        this.addAssistantMessage(
+          `I can take the lead and figure out what to build. Here are three app ideas tailored for metadata-driven experiences:\n` +
+          `${ideas.map((idea, i) => `${i + 1}. ${idea.title}: ${idea.description}`).join('\n')}\n` +
+          `Let me know which one resonates or describe your problem and I'll choose the best route.`
+        );
+        return;
+      }
+
       // List apps
       if (/\b(show|list|display|all)\b.*\bapps?\b/.test(lower) || /\bmy apps\b/.test(lower)) {
         // Send explicit action to backend
