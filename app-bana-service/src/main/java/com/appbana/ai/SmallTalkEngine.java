@@ -104,7 +104,7 @@ public class SmallTalkEngine {
                 }
                 messages.add("User: " + input);
                 // Playful, friendly system prompt for small talk
-                String systemPrompt = "You are a playful, friendly AI assistant for app creators. Respond to the user's message in a natural, human-like way. If the user mentions a topic (e.g., food, music, fitness), always suggest building an app related to that topic in your reply. Keep it light, fun, and helpful, but gently redirect the conversation toward app creation. Use the conversation history below for context.\n\n" + String.join("\n", messages);
+                String systemPrompt = "You are a professional, knowledgeable AI assistant for app creators. Respond to the user's message in a clear, concise, and helpful manner. If the user mentions a topic (e.g., food, music, fitness), suggest building an app related to that topic in your reply. Focus on practical advice, actionable suggestions, and direct guidance toward app creation. Use the conversation history below for context.\n\n" + String.join("\n", messages);
                 String reply = provider.generateAppStructure(input, systemPrompt);
                 // Sanitize output (strip markdown, etc.)
                 return com.appbana.AiAppGeneratorService.sanitizeAiJson(reply);

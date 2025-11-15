@@ -34,24 +34,29 @@ public class AiAppGeneratorService {
         try {
             // Small talk detection (before intent classification)
             if (request != null && request.description != null) {
-                // Use request.userId if available, else fallback to 'default'
-                String userId = "default";
-                if (request.options != null && request.options.containsKey("userId")) {
-                    userId = String.valueOf(request.options.get("userId"));
-                } else if (request.conversationContext != null && request.conversationContext.containsKey("userId")) {
-                    userId = String.valueOf(request.conversationContext.get("userId"));
-                }
-                String smallTalkReply = com.appbana.ai.SmallTalkEngine.getSmallTalkResponse(request.description, userId);
-                if (smallTalkReply != null) {
-                    GenerationResult result = new GenerationResult();
-                    result.success = true;
-                    result.payload = new HashMap<>();
-                    result.payload.put("smallTalk", true);
-                    result.payload.put("reply", smallTalkReply);
-                    LOG.info("[AI] Small talk detected, responding: {}", smallTalkReply);
-                    // Record in agent memory
-                    com.appbana.ai.AgentMemoryService.record(userId, request.description, smallTalkReply);
-                    return result;
+                String lower = request.description.toLowerCase();
+                // If the input contains app creation intent, bypass small talk
+                boolean isAppCreation = lower.contains("create the app") || lower.contains("build the app") || lower.contains("generate the app") || lower.contains("make the app") || lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("generate app") || lower.startsWith("make app");
+                if (!isAppCreation) {
+                    // Use request.userId if available, else fallback to 'default'
+                    String userId = "default";
+                    if (request.options != null && request.options.containsKey("userId")) {
+                        userId = String.valueOf(request.options.get("userId"));
+                    } else if (request.conversationContext != null && request.conversationContext.containsKey("userId")) {
+                        userId = String.valueOf(request.conversationContext.get("userId"));
+                    }
+                    String smallTalkReply = com.appbana.ai.SmallTalkEngine.getSmallTalkResponse(request.description, userId);
+                    if (smallTalkReply != null) {
+                        GenerationResult result = new GenerationResult();
+                        result.success = true;
+                        result.payload = new HashMap<>();
+                        result.payload.put("smallTalk", true);
+                        result.payload.put("reply", smallTalkReply);
+                        LOG.info("[AI] Small talk detected, responding: {}", smallTalkReply);
+                        // Record in agent memory
+                        com.appbana.ai.AgentMemoryService.record(userId, request.description, smallTalkReply);
+                        return result;
+                    }
                 }
             }
             // If no explicit action, ask the AI to classify the user's intent into an action+options JSON
