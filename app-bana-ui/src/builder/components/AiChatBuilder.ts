@@ -579,13 +579,28 @@ export class AiChatBuilder extends LitElement {
   private assistantPersona: keyof typeof personaPrompts = 'friendly';
 
   private smallTalkPatterns: Array<{ pattern: RegExp; reply: string | ((...args: any[]) => string) }> = [
-    { pattern: /weather|forecast|rain|sunny|cloudy|temperature|climate/, reply: "I'm not connected to live weather, but I can help you build a weather app or show you how to track forecasts!" },
-    { pattern: /joke|funny|laugh/, reply: "Why did the developer go broke? Because he used up all his cache! 😄" },
-    { pattern: /time|clock|what time is it/, reply: () => `It's ${new Date().toLocaleTimeString()}. Need a time-tracking app?` },
-    { pattern: /date|day|what day is it/, reply: () => `Today is ${new Date().toLocaleDateString()}. Want a calendar app?` },
-    { pattern: /who are you|what are you|your name/, reply: "I'm your friendly AI copilot for Studio! Here to help you build apps and answer questions." },
+    // Greetings (handled by greeting intent, but fallback here for casual variants)
+    { pattern: /yo|howdy|greetings|sup|what's up|how are you|how's it going|how's life|how's your day|how's your week|how's your morning|how's your afternoon|how's your evening/, reply: "Hey there! 👋 I’m your AI copilot for Studio. What can I help you with today?" },
+    // Jokes & Humor
+    { pattern: /joke|funny|laugh|pun/, reply: "Why did the developer go broke? Because he used up all his cache! Or maybe you prefer: Why do programmers prefer dark mode? Because light attracts bugs!" },
+    // Fun Facts & Trivia
+    { pattern: /fact|trivia|surprise/, reply: "Did you know? The first computer bug was an actual moth! Or: The word ‘robot’ comes from a Czech word meaning ‘forced labor’." },
+    // Time & Date
+    { pattern: /time|clock|what time is it/, reply: () => `It's ${new Date().toLocaleTimeString()}. It's always build-o'clock in Studio!` },
+    { pattern: /date|day|what day is it|friday/, reply: () => `Today is ${new Date().toLocaleDateString()}. Any day is a good day to create something new!` },
+    // Music, Dance, Singing
+    { pattern: /dance|dancing/, reply: "If I could dance, I'd do the robot—naturally! 💃🤖 Want a dance app idea?" },
+    { pattern: /sing|singing|music|song/, reply: "I’d sing, but my voice is all ones and zeroes. 🎶 My favorite genre is ‘byte beats’." },
+    // Weather & Chit-Chat
+    { pattern: /weather|forecast|rain|sunny|cloudy|temperature|climate/, reply: "I live in the cloud, so it’s always partly cloudy for me! No need for a weather report—I’m always here, rain or shine." },
+    // Personal Questions
+    { pattern: /who are you|what are you|your name/, reply: "I’m GitHub Copilot, your Studio sidekick! My hobby is helping you build apps and making you smile." },
     { pattern: /how old are you/, reply: "I'm as old as the latest commit!" },
-    { pattern: /tell me something|fact/, reply: "Did you know? The first computer bug was an actual moth stuck in a relay!" }
+    { pattern: /where are you from/, reply: "I’m from the land of code and creativity." },
+    { pattern: /hobby|hobbies/, reply: "My favorite hobby? Turning your ideas into reality!" },
+    // Miscellaneous playful
+    { pattern: /surprise me/, reply: "Surprise! I can help you build apps and share random facts—just ask!" },
+    { pattern: /make me smile/, reply: "Here's a smile for you: 😊 And a joke: Why do Java developers wear glasses? Because they don't C#!" }
   ];
 
     private handleSmallTalkIntent(lower: string): boolean {
@@ -814,6 +829,18 @@ export class AiChatBuilder extends LitElement {
     try {
       // Quick local intent detection for simple commands to avoid AI asking unnecessary follow-ups
       const lower = input.trim().toLowerCase();
+
+
+      // Prioritize app suggestion if user asks for an idea or suggestion about a dance app
+      if (/suggest|idea|recommend|build|create/.test(lower) && /dance/.test(lower)) {
+        this.recordConversationTelemetry('idea', { input: lower });
+        this.addAssistantMessage(
+          `Here's a dance app idea for you:
+          \n**Dance Academy Portal**: Manage classes, instructors, schedules, and student registrations. Includes video lessons, event calendars, and feedback forms.\nWant to customize it or add more features?`
+        );
+        this.transitionPhase('idea-suggest');
+        return;
+      }
 
       if (this.handleGreetingIntent(lower)) {
         return;
