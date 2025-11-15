@@ -43,6 +43,452 @@ const ideaPromptPattern = /idea|suggestion|recommend|what can you do|show me/i;
 @customElement('ai-chat-builder')
 export class AiChatBuilder extends LitElement {
 
+  static readonly styles = css`
+    :host {
+      display: block;
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      color: #0f172a;
+    }
+
+    .ai-chat-panel {
+      width: min(760px, 100%);
+      margin: 0 auto;
+      background: linear-gradient(180deg, #f8fafc 0%, #e0f2fe 100%);
+      padding: 1.5rem;
+      border-radius: 24px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.15);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      min-height: 580px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .header h2 {
+      margin: 0;
+      font-size: 1.85rem;
+      font-weight: 600;
+    }
+
+    .header p {
+      margin: 0.35rem 0 0;
+      color: #475569;
+      line-height: 1.4;
+    }
+
+    .settings-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: #fff;
+      color: #0f172a;
+      font-size: 1.2rem;
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.15);
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .settings-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.2);
+    }
+
+    .chat-container {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      padding: 1rem;
+      min-height: 320px;
+      max-height: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    .chat-container::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .chat-container::-webkit-scrollbar-thumb {
+      background: rgba(15, 23, 42, 0.2);
+      border-radius: 999px;
+    }
+
+    .message {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.85rem;
+      padding: 0.85rem 1rem;
+      border-radius: 16px;
+      border: 1px solid transparent;
+      background: #f8fafc;
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.05);
+    }
+
+    .message.assistant {
+      background: #eef2ff;
+      border-color: #c7d2fe;
+    }
+
+    .message.user {
+      margin-left: auto;
+      background: #e0f2fe;
+      border-color: #bae6fd;
+    }
+
+    .message-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    .message.user .message-avatar {
+      background: #bae6fd;
+    }
+
+    .message-content {
+      flex: 1;
+    }
+
+    .message-text {
+      margin: 0;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: #0f172a;
+      white-space: pre-line;
+      font-weight: 500;
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+      color: #475569;
+      font-size: 0.95rem;
+      padding: 0.75rem;
+      border-radius: 14px;
+      background: #f1f5f9;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 3px solid rgba(15, 23, 42, 0.2);
+      border-top-color: #2563eb;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .input-container {
+      display: flex;
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid #cbd5f5;
+      padding: 0.75rem;
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.1);
+    }
+
+    .input-wrapper {
+      display: flex;
+      flex: 1;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .input-field {
+      flex: 1;
+      position: relative;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 80px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      padding: 0.85rem 1rem;
+      font-family: inherit;
+      font-size: 0.95rem;
+      resize: none;
+      line-height: 1.4;
+      background: #f8fafc;
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+      transition: border 0.2s ease;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #2563eb;
+      background: #fff;
+    }
+
+    .send-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 0.6rem 1.75rem;
+      background: linear-gradient(135deg, #2563eb, #4f46e5);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 10px 18px rgba(37, 99, 235, 0.3);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 0.65rem;
+      padding: 1.5rem;
+      border-radius: 16px;
+      background: #f8fafc;
+      border: 1px dashed rgba(148, 163, 184, 0.6);
+    }
+
+    .empty-state h3 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .empty-state p {
+      margin: 0;
+      color: #475569;
+      font-size: 0.9rem;
+    }
+
+    .example-prompts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      justify-content: center;
+      margin-top: 0.75rem;
+    }
+
+    .example-prompt {
+      border: none;
+      border-radius: 999px;
+      padding: 0.55rem 1rem;
+      background: #2563eb;
+      color: #fff;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.2s ease;
+    }
+
+    .example-prompt:hover {
+      background: #1e40af;
+      transform: translateY(-1px);
+    }
+
+    .settings-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 1000;
+    }
+
+    .settings-content {
+      background: #fff;
+      border-radius: 20px;
+      padding: 1.5rem;
+      max-width: 520px;
+      width: 100%;
+      box-shadow: 0 25px 45px rgba(15, 23, 42, 0.25);
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: #475569;
+    }
+
+    .settings-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    label {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #0f172a;
+    }
+
+    input,
+    select {
+      border-radius: 12px;
+      border: 1px solid #cbd5f5;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: #f8fafc;
+    }
+
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: #2563eb;
+      background: #fff;
+    }
+
+    .form-help {
+      font-size: 0.8rem;
+      color: #475569;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+
+    .status-badge.success {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .status-badge.info {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .settings-footer {
+      margin-top: 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 0.35rem;
+    }
+
+    .btn {
+      border-radius: 999px;
+      border: 1px solid transparent;
+      padding: 0.55rem 1.2rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+
+    .btn.primary {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    .preview-card {
+      background: #f8fafc;
+      border-radius: 16px;
+      padding: 1rem;
+      border: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .preview-card h4 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .preview-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .preview-list li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 768px) {
+      .ai-chat-panel {
+        padding: 1rem;
+        min-height: auto;
+        border-radius: 20px;
+      }
+
+      .chat-container {
+        max-height: 360px;
+      }
+
+      .input-container {
+        flex-direction: column;
+      }
+
+      .send-btn {
+        width: 100%;
+        text-align: center;
+      }
+    }
+  `;
+
   @state() private messages: ChatMessage[] = [];
   @state() private inputValue = '';
   @state() private isProcessing = false;
@@ -885,20 +1331,21 @@ export class AiChatBuilder extends LitElement {
 
   render() {
     return html`
-      <div class="header">
+      <div class="ai-chat-panel">
+        <div class="header">
         <h2>🤖 AI App Builder</h2>
         <p>Describe your app idea and I'll build it for you</p>
         <button class="settings-btn" @click=${this.openSettings} title="AI Settings">
           ⚙️
         </button>
-      </div>
+        </div>
 
-      <div class="chat-container">
+        <div class="chat-container">
         ${this.messages.length === 0 ? this.renderEmptyState() : this.renderMessages()}
         ${this.isProcessing ? this.renderLoading() : ''}
       </div>
 
-      <div class="input-container">
+        <div class="input-container">
         <div class="input-wrapper">
           <div class="input-field">
             <textarea
@@ -924,7 +1371,8 @@ export class AiChatBuilder extends LitElement {
         </div>
       </div>
 
-      ${this.showSettings ? this.renderSettingsModal() : ''}
+        ${this.showSettings ? this.renderSettingsModal() : ''}
+      </div>
     `;
   }
 
