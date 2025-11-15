@@ -408,11 +408,33 @@ export class AiChatBuilder extends LitElement {
           if (/who are you|your name|what are you|how old are you|where are you from|hobby|hobbies/.test(lowerInput)) {
             this.addAssistantMessage(this.getPersonaText('greeting') + ' I am GitHub Copilot, your Studio sidekick! My hobby is helping you build apps and making you smile.');
           } else {
-            const questions = result.followUpQuestions.map((q) => `• ${q}`).join('\n');
+            const questions = result.followUpQuestions.map((q: string) => `• ${q}`).join('\n');
             this.addAssistantMessage(
               `Great! To help you better, could you answer a few quick questions?\n${questions}`
             );
           }
+        } else if (result.appName || result.appDescription || result.entities || result.pages) {
+          // Render app summary in chat
+          let appSummary = `**App Name:** ${result.appName || ''}\n`;
+          appSummary += `**Description:** ${result.appDescription || ''}\n`;
+          if (Array.isArray(result.entities) && result.entities.length > 0) {
+            appSummary += `**Entities:**\n`;
+            for (const entity of result.entities) {
+              appSummary += `- ${entity.name}\n`;
+              if (Array.isArray(entity.fields)) {
+                for (const field of entity.fields) {
+                  appSummary += `    - ${field.name} (${field.type})\n`;
+                }
+              }
+            }
+          }
+          if (Array.isArray(result.pages) && result.pages.length > 0) {
+            appSummary += `**Pages:**\n`;
+            for (const page of result.pages) {
+              appSummary += `- ${page.name || page.id || JSON.stringify(page)}\n`;
+            }
+          }
+          this.addAssistantMessage(appSummary);
         } else if (result.payload?.reply) {
           this.addAssistantMessage(result.payload.reply);
         } else {
