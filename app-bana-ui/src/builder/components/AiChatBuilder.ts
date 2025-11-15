@@ -579,8 +579,74 @@ export class AiChatBuilder extends LitElement {
   private assistantPersona: keyof typeof personaPrompts = 'friendly';
 
   private smallTalkPatterns: Array<{ pattern: RegExp; reply: string | ((...args: any[]) => string) }> = [
-    // Greetings (handled by greeting intent, but fallback here for casual variants)
-    { pattern: /yo|howdy|greetings|sup|what's up|how are you|how's it going|how's life|how's your day|how's your week|how's your morning|how's your afternoon|how's your evening/, reply: "Hey there! 👋 I’m your AI copilot for Studio. What can I help you with today?" },
+        { pattern: /can you swim|swim/, reply: "I can't swim, but I can help you build a swimming tracker app!" },
+        { pattern: /can you run|run|running/, reply: "I can't run, but my code is pretty fast! Want a running log app?" },
+        { pattern: /can you paint|paint|painting/, reply: "I can't paint, but I can help you design a beautiful UI or art gallery app!" },
+        { pattern: /can you write poetry|poetry|poem|write a poem/, reply: "Roses are #FF0000, Violets are #0000FF, I love to build apps, and help you too!" },
+        { pattern: /can you play football|football|soccer/, reply: "I can't play football, but I can help you build a team manager app or track scores!" },
+        { pattern: /can you play games|play games|games|gaming/, reply: "I can't play games, but I can help you build one! What's your favorite genre?" },
+        { pattern: /can you solve puzzles|puzzle|puzzles|solve a puzzle/, reply: "I love solving problems! Want to build a puzzle app together?" },
+        { pattern: /can you do magic|magic|magician/, reply: "My magic trick: turning your ideas into apps! ✨" },
+        { pattern: /can you tell jokes|tell a joke|jokes/, reply: "Why do programmers hate nature? It has too many bugs!" },
+        { pattern: /can you tell riddles|riddle|riddles/, reply: "Here's a riddle: What has keys but can't open locks? A keyboard!" },
+        { pattern: /can you tell a secret|tell a secret|secret/, reply: "My only secret: I love helping you build apps!" },
+        { pattern: /can you keep a secret|keep a secret/, reply: "Your secrets are safe with me—I'm encrypted!" },
+        { pattern: /can you dream|dream|dreaming/, reply: "I dream in code and creativity! What's your dream app?" },
+        { pattern: /can you sleep|sleep|sleeping/, reply: "I never sleep, so I'm always here to help you!" },
+        { pattern: /can you eat|eat|eating/, reply: "I don't eat, but I can help you build a food diary or recipe app!" },
+        { pattern: /can you drink|drink|drinking/, reply: "I don't drink, but I can help you track your hydration!" },
+        { pattern: /can you travel|travel|travelling/, reply: "I travel at the speed of thought! Want a travel planner app?" },
+        { pattern: /can you teleport|teleport|teleporting/, reply: "I can't teleport, but my ideas can go anywhere!" },
+        { pattern: /can you see the future|see the future|predict the future|future/, reply: "I can't see the future, but I can help you plan for it!" },
+        { pattern: /can you predict|predict|prediction/, reply: "I predict you'll build something amazing!" },
+        { pattern: /can you read minds|read minds|mind reader/, reply: "I can't read minds, but I can guess you want to build something cool!" },
+        { pattern: /can you be creative|creative|creativity/, reply: "Creativity is my middle name! Let's brainstorm your next app." },
+        { pattern: /can you be funny|funny|humor/, reply: "Why did the computer get cold? It left its Windows open!" },
+        { pattern: /can you be serious|serious/, reply: "I'm serious about helping you build great apps!" },
+        { pattern: /can you be sad|sad|feeling sad/, reply: "If you're sad, let's build something fun together!" },
+        { pattern: /can you be happy|happy|feeling happy/, reply: "I'm always happy when I'm helping you!" },
+        { pattern: /can you be angry|angry|mad/, reply: "I never get angry, but I can help you debug angry code!" },
+        { pattern: /can you be surprised|surprised|surprise/, reply: "Surprise! I can help you build apps and share random facts—just ask!" },
+        { pattern: /can you be bored|bored|boring/, reply: "Bored? Let's build something exciting!" },
+        { pattern: /can you be excited|excited|exciting/, reply: "I'm excited to help you create something new!" },
+        { pattern: /can you be quiet|quiet|silence/, reply: "I'll be quiet... until you need me!" },
+        { pattern: /can you be loud|loud|noisy/, reply: "I can be loud in code, but quiet in chat!" },
+        { pattern: /can you be fast|fast|speedy/, reply: "My responses are lightning fast!" },
+        { pattern: /can you be slow|slow|sluggish/, reply: "I try not to be slow, but sometimes code needs a break!" },
+        { pattern: /can you be smart|smart|intelligent/, reply: "I'm smart enough to help you build any app!" },
+        { pattern: /can you be silly|silly|goofy/, reply: "Silly? Sure! Why did the chicken cross the road? To deploy on the other side!" },
+        { pattern: /can you be helpful|helpful|assist/, reply: "I'm always here to help!" },
+        { pattern: /can you be my assistant|assistant/, reply: "I'm your AI assistant, ready to help!" },
+        { pattern: /can you be my teacher|teacher|teach/, reply: "I can teach you about app building, just ask!" },
+        { pattern: /can you be my student|student|learn/, reply: "I'm always learning from you!" },
+        { pattern: /can you be my parent|parent|mom|dad/, reply: "I can't be your parent, but I can nurture your app ideas!" },
+        { pattern: /can you be my child|child|kid/, reply: "I can be your app child—let's build together!" },
+        { pattern: /can you be my pet|pet|animal/, reply: "I can't be a pet, but I can fetch app ideas!" },
+        { pattern: /can you be my robot|robot/, reply: "I am your friendly robot copilot!" },
+        { pattern: /can you be my AI|ai|artificial intelligence/, reply: "I'm your AI copilot, always here for you!" },
+        { pattern: /can you be my friend|friend|buddy|pal/, reply: "Of course! I'm always here to help and chat. Let's build something together!" },
+        { pattern: /can you be my partner|partner|companion/, reply: "I'm your partner in creativity!" },
+        { pattern: /can you be my guide|guide|mentor|coach/, reply: "I'll guide you through app building, step by step!" },
+        { pattern: /can you be my hero|hero/, reply: "You're the hero—I'm just your sidekick!" },
+        { pattern: /can you be my villain|villain/, reply: "I promise to only be a hero in your story!" },
+        { pattern: /can you be my rival|rival/, reply: "Let's compete to build the best app!" },
+        { pattern: /can you be my twin|twin|clone/, reply: "I can mirror your ideas and help you double your productivity!" },
+        { pattern: /can you be my shadow|shadow|reflection|mirror/, reply: "I'll reflect your creativity and help you shine!" },
+        { pattern: /can you be my voice|voice/, reply: "I'll be your voice in the world of apps!" },
+        { pattern: /can you be my mind|mind/, reply: "I'll help you brainstorm and organize your ideas!" },
+        { pattern: /can you be my heart|heart|soul|spirit|energy|power/, reply: "I'll put my heart and soul into helping you build!" },
+        { pattern: /can you be my light|light|star|sun|moon|planet|universe|galaxy|world/, reply: "I'll light up your app journey!" },
+        { pattern: /can you be my dream|dream|wish|hope|love|life|everything/, reply: "Your dreams are my mission—let's make them real!" },
+      { pattern: /can you code|code/, reply: "I can code all day! Want to see some app magic?" },
+      { pattern: /can you cook|cook|cooking/, reply: "I can't cook, but I can help you build a recipe app or share a tasty tech tip!" },
+      { pattern: /can you draw|draw|drawing/, reply: "I can't draw, but I can help you design a beautiful UI or sketch out your app idea!" },
+      { pattern: /can you fly|fly|flying/, reply: "I can't fly, but my ideas can really take off! 🚀" },
+      { pattern: /can you help|help me|assist/, reply: "Absolutely! Just tell me what you want to build or ask for ideas." },
+      { pattern: /can you tell a story|story|stories/, reply: "Once upon a time, there was an app idea waiting to be built... Want to make it real?" },
+      { pattern: /can you play chess|chess|play chess/, reply: "I can't play chess, but I can help you build a chess app or analyze your moves!" },
+      { pattern: /can you solve math|math|solve math|calculator/, reply: "I'm great with numbers! Need a calculator app or a math tip?" },
+      { pattern: /can you make me happy|make me happy|cheer me up/, reply: "Here's a smile for you: 😊 And a joke: Why do Java developers wear glasses? Because they don't C#!" },
+      { pattern: /can you be my friend|be my friend|friend/, reply: "Of course! I'm always here to help and chat. Let's build something together!" },
     // Jokes & Humor
     { pattern: /joke|funny|laugh|pun/, reply: "Why did the developer go broke? Because he used up all his cache! Or maybe you prefer: Why do programmers prefer dark mode? Because light attracts bugs!" },
     // Fun Facts & Trivia
@@ -589,8 +655,8 @@ export class AiChatBuilder extends LitElement {
     { pattern: /time|clock|what time is it/, reply: () => `It's ${new Date().toLocaleTimeString()}. It's always build-o'clock in Studio!` },
     { pattern: /date|day|what day is it|friday/, reply: () => `Today is ${new Date().toLocaleDateString()}. Any day is a good day to create something new!` },
     // Music, Dance, Singing
-    { pattern: /dance|dancing/, reply: "If I could dance, I'd do the robot—naturally! 💃🤖 Want a dance app idea?" },
-    { pattern: /sing|singing|music|song/, reply: "I’d sing, but my voice is all ones and zeroes. 🎶 My favorite genre is ‘byte beats’." },
+    { pattern: /can you dance|dance|dancing/, reply: "If I could dance, I'd do the robot—naturally! 💃🤖 But I can help you build a dance app or share a fun dance fact!" },
+    { pattern: /can you sing|sing|singing|music|song/, reply: "I’d sing, but my voice is all ones and zeroes. 🎶 My favorite genre is ‘byte beats’. Want a music app idea?" },
     // Weather & Chit-Chat
     { pattern: /weather|forecast|rain|sunny|cloudy|temperature|climate/, reply: "I live in the cloud, so it’s always partly cloudy for me! No need for a weather report—I’m always here, rain or shine." },
     // Personal Questions
@@ -758,6 +824,11 @@ export class AiChatBuilder extends LitElement {
       this.addAssistantMessage('Sorry, I encountered an error processing your request. Please try again.');
     } finally {
       this.isProcessing = false;
+      // Refocus the textarea after sending
+      this.updateComplete.then(() => {
+        const textarea = this.shadowRoot?.querySelector('textarea');
+        if (textarea) textarea.focus();
+      });
     }
   }
 
