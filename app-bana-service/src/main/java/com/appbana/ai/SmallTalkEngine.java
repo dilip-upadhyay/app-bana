@@ -91,7 +91,14 @@ public class SmallTalkEngine {
             return null;
         }
         // If the input is clearly asking for app listing/loading/deleting, do NOT treat as small talk
-        if (lower.contains("show my apps") || lower.contains("list my apps") || lower.contains("show apps") || lower.contains("list apps") || lower.contains("my apps") || lower.contains("load app") || lower.contains("open app") || lower.contains("delete app") || lower.contains("remove app")) {
+        // More comprehensive patterns to catch "load second app", "open the first app", "load Blog Application", etc.
+        if (lower.contains("show") && lower.contains("app") ||
+            lower.contains("list") && lower.contains("app") ||
+            lower.contains("my apps") ||
+            lower.contains("load") && lower.contains("app") ||
+            lower.contains("open") && lower.contains("app") ||
+            lower.contains("delete") && lower.contains("app") ||
+            lower.contains("remove") && lower.contains("app")) {
             return null;
         }
         // Check if AI provider is enabled

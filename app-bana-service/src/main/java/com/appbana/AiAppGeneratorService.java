@@ -508,11 +508,13 @@ public class AiAppGeneratorService {
         String lower = userText == null ? "" : userText.toLowerCase(Locale.ROOT);
         Map<String, Object> fallback = new HashMap<>();
 
-        if (lower.matches(".*(list|show).*(apps|app list).*")) {
+        // List apps: "show my apps", "list apps", "show apps"
+        if (lower.matches(".*(list|show).*(apps|app list).*") || lower.contains("my apps")) {
             fallback.put("action", ACTION_LIST_APPS);
             fallback.put("options", new HashMap<>());
             return fallback;
         }
+        // Load/open app: "load second app", "open the first app", "load Blog Application", "open my first app"
         if (lower.matches(".*(load|open).*(app).*")) {
             fallback.put("action", ACTION_LOAD_APP);
             fallback.put("options", new HashMap<>());
