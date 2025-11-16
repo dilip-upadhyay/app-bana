@@ -862,10 +862,10 @@ export class AiChatBuilder extends LitElement {
       }
       if (result && result.success) {
         const action = result.payload?.action;
-        if (action === 'list' && Array.isArray(result.payload?.apps)) {
+        if ((action === 'list' || action === 'listApps') && Array.isArray(result.payload?.apps)) {
           const reply = result.payload.reply || 'Here are your apps:';
           this.addAssistantMessage(reply, {
-            action,
+            action: 'list',  // Normalize to 'list' for rendering
             generatedApp: result
           });
           return;
