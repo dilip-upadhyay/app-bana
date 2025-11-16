@@ -3,514 +3,503 @@ package com.appbana;
 import com.appbana.ai.AiProvider;
 import com.appbana.ai.AiProviderFactory;
 import com.appbana.ai.AiSystemPrompts;
+import com.appbana.ai.AgentMemoryService;
+import com.appbana.ai.SmallTalkEngine;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.*;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * AI-powered app generation service
- * Parses natural language input and generates app metadata
+ * AI-powered app generation service.
+ * Resolves conversational intent into structured actions and falls back to template-based generation.
  */
 public class AiAppGeneratorService {
-    
+
     private static final Logger LOG = LoggerFactory.getLogger(AiAppGeneratorService.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
-    
-    /**
-     * Generate app from natural language description
-     * Uses AI if configured, otherwise falls back to template-based generation
-     */
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<Map<String, Object>>() {};
+
+    private static final String ACTION_LIST_APPS = "listApps";
+    private static final String ACTION_LOAD_APP = "loadApp";
+    private static final String ACTION_DELETE_APP = "deleteApp";
+    private static final String ACTION_LIST_PAGES = "listPages";
+    private static final String ACTION_GENERATE_APP = "generateApp";
+    private static final String PAYLOAD_APPS = "apps";
+    private static final String PAYLOAD_ACTION = "action";
+    private static final String PAYLOAD_REPLY = "reply";
+    private static final String PAYLOAD_SMALL_TALK = "smallTalk";
+    private static final String DEFAULT_USER = "default";
+
     public static GenerationResult generateApp(GenerationRequest request) {
-        // Enhanced logging for debugging
-        LOG.info("[AI] Incoming GenerationRequest: action={}, description={}, options={}", request != null ? request.action : null, request != null ? request.description : null, request != null ? request.options : null);
+        LOG.info("[AI] Incoming GenerationRequest: action={}, description={}, options={}",
+            request != null ? request.action : null,
+            request != null ? request.description : null,
+            request != null ? request.options : null);
         try {
-            // Small talk detection (before intent classification)
-            if (request != null && request.description != null) {
-                String lower = request.description.toLowerCase();
-                boolean isAppCreation = lower.contains("create the app") || lower.contains("build the app") || lower.contains("generate the app") || lower.contains("make the app") || lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("generate app") || lower.startsWith("make app");
-                // Always classify action before responding to small talk
-                Map<String, Object> classification = null;
-                try {
-                    classification = classifyAction(request.description);
-                } catch (Exception e) {
-                    LOG.warn("[AI] Action classification error: {}", e.getMessage());
-                }
-                String normalizedAction = null;
-                if (classification != null && classification.containsKey("action")) {
-                    normalizedAction = String.valueOf(classification.get("action"));
-                    LOG.info("[AI] Normalized action from classifier: {}", normalizedAction);
-                }
-                // If classifier says listApps, always return app list
-                if (normalizedAction != null && normalizedAction.equalsIgnoreCase("listApps")) {
-                    GenerationResult listResult = new GenerationResult();
-                    listResult.success = true;
-                    List<Map<String, Object>> apps = AppManager.listApps();
-                    listResult.payload = new HashMap<>();
-                    listResult.payload.put("apps", apps);
-                    listResult.payload.put("action", "list");
-                    listResult.payload.put("reply", "Fetched your apps via GET /apps");
-                    LOG.info("[AI] Forced apps list for normalized action: {}", normalizedAction);
-                    return listResult;
-                }
-                // Otherwise, handle small talk as before
-                if (!isAppCreation) {
-                    String userId = "default";
-                    if (request.options != null && request.options.containsKey("userId")) {
-                        userId = String.valueOf(request.options.get("userId"));
-                    } else if (request.conversationContext != null && request.conversationContext.containsKey("userId")) {
-                        userId = String.valueOf(request.conversationContext.get("userId"));
-                    }
-                    String smallTalkReply = com.appbana.ai.SmallTalkEngine.getSmallTalkResponse(request.description, userId);
-                    if (smallTalkReply != null) {
-                        GenerationResult result = new GenerationResult();
-                        result.success = true;
-                        result.payload = new HashMap<>();
-                        result.payload.put("smallTalk", true);
-                        result.payload.put("reply", smallTalkReply);
-                        LOG.info("[AI] Small talk detected, responding: {}", smallTalkReply);
-                        com.appbana.ai.AgentMemoryService.record(userId, request.description, smallTalkReply);
-                        return result;
-                    }
-                }
+            String normalizedAction = resolveAction(request);
+
+            if (ACTION_LIST_APPS.equals(normalizedAction)) {
+                return buildAppsListResult();
             }
-            // If no explicit action, ask the AI to classify the user's intent into an action+options JSON
-            if ((request == null || request.action == null) && request != null && request.description != null) {
-                try {
-                    Map<String, Object> classification = classifyAction(request.description);
-                    if (classification != null && classification.containsKey("action")) {
-                        Object a = classification.get("action");
-                        if (a != null) request.action = String.valueOf(a);
-                        if (classification.containsKey("options") && classification.get("options") instanceof Map) {
-                            request.options = (Map<String, Object>) classification.get("options");
-                        }
-                        LOG.info("[AI] AI classified action: {} with options: {}", request.action, request.options);
-                    }
-                } catch (Exception e) {
-                    LOG.warn("[AI] Action classification failed: {}", e.getMessage());
-                }
+
+            GenerationResult smallTalk = handleSmallTalkIfNeeded(request, normalizedAction);
+            if (smallTalk != null) {
+                return smallTalk;
             }
-            if (request != null && request.action != null) {
-                String action = request.action.trim().toLowerCase();
-                LOG.info("[AI] Handling action request: {}", action);
-                switch (action) {
-                    case "listapps":
-                    case "list_apps":
-                    case "list-apps":
-                        GenerationResult listResult = new GenerationResult();
-                        listResult.success = true;
-                        List<Map<String, Object>> apps = AppManager.listApps();
-                        listResult.payload = new HashMap<>();
-                        listResult.payload.put("apps", apps);
-                        listResult.payload.put("action", "list");
-                        listResult.payload.put("reply", "Fetched your apps via GET /apps");
-                        LOG.info("[AI] Returning apps list: {}", apps);
-                        return listResult;
-                    case "loadapp":
-                    case "load_app":
-                    case "load-app":
-                        String appId = null;
-                        if (request.options != null && request.options.containsKey("appId")) {
-                            appId = String.valueOf(request.options.get("appId"));
-                        }
-                        GenerationResult loadResult = new GenerationResult();
-                        if (appId == null || appId.isEmpty()) {
-                            loadResult.success = false;
-                            loadResult.error = "appId option is required for loadApp";
-                            LOG.warn("[AI] loadApp missing appId");
-                            return loadResult;
-                        }
-                        try {
-                            Map<String, Object> appWithPages = AppManager.getAppWithPages(appId);
-                            if (appWithPages == null) {
-                                loadResult.success = false;
-                                loadResult.error = "App not found: " + appId;
-                                LOG.warn("[AI] App not found: {}", appId);
-                            } else {
-                                loadResult.success = true;
-                                loadResult.payload = new HashMap<>();
-                                loadResult.payload.put("app", appWithPages.get("app"));
-                                loadResult.payload.put("pages", appWithPages.get("pages"));
-                                LOG.info("[AI] Loaded app: {}", appId);
-                            }
-                        } catch (Exception e) {
-                            loadResult.success = false;
-                            loadResult.error = "Failed to load app: " + e.getMessage();
-                            LOG.error("[AI] Failed to load app: {}", e.getMessage());
-                        }
-                        return loadResult;
-                    case "deleteapp":
-                    case "delete_app":
-                    case "delete-app":
-                        String appToDelete = null;
-                        if (request.options != null && request.options.containsKey("appId")) {
-                            appToDelete = String.valueOf(request.options.get("appId"));
-                        }
-                        GenerationResult delResult = new GenerationResult();
-                        if (appToDelete == null || appToDelete.isEmpty()) {
-                            delResult.success = false;
-                            delResult.error = "appId option is required for deleteApp";
-                            LOG.warn("[AI] deleteApp missing appId");
-                            return delResult;
-                        }
-                        try {
-                            boolean deleted = AppManager.deleteApp(appToDelete);
-                            delResult.success = deleted;
-                            delResult.payload = new HashMap<>();
-                            delResult.payload.put("deleted", deleted);
-                            LOG.info("[AI] Deleted app: {}", appToDelete);
-                        } catch (Exception e) {
-                            delResult.success = false;
-                            delResult.error = "Failed to delete app: " + e.getMessage();
-                            LOG.error("[AI] Failed to delete app: {}", e.getMessage());
-                        }
-                        return delResult;
-                    case "listpages":
-                    case "list_pages":
-                    case "list-pages":
-                    case "getapppages":
-                    case "get_app_pages":
-                    case "get-app-pages": {
-                        String foundAppId = null;
-                        if (request.options != null && request.options.containsKey("appId")) {
-                            foundAppId = String.valueOf(request.options.get("appId"));
-                        } else if (request.options != null && request.options.containsKey("appName")) {
-                            // Find appId by name
-                            String appName = String.valueOf(request.options.get("appName"));
-                            List<Map<String, Object>> appList = AppManager.listApps();
-                            for (Map<String, Object> app : appList) {
-                                if (appName.equalsIgnoreCase(String.valueOf(app.get("name")))) {
-                                    foundAppId = String.valueOf(app.get("id"));
-                                    break;
-                                }
-                            }
-                        } else if (request.conversationContext != null && request.conversationContext.containsKey("currentAppId")) {
-                            // Use currently selected app from conversation context
-                            foundAppId = String.valueOf(request.conversationContext.get("currentAppId"));
-                            LOG.info("[AI] Using currentAppId from conversation context: {}", foundAppId);
-                        }
-                        GenerationResult pageResult = new GenerationResult();
-                        if (foundAppId == null || foundAppId.isEmpty()) {
-                            pageResult.success = false;
-                            pageResult.error = "appId or appName is required for listPages";
-                            LOG.warn("[AI] listPages missing appId/appName");
-                            return pageResult;
-                        }
-                        try {
-                            Map<String, Object> appWithPages = AppManager.getAppWithPages(foundAppId);
-                            if (appWithPages == null) {
-                                pageResult.success = false;
-                                pageResult.error = "App not found: " + foundAppId;
-                                LOG.warn("[AI] App not found: {}", foundAppId);
-                            } else {
-                                List<?> pages = (List<?>) appWithPages.get("pages");
-                                pageResult.success = true;
-                                pageResult.payload = new HashMap<>();
-                                pageResult.payload.put("appId", foundAppId);
-                                pageResult.payload.put("pageCount", pages != null ? pages.size() : 0);
-                                pageResult.payload.put("pages", pages);
-                                LOG.info("[AI] App {} has {} pages", foundAppId, pages != null ? pages.size() : 0);
-                            }
-                        } catch (Exception e) {
-                            pageResult.success = false;
-                            pageResult.error = "Failed to list pages: " + e.getMessage();
-                            LOG.error("[AI] Failed to list pages: {}", e.getMessage());
-                        }
-                        return pageResult;
-                    }
-                    case "createpage": {
-                        // Stub: create a new page in the app
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "createPage not yet implemented";
-                        return result;
-                    }
-                    case "deletepage": {
-                        // Stub: delete a page from the app
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "deletePage not yet implemented";
-                        return result;
-                    }
-                    case "listentities": {
-                        // Stub: list all entities in the app
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "listEntities not yet implemented";
-                        return result;
-                    }
-                    case "getentitydetails": {
-                        // Stub: get details for a specific entity
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "getEntityDetails not yet implemented";
-                        return result;
-                    }
-                    case "addentity": {
-                        // Stub: add a new entity to the app
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "addEntity not yet implemented";
-                        return result;
-                    }
-                    case "deleteentity": {
-                        // Stub: delete an entity from the app
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "deleteEntity not yet implemented";
-                        return result;
-                    }
-                    case "updateentity": {
-                        // Stub: update an entity in the app
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "updateEntity not yet implemented";
-                        return result;
-                    }
-                    case "listcomponents": {
-                        // Stub: list available UI components
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "listComponents not yet implemented";
-                        return result;
-                    }
-                    case "getappsummary": {
-                        // Stub: return app summary
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "getAppSummary not yet implemented";
-                        return result;
-                    }
-                    case "exportapp": {
-                        // Stub: export app metadata
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "exportApp not yet implemented";
-                        return result;
-                    }
-                    case "importapp": {
-                        // Stub: import app metadata
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "importApp not yet implemented";
-                        return result;
-                    }
-                    case "cloneapp": {
-                        // Stub: clone an app
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "cloneApp not yet implemented";
-                        return result;
-                    }
-                    case "getpagedetails": {
-                        // Stub: get details for a specific page
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "getPageDetails not yet implemented";
-                        return result;
-                    }
-                    case "previewpage": {
-                        // Stub: render a live preview of a page
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "previewPage not yet implemented";
-                        return result;
-                    }
-                    case "runvalidation": {
-                        // Stub: validate app/page/entity
-                        GenerationResult result = new GenerationResult();
-                        result.success = false;
-                        result.error = "runValidation not yet implemented";
-                        return result;
-                    }
-                    default:
-                        // fall through to AI/template generation
-                        LOG.info("[AI] Unknown action '{}', falling back to generation flow", action);
+
+            if (normalizedAction != null) {
+                GenerationResult actionResult = handleStructuredAction(normalizedAction, request);
+                if (actionResult != null) {
+                    return actionResult;
                 }
             }
 
-            // Try AI generation first
-            AppConfig config = getConfig();
-            if (AiProviderFactory.isAiEnabled(config)) {
-                try {
-                    LOG.info("[AI] Attempting AI generation with provider: {}", config.getAiProvider());
-                    GenerationResult aiResult = generateWithAi(request, config);
-                    LOG.info("[AI] AI GenerationResult: {}", aiResult);
-                    
-                    // Validate AI result before returning
-                    if (AiResultValidator.validateAiResult(aiResult, request)) {
-                        LOG.info("[AI] AI result validated successfully");
-                        return aiResult;
-                    } else {
-                        LOG.warn("[AI] AI result validation failed, will use templates as fallback");
-                    }
-                } catch (Exception e) {
-                    LOG.error("[AI] AI generation failed with exception: {}", e.getMessage(), e);
-                }
-            } else {
-                LOG.warn("[AI] AI provider not enabled, will use template-based generation");
-            }
-
-            // Fall back to template-based generation
-            LOG.info("[AI] Using template-based generation as fallback");
-            GenerationResult templateResult = generateFromTemplates(request);
-            LOG.info("[AI] Template-based GenerationResult: {}", templateResult);
-            return templateResult;
+            return runGenerationPipelines(request);
         } catch (Exception ex) {
             GenerationResult err = new GenerationResult();
             err.success = false;
             err.error = ex.getMessage();
-            LOG.error("[AI] Generation failed: {}", ex.getMessage());
+            LOG.error("[AI] Generation failed", ex);
             return err;
         }
     }
-    
-    /**
-     * Generate app using AI provider
-     */
+
+    private static String resolveAction(GenerationRequest request) {
+        if (request == null) {
+            return null;
+        }
+
+        if (request.action != null && !request.action.isBlank()) {
+            request.action = normalizeActionLabel(request.action);
+            return request.action;
+        }
+
+        if (request.description == null || request.description.isBlank()) {
+            return null;
+        }
+
+        Map<String, Object> classification = classifyActionSafe(request.description);
+        if (classification == null) {
+            return null;
+        }
+
+        Object classifiedAction = classification.get("action");
+        if (classifiedAction != null) {
+            request.action = normalizeActionLabel(String.valueOf(classifiedAction));
+        }
+
+        if ((request.options == null || request.options.isEmpty()) && classification.get("options") != null) {
+            request.options = MAPPER.convertValue(classification.get("options"), MAP_TYPE);
+        }
+
+        return request.action;
+    }
+
+    private static Map<String, Object> classifyActionSafe(String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+        try {
+            return classifyAction(description);
+        } catch (Exception e) {
+            LOG.warn("[AI] Action classification failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private static GenerationResult handleSmallTalkIfNeeded(GenerationRequest request, String normalizedAction) {
+        if (!shouldHandleSmallTalk(request, normalizedAction)) {
+            return null;
+        }
+
+        String userId = resolveUserId(request);
+        String reply = SmallTalkEngine.getSmallTalkResponse(request.description, userId);
+        if (reply == null) {
+            return null;
+        }
+
+        GenerationResult result = new GenerationResult();
+        result.success = true;
+        result.payload = new HashMap<>();
+        result.payload.put(PAYLOAD_SMALL_TALK, true);
+        result.payload.put(PAYLOAD_REPLY, reply);
+        LOG.info("[AI] Small talk detected, responding: {}", reply);
+        AgentMemoryService.record(userId, request.description, reply);
+        return result;
+    }
+
+    private static boolean shouldHandleSmallTalk(GenerationRequest request, String normalizedAction) {
+        if (request == null || request.description == null) {
+            return false;
+        }
+        if (normalizedAction != null) {
+            return false;
+        }
+        return !isAppCreationRequest(request.description.toLowerCase(Locale.ROOT));
+    }
+
+    private static boolean isAppCreationRequest(String lowerDescription) {
+        if (lowerDescription == null) {
+            return false;
+        }
+        return lowerDescription.contains("create the app")
+            || lowerDescription.contains("build the app")
+            || lowerDescription.contains("generate the app")
+            || lowerDescription.contains("make the app")
+            || lowerDescription.startsWith("create app")
+            || lowerDescription.startsWith("build app")
+            || lowerDescription.startsWith("generate app")
+            || lowerDescription.startsWith("make app");
+    }
+
+    private static String resolveUserId(GenerationRequest request) {
+        if (request == null) {
+            return DEFAULT_USER;
+        }
+        if (request.options != null && request.options.get("userId") != null) {
+            return String.valueOf(request.options.get("userId"));
+        }
+        if (request.conversationContext != null && request.conversationContext.get("userId") != null) {
+            return String.valueOf(request.conversationContext.get("userId"));
+        }
+        if (request.userId != null && !request.userId.isBlank()) {
+            return request.userId;
+        }
+        return DEFAULT_USER;
+    }
+
+    private static GenerationResult handleStructuredAction(String action, GenerationRequest request) {
+        switch (action) {
+            case ACTION_LIST_APPS:
+                return buildAppsListResult();
+            case ACTION_LOAD_APP:
+                return handleLoadApp(request);
+            case ACTION_DELETE_APP:
+                return handleDeleteApp(request);
+            case ACTION_LIST_PAGES:
+                return handleListPages(request);
+            default:
+                LOG.info("[AI] Unknown action '{}', falling back to generation flow", action);
+                return null;
+        }
+    }
+
+    private static GenerationResult buildAppsListResult() {
+        GenerationResult listResult = new GenerationResult();
+        listResult.success = true;
+        List<Map<String, Object>> apps = safeListApps();
+        listResult.payload = new HashMap<>();
+        listResult.payload.put(PAYLOAD_APPS, apps);
+        listResult.payload.put(PAYLOAD_ACTION, "list");
+        listResult.payload.put(PAYLOAD_REPLY, "Fetched your apps via GET /apps");
+        LOG.info("[AI] Returning apps list: {}", apps);
+        return listResult;
+    }
+
+    private static GenerationResult handleLoadApp(GenerationRequest request) {
+        GenerationResult loadResult = new GenerationResult();
+        String appId = resolveLoadAppId(request);
+        if (appId == null || appId.isBlank()) {
+            loadResult.success = false;
+            loadResult.error = "appId option is required for loadApp";
+            LOG.warn("[AI] loadApp missing appId");
+            return loadResult;
+        }
+        try {
+            Map<String, Object> appWithPages = AppManager.getAppWithPages(appId);
+            if (appWithPages == null) {
+                loadResult.success = false;
+                loadResult.error = "App not found: " + appId;
+                LOG.warn("[AI] App not found: {}", appId);
+            } else {
+                loadResult.success = true;
+                loadResult.payload = new HashMap<>();
+                loadResult.payload.put("app", appWithPages.get("app"));
+                loadResult.payload.put("pages", appWithPages.get("pages"));
+                LOG.info("[AI] Loaded app: {}", appId);
+            }
+        } catch (Exception e) {
+            loadResult.success = false;
+            loadResult.error = "Failed to load app: " + e.getMessage();
+            LOG.error("[AI] Failed to load app", e);
+        }
+        return loadResult;
+    }
+
+    private static String resolveLoadAppId(GenerationRequest request) {
+        if (request == null) {
+            return null;
+        }
+        if (request.options != null && request.options.get("appId") != null) {
+            return String.valueOf(request.options.get("appId"));
+        }
+        if (request.description != null && request.description.toLowerCase(Locale.ROOT).contains("first app")) {
+            List<Map<String, Object>> apps = safeListApps();
+            if (apps != null && !apps.isEmpty() && apps.get(0).get("id") != null) {
+                String pickedId = String.valueOf(apps.get(0).get("id"));
+                LOG.info("[AI] Auto-selected first app for load request: {}", pickedId);
+                return pickedId;
+            }
+        }
+        return null;
+    }
+
+    private static GenerationResult handleDeleteApp(GenerationRequest request) {
+        GenerationResult result = new GenerationResult();
+        String appId = request != null && request.options != null ? String.valueOf(request.options.get("appId")) : null;
+        if (appId == null || appId.isBlank()) {
+            result.success = false;
+            result.error = "appId option is required for deleteApp";
+            LOG.warn("[AI] deleteApp missing appId");
+            return result;
+        }
+        try {
+            boolean deleted = AppManager.deleteApp(appId);
+            result.success = deleted;
+            result.payload = new HashMap<>();
+            result.payload.put("deleted", deleted);
+            LOG.info("[AI] Deleted app: {}", appId);
+        } catch (Exception e) {
+            result.success = false;
+            result.error = "Failed to delete app: " + e.getMessage();
+            LOG.error("[AI] Failed to delete app", e);
+        }
+        return result;
+    }
+
+    private static GenerationResult handleListPages(GenerationRequest request) {
+        GenerationResult pageResult = new GenerationResult();
+        String appId = resolveAppIdForPages(request);
+        if (appId == null || appId.isBlank()) {
+            pageResult.success = false;
+            pageResult.error = "appId or appName is required for listPages";
+            LOG.warn("[AI] listPages missing appId/appName");
+            return pageResult;
+        }
+        try {
+            Map<String, Object> appWithPages = AppManager.getAppWithPages(appId);
+            if (appWithPages == null) {
+                pageResult.success = false;
+                pageResult.error = "App not found: " + appId;
+                LOG.warn("[AI] App not found: {}", appId);
+            } else {
+                List<?> pages = (List<?>) appWithPages.get("pages");
+                pageResult.success = true;
+                pageResult.payload = new HashMap<>();
+                pageResult.payload.put("appId", appId);
+                pageResult.payload.put("pageCount", pages != null ? pages.size() : 0);
+                pageResult.payload.put("pages", pages);
+                LOG.info("[AI] App {} has {} pages", appId, pages != null ? pages.size() : 0);
+            }
+        } catch (Exception e) {
+            pageResult.success = false;
+            pageResult.error = "Failed to list pages: " + e.getMessage();
+            LOG.error("[AI] Failed to list pages", e);
+        }
+        return pageResult;
+    }
+
+    private static String resolveAppIdForPages(GenerationRequest request) {
+        if (request == null) {
+            return null;
+        }
+        if (request.options != null) {
+            Object appId = request.options.get("appId");
+            if (appId != null && !String.valueOf(appId).isBlank()) {
+                return String.valueOf(appId);
+            }
+            Object appName = request.options.get("appName");
+            if (appName != null) {
+                List<Map<String, Object>> apps = safeListApps();
+                for (Map<String, Object> app : apps) {
+                    if (appName.toString().equalsIgnoreCase(String.valueOf(app.get("name")))) {
+                        return String.valueOf(app.get("id"));
+                    }
+                }
+            }
+        }
+        if (request.conversationContext != null && request.conversationContext.get("currentAppId") != null) {
+            return String.valueOf(request.conversationContext.get("currentAppId"));
+        }
+        return null;
+    }
+
+    private static List<Map<String, Object>> safeListApps() {
+        try {
+            return AppManager.listApps();
+        } catch (IOException e) {
+            LOG.error("[AI] Failed to list apps", e);
+            return Collections.emptyList();
+        }
+    }
+
+    private static GenerationResult runGenerationPipelines(GenerationRequest request) {
+        AppConfig config = getConfig();
+        if (AiProviderFactory.isAiEnabled(config)) {
+            try {
+                LOG.info("[AI] Attempting AI generation with provider: {}", config.getAiProvider());
+                GenerationResult aiResult = generateWithAi(request, config);
+                if (AiResultValidator.validateAiResult(aiResult, request)) {
+                    LOG.info("[AI] AI result validated successfully");
+                    return aiResult;
+                }
+                LOG.warn("[AI] AI result validation failed, will use templates as fallback");
+            } catch (Exception e) {
+                LOG.error("[AI] AI generation failed", e);
+            }
+        } else {
+            LOG.warn("[AI] AI provider not enabled, will use template-based generation");
+        }
+
+        LOG.info("[AI] Using template-based generation as fallback");
+        GenerationResult templateResult = generateFromTemplates(request);
+        LOG.info("[AI] Template-based GenerationResult: {}", templateResult);
+        return templateResult;
+    }
+
     private static GenerationResult generateWithAi(GenerationRequest request, AppConfig config) throws Exception {
         AiProvider provider = AiProviderFactory.createProvider(config);
-        
-        // Use enhanced prompt with builder-database integration
         String systemPrompt = AiSystemPrompts.getAppGenerationPrompt();
-        String userPrompt = request.description;
-        
+        String userPrompt = request != null ? request.description : "";
+
         LOG.info("[AI] Calling AI provider: {} with enhanced builder-database prompt", provider.getProviderName());
         String jsonResponse = provider.generateAppStructure(userPrompt, systemPrompt);
         LOG.info("[AI] Raw AI response: {}", jsonResponse);
-        String sanitized = sanitizeAiJson(jsonResponse);
-        LOG.info("[AI] Sanitized AI response: {}", sanitized);
         GenerationResult result = parseAiResponse(jsonResponse);
         LOG.info("[AI] Parsed GenerationResult: {}", result);
         return result;
     }
 
-    /**
-     * Ask the AI to classify a free-text user request into an action + options JSON
-     */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> classifyAction(String userText) throws Exception {
         AppConfig config = getConfig();
-        if (!AiProviderFactory.isAiEnabled(config)) return null;
-        AiProvider provider = AiProviderFactory.createProvider(config);
-
-        String systemPrompt = AiSystemPrompts.getActionClassifierPrompt();
-        String jsonResponse = provider.generateAppStructure(userText, systemPrompt);
-        LOG.debug("Raw classifier response: {}", jsonResponse);
-        String sanitized = sanitizeAiJson(jsonResponse);
-        LOG.debug("Sanitized classifier JSON: {}", sanitized);
-
         Map<String, Object> parsed = null;
-        try {
-            parsed = mapper.readValue(sanitized, Map.class);
-        } catch (Exception e) {
-            LOG.warn("Failed to parse action classification JSON: {}", e.getMessage());
-            parsed = null;
+
+        if (AiProviderFactory.isAiEnabled(config)) {
+            AiProvider provider = AiProviderFactory.createProvider(config);
+            String systemPrompt = AiSystemPrompts.getActionClassifierPrompt();
+            String jsonResponse = provider.generateAppStructure(userText, systemPrompt);
+            LOG.debug("Raw classifier response: {}", jsonResponse);
+            String sanitized = sanitizeAiJson(jsonResponse);
+            LOG.debug("Sanitized classifier JSON: {}", sanitized);
+            try {
+                parsed = MAPPER.readValue(sanitized, Map.class);
+            } catch (Exception e) {
+                LOG.warn("Failed to parse action classification JSON: {}", e.getMessage());
+                parsed = null;
+            }
         }
 
-
-        // Validate parsed result
         if (parsed != null && parsed.containsKey("action")) {
             Object a = parsed.get("action");
             if (a != null) {
-                String act = String.valueOf(a).trim().toLowerCase();
-                // Robust normalization for all 'list apps' style phrases
-                if (act.matches("^(list|listapps|list_apps|list-apps|showapps|show_apps|show-apps|list tab|show my apps|list my apps|list all apps|show all apps)$")) {
-                    parsed.put("action", "listApps");
-                    return parsed;
-                }
-                switch (act) {
-                    case "loadapp":
-                    case "load_app":
-                    case "load-app":
-                    case "open":
-                        parsed.put("action", "loadApp");
-                        return parsed;
-                    case "deleteapp":
-                    case "delete_app":
-                    case "delete-app":
-                    case "delete":
-                        parsed.put("action", "deleteApp");
-                        return parsed;
-                    case "listpages":
-                    case "list_pages":
-                    case "list-pages":
-                    case "pages":
-                        parsed.put("action", "listPages");
-                        return parsed;
-                    case "generateapp":
-                    case "generate_app":
-                    case "generate-app":
-                    case "generate":
-                        parsed.put("action", "generateApp");
-                        return parsed;
-                    default:
-                        // unknown action - we'll fallback to heuristics below
-                        LOG.info("Classifier returned unknown action '{}', falling back to heuristics", act);
-                }
+                parsed.put("action", normalizeActionLabel(String.valueOf(a)));
             }
+            return parsed;
         }
 
-        // If classifier failed or returned nothing useful, use simple heuristics as a fallback
-        String lower = userText == null ? "" : userText.toLowerCase();
+        return heuristicClassification(userText);
+    }
+
+    private static Map<String, Object> heuristicClassification(String userText) {
+        String lower = userText == null ? "" : userText.toLowerCase(Locale.ROOT);
         Map<String, Object> fallback = new HashMap<>();
 
-        LOG.info("[AI] classifyAction: userText='{}'", userText);
-        LOG.info("[AI] classifyAction: lower='{}'", lower);
-        // Heuristic: page count or list pages for an app
-        boolean isPageCountQuery = lower.matches(".*(how many|count|number of) pages.*(in|for|of) .*") || lower.matches(".*show pages.*(in|for|of) .*") || lower.matches(".*list pages.*(in|for|of) .*");
-        LOG.info("[AI] classifyAction: isPageCountQuery={}", isPageCountQuery);
-        if (isPageCountQuery) {
-            // Try to extract app name
-            String appName = null;
-            Pattern p = Pattern.compile("(in|for|of) ([A-Za-z0-9 _-]+)");
-            java.util.regex.Matcher m = p.matcher(userText);
-            if (m.find()) {
-                appName = m.group(2).trim();
-                LOG.info("[AI] classifyAction: extracted appName='{}'", appName);
-            } else {
-                LOG.info("[AI] classifyAction: appName not found in userText");
-            }
+        if (lower.matches(".*(list|show).*(apps|app list).*")) {
+            fallback.put("action", ACTION_LIST_APPS);
+            fallback.put("options", new HashMap<>());
+            return fallback;
+        }
+        if (lower.matches(".*(load|open).*(app).*")) {
+            fallback.put("action", ACTION_LOAD_APP);
+            fallback.put("options", new HashMap<>());
+            return fallback;
+        }
+        if (lower.matches(".*delete.*app.*")) {
+            fallback.put("action", ACTION_DELETE_APP);
+            fallback.put("options", new HashMap<>());
+            return fallback;
+        }
+        if (lower.matches(".*(how many|count|number of).*pages.*") || lower.matches(".*(list|show).*pages.*")) {
             Map<String, Object> opts = new HashMap<>();
-            if (appName != null && !appName.isEmpty()) opts.put("appName", appName);
+            Matcher matcher = Pattern.compile("(in|for|of) ([A-Za-z0-9 _-]+)").matcher(userText == null ? "" : userText);
+            if (matcher.find()) {
+                opts.put("appName", matcher.group(2).trim());
+            }
             Map<String, Object> result = new HashMap<>();
-            result.put("action", "listPages");
+            result.put("action", ACTION_LIST_PAGES);
             result.put("options", opts);
-            LOG.info("[AI] classifyAction: returning listPages action with options={}", opts);
-            // Always return here for page-count queries
             return result;
         }
 
-        // default: generateApp
-        fallback.put("action", "generateApp");
+        fallback.put("action", ACTION_GENERATE_APP);
         fallback.put("options", new HashMap<>());
-        LOG.info("No classifier match; defaulting to generateApp for input: {}", userText);
         return fallback;
     }
-    
-    /**
-     * Parse AI-generated JSON into GenerationResult
-     */
+
+    private static String normalizeActionLabel(String action) {
+        if (action == null) {
+            return null;
+        }
+        switch (action.trim().toLowerCase(Locale.ROOT)) {
+            case "list":
+            case "listapps":
+            case "list_apps":
+            case "list-apps":
+            case "showapps":
+            case "show_apps":
+            case "show-apps":
+            case "list tab":
+            case "show my apps":
+            case "list my apps":
+            case "list all apps":
+            case "show all apps":
+                return ACTION_LIST_APPS;
+            case "loadapp":
+            case "load_app":
+            case "load-app":
+            case "open":
+                return ACTION_LOAD_APP;
+            case "deleteapp":
+            case "delete_app":
+            case "delete-app":
+            case "delete":
+                return ACTION_DELETE_APP;
+            case "listpages":
+            case "list_pages":
+            case "list-pages":
+            case "pages":
+                return ACTION_LIST_PAGES;
+            case "generateapp":
+            case "generate_app":
+            case "generate-app":
+            case "generate":
+                return ACTION_GENERATE_APP;
+            default:
+                return action;
+        }
+    }
+
     private static GenerationResult parseAiResponse(String jsonResponse) throws Exception {
-        // Sanitize AI output: strip markdown code fences and extract the JSON block
         String sanitized = sanitizeAiJson(jsonResponse);
-        JsonNode root = mapper.readTree(sanitized);
-        
+        JsonNode root = MAPPER.readTree(sanitized);
+
         GenerationResult result = new GenerationResult();
-        
-        // Check if AI is asking for more information
+
         if (root.has("needsMoreInfo") && root.get("needsMoreInfo").asBoolean()) {
             result.success = true;
             result.needsMoreInfo = true;
-            
-            // Parse follow-up questions
             result.followUpQuestions = new ArrayList<>();
             JsonNode questionsNode = root.get("followUpQuestions");
             if (questionsNode != null && questionsNode.isArray()) {
@@ -518,55 +507,42 @@ public class AiAppGeneratorService {
                     result.followUpQuestions.add(questionNode.asText());
                 }
             }
-            
-            // Store partial structure if provided
             if (root.has("partialStructure")) {
                 JsonNode partialNode = root.get("partialStructure");
                 if (partialNode.has("appName")) {
                     result.appName = partialNode.get("appName").asText();
                 }
             }
-            
             return result;
         }
-        
-        // Parse complete app structure
+
         result.success = true;
         result.needsMoreInfo = false;
-        result.appName = root.get("appName").asText();
-        result.appDescription = root.get("appDescription").asText();
-        
-        // Parse entities
+        result.appName = root.path("appName").asText(null);
+        result.appDescription = root.path("appDescription").asText(null);
+
         result.entities = new ArrayList<>();
         JsonNode entitiesNode = root.get("entities");
         if (entitiesNode != null && entitiesNode.isArray()) {
             for (JsonNode entityNode : entitiesNode) {
                 String entityName = entityNode.get("name").asText();
                 List<EntitySchema.Field> fields = new ArrayList<>();
-                
                 JsonNode fieldsNode = entityNode.get("fields");
                 if (fieldsNode != null && fieldsNode.isArray()) {
                     for (JsonNode fieldNode : fieldsNode) {
-                        String fieldName = fieldNode.get("name").asText();
-                        String fieldType = fieldNode.get("type").asText();
-                        boolean required = fieldNode.get("required").asBoolean(false);
-                        
                         EntitySchema.Field field = new EntitySchema.Field();
-                        field.setName(fieldName);
-                        field.setType(fieldType);
-                        field.setRequired(required);
-                        field.setPrimaryKey(false);
-                        field.setAutoIncrement(false);
-                        
+                        field.setName(fieldNode.get("name").asText());
+                        field.setType(fieldNode.get("type").asText());
+                        field.setRequired(fieldNode.path("required").asBoolean(false));
+                        field.setPrimaryKey(fieldNode.path("primaryKey").asBoolean(false));
+                        field.setAutoIncrement(fieldNode.path("autoIncrement").asBoolean(false));
                         fields.add(field);
                     }
                 }
-                
                 result.entities.add(new EntitySchema(entityName, fields));
             }
         }
-        
-        // Parse relationships
+
         result.relationships = new ArrayList<>();
         JsonNode relationshipsNode = root.get("relationships");
         if (relationshipsNode != null && relationshipsNode.isArray()) {
@@ -574,132 +550,103 @@ public class AiAppGeneratorService {
                 result.relationships.add(relNode.asText());
             }
         }
-        
-        // Parse suggested pages (now with more detail)
+
         result.suggestedPages = new ArrayList<>();
         JsonNode pagesNode = root.get("suggestedPages");
         if (pagesNode != null && pagesNode.isArray()) {
             for (JsonNode pageNode : pagesNode) {
-                if (pageNode.isTextual()) {
-                    // Simple string format (legacy)
-                    result.suggestedPages.add(pageNode.asText());
-                } else if (pageNode.isObject()) {
-                    // Detailed object format
-                    result.suggestedPages.add(mapper.writeValueAsString(pageNode));
-                }
+                result.suggestedPages.add(pageNode.isTextual() ? pageNode.asText() : MAPPER.writeValueAsString(pageNode));
             }
         }
-        
-        // Parse detailed pages metadata
+
         result.pages = new ArrayList<>();
         JsonNode pagesMetaNode = root.get("pages");
         if (pagesMetaNode != null && pagesMetaNode.isArray()) {
             for (JsonNode pageNode : pagesMetaNode) {
-                result.pages.add(mapper.convertValue(pageNode, Map.class));
+                result.pages.add(MAPPER.convertValue(pageNode, MAP_TYPE));
             }
         }
-        
+
         return result;
     }
 
-    /**
-     * Attempt to extract a clean JSON substring from AI output.
-     * Handles triple-backtick fenced blocks (```json ... ```), and
-     * falls back to extracting the first {...} or [...] block found.
-     */
     public static String sanitizeAiJson(String raw) {
-        if (raw == null) return null;
-        String s = raw.trim();
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return trimmed;
+        }
 
-        // If there are triple-backtick fences, extract content between the first and last fence
-        int firstFence = s.indexOf("```");
-        int lastFence = s.lastIndexOf("```");
-        if (firstFence != -1 && lastFence != -1 && lastFence > firstFence) {
-            String inside = s.substring(firstFence + 3, lastFence).trim();
-            // If the block starts with a language hint like "json", remove it
+        int firstFence = trimmed.indexOf("```");
+        int lastFence = trimmed.lastIndexOf("```");
+        if (firstFence >= 0 && lastFence > firstFence) {
+            String inside = trimmed.substring(firstFence + 3, lastFence).trim();
             if (inside.startsWith("json")) {
                 inside = inside.substring(4).trim();
             }
-            return inside.trim();
-        }
-
-        // Otherwise try to find a JSON object or array by locating the first { or [ and the matching last } or ]
-        int firstBrace = s.indexOf('{');
-        int firstBracket = s.indexOf('[');
-        int start = -1;
-        char endChar = 0;
-        if (firstBrace != -1 && (firstBracket == -1 || firstBrace < firstBracket)) {
-            start = firstBrace;
-            endChar = '}';
-        } else if (firstBracket != -1) {
-            start = firstBracket;
-            endChar = ']';
-        }
-
-        if (start != -1) {
-            int end = s.lastIndexOf(endChar);
-            if (end != -1 && end >= start) {
-                return s.substring(start, end + 1).trim();
+            if (!inside.isEmpty()) {
+                return inside;
             }
         }
 
-        // Fall back to returning the raw trimmed string
-        return s;
-    }
-    
-    /**
-     * Get config with fallback to defaults
-     */
-    private static AppConfig getConfig() {
-        try {
-            return ConfigManager.getConfig();
-        } catch (Exception e) {
-            LOG.warn("ConfigManager not available, using defaults");
-            return new AppConfig();
+        int firstBrace = trimmed.indexOf('{');
+        int firstBracket = trimmed.indexOf('[');
+        int start;
+        if (firstBrace == -1) {
+            start = firstBracket;
+        } else if (firstBracket == -1) {
+            start = firstBrace;
+        } else {
+            start = Math.min(firstBrace, firstBracket);
         }
+        if (start == -1) {
+            return trimmed;
+        }
+
+        char open = trimmed.charAt(start);
+        char close = open == '{' ? '}' : ']';
+        int depth = 0;
+        for (int i = start; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (c == open) {
+                depth++;
+            } else if (c == close) {
+                depth--;
+                if (depth == 0) {
+                    return trimmed.substring(start, i + 1);
+                }
+            }
+        }
+        return trimmed.substring(start);
     }
-    
-    /**
-     * Generate app from templates (original regex-based logic)
-     */
+
     private static GenerationResult generateFromTemplates(GenerationRequest request) {
-        String input = request.description.toLowerCase();
-        
-        // Parse intent
-        AppIntent intent = parseIntent(input);
-        
-        // Generate based on type
-        GenerationResult result = new GenerationResult();
-        result.success = true;
-        
+        String description = request != null && request.description != null ? request.description : "";
+        AppIntent intent = parseIntent(description.toLowerCase(Locale.ROOT));
         switch (intent.appType) {
             case "blog":
-                result = generateBlogApp(intent);
-                break;
+                return generateBlogApp(intent);
             case "task":
-                result = generateTaskApp(intent);
-                break;
+                return generateTaskApp(intent);
             case "ecommerce":
-                result = generateEcommerceApp(intent);
-                break;
+                return generateEcommerceApp(intent);
             case "crm":
-                result = generateCrmApp(intent);
-                break;
+                return generateCrmApp(intent);
             default:
-                result = generateGenericApp(intent);
+                return generateGenericApp(intent);
         }
-        
-        return result;
     }
-    
-    /**
-     * Parse user intent from natural language
-     */
+
     private static AppIntent parseIntent(String input) {
         AppIntent intent = new AppIntent();
         intent.originalInput = input;
-        
-        // Detect app type
+        if (input == null) {
+            intent.appType = "generic";
+            intent.appName = "Application";
+            return intent;
+        }
         if (Pattern.compile("blog|post|article|comment").matcher(input).find()) {
             intent.appType = "blog";
             intent.appName = "Blog Application";
@@ -713,27 +660,22 @@ public class AiAppGeneratorService {
             intent.appType = "crm";
             intent.appName = "CRM Application";
         } else if (Pattern.compile("cms|content").matcher(input).find()) {
-            intent.appType = "blog"; // CMS similar to blog
+            intent.appType = "blog";
             intent.appName = "Content Management System";
         } else {
             intent.appType = "generic";
             intent.appName = "Application";
         }
-        
         return intent;
     }
-    
-    /**
-     * Generate blog app with Post and Comment entities
-     */
+
     private static GenerationResult generateBlogApp(AppIntent intent) {
         GenerationResult result = new GenerationResult();
         result.success = true;
         result.appName = intent.appName;
         result.appDescription = "A blog application with posts and comments";
         result.entities = new ArrayList<>();
-        
-        // Post entity
+
         EntitySchema post = new EntitySchema();
         post.setName("Post");
         post.setFields(Arrays.asList(
@@ -745,8 +687,7 @@ public class AiAppGeneratorService {
             createField("status", "string", false, false)
         ));
         result.entities.add(post);
-        
-        // Comment entity
+
         EntitySchema comment = new EntitySchema();
         comment.setName("Comment");
         comment.setFields(Arrays.asList(
@@ -756,33 +697,27 @@ public class AiAppGeneratorService {
             createField("post_id", "long", false, false)
         ));
         result.entities.add(comment);
-        
-        // Add relationship info
+
         result.relationships = Arrays.asList(
             "Comment.post_id → Post.id (many-to-one, CASCADE DELETE)"
         );
-        
-        // Suggested pages
+
         result.suggestedPages = Arrays.asList(
             "Posts List (Data Table)",
             "Post Detail (Profile)",
             "Create Post (Form)"
         );
-        
+
         return result;
     }
-    
-    /**
-     * Generate task manager app
-     */
+
     private static GenerationResult generateTaskApp(AppIntent intent) {
         GenerationResult result = new GenerationResult();
         result.success = true;
         result.appName = intent.appName;
         result.appDescription = "Task and todo management application";
         result.entities = new ArrayList<>();
-        
-        // Task entity
+
         EntitySchema task = new EntitySchema();
         task.setName("Task");
         task.setFields(Arrays.asList(
@@ -794,27 +729,23 @@ public class AiAppGeneratorService {
             createField("due_date", "date", false, false)
         ));
         result.entities.add(task);
-        
+
         result.suggestedPages = Arrays.asList(
             "Task List (Data Table)",
             "Task Detail (Profile)",
             "Create Task (Form)"
         );
-        
+
         return result;
     }
-    
-    /**
-     * Generate e-commerce app
-     */
+
     private static GenerationResult generateEcommerceApp(AppIntent intent) {
         GenerationResult result = new GenerationResult();
         result.success = true;
         result.appName = intent.appName;
         result.appDescription = "Online store with product catalog";
         result.entities = new ArrayList<>();
-        
-        // Product entity
+
         EntitySchema product = new EntitySchema();
         product.setName("Product");
         product.setFields(Arrays.asList(
@@ -826,26 +757,22 @@ public class AiAppGeneratorService {
             createField("category", "string", false, false)
         ));
         result.entities.add(product);
-        
+
         result.suggestedPages = Arrays.asList(
             "Product Catalog (Data Table)",
             "Product Detail (Profile)"
         );
-        
+
         return result;
     }
-    
-    /**
-     * Generate CRM app
-     */
+
     private static GenerationResult generateCrmApp(AppIntent intent) {
         GenerationResult result = new GenerationResult();
         result.success = true;
         result.appName = intent.appName;
         result.appDescription = "Customer relationship management system";
         result.entities = new ArrayList<>();
-        
-        // Contact entity
+
         EntitySchema contact = new EntitySchema();
         contact.setName("Contact");
         contact.setFields(Arrays.asList(
@@ -858,55 +785,49 @@ public class AiAppGeneratorService {
             createField("status", "string", false, false)
         ));
         result.entities.add(contact);
-        
+
         result.suggestedPages = Arrays.asList(
             "Contacts List (Data Table)",
             "Contact Detail (Profile)"
         );
-        
+
         return result;
     }
-    
-    /**
-     * Generate generic app
-     */
+
     private static GenerationResult generateGenericApp(AppIntent intent) {
         GenerationResult result = new GenerationResult();
         result.success = true;
-        result.appName = "New Application";
+        result.appName = intent.appName != null ? intent.appName : "New Application";
         result.appDescription = "Custom application";
         result.entities = new ArrayList<>();
         result.suggestedPages = new ArrayList<>();
-        
         return result;
     }
-    
-    /**
-     * Helper to create field definition
-     */
+
     private static EntitySchema.Field createField(String name, String type, boolean isPrimaryKey, boolean isAutoIncrement) {
         EntitySchema.Field field = new EntitySchema.Field();
         field.setName(name);
         field.setType(type);
         field.setPrimaryKey(isPrimaryKey);
         field.setAutoIncrement(isAutoIncrement);
-        field.setRequired(!isPrimaryKey); // All non-PK fields are required by default
+        field.setRequired(!isPrimaryKey);
         return field;
     }
-    
-    // Request/Response models
-    
+
+    private static AppConfig getConfig() {
+        return ConfigManager.getConfig();
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class GenerationRequest {
         public String description;
         public String userId;
         public Map<String, Object> options;
-        // Optional action (listApps, loadApp, deleteApp, etc.)
         public String action;
         public Map<String, Object> conversationContext;
         public String mode;
     }
-    
+
     public static class GenerationResult {
         public boolean success;
         public boolean needsMoreInfo;
@@ -916,12 +837,21 @@ public class AiAppGeneratorService {
         public List<EntitySchema> entities;
         public List<String> relationships;
         public List<String> suggestedPages;
-        public List<Map<String, Object>> pages; // <-- Add detailed page metadata
+        public List<Map<String, Object>> pages;
         public String error;
-        // Generic payload for action results (e.g., listApps -> { apps: [...] })
         public Map<String, Object> payload;
+
+        @Override
+        public String toString() {
+            return "GenerationResult{" +
+                "success=" + success +
+                ", needsMoreInfo=" + needsMoreInfo +
+                ", appName='" + appName + '\'' +
+                ", payload=" + payload +
+                '}';
+        }
     }
-    
+
     private static class AppIntent {
         String originalInput;
         String appType;
