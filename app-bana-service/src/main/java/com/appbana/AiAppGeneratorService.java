@@ -143,10 +143,21 @@ public class AiAppGeneratorService {
         if (request == null || request.description == null) {
             return false;
         }
-        if (normalizedAction != null) {
+        if (normalizedAction != null && !ACTION_LIST_APPS.equals(normalizedAction)) {
             return false;
         }
-        return !isAppCreationRequest(request.description.toLowerCase(Locale.ROOT));
+        String lower = request.description.toLowerCase(Locale.ROOT).trim();
+        if (isAppCreationRequest(lower)) {
+            return false;
+        }
+        // very short greetings or pure small talk
+        if (lower.matches("^(hi|hello|hey|good morning|good evening|good afternoon)[!. ]*$")
+            || lower.matches("^(how are you\\??|how's it going\\??|what's up\\??)$")
+            || lower.matches("^(thanks|thank you|thank you so much)[!. ]*$")) {
+            return true;
+        }
+        // if classifier did not confidently detect an action and text looks like chit-chat
+        return normalizedAction == null;
     }
 
     private static boolean isAppCreationRequest(String lowerDescription) {
@@ -202,7 +213,11 @@ public class AiAppGeneratorService {
         listResult.payload = new HashMap<>();
         listResult.payload.put(PAYLOAD_APPS, apps);
         listResult.payload.put(PAYLOAD_ACTION, "list");
-        listResult.payload.put(PAYLOAD_REPLY, "Fetched your apps via GET /apps");
+        if (apps.isEmpty()) {
+            listResult.payload.put(PAYLOAD_REPLY, "You don't have any apps yet. Describe an app you want to build, for example 'Create a project management app with projects and tasks'.");
+        } else {
+            listResult.payload.put(PAYLOAD_REPLY, "Here are your apps. You can say 'open the second app' or 'delete the project management app'.");
+        }
         LOG.info("[AI] Returning apps list: {}", apps);
         return listResult;
     }
@@ -212,8 +227,11 @@ public class AiAppGeneratorService {
         String appId = resolveLoadAppId(request);
         if (appId == null || appId.isBlank()) {
             loadResult.success = false;
-            loadResult.error = "appId option is required for loadApp";
-            LOG.warn("[AI] loadApp missing appId");
+            loadResult.error = "Could not determine which app to load.";
+            Map<String, Object> payload = new HashMap<>();
+            payload.put(PAYLOAD_REPLY, "I couldn't tell which app you meant. You can say 'open the second app' or 'open Restaurant Management App'.");
+            loadResult.payload = payload;
+            LOG.warn("[AI] loadApp missing resolvable appId");
             return loadResult;
         }
         try {
@@ -227,6 +245,7 @@ public class AiAppGeneratorService {
                 loadResult.payload = new HashMap<>();
                 loadResult.payload.put("app", appWithPages.get("app"));
                 loadResult.payload.put("pages", appWithPages.get("pages"));
+                loadResult.payload.put(PAYLOAD_REPLY, "Opened app '" + appWithPages.getOrDefault("name", appId) + "'.");
                 LOG.info("[AI] Loaded app: {}", appId);
             }
         } catch (Exception e) {
@@ -243,6 +262,42 @@ public class AiAppGeneratorService {
         }
         if (request.options != null && request.options.get("appId") != null) {
             return String.valueOf(request.options.get("appId"));
+        }
+        // Try resolve from ordinal like "second app" using lastAppList in conversationContext
+        String desc = request.description != null ? request.description.toLowerCase(Locale.ROOT) : "";
+        Integer indexFromText = extractOrdinalIndex(desc);
+        if (indexFromText != null && request.conversationContext != null) {
+            Object lastAppsObj = request.conversationContext.get("lastAppList");
+            if (lastAppsObj instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> lastApps = (List<Map<String, Object>>) lastAppsObj;
+                int idx = indexFromText - 1;
+                if (idx >= 0 && idx < lastApps.size()) {
+                    Object id = lastApps.get(idx).get("id");
+                    if (id != null) {
+                        LOG.info("[AI] Resolved ordinal '{}' to app id '{}'", indexFromText, id);
+                        return String.valueOf(id);
+                    }
+                }
+            }
+        }
+        // Try resolve by name from lastAppList
+        if (request.conversationContext != null) {
+            Object lastAppsObj = request.conversationContext.get("lastAppList");
+            if (lastAppsObj instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> lastApps = (List<Map<String, Object>>) lastAppsObj;
+                for (Map<String, Object> app : lastApps) {
+                    Object nameObj = app.get("name");
+                    if (nameObj != null && desc.contains(nameObj.toString().toLowerCase(Locale.ROOT))) {
+                        Object id = app.get("id");
+                        if (id != null) {
+                            LOG.info("[AI] Resolved app by name '{}' to id '{}' from lastAppList", nameObj, id);
+                            return String.valueOf(id);
+                        }
+                    }
+                }
+            }
         }
         if (request.description != null && request.description.toLowerCase(Locale.ROOT).contains("first app")) {
             List<Map<String, Object>> apps = safeListApps();
@@ -331,6 +386,25 @@ public class AiAppGeneratorService {
         }
         if (request.conversationContext != null && request.conversationContext.get("currentAppId") != null) {
             return String.valueOf(request.conversationContext.get("currentAppId"));
+        }
+        return null;
+    }
+
+    private static Integer extractOrdinalIndex(String text) {
+        if (text == null) {
+            return null;
+        }
+        if (text.contains("first")) return 1;
+        if (text.contains("second")) return 2;
+        if (text.contains("third")) return 3;
+        if (text.contains("fourth")) return 4;
+        if (text.contains("fifth")) return 5;
+        Matcher m = Pattern.compile("\\b(\\d+)(st|nd|rd|th)?\\b").matcher(text);
+        if (m.find()) {
+            try {
+                return Integer.parseInt(m.group(1));
+            } catch (NumberFormatException ignored) {
+            }
         }
         return null;
     }
