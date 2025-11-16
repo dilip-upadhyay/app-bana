@@ -10,7 +10,7 @@
   "nodes" : [ {
     "type" : "container",
     "id" : "root-1763320971501",
-    "children" : [ "heading-root-1763320971501" ],
+    "children" : [ "heading-root-1763320971501", "table-root-1763320971501" ],
     "props" : {
       "gap" : "lg",
       "padding" : "xl",
@@ -23,5 +23,25 @@
       "tag" : "h1"
     },
     "type" : "text"
+  }, {
+    "id" : "table-root-1763320971501",
+    "type" : "table",
+    "props" : {
+      "entity" : "Message",
+      "fields" : [
+        { "name" : "id", "label" : "ID", "type" : "text" },
+        { "name" : "content", "label" : "Content", "type" : "text" },
+        { "name" : "timestamp", "label" : "Timestamp", "type" : "datetime" },
+        { "name" : "senderId", "label" : "Sender ID", "type" : "text" },
+        { "name" : "receiverId", "label" : "Receiver ID", "type" : "text" }
+      ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
   } ]
 }

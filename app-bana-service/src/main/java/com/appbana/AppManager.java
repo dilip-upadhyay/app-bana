@@ -1,6 +1,7 @@
 package com.appbana;
 
 import com.appbana.model.AppMetadata;
+import com.appbana.model.EntitySchema;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
@@ -184,8 +185,33 @@ public class AppManager {
         // Save app metadata
         saveApp(app);
 
+        // Register entities as schemas so API endpoints work
+        if (app.getEntities() != null && !app.getEntities().isEmpty()) {
+            registerAppEntities(app);
+        }
+
         System.out.println("[AppManager] Created app: " + app.getId());
         return app;
+    }
+
+    /**
+     * Register all entities from an app as database schemas
+     */
+    private static void registerAppEntities(AppMetadata app) {
+        if (app.getEntities() == null) {
+            return;
+        }
+        
+        for (Object entityObj : app.getEntities()) {
+            try {
+                // Convert entity object to EntitySchema
+                EntitySchema schema = mapper.convertValue(entityObj, EntitySchema.class);
+                SchemaManager.saveSchema(schema);
+                System.out.println("[AppManager] Registered entity schema: " + schema.getName());
+            } catch (Exception e) {
+                System.err.println("[AppManager] Failed to register entity: " + e.getMessage());
+            }
+        }
     }
 
     /**
