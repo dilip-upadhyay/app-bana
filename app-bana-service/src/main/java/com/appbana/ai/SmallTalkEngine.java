@@ -90,6 +90,10 @@ public class SmallTalkEngine {
         if (lower.contains("create an app") || lower.contains("build an app") || lower.contains("generate app") || lower.contains("make an app") || lower.contains("app for me") || lower.contains("app that") || lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("generate app")) {
             return null;
         }
+        // If the input is clearly asking for app listing/loading/deleting, do NOT treat as small talk
+        if (lower.contains("show my apps") || lower.contains("list my apps") || lower.contains("show apps") || lower.contains("list apps") || lower.contains("my apps") || lower.contains("load app") || lower.contains("open app") || lower.contains("delete app") || lower.contains("remove app")) {
+            return null;
+        }
         // Check if AI provider is enabled
         com.appbana.config.AppConfig config = com.appbana.config.ConfigManager.getConfig();
         if (com.appbana.ai.AiProviderFactory.isAiEnabled(config)) {

@@ -47,15 +47,21 @@ public class AiAppGeneratorService {
             request != null ? request.description : null,
             request != null ? request.options : null);
         try {
-            String normalizedAction = resolveAction(request);
-
-            if (ACTION_LIST_APPS.equals(normalizedAction)) {
-                return buildAppsListResult();
+            // Early small-talk handling before we even resolve actions
+            GenerationResult earlySmallTalk = handleSmallTalkIfNeeded(request, null);
+            if (earlySmallTalk != null) {
+                return earlySmallTalk;
             }
+
+            String normalizedAction = resolveAction(request);
 
             GenerationResult smallTalk = handleSmallTalkIfNeeded(request, normalizedAction);
             if (smallTalk != null) {
                 return smallTalk;
+            }
+
+            if (ACTION_LIST_APPS.equals(normalizedAction)) {
+                return buildAppsListResult();
             }
 
             if (normalizedAction != null) {
@@ -260,10 +266,7 @@ public class AiAppGeneratorService {
         if (request == null) {
             return null;
         }
-        if (request.options != null && request.options.get("appId") != null) {
-            return String.valueOf(request.options.get("appId"));
-        }
-        // Try resolve from ordinal like "second app" using lastAppList in conversationContext
+        // Priority 1: Try resolve from ordinal like "second app" using lastAppList in conversationContext
         String desc = request.description != null ? request.description.toLowerCase(Locale.ROOT) : "";
         Integer indexFromText = extractOrdinalIndex(desc);
         if (indexFromText != null && request.conversationContext != null) {
@@ -299,6 +302,21 @@ public class AiAppGeneratorService {
                 }
             }
         }
+        // Priority 3: Check options.appId from classifier (if it looks like a real id)
+        if (request.options != null && request.options.get("appId") != null) {
+            Object rawAppId = request.options.get("appId");
+            String appIdStr = String.valueOf(rawAppId);
+            // If classifier returned something like "second app", do not trust it as a real id
+            String lowered = appIdStr.toLowerCase(Locale.ROOT);
+            if (!lowered.contains(" ") && !lowered.contains("first") && !lowered.contains("second")
+                && !lowered.contains("third") && !lowered.contains("fourth") && !lowered.contains("fifth")
+                && !lowered.contains("app")) {
+                LOG.info("[AI] Using appId from classifier: {}", appIdStr);
+                return appIdStr;
+            }
+            LOG.info("[AI] Ignoring non-id appId from classifier: {}", appIdStr);
+        }
+        // Priority 4: Fallback to "first app" heuristic
         if (request.description != null && request.description.toLowerCase(Locale.ROOT).contains("first app")) {
             List<Map<String, Object>> apps = safeListApps();
             if (apps != null && !apps.isEmpty() && apps.get(0).get("id") != null) {
