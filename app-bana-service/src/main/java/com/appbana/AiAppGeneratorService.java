@@ -1766,6 +1766,12 @@ public class AiAppGeneratorService {
         if (nodes == null || nodes.isEmpty()) {
             return;
         }
+        
+        // Convert to mutable list if needed (immutable lists can't be modified)
+        if (!(nodes instanceof ArrayList)) {
+            nodes = new ArrayList<>(nodes);
+            page.put("nodes", nodes);
+        }
 
         // Check if table component already exists
         boolean hasTable = nodes.stream()
