@@ -1,9 +1,0 @@
-{
-  "id" : "my-first-app",
-  "name" : "My First App",
-  "description" : "Test app for persistence",
-  "version" : "1.0.0",
-  "created" : 1762603324369,
-  "updated" : 1762603872038,
-  "pages" : [ "home" ]
-}

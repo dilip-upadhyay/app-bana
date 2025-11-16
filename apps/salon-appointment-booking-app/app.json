@@ -1,10 +1,10 @@
 {
   "id" : "salon-appointment-booking-app",
   "name" : "Salon Appointment Booking App",
-  "description" : "An application for booking appointments at a salon, managing services, and handling customer details.",
+  "description" : "A comprehensive application for managing appointments, customers, and services in a salon.",
   "version" : "1.0.0",
-  "created" : 1763322863212,
-  "updated" : 1763322863212,
+  "created" : 1763324189836,
+  "updated" : 1763324189836,
   "pages" : [ ],
   "entities" : [ {
     "name" : "Customer",
@@ -42,14 +42,14 @@
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "price",
-      "type" : "currency",
+      "name" : "duration",
+      "type" : "duration",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "duration",
-      "type" : "duration",
+      "name" : "price",
+      "type" : "currency",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
@@ -57,26 +57,20 @@
   }, {
     "name" : "Appointment",
     "fields" : [ {
-      "name" : "date",
+      "name" : "appointmentDate",
       "type" : "datetime",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
       "name" : "customerId",
-      "type" : "reference",
+      "type" : "long",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
       "name" : "serviceId",
-      "type" : "reference",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
-      "name" : "status",
-      "type" : "status",
+      "type" : "long",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
