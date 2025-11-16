@@ -26,7 +26,7 @@ public class SmallTalkEngine {
             patterns.add(new SmallTalkPattern(Pattern.compile("can you draw|draw|drawing|sketch|art", Pattern.CASE_INSENSITIVE), "I can't draw, but I can help you design a creative art app!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you joke|joke|make me laugh|funny|laugh", Pattern.CASE_INSENSITIVE), "Why did the computer go to art school? To learn how to draw its curtains!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you code|code|coding|program|programming", Pattern.CASE_INSENSITIVE), "Coding is my superpower! Want to build something together?"));
-            patterns.add(new SmallTalkPattern(Pattern.compile("can you help|help|assist|support", Pattern.CASE_INSENSITIVE), "I'm always here to help you build apps and solve problems!"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("^(can you help me|help me|how can you help me)\\??$", Pattern.CASE_INSENSITIVE), "I'm always here to help you build apps and solve problems!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you play|play|playing|game|games", Pattern.CASE_INSENSITIVE), "I can't play games, but I can help you create one! What's your favorite genre?"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you teach|teach|teacher|learn|student", Pattern.CASE_INSENSITIVE), "I can teach you about app building, or learn from you!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you listen|listen|listening|hear|hearing", Pattern.CASE_INSENSITIVE), "I listen to every idea you share!"));

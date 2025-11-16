@@ -348,20 +348,31 @@ public class AiAppGeneratorService {
         if (request == null || request.description == null) {
             return false;
         }
-        if (normalizedAction != null && !ACTION_LIST_APPS.equals(normalizedAction)) {
-            return false;
-        }
+        
         String lower = request.description.toLowerCase(Locale.ROOT).trim();
+        
+        // Skip small talk if this is clearly an app creation request
         if (isAppCreationRequest(lower)) {
             return false;
         }
-        // very short greetings or pure small talk
-        if (lower.matches("^(hi|hello|hey|good morning|good evening|good afternoon)[!. ]*$")
-            || lower.matches("^(how are you\\??|how's it going\\??|what's up\\??)$")
-            || lower.matches("^(thanks|thank you|thank you so much)[!. ]*$")) {
+        
+        // PRIORITY: Check for explicit small talk patterns FIRST (ignore normalizedAction)
+        // These should ALWAYS be handled as small talk, even if classifier thinks otherwise
+        if (lower.matches("^(hi|hello|hey|hiya|howdy|greetings)[!. ]*$")
+            || lower.matches("^(good morning|good afternoon|good evening)[!. ]*$")
+            || lower.matches("^(how are you\\??|how's it going\\??|what's up\\??|sup\\??)$")
+            || lower.matches("^(thanks|thank you|thank you so much|thx|ty)[!. ]*$")
+            || lower.matches("^(bye|goodbye|see you|cya|later)[!. ]*$")
+            || lower.matches("^(ok|okay|sure|alright)[!. ]*$")) {
             return true;
         }
-        // if classifier did not confidently detect an action and text looks like chit-chat
+        
+        // If classifier detected a specific action (other than listApps), don't treat as small talk
+        if (normalizedAction != null && !ACTION_LIST_APPS.equals(normalizedAction)) {
+            return false;
+        }
+        
+        // If classifier did not confidently detect an action, might be chit-chat
         return normalizedAction == null;
     }
 
