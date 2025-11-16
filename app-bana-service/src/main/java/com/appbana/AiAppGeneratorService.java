@@ -60,9 +60,15 @@ public class AiAppGeneratorService {
                 return smallTalk;
             }
 
-            // Explicit creation intent short-circuit: run generation pipeline directly
+            // Extract app type from description/context
+            String appType = extractAppType(request != null ? request.description : null);
             if (isAppCreationRequest(request != null ? request.description == null ? null : request.description.toLowerCase(Locale.ROOT) : null)) {
                 GenerationResult gen = runGenerationPipelines(request);
+                if (appType != null && !appType.isBlank()) {
+                    gen.appType = appType;
+                    if (gen.payload == null) gen.payload = new HashMap<>();
+                    gen.payload.put("appType", appType);
+                }
                 postProcessAndPersistIfNeeded(gen, request);
                 return gen;
             }
@@ -1182,6 +1188,7 @@ public class AiAppGeneratorService {
         public List<Map<String, Object>> pages;
         public String error;
         public Map<String, Object> payload;
+        public String appType; // added for app type extraction
 
         @Override
         public String toString() {
@@ -1199,5 +1206,23 @@ public class AiAppGeneratorService {
         String appType;
         String appName;
         List<String> detectedEntities;
+    }
+
+    // Extracts app type from user description (e.g., 'running app', 'dance app')
+    private static String extractAppType(String description) {
+        if (description == null || description.isBlank()) return null;
+        String lower = description.toLowerCase(Locale.ROOT);
+        Pattern p = Pattern.compile("(\\w+ app)");
+        Matcher m = p.matcher(lower);
+        if (m.find()) {
+            return m.group(1);
+        }
+        // fallback: look for 'create a/an ... app'
+        p = Pattern.compile("create (?:a|an) ([\\w\\s]+) app");
+        m = p.matcher(lower);
+        if (m.find()) {
+            return m.group(1).trim() + " app";
+        }
+        return null;
     }
 }
