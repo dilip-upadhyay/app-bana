@@ -42,11 +42,11 @@ public class SmallTalkEngine {
         patterns.add(new SmallTalkPattern(Pattern.compile("can you tell riddles|riddle|riddles", Pattern.CASE_INSENSITIVE), "Here's a riddle: What has keys but can't open locks? A keyboard!"));
         patterns.add(new SmallTalkPattern(Pattern.compile("can you tell a secret|tell a secret|secret", Pattern.CASE_INSENSITIVE), "My only secret: I love helping you build apps!"));
         patterns.add(new SmallTalkPattern(Pattern.compile("can you keep a secret|keep a secret", Pattern.CASE_INSENSITIVE), "Your secrets are safe with me—I'm encrypted!"));
-        patterns.add(new SmallTalkPattern(Pattern.compile("can you dream|dream|dreaming", Pattern.CASE_INSENSITIVE), "I dream in code and creativity! What's your dream app?"));
-        patterns.add(new SmallTalkPattern(Pattern.compile("can you sleep|sleep|sleeping", Pattern.CASE_INSENSITIVE), "I never sleep, so I'm always here to help you!"));
-        patterns.add(new SmallTalkPattern(Pattern.compile("can you eat|eat|eating", Pattern.CASE_INSENSITIVE), "I don't eat, but I can help you build a food diary or recipe app!"));
-        patterns.add(new SmallTalkPattern(Pattern.compile("can you drink|drink|drinking", Pattern.CASE_INSENSITIVE), "I don't drink, but I can help you track your hydration!"));
-        patterns.add(new SmallTalkPattern(Pattern.compile("can you travel|travel|travelling", Pattern.CASE_INSENSITIVE), "I travel at the speed of thought! Want a travel planner app?"));
+        patterns.add(new SmallTalkPattern(Pattern.compile("can you dream|dream about|dreaming about", Pattern.CASE_INSENSITIVE), "I dream in code and creativity! What's your dream app?"));
+        patterns.add(new SmallTalkPattern(Pattern.compile("can you sleep|do you sleep|sleeping habits", Pattern.CASE_INSENSITIVE), "I never sleep, so I'm always here to help you!"));
+        patterns.add(new SmallTalkPattern(Pattern.compile("(?:^|\\s)(?:can you eat|do you eat|what do you eat)(?:\\s|$|\\?)", Pattern.CASE_INSENSITIVE), "I don't eat, but I can help you build a food diary or recipe app!"));
+        patterns.add(new SmallTalkPattern(Pattern.compile("(?:^|\\s)(?:can you drink|do you drink|what do you drink)(?:\\s|$|\\?)", Pattern.CASE_INSENSITIVE), "I don't drink, but I can help you track your hydration!"));
+        patterns.add(new SmallTalkPattern(Pattern.compile("can you travel|do you travel|travelling to", Pattern.CASE_INSENSITIVE), "I travel at the speed of thought! Want a travel planner app?"));
         patterns.add(new SmallTalkPattern(Pattern.compile("can you teleport|teleport|teleporting", Pattern.CASE_INSENSITIVE), "I can't teleport, but my ideas can go anywhere!"));
         patterns.add(new SmallTalkPattern(Pattern.compile("can you see the future|see the future|predict the future|future", Pattern.CASE_INSENSITIVE), "I can't see the future, but I can help you plan for it!"));
         patterns.add(new SmallTalkPattern(Pattern.compile("can you predict|predict|prediction", Pattern.CASE_INSENSITIVE), "I predict you'll build something amazing!"));

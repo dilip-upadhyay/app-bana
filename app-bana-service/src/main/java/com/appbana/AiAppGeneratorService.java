@@ -47,24 +47,77 @@ public class AiAppGeneratorService {
     private static final String DOMAIN_TEMPLATES_PATH = "builder-database/10-domain-templates.json";
     private static List<Map<String,Object>> cachedDomainTemplates;
 
+    // Conversation context tracking for continuity across requests
+    private static final Map<String, ConversationContext> sessionContexts = new HashMap<>();
+    private static final long CONTEXT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+    /**
+     * Conversation context to maintain state across multiple requests
+     */
+    private static class ConversationContext {
+        String lastDiscussedAppType;
+        String lastDiscussedAppDescription;
+        List<String> discussedEntities;
+        String lastCreatedAppId;
+        String lastOpenedAppId;
+        long timestamp;
+
+        ConversationContext() {
+            this.discussedEntities = new ArrayList<>();
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() - timestamp > CONTEXT_TIMEOUT_MS;
+        }
+
+        void refresh() {
+            this.timestamp = System.currentTimeMillis();
+        }
+    }
+
     public static GenerationResult generateApp(GenerationRequest request) {
         LOG.info("[AI] Incoming GenerationRequest: action={}, description={}, options={}",
             request != null ? request.action : null,
             request != null ? request.description : null,
             request != null ? request.options : null);
         try {
+            // FIX #1: Use contextual description if continuation request
+            String effectiveDescription = buildContextualDescription(request);
+            if (!effectiveDescription.equals(request.description)) {
+                // Update request with context
+                GenerationRequest contextualRequest = new GenerationRequest();
+                contextualRequest.description = effectiveDescription;
+                contextualRequest.userId = request.userId;
+                contextualRequest.action = request.action;
+                contextualRequest.options = request.options;
+                contextualRequest.conversationContext = request.conversationContext;
+                contextualRequest.mode = request.mode;
+                request = contextualRequest;
+            }
+
             GenerationResult earlySmallTalk = handleSmallTalkIfNeeded(request, null);
             if (earlySmallTalk != null) {
                 return earlySmallTalk;
             }
             String normalizedAction = resolveAction(request);
+            
+            // FIX #3: Handle "create pages" / "regenerate pages" requests
+            if (isRegeneratePageRequest(request.description)) {
+                return handleRegeneratePagesRequest(request);
+            }
+            
             GenerationResult smallTalk = handleSmallTalkIfNeeded(request, normalizedAction);
             if (smallTalk != null) {
                 return smallTalk;
             }
 
-            // Extract app type from description/context
+            // Extract app type from description/context and track it
             String appType = extractAppType(request != null ? request.description : null);
+            if (appType != null && request.description != null) {
+                updateDiscussedApp(request.userId, appType, request.description);
+            }
+            
             if (isAppCreationRequest(request != null ? request.description == null ? null : request.description.toLowerCase(Locale.ROOT) : null)) {
                 GenerationResult gen = runGenerationPipelines(request);
                 if (appType != null && !appType.isBlank()) {
@@ -356,6 +409,16 @@ public class AiAppGeneratorService {
             return false;
         }
         
+        // FIX #5: Skip small talk if requesting page operations
+        if (lower.contains("page") && (
+            lower.contains("create") || 
+            lower.contains("generate") || 
+            lower.contains("do not see") ||
+            lower.contains("don't see") ||
+            lower.contains("missing"))) {
+            return false;
+        }
+        
         // PRIORITY: Check for explicit small talk patterns FIRST (ignore normalizedAction)
         // These should ALWAYS be handled as small talk, even if classifier thinks otherwise
         if (lower.matches("^(hi|hello|hey|hiya|howdy|greetings)[!. ]*$")
@@ -626,6 +689,10 @@ public class AiAppGeneratorService {
                 loadResult.payload.put("pages", appWithPages.get("pages"));
                 loadResult.payload.put(PAYLOAD_REPLY, "Opened app '" + appWithPages.getOrDefault("name", appId) + "'.");
                 loadResult.payload.put(PAYLOAD_ACTION, ACTION_LOAD_APP);
+                
+                // Track opened app in context
+                updateOpenedApp(request.userId, appId);
+                
                 LOG.info("[AI] Loaded app: {}", appId);
             }
         } catch (Exception e) {
@@ -940,6 +1007,10 @@ public class AiAppGeneratorService {
             persisted.setDefaultPage(persisted.getPages().get(0));
             AppManager.updateApp(appId, persisted);
         }
+        
+        // Track created app in context
+        updateCreatedApp(request.userId, appId);
+        
         LOG.info("[AI] Persisted generated app '{}'", appId);
     }
 
@@ -1255,7 +1326,6 @@ public class AiAppGeneratorService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String,Object> classifyAction(String userText) throws Exception {
         // Simple heuristic-only fallback (full AI classification may be added later)
         return heuristicClassification(userText);
@@ -1888,4 +1958,248 @@ public class AiAppGeneratorService {
         }
         return result.toString();
     }
+
+    // ========== Conversation Context Management ==========
+
+    /**
+     * Check if request is asking to regenerate/create pages for an app
+     */
+    private static boolean isRegeneratePageRequest(String description) {
+        if (description == null) return false;
+        
+        String lower = description.toLowerCase();
+        
+        // Patterns for page regeneration requests
+        return (lower.contains("page") && (
+            lower.contains("do not see") ||
+            lower.contains("don't see") ||
+            lower.contains("not see") ||
+            lower.contains("no page") ||
+            lower.contains("missing page") ||
+            lower.contains("create page") ||
+            lower.contains("generate page") ||
+            lower.contains("add page") ||
+            lower.contains("if not created")
+        ));
+    }
+
+    /**
+     * Handle request to regenerate pages for an app
+     */
+    private static GenerationResult handleRegeneratePagesRequest(GenerationRequest request) {
+        GenerationResult result = new GenerationResult();
+        result.payload = new HashMap<>();
+        
+        // Extract app ID from description
+        String appId = extractAppIdFromDescription(request.description);
+        
+        // If no app ID in description, use last opened app from context
+        if (appId == null) {
+            ConversationContext ctx = getContext(request.userId);
+            appId = ctx.lastOpenedAppId;
+        }
+        
+        if (appId == null) {
+            result.success = false;
+            result.payload.put(PAYLOAD_REPLY, "I couldn't determine which app you're referring to. Please specify the app name or open the app first.");
+            result.payload.put(PAYLOAD_ACTION, "regeneratePages");
+            return result;
+        }
+        
+        try {
+            // Get app to check entities
+            AppMetadata app = AppManager.getApp(appId);
+            if (app == null) {
+                result.success = false;
+                result.payload.put(PAYLOAD_REPLY, "App not found: " + appId);
+                return result;
+            }
+            
+            // Check if app has entities but no pages
+            if (app.getEntities() != null && !app.getEntities().isEmpty()) {
+                List<String> entityNames = new ArrayList<>();
+                for (Object entityObj : app.getEntities()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> entity = (Map<String, Object>) entityObj;
+                    entityNames.add(String.valueOf(entity.get("name")));
+                }
+                
+                // Generate list pages for each entity
+                int createdCount = 0;
+                for (String entityName : entityNames) {
+                    String pageId = entityName.toLowerCase() + "-list";
+                    String pageName = entityName + " List";
+                    
+                    // Check if page already exists
+                    try {
+                        Map<String, Object> existing = AppManager.getPage(appId, pageId);
+                        if (existing != null) {
+                            LOG.info("[AI] Page {} already exists, skipping", pageId);
+                            continue;
+                        }
+                    } catch (Exception ignored) {}
+                    
+                    // Create page metadata
+                    Map<String, Object> page = scaffoldPage(pageName);
+                    page.put("id", pageId);
+                    page.put("type", "data-table");
+                    page.put("entity", entityName);
+                    
+                    // Auto-complete will add the table component
+                    autoCompletePageComponents(page, app.getEntities());
+                    
+                    // Save page
+                    AppManager.savePage(appId, pageId, page);
+                    createdCount++;
+                    
+                    // Add page to app's pages list
+                    if (app.getPages() == null) {
+                        app.setPages(new ArrayList<>());
+                    }
+                    if (!app.getPages().contains(pageId)) {
+                        app.getPages().add(pageId);
+                    }
+                }
+                
+                // Update app metadata
+                if (createdCount > 0) {
+                    AppManager.updateApp(appId, app);
+                }
+                
+                result.success = true;
+                result.payload.put(PAYLOAD_REPLY, 
+                    createdCount > 0 
+                        ? "Created " + createdCount + " page(s) for " + app.getName() + ". Refresh to see them!"
+                        : "All pages already exist for " + app.getName() + ".");
+                result.payload.put(PAYLOAD_ACTION, "regeneratePages");
+                result.payload.put("createdCount", createdCount);
+                
+                LOG.info("[AI] Regenerated {} pages for app {}", createdCount, appId);
+                
+            } else {
+                result.success = false;
+                result.payload.put(PAYLOAD_REPLY, "Cannot create pages: app has no entities defined.");
+            }
+            
+        } catch (Exception e) {
+            LOG.error("[AI] Failed to regenerate pages", e);
+            result.success = false;
+            result.payload.put(PAYLOAD_REPLY, "Failed to create pages: " + e.getMessage());
+        }
+        
+        return result;
+    }
+
+    /**
+     * Extract app ID from description text (e.g., "inside salon-appointment-booking-app")
+     */
+    private static String extractAppIdFromDescription(String description) {
+        if (description == null) return null;
+        
+        // Pattern: "inside {app-id}" or "in {app-id}" or "{app-id}"
+        Pattern pattern = Pattern.compile("(?:inside|in)\\s+([a-z0-9][a-z0-9-]+)", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(description);
+        
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        
+        return null;
+    }
+
+    // ========== Conversation Context Management ==========
+
+    /**
+     * Get or create conversation context for a user session
+     */
+    private static ConversationContext getContext(String userId) {
+        String key = userId != null ? userId : DEFAULT_USER;
+        ConversationContext ctx = sessionContexts.get(key);
+        
+        if (ctx == null || ctx.isExpired()) {
+            ctx = new ConversationContext();
+            sessionContexts.put(key, ctx);
+            LOG.debug("[AI Context] Created new context for user: {}", key);
+        } else {
+            ctx.refresh();
+        }
+        
+        return ctx;
+    }
+
+    /**
+     * Update context when app type/description is discussed
+     */
+    private static void updateDiscussedApp(String userId, String appType, String description) {
+        ConversationContext ctx = getContext(userId);
+        ctx.lastDiscussedAppType = appType;
+        ctx.lastDiscussedAppDescription = description;
+        LOG.info("[AI Context] Updated discussed app: type='{}', desc='{}'", appType, 
+            description != null && description.length() > 50 ? description.substring(0, 50) + "..." : description);
+    }
+
+    /**
+     * Update context when app is created
+     */
+    private static void updateCreatedApp(String userId, String appId) {
+        ConversationContext ctx = getContext(userId);
+        ctx.lastCreatedAppId = appId;
+        LOG.info("[AI Context] Tracked created app: {}", appId);
+    }
+
+    /**
+     * Update context when app is opened
+     */
+    private static void updateOpenedApp(String userId, String appId) {
+        ConversationContext ctx = getContext(userId);
+        ctx.lastOpenedAppId = appId;
+        LOG.info("[AI Context] Tracked opened app: {}", appId);
+    }
+
+    /**
+     * Check if request is a continuation (e.g., "create the app" after discussing requirements)
+     */
+    private static boolean isContinuationRequest(GenerationRequest request) {
+        if (request == null || request.description == null) return false;
+        
+        String desc = request.description.toLowerCase().trim();
+        
+        // Patterns indicating continuation
+        String[] continuationPatterns = {
+            "create the app",
+            "create it",
+            "build the app",
+            "build it",
+            "make the app",
+            "make it",
+            "yes create",
+            "yes build",
+            "go ahead",
+            "proceed"
+        };
+        
+        for (String pattern : continuationPatterns) {
+            if (desc.equals(pattern) || desc.startsWith(pattern + " ") || desc.endsWith(" " + pattern)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Build context-aware description from conversation history
+     */
+    private static String buildContextualDescription(GenerationRequest request) {
+        ConversationContext ctx = getContext(request.userId);
+        
+        // If continuation request and we have context, use it
+        if (isContinuationRequest(request) && ctx.lastDiscussedAppDescription != null) {
+            LOG.info("[AI Context] Using previous description from context for continuation request");
+            return ctx.lastDiscussedAppDescription;
+        }
+        
+        return request.description;
+    }
 }
+
