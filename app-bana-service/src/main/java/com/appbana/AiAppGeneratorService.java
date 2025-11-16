@@ -919,6 +919,8 @@ public class AiAppGeneratorService {
         if (result.pages != null && !result.pages.isEmpty()) {
             for (Map<String,Object> pg : result.pages) {
                 Map<String,Object> normalized = ensurePageMeta(pg);
+                // Auto-complete missing components for data-table pages
+                autoCompletePageComponents(normalized, entityMaps);
                 AppManager.savePage(appId, String.valueOf(normalized.get("id")), normalized);
             }
         } else if (result.suggestedPages != null && !result.suggestedPages.isEmpty()) {
@@ -1659,5 +1661,231 @@ public class AiAppGeneratorService {
         if (lower.contains("detail") || lower.contains("profile") || lower.contains("view")) return "detail";
         if (lower.contains("form") || lower.contains("create") || lower.contains("add") || lower.contains("new")) return "form";
         return "blank";
+    }
+
+    /**
+     * Auto-complete missing components in page nodes based on page metadata.
+     * Critical fix: AI often generates page metadata (type, entity, columns) but forgets
+     * to add the actual data component to the nodes array.
+     */
+    private static void autoCompletePageComponents(Map<String,Object> page, List<Object> entities) {
+        String pageType = String.valueOf(page.get("type"));
+        String entityName = String.valueOf(page.get("entity"));
+        
+        // Only process data-table/list pages
+        if (!"data-table".equals(pageType) && !"list".equals(pageType)) {
+            return;
+        }
+
+        // Try to infer entity from page name if not explicitly set
+        if (entityName == null || "null".equals(entityName) || entityName.isEmpty()) {
+            entityName = inferEntityFromPageName(String.valueOf(page.get("name")), entities);
+            if (entityName != null) {
+                page.put("entity", entityName); // Add entity to metadata
+                LOG.info("[AI] Inferred entity '{}' from page name '{}'", entityName, page.get("name"));
+            }
+        }
+
+        // If still no entity, can't auto-complete
+        if (entityName == null || "null".equals(entityName) || entityName.isEmpty()) {
+            return;
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Map<String,Object>> nodes = (List<Map<String,Object>>) page.get("nodes");
+        if (nodes == null || nodes.isEmpty()) {
+            return;
+        }
+
+        // Check if table component already exists
+        boolean hasTable = nodes.stream()
+            .anyMatch(n -> "table".equals(n.get("type")) || "studio-table-live".equals(n.get("type")));
+        
+        if (hasTable) {
+            return; // Already has table component
+        }
+
+        LOG.info("[AI] Auto-completing missing table component for page '{}' with entity '{}'", 
+            page.get("name"), entityName);
+
+        // Find the entity to get its fields
+        Map<String,Object> entityMap = findEntityByName(entities, entityName);
+        if (entityMap == null) {
+            LOG.warn("[AI] Cannot auto-complete table: entity '{}' not found", entityName);
+            return;
+        }
+
+        // Build fields array for table component
+        List<Map<String,Object>> fields = buildTableFields(entityMap);
+        
+        // Create table component node
+        String tableId = "table-" + page.get("rootId");
+        Map<String,Object> tableNode = new LinkedHashMap<>();
+        tableNode.put("id", tableId);
+        tableNode.put("type", "table");
+        
+        Map<String,Object> tableProps = new LinkedHashMap<>();
+        tableProps.put("entity", entityName);
+        tableProps.put("fields", fields);
+        tableProps.put("pageSize", 25);
+        tableProps.put("multiSelect", true);
+        tableProps.put("actions", List.of("view"));
+        tableProps.put("bulkActions", List.of("delete", "export"));
+        tableProps.put("confirmDelete", true);
+        tableProps.put("viewMode", "dynamic");
+        tableProps.put("theme", "default");
+        tableNode.put("props", tableProps);
+
+        // Add table to nodes
+        nodes.add(tableNode);
+
+        // Update root container to include table in children
+        Map<String,Object> rootNode = nodes.stream()
+            .filter(n -> page.get("rootId").equals(n.get("id")))
+            .findFirst()
+            .orElse(null);
+        
+        if (rootNode != null) {
+            @SuppressWarnings("unchecked")
+            List<String> children = (List<String>) rootNode.get("children");
+            if (children != null && !children.contains(tableId)) {
+                // Create mutable copy and add table
+                List<String> newChildren = new ArrayList<>(children);
+                newChildren.add(tableId);
+                rootNode.put("children", newChildren);
+            }
+        }
+
+        LOG.info("[AI] ✓ Auto-completed table component with {} fields", fields.size());
+    }
+
+    /**
+     * Infer entity name from page name (e.g., "Customer List" -> "Customer")
+     */
+    private static String inferEntityFromPageName(String pageName, List<Object> entities) {
+        if (pageName == null || entities == null) return null;
+        
+        String normalized = pageName.toLowerCase()
+            .replace("list", "")
+            .replace("table", "")
+            .replace("page", "")
+            .trim();
+        
+        // Try exact match first
+        for (Object entityObj : entities) {
+            @SuppressWarnings("unchecked")
+            Map<String,Object> entity = (Map<String,Object>) entityObj;
+            String entityName = String.valueOf(entity.get("name"));
+            if (normalized.equalsIgnoreCase(entityName)) {
+                return entityName;
+            }
+        }
+        
+        // Try partial match (e.g., "customer" matches "Customer")
+        for (Object entityObj : entities) {
+            @SuppressWarnings("unchecked")
+            Map<String,Object> entity = (Map<String,Object>) entityObj;
+            String entityName = String.valueOf(entity.get("name"));
+            if (entityName.toLowerCase().contains(normalized) || 
+                normalized.contains(entityName.toLowerCase())) {
+                return entityName;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Find entity map by name from entities list
+     */
+    private static Map<String,Object> findEntityByName(List<Object> entities, String name) {
+        if (entities == null || name == null) return null;
+        
+        for (Object entityObj : entities) {
+            @SuppressWarnings("unchecked")
+            Map<String,Object> entity = (Map<String,Object>) entityObj;
+            if (name.equals(entity.get("name"))) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Build table fields array from entity definition
+     */
+    private static List<Map<String,Object>> buildTableFields(Map<String,Object> entity) {
+        List<Map<String,Object>> fields = new ArrayList<>();
+        
+        // Always include id field first
+        Map<String,Object> idField = new LinkedHashMap<>();
+        idField.put("name", "id");
+        idField.put("label", "ID");
+        idField.put("type", "text");
+        fields.add(idField);
+
+        // Add entity fields
+        @SuppressWarnings("unchecked")
+        List<Map<String,Object>> entityFields = (List<Map<String,Object>>) entity.get("fields");
+        if (entityFields != null) {
+            for (Map<String,Object> field : entityFields) {
+                String fieldName = String.valueOf(field.get("name"));
+                String fieldType = String.valueOf(field.get("type"));
+                
+                Map<String,Object> tableField = new LinkedHashMap<>();
+                tableField.put("name", fieldName);
+                tableField.put("label", capitalizeWords(fieldName));
+                tableField.put("type", mapFieldTypeForTable(fieldType));
+                fields.add(tableField);
+            }
+        }
+
+        return fields;
+    }
+
+    /**
+     * Map entity field type to table display type
+     */
+    private static String mapFieldTypeForTable(String entityType) {
+        if (entityType == null) return "text";
+        
+        switch (entityType.toLowerCase()) {
+            case "datetime":
+            case "createdat":
+            case "updatedat":
+                return "datetime";
+            case "date":
+                return "date";
+            case "boolean":
+                return "boolean";
+            case "image":
+                return "image";
+            default:
+                return "text";
+        }
+    }
+
+    /**
+     * Capitalize words for field labels (e.g., "firstName" -> "First Name")
+     */
+    private static String capitalizeWords(String input) {
+        if (input == null || input.isEmpty()) return input;
+        
+        // Handle camelCase: insert space before capitals
+        String spaced = input.replaceAll("([a-z])([A-Z])", "$1 $2");
+        
+        // Capitalize first letter of each word
+        String[] words = spaced.split("\\s+");
+        StringBuilder result = new StringBuilder();
+        for (String word : words) {
+            if (result.length() > 0) result.append(" ");
+            if (!word.isEmpty()) {
+                result.append(Character.toUpperCase(word.charAt(0)));
+                if (word.length() > 1) {
+                    result.append(word.substring(1).toLowerCase());
+                }
+            }
+        }
+        return result.toString();
     }
 }
