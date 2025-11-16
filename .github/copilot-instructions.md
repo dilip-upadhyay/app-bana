@@ -35,10 +35,11 @@ Invoke-WebRequest -Uri "http://localhost:8080/apps"
 ```
 
 **⚠️ CRITICAL RULES**:
-1. Backend runs in its own terminal showing server logs continuously
-2. **NEVER** run PowerShell commands in the backend terminal - it exits the server!
-3. Always use `.\start-backend.bat` (not manual `java -jar` commands)
-4. For development, use Vite dev server (`npm run dev`) on port 5173
+1. Backend runs in its own terminal showing server logs continuously.
+2. **NEVER** run PowerShell commands, tests, or API calls in the backend terminal — doing so exits the server.
+3. Always use `.\start-backend.bat` (not manual `java -jar` commands) *only* in the dedicated backend terminal.
+4. For development, use Vite dev server (`npm run dev`) on port 5173.
+5. All testing, `mvn` commands, and `Invoke-WebRequest` API checks **must** be run in a separate terminal from the backend.
 
 ### Build & Deployment Architecture
 **Maven Multi-Module Structure**:
