@@ -504,6 +504,7 @@ export class AiChatBuilder extends LitElement {
     followUpAnswers: {},
     questionsAsked: []
   };
+  @state() private conversationContext: Record<string, any> = {};
   private assistantPersona: keyof typeof personaPrompts = 'friendly';
 
   private smallTalkPatterns: Array<{ pattern: RegExp; reply: string | ((...args: any[]) => string) }> = [
@@ -829,7 +830,8 @@ export class AiChatBuilder extends LitElement {
       const payload = {
         description: input,
         options: { userId },
-        messages: this.messages.map(m => ({ role: m.role, content: m.content }))
+        messages: this.messages.map(m => ({ role: m.role, content: m.content })),
+        conversationContext: this.conversationContext
       };
 
       const response = await fetch('/api/ai/generate', {
@@ -845,9 +847,20 @@ export class AiChatBuilder extends LitElement {
       }
 
       const result = await response.json();
-      if (result && result.payload && result.payload.smallTalk) {
-        this.addAssistantMessage(result.payload.reply || 'Small talk response.');
-      } else if (result && result.success) {
+      // Update appType context if present
+      if (result.payload && result.payload.appType) {
+        this.conversationContext.appType = result.payload.appType;
+      }
+      // After app creation, show confirmation and next steps
+      if (result.success && result.payload && result.payload.appId) {
+        this.conversationContext.currentAppId = result.payload.appId;
+        this.conversationContext.currentAppName = result.payload.currentAppName;
+        this.addAssistantMessage(
+          `✅ Created your ${this.conversationContext.appType || ''} (${result.payload.currentAppName || ''}).\nSay 'show my apps' or 'open the first app' to continue.`
+        );
+        return;
+      }
+      if (result && result.success) {
         const action = result.payload?.action;
         if (action === 'list' && Array.isArray(result.payload?.apps)) {
           const reply = result.payload.reply || 'Here are your apps:';
@@ -976,7 +989,7 @@ export class AiChatBuilder extends LitElement {
     if (lowerName.includes('dashboard') || lowerName.includes('home')) return 'dashboard';
     if (lowerName.includes('list') || lowerName.includes('all ')) return 'list';
     if (lowerName.includes('form') || lowerName.includes('create') || lowerName.includes('add')) return 'form';
-    if (lowerName.includes('detail') || lowerName.includes('view')) return 'detail';
+    if (lowerName.includes('detail') || lowerName.includes('view')) return 'profile'; // AI often uses 'profile' for detail pages
     if (lowerName.includes('profile')) return 'profile';
     if (lowerName.includes('contact')) return 'contact';
     

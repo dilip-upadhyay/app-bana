@@ -1,0 +1,74 @@
+{
+  "id" : "dance-application",
+  "name" : "Dance Application",
+  "description" : "Dance tutorials, videos and events",
+  "version" : "1.0.0",
+  "created" : 1763305391849,
+  "updated" : 1763305391875,
+  "pages" : [ "page-1763305391856", "page-1763305391867", "page-1763305391870" ],
+  "defaultPage" : "page-1763305391856",
+  "entities" : [ {
+    "name" : "DanceVideo",
+    "fields" : [ {
+      "name" : "id",
+      "type" : "long",
+      "required" : false,
+      "primaryKey" : true,
+      "autoIncrement" : true
+    }, {
+      "name" : "title",
+      "type" : "string",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "style",
+      "type" : "string",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "difficulty",
+      "type" : "string",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "length_min",
+      "type" : "int",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Event",
+    "fields" : [ {
+      "name" : "id",
+      "type" : "long",
+      "required" : false,
+      "primaryKey" : true,
+      "autoIncrement" : true
+    }, {
+      "name" : "name",
+      "type" : "string",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "date",
+      "type" : "date",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "location",
+      "type" : "string",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  } ],
+  "routes" : {
+    "basePath" : "/dance-application"
+  }
+}

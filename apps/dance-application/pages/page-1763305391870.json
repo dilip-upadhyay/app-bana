@@ -1,0 +1,24 @@
+{
+  "id" : "page-1763305391870",
+  "name" : "Create Video (Form)",
+  "rootId" : "root-1763305391870",
+  "nodes" : [ {
+    "id" : "root-1763305391870",
+    "type" : "container",
+    "props" : {
+      "gap" : "lg",
+      "padding" : "xl",
+      "layout" : "vertical"
+    },
+    "children" : [ "heading-root-1763305391870" ]
+  }, {
+    "id" : "heading-root-1763305391870",
+    "type" : "text",
+    "props" : {
+      "content" : "Create Video (Form)",
+      "tag" : "h1"
+    }
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "form"
+}

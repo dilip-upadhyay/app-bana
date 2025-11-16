@@ -43,6 +43,8 @@ public class AiAppGeneratorService {
     private static final String PAYLOAD_REPLY = "reply";
     private static final String PAYLOAD_SMALL_TALK = "smallTalk";
     private static final String DEFAULT_USER = "default";
+    private static final String DOMAIN_TEMPLATES_PATH = "builder-database/10-domain-templates.json";
+    private static List<Map<String,Object>> cachedDomainTemplates;
 
     public static GenerationResult generateApp(GenerationRequest request) {
         LOG.info("[AI] Incoming GenerationRequest: action={}, description={}, options={}",
@@ -69,6 +71,7 @@ public class AiAppGeneratorService {
                     if (gen.payload == null) gen.payload = new HashMap<>();
                     gen.payload.put("appType", appType);
                 }
+                ensureStructuralMinimum(gen, appType, request);
                 postProcessAndPersistIfNeeded(gen, request);
                 return gen;
             }
@@ -125,6 +128,8 @@ public class AiAppGeneratorService {
 
     private static boolean isAppCreationRequest(String lowerDescription) {
         if (lowerDescription == null) return false;
+        // broaden detection: 'create X app', 'build X app', 'generate X app'
+        if (lowerDescription.matches("^(create|build|generate|make) [a-z0-9 -]+ app$")) return true;
         return lowerDescription.contains("create the app")
             || lowerDescription.contains("build the app")
             || lowerDescription.contains("generate the app")
@@ -143,7 +148,7 @@ public class AiAppGeneratorService {
             || lowerDescription.contains("please create")
             || lowerDescription.contains("i need an app")
             || lowerDescription.contains("i want an app")
-            || lowerDescription.contains("create a") && lowerDescription.contains("app");
+            || (lowerDescription.contains("create ") && lowerDescription.contains(" app"));
     }
 
     private static String resolveAction(GenerationRequest request) {
@@ -652,338 +657,79 @@ public class AiAppGeneratorService {
         LOG.info("[AI] Persisted generated app '{}'", appId);
     }
 
-    private static Map<String,Object> ensurePageMeta(Map<String,Object> page) {
-        Map<String,Object> out = new LinkedHashMap<>(page);
-        if (!out.containsKey("id")) out.put("id", "page-" + System.currentTimeMillis());
-        if (!out.containsKey("name")) out.put("name", String.valueOf(out.get("id")));
-        if (!out.containsKey("rootId")) out.put("rootId", "root-" + System.currentTimeMillis());
-        if (!out.containsKey("metaVersion")) out.put("metaVersion", "1.0.0");
-        if (!out.containsKey("type")) out.put("type", "blank");
-        if (!out.containsKey("nodes")) {
-            String rootId = String.valueOf(out.get("rootId"));
-            out.put("nodes", List.of(Map.of(
-                "id", rootId,
-                "type", "container",
-                "props", Map.of("layout", "vertical", "gap", "lg", "padding", "xl"),
-                "children", List.of("heading-" + rootId)
-            ), Map.of(
-                "id", "heading-" + rootId,
-                "type", "text",
-                "props", Map.of("content", out.get("name"), "tag", "h1")
-            )));
-        }
-        return out;
-    }
-
-    private static Map<String,Object> scaffoldPage(String name) {
-        String base = name == null || name.isBlank() ? "Page" : name.trim();
-        String id = "page-" + System.currentTimeMillis() + "-" + Math.random();
-        String rootId = "root-" + System.currentTimeMillis();
-        Map<String,Object> root = new LinkedHashMap<>();
-        root.put("id", rootId);
-        root.put("type", "container");
-        root.put("props", Map.of("layout", "vertical", "gap", "lg", "padding", "xl"));
-        root.put("children", List.of("heading-" + rootId));
-        Map<String,Object> heading = new LinkedHashMap<>();
-        heading.put("id", "heading-" + rootId);
-        heading.put("type", "text");
-        heading.put("props", Map.of("content", base, "tag", "h1"));
-        Map<String,Object> page = new LinkedHashMap<>();
-        page.put("id", id);
-        page.put("name", base);
-        page.put("rootId", rootId);
-        page.put("nodes", List.of(root, heading));
-        page.put("metaVersion", "1.0.0");
-        page.put("type", guessPageType(base));
-        return page;
-    }
-
-    private static String guessPageType(String name) {
-        if (name == null) return "blank";
-        String lower = name.toLowerCase(Locale.ROOT);
-        if (lower.contains("dashboard")) return "dashboard";
-        if (lower.contains("list")) return "list";
-        if (lower.contains("detail")) return "detail";
-        if (lower.contains("form") || lower.contains("create") || lower.contains("add")) return "form";
-        return "blank";
-    }
-
-    private static String sanitizeAppId(String raw) {
-        if (raw == null) return "app" + System.currentTimeMillis();
-        String s = raw.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("-+", "-");
-        s = s.replaceAll("^-", "").replaceAll("-$", "");
-        if (s.isBlank()) s = "app" + System.currentTimeMillis();
-        return s;
-    }
-
-    private static String generateUniqueAppId(String base) {
-        String candidate = base;
-        int counter = 1;
-        try {
-            while (AppManager.getApp(candidate) != null) {
-                candidate = base + "-" + counter++;
-            }
-        } catch (IOException ignored) {}
-        return candidate;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> classifyAction(String userText) throws Exception {
-        AppConfig config = getConfig();
-        Map<String, Object> parsed = null;
-
-        if (AiProviderFactory.isAiEnabled(config)) {
-            AiProvider provider = AiProviderFactory.createProvider(config);
-            String systemPrompt = AiSystemPrompts.getActionClassifierPrompt();
-            String jsonResponse = provider.generateAppStructure(userText, systemPrompt);
-            LOG.debug("Raw classifier response: {}", jsonResponse);
-            String sanitized = sanitizeAiJson(jsonResponse);
-            LOG.debug("Sanitized classifier JSON: {}", sanitized);
-            try {
-                parsed = MAPPER.readValue(sanitized, Map.class);
-            } catch (Exception e) {
-                LOG.warn("Failed to parse action classification JSON: {}", e.getMessage());
-                parsed = null;
-            }
-        }
-
-        if (parsed != null && parsed.containsKey("action")) {
-            Object a = parsed.get("action");
-            if (a != null) {
-                parsed.put("action", normalizeActionLabel(String.valueOf(a)));
-            }
-            return parsed;
-        }
-
-        return heuristicClassification(userText);
-    }
-
-    private static Map<String, Object> heuristicClassification(String userText) {
-        String lower = userText == null ? "" : userText.toLowerCase(Locale.ROOT);
-        Map<String, Object> fallback = new HashMap<>();
-
-        // List apps: "show my apps", "list apps", "show apps"
-        if (lower.matches(".*(list|show).*(apps|app list).*") || lower.contains("my apps")) {
-            fallback.put("action", ACTION_LIST_APPS);
-            fallback.put("options", new HashMap<>());
-            return fallback;
-        }
-        // Load/open app: "load second app", "open the first app", "load Blog Application", "open my first app"
-        if (lower.matches(".*(load|open).*(app).*")) {
-            fallback.put("action", ACTION_LOAD_APP);
-            fallback.put("options", new HashMap<>());
-            return fallback;
-        }
-        if (lower.matches(".*delete.*app.*")) {
-            fallback.put("action", ACTION_DELETE_APP);
-            fallback.put("options", new HashMap<>());
-            return fallback;
-        }
-        if (lower.matches(".*(how many|count|number of).*pages.*") || lower.matches(".*(list|show).*pages.*")) {
-            Map<String, Object> opts = new HashMap<>();
-            Matcher matcher = Pattern.compile("(in|for|of) ([A-Za-z0-9 _-]+)").matcher(userText == null ? "" : userText);
-            if (matcher.find()) {
-                opts.put("appName", matcher.group(2).trim());
-            }
-            Map<String, Object> result = new HashMap<>();
-            result.put("action", ACTION_LIST_PAGES);
-            result.put("options", opts);
-            return result;
-        }
-
-        fallback.put("action", ACTION_GENERATE_APP);
-        fallback.put("options", new HashMap<>());
-        return fallback;
-    }
-
-    private static String normalizeActionLabel(String action) {
-        if (action == null) {
-            return null;
-        }
-        switch (action.trim().toLowerCase(Locale.ROOT)) {
-            case "list":
-            case "listapps":
-            case "list_apps":
-            case "list-apps":
-            case "showapps":
-            case "show_apps":
-            case "show-apps":
-            case "list tab":
-            case "show my apps":
-            case "list my apps":
-            case "list all apps":
-            case "show all apps":
-                return ACTION_LIST_APPS;
-            case "loadapp":
-            case "load_app":
-            case "load-app":
-            case "open":
-                return ACTION_LOAD_APP;
-            case "deleteapp":
-            case "delete_app":
-            case "delete-app":
-            case "delete":
-                return ACTION_DELETE_APP;
-            case "listpages":
-            case "list_pages":
-            case "list-pages":
-            case "pages":
-                return ACTION_LIST_PAGES;
-            case "generateapp":
-            case "generate_app":
-            case "generate-app":
-            case "generate":
-                return ACTION_GENERATE_APP;
-            default:
-                return action;
-        }
-    }
-
-    private static GenerationResult parseAiResponse(String jsonResponse) throws Exception {
-        String sanitized = sanitizeAiJson(jsonResponse);
-        JsonNode root = MAPPER.readTree(sanitized);
-
-        GenerationResult result = new GenerationResult();
-
-        if (root.has("needsMoreInfo") && root.get("needsMoreInfo").asBoolean()) {
-            result.success = true;
-            result.needsMoreInfo = true;
-            result.followUpQuestions = new ArrayList<>();
-            JsonNode questionsNode = root.get("followUpQuestions");
-            if (questionsNode != null && questionsNode.isArray()) {
-                for (JsonNode questionNode : questionsNode) {
-                    result.followUpQuestions.add(questionNode.asText());
+    private static void ensureStructuralMinimum(GenerationResult gen, String appType, GenerationRequest request) {
+        if (gen == null) return;
+        if (gen.appName == null) {
+            // derive appName from appType or description
+            String derived = null;
+            if (appType != null) {
+                derived = Arrays.stream(appType.replace(" app"," ").trim().split("[ -]+"))
+                    .filter(s -> !s.isBlank())
+                    .map(s -> s.substring(0,1).toUpperCase(Locale.ROOT) + s.substring(1))
+                    .reduce("", (a,b) -> a + (a.isEmpty()?"":" ") + b) + " App";
+            } else if (request != null && request.description != null) {
+                // take first two words before 'app'
+                Matcher m = Pattern.compile("(create|build|generate|make) (.+?) app").matcher(request.description.toLowerCase(Locale.ROOT));
+                if (m.find()) {
+                    String core = m.group(2).trim();
+                    derived = Arrays.stream(core.split("[ -]+"))
+                        .filter(s -> !s.isBlank())
+                        .map(s -> s.substring(0,1).toUpperCase(Locale.ROOT) + s.substring(1))
+                        .reduce("", (a,b) -> a + (a.isEmpty()?"":" ") + b) + " App";
                 }
             }
-            if (root.has("partialStructure")) {
-                JsonNode partialNode = root.get("partialStructure");
-                if (partialNode.has("appName")) {
-                    result.appName = partialNode.get("appName").asText();
-                }
-            }
-            return result;
+            gen.appName = derived != null ? derived : "Application";
         }
-
-        result.success = true;
-        result.needsMoreInfo = false;
-        result.appName = root.path("appName").asText(null);
-        result.appDescription = root.path("appDescription").asText(null);
-
-        result.entities = new ArrayList<>();
-        JsonNode entitiesNode = root.get("entities");
-        if (entitiesNode != null && entitiesNode.isArray()) {
-            for (JsonNode entityNode : entitiesNode) {
-                String entityName = entityNode.get("name").asText();
-                List<EntitySchema.Field> fields = new ArrayList<>();
-                JsonNode fieldsNode = entityNode.get("fields");
-                if (fieldsNode != null && fieldsNode.isArray()) {
-                    for (JsonNode fieldNode : fieldsNode) {
-                        EntitySchema.Field field = new EntitySchema.Field();
-                        field.setName(fieldNode.get("name").asText());
-                        field.setType(fieldNode.get("type").asText());
-                        field.setRequired(fieldNode.path("required").asBoolean(false));
-                        field.setPrimaryKey(fieldNode.path("primaryKey").asBoolean(false));
-                        field.setAutoIncrement(fieldNode.path("autoIncrement").asBoolean(false));
-                        fields.add(field);
-                    }
-                }
-                result.entities.add(new EntitySchema(entityName, fields));
-            }
-        }
-
-        result.relationships = new ArrayList<>();
-        JsonNode relationshipsNode = root.get("relationships");
-        if (relationshipsNode != null && relationshipsNode.isArray()) {
-            for (JsonNode relNode : relationshipsNode) {
-                result.relationships.add(relNode.asText());
-            }
-        }
-
-        result.suggestedPages = new ArrayList<>();
-        JsonNode pagesNode = root.get("suggestedPages");
-        if (pagesNode != null && pagesNode.isArray()) {
-            for (JsonNode pageNode : pagesNode) {
-                result.suggestedPages.add(pageNode.isTextual() ? pageNode.asText() : MAPPER.writeValueAsString(pageNode));
+        if (gen.entities == null || gen.entities.isEmpty()) {
+            gen.entities = new ArrayList<>();
+            if (appType != null && appType.contains("running")) {
+                gen.entities.add(buildEntity("RunSession", new String[][]{
+                    {"id","long","pk","auto"},
+                    {"date","date"},
+                    {"distance_km","decimal"},
+                    {"duration_min","int"},
+                    {"pace","string"},
+                    {"notes","string"}
+                }));
+                gen.entities.add(buildEntity("TrainingPlan", new String[][]{
+                    {"id","long","pk","auto"},
+                    {"name","string"},
+                    {"goal_distance_km","decimal"},
+                    {"target_race","string"},
+                    {"weeks","int"}
+                }));
+            } else if (appType != null && appType.contains("dance")) {
+                gen.entities.add(buildEntity("DanceVideo", new String[][]{
+                    {"id","long","pk","auto"},
+                    {"title","string"},
+                    {"style","string"},
+                    {"difficulty","string"},
+                    {"length_min","int"}
+                }));
+                gen.entities.add(buildEntity("Event", new String[][]{
+                    {"id","long","pk","auto"},
+                    {"name","string"},
+                    {"date","date"},
+                    {"location","string"}
+                }));
+            } else {
+                gen.entities.add(buildEntity("Item", new String[][]{
+                    {"id","long","pk","auto"},
+                    {"name","string"},
+                    {"description","string"}
+                }));
             }
         }
-
-        result.pages = new ArrayList<>();
-        JsonNode pagesMetaNode = root.get("pages");
-        if (pagesMetaNode != null && pagesMetaNode.isArray()) {
-            for (JsonNode pageNode : pagesMetaNode) {
-                result.pages.add(MAPPER.convertValue(pageNode, MAP_TYPE));
-            }
+        if ((gen.pages == null || gen.pages.isEmpty()) && (gen.suggestedPages == null || gen.suggestedPages.isEmpty())) {
+            gen.suggestedPages = Arrays.asList(
+                (appType != null && appType.contains("running")) ? "Run Sessions List (Data Table)" : "Items List (Data Table)",
+                "Dashboard Page",
+                "Create Form Page"
+            );
         }
-
-        return result;
-    }
-
-    public static String sanitizeAiJson(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        String trimmed = raw.trim();
-        if (trimmed.isEmpty()) {
-            return trimmed;
-        }
-
-        int firstFence = trimmed.indexOf("```");
-        int lastFence = trimmed.lastIndexOf("```");
-        if (firstFence >= 0 && lastFence > firstFence) {
-            String inside = trimmed.substring(firstFence + 3, lastFence).trim();
-            if (inside.startsWith("json")) {
-                inside = inside.substring(4).trim();
-            }
-            if (!inside.isEmpty()) {
-                return inside;
-            }
-        }
-
-        int firstBrace = trimmed.indexOf('{');
-        int firstBracket = trimmed.indexOf('[');
-        int start;
-        if (firstBrace == -1) {
-            start = firstBracket;
-        } else if (firstBracket == -1) {
-            start = firstBrace;
-        } else {
-            start = Math.min(firstBrace, firstBracket);
-        }
-        if (start == -1) {
-            return trimmed;
-        }
-
-        char open = trimmed.charAt(start);
-        char close = open == '{' ? '}' : ']';
-        int depth = 0;
-        for (int i = start; i < trimmed.length(); i++) {
-            char c = trimmed.charAt(i);
-            if (c == open) {
-                depth++;
-            } else if (c == close) {
-                depth--;
-                if (depth == 0) {
-                    return trimmed.substring(start, i + 1);
-                }
-            }
-        }
-        return trimmed.substring(start);
-    }
-
-    private static GenerationResult generateFromTemplates(GenerationRequest request) {
-        String description = request != null && request.description != null ? request.description : "";
-        AppIntent intent = parseIntent(description.toLowerCase(Locale.ROOT));
-        switch (intent.appType) {
-            case "blog":
-                return generateBlogApp(intent);
-            case "task":
-                return generateTaskApp(intent);
-            case "ecommerce":
-                return generateEcommerceApp(intent);
-            case "crm":
-                return generateCrmApp(intent);
-            default:
-                return generateGenericApp(intent);
+        if (gen.payload == null) gen.payload = new HashMap<>();
+        if (!gen.payload.containsKey(PAYLOAD_REPLY)) {
+            gen.payload.put(PAYLOAD_REPLY, "Generated skeleton for " + gen.appName + ". I inferred " + gen.entities.size() + " entities and " + (gen.pages != null ? gen.pages.size() : gen.suggestedPages != null ? gen.suggestedPages.size() : 0) + " pages. Say 'show my apps' or 'open the first app'.");
         }
     }
 
@@ -995,7 +741,13 @@ public class AiAppGeneratorService {
             intent.appName = "Application";
             return intent;
         }
-        if (Pattern.compile("blog|post|article|comment").matcher(input).find()) {
+        if (Pattern.compile("running|run tracker|runner|fitness|workout").matcher(input).find()) {
+            intent.appType = "running";
+            intent.appName = "Running Tracker";
+        } else if (Pattern.compile("dance|choreo|choreography").matcher(input).find()) {
+            intent.appType = "dance";
+            intent.appName = "Dance Application";
+        } else if (Pattern.compile("blog|post|article|comment").matcher(input).find()) {
             intent.appType = "blog";
             intent.appName = "Blog Application";
         } else if (Pattern.compile("task|todo|checklist").matcher(input).find()) {
@@ -1015,6 +767,38 @@ public class AiAppGeneratorService {
             intent.appName = "Application";
         }
         return intent;
+    }
+
+    private static GenerationResult generateRunningApp(AppIntent intent) {
+        GenerationResult result = new GenerationResult();
+        result.success = true;
+        result.appName = intent.appName;
+        result.appDescription = "Track runs, training plans, and performance metrics";
+        result.entities = new ArrayList<>();
+        EntitySchema session = new EntitySchema();
+        session.setName("RunSession");
+        session.setFields(Arrays.asList(
+            createField("id","long",true,true),
+            createField("date","date",false,false),
+            createField("distance_km","decimal",false,false),
+            createField("duration_min","int",false,false),
+            createField("pace","string",false,false),
+            createField("notes","string",false,false)
+        ));
+        result.entities.add(session);
+        EntitySchema plan = new EntitySchema();
+        plan.setName("TrainingPlan");
+        plan.setFields(Arrays.asList(
+            createField("id","long",true,true),
+            createField("name","string",false,false),
+            createField("goal_distance_km","decimal",false,false),
+            createField("target_race","string",false,false),
+            createField("weeks","int",false,false)
+        ));
+        result.entities.add(plan);
+        result.relationships = Arrays.asList("RunSession plan reference (future expansion)");
+        result.suggestedPages = Arrays.asList("Run Sessions List (Data Table)", "Run Session Detail (Profile)", "Create Run Session (Form)");
+        return result;
     }
 
     private static GenerationResult generateBlogApp(AppIntent intent) {
@@ -1166,6 +950,220 @@ public class AiAppGeneratorService {
         return ConfigManager.getConfig();
     }
 
+    // --- Restored utility + classifier methods (re-added) ---
+    private static String normalizeActionLabel(String action) {
+        if (action == null) return null;
+        switch (action.trim().toLowerCase(Locale.ROOT)) {
+            case "list": case "listapps": case "list_apps": case "list-apps": case "showapps": case "show_apps": case "show-apps": case "show my apps": case "list my apps": case "list all apps": case "show all apps":
+                return ACTION_LIST_APPS;
+            case "load": case "open": case "loadapp": case "load_app": case "load-app":
+                return ACTION_LOAD_APP;
+            case "delete": case "deleteapp": case "delete_app": case "delete-app":
+                return ACTION_DELETE_APP;
+            case "pages": case "listpages": case "list_pages": case "list-pages":
+                return ACTION_LIST_PAGES;
+            case "generate": case "generateapp": case "generate_app": case "generate-app":
+                return ACTION_GENERATE_APP;
+            default:
+                return action;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String,Object> classifyAction(String userText) throws Exception {
+        // Simple heuristic-only fallback (full AI classification may be added later)
+        return heuristicClassification(userText);
+    }
+
+    private static Map<String,Object> heuristicClassification(String userText) {
+        String lower = userText == null ? "" : userText.toLowerCase(Locale.ROOT);
+        Map<String,Object> out = new HashMap<>();
+        if (lower.matches(".*(list|show).*(apps|app list).*") || lower.contains("my apps")) {
+            out.put("action", ACTION_LIST_APPS); out.put("options", new HashMap<>()); return out;
+        }
+        if (lower.matches(".*(open|load).*(app).*")) {
+            out.put("action", ACTION_LOAD_APP); out.put("options", new HashMap<>()); return out;
+        }
+        if (lower.matches(".*delete.*app.*")) {
+            out.put("action", ACTION_DELETE_APP); out.put("options", new HashMap<>()); return out;
+        }
+        if (lower.matches(".*(list|show|how many|count|number of).*pages.*")) {
+            Map<String,Object> opts = new HashMap<>();
+            Matcher m = Pattern.compile("(in|for|of) ([A-Za-z0-9 _-]+)").matcher(lower);
+            if (m.find()) opts.put("appName", m.group(2).trim());
+            out.put("action", ACTION_LIST_PAGES); out.put("options", opts); return out;
+        }
+        out.put("action", ACTION_GENERATE_APP); out.put("options", new HashMap<>()); return out;
+    }
+
+    public static String sanitizeAiJson(String raw) { // kept public for other components referencing it
+        if (raw == null) return null;
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) return trimmed;
+        int firstFence = trimmed.indexOf("```");
+        int lastFence = trimmed.lastIndexOf("```");
+        if (firstFence >= 0 && lastFence > firstFence) {
+            String inside = trimmed.substring(firstFence + 3, lastFence).trim();
+            if (inside.startsWith("json")) inside = inside.substring(4).trim();
+            if (!inside.isEmpty()) return inside;
+        }
+        int firstBrace = trimmed.indexOf('{');
+        int firstBracket = trimmed.indexOf('[');
+        int start;
+        if (firstBrace == -1) start = firstBracket; else if (firstBracket == -1) start = firstBrace; else start = Math.min(firstBrace, firstBracket);
+        if (start == -1) return trimmed;
+        char open = trimmed.charAt(start); char close = open == '{' ? '}' : ']'; int depth = 0;
+        for (int i = start; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (c == open) depth++; else if (c == close) { depth--; if (depth == 0) return trimmed.substring(start, i+1); }
+        }
+        return trimmed.substring(start);
+    }
+
+    private static GenerationResult parseAiResponse(String jsonResponse) throws Exception {
+        // Minimal parser; expect structured JSON or fallback to generic app
+        GenerationResult result = new GenerationResult();
+        if (jsonResponse == null || jsonResponse.isBlank()) {
+            result.success = true; result.appName = "Application"; result.entities = new ArrayList<>(); return result;
+        }
+        String sanitized = sanitizeAiJson(jsonResponse);
+        JsonNode root = MAPPER.readTree(sanitized);
+        result.success = true;
+        result.appName = root.path("appName").asText(null);
+        result.appDescription = root.path("appDescription").asText(null);
+        // Entities
+        result.entities = new ArrayList<>();
+        JsonNode entitiesNode = root.get("entities");
+        if (entitiesNode != null && entitiesNode.isArray()) {
+            for (JsonNode eNode : entitiesNode) {
+                String name = eNode.path("name").asText("Entity");
+                List<EntitySchema.Field> fields = new ArrayList<>();
+                JsonNode fieldsNode = eNode.get("fields");
+                if (fieldsNode != null && fieldsNode.isArray()) {
+                    for (JsonNode fNode : fieldsNode) {
+                        EntitySchema.Field f = new EntitySchema.Field();
+                        f.setName(fNode.path("name").asText("field"));
+                        f.setType(fNode.path("type").asText("string"));
+                        f.setRequired(fNode.path("required").asBoolean(false));
+                        f.setPrimaryKey(fNode.path("primaryKey").asBoolean(false));
+                        f.setAutoIncrement(fNode.path("autoIncrement").asBoolean(false));
+                        fields.add(f);
+                    }
+                }
+                result.entities.add(new EntitySchema(name, fields));
+            }
+        }
+        // Suggested pages
+        result.suggestedPages = new ArrayList<>();
+        JsonNode pagesNode = root.get("suggestedPages");
+        if (pagesNode != null && pagesNode.isArray()) {
+            for (JsonNode pNode : pagesNode) result.suggestedPages.add(pNode.asText());
+        }
+        return result;
+    }
+
+    private static Map<String,Object> findDomainTemplate(String domain) {
+        if (domain == null) return null;
+        List<Map<String,Object>> templates = loadDomainTemplates();
+        for (Map<String,Object> t : templates) {
+            Object d = t.get("domain");
+            if (d != null && domain.equalsIgnoreCase(String.valueOf(d))) return t;
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String,Object>> loadDomainTemplates() {
+        if (cachedDomainTemplates != null) return cachedDomainTemplates;
+        try {
+            java.nio.file.Path p = java.nio.file.Paths.get(DOMAIN_TEMPLATES_PATH);
+            if (!java.nio.file.Files.exists(p)) {
+                LOG.warn("[AI] Domain templates file not found: {}", p.toAbsolutePath());
+                cachedDomainTemplates = List.of();
+                return cachedDomainTemplates;
+            }
+            String json = java.nio.file.Files.readString(p);
+            Map<String,Object> root = MAPPER.readValue(json, Map.class);
+            Object arr = root.get("templates");
+            if (arr instanceof List) {
+                cachedDomainTemplates = (List<Map<String,Object>>) arr;
+            } else {
+                cachedDomainTemplates = List.of();
+            }
+        } catch (Exception e) {
+            LOG.error("[AI] Failed to load domain templates", e);
+            cachedDomainTemplates = List.of();
+        }
+        return cachedDomainTemplates;
+    }
+
+    private static GenerationResult generateFromTemplateDomain(String domain) {
+        Map<String,Object> tpl = findDomainTemplate(domain);
+        if (tpl == null) return null;
+        GenerationResult result = new GenerationResult();
+        result.success = true;
+        result.appName = String.valueOf(tpl.getOrDefault("appName", domain + " App"));
+        result.appDescription = String.valueOf(tpl.getOrDefault("description", result.appName));
+        // entities
+        result.entities = new ArrayList<>();
+        Object entsObj = tpl.get("entities");
+        if (entsObj instanceof List) {
+            for (Object eo : (List<?>) entsObj) {
+                if (!(eo instanceof Map)) continue;
+                Map<String,Object> em = (Map<String,Object>) eo;
+                EntitySchema schema = new EntitySchema();
+                schema.setName(String.valueOf(em.getOrDefault("name", "Entity")));
+                List<EntitySchema.Field> fields = new ArrayList<>();
+                Object fieldsObj = em.get("fields");
+                if (fieldsObj instanceof List) {
+                    for (Object fo : (List<?>) fieldsObj) {
+                        if (!(fo instanceof Map)) continue;
+                        Map<String,Object> fm = (Map<String,Object>) fo;
+                        EntitySchema.Field f = new EntitySchema.Field();
+                        f.setName(String.valueOf(fm.getOrDefault("name", "field")));
+                        f.setType(String.valueOf(fm.getOrDefault("type", "string")));
+                        f.setPrimaryKey(Boolean.TRUE.equals(fm.get("primaryKey")));
+                        f.setAutoIncrement(Boolean.TRUE.equals(fm.get("autoIncrement")));
+                        f.setRequired(!Boolean.TRUE.equals(fm.get("primaryKey")));
+                        fields.add(f);
+                    }
+                }
+                schema.setFields(fields);
+                result.entities.add(schema);
+            }
+        }
+        // relationships
+        result.relationships = new ArrayList<>();
+        Object relObj = tpl.get("relationships");
+        if (relObj instanceof List) {
+            for (Object ro : (List<?>) relObj) result.relationships.add(String.valueOf(ro));
+        }
+        // suggested pages
+        result.suggestedPages = new ArrayList<>();
+        Object pagesObj = tpl.get("suggestedPages");
+        if (pagesObj instanceof List) {
+            for (Object po : (List<?>) pagesObj) result.suggestedPages.add(String.valueOf(po));
+        }
+        return result;
+    }
+
+    private static GenerationResult generateFromTemplates(GenerationRequest request) {
+        String description = request != null && request.description != null ? request.description : "";
+        AppIntent intent = parseIntent(description.toLowerCase(Locale.ROOT));
+        // Try domain template first
+        GenerationResult domainResult = generateFromTemplateDomain(intent.appType);
+        if (domainResult != null) return domainResult;
+        switch (intent.appType) {
+            case "running": return generateRunningApp(intent); // fallback legacy
+            case "dance": return generateDanceApp(intent);
+            case "blog": return generateBlogApp(intent);
+            case "task": return generateTaskApp(intent);
+            case "ecommerce": return generateEcommerceApp(intent);
+            case "crm": return generateCrmApp(intent);
+            default: return generateGenericApp(intent);
+        }
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class GenerationRequest {
         public String description;
@@ -1224,5 +1222,138 @@ public class AiAppGeneratorService {
             return m.group(1).trim() + " app";
         }
         return null;
+    }
+
+    private static GenerationResult generateDanceApp(AppIntent intent) {
+        GenerationResult result = new GenerationResult();
+        result.success = true;
+        result.appName = intent.appName != null ? intent.appName : "Dance Application";
+        result.appDescription = "Dance tutorial and event application";
+        result.entities = new ArrayList<>();
+        // Entities: DanceVideo, Event
+        result.entities.add(buildEntity("DanceVideo", new String[][]{
+            {"id","long","pk","auto"},
+            {"title","string"},
+            {"style","string"},
+            {"difficulty","string"},
+            {"length_min","int"}
+        }));
+        result.entities.add(buildEntity("Event", new String[][]{
+            {"id","long","pk","auto"},
+            {"name","string"},
+            {"date","date"},
+            {"location","string"}
+        }));
+        result.suggestedPages = Arrays.asList(
+            "Videos List (Data Table)",
+            "Video Detail (Profile)",
+            "Create Video (Form)"
+        );
+        return result;
+    }
+
+    // Build an EntitySchema from 2D array field definitions
+    private static EntitySchema buildEntity(String name, String[][] fieldDefs) {
+        EntitySchema e = new EntitySchema();
+        e.setName(name);
+        List<EntitySchema.Field> fields = new ArrayList<>();
+        for (String[] def : fieldDefs) {
+            if (def.length < 2) continue;
+            String fname = def[0];
+            String ftype = def[1];
+            boolean pk = Arrays.asList(def).contains("pk");
+            boolean auto = Arrays.asList(def).contains("auto");
+            EntitySchema.Field f = new EntitySchema.Field();
+            f.setName(fname);
+            f.setType(ftype);
+            f.setPrimaryKey(pk);
+            f.setAutoIncrement(auto);
+            f.setRequired(!pk);
+            fields.add(f);
+        }
+        e.setFields(fields);
+        return e;
+    }
+
+    // Ensure page meta has required fields and a minimal node tree
+    private static Map<String,Object> ensurePageMeta(Map<String,Object> page) {
+        Map<String,Object> out = new LinkedHashMap<>(page);
+        if (!out.containsKey("id")) out.put("id", "page-" + System.currentTimeMillis());
+        if (!out.containsKey("name")) out.put("name", String.valueOf(out.get("id")));
+        if (!out.containsKey("rootId")) out.put("rootId", "root-" + System.currentTimeMillis());
+        if (!out.containsKey("metaVersion")) out.put("metaVersion", "1.0.0");
+        if (!out.containsKey("type")) out.put("type", guessPageType(String.valueOf(out.get("name"))));
+        if (!out.containsKey("nodes")) {
+            String rootId = String.valueOf(out.get("rootId"));
+            out.put("nodes", List.of(
+                Map.of(
+                    "id", rootId,
+                    "type", "container",
+                    "props", Map.of("layout", "vertical", "gap", "lg", "padding", "xl"),
+                    "children", List.of("heading-" + rootId)
+                ),
+                Map.of(
+                    "id", "heading-" + rootId,
+                    "type", "text",
+                    "props", Map.of("content", out.get("name"), "tag", "h1")
+                )
+            ));
+        }
+        return out;
+    }
+
+    // Scaffold a page from a simple name
+    private static Map<String,Object> scaffoldPage(String name) {
+        String base = (name == null || name.isBlank()) ? "Page" : name.trim();
+        String id = "page-" + System.currentTimeMillis();
+        String rootId = "root-" + System.currentTimeMillis();
+        Map<String,Object> root = new LinkedHashMap<>();
+        root.put("id", rootId);
+        root.put("type", "container");
+        root.put("props", Map.of("layout", "vertical", "gap", "lg", "padding", "xl"));
+        root.put("children", List.of("heading-" + rootId));
+        Map<String,Object> heading = new LinkedHashMap<>();
+        heading.put("id", "heading-" + rootId);
+        heading.put("type", "text");
+        heading.put("props", Map.of("content", base, "tag", "h1"));
+        Map<String,Object> page = new LinkedHashMap<>();
+        page.put("id", id);
+        page.put("name", base);
+        page.put("rootId", rootId);
+        page.put("nodes", List.of(root, heading));
+        page.put("metaVersion", "1.0.0");
+        page.put("type", guessPageType(base));
+        return page;
+    }
+
+    // Sanitize appId slug
+    private static String sanitizeAppId(String raw) {
+        if (raw == null) return "app" + System.currentTimeMillis();
+        String s = raw.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("-+", "-");
+        s = s.replaceAll("^-", "").replaceAll("-$", "");
+        if (s.isBlank()) s = "app" + System.currentTimeMillis();
+        return s;
+    }
+
+    // Generate unique slug avoiding collisions
+    private static String generateUniqueAppId(String base) {
+        String candidate = base;
+        int counter = 1;
+        try {
+            while (AppManager.getApp(candidate) != null) {
+                candidate = base + "-" + counter++;
+            }
+        } catch (IOException ignored) {}
+        return candidate;
+    }
+
+    private static String guessPageType(String name) {
+        if (name == null) return "blank";
+        String lower = name.toLowerCase(Locale.ROOT);
+        if (lower.contains("dashboard")) return "dashboard";
+        if (lower.contains("list") || lower.contains("table")) return "list";
+        if (lower.contains("detail") || lower.contains("profile") || lower.contains("view")) return "detail";
+        if (lower.contains("form") || lower.contains("create") || lower.contains("add") || lower.contains("new")) return "form";
+        return "blank";
     }
 }
