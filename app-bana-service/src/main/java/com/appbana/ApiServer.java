@@ -2,6 +2,8 @@ package com.appbana;
 
 import com.appbana.ai.AiProvider;
 import com.appbana.ai.AiProviderFactory;
+import com.appbana.api.IntentCacheApi;
+import com.appbana.api.SmallTalkCacheApi;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.config.DatasourceConfig;
@@ -573,6 +575,82 @@ public class ApiServer {
                 )
             );
             res.json(200, providers);
+        });
+        
+        // Intent Cache Stats
+        router.get("/api/ai/cache/stats", (req, res) -> {
+            try {
+                com.appbana.ai.IntentCache.CacheStats stats = com.appbana.ai.IntentCache.getStats();
+                res.json(200, Map.of("success", true, "stats", stats));
+            } catch (Exception e) {
+                LOG.error("Failed to get cache stats", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        
+        // Clear Intent Cache
+        router.post("/api/ai/cache/clear", (req, res) -> {
+            try {
+                com.appbana.ai.IntentCache.clear();
+                res.json(200, Map.of("success", true, "message", "Cache cleared successfully"));
+            } catch (Exception e) {
+                LOG.error("Failed to clear cache", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        
+        // Remove Cache Entry
+        router.delete("/api/ai/cache/entry", (req, res) -> {
+            try {
+                String text = req.query("text");
+                if (text == null || text.isEmpty()) {
+                    res.json(400, Map.of("error", "Missing 'text' query parameter"));
+                    return;
+                }
+                com.appbana.ai.IntentCache.remove(text);
+                res.json(200, Map.of("success", true, "message", "Entry removed successfully"));
+            } catch (Exception e) {
+                LOG.error("Failed to remove cache entry", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        
+        // SmallTalk Cache Stats
+        router.get("/api/ai/smalltalk-cache/stats", (req, res) -> {
+            try {
+                com.appbana.ai.SmallTalkCache.CacheStats stats = com.appbana.ai.SmallTalkCache.getStats();
+                res.json(200, Map.of("success", true, "stats", stats));
+            } catch (Exception e) {
+                LOG.error("Failed to get smalltalk cache stats", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        
+        // Clear SmallTalk Cache
+        router.post("/api/ai/smalltalk-cache/clear", (req, res) -> {
+            try {
+                com.appbana.ai.SmallTalkCache.clear();
+                res.json(200, Map.of("success", true, "message", "SmallTalk cache cleared successfully"));
+            } catch (Exception e) {
+                LOG.error("Failed to clear smalltalk cache", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+        
+        // Remove SmallTalk Cache Entry
+        router.delete("/api/ai/smalltalk-cache/entry", (req, res) -> {
+            try {
+                String text = req.query("text");
+                if (text == null || text.isEmpty()) {
+                    res.json(400, Map.of("error", "Missing 'text' query parameter"));
+                    return;
+                }
+                com.appbana.ai.SmallTalkCache.remove(text);
+                res.json(200, Map.of("success", true, "message", "SmallTalk entry removed successfully"));
+            } catch (Exception e) {
+                LOG.error("Failed to remove smalltalk cache entry", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
         });
 
         // ==================== APP ENDPOINTS ====================

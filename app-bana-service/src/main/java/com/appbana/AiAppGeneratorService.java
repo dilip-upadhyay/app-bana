@@ -5,6 +5,7 @@ import com.appbana.ai.AiProviderFactory;
 import com.appbana.ai.AiSystemPrompts;
 import com.appbana.ai.AgentMemoryService;
 import com.appbana.ai.SmallTalkEngine;
+import com.appbana.ai.IntentCache;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
@@ -165,6 +166,33 @@ public class AiAppGeneratorService {
             return null;
         }
 
+        // Try rule-based classification first (no GPT needed)
+        Map<String, Object> ruleBasedResult = classifyWithRules(request.description);
+        if (ruleBasedResult != null) {
+            LOG.info("[AI] Rule-based classification succeeded for: {}", request.description);
+            Object classifiedAction = ruleBasedResult.get("action");
+            if (classifiedAction != null) {
+                request.action = normalizeActionLabel(String.valueOf(classifiedAction));
+            }
+            if ((request.options == null || request.options.isEmpty()) && ruleBasedResult.get("options") != null) {
+                request.options = MAPPER.convertValue(ruleBasedResult.get("options"), MAP_TYPE);
+            }
+            return request.action;
+        }
+
+        // Try intent cache
+        IntentCache.ActionDescriptor cached = IntentCache.get(request.description);
+        if (cached != null) {
+            LOG.info("[AI] Intent cache hit for: {}", request.description);
+            request.action = normalizeActionLabel(cached.action);
+            if (request.options == null || request.options.isEmpty()) {
+                request.options = cached.options;
+            }
+            return request.action;
+        }
+
+        // Fall back to GPT classification
+        LOG.info("[AI] Using GPT classification for: {}", request.description);
         Map<String, Object> classification = classifyActionSafe(request.description);
         if (classification == null) {
             return null;
@@ -179,7 +207,108 @@ public class AiAppGeneratorService {
             request.options = MAPPER.convertValue(classification.get("options"), MAP_TYPE);
         }
 
+        // Store in cache for future use
+        if (request.action != null) {
+            IntentCache.ActionDescriptor descriptor = new IntentCache.ActionDescriptor(request.action);
+            descriptor.options = request.options != null ? request.options : new HashMap<>();
+            IntentCache.put(request.description, descriptor);
+            LOG.info("[AI] Stored GPT classification in cache: {} -> {}", request.description, request.action);
+        }
+
         return request.action;
+    }
+
+    /**
+     * Rule-based classification - handles common commands without GPT
+     * Returns Map with "action" and optional "options" keys, or null if no match
+     */
+    private static Map<String, Object> classifyWithRules(String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+        
+        String lower = description.toLowerCase(Locale.ROOT).trim();
+        Map<String, Object> result = new HashMap<>();
+        
+        // List apps commands
+        if (lower.matches("^(show|list|display|get|view|see) (my |all )?apps?$")
+            || lower.equals("apps")
+            || lower.equals("my apps")
+            || lower.equals("what apps do i have")
+            || lower.equals("show me my apps")
+            || lower.contains("list all apps")
+            || lower.contains("show all apps")) {
+            result.put("action", ACTION_LIST_APPS);
+            return result;
+        }
+        
+        // Load/Open app commands
+        if (lower.matches("^(open|load|show|view|select) (the )?(first|second|third|fourth|fifth|\\d+(st|nd|rd|th)?) app$")
+            || lower.contains("open app")
+            || lower.contains("load app")
+            || lower.contains("open the app")
+            || (lower.startsWith("open ") && !lower.contains("create"))
+            || (lower.startsWith("load ") && !lower.contains("create"))) {
+            result.put("action", ACTION_LOAD_APP);
+            return result;
+        }
+        
+        // Delete app commands
+        if (lower.matches("^(delete|remove|destroy) (the )?(first|second|third|fourth|fifth|\\d+(st|nd|rd|th)?) app$")
+            || lower.contains("delete app")
+            || lower.contains("remove app")
+            || lower.contains("delete this app")
+            || lower.contains("remove this app")) {
+            result.put("action", ACTION_DELETE_APP);
+            return result;
+        }
+        
+        // List pages commands
+        if (lower.matches("^(show|list|display|get|view|see) (the )?pages?$")
+            || lower.equals("pages")
+            || lower.equals("my pages")
+            || lower.equals("what pages")
+            || lower.contains("list pages")
+            || lower.contains("show pages")
+            || lower.contains("list all pages")
+            || lower.contains("what pages does this app have")) {
+            result.put("action", ACTION_LIST_PAGES);
+            return result;
+        }
+        
+        // Describe app / show entities commands
+        if (lower.matches("^(describe|explain|show|tell me about|what is) (this|the|my) app$")
+            || lower.contains("describe app")
+            || lower.contains("what entities")
+            || lower.contains("show entities")
+            || lower.contains("list entities")
+            || lower.contains("what does this app have")
+            || lower.contains("what's in this app")) {
+            result.put("action", "describeApp");
+            return result;
+        }
+        
+        // Show fields commands
+        if (lower.matches("^(show|list|describe|what are the) fields? (of|for|in) \\w+$")
+            || lower.contains("show fields")
+            || lower.contains("list fields")
+            || lower.contains("what fields does")
+            || lower.contains("fields in")) {
+            result.put("action", "listFields");
+            return result;
+        }
+        
+        // Help commands
+        if (lower.matches("^(help|what can you do|capabilities|commands)$")
+            || lower.equals("?")
+            || lower.contains("what can i")
+            || lower.contains("how do i")
+            || lower.contains("show me help")) {
+            result.put("action", "help");
+            return result;
+        }
+        
+        return null; // No rule match
     }
 
     private static Map<String, Object> classifyActionSafe(String description) {
@@ -557,10 +686,123 @@ public class AiAppGeneratorService {
                 return handleDeleteApp(request);
             case ACTION_LIST_PAGES:
                 return handleListPages(request);
+            case "describeApp":
+                return handleDescribeApp(request);
+            case "listFields":
+                return handleListFields(request);
+            case "help":
+                return handleHelp();
             default:
                 LOG.info("[AI] Unknown action '{}'", action);
                 return null;
         }
+    }
+
+    private static GenerationResult handleDescribeApp(GenerationRequest request) {
+        GenerationResult result = new GenerationResult();
+        String appId = resolveAppIdForPages(request);
+        
+        if (appId == null || appId.isBlank()) {
+            result.success = false;
+            result.error = "No app context. Please open an app first.";
+            result.payload = new HashMap<>();
+            result.payload.put(PAYLOAD_REPLY, "I need to know which app to describe. Try 'open the first app' first.");
+            result.payload.put(PAYLOAD_ACTION, "describeApp");
+            return result;
+        }
+        
+        try {
+            AppMetadata app = AppManager.getApp(appId);
+            if (app == null) {
+                result.success = false;
+                result.error = "App not found: " + appId;
+                result.payload = new HashMap<>();
+                result.payload.put(PAYLOAD_REPLY, "App not found: " + appId);
+                result.payload.put(PAYLOAD_ACTION, "describeApp");
+                return result;
+            }
+            
+            StringBuilder description = new StringBuilder();
+            description.append("**").append(app.getName()).append("**\n\n");
+            description.append("**Description:** ").append(app.getDescription() != null ? app.getDescription() : "No description").append("\n\n");
+            
+            if (app.getEntities() != null && !app.getEntities().isEmpty()) {
+                description.append("**Entities:** ").append(app.getEntities().size()).append("\n");
+                for (Object entityObj : app.getEntities()) {
+                    if (entityObj instanceof Map) {
+                        Map<?, ?> entity = (Map<?, ?>) entityObj;
+                        description.append("  - ").append(entity.get("name")).append("\n");
+                    }
+                }
+            } else {
+                description.append("**Entities:** None\n");
+            }
+            
+            if (app.getPages() != null && !app.getPages().isEmpty()) {
+                description.append("\n**Pages:** ").append(app.getPages().size()).append("\n");
+                for (String pageId : app.getPages()) {
+                    description.append("  - ").append(pageId).append("\n");
+                }
+            } else {
+                description.append("\n**Pages:** None\n");
+            }
+            
+            result.success = true;
+            result.payload = new HashMap<>();
+            result.payload.put("app", app);
+            result.payload.put(PAYLOAD_REPLY, description.toString());
+            result.payload.put(PAYLOAD_ACTION, "describeApp");
+            LOG.info("[AI] Described app: {}", appId);
+            
+        } catch (Exception e) {
+            result.success = false;
+            result.error = "Failed to describe app: " + e.getMessage();
+            result.payload = new HashMap<>();
+            result.payload.put(PAYLOAD_REPLY, "Failed to describe app: " + e.getMessage());
+            result.payload.put(PAYLOAD_ACTION, "describeApp");
+            LOG.error("[AI] Failed to describe app", e);
+        }
+        
+        return result;
+    }
+
+    private static GenerationResult handleListFields(GenerationRequest request) {
+        GenerationResult result = new GenerationResult();
+        result.success = false;
+        result.error = "Entity field listing not yet implemented";
+        result.payload = new HashMap<>();
+        result.payload.put(PAYLOAD_REPLY, "Entity field listing is coming soon. For now, use 'describe app' to see all entities.");
+        result.payload.put(PAYLOAD_ACTION, "listFields");
+        return result;
+    }
+
+    private static GenerationResult handleHelp() {
+        GenerationResult result = new GenerationResult();
+        result.success = true;
+        result.payload = new HashMap<>();
+        
+        StringBuilder help = new StringBuilder();
+        help.append("**Available Commands:**\n\n");
+        help.append("**App Management:**\n");
+        help.append("  - 'show my apps' - List all apps\n");
+        help.append("  - 'open the second app' - Open app by index\n");
+        help.append("  - 'open Restaurant App' - Open app by name\n");
+        help.append("  - 'delete this app' - Delete current app\n\n");
+        help.append("**App Creation:**\n");
+        help.append("  - 'create a blog app' - Generate new app\n");
+        help.append("  - 'build a task manager' - Generate task app\n\n");
+        help.append("**App Info:**\n");
+        help.append("  - 'describe app' - Show app details\n");
+        help.append("  - 'list pages' - Show all pages\n");
+        help.append("  - 'show entities' - List entities\n\n");
+        help.append("**Other:**\n");
+        help.append("  - 'help' - Show this help\n");
+        
+        result.payload.put(PAYLOAD_REPLY, help.toString());
+        result.payload.put(PAYLOAD_ACTION, "help");
+        LOG.info("[AI] Displayed help");
+        
+        return result;
     }
 
     private static String resolveUserId(GenerationRequest request) {

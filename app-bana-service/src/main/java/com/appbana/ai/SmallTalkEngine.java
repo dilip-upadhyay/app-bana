@@ -11,6 +11,15 @@ public class SmallTalkEngine {
     private static final List<SmallTalkPattern> patterns = new ArrayList<>();
 
     static {
+            // PRIORITY: Simple greetings should match first (no GPT needed)
+            patterns.add(new SmallTalkPattern(Pattern.compile("^(hi|hello|hey|hiya|howdy|greetings)$", Pattern.CASE_INSENSITIVE), "Hello! I'm here to help you build amazing apps. What would you like to create today?"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("^(good morning)$", Pattern.CASE_INSENSITIVE), "Good morning! Ready to create something amazing?"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("^(good afternoon)$", Pattern.CASE_INSENSITIVE), "Good afternoon! What would you like to build today?"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("^(good evening)$", Pattern.CASE_INSENSITIVE), "Good evening! Let's make your app idea a reality."));
+            patterns.add(new SmallTalkPattern(Pattern.compile("^(how are you|how's it going|what's up|sup)\\??$", Pattern.CASE_INSENSITIVE), "I'm doing great! How can I help you build today?"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("^(thanks|thank you|thx|ty)$", Pattern.CASE_INSENSITIVE), "You're welcome! Let me know if you need anything else."));
+            patterns.add(new SmallTalkPattern(Pattern.compile("^(bye|goodbye|see you|cya|later)$", Pattern.CASE_INSENSITIVE), "Goodbye! Come back anytime to build more apps."));
+            
             patterns.add(new SmallTalkPattern(Pattern.compile("can you dance|dance|dancing", Pattern.CASE_INSENSITIVE), "I can't dance, but I can help you build a dance app or playlist!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you sing|sing|singing|song|music", Pattern.CASE_INSENSITIVE), "I can't sing, but I can help you create a music app or playlist!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you cook|cook|cooking|chef|recipe", Pattern.CASE_INSENSITIVE), "I can't cook, but I can help you build a recipe or meal planner app!"));
@@ -82,16 +91,17 @@ public class SmallTalkEngine {
     }
 
     /**
-     * Returns a small talk response using OpenAI if enabled, otherwise falls back to legacy patterns.
+     * Returns a small talk response using patterns first, then OpenAI if enabled and no pattern matched.
      */
     public static String getSmallTalkResponse(String input, String userId) {
         String lower = input == null ? "" : input.toLowerCase();
+        
         // If the input contains app creation intent, do NOT treat as small talk
         if (lower.contains("create an app") || lower.contains("build an app") || lower.contains("generate app") || lower.contains("make an app") || lower.contains("app for me") || lower.contains("app that") || lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("generate app")) {
             return null;
         }
+        
         // If the input is clearly asking for app listing/loading/deleting, do NOT treat as small talk
-        // More comprehensive patterns to catch "load second app", "open the first app", "load Blog Application", etc.
         if (lower.contains("show") && lower.contains("app") ||
             lower.contains("list") && lower.contains("app") ||
             lower.contains("my apps") ||
@@ -101,10 +111,27 @@ public class SmallTalkEngine {
             lower.contains("remove") && lower.contains("app")) {
             return null;
         }
-        // Check if AI provider is enabled
+        
+        // FIRST: Check pattern matching (instant, no cost)
+        for (SmallTalkPattern p : patterns) {
+            if (p.pattern.matcher(input).find()) {
+                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class).info("[SmallTalk] Pattern match for: {}", input);
+                return p.reply;
+            }
+        }
+        
+        // SECOND: Check SmallTalkCache for previously seen queries (fast, no cost)
+        String cachedResponse = com.appbana.ai.SmallTalkCache.get(input);
+        if (cachedResponse != null) {
+            org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class).info("[SmallTalk] Cache hit for: {}", input);
+            return cachedResponse;
+        }
+        
+        // THIRD: If no pattern matched and no cache hit, use OpenAI for complex small talk
         com.appbana.config.AppConfig config = com.appbana.config.ConfigManager.getConfig();
         if (com.appbana.ai.AiProviderFactory.isAiEnabled(config)) {
             try {
+                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class).info("[SmallTalk] No pattern/cache match, using OpenAI for: {}", input);
                 com.appbana.ai.AiProvider provider = com.appbana.ai.AiProviderFactory.createProvider(config);
                 // Fetch structured conversation history
                 java.util.List<com.appbana.ai.AgentMemoryService.MemoryEntry> history = com.appbana.ai.AgentMemoryService.getHistory(userId);
@@ -118,18 +145,20 @@ public class SmallTalkEngine {
                 String systemPrompt = "You are a professional, knowledgeable AI assistant for app creators. Respond to the user's message in a clear, concise, and helpful manner. If the user mentions a topic (e.g., food, music, fitness), suggest building an app related to that topic in your reply. Focus on practical advice, actionable suggestions, and direct guidance toward app creation. Use the conversation history below for context.\n\n" + String.join("\n", messages);
                 String reply = provider.generateAppStructure(input, systemPrompt);
                 // Sanitize output (strip markdown, etc.)
-                return com.appbana.AiAppGeneratorService.sanitizeAiJson(reply);
+                String sanitizedReply = com.appbana.AiAppGeneratorService.sanitizeAiJson(reply);
+                
+                // Cache the response for future use
+                com.appbana.ai.SmallTalkCache.put(input, sanitizedReply);
+                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class).info("[SmallTalk] Cached OpenAI response for: {}", input);
+                
+                return sanitizedReply;
             } catch (Exception e) {
-                // Log and fallback to legacy patterns
-                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class).warn("OpenAI small talk failed, falling back to legacy patterns: {}", e.getMessage());
+                // Log and return null (not small talk)
+                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class).warn("OpenAI small talk failed: {}", e.getMessage());
             }
         }
-        // Legacy fallback: hardcoded patterns
-        for (SmallTalkPattern p : patterns) {
-            if (p.pattern.matcher(input).find()) {
-                return p.reply;
-            }
-        }
+        
+        // If no pattern matched and AI not enabled, return null (not small talk)
         return null;
     }
 

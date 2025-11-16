@@ -1,0 +1,28 @@
+{
+  "lastUpdated" : 1763311538044,
+  "entries" : [ {
+    "normalizedText" : "show me the app you just created",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763311538042,
+    "lastAccessTime" : 1763311538042,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "yes, i am thinking to create application on logistics managment. can you suggest me",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763311496769,
+    "lastAccessTime" : 1763311496769,
+    "hitCount" : 0
+  } ]
+}

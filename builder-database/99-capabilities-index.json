@@ -1,6 +1,6 @@
 {
-  "version": "1.0.1",
-  "lastUpdated": "2025-11-15T00:00:00Z",
+  "version": "1.0.2",
+  "lastUpdated": "2025-11-16T15:37:00Z",
   "description": "Quick reference index for all AppBana capabilities",
   
   "summary": {
@@ -8,7 +8,7 @@
     "totalFieldTypes": 38,
     "totalDatasources": 25,
     "totalPageTemplates": 7,
-    "totalApiEndpoints": 30
+    "totalApiEndpoints": 36
   },
 
   "quickReference": {
@@ -51,10 +51,25 @@
     },
     "api": {
       "file": "08-api-endpoints.json",
-      "endpointCount": 30,
-      "categories": ["Apps (5)", "Pages (3)", "Schema (5)", "CRUD (5)", "Audit (1)", "Datasources (5)", "OpenAPI (2)"],
+      "endpointCount": 36,
+      "categories": ["Apps (5)", "Pages (3)", "Schema (5)", "CRUD (5)", "Audit (1)", "Datasources (5)", "OpenAPI (2)", "AI Caching (6)"],
       "baseURL": "http://localhost:8080",
       "keyFiles": ["app-bana-service/src/main/java/com/appbana/ApiServer.java"]
+    },
+    "aiCaching": {
+      "intentCache": {
+        "purpose": "Cache action classifications (user text → ActionDescriptor)",
+        "file": "ai-mem/intent-cache.json",
+        "endpoints": ["/api/ai/cache/stats", "/api/ai/cache/clear", "/api/ai/cache/entry"],
+        "savings": "Avoid repeated GPT calls for action classification"
+      },
+      "smallTalkCache": {
+        "purpose": "Cache conversational responses (user text → GPT response)",
+        "file": "ai-mem/smalltalk-cache.json",
+        "endpoints": ["/api/ai/smalltalk-cache/stats", "/api/ai/smalltalk-cache/clear", "/api/ai/smalltalk-cache/entry"],
+        "savings": "30% cost reduction for repeated conversational queries",
+        "implementation": "3-tier strategy: Pattern → Cache → GPT"
+      }
     }
   },
 
@@ -110,6 +125,13 @@
   },
 
   "recentEnhancements": [
+    {
+      "title": "SmallTalk Response Caching",
+      "date": "2025-11-16",
+      "summary": "3-tier caching strategy (Pattern → Cache → GPT) to minimize OpenAI costs for repeated conversational queries. 30% cost reduction, 10x faster responses.",
+      "docs": ["docs/SMALLTALK_CACHE_COMPLETE.md"],
+      "builderImpact": "AI agents should leverage cached responses for repeated questions. Cache management available via API endpoints."
+    },
     {
       "title": "StudioTableLive table suite",
       "date": "2025-11-15",

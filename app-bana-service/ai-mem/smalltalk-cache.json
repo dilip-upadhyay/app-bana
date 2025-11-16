@@ -1,0 +1,26 @@
+{
+  "version" : "1.0",
+  "lastUpdated" : "Sun Nov 16 21:47:49 IST 2025",
+  "entries" : [ {
+    "originalText" : "Whats you name?",
+    "normalizedText" : "whats you name",
+    "response" : "I don’t have a personal name, but you can call me your app assistant! I'm here to help you with your app ideas. Do you have a particular topic in mind for your app?",
+    "createdTime" : 1763309869592,
+    "lastAccessTime" : 1763309869592,
+    "hitCount" : 0
+  }, {
+    "originalText" : "What do you do?",
+    "normalizedText" : "what do you do",
+    "response" : "I assist you in creating apps by providing guidance, suggestions, and practical advice. If you have an idea or a specific topic in mind—like fitness, food, or music—I can help you brainstorm and develop that into a functional app. What area are you interested in?",
+    "createdTime" : 1763309286963,
+    "lastAccessTime" : 1763309314033,
+    "hitCount" : 1
+  }, {
+    "originalText" : "ok",
+    "normalizedText" : "ok",
+    "response" : "Great! If you have an idea or a specific topic in mind for an app, let me know. Whether it's related to fitness, food, music, or anything else, I can help you brainstorm and develop it into a functional app. What are you thinking about?",
+    "createdTime" : 1763309843583,
+    "lastAccessTime" : 1763309843583,
+    "hitCount" : 0
+  } ]
+}
