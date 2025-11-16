@@ -3,6 +3,15 @@
 ## Project Overview
 AppBana is a **metadata-driven platform** that generates end-to-end functionality from a single source of truth. The core flow: `Entity Definition (Business Layer) → Schema (Technical Layer) → Database Table → REST CRUD APIs → UI Pages (Runtime)`. Changes to metadata propagate automatically through all layers.
 
+**CRITICAL PRIORITY (AI Builder)**
+
+- The **AI Builder experience is the highest-priority concern** in this project.
+- For **any new feature, capability, or metadata change**, you **must**:
+  - Consider how it should be surfaced and controlled via the AI Builder.
+  - Update backend AI orchestration (e.g., `AiAppGeneratorService`, prompts, classifiers) so the new capability can be driven through conversation.
+  - Update the builder database (`builder-database/*.json`) so AI has an accurate, machine-readable description of the new capability.
+- When making trade-offs, prefer solutions that **improve or at least do not degrade** the conversational builder experience.
+
 ## Technology Stack
 - **Backend**: Java 21 LTS, JDK HttpServer with CORS, H2 embedded database, HikariCP, Jackson, Maven multi-module
 - **Frontend**: TypeScript 5.2.2+, Lit 3.1.4 Web Components, Vite 5.3.1+ dev server, Shadow DOM
