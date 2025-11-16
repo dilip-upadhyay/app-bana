@@ -381,14 +381,32 @@ public class AiAppGeneratorService {
         if (AiProviderFactory.isAiEnabled(config)) {
             try {
                 LOG.info("[AI] Attempting AI generation with provider: {}", config.getAiProvider());
-                GenerationResult aiResult = generateWithAi(request, config);
-                if (AiResultValidator.validateAiResult(aiResult, request)) {
-                    LOG.info("[AI] AI result validated successfully");
+                GenerationResult aiResult = generateWithAi(request, config, null);
+                
+                // First attempt validation
+                String validationErrors = AiResultValidator.getValidationErrors(aiResult, request);
+                if (validationErrors == null) {
+                    LOG.info("[AI] ✓ AI result validated successfully on first attempt");
                     return aiResult;
                 }
-                LOG.warn("[AI] AI result validation failed, will use templates as fallback");
+                
+                // First attempt failed - try self-correction
+                LOG.warn("[AI] ⚠ First attempt validation failed: {}", validationErrors);
+                LOG.info("[AI] Attempting self-correction with error feedback...");
+                
+                GenerationResult correctedResult = generateWithAi(request, config, validationErrors);
+                String retryValidation = AiResultValidator.getValidationErrors(correctedResult, request);
+                
+                if (retryValidation == null) {
+                    LOG.info("[AI] ✓ Self-correction successful! Validation passed on retry.");
+                    return correctedResult;
+                }
+                
+                LOG.warn("[AI] ✗ Self-correction failed: {}", retryValidation);
+                LOG.warn("[AI] Falling back to templates after 2 attempts");
+                
             } catch (Exception e) {
-                LOG.error("[AI] AI generation failed", e);
+                LOG.error("[AI] AI generation failed with exception", e);
             }
         } else {
             LOG.warn("[AI] AI provider not enabled, will use template-based generation");
@@ -397,10 +415,23 @@ public class AiAppGeneratorService {
         return generateFromTemplates(request);
     }
 
-    private static GenerationResult generateWithAi(GenerationRequest request, AppConfig config) throws Exception {
+    private static GenerationResult generateWithAi(GenerationRequest request, AppConfig config, String previousErrors) throws Exception {
         AiProvider provider = AiProviderFactory.createProvider(config);
         String systemPrompt = AiSystemPrompts.getAppGenerationPrompt();
         String userPrompt = request != null ? request.description : "";
+        
+        // If this is a retry with error feedback, append correction instructions
+        if (previousErrors != null && !previousErrors.isBlank()) {
+            userPrompt = userPrompt + "\n\n" +
+                "⚠️ IMPORTANT: Your previous response had validation errors:\n" +
+                previousErrors + "\n\n" +
+                "Please generate the app structure again, fixing these issues. " +
+                "Ensure all fields are properly formatted and match the schema requirements.";
+            LOG.info("[AI] Retry attempt with error feedback ({} chars)", previousErrors.length());
+        } else {
+            LOG.info("[AI] First generation attempt");
+        }
+        
         LOG.info("[AI] Calling AI provider: {} with enhanced builder-database prompt", provider.getProviderName());
         String jsonResponse = provider.generateAppStructure(userPrompt, systemPrompt);
         LOG.info("[AI] Raw AI response: {}", jsonResponse);
@@ -1306,12 +1337,32 @@ public class AiAppGeneratorService {
                 result.entities.add(new EntitySchema(name, fields));
             }
         }
-        // Suggested pages
-        result.suggestedPages = new ArrayList<>();
-        JsonNode pagesNode = root.get("suggestedPages");
-        if (pagesNode != null && pagesNode.isArray()) {
-            for (JsonNode pNode : pagesNode) result.suggestedPages.add(pNode.asText());
+        // Pages - handle both detailed pages and simple suggested pages
+        JsonNode detailedPagesNode = root.get("pages");
+        if (detailedPagesNode != null && detailedPagesNode.isArray()) {
+            // GPT returned detailed page definitions with metadata
+            result.pages = new ArrayList<>();
+            for (JsonNode pageNode : detailedPagesNode) {
+                try {
+                    Map<String, Object> pageMap = MAPPER.convertValue(pageNode, MAP_TYPE);
+                    result.pages.add(pageMap);
+                } catch (Exception e) {
+                    LOG.warn("[AI] Failed to parse page node: {}", e.getMessage());
+                }
+            }
+            LOG.info("[AI] Parsed {} detailed pages from AI response", result.pages.size());
         }
+        
+        // Suggested pages (fallback if no detailed pages)
+        result.suggestedPages = new ArrayList<>();
+        JsonNode suggestedPagesNode = root.get("suggestedPages");
+        if (suggestedPagesNode != null && suggestedPagesNode.isArray()) {
+            for (JsonNode pNode : suggestedPagesNode) {
+                result.suggestedPages.add(pNode.asText());
+            }
+            LOG.info("[AI] Parsed {} suggested pages from AI response", result.suggestedPages.size());
+        }
+        
         return result;
     }
 

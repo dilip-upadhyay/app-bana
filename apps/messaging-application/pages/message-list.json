@@ -1,0 +1,27 @@
+{
+  "id" : "message-list",
+  "name" : "Message List",
+  "type" : "data-table",
+  "entity" : "Message",
+  "columns" : [ "content", "timestamp", "senderId", "receiverId" ],
+  "actions" : [ "view", "delete" ],
+  "rootId" : "root-1763320971501",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "type" : "container",
+    "id" : "root-1763320971501",
+    "children" : [ "heading-root-1763320971501" ],
+    "props" : {
+      "gap" : "lg",
+      "padding" : "xl",
+      "layout" : "vertical"
+    }
+  }, {
+    "id" : "heading-root-1763320971501",
+    "props" : {
+      "content" : "Message List",
+      "tag" : "h1"
+    },
+    "type" : "text"
+  } ]
+}

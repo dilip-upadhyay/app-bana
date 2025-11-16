@@ -1,0 +1,27 @@
+{
+  "id" : "user-list",
+  "name" : "User List",
+  "type" : "data-table",
+  "entity" : "User",
+  "columns" : [ "username", "email" ],
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1763320971483",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "type" : "container",
+    "id" : "root-1763320971483",
+    "children" : [ "heading-root-1763320971483" ],
+    "props" : {
+      "gap" : "lg",
+      "padding" : "xl",
+      "layout" : "vertical"
+    }
+  }, {
+    "id" : "heading-root-1763320971483",
+    "props" : {
+      "content" : "User List",
+      "tag" : "h1"
+    },
+    "type" : "text"
+  } ]
+}
