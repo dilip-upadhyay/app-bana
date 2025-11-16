@@ -93,11 +93,11 @@ public class AiSystemPrompts {
         
         p.append("CLASSIFICATION RULES:\n");
         p.append("- If user mentions 'pages', 'list pages', 'show pages', 'get pages' -> USE listPages\n");
-        p.append("- If user mentions 'apps', 'list apps', 'show apps', 'all apps' -> USE listApps\n");
+        p.append("- If user mentions 'apps', 'list apps', 'show apps', 'all apps', 'list tab', 'show my apps', 'list my apps', 'list all apps', 'show all apps' -> USE listApps\n");
         p.append("- If user mentions 'open app', 'load app', 'select app' -> USE loadApp\n");
         p.append("- If user mentions 'delete app', 'remove app' -> USE deleteApp\n");
         p.append("- Only use generateApp if user clearly asks to CREATE a new app with specific requirements\n\n");
-        
+
         p.append("Examples:\n");
         p.append("1) User: 'Show me all my apps' -> { \"action\": \"listApps\", \"options\": {} }\n");
         p.append("2) User: 'Open app my-first-app' -> { \"action\": \"loadApp\", \"options\": { \"appId\": \"my-first-app\" } }\n");
@@ -105,8 +105,12 @@ public class AiSystemPrompts {
         p.append("4) User: 'list pages' -> { \"action\": \"listPages\", \"options\": {} }\n");
         p.append("5) User: 'show pages' -> { \"action\": \"listPages\", \"options\": {} }\n");
         p.append("6) User: 'what pages are there' -> { \"action\": \"listPages\", \"options\": {} }\n");
-        p.append("7) User: 'Create a blog app with posts and comments' -> { \"action\": \"generateApp\", \"options\": {} }\n\n");
-        
+        p.append("7) User: 'Create a blog app with posts and comments' -> { \"action\": \"generateApp\", \"options\": {} }\n");
+        p.append("8) User: 'list tab' -> { \"action\": \"listApps\", \"options\": {} }\n");
+        p.append("9) User: 'show my apps' -> { \"action\": \"listApps\", \"options\": {} }\n");
+        p.append("10) User: 'list all apps' -> { \"action\": \"listApps\", \"options\": {} }\n");
+        p.append("11) User: 'show all apps' -> { \"action\": \"listApps\", \"options\": {} }\n\n");
+
         p.append("CRITICAL: When user just says 'pages' or 'list pages', they mean pages of the CURRENTLY LOADED app. Always use listPages action.\n");
         p.append("Return ONLY the JSON object, no explanatory text.\n");
         return p.toString();

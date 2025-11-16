@@ -150,7 +150,8 @@ builder-database/
 ## Conversational Builder Alignment
 
 - **Persona Reference**: Studio now follows the `Studio Conversational LAN` (see `docs/STUDIO-CONVERSATIONAL-LAN.md`) so AI builders should greet users, offer guided ideas, and narrate metadata decisions.
-- **AiChatBuilder Focus**: Keep `/api/ai/generate` calls focused on structured intent flows; handle greetings, idea suggestions, and simple directives client-side before backend generation.
+- **AiChatBuilder Focus**: Keep `/api/ai/generate` calls focused on structured intent flows; handle greetings, idea suggestions, and simple directives client-side before backend generation, but delegate any `list`-style commands (e.g., asking to "list apps" or "show my apps") entirely to the backend so it can return the real `/apps` data.
+- **List instructions**: Avoid introducing new heuristics for detecting list requests on the frontend—backend classification should mark them with the `list` action and return `payload.apps`, and the UI should simply render whatever metadata the server returns. Stick with this backend-led pattern going forward.
 - **Builder Database Sync**: When introducing new conversational cues (greetings, ideas, persona states), capture them in `builder-database/02-components.json` so AI agents understand the policy that drives the UI builder.
 
 ## Common Debugging Scenarios

@@ -848,6 +848,15 @@ export class AiChatBuilder extends LitElement {
       if (result && result.payload && result.payload.smallTalk) {
         this.addAssistantMessage(result.payload.reply || 'Small talk response.');
       } else if (result && result.success) {
+        const action = result.payload?.action;
+        if (action === 'list' && Array.isArray(result.payload?.apps)) {
+          const reply = result.payload.reply || 'Here are your apps:';
+          this.addAssistantMessage(reply, {
+            action,
+            generatedApp: result
+          });
+          return;
+        }
         if (result.needsMoreInfo && Array.isArray(result.followUpQuestions)) {
           // If the user's input is a greeting or personal question, use persona response
           const lowerInput = input.toLowerCase();

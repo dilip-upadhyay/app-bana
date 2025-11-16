@@ -35,10 +35,33 @@ public class AiAppGeneratorService {
             // Small talk detection (before intent classification)
             if (request != null && request.description != null) {
                 String lower = request.description.toLowerCase();
-                // If the input contains app creation intent, bypass small talk
                 boolean isAppCreation = lower.contains("create the app") || lower.contains("build the app") || lower.contains("generate the app") || lower.contains("make the app") || lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("generate app") || lower.startsWith("make app");
+                // Always classify action before responding to small talk
+                Map<String, Object> classification = null;
+                try {
+                    classification = classifyAction(request.description);
+                } catch (Exception e) {
+                    LOG.warn("[AI] Action classification error: {}", e.getMessage());
+                }
+                String normalizedAction = null;
+                if (classification != null && classification.containsKey("action")) {
+                    normalizedAction = String.valueOf(classification.get("action"));
+                    LOG.info("[AI] Normalized action from classifier: {}", normalizedAction);
+                }
+                // If classifier says listApps, always return app list
+                if (normalizedAction != null && normalizedAction.equalsIgnoreCase("listApps")) {
+                    GenerationResult listResult = new GenerationResult();
+                    listResult.success = true;
+                    List<Map<String, Object>> apps = AppManager.listApps();
+                    listResult.payload = new HashMap<>();
+                    listResult.payload.put("apps", apps);
+                    listResult.payload.put("action", "list");
+                    listResult.payload.put("reply", "Fetched your apps via GET /apps");
+                    LOG.info("[AI] Forced apps list for normalized action: {}", normalizedAction);
+                    return listResult;
+                }
+                // Otherwise, handle small talk as before
                 if (!isAppCreation) {
-                    // Use request.userId if available, else fallback to 'default'
                     String userId = "default";
                     if (request.options != null && request.options.containsKey("userId")) {
                         userId = String.valueOf(request.options.get("userId"));
@@ -53,7 +76,6 @@ public class AiAppGeneratorService {
                         result.payload.put("smallTalk", true);
                         result.payload.put("reply", smallTalkReply);
                         LOG.info("[AI] Small talk detected, responding: {}", smallTalkReply);
-                        // Record in agent memory
                         com.appbana.ai.AgentMemoryService.record(userId, request.description, smallTalkReply);
                         return result;
                     }
@@ -87,6 +109,8 @@ public class AiAppGeneratorService {
                         List<Map<String, Object>> apps = AppManager.listApps();
                         listResult.payload = new HashMap<>();
                         listResult.payload.put("apps", apps);
+                        listResult.payload.put("action", "list");
+                        listResult.payload.put("reply", "Fetched your apps via GET /apps");
                         LOG.info("[AI] Returning apps list: {}", apps);
                         return listResult;
                     case "loadapp":
@@ -391,19 +415,18 @@ public class AiAppGeneratorService {
             parsed = null;
         }
 
+
         // Validate parsed result
         if (parsed != null && parsed.containsKey("action")) {
             Object a = parsed.get("action");
             if (a != null) {
-                String act = String.valueOf(a).trim();
-                // normalize action names
-                switch (act.toLowerCase()) {
-                    case "listapps":
-                    case "list_apps":
-                    case "list-apps":
-                    case "list":
-                        parsed.put("action", "listApps");
-                        return parsed;
+                String act = String.valueOf(a).trim().toLowerCase();
+                // Robust normalization for all 'list apps' style phrases
+                if (act.matches("^(list|listapps|list_apps|list-apps|showapps|show_apps|show-apps|list tab|show my apps|list my apps|list all apps|show all apps)$")) {
+                    parsed.put("action", "listApps");
+                    return parsed;
+                }
+                switch (act) {
                     case "loadapp":
                     case "load_app":
                     case "load-app":
