@@ -268,8 +268,8 @@ public class ApiServer {
             }
         }
 
-        // Use virtual threads for handling requests (Java 21+)
-        httpServer.setExecutor(r -> Thread.ofVirtual().start(r));
+        // Use thread pool for handling requests (Java 17 compatible)
+        httpServer.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
         httpServer.start();
         LOG.info("HTTP server started on port {}{}", port, httpsStarted ? " (HTTPS also enabled)" : "");
     }
@@ -973,7 +973,7 @@ public class ApiServer {
             AppConfig cfgNow = ConfigManager.getConfig();
             cfgNow.getDatasources().removeIf(d -> name.equals(d.getName()));
             if (name.equals(cfgNow.getActiveDatasource())) {
-                if (!cfgNow.getDatasources().isEmpty()) cfgNow.setActiveDatasource(cfgNow.getDatasources().getFirst().getName());
+                if (!cfgNow.getDatasources().isEmpty()) cfgNow.setActiveDatasource(cfgNow.getDatasources().get(0).getName());
                 else cfgNow.setActiveDatasource(null);
             }
             try {
@@ -1007,7 +1007,7 @@ public class ApiServer {
                 for (DatasourceConfig d : cfgNow.getDatasources()) {
                     if (active != null && active.equals(d.getName())) { target = d; break; }
                 }
-                if (target == null && !cfgNow.getDatasources().isEmpty()) target = cfgNow.getDatasources().getFirst();
+                if (target == null && !cfgNow.getDatasources().isEmpty()) target = cfgNow.getDatasources().get(0);
             }
             String url = target.getJdbcUrl();
             String user = target.getUsername();
@@ -1380,8 +1380,8 @@ public class ApiServer {
         });
 
 
-        // Use virtual threads per server
-        server.setExecutor(r -> Thread.ofVirtual().start(r));
+        // Use thread pool per server (Java 17 compatible)
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
     }
 
     // CRUD helpers extracted from EntityHandler
@@ -1531,7 +1531,7 @@ public class ApiServer {
             ps.setObject(1, parseId(id, pk));
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
-                return list.isEmpty() ? null : list.getFirst();
+                return list.isEmpty() ? null : list.get(0);
             }
         }
     }
