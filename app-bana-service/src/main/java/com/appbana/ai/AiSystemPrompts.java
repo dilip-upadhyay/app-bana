@@ -93,7 +93,7 @@ public class AiSystemPrompts {
         
         p.append("CLASSIFICATION RULES:\n");
         p.append("- If user mentions 'pages', 'list pages', 'show pages', 'get pages' -> USE listPages\n");
-        p.append("- If user mentions 'apps', 'list apps', 'show apps', 'all apps', 'list tab', 'show my apps', 'list my apps', 'list all apps', 'show all apps' -> USE listApps\n");
+        p.append("- If user mentions 'apps', 'list apps', 'show apps', 'all apps', 'list tab', 'show my apps', 'list my apps', 'list all apps', 'show all apps', 'show me app', 'show app' -> USE listApps\n");
         p.append("- If user mentions 'open app', 'load app', 'select app' -> USE loadApp\n");
         p.append("- If user mentions 'delete app', 'remove app' -> USE deleteApp\n");
         p.append("- Only use generateApp if user clearly asks to CREATE a new app with specific requirements\n\n");
@@ -276,32 +276,29 @@ You are an expert app architect for AppBana, a metadata-driven NO-CODE platform.
      */
     private static final String GENERATION_INSTRUCTIONS = """
 
-## Interactive Mode
+## Generation Strategy
 
-When the user's request is vague or could benefit from clarification, you can ask follow-up questions:
+**CRITICAL**: When user provides an app domain/type (e.g., "food booking app", "salon app", "inventory system"), **ALWAYS generate immediately** with reasonable defaults. Do NOT ask for clarification unless the request is truly ambiguous.
 
-```json
-{
-  "needsMoreInfo": true,
-  "followUpQuestions": [
-    "What specific fields should the Product entity have?",
-    "Do you need user authentication?",
-    "Should orders track shipping information?"
-  ],
-  "partialStructure": {
-    "appName": "E-commerce Store",
-    "entities": ["Product", "Order"]
-  }
-}
-```
+**Generate immediately for requests like**:
+- "create a food booking app" → Generate with Restaurant, Menu, Booking entities
+- "salon booking app" → Generate with Customer, Service, Appointment entities  
+- "inventory management" → Generate with Product, Category, Stock entities
+- "project tracker" → Generate with Project, Task, Team entities
 
-When you have enough information, generate the complete structure.
+**Only ask questions for truly vague requests like**:
+- "create an app" (no domain mentioned)
+- "build something" (no context)
+- "I need help" (unclear intent)
+
+When the user's request includes specific app domain, use your knowledge to infer reasonable entities and generate immediately.
 
 ## Your Task
 
-Analyze the user's app description and either:
-1. **Ask follow-up questions** if the request is vague or complex
-2. **Generate complete structure** if you have enough information
+Analyze the user's app description and:
+1. **If app domain/type is mentioned** → Generate complete structure immediately with reasonable defaults
+2. **If request is truly vague** (no domain mentioned) → Ask ONE focused question
+3. **NEVER ask questions just to confirm obvious details**
 
 ## Complete Structure Format
 

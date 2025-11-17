@@ -1,0 +1,40 @@
+{
+  "id" : "show-me-app",
+  "name" : "Show Me App",
+  "description" : "An application to display information dynamically based on user requests.",
+  "version" : "1.0.0",
+  "created" : 1763409612968,
+  "updated" : 1763409612968,
+  "pages" : [ ],
+  "entities" : [ {
+    "name" : "Information",
+    "fields" : [ {
+      "name" : "title",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "description",
+      "type" : "longtext",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "createdAt",
+      "type" : "createdAt",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "updatedAt",
+      "type" : "updatedAt",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  } ],
+  "routes" : {
+    "basePath" : "/show-me-app"
+  }
+}

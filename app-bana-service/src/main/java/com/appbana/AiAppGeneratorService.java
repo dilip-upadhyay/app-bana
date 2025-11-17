@@ -113,9 +113,20 @@ public class AiAppGeneratorService {
             }
 
             // Extract app type from description/context and track it
+            // BUT: Don't overwrite context if this is a continuation request
             String appType = extractAppType(request != null ? request.description : null);
-            if (appType != null && request.description != null) {
+            if (appType != null && request.description != null && !isContinuationRequest(request)) {
                 updateDiscussedApp(request.userId, appType, request.description);
+            }
+            
+            // ALSO: If description mentions entities/features, store it even if no app type extracted
+            if (request.description != null && !isContinuationRequest(request) && 
+                (request.description.toLowerCase().contains("entity") || 
+                 request.description.toLowerCase().contains("entities") ||
+                 request.description.toLowerCase().matches(".*\\b(customer|user|product|order|item|service|appointment|project|task)\\b.*"))) {
+                String descAppType = appType != null ? appType : "application";
+                updateDiscussedApp(request.userId, descAppType, request.description);
+                LOG.info("[AI Context] Stored detailed app description in context");
             }
             
             if (isAppCreationRequest(request != null ? request.description == null ? null : request.description.toLowerCase(Locale.ROOT) : null)) {
@@ -1813,8 +1824,8 @@ public class AiAppGeneratorService {
         tableProps.put("fields", fields);
         tableProps.put("pageSize", 25);
         tableProps.put("multiSelect", true);
-        tableProps.put("actions", List.of("view"));
-        tableProps.put("bulkActions", List.of("delete", "export"));
+        tableProps.put("actions", new ArrayList<>(Arrays.asList("view")));
+        tableProps.put("bulkActions", new ArrayList<>(Arrays.asList("delete", "export")));
         tableProps.put("confirmDelete", true);
         tableProps.put("viewMode", "dynamic");
         tableProps.put("theme", "default");

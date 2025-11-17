@@ -23,7 +23,7 @@ public class SmallTalkEngine {
             patterns.add(new SmallTalkPattern(Pattern.compile("can you dance|dance|dancing", Pattern.CASE_INSENSITIVE), "I can't dance, but I can help you build a dance app or playlist!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you sing|sing|singing|song|music", Pattern.CASE_INSENSITIVE), "I can't sing, but I can help you create a music app or playlist!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you cook|cook|cooking|chef|recipe", Pattern.CASE_INSENSITIVE), "I can't cook, but I can help you build a recipe or meal planner app!"));
-            patterns.add(new SmallTalkPattern(Pattern.compile("can you draw|draw|drawing|sketch|art", Pattern.CASE_INSENSITIVE), "I can't draw, but I can help you design a creative art app!"));
+            patterns.add(new SmallTalkPattern(Pattern.compile("can you draw|\\bdraw\\b|drawing|sketch|\\bart\\b", Pattern.CASE_INSENSITIVE), "I can't draw, but I can help you design a creative art app!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you joke|joke|make me laugh|funny|laugh", Pattern.CASE_INSENSITIVE), "Why did the computer go to art school? To learn how to draw its curtains!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you code|code|coding|program|programming", Pattern.CASE_INSENSITIVE), "Coding is my superpower! Want to build something together?"));
             patterns.add(new SmallTalkPattern(Pattern.compile("^(can you help me|help me|how can you help me)\\??$", Pattern.CASE_INSENSITIVE), "I'm always here to help you build apps and solve problems!"));

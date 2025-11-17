@@ -1,0 +1,24 @@
+{
+  "id" : "page-1763409590537",
+  "name" : "Items List (Data Table)",
+  "rootId" : "root-1763409590542",
+  "nodes" : [ {
+    "id" : "root-1763409590542",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "children" : [ "heading-root-1763409590542" ]
+  }, {
+    "id" : "heading-root-1763409590542",
+    "type" : "text",
+    "props" : {
+      "content" : "Items List (Data Table)",
+      "tag" : "h1"
+    }
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "list"
+}

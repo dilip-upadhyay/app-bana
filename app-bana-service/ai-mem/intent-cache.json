@@ -1,19 +1,7 @@
 {
-  "lastUpdated" : 1763407727124,
+  "lastUpdated" : 1763410395441,
   "entries" : [ {
-    "normalizedText" : "delete all apps above listed",
-    "action" : {
-      "action" : "deleteApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1763324002931,
-    "lastAccessTime" : 1763324002931,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "i am thinking to create app for salon where user can book appointments",
+    "normalizedText" : "i want to create food booking app",
     "action" : {
       "action" : "generateApp",
       "target" : { },
@@ -21,9 +9,21 @@
         "userId" : "default"
       }
     },
-    "createdTime" : 1763322846956,
-    "lastAccessTime" : 1763322846956,
+    "createdTime" : 1763409586063,
+    "lastAccessTime" : 1763409586063,
     "hitCount" : 0
+  }, {
+    "normalizedText" : "i mean how will customer order product from my app that you will create",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763410210238,
+    "lastAccessTime" : 1763410395440,
+    "hitCount" : 1
   }, {
     "normalizedText" : "want to create a salon booking app with customer, service, appointment",
     "action" : {
@@ -49,18 +49,6 @@
     "lastAccessTime" : 1763311538042,
     "hitCount" : 0
   }, {
-    "normalizedText" : "i want to create messaging application where suer can register and chat with other users. once user is registerd he or she can see all the registerd users and can select and send messages. lets focus one only one on one mesages for now",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1763312933054,
-    "lastAccessTime" : 1763313005522,
-    "hitCount" : 1
-  }, {
     "normalizedText" : "create a messaging application",
     "action" : {
       "action" : "generateApp",
@@ -71,30 +59,6 @@
     },
     "createdTime" : 1763320959101,
     "lastAccessTime" : 1763320959101,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "yes, i am thinking to create application on logistics managment. can you suggest me",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1763311496769,
-    "lastAccessTime" : 1763311496769,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "ok, create the app",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1763322886212,
-    "lastAccessTime" : 1763322886212,
     "hitCount" : 0
   }, {
     "normalizedText" : "delete all apps",
@@ -109,6 +73,18 @@
     "lastAccessTime" : 1763323956034,
     "hitCount" : 0
   }, {
+    "normalizedText" : "ok, create the app",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763322886212,
+    "lastAccessTime" : 1763322886212,
+    "hitCount" : 0
+  }, {
     "normalizedText" : "create a task manager application",
     "action" : {
       "action" : "generateApp",
@@ -117,6 +93,78 @@
     },
     "createdTime" : 1763322472699,
     "lastAccessTime" : 1763322472699,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "show me app",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763409602841,
+    "lastAccessTime" : 1763409602841,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "delete all apps above listed",
+    "action" : {
+      "action" : "deleteApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763324002931,
+    "lastAccessTime" : 1763324002931,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "i am thinking to create app for salon where user can book appointments",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763322846956,
+    "lastAccessTime" : 1763322846956,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "no, i want to create store and want you to suggest app",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763410097013,
+    "lastAccessTime" : 1763410097013,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "i want to create messaging application where suer can register and chat with other users. once user is registerd he or she can see all the registerd users and can select and send messages. lets focus one only one on one mesages for now",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763312933054,
+    "lastAccessTime" : 1763313005522,
+    "hitCount" : 1
+  }, {
+    "normalizedText" : "yes, i am thinking to create application on logistics managment. can you suggest me",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763311496769,
+    "lastAccessTime" : 1763311496769,
     "hitCount" : 0
   }, {
     "normalizedText" : "i want to create application to book appointment for my salon",
