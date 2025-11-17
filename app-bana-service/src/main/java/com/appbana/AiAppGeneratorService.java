@@ -481,6 +481,14 @@ public class AiAppGeneratorService {
     private static GenerationResult generateWithAi(GenerationRequest request, AppConfig config, String previousErrors) throws Exception {
         AiProvider provider = AiProviderFactory.createProvider(config);
         String systemPrompt = AiSystemPrompts.getAppGenerationPrompt();
+        
+        // Inject conversation context into system prompt
+        String contextPrompt = buildContextPrompt(request.userId);
+        if (contextPrompt != null && !contextPrompt.isBlank()) {
+            systemPrompt = contextPrompt + "\n\n" + systemPrompt;
+            LOG.info("[AI Context] Injected conversation context into system prompt");
+        }
+        
         String userPrompt = request != null ? request.description : "";
         
         // If this is a retry with error feedback, append correction instructions
@@ -2206,6 +2214,50 @@ public class AiAppGeneratorService {
         }
         
         return request.description;
+    }
+
+    /**
+     * Build context prompt from conversation history to inject into system prompt
+     */
+    private static String buildContextPrompt(String userId) {
+        ConversationContext ctx = getContext(userId);
+        
+        // Only add context if we have meaningful information
+        if (ctx.lastDiscussedAppType == null && ctx.lastDiscussedAppDescription == null && 
+            ctx.discussedEntities.isEmpty() && ctx.lastCreatedAppId == null && ctx.lastOpenedAppId == null) {
+            return null;
+        }
+        
+        StringBuilder contextBuilder = new StringBuilder();
+        contextBuilder.append("📝 CONVERSATION CONTEXT (for continuity):\n");
+        
+        if (ctx.lastDiscussedAppType != null) {
+            contextBuilder.append("- User previously discussed: ").append(ctx.lastDiscussedAppType).append("\n");
+        }
+        
+        if (ctx.lastDiscussedAppDescription != null && !ctx.lastDiscussedAppDescription.isBlank()) {
+            String shortDesc = ctx.lastDiscussedAppDescription.length() > 100 
+                ? ctx.lastDiscussedAppDescription.substring(0, 100) + "..." 
+                : ctx.lastDiscussedAppDescription;
+            contextBuilder.append("- Description: \"").append(shortDesc).append("\"\n");
+        }
+        
+        if (!ctx.discussedEntities.isEmpty()) {
+            contextBuilder.append("- Entities mentioned: ").append(String.join(", ", ctx.discussedEntities)).append("\n");
+        }
+        
+        if (ctx.lastCreatedAppId != null) {
+            contextBuilder.append("- Last created app ID: ").append(ctx.lastCreatedAppId).append("\n");
+        }
+        
+        if (ctx.lastOpenedAppId != null) {
+            contextBuilder.append("- Currently opened app ID: ").append(ctx.lastOpenedAppId).append("\n");
+        }
+        
+        contextBuilder.append("\nUSE THIS CONTEXT: If user's request is vague or a continuation (e.g., 'create the app', 'add more entities'), ");
+        contextBuilder.append("refer to the above context to understand what they're asking for.\n");
+        
+        return contextBuilder.toString();
     }
 }
 

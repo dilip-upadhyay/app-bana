@@ -1,15 +1,21 @@
 {
-  "id" : "salon-appointment-booking-app",
-  "name" : "Salon Appointment Booking App",
-  "description" : "A comprehensive application for managing appointments, customers, and services in a salon.",
+  "id" : "salon-booking-app",
+  "name" : "Salon Booking App",
+  "description" : "Salon booking system with Customers, Services, and Appointments",
   "version" : "1.0.0",
-  "created" : 1763324189836,
-  "updated" : 1763324189836,
+  "created" : 1763407746796,
+  "updated" : 1763407746796,
   "pages" : [ ],
   "entities" : [ {
     "name" : "Customer",
     "fields" : [ {
-      "name" : "name",
+      "name" : "firstName",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "lastName",
       "type" : "text",
       "required" : true,
       "primaryKey" : false,
@@ -23,7 +29,7 @@
     }, {
       "name" : "phone",
       "type" : "phone",
-      "required" : true,
+      "required" : false,
       "primaryKey" : false,
       "autoIncrement" : false
     } ]
@@ -57,26 +63,32 @@
   }, {
     "name" : "Appointment",
     "fields" : [ {
-      "name" : "appointmentDate",
+      "name" : "dateTime",
       "type" : "datetime",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
       "name" : "customerId",
-      "type" : "long",
+      "type" : "reference",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
       "name" : "serviceId",
-      "type" : "long",
+      "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     } ]
   } ],
   "routes" : {
-    "basePath" : "/salon-appointment-booking-app"
+    "basePath" : "/salon-booking-app"
   }
 }

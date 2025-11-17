@@ -38,12 +38,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [4/4] Starting backend server...
+echo [4/4] Starting backend server in new terminal...
 echo.
 echo ==========================================
 echo Server will start on http://localhost:8080
-echo Press Ctrl+C to stop the server
+echo A new terminal window will open
+echo Close that window to stop the server
 echo ==========================================
 echo.
 
-java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
+start "AppBana Backend" cmd /k "cd /d %CD% && java -jar target\app-bana-1.0-SNAPSHOT-fat.jar"
+
+echo.
+echo Backend server started in new terminal window.
+echo.
