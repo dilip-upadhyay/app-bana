@@ -243,6 +243,47 @@ export class AiChatBuilder extends LitElement {
       background: #fff;
     }
 
+    .voice-btn {
+      border: none;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      font-size: 1.3rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 8px rgba(16, 185, 129, 0.25);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .voice-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(16, 185, 129, 0.35);
+    }
+
+    .voice-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .voice-btn.recording {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 4px 8px rgba(239, 68, 68, 0.25);
+      }
+      50% {
+        box-shadow: 0 4px 16px rgba(239, 68, 68, 0.5);
+      }
+    }
+
     .send-btn {
       border: none;
       border-radius: 999px;
@@ -505,7 +546,10 @@ export class AiChatBuilder extends LitElement {
     questionsAsked: []
   };
   @state() private conversationContext: Record<string, any> = {};
+  @state() private isRecording = false;
+  @state() private voiceSupported = false;
   private assistantPersona: keyof typeof personaPrompts = 'friendly';
+  private recognition: any = null;
 
   private smallTalkPatterns: Array<{ pattern: RegExp; reply: string | ((...args: any[]) => string) }> = [
         { pattern: /can you swim|swim/, reply: "I can't swim, but I can help you build a swimming tracker app!" },
@@ -620,6 +664,7 @@ export class AiChatBuilder extends LitElement {
     super.connectedCallback();
     this.addSystemMessage('Welcome! I can help you build applications using natural language. Describe the app you want to create.');
     this.loadAIConfiguration();
+    this.initializeVoiceRecognition();
   }
 
   private async loadAIConfiguration() {
@@ -636,6 +681,60 @@ export class AiChatBuilder extends LitElement {
       this.aiProviders = await providersResponse.json();
     }
   } // END loadAIConfiguration
+
+  private initializeVoiceRecognition() {
+    // Check if browser supports Web Speech API
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn('[Voice] Speech recognition not supported in this browser');
+      this.voiceSupported = false;
+      return;
+    }
+
+    this.voiceSupported = true;
+    this.recognition = new SpeechRecognition();
+    this.recognition.continuous = false;
+    this.recognition.interimResults = false;
+    this.recognition.lang = 'en-US';
+
+    this.recognition.onstart = () => {
+      console.log('[Voice] Recording started');
+      this.isRecording = true;
+    };
+
+    this.recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      console.log('[Voice] Transcript:', transcript);
+      this.inputValue = transcript;
+      this.isRecording = false;
+    };
+
+    this.recognition.onerror = (event: any) => {
+      console.error('[Voice] Recognition error:', event.error);
+      this.isRecording = false;
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        alert('Microphone access denied. Please enable microphone permissions.');
+      }
+    };
+
+    this.recognition.onend = () => {
+      console.log('[Voice] Recording ended');
+      this.isRecording = false;
+    };
+  }
+
+  private toggleVoiceRecording() {
+    if (!this.voiceSupported || !this.recognition) {
+      alert('Voice input is not supported in your browser. Please use Chrome, Edge, or Safari.');
+      return;
+    }
+
+    if (this.isRecording) {
+      this.recognition.stop();
+    } else {
+      this.recognition.start();
+    }
+  }
 
 
   private async openSettings() {
@@ -1371,6 +1470,16 @@ export class AiChatBuilder extends LitElement {
 
         <div class="input-container">
         <div class="input-wrapper">
+          ${this.voiceSupported ? html`
+            <button
+              class="voice-btn ${this.isRecording ? 'recording' : ''}"
+              @click=${this.toggleVoiceRecording}
+              ?disabled=${this.isProcessing}
+              title="${this.isRecording ? 'Stop recording' : 'Start voice input'}"
+            >
+              ${this.isRecording ? '⏹️' : '🎤'}
+            </button>
+          ` : ''}
           <div class="input-field">
             <textarea
               .value=${this.inputValue}
@@ -1381,7 +1490,7 @@ export class AiChatBuilder extends LitElement {
                   this.handleSend();
                 }
               }}
-              placeholder="Describe the app you want to build... (Press Enter to send, Shift+Enter for new line)"
+              placeholder="${this.voiceSupported ? 'Type or use voice input... (Press Enter to send, Shift+Enter for new line)' : 'Describe the app you want to build... (Press Enter to send, Shift+Enter for new line)'}"
               ?disabled=${this.isProcessing}
             ></textarea>
           </div>

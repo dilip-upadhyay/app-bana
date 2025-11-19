@@ -1,0 +1,88 @@
+{
+  "id" : "salon-booking-app-1",
+  "name" : "Salon Booking App",
+  "description" : "Application for booking appointments at a salon with services and customer management",
+  "version" : "1.0.0",
+  "created" : 1763579413807,
+  "updated" : 1763579413807,
+  "pages" : [ ],
+  "entities" : [ {
+    "name" : "Customer",
+    "fields" : [ {
+      "name" : "name",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "email",
+      "type" : "email",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "phone",
+      "type" : "phone",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Service",
+    "fields" : [ {
+      "name" : "name",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "description",
+      "type" : "longtext",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "price",
+      "type" : "currency",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "duration",
+      "type" : "duration",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Appointment",
+    "fields" : [ {
+      "name" : "dateTime",
+      "type" : "datetime",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "customerId",
+      "type" : "long",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "serviceId",
+      "type" : "long",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  } ],
+  "routes" : {
+    "basePath" : "/salon-booking-app-1"
+  }
+}
