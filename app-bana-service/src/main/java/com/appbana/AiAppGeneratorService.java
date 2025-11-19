@@ -393,6 +393,26 @@ public class AiAppGeneratorService {
         }
 
         String userId = resolveUserId(request);
+        
+        // Check if this is approval of a previously discussed app
+        if (isApprovalResponse(request)) {
+            ConversationContext ctx = getContext(userId);
+            if (ctx.lastDiscussedAppType != null || ctx.lastDiscussedAppDescription != null) {
+                // Build a prompt suggesting to create the app
+                String appType = ctx.lastDiscussedAppType != null ? ctx.lastDiscussedAppType : "app";
+                String prompt = buildAppCreationPrompt(appType);
+                
+                GenerationResult result = new GenerationResult();
+                result.success = true;
+                result.payload = new HashMap<>();
+                result.payload.put(PAYLOAD_SMALL_TALK, true);
+                result.payload.put(PAYLOAD_REPLY, prompt);
+                LOG.info("[AI] Approval detected with context, suggesting app creation");
+                AgentMemoryService.record(userId, request.description, prompt);
+                return result;
+            }
+        }
+        
         String reply = SmallTalkEngine.getSmallTalkResponse(request.description, userId);
         if (reply == null) {
             return null;
@@ -2182,10 +2202,41 @@ public class AiAppGeneratorService {
     }
 
     /**
+     * Check if user is expressing approval/confirmation
+     */
+    private static boolean isApprovalResponse(GenerationRequest request) {
+        if (request == null || request.description == null) return false;
+        
+        String desc = request.description.toLowerCase().trim();
+        
+        // Approval patterns
+        String[] approvalPatterns = {
+            "looks ok", "looks good", "looks great", "sounds good", "sounds great",
+            "that's fine", "that's good", "that's great", "that works", "that's perfect",
+            "perfect", "excellent", "awesome", "nice", "cool",
+            "yes", "yep", "yeah", "sure", "ok", "okay",
+            "i like it", "i love it", "i agree"
+        };
+        
+        for (String pattern : approvalPatterns) {
+            if (desc.equals(pattern) || desc.equals(pattern + "!")) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
      * Check if request is a continuation (e.g., "create the app" after discussing requirements)
      */
     private static boolean isContinuationRequest(GenerationRequest request) {
         if (request == null || request.description == null) return false;
+        
+        // Check for approval first
+        if (isApprovalResponse(request)) {
+            return true;
+        }
         
         String desc = request.description.toLowerCase().trim();
         
@@ -2225,6 +2276,17 @@ public class AiAppGeneratorService {
         }
         
         return request.description;
+    }
+
+    /**
+     * Build a prompt suggesting the user to create the discussed app
+     */
+    private static String buildAppCreationPrompt(String appType) {
+        return String.format(
+            "Great! I'm glad you like the design. Would you like me to create the %s now? " +
+            "Just say 'yes, create it' or 'build the app' and I'll generate it for you!",
+            appType
+        );
     }
 
     /**

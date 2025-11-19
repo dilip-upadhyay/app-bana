@@ -902,6 +902,8 @@ export class AiChatBuilder extends LitElement {
               appSummary += `- ${page.name || page.id || JSON.stringify(page)}\n`;
             }
           }
+          // Add call-to-action
+          appSummary += `\n**Ready to create this app?** Just say 'yes, create it' or 'build the app'!`;
           this.addAssistantMessage(appSummary);
         } else if (result.payload?.reply) {
           this.addAssistantMessage(result.payload.reply);
