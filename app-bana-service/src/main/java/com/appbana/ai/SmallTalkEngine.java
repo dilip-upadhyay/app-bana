@@ -20,9 +20,9 @@ public class SmallTalkEngine {
             patterns.add(new SmallTalkPattern(Pattern.compile("^(thanks|thank you|thx|ty)$", Pattern.CASE_INSENSITIVE), "You're welcome! Let me know if you need anything else."));
             patterns.add(new SmallTalkPattern(Pattern.compile("^(bye|goodbye|see you|cya|later)$", Pattern.CASE_INSENSITIVE), "Goodbye! Come back anytime to build more apps."));
             
-            patterns.add(new SmallTalkPattern(Pattern.compile("can you dance|dance|dancing", Pattern.CASE_INSENSITIVE), "I can't dance, but I can help you build a dance app or playlist!"));
-            patterns.add(new SmallTalkPattern(Pattern.compile("can you sing|sing|singing|song|music", Pattern.CASE_INSENSITIVE), "I can't sing, but I can help you create a music app or playlist!"));
-            patterns.add(new SmallTalkPattern(Pattern.compile("can you cook|cook|cooking|chef|recipe", Pattern.CASE_INSENSITIVE), "I can't cook, but I can help you build a recipe or meal planner app!"));
+        patterns.add(new SmallTalkPattern(Pattern.compile("can you dance|\\bdance\\b|\\bdancing\\b", Pattern.CASE_INSENSITIVE), "I can't dance, but I can help you build a dance app or playlist!"));
+        patterns.add(new SmallTalkPattern(Pattern.compile("can you sing|\\bsing\\b|\\bsinging\\b|\\bsong\\b|\\bmusic\\b", Pattern.CASE_INSENSITIVE), "I can't sing, but I can help you create a music app or playlist!"));
+        patterns.add(new SmallTalkPattern(Pattern.compile("can you cook|\\bcook\\b|\\bcooking\\b|\\bchef\\b|\\brecipe\\b", Pattern.CASE_INSENSITIVE), "I can't cook, but I can help you build a recipe or meal planner app!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you draw|\\bdraw\\b|drawing|sketch|\\bart\\b", Pattern.CASE_INSENSITIVE), "I can't draw, but I can help you design a creative art app!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you joke|joke|make me laugh|funny|laugh", Pattern.CASE_INSENSITIVE), "Why did the computer go to art school? To learn how to draw its curtains!"));
             patterns.add(new SmallTalkPattern(Pattern.compile("can you code|code|coding|program|programming", Pattern.CASE_INSENSITIVE), "Coding is my superpower! Want to build something together?"));
@@ -109,6 +109,20 @@ public class SmallTalkEngine {
             lower.contains("open") && lower.contains("app") ||
             lower.contains("delete") && lower.contains("app") ||
             lower.contains("remove") && lower.contains("app")) {
+            return null;
+        }
+        
+        // If the input is asking about app features/structure (refinement questions), do NOT treat as small talk
+        if ((lower.contains("where") || lower.contains("how") || lower.contains("can you")) &&
+            (lower.contains("option") || lower.contains("register") || lower.contains("registration") ||
+             lower.contains("page") || lower.contains("entity") || lower.contains("field") ||
+             lower.contains("add") && (lower.contains("to the app") || lower.contains("in the app") || lower.contains("to this app")))) {
+            return null;
+        }
+        
+        // If asking for "final version" or "give me", it's about the app structure
+        if ((lower.contains("final version") || lower.contains("give me")) && 
+            (lower.contains("app") || lower.contains("application"))) {
             return null;
         }
         

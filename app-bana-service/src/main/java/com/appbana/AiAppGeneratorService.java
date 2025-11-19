@@ -398,18 +398,10 @@ public class AiAppGeneratorService {
         if (isApprovalResponse(request)) {
             ConversationContext ctx = getContext(userId);
             if (ctx.lastDiscussedAppType != null || ctx.lastDiscussedAppDescription != null) {
-                // Build a prompt suggesting to create the app
-                String appType = ctx.lastDiscussedAppType != null ? ctx.lastDiscussedAppType : "app";
-                String prompt = buildAppCreationPrompt(appType);
-                
-                GenerationResult result = new GenerationResult();
-                result.success = true;
-                result.payload = new HashMap<>();
-                result.payload.put(PAYLOAD_SMALL_TALK, true);
-                result.payload.put(PAYLOAD_REPLY, prompt);
-                LOG.info("[AI] Approval detected with context, suggesting app creation");
-                AgentMemoryService.record(userId, request.description, prompt);
-                return result;
+                // DO NOT return here - let the approval continue to app creation
+                // by returning null so the main flow can handle it as a continuation request
+                LOG.info("[AI] Approval detected with context, allowing app creation flow");
+                return null;
             }
         }
         
@@ -2212,6 +2204,7 @@ public class AiAppGeneratorService {
         // Approval patterns
         String[] approvalPatterns = {
             "looks ok", "looks good", "looks great", "sounds good", "sounds great",
+            "sounds ok", "sounds okay",
             "that's fine", "that's good", "that's great", "that works", "that's perfect",
             "perfect", "excellent", "awesome", "nice", "cool",
             "yes", "yep", "yeah", "sure", "ok", "okay",
@@ -2242,10 +2235,14 @@ public class AiAppGeneratorService {
         
         // Patterns indicating continuation
         String[] continuationPatterns = {
+            "go ahead",
+            "go ahead and create",
             "create the app",
             "create it",
+            "create app",
             "build the app",
             "build it",
+            "build app",
             "make the app",
             "make it",
             "yes create",
