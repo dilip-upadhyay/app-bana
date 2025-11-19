@@ -1,21 +1,15 @@
 {
   "id" : "salon-booking-app",
   "name" : "Salon Booking App",
-  "description" : "Salon booking system with Customers, Services, and Appointments",
+  "description" : "A salon booking system for customers to choose services and book appointments with salon staff.",
   "version" : "1.0.0",
-  "created" : 1763407746796,
-  "updated" : 1763407746796,
-  "pages" : [ ],
+  "created" : 1763578323257,
+  "updated" : 1763578323466,
+  "pages" : [ "customer-registration" ],
   "entities" : [ {
     "name" : "Customer",
     "fields" : [ {
-      "name" : "firstName",
-      "type" : "text",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
-      "name" : "lastName",
+      "name" : "name",
       "type" : "text",
       "required" : true,
       "primaryKey" : false,
@@ -29,7 +23,7 @@
     }, {
       "name" : "phone",
       "type" : "phone",
-      "required" : false,
+      "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     } ]
@@ -70,20 +64,41 @@
       "autoIncrement" : false
     }, {
       "name" : "customerId",
-      "type" : "reference",
+      "type" : "long",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
       "name" : "serviceId",
-      "type" : "reference",
+      "type" : "long",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "status",
-      "type" : "status",
+      "name" : "stylistId",
+      "type" : "long",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Stylist",
+    "fields" : [ {
+      "name" : "name",
+      "type" : "text",
       "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "specialization",
+      "type" : "text",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "phone",
+      "type" : "phone",
+      "required" : false,
       "primaryKey" : false,
       "autoIncrement" : false
     } ]
