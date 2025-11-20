@@ -1,0 +1,107 @@
+{
+  "id" : "library-management-system",
+  "name" : "Library Management System",
+  "description" : "A system to track books, members, borrowing history, and due dates with late fee calculations.",
+  "version" : "1.0.0",
+  "created" : 1763666766282,
+  "updated" : 1763666766385,
+  "pages" : [ "book-list", "member-list", "borrowing-history", "book-detail", "member-detail" ],
+  "defaultPage" : "book-list",
+  "entities" : [ {
+    "name" : "Book",
+    "fields" : [ {
+      "name" : "title",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "author",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "genre",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Member",
+    "fields" : [ {
+      "name" : "name",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "email",
+      "type" : "email",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "phone",
+      "type" : "phone",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "membershipStatus",
+      "type" : "status",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "BorrowingHistory",
+    "fields" : [ {
+      "name" : "bookId",
+      "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "memberId",
+      "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "borrowDate",
+      "type" : "datetime",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "dueDate",
+      "type" : "datetime",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "returnDate",
+      "type" : "datetime",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "lateFee",
+      "type" : "currency",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  } ],
+  "routes" : {
+    "basePath" : "/library-management-system"
+  }
+}

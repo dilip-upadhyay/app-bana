@@ -1,0 +1,80 @@
+{
+  "id" : "real-estate-management-app",
+  "name" : "Real Estate Management App",
+  "description" : "Real estate app to manage property listings with details like location, price, bedrooms, amenities, and agent information.",
+  "version" : "1.0.0",
+  "created" : 1763666795642,
+  "updated" : 1763666795713,
+  "pages" : [ "property-list", "property-detail", "agent-directory" ],
+  "defaultPage" : "property-list",
+  "entities" : [ {
+    "name" : "Property",
+    "fields" : [ {
+      "name" : "title",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "location",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "price",
+      "type" : "currency",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "bedrooms",
+      "type" : "number",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "bathrooms",
+      "type" : "number",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "amenities",
+      "type" : "longtext",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "agentId",
+      "type" : "long",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Agent",
+    "fields" : [ {
+      "name" : "name",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "email",
+      "type" : "email",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "phone",
+      "type" : "phone",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  } ],
+  "routes" : {
+    "basePath" : "/real-estate-management-app"
+  }
+}

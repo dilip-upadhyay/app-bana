@@ -1,6 +1,6 @@
 {
-  "version": "1.0.2",
-  "lastUpdated": "2025-11-16T15:37:00Z",
+  "version": "1.1.0",
+  "lastUpdated": "2025-11-20T01:10:00Z",
   "description": "Quick reference index for all AppBana capabilities",
   
   "summary": {
@@ -8,10 +8,34 @@
     "totalFieldTypes": 38,
     "totalDatasources": 25,
     "totalPageTemplates": 7,
-    "totalApiEndpoints": 36
+    "totalApiEndpoints": 38,
+    "totalIntentPatterns": 8
   },
 
   "quickReference": {
+    "metadataIntelligence": {
+      "file": "11-intent-patterns.json",
+      "version": "1.0",
+      "description": "Metadata-driven AI intelligence - defines all AI behavior through JSON",
+      "intentCount": 8,
+      "intents": ["create_app", "refine_app", "approve_continue", "list_apps", "load_app", "request_final_version", "greeting", "smalltalk"],
+      "patternTypes": ["keyword", "exact_match", "approval_phrase", "entity_overlap", "question_word", "ordinal"],
+      "features": [
+        "Hot-reload without restart",
+        "Confidence-based classification",
+        "Context-aware boosting",
+        "Learning from feedback",
+        "A/B testing via metadata"
+      ],
+      "keyFiles": [
+        "com.appbana.ai.MetadataIntelligenceEngine",
+        "com.appbana.api.MetadataIntelligenceApi"
+      ],
+      "apiEndpoints": [
+        "POST /api/meta-intelligence/reload",
+        "GET /api/meta-intelligence/classify?input=xxx"
+      ]
+    },
     "components": {
       "file": "02-components.json",
       "count": 13,

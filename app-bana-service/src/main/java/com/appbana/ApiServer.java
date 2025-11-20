@@ -285,6 +285,9 @@ public class ApiServer {
         router.post("/api/agent/preferences", com.appbana.api.AgentMemoryApi.setPreferenceHandler());
         router.get("/api/agent/feedback", com.appbana.api.AgentMemoryApi.feedbackHandler());
         router.post("/api/agent/feedback", com.appbana.api.AgentMemoryApi.recordFeedbackHandler());
+        // Metadata intelligence endpoints
+        router.post("/api/meta-intelligence/reload", com.appbana.api.MetadataIntelligenceApi.reloadHandler());
+        router.get("/api/meta-intelligence/classify", com.appbana.api.MetadataIntelligenceApi.classifyHandler());
         router.get("/health", (req, res) -> res.json(200, Map.of("status", "UP")));
         router.get("/ready", (req, res) -> {
             long start = System.currentTimeMillis();

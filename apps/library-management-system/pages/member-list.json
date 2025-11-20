@@ -1,0 +1,61 @@
+{
+  "id" : "member-list",
+  "name" : "Member List",
+  "type" : "data-table",
+  "entity" : "Member",
+  "columns" : [ "name", "email", "phone", "membershipStatus" ],
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1763666766364",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1763666766364",
+    "children" : [ "heading-root-1763666766364", "table-root-1763666766364" ]
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1763666766364",
+    "props" : {
+      "content" : "Member List",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "table-root-1763666766364",
+    "type" : "table",
+    "props" : {
+      "entity" : "Member",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "name",
+        "label" : "Name",
+        "type" : "text"
+      }, {
+        "name" : "email",
+        "label" : "Email",
+        "type" : "text"
+      }, {
+        "name" : "phone",
+        "label" : "Phone",
+        "type" : "text"
+      }, {
+        "name" : "membershipStatus",
+        "label" : "Membership Status",
+        "type" : "text"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}

@@ -6,6 +6,7 @@ import com.appbana.ai.AiSystemPrompts;
 import com.appbana.ai.AgentMemoryService;
 import com.appbana.ai.SmallTalkEngine;
 import com.appbana.ai.IntentCache;
+import com.appbana.ai.MetadataIntelligenceEngine;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
@@ -77,6 +78,9 @@ public class AiAppGeneratorService {
     }
 
     public static GenerationResult generateApp(GenerationRequest request) {
+        // Initialize metadata intelligence engine
+        MetadataIntelligenceEngine.initialize();
+        
         LOG.info("[AI] Incoming GenerationRequest: action={}, description={}, options={}",
             request != null ? request.action : null,
             request != null ? request.description : null,
@@ -100,6 +104,25 @@ public class AiAppGeneratorService {
             if (earlySmallTalk != null) {
                 return earlySmallTalk;
             }
+            
+            // NEW: Use metadata-driven intelligence for intent classification
+            String userId = resolveUserId(request);
+            ConversationContext ctx = getContext(userId);
+            Map<String, Object> contextMap = convertContextToMap(ctx);
+            
+            MetadataIntelligenceEngine.IntentResult intentResult = 
+                MetadataIntelligenceEngine.classifyIntent(request.description, contextMap);
+            
+            LOG.info("[AI] MetaAI classified as: {} (confidence: {:.2f})", 
+                intentResult.intent, intentResult.confidence);
+            
+            // Handle metadata-classified intents
+            GenerationResult metaResult = handleMetadataIntent(intentResult, request, ctx);
+            if (metaResult != null) {
+                return metaResult;
+            }
+            
+            // Fallback to original flow for backward compatibility
             String normalizedAction = resolveAction(request);
             
             // FIX #3: Handle "create pages" / "regenerate pages" requests
@@ -167,6 +190,102 @@ public class AiAppGeneratorService {
             LOG.error("[AI] Generation failed", ex);
             return err;
         }
+    }
+
+    /**
+     * Convert ConversationContext to Map for MetadataIntelligenceEngine
+     */
+    private static Map<String, Object> convertContextToMap(ConversationContext ctx) {
+        Map<String, Object> map = new HashMap<>();
+        if (ctx == null) return map;
+        
+        map.put("lastDiscussedAppType", ctx.lastDiscussedAppType);
+        map.put("lastDiscussedAppDescription", ctx.lastDiscussedAppDescription);
+        map.put("discussed_entities", ctx.discussedEntities);
+        map.put("lastCreatedAppId", ctx.lastCreatedAppId);
+        map.put("lastOpenedAppId", ctx.lastOpenedAppId);
+        
+        return map;
+    }
+    
+    /**
+     * Handle intent classified by metadata engine
+     */
+    private static GenerationResult handleMetadataIntent(MetadataIntelligenceEngine.IntentResult intentResult,
+                                                        GenerationRequest request,
+                                                        ConversationContext ctx) {
+        if (intentResult == null || intentResult.intent == null) {
+            return null;
+        }
+        
+        String intent = intentResult.intent;
+        
+        // Handle specific intents from metadata
+        switch (intent) {
+            case "greeting":
+            case "smalltalk":
+                if (intentResult.shouldUseSmallTalk()) {
+                    String reply = SmallTalkEngine.getSmallTalkResponse(request.description, request.userId);
+                    if (reply != null) {
+                        return buildSmallTalkResult(reply, request.userId, request.description);
+                    }
+                }
+                return null;
+            
+            case "list_apps":
+                return buildAppsListResult();
+            
+            case "load_app":
+                return handleStructuredAction(ACTION_LOAD_APP, request);
+            
+            case "approve_continue":
+                // User approved - create app from context
+                if (ctx.lastDiscussedAppDescription != null) {
+                    LOG.info("[AI] Approval detected via metadata, creating app from context");
+                    // Don't return here - let it flow through to app creation
+                    return null;
+                }
+                break;
+            
+            case "refine_app":
+                // User wants to refine the app structure
+                // Let it flow through to GPT generation with context
+                LOG.info("[AI] Refinement request detected, will regenerate with context");
+                return null;
+            
+            case "request_final_version":
+                // Show final structure or regenerate
+                if (ctx.lastDiscussedAppDescription != null) {
+                    LOG.info("[AI] Final version requested, regenerating structure");
+                    return null; // Flow through to generation
+                }
+                break;
+            
+            case "create_app":
+                // Explicit app creation - flow through
+                return null;
+            
+            case "gpt_fallback":
+                // Low confidence - let GPT handle it
+                LOG.info("[AI] Low confidence from metadata ({}), using GPT", intentResult.confidence);
+                return null;
+            
+            case "unknown":
+                // Unknown intent - use GPT
+                return null;
+        }
+        
+        return null;
+    }
+    
+    private static GenerationResult buildSmallTalkResult(String reply, String userId, String input) {
+        GenerationResult result = new GenerationResult();
+        result.success = true;
+        result.payload = new HashMap<>();
+        result.payload.put(PAYLOAD_SMALL_TALK, true);
+        result.payload.put(PAYLOAD_REPLY, reply);
+        AgentMemoryService.record(userId, input, reply);
+        return result;
     }
 
     // Adds conversational context hints for frontend to update memory
@@ -1847,19 +1966,35 @@ public class AiAppGeneratorService {
         nodes.add(tableNode);
 
         // Update root container to include table in children
-        Map<String,Object> rootNode = nodes.stream()
-            .filter(n -> page.get("rootId").equals(n.get("id")))
-            .findFirst()
-            .orElse(null);
+        int rootNodeIndex = -1;
+        Map<String,Object> rootNode = null;
+        for (int i = 0; i < nodes.size(); i++) {
+            if (page.get("rootId").equals(nodes.get(i).get("id"))) {
+                rootNode = nodes.get(i);
+                rootNodeIndex = i;
+                break;
+            }
+        }
         
         if (rootNode != null) {
+            // Ensure rootNode is mutable (convert if needed)
+            if (!(rootNode instanceof LinkedHashMap)) {
+                rootNode = new LinkedHashMap<>(rootNode);
+                nodes.set(rootNodeIndex, rootNode);
+            }
+            
             @SuppressWarnings("unchecked")
             List<String> children = (List<String>) rootNode.get("children");
             if (children != null && !children.contains(tableId)) {
-                // Create mutable copy and add table
-                List<String> newChildren = new ArrayList<>(children);
-                newChildren.add(tableId);
-                rootNode.put("children", newChildren);
+                // Ensure children list is mutable
+                if (!(children instanceof ArrayList)) {
+                    children = new ArrayList<>(children);
+                    rootNode.put("children", children);
+                }
+                children.add(tableId);
+            } else if (children == null) {
+                // Create new children list if none exists
+                rootNode.put("children", new ArrayList<>(List.of(tableId)));
             }
         }
 
