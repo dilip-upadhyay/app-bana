@@ -3,8 +3,41 @@
 ## Project Overview
 AppBana is a **metadata-driven platform** that generates end-to-end functionality from a single source of truth. The core flow: `Entity Definition (Business Layer) → Schema (Technical Layer) → Database Table → REST CRUD APIs → UI Pages (Runtime)`. Changes to metadata propagate automatically through all layers.
 
-**CRITICAL PRIORITY (AI Builder)**
+**CRITICAL PRIORITIES (November 2025)**
 
+### 1. Authentication Phase 1 - Enterprise Features (HIGHEST PRIORITY) 🔴
+**Status**: Week 1-2 of 6-week implementation ($80K-120K investment)  
+**Current Grade**: 6/10 (MVP-Ready) → Target: 8.5/10 (Enterprise-Ready)  
+**Business Impact**: Unlocks $500K-2M ARR (Healthcare $50M-100M TAM, Finance $30M-60M TAM)
+
+**Active Implementation** (Week 1-2):
+- **Field-Level Security (FLS)** - 40% complete
+  - ✅ Database: `field_permission` table (V2__field_level_security.sql, 250+ lines)
+  - ✅ Entity: `FieldPermission.java` (155 lines with Lombok + Java 21 records)
+  - ✅ Service: `PermissionService.java` (400+ lines, 6 methods, 5-min cache)
+  - ⏳ REST API: Filter GET responses, validate PUT requests (30%)
+  - ⏳ UI: Field masking in FormElement (10%)
+  - ❌ Tests: Integration tests (0%, 7 scenarios defined)
+
+**Upcoming Features** (Weeks 2-6):
+- Week 2-3: Profile Layer (user setup 2 hours → 10 minutes)
+- Week 3-4: Role Hierarchy (managers see subordinates automatically)
+- Week 4-5: Session Management (token revocation within 1 second)
+- Week 5-6: Multi-Tenancy (SaaS-ready, zero cross-org data leakage)
+
+**Files Modified**:
+- `model/User.java`, `model/Role.java`, `model/Permission.java`, `model/FieldPermission.java` (Lombok refactored)
+- `service/PasswordService.java`, `service/JwtService.java`, `service/PermissionService.java`
+- `V2__field_level_security.sql` (migration with indexes and seed data)
+- `builder-database/09-authentication.json` (FLS capabilities for AI)
+
+**Next Steps**:
+1. Integrate PermissionService into ApiServer REST endpoints (HIGH PRIORITY)
+2. Create FLS CRUD endpoints (`/api/field-permissions`)
+3. Add JUnit tests for PermissionService (7 scenarios)
+4. Update FormElement.ts for field masking UI
+
+### 2. AI Builder Experience (ONGOING)
 - The **AI Builder experience is the highest-priority concern** in this project.
 - For **any new feature, capability, or metadata change**, you **must**:
   - Consider how it should be surfaced and controlled via the AI Builder.
@@ -75,12 +108,26 @@ mvn clean package -DskipTests       # Creates fat JAR with UI embedded
 ## Key Files Reference
 
 **Backend (Java)**:
-- `ApiServer.java` - HTTP routes, /apps endpoints
+- `ApiServer.java` - HTTP routes, /apps endpoints, virtual threads
 - `AppManager.java` - App/page CRUD with auto-linking
 - `api/Router.java` - Custom HTTP router with CORS
 - `ai/AiSystemPrompts.java` - AI generation prompts
 - `ai/AiAppGeneratorService.java` - AI action classification and app generation
 - `AiResultValidator.java` - Validates AI responses
+
+**Authentication (Phase 1 - NEW)**:
+- `model/User.java` - User entity (Lombok @Data, 100 lines)
+- `model/Role.java` - Role entity with permissions (Lombok @Data, 78 lines)
+- `model/Permission.java` - Granular permission model (resource:action:scope, 120 lines)
+- `model/FieldPermission.java` - Field-level security (Lombok @Data, 155 lines)
+- `model/dto/UserDTO.java` - Safe user DTO (Java 21 record, no password hash)
+- `model/dto/RoleDTO.java` - Role DTO (Java 21 record)
+- `model/dto/PermissionDTO.java` - Permission DTO (Java 21 record)
+- `model/dto/JwtClaims.java` - JWT payload (Java 21 record)
+- `service/PasswordService.java` - BCrypt password hashing (cost factor 12)
+- `service/JwtService.java` - JWT token generation/verification (HMAC-SHA256)
+- `service/PermissionService.java` - FLS runtime filtering (6 methods, 5-min cache)
+- `src/main/resources/db/migration/V2__field_level_security.sql` - FLS schema + seed data
 
 **Frontend (TypeScript)**:
 - `builder/store/AppStore.ts` - Global state singleton (use `appStore` import)
@@ -252,4 +299,9 @@ Invoke-WebRequest -Uri "http://localhost:8080/apps" | Select-Object StatusCode
 ---
 
 **Last Updated**: November 22, 2025  
-**Major Changes**: Java 21 modernization (virtual threads, records, switch expressions), DTO package created, updated coding standards
+**Major Changes**: 
+- **Authentication Phase 1**: FLS implementation (database/entity/service complete, REST API in progress)
+- **Java 21 Modernization**: Virtual threads, records for DTOs, switch expressions
+- **Lombok Integration**: All entities refactored (322 lines eliminated, 42% reduction)
+- **Current Priority**: Complete FLS REST API integration + field masking UI (Week 1-2)
+- **Next Sprint**: Profile Layer (Week 2-3), Role Hierarchy (Week 3-4)
