@@ -1,21 +1,44 @@
 package com.appbana.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
-import java.util.Objects;
 
 /**
  * User entity representing an authenticated user in AppBana.
  * Maps to the app_user table in the database.
+ * 
+ * <p>Uses Lombok to reduce boilerplate code:</p>
+ * <ul>
+ *   <li>@Data: Generates getters, setters, toString, equals, hashCode</li>
+ *   <li>@Builder: Enables fluent builder pattern</li>
+ *   <li>@NoArgsConstructor: Default constructor</li>
+ *   <li>@AllArgsConstructor: Constructor with all fields</li>
+ * </ul>
  */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class User {
     private Long id;
     private String email;
     private String passwordHash;
     private String name;
-    private UserStatus status;
-    private LocalDateTime createdAt;
+    
+    @Builder.Default
+    private UserStatus status = UserStatus.ACTIVE;
+    
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
+    
     private LocalDateTime lastLogin;
-    private LocalDateTime updatedAt;
+    
+    @Builder.Default
+    private LocalDateTime updatedAt = LocalDateTime.now();
 
     /**
      * User status enumeration
@@ -46,85 +69,6 @@ public class User {
         }
     }
 
-    // Constructors
-    public User() {
-        this.status = UserStatus.ACTIVE;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    public User(String email, String passwordHash, String name) {
-        this();
-        this.email = email;
-        this.passwordHash = passwordHash;
-        this.name = name;
-    }
-
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public UserStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(UserStatus status) {
-        this.status = status;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getLastLogin() {
-        return lastLogin;
-    }
-
-    public void setLastLogin(LocalDateTime lastLogin) {
-        this.lastLogin = lastLogin;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
     // Utility methods
     /**
      * Check if this user is active
@@ -146,40 +90,15 @@ public class User {
      * for sending to frontend
      */
     public User toSafeUser() {
-        User safe = new User();
-        safe.id = this.id;
-        safe.email = this.email;
-        safe.name = this.name;
-        safe.status = this.status;
-        safe.createdAt = this.createdAt;
-        safe.lastLogin = this.lastLogin;
-        safe.updatedAt = this.updatedAt;
-        // Explicitly NOT copying passwordHash
-        return safe;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        User user = (User) o;
-        return Objects.equals(id, user.id) && Objects.equals(email, user.email);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(id, email);
-    }
-
-    @Override
-    public String toString() {
-        return "User{" +
-                "id=" + id +
-                ", email='" + email + '\'' +
-                ", name='" + name + '\'' +
-                ", status=" + status +
-                ", createdAt=" + createdAt +
-                ", lastLogin=" + lastLogin +
-                '}';
+        return User.builder()
+                .id(this.id)
+                .email(this.email)
+                .name(this.name)
+                .status(this.status)
+                .createdAt(this.createdAt)
+                .lastLogin(this.lastLogin)
+                .updatedAt(this.updatedAt)
+                // Explicitly NOT copying passwordHash
+                .build();
     }
 }

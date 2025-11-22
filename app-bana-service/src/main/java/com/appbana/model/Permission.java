@@ -1,24 +1,49 @@
 package com.appbana.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
-import java.util.Objects;
 
 /**
- * Permission entity representing a granular permission in AppBana.
+ * Permission entity representing granular access control in AppBana RBAC.
  * Maps to the permission table in the database.
  * 
- * Permission Model:
- * - resource: The resource being accessed (e.g., "Project", "User", "*" for all)
- * - action: The action being performed (e.g., "create", "read", "update", "delete", "*" for all)
- * - scope: The scope of access (e.g., "all", "own", "team")
+ * <p>Permission format: resource:action:scope</p>
+ * <ul>
+ *   <li><b>resource</b>: Entity or resource name (e.g., "Project", "User")</li>
+ *   <li><b>action</b>: CRUD operation (create, read, update, delete, *)</li>
+ *   <li><b>scope</b>: Access scope (all, own, team, *)</li>
+ * </ul>
+ * 
+ * <p>Examples:</p>
+ * <pre>
+ * "Project:*:*"        - Full access to all projects
+ * "Project:read:all"   - Read all projects
+ * "Project:update:own" - Update own projects only
+ * "User:delete:team"   - Delete users in own team
+ * </pre>
+ * 
+ * <p>Uses Lombok for reduced boilerplate</p>
  */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Permission {
     private Long id;
     private String resource;
     private String action;
-    private String scope;
+    
+    @Builder.Default
+    private String scope = SCOPE_ALL;
+    
     private String description;
-    private LocalDateTime createdAt;
+    
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
 
     // Wildcard constants
     public static final String WILDCARD = "*";
@@ -34,74 +59,6 @@ public class Permission {
     public static final String SCOPE_OWN = "own";
     public static final String SCOPE_TEAM = "team";
 
-    // Constructors
-    public Permission() {
-        this.scope = SCOPE_ALL;
-        this.createdAt = LocalDateTime.now();
-    }
-
-    public Permission(String resource, String action, String scope) {
-        this();
-        this.resource = resource;
-        this.action = action;
-        this.scope = scope;
-    }
-
-    public Permission(String resource, String action, String scope, String description) {
-        this(resource, action, scope);
-        this.description = description;
-    }
-
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getResource() {
-        return resource;
-    }
-
-    public void setResource(String resource) {
-        this.resource = resource;
-    }
-
-    public String getAction() {
-        return action;
-    }
-
-    public void setAction(String action) {
-        this.action = action;
-    }
-
-    public String getScope() {
-        return scope;
-    }
-
-    public void setScope(String scope) {
-        this.scope = scope;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    // Utility methods
     /**
      * Check if this permission matches the requested resource, action, and scope.
      * Supports wildcard matching.
@@ -137,7 +94,12 @@ public class Permission {
      * Factory method to create admin permission
      */
     public static Permission createAdminPermission() {
-        return new Permission(WILDCARD, WILDCARD, SCOPE_ALL, "Full access to all resources");
+        return Permission.builder()
+                .resource(WILDCARD)
+                .action(WILDCARD)
+                .scope(SCOPE_ALL)
+                .description("Full access to all resources")
+                .build();
     }
 
     /**
@@ -145,37 +107,10 @@ public class Permission {
      */
     public static Permission[] createCrudPermissions(String resource, String scope) {
         return new Permission[]{
-                new Permission(resource, CREATE, scope, "Create " + resource),
-                new Permission(resource, READ, scope, "Read " + resource),
-                new Permission(resource, UPDATE, scope, "Update " + resource),
-                new Permission(resource, DELETE, scope, "Delete " + resource)
+                Permission.builder().resource(resource).action(CREATE).scope(scope).description("Create " + resource).build(),
+                Permission.builder().resource(resource).action(READ).scope(scope).description("Read " + resource).build(),
+                Permission.builder().resource(resource).action(UPDATE).scope(scope).description("Update " + resource).build(),
+                Permission.builder().resource(resource).action(DELETE).scope(scope).description("Delete " + resource).build()
         };
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Permission that = (Permission) o;
-        return Objects.equals(id, that.id) ||
-                (Objects.equals(resource, that.resource) &&
-                        Objects.equals(action, that.action) &&
-                        Objects.equals(scope, that.scope));
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(resource, action, scope);
-    }
-
-    @Override
-    public String toString() {
-        return "Permission{" +
-                "id=" + id +
-                ", resource='" + resource + '\'' +
-                ", action='" + action + '\'' +
-                ", scope='" + scope + '\'' +
-                ", description='" + description + '\'' +
-                '}';
     }
 }

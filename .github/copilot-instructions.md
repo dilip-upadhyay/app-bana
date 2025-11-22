@@ -200,10 +200,41 @@ Invoke-WebRequest -Uri "http://localhost:8080/apps" | Select-Object StatusCode
 
 ## Best Practices
 
-**Backend Java**:
+**Backend Java (Java 21 LTS)**:
 - Use `AppManager` for all app/page operations (don't write files directly)
 - Jackson ObjectMapper with `INDENT_OUTPUT` for pretty JSON
 - Use System.out logging (logger migration deferred)
+
+**Java 21 Modern Features (ALWAYS USE)**:
+- **Virtual Threads**: Use `Thread.ofVirtual().start(r)` for executors (already in ApiServer)
+- **Records for DTOs**: Use `record` for immutable API responses, never expose entities with sensitive data
+  ```java
+  public record UserDTO(Long id, String email, String name) {
+      public static UserDTO fromUser(User user) { return new UserDTO(user.getId(), ...); }
+  }
+  ```
+- **Switch Expressions**: Use `switch` as expression with `yield`, not statements with `break`
+  ```java
+  String url = switch (type) {
+      case "h2" -> { yield "jdbc:h2:..."; }
+      case "postgres" -> { yield "jdbc:postgresql://..."; }
+      default -> null;
+  };
+  ```
+- **Pattern Matching**: Use `instanceof` with pattern variables
+  ```java
+  if (obj instanceof String s && s.length() > 5) { ... }
+  ```
+- **Text Blocks**: Use `"""` for multi-line SQL, JSON, HTML
+  ```java
+  String sql = """
+      SELECT * FROM users
+      WHERE status = 'active'
+      """;
+  ```
+- **Lombok + Records**: Keep Lombok `@Data` for mutable entities (User, Role), use records for immutable DTOs
+- **NO null returns**: Use `Optional<T>` for potentially absent values
+- **Stream API**: Prefer streams over loops for collections
 
 **Frontend TypeScript**:
 - Import from `appStore` singleton, never instantiate new AppStore
@@ -220,5 +251,5 @@ Invoke-WebRequest -Uri "http://localhost:8080/apps" | Select-Object StatusCode
 
 ---
 
-**Last Updated**: November 12, 2025  
-**Major Changes**: Build process clarification, removed duplicate sections, PropertiesPanel added
+**Last Updated**: November 22, 2025  
+**Major Changes**: Java 21 modernization (virtual threads, records, switch expressions), DTO package created, updated coding standards

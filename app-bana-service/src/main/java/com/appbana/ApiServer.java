@@ -78,73 +78,81 @@ public class ApiServer {
         return null;
     }
 
+    /**
+     * Build JDBC URL from datasource configuration map.
+     * Uses Java 21 switch expressions for cleaner, type-safe URL construction.
+     * 
+     * @param data Configuration map with type, host, port, database name, etc.
+     * @return JDBC URL string or null if type is unknown
+     */
     public static String buildJdbcUrl(Map<String, String> data) {
         String type = Optional.ofNullable(data.get("type")).orElse("").toLowerCase();
         String params = Optional.ofNullable(data.get("params")).orElse("").trim();
-        switch (type) {
-            case "h2": {
+        
+        // Java 21 switch expression - no fall-through, no break, cleaner code
+        String baseUrl = switch (type) {
+            case "h2" -> {
                 String mode = Optional.ofNullable(data.get("h2Mode")).orElse("file");
                 if ("mem".equalsIgnoreCase(mode)) {
                     String name = Optional.ofNullable(data.get("h2MemName")).filter(s -> !s.isBlank()).orElse("test");
-                    String url = "jdbc:h2:mem:" + name + ";DB_CLOSE_DELAY=-1";
-                    if (!params.isEmpty()) url += ";" + params.replaceAll("[&?]+", ";");
-                    return url;
+                    yield "jdbc:h2:mem:" + name + ";DB_CLOSE_DELAY=-1";
                 } else {
                     String file = Optional.ofNullable(data.get("h2File")).filter(s -> !s.isBlank()).orElse("./data/appbana");
-                    String url = "jdbc:h2:" + file + ";AUTO_SERVER=TRUE";
-                    if (!params.isEmpty()) url += ";" + params.replaceAll("[&?]+", ";");
-                    return url;
+                    yield "jdbc:h2:" + file + ";AUTO_SERVER=TRUE";
                 }
             }
-            case "sqlite": {
+            case "sqlite" -> {
                 String file = Optional.ofNullable(data.get("sqliteFile")).filter(s -> !s.isBlank()).orElse("/path/to/file.db");
-                String url = "jdbc:sqlite:" + file;
-                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
-                return url;
+                yield "jdbc:sqlite:" + file;
             }
-            case "postgres": {
+            case "postgres" -> {
                 String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("5432");
                 String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("postgres");
-                String url = "jdbc:postgresql://" + host + ":" + port + "/" + db;
-                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
-                return url;
+                yield "jdbc:postgresql://" + host + ":" + port + "/" + db;
             }
-            case "mysql": {
+            case "mysql" -> {
                 String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("3306");
                 String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("test");
-                String url = "jdbc:mysql://" + host + ":" + port + "/" + db;
-                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
-                return url;
+                yield "jdbc:mysql://" + host + ":" + port + "/" + db;
             }
-            case "mariadb": {
+            case "mariadb" -> {
                 String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("3306");
                 String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("test");
-                String url = "jdbc:mariadb://" + host + ":" + port + "/" + db;
-                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
-                return url;
+                yield "jdbc:mariadb://" + host + ":" + port + "/" + db;
             }
-            case "mssql": {
+            case "mssql" -> {
                 String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("1433");
                 String db = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("master");
+                // SQL Server uses semicolon separator
                 String url = "jdbc:sqlserver://" + host + ":" + port + ";databaseName=" + db;
-                if (!params.isEmpty()) url += ";" + params.replaceAll("[&?]+", ";");
-                return url;
+                if (!params.isEmpty()) {
+                    yield url + ";" + params.replaceAll("[&?]+", ";");
+                }
+                yield url;
             }
-            case "oracle": {
+            case "oracle" -> {
                 String host = Optional.ofNullable(data.get("host")).filter(s -> !s.isBlank()).orElse("localhost");
                 String port = Optional.ofNullable(data.get("port")).filter(s -> !s.isBlank()).orElse("1521");
                 String svc = Optional.ofNullable(data.get("dbname")).filter(s -> !s.isBlank()).orElse("orcl");
-                String url = "jdbc:oracle:thin@" + host + ":" + port + "/" + svc;
-                if (!params.isEmpty()) url += (url.contains("?" ) ? "&" : "?") + params;
-                return url;
+                yield "jdbc:oracle:thin@" + host + ":" + port + "/" + svc;
             }
-            default:
-                return null;
+            default -> null; // Unknown database type
+        };
+        
+        // Append additional params (except for SQL Server which was handled above)
+        if (baseUrl != null && !params.isEmpty() && !"mssql".equals(type)) {
+            String separator = (type.equals("h2")) ? ";" : "?";
+            if (baseUrl.contains(separator)) {
+                separator = (type.equals("h2")) ? ";" : "&";
+            }
+            return baseUrl + separator + params.replaceAll("[&?]+", (type.equals("h2")) ? ";" : "&");
         }
+        
+        return baseUrl;
     }
 
     public static String sanitizeUrl(String url) {

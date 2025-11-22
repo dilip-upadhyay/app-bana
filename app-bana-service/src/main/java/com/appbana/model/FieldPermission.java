@@ -1,7 +1,12 @@
 package com.appbana.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
-import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Field-Level Security (FLS) Permission Entity
@@ -20,13 +25,23 @@ import java.util.Objects;
  * 
  * <h3>Examples</h3>
  * <pre>
- * // Admin can read/write all User fields
- * new FieldPermission("admin-role-id", "User", "*", true, true);
+ * // Admin can read/write all User fields (using Builder)
+ * FieldPermission.builder()
+ *     .roleId("admin-role-id")
+ *     .entityName("User")
+ *     .fieldName("*")
+ *     .readable(true)
+ *     .editable(true)
+ *     .build();
  * 
  * // Manager can read User.salary but not edit
- * new FieldPermission("manager-role-id", "User", "salary", true, false);
- * 
- * // Standard user cannot see salary at all (no permission record)
+ * FieldPermission.builder()
+ *     .roleId("manager-role-id")
+ *     .entityName("User")
+ *     .fieldName("salary")
+ *     .readable(true)
+ *     .editable(false)
+ *     .build();
  * </pre>
  * 
  * <h3>Wildcard Matching</h3>
@@ -36,19 +51,31 @@ import java.util.Objects;
  *   <li>Multiple roles combine (OR logic): read/edit if ANY role grants</li>
  * </ul>
  * 
+ * <p>Uses Lombok for cleaner code with @Builder pattern</p>
+ * 
  * @see com.appbana.service.PermissionService#canReadField(String, String, String)
  * @see com.appbana.service.PermissionService#canEditField(String, String, String)
  */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class FieldPermission {
     
-    private String id;
+    @Builder.Default
+    private String id = UUID.randomUUID().toString();
+    
     private String roleId;
     private String entityName;
     private String fieldName;
     private boolean readable;
     private boolean editable;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
+    
+    @Builder.Default
+    private LocalDateTime updatedAt = LocalDateTime.now();
     
     // Constants for common field names
     public static final String WILDCARD = "*";
@@ -56,47 +83,6 @@ public class FieldPermission {
     public static final String FIELD_SSN = "ssn";
     public static final String FIELD_PASSWORD_HASH = "passwordHash";
     public static final String FIELD_CREDIT_CARD = "creditCard";
-    
-    /**
-     * Default constructor for Jackson deserialization
-     */
-    public FieldPermission() {
-    }
-    
-    /**
-     * Constructor for creating new field permission
-     * 
-     * @param roleId Role ID that has this permission
-     * @param entityName Entity name (e.g., "User", "Project")
-     * @param fieldName Field name or "*" for all fields
-     * @param readable Can the role read this field?
-     * @param editable Can the role edit this field?
-     */
-    public FieldPermission(String roleId, String entityName, String fieldName, 
-                          boolean readable, boolean editable) {
-        this.id = java.util.UUID.randomUUID().toString();
-        this.roleId = roleId;
-        this.entityName = entityName;
-        this.fieldName = fieldName;
-        this.readable = readable;
-        this.editable = editable;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-    }
-    
-    // Getters and Setters
-    
-    public String getId() {
-        return id;
-    }
-    
-    public void setId(String id) {
-        this.id = id;
-    }
-    
-    public String getRoleId() {
-        return roleId;
-    }
     
     public void setRoleId(String roleId) {
         this.roleId = roleId;
@@ -182,7 +168,13 @@ public class FieldPermission {
      */
     public static FieldPermission createWildcard(String roleId, String entityName, 
                                                  boolean readable, boolean editable) {
-        return new FieldPermission(roleId, entityName, WILDCARD, readable, editable);
+        return FieldPermission.builder()
+                .roleId(roleId)
+                .entityName(entityName)
+                .fieldName(WILDCARD)
+                .readable(readable)
+                .editable(editable)
+                .build();
     }
     
     /**
@@ -195,7 +187,13 @@ public class FieldPermission {
      */
     public static FieldPermission createReadOnly(String roleId, String entityName, 
                                                  String fieldName) {
-        return new FieldPermission(roleId, entityName, fieldName, true, false);
+        return FieldPermission.builder()
+                .roleId(roleId)
+                .entityName(entityName)
+                .fieldName(fieldName)
+                .readable(true)
+                .editable(false)
+                .build();
     }
     
     /**
@@ -208,7 +206,13 @@ public class FieldPermission {
      */
     public static FieldPermission createReadWrite(String roleId, String entityName, 
                                                   String fieldName) {
-        return new FieldPermission(roleId, entityName, fieldName, true, true);
+        return FieldPermission.builder()
+                .roleId(roleId)
+                .entityName(entityName)
+                .fieldName(fieldName)
+                .readable(true)
+                .editable(true)
+                .build();
     }
     
     /**
@@ -216,32 +220,5 @@ public class FieldPermission {
      */
     public void touch() {
         this.updatedAt = LocalDateTime.now();
-    }
-    
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        FieldPermission that = (FieldPermission) o;
-        return Objects.equals(id, that.id);
-    }
-    
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
-    
-    @Override
-    public String toString() {
-        return "FieldPermission{" +
-                "id='" + id + '\'' +
-                ", roleId='" + roleId + '\'' +
-                ", entityName='" + entityName + '\'' +
-                ", fieldName='" + fieldName + '\'' +
-                ", readable=" + readable +
-                ", editable=" + editable +
-                ", createdAt=" + createdAt +
-                ", updatedAt=" + updatedAt +
-                '}';
     }
 }
