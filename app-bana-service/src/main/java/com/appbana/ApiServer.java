@@ -1256,8 +1256,8 @@ public class ApiServer {
                             perm.put("roleId", rs.getString("role_id"));
                             perm.put("entityName", rs.getString("entity_name"));
                             perm.put("fieldName", rs.getString("field_name"));
-                            perm.put("readable", rs.getBoolean("readable"));
-                            perm.put("editable", rs.getBoolean("editable"));
+                            perm.put("canRead", rs.getBoolean("can_read"));
+                            perm.put("canEdit", rs.getBoolean("can_edit"));
                             perm.put("createdAt", rs.getTimestamp("created_at"));
                             perm.put("updatedAt", rs.getTimestamp("updated_at"));
                             permissions.add(perm);
@@ -1292,8 +1292,8 @@ public class ApiServer {
                         perm.put("roleId", rs.getString("role_id"));
                         perm.put("entityName", rs.getString("entity_name"));
                         perm.put("fieldName", rs.getString("field_name"));
-                        perm.put("readable", rs.getBoolean("readable"));
-                        perm.put("editable", rs.getBoolean("editable"));
+                        perm.put("canRead", rs.getBoolean("can_read"));
+                        perm.put("canEdit", rs.getBoolean("can_edit"));
                         perm.put("createdAt", rs.getTimestamp("created_at"));
                         perm.put("updatedAt", rs.getTimestamp("updated_at"));
                         res.json(200, perm);
@@ -1319,8 +1319,8 @@ public class ApiServer {
             String roleId = (String) data.get("roleId");
             String entityName = (String) data.get("entityName");
             String fieldName = (String) data.get("fieldName");
-            Boolean readable = (Boolean) data.getOrDefault("readable", false);
-            Boolean editable = (Boolean) data.getOrDefault("editable", false);
+            Boolean canRead = (Boolean) data.getOrDefault("canRead", false);
+            Boolean canEdit = (Boolean) data.getOrDefault("canEdit", false);
             
             if (roleId == null || entityName == null || fieldName == null) {
                 res.json(400, Map.of("error", "roleId, entityName, and fieldName are required"));
@@ -1329,7 +1329,7 @@ public class ApiServer {
             
             try (Connection conn = JdbcManager.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(
-                     "INSERT INTO field_permission (id, role_id, entity_name, field_name, readable, editable, created_at, updated_at) " +
+                     "INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit, created_at, updated_at) " +
                      "VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
                 
                 String id = java.util.UUID.randomUUID().toString();
@@ -1337,8 +1337,8 @@ public class ApiServer {
                 stmt.setString(2, roleId);
                 stmt.setString(3, entityName);
                 stmt.setString(4, fieldName);
-                stmt.setBoolean(5, readable);
-                stmt.setBoolean(6, editable);
+                stmt.setBoolean(5, canRead);
+                stmt.setBoolean(6, canEdit);
                 
                 int inserted = stmt.executeUpdate();
                 
@@ -1367,11 +1367,11 @@ public class ApiServer {
             String id = req.pathParam("id");
             Map<String, Object> data = req.readJson(new TypeReference<>() {});
             
-            Boolean readable = (Boolean) data.get("readable");
-            Boolean editable = (Boolean) data.get("editable");
+            Boolean canRead = (Boolean) data.get("canRead");
+            Boolean canEdit = (Boolean) data.get("canEdit");
             
-            if (readable == null && editable == null) {
-                res.json(400, Map.of("error", "At least one of readable or editable must be provided"));
+            if (canRead == null && canEdit == null) {
+                res.json(400, Map.of("error", "At least one of canRead or canEdit must be provided"));
                 return;
             }
             
@@ -1379,13 +1379,13 @@ public class ApiServer {
                 StringBuilder sql = new StringBuilder("UPDATE field_permission SET updated_at = CURRENT_TIMESTAMP");
                 List<Object> params = new ArrayList<>();
                 
-                if (readable != null) {
-                    sql.append(", readable = ?");
-                    params.add(readable);
+                if (canRead != null) {
+                    sql.append(", can_read = ?");
+                    params.add(canRead);
                 }
-                if (editable != null) {
-                    sql.append(", editable = ?");
-                    params.add(editable);
+                if (canEdit != null) {
+                    sql.append(", can_edit = ?");
+                    params.add(canEdit);
                 }
                 
                 sql.append(" WHERE id = ?");

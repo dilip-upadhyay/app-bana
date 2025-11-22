@@ -297,8 +297,8 @@ public class PermissionService {
         // Check for explicit field permission OR wildcard
         String sql = """
             SELECT 
-                MAX(CAST(fp.readable AS INT)) as max_readable,
-                MAX(CAST(fp.editable AS INT)) as max_editable
+                MAX(CAST(fp.can_read AS INT)) as max_readable,
+                MAX(CAST(fp.can_edit AS INT)) as max_editable
             FROM field_permission fp
             INNER JOIN user_role ur ON fp.role_id = ur.role_id
             WHERE ur.user_id = ? 
