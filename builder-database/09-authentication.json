@@ -1,0 +1,528 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-22T00:00:00Z",
+  "description": "Authentication and Role-Based Access Control (RBAC) capabilities",
+  
+  "overview": {
+    "status": "Available",
+    "features": ["User Authentication", "Role-Based Access Control (RBAC)", "Permission Management", "JWT Tokens", "Password Security"],
+    "implementation": "BCrypt password hashing + JWT tokens + Multi-role RBAC",
+    "securityLevel": "Enterprise-grade"
+  },
+
+  "authenticationEntities": {
+    "User": {
+      "description": "Represents an authenticated user with credentials and profile",
+      "tableName": "app_user",
+      "fields": [
+        {"name": "id", "type": "number", "sqlType": "BIGINT", "protected": true, "description": "Auto-increment primary key"},
+        {"name": "email", "type": "email", "sqlType": "VARCHAR(255)", "unique": true, "required": true, "description": "User email address (login identifier)"},
+        {"name": "password", "type": "password", "sqlType": "VARCHAR(255)", "required": true, "description": "BCrypt hashed password (never return to frontend)"},
+        {"name": "name", "type": "text", "sqlType": "VARCHAR(255)", "required": true, "description": "User display name"},
+        {"name": "status", "type": "status", "sqlType": "VARCHAR(50)", "default": "active", "allowedValues": ["active", "inactive", "suspended", "pending"], "description": "Account status"},
+        {"name": "createdAt", "type": "datetime", "sqlType": "TIMESTAMP", "protected": true, "description": "Account creation timestamp"},
+        {"name": "lastLogin", "type": "datetime", "sqlType": "TIMESTAMP", "description": "Last successful login timestamp"},
+        {"name": "updatedAt", "type": "datetime", "sqlType": "TIMESTAMP", "protected": true, "description": "Last update timestamp"}
+      ],
+      "relationships": [
+        {"type": "manyToMany", "target": "Role", "through": "user_role", "description": "User can have multiple roles"}
+      ],
+      "securityNotes": [
+        "Password field uses BCrypt hash with cost factor 12",
+        "toSafeUser() method removes password before sending to frontend",
+        "Email must be unique and validated",
+        "Status controls account access (only 'active' users can login)"
+      ],
+      "apiEndpoints": [
+        {"method": "POST", "path": "/api/auth/register", "description": "Create new user account"},
+        {"method": "POST", "path": "/api/auth/login", "description": "Authenticate and receive JWT token"},
+        {"method": "GET", "path": "/api/auth/me", "description": "Get current authenticated user"},
+        {"method": "PUT", "path": "/api/users/:id", "description": "Update user profile"},
+        {"method": "GET", "path": "/api/users", "description": "List users (admin only)"}
+      ]
+    },
+
+    "Role": {
+      "description": "Defines a role with a set of permissions",
+      "tableName": "role",
+      "fields": [
+        {"name": "id", "type": "number", "sqlType": "BIGINT", "protected": true},
+        {"name": "name", "type": "text", "sqlType": "VARCHAR(100)", "unique": true, "required": true, "description": "Role name (e.g., 'admin', 'manager', 'user')"},
+        {"name": "description", "type": "longtext", "sqlType": "TEXT", "description": "Role description"},
+        {"name": "isSystem", "type": "boolean", "sqlType": "BOOLEAN", "default": false, "description": "System roles cannot be deleted"},
+        {"name": "createdAt", "type": "datetime", "sqlType": "TIMESTAMP", "protected": true},
+        {"name": "updatedAt", "type": "datetime", "sqlType": "TIMESTAMP", "protected": true}
+      ],
+      "relationships": [
+        {"type": "manyToMany", "target": "User", "through": "user_role", "description": "Role can be assigned to multiple users"},
+        {"type": "manyToMany", "target": "Permission", "through": "role_permission", "description": "Role has multiple permissions"}
+      ],
+      "predefinedRoles": [
+        {
+          "name": "admin",
+          "description": "Full system administrator with all permissions",
+          "isSystem": true,
+          "permissions": ["*:*:all"]
+        },
+        {
+          "name": "manager",
+          "description": "Manager with permissions to manage resources",
+          "isSystem": true,
+          "permissions": ["*:create:all", "*:read:all", "*:update:all", "*:delete:own"]
+        },
+        {
+          "name": "user",
+          "description": "Standard user with basic read/write access",
+          "isSystem": true,
+          "permissions": ["*:read:all", "*:create:own", "*:update:own", "*:delete:own"]
+        }
+      ],
+      "apiEndpoints": [
+        {"method": "GET", "path": "/api/roles", "description": "List all roles"},
+        {"method": "POST", "path": "/api/roles", "description": "Create new role (admin only)"},
+        {"method": "PUT", "path": "/api/roles/:id", "description": "Update role (admin only)"},
+        {"method": "DELETE", "path": "/api/roles/:id", "description": "Delete non-system role (admin only)"},
+        {"method": "POST", "path": "/api/users/:userId/roles/:roleId", "description": "Assign role to user (admin only)"},
+        {"method": "DELETE", "path": "/api/users/:userId/roles/:roleId", "description": "Remove role from user (admin only)"}
+      ]
+    },
+
+    "Permission": {
+      "description": "Granular permission defining what actions users can perform",
+      "tableName": "permission",
+      "fields": [
+        {"name": "id", "type": "number", "sqlType": "BIGINT", "protected": true},
+        {"name": "resource", "type": "text", "sqlType": "VARCHAR(100)", "required": true, "description": "Resource type (entity name or '*' for all)"},
+        {"name": "action", "type": "text", "sqlType": "VARCHAR(50)", "required": true, "description": "Action: create, read, update, delete, or '*' for all"},
+        {"name": "scope", "type": "text", "sqlType": "VARCHAR(50)", "required": true, "default": "all", "description": "Scope: 'all', 'own', 'team'"},
+        {"name": "description", "type": "longtext", "sqlType": "TEXT", "description": "Permission description"},
+        {"name": "createdAt", "type": "datetime", "sqlType": "TIMESTAMP", "protected": true}
+      ],
+      "permissionModel": {
+        "format": "resource:action:scope",
+        "examples": [
+          {"permission": "*:*:all", "description": "Admin - full access to everything"},
+          {"permission": "Project:read:all", "description": "Read all projects"},
+          {"permission": "Project:delete:own", "description": "Delete only own projects"},
+          {"permission": "Invoice:create:team", "description": "Create invoices for team"}
+        ],
+        "wildcardSupport": true,
+        "wildcardRules": [
+          "'*' in resource matches any entity",
+          "'*' in action matches any CRUD operation",
+          "'all' scope overrides 'own' and 'team'"
+        ]
+      },
+      "commonPermissions": [
+        {"resource": "*", "action": "*", "scope": "all", "description": "Super admin permission"},
+        {"resource": "*", "action": "create", "scope": "all", "description": "Create any resource"},
+        {"resource": "*", "action": "read", "scope": "all", "description": "Read any resource"},
+        {"resource": "*", "action": "update", "scope": "all", "description": "Update any resource"},
+        {"resource": "*", "action": "delete", "scope": "all", "description": "Delete any resource"},
+        {"resource": "*", "action": "read", "scope": "own", "description": "Read own records only"},
+        {"resource": "*", "action": "update", "scope": "own", "description": "Update own records only"},
+        {"resource": "*", "action": "delete", "scope": "own", "description": "Delete own records only"}
+      ],
+      "apiEndpoints": [
+        {"method": "GET", "path": "/api/permissions", "description": "List all permissions"},
+        {"method": "POST", "path": "/api/permissions", "description": "Create new permission (admin only)"}
+      ]
+    }
+  },
+
+  "securityImplementation": {
+    "passwordHashing": {
+      "algorithm": "BCrypt",
+      "costFactor": 12,
+      "description": "BCrypt with 2^12 iterations (~250ms per hash)",
+      "service": "com.appbana.service.PasswordService",
+      "methods": [
+        {"name": "hashPassword(String plainPassword)", "returns": "String", "description": "Generate BCrypt hash with random salt"},
+        {"name": "verifyPassword(String plainPassword, String hashedPassword)", "returns": "boolean", "description": "Verify password against hash (constant-time)"},
+        {"name": "isPasswordStrong(String password)", "returns": "boolean", "description": "Validate password meets requirements"}
+      ],
+      "passwordRequirements": {
+        "minLength": 8,
+        "requireUppercase": true,
+        "requireLowercase": true,
+        "requireDigit": true,
+        "requireSpecial": true,
+        "description": "Password must be 8+ chars with uppercase, lowercase, digit, and special character"
+      }
+    },
+
+    "jwtTokens": {
+      "algorithm": "HMAC-SHA256",
+      "expiration": "7 days",
+      "issuer": "appbana",
+      "service": "com.appbana.service.JwtService",
+      "claims": {
+        "subject": "User ID (as string)",
+        "email": "User email address",
+        "name": "User display name",
+        "roles": "Array of role names"
+      },
+      "methods": [
+        {"name": "generateToken(Long userId, String email, String name, List<String> roles)", "returns": "String", "description": "Generate JWT token"},
+        {"name": "verifyToken(String token)", "returns": "DecodedJWT", "description": "Verify signature and expiration"},
+        {"name": "getUserIdFromToken(String token)", "returns": "Long", "description": "Extract user ID from token"},
+        {"name": "getEmailFromToken(String token)", "returns": "String", "description": "Extract email from token"},
+        {"name": "getRolesFromToken(String token)", "returns": "List<String>", "description": "Extract roles from token"},
+        {"name": "extractTokenFromHeader(String authHeader)", "returns": "String", "description": "Parse 'Bearer <token>' format"}
+      ],
+      "usage": {
+        "frontend": "Store token in localStorage or sessionStorage",
+        "apiCalls": "Include 'Authorization: Bearer <token>' header",
+        "expiredToken": "Return 401 Unauthorized, frontend redirects to login"
+      }
+    },
+
+    "authenticationFlow": {
+      "registration": [
+        "1. User fills registration form (email, password, name)",
+        "2. Frontend validates password strength",
+        "3. POST /api/auth/register",
+        "4. Backend validates email uniqueness",
+        "5. Backend hashes password with BCrypt",
+        "6. Backend creates user with 'pending' or 'active' status",
+        "7. Backend generates JWT token",
+        "8. Frontend stores token and redirects to dashboard"
+      ],
+      "login": [
+        "1. User enters email and password",
+        "2. POST /api/auth/login",
+        "3. Backend finds user by email",
+        "4. Backend verifies password with BCrypt",
+        "5. Backend checks user status is 'active'",
+        "6. Backend updates last_login timestamp",
+        "7. Backend generates JWT token with user's roles",
+        "8. Frontend stores token and redirects to dashboard"
+      ],
+      "protectedRequest": [
+        "1. Frontend includes 'Authorization: Bearer <token>' header",
+        "2. Backend extracts token from header",
+        "3. Backend verifies JWT signature and expiration",
+        "4. Backend extracts user ID from token",
+        "5. Backend loads user and checks status",
+        "6. Backend checks permissions for requested action",
+        "7. If authorized: process request",
+        "8. If unauthorized: return 403 Forbidden"
+      ],
+      "logout": [
+        "1. Frontend removes token from storage",
+        "2. Optional: POST /api/auth/logout to invalidate token on server",
+        "3. Redirect to login page"
+      ]
+    },
+
+    "rbacImplementation": {
+      "permissionCheck": {
+        "method": "hasPermission(userId, resource, action, recordOwnerId)",
+        "logic": [
+          "1. Load user's roles from user_role table",
+          "2. Load all permissions for those roles from role_permission table",
+          "3. Check if any permission matches (resource, action, scope)",
+          "4. If permission scope is 'own', verify recordOwnerId == userId",
+          "5. If permission scope is 'team', verify user is in same team",
+          "6. If permission scope is 'all', grant access",
+          "7. Wildcard '*' in resource or action matches anything"
+        ],
+        "examples": [
+          {
+            "scenario": "Admin deletes any project",
+            "userRole": "admin",
+            "permission": "*:*:all",
+            "request": "DELETE /api/projects/123",
+            "result": "Allowed (admin has wildcard permission)"
+          },
+          {
+            "scenario": "Manager updates own project",
+            "userRole": "manager",
+            "permission": "*:update:all",
+            "request": "PUT /api/projects/123",
+            "result": "Allowed (manager can update all projects)"
+          },
+          {
+            "scenario": "User deletes own project",
+            "userRole": "user",
+            "permission": "*:delete:own",
+            "request": "DELETE /api/projects/123 (owned by user)",
+            "result": "Allowed (user owns the project)"
+          },
+          {
+            "scenario": "User deletes other's project",
+            "userRole": "user",
+            "permission": "*:delete:own",
+            "request": "DELETE /api/projects/456 (owned by someone else)",
+            "result": "Denied (user can only delete own projects)"
+          }
+        ]
+      },
+      "uiIntegration": {
+        "description": "Frontend checks permissions to show/hide UI elements",
+        "components": [
+          {"component": "DataTableElement", "feature": "Hide delete button if user lacks delete permission"},
+          {"component": "FormElement", "feature": "Disable submit button if user lacks create/update permission"},
+          {"component": "ButtonElement", "feature": "Conditional rendering based on hasPermission()"},
+          {"component": "NavigationElement", "feature": "Hide menu items based on permissions"}
+        ],
+        "authStore": {
+          "file": "src/builder/store/AuthStore.ts",
+          "methods": [
+            {"name": "hasRole(roleName: string)", "returns": "boolean", "description": "Check if user has specific role"},
+            {"name": "hasPermission(resource: string, action: string)", "returns": "boolean", "description": "Check if user has specific permission"},
+            {"name": "isAdmin()", "returns": "boolean", "description": "Check if user is admin"},
+            {"name": "getCurrentUser()", "returns": "User | null", "description": "Get current authenticated user"}
+          ]
+        }
+      }
+    }
+  },
+
+  "aiGenerationPatterns": {
+    "detectAuthRequirement": {
+      "triggers": [
+        "User mentions 'login', 'register', 'sign up', 'authentication', 'secure'",
+        "User mentions 'users', 'accounts', 'profiles'",
+        "User mentions 'admin', 'manager', 'roles', 'permissions'",
+        "User asks for 'multi-user' or 'team' application",
+        "User mentions 'access control', 'security', 'protect'"
+      ],
+      "aiResponse": "Automatically include User, Role, Permission entities + authentication pages"
+    },
+
+    "authenticationAppPattern": {
+      "entities": [
+        {
+          "name": "User",
+          "fields": [
+            {"name": "email", "type": "email", "required": true},
+            {"name": "password", "type": "password", "required": true},
+            {"name": "name", "type": "text", "required": true},
+            {"name": "status", "type": "status", "allowedValues": ["active", "inactive"]}
+          ]
+        },
+        {
+          "name": "Role",
+          "fields": [
+            {"name": "name", "type": "text", "required": true},
+            {"name": "description", "type": "longtext"}
+          ]
+        }
+      ],
+      "pages": [
+        {
+          "name": "Login",
+          "type": "form",
+          "components": [
+            {"type": "input", "props": {"type": "email", "label": "Email", "required": true}},
+            {"type": "input", "props": {"type": "password", "label": "Password", "required": true}},
+            {"type": "button", "props": {"label": "Login", "variant": "primary"}}
+          ]
+        },
+        {
+          "name": "Register",
+          "type": "form",
+          "components": [
+            {"type": "input", "props": {"type": "text", "label": "Name", "required": true}},
+            {"type": "input", "props": {"type": "email", "label": "Email", "required": true}},
+            {"type": "input", "props": {"type": "password", "label": "Password", "required": true}},
+            {"type": "checkbox", "props": {"label": "I agree to terms and conditions", "required": true}},
+            {"type": "button", "props": {"label": "Register", "variant": "primary"}}
+          ]
+        }
+      ]
+    },
+
+    "examplePrompts": [
+      {
+        "userPrompt": "Create a project management app with user authentication",
+        "aiResponse": {
+          "entities": [
+            "User (email, password, name, status)",
+            "Role (name, description)",
+            "Project (name, description, ownerId:User)"
+          ],
+          "pages": [
+            "Login page",
+            "Register page",
+            "Projects dashboard (protected, requires login)",
+            "Project details (protected, owner can edit)"
+          ],
+          "notes": "Users must login to access projects. Project owner can edit/delete their projects."
+        }
+      },
+      {
+        "userPrompt": "Build an e-commerce store with admin and customer roles",
+        "aiResponse": {
+          "entities": [
+            "User (email, password, name, status)",
+            "Role (name: 'admin' | 'customer')",
+            "Product (name, price, stock)",
+            "Order (userId:User, total, status)"
+          ],
+          "pages": [
+            "Login page",
+            "Register page",
+            "Customer dashboard (view products, place orders)",
+            "Admin dashboard (manage products, view all orders)"
+          ],
+          "permissions": [
+            "Admin: Full CRUD on Product and Order",
+            "Customer: Read Product, Create/Read own Orders"
+          ]
+        }
+      },
+      {
+        "userPrompt": "Create a blog where only admins can publish posts",
+        "aiResponse": {
+          "entities": [
+            "User (email, password, name, status)",
+            "Role (name: 'admin' | 'reader')",
+            "Post (title, content, authorId:User, published:boolean)"
+          ],
+          "pages": [
+            "Login page",
+            "Register page",
+            "Blog homepage (public, shows published posts)",
+            "Admin dashboard (create/edit/publish posts)",
+            "Reader dashboard (view posts, cannot publish)"
+          ],
+          "permissions": [
+            "Admin: Full CRUD on Post + set published=true",
+            "Reader: Read published posts only"
+          ]
+        }
+      }
+    ]
+  },
+
+  "bestPractices": {
+    "security": [
+      "Never store plain-text passwords",
+      "Always use BCrypt with salt for password hashing",
+      "Use JWT tokens with expiration (7 days max)",
+      "Validate JWT signature on every protected request",
+      "Use HTTPS in production to prevent token interception",
+      "Implement rate limiting on login endpoint (prevent brute force)",
+      "Log all authentication events for audit trail",
+      "Validate password strength on registration",
+      "Use constant-time comparison for password verification (prevent timing attacks)"
+    ],
+    "rbac": [
+      "Default to least privilege (deny by default)",
+      "Use wildcard permissions sparingly (only for admin)",
+      "Prefer scope='own' for user-generated content",
+      "System roles (admin, manager, user) cannot be deleted",
+      "Check permissions on backend, not just frontend",
+      "Frontend hides UI elements, backend enforces permissions",
+      "Log permission checks for debugging",
+      "Cache user permissions in JWT token to reduce DB queries"
+    ],
+    "frontend": [
+      "Store JWT token in localStorage (or sessionStorage for extra security)",
+      "Include 'Authorization: Bearer <token>' header on all API calls",
+      "Redirect to login page on 401 Unauthorized",
+      "Show 'Permission Denied' message on 403 Forbidden",
+      "Use AuthStore singleton for global auth state",
+      "Hide sensitive UI elements based on permissions (hasPermission())",
+      "Clear token and redirect to login on logout"
+    ]
+  },
+
+  "databaseSchema": {
+    "file": "app-bana-service/src/main/resources/db/auth-schema.sql",
+    "tables": 7,
+    "views": 3,
+    "storedProcedures": 3,
+    "description": "Complete authentication schema with User, Role, Permission, user_role (junction), role_permission (junction), user_session (optional), audit_log"
+  },
+
+  "frontendComponents": {
+    "planned": [
+      {"file": "LoginForm.ts", "status": "Pending", "description": "Login form with email and password"},
+      {"file": "RegisterForm.ts", "status": "Pending", "description": "Registration form with validation"},
+      {"file": "AuthStore.ts", "status": "Pending", "description": "MobX store for authentication state"},
+      {"file": "RoleManager.ts", "status": "Pending", "description": "Admin UI to assign roles to users"},
+      {"file": "PermissionGuard.ts", "status": "Pending", "description": "Higher-order component to protect routes"}
+    ]
+  },
+
+  "apiEndpoints": {
+    "baseUrl": "http://localhost:8080",
+    "authentication": [
+      {
+        "method": "POST",
+        "path": "/api/auth/register",
+        "request": {"email": "string", "password": "string", "name": "string"},
+        "response": {"user": "User", "token": "string"},
+        "errors": ["400: Invalid email", "400: Weak password", "409: Email already exists"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/login",
+        "request": {"email": "string", "password": "string"},
+        "response": {"user": "User", "token": "string"},
+        "errors": ["400: Invalid credentials", "403: Account inactive"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/auth/me",
+        "headers": {"Authorization": "Bearer <token>"},
+        "response": {"user": "User", "roles": ["string"], "permissions": ["string"]},
+        "errors": ["401: Invalid token", "401: Token expired"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/logout",
+        "headers": {"Authorization": "Bearer <token>"},
+        "response": {"message": "Logged out successfully"},
+        "errors": ["401: Invalid token"]
+      }
+    ],
+    "userManagement": [
+      {
+        "method": "GET",
+        "path": "/api/users",
+        "requiredPermission": "User:read:all",
+        "response": {"users": ["User"]},
+        "description": "List all users (admin only)"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/users/:id",
+        "requiredPermission": "User:update:own or User:update:all",
+        "request": {"name": "string", "email": "string"},
+        "response": {"user": "User"},
+        "description": "Update user profile"
+      },
+      {
+        "method": "POST",
+        "path": "/api/users/:userId/roles/:roleId",
+        "requiredPermission": "Role:assign:all",
+        "response": {"message": "Role assigned"},
+        "description": "Assign role to user (admin only)"
+      }
+    ]
+  },
+
+  "integrationStatus": {
+    "backend": {
+      "models": "Complete (User.java, Role.java, Permission.java)",
+      "services": "Complete (PasswordService.java, JwtService.java)",
+      "database": "Complete (auth-schema.sql)",
+      "endpoints": "Pending (POST /api/auth/register, login, me)",
+      "middleware": "Pending (AuthenticationFilter.java)"
+    },
+    "frontend": {
+      "store": "Pending (AuthStore.ts)",
+      "components": "Pending (LoginForm.ts, RegisterForm.ts)",
+      "permissionChecks": "Pending (hasPermission() in DataTableElement, FormElement)"
+    },
+    "aiBuilder": {
+      "entityGeneration": "Pending (User, Role entities not in builder-database)",
+      "pageGeneration": "Pending (Login, Register page templates not in 04-pages.json)",
+      "promptEnhancement": "Pending (Auth patterns not loaded in AiSystemPrompts.java)"
+    }
+  }
+}

@@ -81,6 +81,15 @@ public class AiSystemPrompts {
                 prompt.append("\n\n");
             }
             
+            // Load authentication capabilities
+            String authContent = loadBuilderDatabaseFile("09-authentication.json");
+            if (authContent != null) {
+                JsonNode auth = mapper.readTree(authContent);
+                prompt.append("### Authentication & RBAC Capabilities:\n");
+                prompt.append(formatAuthenticationCapabilities(auth));
+                prompt.append("\n\n");
+            }
+            
             LOG.info("Successfully loaded builder database content into AI prompt");
         } catch (Exception e) {
             LOG.warn("Failed to load builder database content, using base prompt only: {}", e.getMessage());
@@ -268,6 +277,73 @@ public class AiSystemPrompts {
                 }
             }
         }
+        
+        return sb.toString();
+    }
+    
+    /**
+     * Format authentication capabilities from authentication database
+     */
+    private static String formatAuthenticationCapabilities(JsonNode auth) {
+        StringBuilder sb = new StringBuilder();
+        
+        sb.append("**🔐 AUTHENTICATION & RBAC AVAILABLE**:\n");
+        sb.append("AppBana has enterprise-grade authentication built-in. Use when user mentions:\n");
+        sb.append("- 'login', 'register', 'sign up', 'authentication', 'secure'\n");
+        sb.append("- 'users', 'accounts', 'profiles'\n");
+        sb.append("- 'admin', 'manager', 'roles', 'permissions'\n");
+        sb.append("- 'multi-user', 'team', 'access control', 'security'\n\n");
+        
+        // Show available auth entities
+        JsonNode entities = auth.get("authenticationEntities");
+        if (entities != null) {
+            sb.append("**Auth Entities** (automatically include when needed):\n");
+            
+            JsonNode user = entities.get("User");
+            if (user != null) {
+                sb.append("  - **User**: email (unique), password (BCrypt hashed), name, status (active/inactive)\n");
+            }
+            
+            JsonNode role = entities.get("Role");
+            if (role != null) {
+                sb.append("  - **Role**: name, description, permissions (many-to-many with User)\n");
+                sb.append("    Predefined: admin (full access), manager (create/read/update all), user (read all, CRUD own)\n");
+            }
+            
+            JsonNode permission = entities.get("Permission");
+            if (permission != null) {
+                sb.append("  - **Permission**: resource:action:scope (e.g., 'Project:delete:own')\n");
+                sb.append("    Actions: create, read, update, delete\n");
+                sb.append("    Scopes: all (any record), own (user's records only), team (team records)\n\n");
+            }
+        }
+        
+        // Show authentication flow
+        JsonNode aiPatterns = auth.get("aiGenerationPatterns");
+        if (aiPatterns != null) {
+            JsonNode pattern = aiPatterns.get("authenticationAppPattern");
+            if (pattern != null) {
+                sb.append("**When Generating Auth-Enabled Apps**:\n");
+                sb.append("1. Include User, Role entities automatically\n");
+                sb.append("2. Add Login and Register pages\n");
+                sb.append("3. Protect other pages (requiresAuth: true)\n");
+                sb.append("4. Set up default roles: admin, manager, user\n\n");
+            }
+            
+            JsonNode examples = aiPatterns.get("examplePrompts");
+            if (examples != null && examples.isArray() && examples.size() > 0) {
+                sb.append("**Example**: If user says 'Create a project management app with user authentication':\n");
+                sb.append("- Generate: User (email, password, name), Role (name), Project (name, ownerId:User)\n");
+                sb.append("- Pages: Login, Register, Projects Dashboard (protected), Project Details\n");
+                sb.append("- Permissions: Project owner can edit/delete, others can only view\n\n");
+            }
+        }
+        
+        sb.append("**Security Notes**:\n");
+        sb.append("- Passwords are BCrypt hashed (cost 12) - NEVER store plain text\n");
+        sb.append("- JWT tokens expire after 7 days\n");
+        sb.append("- Permission checks on both frontend (UI) and backend (API)\n");
+        sb.append("- Status='active' required to login\n");
         
         return sb.toString();
     }

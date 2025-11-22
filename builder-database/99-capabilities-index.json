@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "lastUpdated": "2025-11-22T00:00:00Z",
   "description": "Quick reference index for all AppBana capabilities",
   
@@ -8,8 +8,9 @@
     "totalFieldTypes": 38,
     "totalDatasources": 25,
     "totalPageTemplates": 7,
-    "totalApiEndpoints": 38,
-    "totalIntentPatterns": 8
+    "totalApiEndpoints": 42,
+    "totalIntentPatterns": 8,
+    "authenticationEnabled": true
   },
 
   "quickReference": {
@@ -82,6 +83,21 @@
       "baseURL": "http://localhost:8080",
       "keyFiles": ["app-bana-service/src/main/java/com/appbana/ApiServer.java"]
     },
+    "authentication": {
+      "file": "09-authentication.json",
+      "status": "Available",
+      "entities": ["User", "Role", "Permission"],
+      "features": ["User Authentication", "RBAC", "JWT Tokens", "BCrypt Passwords"],
+      "endpoints": ["/api/auth/register", "/api/auth/login", "/api/auth/me", "/api/auth/logout"],
+      "keyFiles": [
+        "com.appbana.model.User",
+        "com.appbana.model.Role",
+        "com.appbana.model.Permission",
+        "com.appbana.service.PasswordService",
+        "com.appbana.service.JwtService"
+      ],
+      "securityLevel": "Enterprise-grade"
+    },
     "aiCaching": {
       "intentCache": {
         "purpose": "Cache action classifications (user text → ActionDescriptor)",
@@ -152,6 +168,14 @@
 
   "recentEnhancements": [
     {
+      "title": "User Authentication & RBAC",
+      "date": "2025-11-22",
+      "summary": "Enterprise-grade authentication with BCrypt password hashing, JWT tokens, and Role-Based Access Control (RBAC). Supports multi-role users, granular permissions (resource:action:scope), and secure session management.",
+      "docs": ["docs/AUTH_RBAC_DESIGN.md", "docs/AUTH_PROGRESS.md"],
+      "builderImpact": "AI agents can now generate User, Role, Permission entities. When user mentions 'login', 'authentication', 'secure', 'users', or 'admin', AI should automatically include auth entities and pages.",
+      "status": "Backend Complete, Frontend Pending"
+    },
+    {
       "title": "SmallTalk Response Caching",
       "date": "2025-11-16",
       "summary": "3-tier caching strategy (Pattern → Cache → GPT) to minimize OpenAI costs for repeated conversational queries. 30% cost reduction, 10x faster responses.",
@@ -178,7 +202,9 @@
       "05-datasources.json",
       "06-styling.json",
       "07-validation.json",
-      "08-api-endpoints.json"
+      "08-api-endpoints.json",
+      "09-authentication.json",
+      "10-form-patterns.json"
     ],
     "index": "99-capabilities-index.json"
   }
