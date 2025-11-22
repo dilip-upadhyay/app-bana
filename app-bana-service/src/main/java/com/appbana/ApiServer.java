@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.*;
 import com.appbana.model.EntitySchema;
 import com.appbana.model.AppMetadata;
+import org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -235,6 +236,26 @@ public class ApiServer {
 
     public static void startJdk(int port) throws IOException {
         AppConfig cfg = ConfigManager.getConfig();
+        
+        // Run Flyway migrations BEFORE initializing services
+        try {
+            LOG.info("Running Flyway database migrations...");
+            Flyway flyway = Flyway.configure()
+                    .dataSource(cfg.getJdbcUrl(), cfg.getUsername(), cfg.getPassword())
+                    .locations("classpath:db/migration")
+                    .cleanDisabled(false)  // Allow clean for development
+                    .load();
+            
+            // Clean and recreate schema (DEVELOPMENT ONLY)
+            LOG.warn("Cleaning database - all data will be lost (development mode)");
+            flyway.clean();
+            
+            int migrationsApplied = flyway.migrate().migrationsExecuted;
+            LOG.info("Flyway migrations complete: {} migrations applied", migrationsApplied);
+        } catch (Exception e) {
+            LOG.error("Flyway migration failed: {}", e.getMessage(), e);
+            throw new RuntimeException("Database migration failed", e);
+        }
         
         // Initialize PermissionService with datasource
         try {

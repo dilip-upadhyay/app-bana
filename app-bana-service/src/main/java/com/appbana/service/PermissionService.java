@@ -114,10 +114,10 @@ public class PermissionService {
         
         List<String> fields = new ArrayList<>();
         String sql = """
-            SELECT DISTINCT fp.field_name, fp.readable
+            SELECT DISTINCT fp.field_name, fp.can_read
             FROM field_permission fp
             INNER JOIN user_role ur ON fp.role_id = ur.role_id
-            WHERE ur.user_id = ? AND fp.entity_name = ? AND fp.readable = TRUE
+            WHERE ur.user_id = ? AND fp.entity_name = ? AND fp.can_read = TRUE
             ORDER BY CASE WHEN fp.field_name = '*' THEN 0 ELSE 1 END, fp.field_name
             """;
         
@@ -153,10 +153,10 @@ public class PermissionService {
         
         List<String> fields = new ArrayList<>();
         String sql = """
-            SELECT DISTINCT fp.field_name, fp.editable
+            SELECT DISTINCT fp.field_name, fp.can_edit
             FROM field_permission fp
             INNER JOIN user_role ur ON fp.role_id = ur.role_id
-            WHERE ur.user_id = ? AND fp.entity_name = ? AND fp.editable = TRUE
+            WHERE ur.user_id = ? AND fp.entity_name = ? AND fp.can_edit = TRUE
             ORDER BY CASE WHEN fp.field_name = '*' THEN 0 ELSE 1 END, fp.field_name
             """;
         
