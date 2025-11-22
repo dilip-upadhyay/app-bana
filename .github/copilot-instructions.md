@@ -9,22 +9,22 @@ AppBana is a **metadata-driven platform** generating end-to-end functionality fr
 
 ### 1. Authentication Phase 1 - Enterprise Features 🔴 HIGHEST PRIORITY
 **Status**: Week 1-2 of 6-week implementation  
-**Grade**: 6/10 → 8.5/10 (Enterprise-Ready)  
+**Grade**: 7.5/10 → 8.5/10 (Enterprise-Ready)  
 **Impact**: $500K-2M ARR unlock (Healthcare/Finance TAM: $80M-160M)
 
-**Field-Level Security (FLS)** - 40% Complete:
+**Field-Level Security (FLS)** - 70% Complete:
 - ✅ Database: `field_permission` table + indexes + seed data
 - ✅ Entity: `FieldPermission.java` (Lombok, 155 lines)
 - ✅ Service: `PermissionService.java` (6 methods, 5-min cache)
-- ⏳ REST API: GET/PUT filtering (HIGH PRIORITY - NEXT)
-- ⏳ UI: Field masking in FormElement
-- ❌ Tests: 7 integration test scenarios
+- ✅ REST API: GET/PUT filtering + FLS CRUD endpoints (COMPLETE)
+- ⏳ UI: Field masking in FormElement (20% - NEXT)
+- ⏳ Tests: JUnit tests for PermissionService (0% - HIGH PRIORITY)
 
 **Next Steps**:
-1. Integrate `PermissionService` into `ApiServer` REST endpoints
-2. Create `/api/field-permissions` CRUD endpoints
-3. Add JUnit tests for `PermissionService`
-4. Update `FormElement.ts` for field masking
+1. Add JUnit tests for `PermissionService` (7 test scenarios)
+2. Update `FormElement.ts` for field masking
+3. Document FLS API in OpenAPI spec
+4. Test with Postman/PowerShell
 
 **Upcoming** (Weeks 2-6): Profile Layer → Role Hierarchy → Session Management → Multi-Tenancy
 
