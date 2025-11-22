@@ -318,6 +318,32 @@ public class AiSystemPrompts {
             }
         }
         
+        // Show Field-Level Security (FLS) if available
+        JsonNode fls = auth.get("fieldLevelSecurity");
+        if (fls != null) {
+            String flsStatus = fls.has("status") ? fls.get("status").asText() : "Available";
+            sb.append("**🔒 FIELD-LEVEL SECURITY (FLS)** - " + flsStatus + ":\n");
+            sb.append("For HIPAA/PCI-DSS compliance, AppBana supports granular field-level permissions:\n");
+            sb.append("  - **FieldPermission**: roleId, entityName, fieldName, readable, editable\n");
+            sb.append("  - Wildcard support: fieldName='*' grants access to all fields\n");
+            sb.append("  - Use for sensitive fields: SSN, salary, credit cards, medical records\n");
+            sb.append("  - REST API: GET/PUT automatically filter by permissions\n");
+            sb.append("  - Management endpoints: /api/field-permissions (CRUD)\n\n");
+            
+            // Show FLS examples
+            JsonNode examples = fls.get("examples");
+            if (examples != null && examples.isArray() && examples.size() > 0) {
+                sb.append("**FLS Examples**:\n");
+                for (JsonNode example : examples) {
+                    String scenario = example.has("scenario") ? example.get("scenario").asText() : "";
+                    if (!scenario.isEmpty()) {
+                        sb.append("  - " + scenario + "\n");
+                    }
+                }
+                sb.append("\n");
+            }
+        }
+        
         // Show authentication flow
         JsonNode aiPatterns = auth.get("aiGenerationPatterns");
         if (aiPatterns != null) {

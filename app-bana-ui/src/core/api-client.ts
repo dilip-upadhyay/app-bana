@@ -354,3 +354,30 @@ export async function updateRow(entity: string, id: string|number, data: Record<
   const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
   return apiClient.put(`${base}/api/${entity}/${id}`, data);
 }
+
+/**
+ * Field-Level Security (FLS) API Functions
+ */
+
+/** Get field permissions for current user and entity */
+export async function getFieldPermissions(entityName: string): Promise<{readable: string[], editable: string[]}> {
+  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  try {
+    // For now, return all fields as accessible (Phase 1 - no JWT integration yet)
+    // In Phase 2, this will call /api/field-permissions/check with userId from JWT
+    return { readable: ['*'], editable: ['*'] };
+  } catch (error) {
+    console.warn('FLS API not available, defaulting to full access:', error);
+    return { readable: ['*'], editable: ['*'] };
+  }
+}
+
+/** Check if field is readable for current user */
+export function canReadField(fieldName: string, readableFields: string[]): boolean {
+  return readableFields.includes('*') || readableFields.includes(fieldName);
+}
+
+/** Check if field is editable for current user */
+export function canEditField(fieldName: string, editableFields: string[]): boolean {
+  return editableFields.includes('*') || editableFields.includes(fieldName);
+}

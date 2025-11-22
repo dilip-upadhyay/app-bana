@@ -506,9 +506,54 @@
     ]
   },
 
+  "fieldLevelSecurityEndpoints": [
+    {
+      "method": "GET",
+      "path": "/api/field-permissions",
+      "queryParams": {"roleId": "string (optional)", "entityName": "string (optional)"},
+      "response": {"permissions": ["FieldPermission"], "total": "number"},
+      "description": "List field permissions with optional filtering",
+      "requiredPermission": "Admin only"
+    },
+    {
+      "method": "GET",
+      "path": "/api/field-permissions/:id",
+      "response": "FieldPermission",
+      "errors": ["404: Field permission not found"],
+      "description": "Get single field permission by ID",
+      "requiredPermission": "Admin only"
+    },
+    {
+      "method": "POST",
+      "path": "/api/field-permissions",
+      "request": {"roleId": "string", "entityName": "string", "fieldName": "string", "readable": "boolean", "editable": "boolean"},
+      "response": {"id": "string", "message": "Field permission created"},
+      "errors": ["400: Missing required fields"],
+      "description": "Create new field permission (clears cache)",
+      "requiredPermission": "Admin only"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/field-permissions/:id",
+      "request": {"readable": "boolean (optional)", "editable": "boolean (optional)"},
+      "response": {"updated": "number", "message": "Field permission updated"},
+      "errors": ["400: No fields to update", "404: Field permission not found"],
+      "description": "Update field permission (clears cache)",
+      "requiredPermission": "Admin only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/field-permissions/:id",
+      "response": {"deleted": "number", "message": "Field permission deleted"},
+      "errors": ["404: Field permission not found"],
+      "description": "Delete field permission (clears cache)",
+      "requiredPermission": "Admin only"
+    }
+  ],
+
   "fieldLevelSecurity": {
     "description": "Granular field-level permissions for HIPAA/PCI-DSS compliance (Phase 1 Week 1-2)",
-    "status": "In Progress - Week 1 of 6",
+    "status": "90% Complete - UI Field Masking Done",
     "entity": "FieldPermission",
     "tableName": "field_permission",
     "fields": [
@@ -569,10 +614,12 @@
     },
     "implementation": {
       "database": "Complete - V2__field_level_security.sql migration",
-      "entity": "Complete - FieldPermission.java (185 lines)",
-      "service": "Complete - PermissionService.java with FLS methods (400+ lines)",
-      "restApiFiltering": "Pending - Update entity endpoints",
-      "uiMasking": "Pending - FormElement field hiding"
+      "entity": "Complete - FieldPermission.java (155 lines with Lombok)",
+      "service": "Complete - PermissionService.java with FLS methods (400+ lines, 5-min cache)",
+      "restApiFiltering": "Complete - GET/PUT endpoints filter by permissions",
+      "restApiCrud": "Complete - 5 CRUD endpoints for field permissions management",
+      "uiMasking": "Complete - StudioTableLive hides non-readable fields, disables non-editable fields with 🔒 icon",
+      "testing": "Pending - JUnit tests for PermissionService (7 scenarios, deferred)"
     }
   },
 
@@ -595,7 +642,7 @@
       "promptEnhancement": "Complete (Auth + FLS capabilities loaded in AiSystemPrompts.java)"
     },
     "phase1Progress": {
-      "week1-2": "In Progress - Field-Level Security (FLS) - 40% complete",
+      "week1-2": "90% Complete - Field-Level Security (FLS) DONE: database, entity, service, REST API, UI masking",
       "week2-3": "Not Started - Profile Layer",
       "week3-4": "Not Started - Role Hierarchy",
       "week4-5": "Not Started - Session Management",

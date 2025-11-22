@@ -1,7 +1,7 @@
 // StudioTableLive.ts - Lit component for runtime table rendering with live data
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { fetchTableData, bulkDelete, bulkExport, updateRow } from '../../core/api-client';
+import { fetchTableData, bulkDelete, bulkExport, updateRow, getFieldPermissions, canReadField, canEditField } from '../../core/api-client';
 import type { ComponentNode } from '../../models/metadata';
 
 @customElement('studio-table-live')
@@ -27,6 +27,7 @@ export class StudioTableLive extends LitElement {
   @state() private viewRow: any = null;
   @state() private editMode: boolean = false;
   @state() private editValues: Record<string,any> = {};
+  @state() private fieldPermissions: {readable: string[], editable: string[]} | null = null;
 
   public static readonly styles = css`
     .table-container {
@@ -344,6 +345,23 @@ export class StudioTableLive extends LitElement {
   // Use lifecycle without returning a Promise type per lint rule; wrap async logic
   firstUpdated() {
     this.initializeTable();
+  }
+
+  async connectedCallback() {
+    super.connectedCallback();
+    // Load field permissions for FLS
+    await this.loadFieldPermissions();
+  }
+
+  private async loadFieldPermissions() {
+    const entity = this.node?.props?.entity;
+    if (!entity) return;
+    try {
+      this.fieldPermissions = await getFieldPermissions(entity);
+    } catch (error) {
+      console.warn('Failed to load field permissions, defaulting to full access:', error);
+      this.fieldPermissions = { readable: ['*'], editable: ['*'] };
+    }
   }
 
   protected updated(): void {
@@ -867,6 +885,12 @@ export class StudioTableLive extends LitElement {
       const label = fd.label || fd.name;
       const rawValue = this.viewRow[fd.name];
       const type = fd.type || this.inferValueType(rawValue);
+      
+      // Apply FLS: Hide non-readable fields
+      if (this.fieldPermissions && !canReadField(fd.name, this.fieldPermissions.readable)) {
+        return html``; // Field hidden (user cannot read)
+      }
+      
       if (this.editMode) return this.renderEditableField(fd, label, type);
       const display = this.formatDisplayValue(type, rawValue);
       return html`<div class="view-field"><label>${label}</label><div class="view-value">${display}</div></div>`;
@@ -875,16 +899,21 @@ export class StudioTableLive extends LitElement {
 
   private renderEditableField(fd: any, label: string, type: string) {
     const current = this.editValues[fd.name];
+    
+    // Apply FLS: Disable non-editable fields
+    const disabled = this.fieldPermissions && !canEditField(fd.name, this.fieldPermissions.editable);
+    const lockIcon = disabled ? ' 🔒' : '';
+    
     if (type === 'textarea') {
-      return html`<div class="view-field"><label>${label}</label><textarea style="resize:vertical;min-height:70px;font-size:0.8rem;" .value=${current ?? ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLTextAreaElement).value)}></textarea></div>`;
+      return html`<div class="view-field"><label>${label}${lockIcon}</label><textarea style="resize:vertical;min-height:70px;font-size:0.8rem;" .value=${current ?? ''} ?disabled=${disabled} title=${disabled ? 'Field is read-only (no edit permission)' : ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLTextAreaElement).value)}></textarea></div>`;
     }
     if (type === 'date') {
-      return html`<div class="view-field"><label>${label}</label><input type="date" .value=${this.toDateInputValue(current)} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLInputElement).value)}></div>`;
+      return html`<div class="view-field"><label>${label}${lockIcon}</label><input type="date" .value=${this.toDateInputValue(current)} ?disabled=${disabled} title=${disabled ? 'Field is read-only (no edit permission)' : ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLInputElement).value)}></div>`;
     }
     if (type === 'number') {
-      return html`<div class="view-field"><label>${label}</label><input type="number" .value=${current ?? ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLInputElement).value)}></div>`;
+      return html`<div class="view-field"><label>${label}${lockIcon}</label><input type="number" .value=${current ?? ''} ?disabled=${disabled} title=${disabled ? 'Field is read-only (no edit permission)' : ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLInputElement).value)}></div>`;
     }
-    return html`<div class="view-field"><label>${label}</label><input type="text" .value=${current ?? ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLInputElement).value)}></div>`;
+    return html`<div class="view-field"><label>${label}${lockIcon}</label><input type="text" .value=${current ?? ''} ?disabled=${disabled} title=${disabled ? 'Field is read-only (no edit permission)' : ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLInputElement).value)}></div>`;
   }
 
   private formatDisplayValue(type: string, rawValue: any) {

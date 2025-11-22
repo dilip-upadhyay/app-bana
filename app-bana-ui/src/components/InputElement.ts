@@ -15,7 +15,6 @@ export class InputElement extends BaseElement {
   }
 
   connectedCallback() {
-    super.connectedCallback();
     this.setupEventListeners();
   }
 
