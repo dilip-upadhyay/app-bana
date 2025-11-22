@@ -1,10 +1,10 @@
 {
   "version": "1.1.0",
-  "lastUpdated": "2025-11-20T01:10:00Z",
+  "lastUpdated": "2025-11-22T00:00:00Z",
   "description": "Quick reference index for all AppBana capabilities",
   
   "summary": {
-    "totalComponents": 14,
+    "totalComponents": 19,
     "totalFieldTypes": 38,
     "totalDatasources": 25,
     "totalPageTemplates": 7,
@@ -38,9 +38,11 @@
     },
     "components": {
       "file": "02-components.json",
-      "count": 13,
+      "count": 19,
       "categories": ["Layout", "Form", "Display", "Navigation", "Data"],
-      "mostUsed": ["container", "button", "text", "app-grid"]
+      "mostUsed": ["container", "button", "input", "text", "studio-table-live"],
+      "formComponents": ["input", "textarea", "select", "checkbox", "radio-group", "button"],
+      "newInV1.1": ["input", "textarea", "select", "checkbox", "radio-group"]
     },
     "entities": {
       "file": "03-entities.json",

@@ -1,0 +1,240 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-22T00:00:00Z",
+  "description": "Complete guide for building forms with all possible combinations and patterns",
+  
+  "formComponents": {
+    "input": {
+      "types": ["text", "email", "password", "number", "tel", "url", "date", "datetime-local", "time"],
+      "validations": ["required", "min", "max", "pattern"],
+      "useCases": {
+        "text": ["Name", "Address", "City", "Company", "Job Title"],
+        "email": ["User email", "Contact email", "Work email"],
+        "password": ["Login password", "New password", "Confirm password"],
+        "number": ["Age", "Quantity", "Price", "Rating (1-5)"],
+        "tel": ["Phone number", "Mobile", "Fax"],
+        "url": ["Website", "Portfolio", "Social media link"],
+        "date": ["Birth date", "Hire date", "Event date"],
+        "datetime-local": ["Appointment time", "Meeting schedule"],
+        "time": ["Start time", "End time", "Opening hours"]
+      }
+    },
+    "textarea": {
+      "useCases": ["Description", "Comments", "Bio", "Address (multi-line)", "Message", "Notes"],
+      "features": ["Character counter with maxlength", "Resizable", "Multi-line input"]
+    },
+    "select": {
+      "optionsFormat": ["JSON array", "Comma-separated string"],
+      "useCases": ["Country", "State", "Category", "Status", "Priority", "Department"],
+      "examples": {
+        "jsonArray": "[{\"value\":\"us\",\"label\":\"United States\"},{\"value\":\"ca\",\"label\":\"Canada\"}]",
+        "commaSeparated": "Active, Inactive, Pending, Archived"
+      }
+    },
+    "checkbox": {
+      "useCases": ["Terms agreement", "Newsletter subscription", "Feature toggles", "Preferences"],
+      "standalone": true
+    },
+    "radio-group": {
+      "layouts": ["vertical", "horizontal"],
+      "useCases": ["Gender selection", "Payment method", "Shipping method", "Plan selection"],
+      "optionsFormat": ["JSON array", "Comma-separated string"]
+    }
+  },
+
+  "formPatterns": {
+    "registration": {
+      "description": "User registration form",
+      "components": [
+        {"type": "input", "inputType": "text", "label": "Full Name", "required": true},
+        {"type": "input", "inputType": "email", "label": "Email", "required": true},
+        {"type": "input", "inputType": "password", "label": "Password", "required": true},
+        {"type": "input", "inputType": "password", "label": "Confirm Password", "required": true},
+        {"type": "input", "inputType": "tel", "label": "Phone Number"},
+        {"type": "input", "inputType": "date", "label": "Birth Date"},
+        {"type": "select", "label": "Country", "required": true},
+        {"type": "checkbox", "label": "I agree to terms and conditions", "required": true},
+        {"type": "button", "label": "Register", "variant": "primary"}
+      ]
+    },
+    "login": {
+      "description": "Simple login form",
+      "components": [
+        {"type": "input", "inputType": "email", "label": "Email", "required": true},
+        {"type": "input", "inputType": "password", "label": "Password", "required": true},
+        {"type": "checkbox", "label": "Remember me"},
+        {"type": "button", "label": "Sign In", "variant": "primary"}
+      ]
+    },
+    "contact": {
+      "description": "Contact form",
+      "components": [
+        {"type": "input", "inputType": "text", "label": "Name", "required": true},
+        {"type": "input", "inputType": "email", "label": "Email", "required": true},
+        {"type": "input", "inputType": "text", "label": "Subject", "required": true},
+        {"type": "textarea", "label": "Message", "rows": "6", "required": true, "maxlength": "500"},
+        {"type": "button", "label": "Send Message", "variant": "primary"}
+      ]
+    },
+    "profile": {
+      "description": "User profile edit form",
+      "components": [
+        {"type": "input", "inputType": "text", "label": "Full Name", "required": true},
+        {"type": "input", "inputType": "email", "label": "Email", "required": true},
+        {"type": "input", "inputType": "tel", "label": "Phone"},
+        {"type": "input", "inputType": "url", "label": "Website"},
+        {"type": "textarea", "label": "Bio", "rows": "4", "maxlength": "300"},
+        {"type": "input", "inputType": "date", "label": "Birth Date"},
+        {"type": "select", "label": "Country"},
+        {"type": "radio-group", "label": "Gender", "options": "Male, Female, Other", "layout": "horizontal"},
+        {"type": "button", "label": "Save Changes", "variant": "primary"}
+      ]
+    },
+    "survey": {
+      "description": "Survey/feedback form",
+      "components": [
+        {"type": "radio-group", "label": "How satisfied are you?", "options": "Very Satisfied, Satisfied, Neutral, Dissatisfied, Very Dissatisfied", "required": true},
+        {"type": "radio-group", "label": "Would you recommend us?", "options": "Yes, No, Maybe", "layout": "horizontal", "required": true},
+        {"type": "select", "label": "How did you hear about us?", "options": "Google, Social Media, Friend, Advertisement, Other"},
+        {"type": "textarea", "label": "Additional Comments", "rows": "5"},
+        {"type": "checkbox", "label": "I'd like to be contacted for follow-up"},
+        {"type": "button", "label": "Submit Feedback", "variant": "primary"}
+      ]
+    },
+    "booking": {
+      "description": "Appointment/booking form",
+      "components": [
+        {"type": "input", "inputType": "text", "label": "Full Name", "required": true},
+        {"type": "input", "inputType": "email", "label": "Email", "required": true},
+        {"type": "input", "inputType": "tel", "label": "Phone", "required": true},
+        {"type": "input", "inputType": "date", "label": "Preferred Date", "required": true},
+        {"type": "input", "inputType": "time", "label": "Preferred Time", "required": true},
+        {"type": "select", "label": "Service Type", "required": true},
+        {"type": "textarea", "label": "Special Requests", "rows": "3"},
+        {"type": "button", "label": "Book Appointment", "variant": "primary"}
+      ]
+    },
+    "checkout": {
+      "description": "E-commerce checkout form",
+      "components": [
+        {"type": "input", "inputType": "text", "label": "Full Name", "required": true},
+        {"type": "input", "inputType": "email", "label": "Email", "required": true},
+        {"type": "input", "inputType": "tel", "label": "Phone", "required": true},
+        {"type": "textarea", "label": "Shipping Address", "rows": "3", "required": true},
+        {"type": "select", "label": "Country", "required": true},
+        {"type": "input", "inputType": "text", "label": "City", "required": true},
+        {"type": "input", "inputType": "text", "label": "Postal Code", "required": true},
+        {"type": "radio-group", "label": "Shipping Method", "options": "Standard (3-5 days), Express (1-2 days), Overnight", "required": true},
+        {"type": "radio-group", "label": "Payment Method", "options": "Credit Card, PayPal, Bank Transfer", "required": true},
+        {"type": "checkbox", "label": "Save this information for next time"},
+        {"type": "button", "label": "Place Order", "variant": "primary"}
+      ]
+    },
+    "jobApplication": {
+      "description": "Job application form",
+      "components": [
+        {"type": "input", "inputType": "text", "label": "Full Name", "required": true},
+        {"type": "input", "inputType": "email", "label": "Email", "required": true},
+        {"type": "input", "inputType": "tel", "label": "Phone", "required": true},
+        {"type": "input", "inputType": "text", "label": "Current Position"},
+        {"type": "input", "inputType": "number", "label": "Years of Experience", "min": "0", "max": "50"},
+        {"type": "select", "label": "Position Applied For", "required": true},
+        {"type": "select", "label": "Education Level", "options": "High School, Bachelor's, Master's, PhD"},
+        {"type": "textarea", "label": "Cover Letter", "rows": "8", "maxlength": "1000", "required": true},
+        {"type": "input", "inputType": "url", "label": "LinkedIn Profile"},
+        {"type": "input", "inputType": "url", "label": "Portfolio Website"},
+        {"type": "checkbox", "label": "I am authorized to work in this country", "required": true},
+        {"type": "button", "label": "Submit Application", "variant": "primary"}
+      ]
+    }
+  },
+
+  "layoutPatterns": {
+    "singleColumn": {
+      "description": "Stack all fields vertically",
+      "container": {"layout": "vertical", "gap": "md", "maxWidth": "600px"}
+    },
+    "twoColumn": {
+      "description": "Side-by-side fields for wider forms",
+      "container": {"layout": "grid", "columns": 2, "gap": "md"}
+    },
+    "sections": {
+      "description": "Group related fields in sections",
+      "structure": [
+        {"section": "Personal Information", "fields": ["name", "email", "phone"]},
+        {"section": "Address", "fields": ["street", "city", "state", "zip"]},
+        {"section": "Preferences", "fields": ["newsletter", "notifications"]}
+      ]
+    }
+  },
+
+  "validationCombinations": {
+    "email": {
+      "required": true,
+      "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+    },
+    "phone": {
+      "required": true,
+      "pattern": "^[\\d\\s\\-\\+\\(\\)]+$"
+    },
+    "password": {
+      "required": true,
+      "minlength": "8",
+      "pattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$"
+    },
+    "zipCode": {
+      "required": true,
+      "pattern": "^\\d{5}(-\\d{4})?$"
+    },
+    "age": {
+      "type": "number",
+      "min": "18",
+      "max": "120",
+      "required": true
+    },
+    "rating": {
+      "type": "number",
+      "min": "1",
+      "max": "5",
+      "required": true
+    }
+  },
+
+  "aiPromptExamples": {
+    "registration": "Create a user registration form with name, email, password, phone, and terms agreement",
+    "login": "Create a login form with email and password",
+    "contact": "Create a contact form with name, email, subject, and message",
+    "profile": "Create a profile edit form with personal information, bio, and preferences",
+    "survey": "Create a customer satisfaction survey with rating scales and comments",
+    "booking": "Create an appointment booking form with date, time, and service selection",
+    "checkout": "Create a checkout form with shipping address and payment options",
+    "jobApplication": "Create a job application form with resume upload and cover letter"
+  },
+
+  "integrationWithEntities": {
+    "description": "Forms can be auto-generated from entity definitions",
+    "mapping": {
+      "entityField": "formComponent",
+      "text": "input[type=text]",
+      "email": "input[type=email]",
+      "password": "input[type=password]",
+      "number": "input[type=number]",
+      "date": "input[type=date]",
+      "datetime": "input[type=datetime-local]",
+      "boolean": "checkbox",
+      "enum": "select or radio-group",
+      "longText": "textarea"
+    }
+  },
+
+  "bestPractices": {
+    "labels": "Always provide clear labels for accessibility",
+    "required": "Mark required fields with asterisk (*)",
+    "validation": "Use browser-native HTML5 validation first",
+    "feedback": "Show error messages near the invalid field",
+    "grouping": "Group related fields in sections",
+    "layout": "Use single column for mobile, multi-column for desktop",
+    "submission": "Disable submit button during processing",
+    "success": "Show clear confirmation after successful submission"
+  }
+}
