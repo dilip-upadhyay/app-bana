@@ -38,6 +38,23 @@ export function ensureCoreRegistered(): Promise<void> {
     proms.push(import('../components/UnknownElement.js'));
   }
 
+  // Form components
+  if (!registry.has('input')) {
+    proms.push(import('../components/InputElement.js'));
+  }
+  if (!registry.has('textarea')) {
+    proms.push(import('../components/TextareaElement.js'));
+  }
+  if (!registry.has('select')) {
+    proms.push(import('../components/SelectElement.js'));
+  }
+  if (!registry.has('checkbox')) {
+    proms.push(import('../components/CheckboxElement.js'));
+  }
+  if (!registry.has('radio-group')) {
+    proms.push(import('../components/RadioGroupElement.js'));
+  }
+
   // HTML elements
   if (!registry.has('header')) {
     proms.push(import('../components/HTMLElements.js'));

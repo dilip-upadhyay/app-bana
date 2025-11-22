@@ -1,6 +1,6 @@
 {
-  "version": "1.0.1",
-  "lastUpdated": "2025-11-15T00:00:00Z",
+  "version": "1.1.0",
+  "lastUpdated": "2025-11-22T00:00:00Z",
   "description": "All available UI components in AppBana with properties and usage examples",
   
   "categories": [
@@ -97,6 +97,290 @@
           "label": "Submit",
           "variant": "primary",
           "size": "md"
+        }
+      }
+    },
+    {
+      "type": "input",
+      "name": "InputElement",
+      "category": "Form Components",
+      "file": "src/components/InputElement.ts",
+      "description": "Universal text input component supporting text, email, password, number, tel, url, date, datetime-local",
+      "baseClass": "BaseElement",
+      "customElement": "studio-input",
+      "props": {
+        "type": {
+          "type": "string",
+          "values": ["text", "email", "password", "number", "tel", "url", "date", "datetime-local", "time"],
+          "default": "text",
+          "description": "Input type"
+        },
+        "label": {
+          "type": "string",
+          "description": "Label text above input"
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text"
+        },
+        "value": {
+          "type": "string",
+          "default": "",
+          "description": "Input value"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Mark field as required"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable input"
+        },
+        "min": {
+          "type": "string",
+          "description": "Minimum value (for number/date types)"
+        },
+        "max": {
+          "type": "string",
+          "description": "Maximum value (for number/date types)"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regex pattern for validation"
+        },
+        "name": {
+          "type": "string",
+          "description": "Form field name"
+        }
+      },
+      "children": false,
+      "events": ["input", "change"],
+      "example": {
+        "id": "email1",
+        "type": "input",
+        "props": {
+          "type": "email",
+          "label": "Email Address",
+          "placeholder": "Enter your email",
+          "required": true
+        }
+      }
+    },
+    {
+      "type": "textarea",
+      "name": "TextareaElement",
+      "category": "Form Components",
+      "file": "src/components/TextareaElement.ts",
+      "description": "Multi-line text input with character count",
+      "baseClass": "BaseElement",
+      "customElement": "studio-textarea",
+      "props": {
+        "label": {
+          "type": "string",
+          "description": "Label text above textarea"
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text"
+        },
+        "value": {
+          "type": "string",
+          "default": "",
+          "description": "Textarea value"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Mark field as required"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable textarea"
+        },
+        "rows": {
+          "type": "string",
+          "default": "4",
+          "description": "Number of visible rows"
+        },
+        "maxlength": {
+          "type": "string",
+          "description": "Maximum character length (shows counter)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Form field name"
+        }
+      },
+      "children": false,
+      "events": ["input", "change"],
+      "example": {
+        "id": "description1",
+        "type": "textarea",
+        "props": {
+          "label": "Description",
+          "placeholder": "Enter description",
+          "rows": "6",
+          "maxlength": "500"
+        }
+      }
+    },
+    {
+      "type": "select",
+      "name": "SelectElement",
+      "category": "Form Components",
+      "file": "src/components/SelectElement.ts",
+      "description": "Dropdown select component with JSON or comma-separated options",
+      "baseClass": "BaseElement",
+      "customElement": "studio-select",
+      "props": {
+        "label": {
+          "type": "string",
+          "description": "Label text above select"
+        },
+        "value": {
+          "type": "string",
+          "default": "",
+          "description": "Selected value"
+        },
+        "options": {
+          "type": "string",
+          "description": "Options as JSON array [{value, label}] or comma-separated string"
+        },
+        "placeholder": {
+          "type": "string",
+          "default": "Select an option",
+          "description": "Placeholder text for empty selection"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Mark field as required"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable select"
+        },
+        "name": {
+          "type": "string",
+          "description": "Form field name"
+        }
+      },
+      "children": false,
+      "events": ["change"],
+      "example": {
+        "id": "country1",
+        "type": "select",
+        "props": {
+          "label": "Country",
+          "options": "[{\"value\":\"us\",\"label\":\"United States\"},{\"value\":\"ca\",\"label\":\"Canada\"}]",
+          "placeholder": "Select country",
+          "required": true
+        }
+      }
+    },
+    {
+      "type": "checkbox",
+      "name": "CheckboxElement",
+      "category": "Form Components",
+      "file": "src/components/CheckboxElement.ts",
+      "description": "Single checkbox input with custom styling",
+      "baseClass": "BaseElement",
+      "customElement": "studio-checkbox",
+      "props": {
+        "label": {
+          "type": "string",
+          "description": "Label text next to checkbox"
+        },
+        "checked": {
+          "type": "boolean",
+          "default": false,
+          "description": "Checked state"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable checkbox"
+        },
+        "value": {
+          "type": "string",
+          "default": "on",
+          "description": "Checkbox value when checked"
+        },
+        "name": {
+          "type": "string",
+          "description": "Form field name"
+        }
+      },
+      "children": false,
+      "events": ["change"],
+      "example": {
+        "id": "terms1",
+        "type": "checkbox",
+        "props": {
+          "label": "I agree to the terms and conditions",
+          "name": "terms",
+          "value": "agreed"
+        }
+      }
+    },
+    {
+      "type": "radio-group",
+      "name": "RadioGroupElement",
+      "category": "Form Components",
+      "file": "src/components/RadioGroupElement.ts",
+      "description": "Radio button group with vertical/horizontal layout",
+      "baseClass": "BaseElement",
+      "customElement": "studio-radio-group",
+      "props": {
+        "label": {
+          "type": "string",
+          "description": "Label text above radio group"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "description": "Form field name (shared by all radios)"
+        },
+        "value": {
+          "type": "string",
+          "default": "",
+          "description": "Selected value"
+        },
+        "options": {
+          "type": "string",
+          "description": "Options as JSON array [{value, label}] or comma-separated string"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Mark field as required"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable all radio buttons"
+        },
+        "layout": {
+          "type": "string",
+          "values": ["vertical", "horizontal"],
+          "default": "vertical",
+          "description": "Layout direction"
+        }
+      },
+      "children": false,
+      "events": ["change"],
+      "example": {
+        "id": "gender1",
+        "type": "radio-group",
+        "props": {
+          "label": "Gender",
+          "name": "gender",
+          "options": "[{\"value\":\"male\",\"label\":\"Male\"},{\"value\":\"female\",\"label\":\"Female\"},{\"value\":\"other\",\"label\":\"Other\"}]",
+          "layout": "horizontal"
         }
       }
     },
