@@ -72,6 +72,15 @@ public class AiSystemPrompts {
                 prompt.append("\n\n");
             }
             
+            // Load form patterns
+            String formPatternsContent = loadBuilderDatabaseFile("10-form-patterns.json");
+            if (formPatternsContent != null) {
+                JsonNode formPatterns = mapper.readTree(formPatternsContent);
+                prompt.append("### Form Building Patterns:\n");
+                prompt.append(formatFormPatterns(formPatterns));
+                prompt.append("\n\n");
+            }
+            
             LOG.info("Successfully loaded builder database content into AI prompt");
         } catch (Exception e) {
             LOG.warn("Failed to load builder database content, using base prompt only: {}", e.getMessage());
@@ -226,6 +235,40 @@ public class AiSystemPrompts {
                   .append(comp.get("description").asText()).append("\n");
             }
         }
+        return sb.toString();
+    }
+    
+    /**
+     * Format form patterns from form patterns database
+     */
+    private static String formatFormPatterns(JsonNode formPatterns) {
+        StringBuilder sb = new StringBuilder();
+        
+        // Show available form components
+        JsonNode formComponents = formPatterns.get("formComponents");
+        if (formComponents != null) {
+            sb.append("**Available Form Components**:\n");
+            sb.append("- input (types: text, email, password, number, tel, url, date, datetime-local, time)\n");
+            sb.append("- textarea (multi-line text with character counter)\n");
+            sb.append("- select (dropdown with JSON/CSV options)\n");
+            sb.append("- checkbox (single toggle)\n");
+            sb.append("- radio-group (multiple choice with layouts)\n\n");
+        }
+        
+        // Show common form patterns
+        JsonNode patterns = formPatterns.get("formPatterns");
+        if (patterns != null) {
+            sb.append("**Common Form Patterns** (use these as templates):\n");
+            String[] patternNames = {"registration", "login", "contact", "profile", "booking", "checkout"};
+            for (String patternName : patternNames) {
+                JsonNode pattern = patterns.get(patternName);
+                if (pattern != null) {
+                    sb.append("  - **").append(patternName).append("**: ")
+                      .append(pattern.get("description").asText()).append("\n");
+                }
+            }
+        }
+        
         return sb.toString();
     }
     
