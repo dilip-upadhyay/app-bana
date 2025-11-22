@@ -1,0 +1,27 @@
+{
+  "id" : "traffic-dashboard",
+  "name" : "Traffic Dashboard",
+  "type" : "dashboard",
+  "entity" : "TrafficInfo",
+  "metrics" : [ "trafficCondition", "estimatedTravelTime" ],
+  "visuals" : [ "charts", "maps" ],
+  "rootId" : "root-1763804066883",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1763804066883",
+    "children" : [ "heading-root-1763804066883" ]
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1763804066883",
+    "props" : {
+      "content" : "Traffic Dashboard",
+      "tag" : "h1"
+    }
+  } ]
+}

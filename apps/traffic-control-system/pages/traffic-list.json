@@ -1,0 +1,65 @@
+{
+  "id" : "traffic-list",
+  "name" : "Traffic Information List",
+  "type" : "data-table",
+  "entity" : "TrafficInfo",
+  "columns" : [ "location", "trafficCondition", "estimatedTravelTime", "lastUpdated" ],
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1763804066885",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1763804066885",
+    "children" : [ "heading-root-1763804066885", "table-root-1763804066885" ]
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1763804066885",
+    "props" : {
+      "content" : "Traffic Information List",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "table-root-1763804066885",
+    "type" : "table",
+    "props" : {
+      "entity" : "TrafficInfo",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "location",
+        "label" : "Location",
+        "type" : "text"
+      }, {
+        "name" : "trafficCondition",
+        "label" : "Traffic Condition",
+        "type" : "text"
+      }, {
+        "name" : "estimatedTravelTime",
+        "label" : "Estimated Travel Time",
+        "type" : "text"
+      }, {
+        "name" : "alternativeRoutes",
+        "label" : "Alternative Routes",
+        "type" : "text"
+      }, {
+        "name" : "lastUpdated",
+        "label" : "Last Updated",
+        "type" : "datetime"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}

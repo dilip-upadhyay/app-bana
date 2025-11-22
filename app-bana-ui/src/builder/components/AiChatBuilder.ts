@@ -550,6 +550,10 @@ export class AiChatBuilder extends LitElement {
   @state() private voiceSupported = false;
   private assistantPersona: keyof typeof personaPrompts = 'friendly';
   private recognition: any = null;
+  private manualStop = false;
+  private voiceInactivityTimer: any = null;
+  private static readonly VOICE_INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 minutes
+  private lastTranscript = ''; // Track last captured transcript to avoid duplication
 
   private smallTalkPatterns: Array<{ pattern: RegExp; reply: string | ((...args: any[]) => string) }> = [
         { pattern: /can you swim|swim/, reply: "I can't swim, but I can help you build a swimming tracker app!" },
@@ -693,25 +697,42 @@ export class AiChatBuilder extends LitElement {
 
     this.voiceSupported = true;
     this.recognition = new SpeechRecognition();
-    this.recognition.continuous = false;
+    this.recognition.continuous = true; // continuous listening
     this.recognition.interimResults = false;
     this.recognition.lang = 'en-US';
 
     this.recognition.onstart = () => {
       console.log('[Voice] Recording started');
       this.isRecording = true;
+      this.manualStop = false;
+      this.lastTranscript = this.inputValue || ''; // Start with existing input
+      this.resetVoiceInactivityTimer();
     };
 
     this.recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      console.log('[Voice] Transcript:', transcript);
-      this.inputValue = transcript;
-      this.isRecording = false;
+      // Build the full transcript from all results
+      let fullTranscript = '';
+      for (let i = 0; i < event.results.length; ++i) {
+        fullTranscript += event.results[i][0].transcript;
+      }
+      console.log('[Voice] Full transcript:', fullTranscript);
+      
+      // Only update if we have new content
+      if (fullTranscript && fullTranscript.trim() !== this.lastTranscript.trim()) {
+        this.inputValue = fullTranscript.trim();
+        this.lastTranscript = fullTranscript.trim();
+      }
+      this.resetVoiceInactivityTimer();
+    };
+
+    this.recognition.onspeechstart = () => {
+      this.resetVoiceInactivityTimer();
     };
 
     this.recognition.onerror = (event: any) => {
       console.error('[Voice] Recognition error:', event.error);
       this.isRecording = false;
+      this.clearVoiceInactivityTimer();
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         alert('Microphone access denied. Please enable microphone permissions.');
       }
@@ -720,7 +741,41 @@ export class AiChatBuilder extends LitElement {
     this.recognition.onend = () => {
       console.log('[Voice] Recording ended');
       this.isRecording = false;
+      this.clearVoiceInactivityTimer();
+      // If not manually stopped, restart listening to continue capturing speech
+      if (!this.manualStop) {
+        try {
+          // Keep the current input value when restarting
+          this.recognition.start();
+        } catch (e) {
+          console.warn('[Voice] Could not restart recognition:', e);
+        }
+      } else {
+        // Reset lastTranscript when manually stopped
+        this.lastTranscript = '';
+      }
     };
+  }
+
+  private resetVoiceInactivityTimer() {
+    this.clearVoiceInactivityTimer();
+    this.voiceInactivityTimer = setTimeout(() => {
+      if (this.isRecording) {
+        this.manualStop = true;
+        this.recognition.stop();
+        // Auto-send input if any
+        if (this.inputValue && this.inputValue.trim()) {
+          this.handleSend();
+        }
+      }
+    }, AiChatBuilder.VOICE_INACTIVITY_LIMIT);
+  }
+
+  private clearVoiceInactivityTimer() {
+    if (this.voiceInactivityTimer) {
+      clearTimeout(this.voiceInactivityTimer);
+      this.voiceInactivityTimer = null;
+    }
   }
 
   private toggleVoiceRecording() {
@@ -730,8 +785,12 @@ export class AiChatBuilder extends LitElement {
     }
 
     if (this.isRecording) {
+      this.manualStop = true;
       this.recognition.stop();
+      this.clearVoiceInactivityTimer();
+      this.lastTranscript = ''; // Reset for next recording
     } else {
+      this.manualStop = false;
       this.recognition.start();
     }
   }
@@ -836,6 +895,13 @@ export class AiChatBuilder extends LitElement {
 
   private async handleSend() {
     if (!this.inputValue.trim() || this.isProcessing) return;
+
+    // If recording, stop and mark as manual stop
+    if (this.isRecording && this.recognition) {
+      this.manualStop = true;
+      this.recognition.stop();
+      this.clearVoiceInactivityTimer();
+    }
 
     const userMessage = this.inputValue.trim();
     this.addUserMessage(userMessage);
