@@ -1,0 +1,652 @@
+openapi: 3.0.3
+info:
+  title: AppBana Field-Level Security API
+  description: |
+    Field-Level Security (FLS) API for AppBana platform.
+    
+    ## Overview
+    This API allows administrators to control which fields users can read and edit at a granular level.
+    
+    ## Features
+    - Per-field read/edit permissions
+    - Role-based access control
+    - Wildcard support (`*` for all fields)
+    - Multi-role OR logic (union of permissions)
+    - 5-minute permission cache
+    - Admin bypass (admins always have full access)
+    
+    ## Authentication
+    All endpoints require authentication (JWT token in `Authorization` header).
+    
+    **Note**: Phase 1 implementation uses hardcoded admin user. Phase 2 will add full JWT authentication.
+    
+  version: 1.0.0
+  contact:
+    name: AppBana Support
+    email: support@appbana.com
+  license:
+    name: Proprietary
+    
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.appbana.com
+    description: Production server
+
+tags:
+  - name: field-permissions
+    description: Field-level permission management
+  - name: query
+    description: Query readable/editable fields for current user
+
+paths:
+  /api/field-permissions:
+    get:
+      tags:
+        - field-permissions
+      summary: List all field permissions
+      description: |
+        Retrieve all field permissions across all roles and entities.
+        
+        **Access**: Admin only
+      operationId: listFieldPermissions
+      responses:
+        '200':
+          description: List of field permissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FieldPermission'
+              examples:
+                success:
+                  value:
+                    - id: "550e8400-e29b-41d4-a716-446655440001"
+                      roleId: "role-uuid-1"
+                      entityName: "user"
+                      fieldName: "salary"
+                      canRead: true
+                      canEdit: false
+                      createdAt: "2025-11-23T10:00:00Z"
+                      updatedAt: "2025-11-23T10:00:00Z"
+                    - id: "550e8400-e29b-41d4-a716-446655440002"
+                      roleId: "role-uuid-2"
+                      entityName: "order"
+                      fieldName: "*"
+                      canRead: true
+                      canEdit: true
+                      createdAt: "2025-11-23T10:00:00Z"
+                      updatedAt: "2025-11-23T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    
+    post:
+      tags:
+        - field-permissions
+      summary: Create field permission
+      description: |
+        Create a new field permission for a role.
+        
+        **Access**: Admin only
+        
+        **Cache Invalidation**: Automatically clears permission cache.
+      operationId: createFieldPermission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFieldPermissionRequest'
+            examples:
+              explicitField:
+                summary: Explicit field permission
+                value:
+                  roleId: "550e8400-e29b-41d4-a716-446655440002"
+                  entityName: "employee"
+                  fieldName: "salary"
+                  canRead: true
+                  canEdit: false
+              wildcardField:
+                summary: Wildcard field (all fields)
+                value:
+                  roleId: "550e8400-e29b-41d4-a716-446655440003"
+                  entityName: "customer"
+                  fieldName: "*"
+                  canRead: true
+                  canEdit: false
+              wildcardEntity:
+                summary: Wildcard entity (all entities and fields)
+                value:
+                  roleId: "550e8400-e29b-41d4-a716-446655440001"
+                  entityName: "*"
+                  fieldName: "*"
+                  canRead: true
+                  canEdit: true
+      responses:
+        '201':
+          description: Permission created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldPermission'
+              examples:
+                success:
+                  value:
+                    id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                    roleId: "550e8400-e29b-41d4-a716-446655440002"
+                    entityName: "employee"
+                    fieldName: "salary"
+                    canRead: true
+                    canEdit: false
+                    createdAt: "2025-11-23T11:00:00Z"
+                    updatedAt: "2025-11-23T11:00:00Z"
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/field-permissions/{id}:
+    get:
+      tags:
+        - field-permissions
+      summary: Get field permission by ID
+      description: |
+        Retrieve a single field permission by its unique ID.
+        
+        **Access**: Admin only
+      operationId: getFieldPermission
+      parameters:
+        - $ref: '#/components/parameters/PermissionId'
+      responses:
+        '200':
+          description: Field permission details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldPermission'
+              examples:
+                success:
+                  value:
+                    id: "550e8400-e29b-41d4-a716-446655440001"
+                    roleId: "role-uuid-1"
+                    entityName: "user"
+                    fieldName: "salary"
+                    canRead: true
+                    canEdit: false
+                    createdAt: "2025-11-23T10:00:00Z"
+                    updatedAt: "2025-11-23T10:00:00Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    
+    put:
+      tags:
+        - field-permissions
+      summary: Update field permission
+      description: |
+        Update an existing field permission. Only `canRead` and `canEdit` can be modified.
+        
+        **Access**: Admin only
+        
+        **Cache Invalidation**: Automatically clears permission cache.
+        
+        **Note**: `roleId`, `entityName`, and `fieldName` cannot be changed. Delete and recreate permission instead.
+      operationId: updateFieldPermission
+      parameters:
+        - $ref: '#/components/parameters/PermissionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFieldPermissionRequest'
+            examples:
+              grantEdit:
+                summary: Grant edit permission
+                value:
+                  canRead: true
+                  canEdit: true
+              revokeEdit:
+                summary: Revoke edit permission
+                value:
+                  canRead: true
+                  canEdit: false
+              revokeAll:
+                summary: Revoke all access
+                value:
+                  canRead: false
+                  canEdit: false
+      responses:
+        '200':
+          description: Permission updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldPermission'
+              examples:
+                success:
+                  value:
+                    id: "550e8400-e29b-41d4-a716-446655440001"
+                    roleId: "role-uuid-1"
+                    entityName: "user"
+                    fieldName: "salary"
+                    canRead: true
+                    canEdit: true
+                    createdAt: "2025-11-23T10:00:00Z"
+                    updatedAt: "2025-11-23T12:30:00Z"
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    
+    delete:
+      tags:
+        - field-permissions
+      summary: Delete field permission
+      description: |
+        Delete a field permission. This will revoke access to the field for the specified role.
+        
+        **Access**: Admin only
+        
+        **Cache Invalidation**: Automatically clears permission cache.
+        
+        **Warning**: This action cannot be undone.
+      operationId: deleteFieldPermission
+      parameters:
+        - $ref: '#/components/parameters/PermissionId'
+      responses:
+        '204':
+          description: Permission deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/field-permissions/readable:
+    get:
+      tags:
+        - query
+      summary: Get readable fields for current user
+      description: |
+        Returns list of field names that the current user can **read** for a given entity.
+        
+        **Access**: All authenticated users
+        
+        **Caching**: Results are cached for 5 minutes per user+entity combination.
+        
+        **Response**:
+        - Returns `["*"]` if user has wildcard read permission
+        - Returns `["field1", "field2", ...]` for explicit field list
+        - Returns `[]` if user has no read permissions
+        
+        **Admin Bypass**: Admin users always receive `["*"]` regardless of explicit permissions.
+      operationId: getReadableFields
+      parameters:
+        - name: entity
+          in: query
+          description: Entity/table name (e.g., "user", "order", "customer")
+          required: true
+          schema:
+            type: string
+          example: "user"
+      responses:
+        '200':
+          description: List of readable field names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+              examples:
+                adminUser:
+                  summary: Admin user (full access)
+                  value: ["*"]
+                managerUser:
+                  summary: Manager user (most fields)
+                  value: ["id", "email", "name", "role_id", "active", "salary", "department"]
+                standardUser:
+                  summary: Standard user (basic fields only)
+                  value: ["id", "email", "name", "active"]
+                noAccess:
+                  summary: No read permissions
+                  value: []
+        '400':
+          description: Missing or invalid entity parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missingEntity:
+                  value:
+                    error: "Missing required parameter: entity"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/field-permissions/editable:
+    get:
+      tags:
+        - query
+      summary: Get editable fields for current user
+      description: |
+        Returns list of field names that the current user can **edit** for a given entity.
+        
+        **Access**: All authenticated users
+        
+        **Caching**: Results are cached for 5 minutes per user+entity combination.
+        
+        **Response**:
+        - Returns `["*"]` if user has wildcard edit permission
+        - Returns `["field1", "field2", ...]` for explicit field list
+        - Returns `[]` if user has no edit permissions
+        
+        **Admin Bypass**: Admin users always receive `["*"]` regardless of explicit permissions.
+        
+        **Note**: Editable fields are a subset of readable fields. You cannot edit what you cannot read.
+      operationId: getEditableFields
+      parameters:
+        - name: entity
+          in: query
+          description: Entity/table name (e.g., "user", "order", "customer")
+          required: true
+          schema:
+            type: string
+          example: "user"
+      responses:
+        '200':
+          description: List of editable field names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+              examples:
+                adminUser:
+                  summary: Admin user (full access)
+                  value: ["*"]
+                managerUser:
+                  summary: Manager user (cannot edit salary)
+                  value: ["id", "email", "name", "role_id", "active", "department"]
+                standardUser:
+                  summary: Standard user (limited edits)
+                  value: ["id", "email", "name"]
+                readOnly:
+                  summary: Read-only access
+                  value: []
+        '400':
+          description: Missing or invalid entity parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missingEntity:
+                  value:
+                    error: "Missing required parameter: entity"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    PermissionId:
+      name: id
+      in: path
+      description: Unique field permission ID (UUID)
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440001"
+
+  schemas:
+    FieldPermission:
+      type: object
+      description: Field-level permission record
+      required:
+        - id
+        - roleId
+        - entityName
+        - fieldName
+        - canRead
+        - canEdit
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique permission identifier
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        roleId:
+          type: string
+          format: uuid
+          description: Role ID (foreign key to role table)
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        entityName:
+          type: string
+          description: Entity/table name (use "*" for all entities)
+          minLength: 1
+          maxLength: 100
+          example: "user"
+        fieldName:
+          type: string
+          description: Field/column name (use "*" for all fields)
+          minLength: 1
+          maxLength: 100
+          example: "salary"
+        canRead:
+          type: boolean
+          description: Whether user can view field value
+          example: true
+        canEdit:
+          type: boolean
+          description: Whether user can modify field value
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when permission was created
+          example: "2025-11-23T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when permission was last updated
+          example: "2025-11-23T10:00:00Z"
+
+    CreateFieldPermissionRequest:
+      type: object
+      description: Request body for creating field permission
+      required:
+        - roleId
+        - entityName
+        - fieldName
+        - canRead
+        - canEdit
+      properties:
+        roleId:
+          type: string
+          format: uuid
+          description: Role ID (must exist in role table)
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        entityName:
+          type: string
+          description: Entity/table name (use "*" for all entities)
+          minLength: 1
+          maxLength: 100
+          example: "user"
+        fieldName:
+          type: string
+          description: Field/column name (use "*" for all fields)
+          minLength: 1
+          maxLength: 100
+          example: "salary"
+        canRead:
+          type: boolean
+          description: Grant read permission
+          example: true
+        canEdit:
+          type: boolean
+          description: Grant edit permission
+          example: false
+
+    UpdateFieldPermissionRequest:
+      type: object
+      description: Request body for updating field permission
+      required:
+        - canRead
+        - canEdit
+      properties:
+        canRead:
+          type: boolean
+          description: Update read permission
+          example: true
+        canEdit:
+          type: boolean
+          description: Update edit permission
+          example: true
+
+    Error:
+      type: object
+      description: Error response
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Validation failed"
+        details:
+          type: array
+          description: Detailed validation errors (optional)
+          items:
+            type: string
+          example:
+            - "roleId is required"
+            - "entityName is required"
+        id:
+          type: string
+          description: Resource ID (for 404 errors)
+          example: "invalid-uuid"
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missingToken:
+              value:
+                error: "Authentication required"
+            invalidToken:
+              value:
+                error: "Invalid or expired token"
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            notAdmin:
+              value:
+                error: "Admin access required"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            permissionNotFound:
+              value:
+                error: "Permission not found"
+                id: "invalid-uuid"
+
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missingFields:
+              value:
+                error: "Validation failed"
+                details:
+                  - "roleId is required"
+                  - "entityName is required"
+                  - "fieldName is required"
+            invalidRoleId:
+              value:
+                error: "Validation failed"
+                details:
+                  - "roleId must be a valid UUID"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            databaseError:
+              value:
+                error: "Internal server error"
+            cacheError:
+              value:
+                error: "Cache service unavailable"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token authentication.
+        
+        **Phase 1**: Hardcoded admin user (no authentication required).
+        
+        **Phase 2**: Full JWT authentication with user sessions.
+        
+        **Header Format**: `Authorization: Bearer <token>`
+
+security:
+  - bearerAuth: []
+
+externalDocs:
+  description: Field-Level Security Admin Guide
+  url: https://docs.appbana.com/fls-admin-guide
