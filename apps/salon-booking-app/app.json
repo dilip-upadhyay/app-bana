@@ -4,8 +4,8 @@
   "description" : "A salon booking system for customers to choose services and book appointments with salon staff.",
   "version" : "1.0.0",
   "created" : 1763578323257,
-  "updated" : 1763578323466,
-  "pages" : [ "customer-registration" ],
+  "updated" : 1763917270927,
+  "pages" : [ "customer-registration", "booking" ],
   "entities" : [ {
     "name" : "Customer",
     "fields" : [ {

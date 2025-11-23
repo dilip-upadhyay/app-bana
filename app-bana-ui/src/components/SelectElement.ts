@@ -20,7 +20,7 @@ export class SelectElement extends FormElement {
 
   private parseOptions(): Array<{ value: string; label: string }> {
     const optionsAttr = this.getAttribute('options') || '';
-    
+
     // Try to parse as JSON array
     try {
       const parsed = JSON.parse(optionsAttr);
@@ -49,12 +49,12 @@ export class SelectElement extends FormElement {
 
   protected render(): string {
     const fieldName = this.getAttribute('name') || '';
-    
+
     // FLS: Hide non-readable fields
     if (this.isFieldHidden(fieldName)) {
       return this.renderHiddenField();
     }
-    
+
     const label = this.getAttribute('label') || '';
     const value = this.getAttribute('value') || '';
     const placeholder = this.getAttribute('placeholder') || 'Select an option';
@@ -76,7 +76,7 @@ export class SelectElement extends FormElement {
 
     const optionsHtml = [
       placeholder ? `<option value="" disabled ${!value ? 'selected' : ''}>${placeholder}</option>` : '',
-      ...options.map(opt => 
+      ...options.map(opt =>
         `<option value="${opt.value}" ${value === opt.value ? 'selected' : ''}>${opt.label}</option>`
       )
     ].join('');
@@ -141,5 +141,7 @@ export class SelectElement extends FormElement {
   }
 }
 
-customElements.define('studio-select', SelectElement);
+if (!customElements.get('studio-select')) {
+  customElements.define('studio-select', SelectElement);
+}
 registerComponent('select', SelectElement);

@@ -19,6 +19,7 @@ export class BuilderCanvas extends LitElement {
   @state() private editingId: string | null = null;
   @state() private editingValue: string = '';
   @state() private dragOverId: string | null = null;
+  @state() private dropPosition: 'before' | 'after' | 'inside' | null = null;
 
   private toastTimer: any = null;
   private storeUnsubscribe: (() => void) | null = null;
@@ -72,24 +73,86 @@ export class BuilderCanvas extends LitElement {
     }
   }
 
+  updated(changedProperties: Map<string, any>) {
+    if (changedProperties.has('selectedId') && this.selectedId) {
+      // Scroll selected node into view
+      const nodeEl = this.renderRoot.querySelector(`[data-selected="true"]`);
+      if (nodeEl) {
+        nodeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }
+
   private onKeyDown = (e: KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
+    const isCmd = e.metaKey || e.ctrlKey;
+    const key = e.key.toLowerCase();
+
+    // Undo / Redo
+    if (isCmd && key === 'z') {
+      if (e.shiftKey) {
+        currentStore?.redo();
+      } else {
+        currentStore?.undo();
+      }
+      e.preventDefault();
+      return;
+    }
+    if (isCmd && key === 'y') { // Redo alternative
+      currentStore?.redo();
+      e.preventDefault();
+      return;
+    }
+
+    // Copy
+    if (isCmd && key === 'c') {
+      if (e.shiftKey) {
+        // Shift+Cmd+C is Copy ID
+        this.copySelectedId();
+      } else if (this.selectedId) {
+        currentStore?.copy(this.selectedId);
+        this.showToast('Copied to clipboard');
+      }
+      e.preventDefault();
+      return;
+    }
+
+    // Cut
+    if (isCmd && key === 'x') {
+      if (this.selectedId && this.selectedId !== this.page!.rootId) {
+        currentStore?.cut(this.selectedId);
+        this.showToast('Cut to clipboard');
+      }
+      e.preventDefault();
+      return;
+    }
+
+    // Paste
+    if (isCmd && key === 'v') {
+      if (this.selectedId) {
+        currentStore?.paste(this.selectedId);
+        this.showToast('Pasted');
+      }
+      e.preventDefault();
+      return;
+    }
+
+    // Duplicate
+    if (isCmd && key === 'd') {
       if (this.selectedId && this.selectedId !== this.page!.rootId) {
         currentStore?.duplicate(this.selectedId);
         e.preventDefault();
         return;
       }
     }
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') {
+
+    // Search Palette
+    if (isCmd && key === 'p') {
       this.openPalette();
       e.preventDefault();
       return;
     }
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
-      this.copySelectedId();
-      e.preventDefault();
-      return;
-    }
+
+    // Delete
     if ((e.key === 'Backspace' || e.key === 'Delete') && this.selectedId && this.selectedId !== this.page!.rootId) {
       const node = this.page!.nodes.find(n => n.id === this.selectedId)!;
       const hasChildren = !!(node.children && node.children.length);
@@ -99,6 +162,8 @@ export class BuilderCanvas extends LitElement {
       e.preventDefault();
       return;
     }
+
+    // Enter (Edit)
     if (e.key === 'Enter' && this.selectedId) {
       const node = this.page!.nodes.find(n => n.id === this.selectedId)!;
       if (this.editingId) {
@@ -112,6 +177,8 @@ export class BuilderCanvas extends LitElement {
         return;
       }
     }
+
+    // Escape
     if (e.key === 'Escape') {
       if (this.editingId) {
         this.cancelEdit();
@@ -121,6 +188,8 @@ export class BuilderCanvas extends LitElement {
         e.preventDefault();
       }
     }
+
+    // Palette Navigation
     if (this.paletteOpen) {
       if (e.key === 'ArrowDown') {
         this.movePaletteIndex(1);
@@ -173,7 +242,7 @@ export class BuilderCanvas extends LitElement {
     if (!this.page) return;
     try {
       localStorage.setItem(this.expandedKey(), JSON.stringify(Array.from(this.expanded)));
-    } catch {}
+    } catch { }
   }
 
   private restoreExpanded() {
@@ -265,31 +334,79 @@ export class BuilderCanvas extends LitElement {
   }
 
   private handleDragOver(e: DragEvent, node: ComponentNode) {
+    e.preventDefault();
     if (!e.dataTransfer) return;
-    if (node.type === 'container') {
-      e.preventDefault();
-      this.dragOverId = node.id;
-      this.requestUpdate();
+
+    // Don't allow dropping on itself or children (cycle check)
+    // This is a basic check, TreeStore handles full cycle check
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    // Determine drop position
+    // Top 25% -> before
+    // Bottom 25% -> after
+    // Middle 50% -> inside (if container)
+
+    const isContainer = node.type === 'container' || node.type === 'section' || node.type === 'div';
+
+    if (y < height * 0.25 && node.id !== this.page!.rootId) {
+      this.dropPosition = 'before';
+    } else if (y > height * 0.75 && node.id !== this.page!.rootId) {
+      this.dropPosition = 'after';
+    } else if (isContainer) {
+      this.dropPosition = 'inside';
+    } else {
+      // If not container and in middle, default to after
+      this.dropPosition = 'after';
     }
+
+    this.dragOverId = node.id;
+    this.requestUpdate();
   }
 
   private handleDragLeave(_e: DragEvent, node: ComponentNode) {
     if (this.dragOverId === node.id) {
       this.dragOverId = null;
+      this.dropPosition = null;
       this.requestUpdate();
     }
   }
 
-  private handleDrop(e: DragEvent, node: ComponentNode) {
-    if (!e.dataTransfer) return;
-    const dragged = e.dataTransfer.getData('text/plain');
-    if (!dragged) return;
-    if (node.type !== 'container') return;
-    if (dragged === node.id) return;
-    this.dragOverId = null;
-    currentStore?.moveNode(dragged, node.id);
-    this.requestUpdate();
+  private handleDrop(e: DragEvent, targetNode: ComponentNode) {
     e.preventDefault();
+    if (!e.dataTransfer) return;
+    const draggedId = e.dataTransfer.getData('text/plain');
+    if (!draggedId) return;
+
+    if (draggedId === targetNode.id) return;
+
+    const dropPos = this.dropPosition;
+    this.dragOverId = null;
+    this.dropPosition = null;
+
+    if (!currentStore) return;
+
+    // Calculate new parent and index
+    let newParentId = targetNode.id;
+    let newIndex: number | undefined = undefined;
+
+    if (dropPos === 'inside') {
+      newParentId = targetNode.id;
+      newIndex = undefined; // Append
+    } else if (dropPos === 'before' || dropPos === 'after') {
+      // Find parent of targetNode
+      const parent = this.page!.nodes.find(n => n.children?.includes(targetNode.id));
+      if (!parent) return; // Should not happen for non-root nodes
+
+      newParentId = parent.id;
+      const targetIndex = parent.children!.indexOf(targetNode.id);
+      newIndex = dropPos === 'before' ? targetIndex : targetIndex + 1;
+    }
+
+    currentStore.moveNode(draggedId, newParentId, newIndex);
+    this.requestUpdate();
   }
 
   private select(id: string) {
@@ -316,10 +433,13 @@ export class BuilderCanvas extends LitElement {
     const expanded = this.expanded.has(node.id);
     const childCount = node.children?.length || 0;
     const isEditing = this.editingId === node.id;
+    const isDragOver = this.dragOverId === node.id;
+
+    const dropClass = isDragOver && this.dropPosition ? `drop-${this.dropPosition}` : '';
 
     return html`
       <div
-        class="node ${this.dragOverId === node.id ? 'drag-over' : ''}"
+        class="node ${isDragOver ? 'drag-over' : ''} ${dropClass}"
         data-selected=${sel}
         role="treeitem"
         aria-selected=${sel}
@@ -329,31 +449,38 @@ export class BuilderCanvas extends LitElement {
         @dragover=${(e: DragEvent) => this.handleDragOver(e, node)}
         @dragleave=${(e: DragEvent) => this.handleDragLeave(e, node)}
         @drop=${(e: DragEvent) => this.handleDrop(e, node)}
-        @click=${(e: Event) => { e.stopPropagation(); this.select(node.id); }}>
+        @click=${(e: Event) => { e.stopPropagation(); this.select(node.id); }}
+        @dblclick=${(e: Event) => {
+        e.stopPropagation();
+        if (node.type === 'text') {
+          this.startEdit(node);
+        }
+      }}>
 
         ${childCount
-          ? html`<button
+        ? html`<button
               class="expand-btn"
               aria-label="${expanded ? 'Collapse' : 'Expand'} ${node.id}"
               @click=${(e: Event) => { e.stopPropagation(); this.toggleExpand(node.id); }}>
               ${expanded ? '▾' : '▸'}
             </button>`
-          : html`<span class="expand-btn" style="opacity:.4;">•</span>`}
+        : html`<span class="expand-btn" style="opacity:.4;">•</span>`}
 
         ${isEditing
-          ? html`<input
+        ? html`<input
               class="inline-edit"
               .value=${this.editingValue}
               @input=${(e: Event) => this.editingValue = (e.target as HTMLInputElement).value}
               @keydown=${(e: KeyboardEvent) => {
-                if (e.key === 'Enter') {
-                  this.commitEdit();
-                } else if (e.key === 'Escape') {
-                  this.cancelEdit();
-                }
-              }}
-              @blur=${() => this.commitEdit()} />`
-          : html`<span>${node.type === 'text' ? (node.props?.text || '<text>') : node.type}</span>`}
+            if (e.key === 'Enter') {
+              this.commitEdit();
+            } else if (e.key === 'Escape') {
+              this.cancelEdit();
+            }
+          }}
+              @blur=${() => this.commitEdit()}
+              @click=${(e: Event) => e.stopPropagation()} />`
+        : html`<span>${node.type === 'text' ? (node.props?.text || '<text>') : node.type}</span>`}
 
         <button
           class="inline"
@@ -363,26 +490,26 @@ export class BuilderCanvas extends LitElement {
         </button>
 
         ${node.id !== this.page!.rootId
-          ? html`<button
+        ? html`<button
               class="inline"
               title="Delete"
               @click=${(e: Event) => {
-                e.stopPropagation();
-                if (!node.children?.length || window.confirm('Delete ' + node.id + ' and its subtree?')) {
-                  this.deleteNode(node.id);
-                }
-              }}>
+            e.stopPropagation();
+            if (!node.children?.length || window.confirm('Delete ' + node.id + ' and its subtree?')) {
+              this.deleteNode(node.id);
+            }
+          }}>
               ×
             </button>`
-          : null}
+        : null}
       </div>
 
       ${childCount && expanded
         ? html`<div class="children" role="group">
             ${node.children!.map(cid => {
-              const child = this.page!.nodes.find(n => n.id === cid)!;
-              return this.renderNode(child);
-            })}
+          const child = this.page!.nodes.find(n => n.id === cid)!;
+          return this.renderNode(child);
+        })}
           </div>`
         : null}
     `;
@@ -439,9 +566,9 @@ export class BuilderCanvas extends LitElement {
                 placeholder="Filter by id / type / text"
                 .value=${this.paletteQuery}
                 @input=${(e: Event) => {
-                  this.paletteQuery = (e.target as HTMLInputElement).value;
-                  this.paletteIndex = 0;
-                }} />
+            this.paletteQuery = (e.target as HTMLInputElement).value;
+            this.paletteIndex = 0;
+          }} />
 
               <ul role="listbox" aria-label="Search results">
                 ${paletteList.map((n, i) => html`
@@ -450,16 +577,16 @@ export class BuilderCanvas extends LitElement {
                     aria-selected=${i === this.paletteIndex}
                     class=${i === this.paletteIndex ? 'active' : ''}
                     @click=${() => {
-                      this.paletteIndex = i;
-                      this.selectPaletteIndex();
-                    }}>
+              this.paletteIndex = i;
+              this.selectPaletteIndex();
+            }}>
                     <span>${n.id}</span>
                     <span class="badge">${n.type}</span>
                   </li>
                 `)}
                 ${!paletteList.length
-                  ? html`<li style="opacity:.6; cursor:default;" aria-disabled="true">No matches</li>`
-                  : null}
+            ? html`<li style="opacity:.6; cursor:default;" aria-disabled="true">No matches</li>`
+            : null}
               </ul>
 
               <div style="padding:4px 8px; font-size:10px; border-top:1px solid #e2e8f0; display:flex; justify-content:space-between;">

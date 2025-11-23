@@ -2,17 +2,11 @@ import { FormElement } from './FormElement';
 import { registerComponent } from '../core/registry';
 
 /**
- * StudioInput - Universal text input component with Field-Level Security (FLS)
- * Supports: text, email, password, number, tel, url, date, datetime-local, time
- * 
- * FLS Features:
- * - Hides fields user cannot read (non-readable)
- * - Disables fields user cannot edit (read-only) with 🔒 icon
- * - Loads permissions from 'entity' attribute
+ * StudioInput - Text input component with Field-Level Security (FLS)
  */
 export class InputElement extends FormElement {
   static get observedAttributes() {
-    return ['type', 'label', 'placeholder', 'value', 'required', 'disabled', 'min', 'max', 'pattern', 'name', 'entity'];
+    return ['label', 'value', 'placeholder', 'type', 'required', 'disabled', 'name', 'entity'];
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
@@ -20,55 +14,23 @@ export class InputElement extends FormElement {
   }
 
   async connectedCallback() {
-    this.setupEventListeners();
     await this.loadFieldPermissionsFromAttribute();
-  }
-
-  private setupEventListeners() {
-    // Delegate input events from shadow DOM to host
-    this.shadowRoot?.addEventListener('input', (e: Event) => {
-      const input = e.target as HTMLInputElement;
-      this.setAttribute('value', input.value);
-      this.dispatchEvent(new CustomEvent('input', {
-        detail: { value: input.value, name: this.getAttribute('name') },
-        bubbles: true,
-        composed: true
-      }));
-    });
-
-    this.shadowRoot?.addEventListener('change', (e: Event) => {
-      const input = e.target as HTMLInputElement;
-      this.dispatchEvent(new CustomEvent('change', {
-        detail: { value: input.value, name: this.getAttribute('name') },
-        bubbles: true,
-        composed: true
-      }));
-    });
-  }
-
-  private getInputType(): string {
-    const type = this.getAttribute('type') || 'text';
-    const validTypes = ['text', 'email', 'password', 'number', 'tel', 'url', 'date', 'datetime-local', 'time'];
-    return validTypes.includes(type) ? type : 'text';
   }
 
   protected render(): string {
     const fieldName = this.getAttribute('name') || '';
-    
+
     // FLS: Hide non-readable fields
     if (this.isFieldHidden(fieldName)) {
       return this.renderHiddenField();
     }
-    
+
     const label = this.getAttribute('label') || '';
-    const placeholder = this.getAttribute('placeholder') || '';
     const value = this.getAttribute('value') || '';
+    const placeholder = this.getAttribute('placeholder') || '';
+    const type = this.getAttribute('type') || 'text';
     const required = this.hasAttribute('required');
     const disabled = this.hasAttribute('disabled');
-    const min = this.getAttribute('min') || '';
-    const max = this.getAttribute('max') || '';
-    const pattern = this.getAttribute('pattern') || '';
-    const type = this.getInputType();
 
     // FLS: Disable non-editable fields
     const flsDisabled = this.isFieldDisabled(fieldName);
@@ -78,19 +40,16 @@ export class InputElement extends FormElement {
 
     const inputAttrs = [
       `type="${type}"`,
-      `placeholder="${placeholder}"`,
       `value="${value}"`,
+      placeholder ? `placeholder="${placeholder}"` : '',
       required ? 'required' : '',
       isDisabled ? 'disabled' : '',
-      min ? `min="${min}"` : '',
-      max ? `max="${max}"` : '',
-      pattern ? `pattern="${pattern}"` : '',
       title ? `title="${title}"` : ''
     ].filter(Boolean).join(' ');
 
     return `
       ${label ? `<label part="label">${label}${lockIcon}${required ? '<span class="required">*</span>' : ''}</label>` : ''}
-      <input part="input" ${inputAttrs} />
+      <input part="input" ${inputAttrs}>
     `;
   }
 
@@ -133,15 +92,11 @@ export class InputElement extends FormElement {
         cursor: not-allowed;
         opacity: 0.6;
       }
-      input::placeholder {
-        color: var(--color-text-muted, #9ca3af);
-      }
-      input:invalid:not(:placeholder-shown) {
-        border-color: var(--color-danger, #e74c3c);
-      }
     `;
   }
 }
 
-customElements.define('studio-input', InputElement);
+if (!customElements.get('studio-input')) {
+  customElements.define('studio-input', InputElement);
+}
 registerComponent('input', InputElement);

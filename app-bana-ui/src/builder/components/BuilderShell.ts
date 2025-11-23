@@ -64,7 +64,7 @@ export class BuilderShell extends LitElement {
     if (!this.isResizing) return;
 
     e.preventDefault();
-    
+
     const delta = e.clientX - this.startX;
     const newWidth = this.startWidth + delta;
 
@@ -105,7 +105,7 @@ export class BuilderShell extends LitElement {
   render() {
     // Set CSS custom property for dynamic width
     this.style.setProperty('--left-panel-width', `${this.leftPanelWidth}px`);
-    
+
     return html`
       <!-- Top: App Manager -->
       <div class="app-manager-panel">

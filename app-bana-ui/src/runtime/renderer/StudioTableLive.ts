@@ -13,10 +13,10 @@ export class StudioTableLive extends LitElement {
   @state() private page: number = 1;
   @state() private pageSize: number = 25;
   @state() private total: number = 0;
-  @state() private filters: Record<string,string> = {};
+  @state() private filters: Record<string, string> = {};
   @state() private effectiveTheme: string = 'default';
   @state() private runtimeThemeOverride: string | null = null;
-  @state() private runtimeThemeTokens: Record<string,string> | null = null;
+  @state() private runtimeThemeTokens: Record<string, string> | null = null;
   @state() private selectedIds: Set<string> = new Set<string>();
   @state() private confirmOpen: boolean = false;
   @state() private confirmMessage: string = '';
@@ -26,8 +26,12 @@ export class StudioTableLive extends LitElement {
   @state() private viewOpen: boolean = false;
   @state() private viewRow: any = null;
   @state() private editMode: boolean = false;
-  @state() private editValues: Record<string,any> = {};
-  @state() private fieldPermissions: {readable: string[], editable: string[]} | null = null;
+  @state() private editValues: Record<string, any> = {};
+  @state() private fieldPermissions: { readable: string[], editable: string[] } | null = null;
+
+  private get entityName(): string | undefined {
+    return this.node?.props?.entity?.replace(/=$/, '');
+  }
 
   public static readonly styles = css`
     .table-container {
@@ -354,7 +358,7 @@ export class StudioTableLive extends LitElement {
   }
 
   private async loadFieldPermissions() {
-    const entity = this.node?.props?.entity;
+    const entity = this.entityName;
     if (!entity) return;
     try {
       this.fieldPermissions = await getFieldPermissions(entity);
@@ -383,7 +387,7 @@ export class StudioTableLive extends LitElement {
   }
 
   private async initializeTable() {
-    if (!this.node?.props?.entity || !Array.isArray(this.node.props.fields) || this.node.props.fields.length === 0) {
+    if (!this.entityName || !Array.isArray(this.node?.props?.fields) || this.node?.props?.fields.length === 0) {
       this.error = 'No entity or columns selected.';
       return;
     }
@@ -401,7 +405,7 @@ export class StudioTableLive extends LitElement {
       if (saved) {
         const obj = JSON.parse(saved);
         if (obj?.theme) this.runtimeThemeOverride = String(obj.theme);
-        if (obj?.tokens && typeof obj.tokens === 'object') this.runtimeThemeTokens = obj.tokens as Record<string,string>;
+        if (obj?.tokens && typeof obj.tokens === 'object') this.runtimeThemeTokens = obj.tokens as Record<string, string>;
       }
     } catch (e) {
       console.error('Failed to load theme overrides', e);
@@ -432,9 +436,13 @@ export class StudioTableLive extends LitElement {
         this.error = 'Component configuration missing.';
         return;
       }
-      const entity = this.node.props.entity;
-      const fields = Array.isArray(this.node.props.fields) ? this.node.props.fields.map((f: any) => f.name) : [];
-      const sort = this.node.props.sort || '';
+      const entity = this.entityName;
+      if (!entity) {
+        this.error = 'Entity not configured.';
+        return;
+      }
+      const fields = Array.isArray(this.node?.props?.fields) ? this.node?.props?.fields.map((f: any) => f.name) : [];
+      const sort = this.node?.props?.sort || '';
       const result = await fetchTableData(entity, fields, { pageSize: this.pageSize, sort, page, filters: this.filters });
       this.data = result;
       this.total = typeof result.total === 'number' ? result.total : (result.rows?.length || 0);
@@ -482,15 +490,15 @@ export class StudioTableLive extends LitElement {
       </div>
       <label style="font-size:0.75rem;color:#475569;display:flex;align-items:center;gap:4px;">Page size:
         <select @change=${this.onPageSizeChange} aria-label="Select page size">
-          ${[10,25,50,100].map(size => html`<option value=${size} ?selected=${size===this.pageSize}>${size}</option>`)}
+          ${[10, 25, 50, 100].map(size => html`<option value=${size} ?selected=${size === this.pageSize}>${size}</option>`)}
         </select>
       </label>
       <label style="font-size:0.75rem;color:#475569;display:flex;align-items:center;gap:4px;">Theme:
         <select @change=${this.onThemeChange} aria-label="Select theme">
-          ${['default','minimal','dark','striped','compact','soft','auto','custom'].map(t => html`<option value=${t} ?selected=${(this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase()===t}>${t}</option>`)}
+          ${['default', 'minimal', 'dark', 'striped', 'compact', 'soft', 'auto', 'custom'].map(t => html`<option value=${t} ?selected=${(this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase() === t}>${t}</option>`)}
         </select>
       </label>
-      ${((this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase()==='custom') ? html`
+      ${((this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase() === 'custom') ? html`
         <button @click=${this.promptCustomTokens} aria-label="Edit custom theme" style="padding:4px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;color:#1e293b;">Edit Tokens</button>
       `: ''}
     </div>`;
@@ -531,8 +539,8 @@ export class StudioTableLive extends LitElement {
 
   private computeCustomStyle(rawTheme: string): string {
     if (rawTheme !== 'custom') return '';
-    const map: Record<string,string> = this.runtimeThemeTokens ?? (this.node?.props?.themeTokens as Record<string,string>) ?? {};
-    const tokenToVar: Record<string,string> = {
+    const map: Record<string, string> = this.runtimeThemeTokens ?? (this.node?.props?.themeTokens as Record<string, string>) ?? {};
+    const tokenToVar: Record<string, string> = {
       headerBg: '--tbl-header-bg',
       headerColor: '--tbl-header-color',
       rowEvenBg: '--tbl-row-even-bg',
@@ -544,7 +552,7 @@ export class StudioTableLive extends LitElement {
       containerBg: '--tbl-container-bg'
     };
     const parts: string[] = [];
-    for (const [k,v] of Object.entries(map)) if (v && tokenToVar[k]) parts.push(`${tokenToVar[k]}:${v}`);
+    for (const [k, v] of Object.entries(map)) if (v && tokenToVar[k]) parts.push(`${tokenToVar[k]}:${v}`);
     return parts.join(';');
   }
 
@@ -556,7 +564,7 @@ export class StudioTableLive extends LitElement {
       const key = `table-theme-${this.node?.id}`;
       const payload = { theme, tokens: this.runtimeThemeTokens };
       globalThis.localStorage?.setItem(key, JSON.stringify(payload));
-    } catch {}
+    } catch { }
     // Resolve effective theme for 'auto' or explicit
     this.applyTheme(theme);
     this.requestUpdate();
@@ -579,7 +587,7 @@ export class StudioTableLive extends LitElement {
     try {
       const obj = JSON.parse(input);
       if (obj && typeof obj === 'object') {
-        this.runtimeThemeTokens = obj as Record<string,string>;
+        this.runtimeThemeTokens = obj as Record<string, string>;
         // Persist
         const key = `table-theme-${this.node?.id}`;
         const payload = { theme: 'custom', tokens: this.runtimeThemeTokens };
@@ -596,19 +604,19 @@ export class StudioTableLive extends LitElement {
   render() {
     if (this.loading) return html`<div>Loading table data...</div>`;
     const fields = Array.isArray(this.node?.props?.fields) ? this.node.props.fields : [];
-  const actions: string[] = this.node?.props?.actions || [];
-  const multiSelect: boolean = Boolean(this.node?.props?.multiSelect);
+    const actions: string[] = this.node?.props?.actions || [];
+    const multiSelect: boolean = Boolean(this.node?.props?.multiSelect);
     const rows = (this.data?.rows && this.data.rows.length > 0)
       ? this.data.rows
-      : [1,2,3].map(i => Object.fromEntries(fields.map((f: any) => [f.name, `Sample ${i}`])));
-    const activeFilters = Object.entries(this.filters).filter(([_,v]) => v && v.trim() !== '');
+      : [1, 2, 3].map(i => Object.fromEntries(fields.map((f: any) => [f.name, `Sample ${i}`])));
+    const activeFilters = Object.entries(this.filters).filter(([_, v]) => v && v.trim() !== '');
     const totalPages = Math.max(1, Math.ceil(this.total / this.pageSize));
     const startIdx = (this.page - 1) * this.pageSize + 1;
     const endIdx = Math.min(this.total, this.page * this.pageSize);
     const rawTheme = (this.node?.props?.theme || 'default').toLowerCase();
     const themeClass = ['table-container', `table-theme-${this.effectiveTheme}`].join(' ');
     const customStyle = this.computeCustomStyle(rawTheme);
-    const bulkActions: string[] = Array.isArray(this.node?.props?.bulkActions) ? this.node.props.bulkActions : ['delete','export'];
+    const bulkActions: string[] = Array.isArray(this.node?.props?.bulkActions) ? this.node.props.bulkActions : ['delete', 'export'];
     const selectedCount = this.selectedIds.size;
     return html`<div class="${themeClass}" style="${customStyle}">
       ${this.error ? html`<div class="table-error" style="background:#fef2f2;color:#b91c1c;border:1px solid #fee2e2;">Showing sample data (${this.error})</div>` : ''}
@@ -633,7 +641,7 @@ export class StudioTableLive extends LitElement {
           </tbody>
         </table>
       </div>
-      ${activeFilters.length > 0 ? html`<div style="margin-top:0.5rem;font-size:0.7rem;color:#475569;">Applied ${activeFilters.length} filter(s). Showing rows ${startIdx}-${endIdx} of ${this.total}.</div>`: ''}
+      ${activeFilters.length > 0 ? html`<div style="margin-top:0.5rem;font-size:0.7rem;color:#475569;">Applied ${activeFilters.length} filter(s). Showing rows ${startIdx}-${endIdx} of ${this.total}.</div>` : ''}
       ${this.confirmOpen ? html`
         <div class="modal-overlay" role="presentation" @click=${this.closeConfirm}>
           <div id="confirmCard" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" tabindex="0" @click=${(e: Event) => e.stopPropagation()}>
@@ -722,7 +730,7 @@ export class StudioTableLive extends LitElement {
   private async commitInlineEdit() {
     if (!this.inlineEditing) return;
     const { rowId, field } = this.inlineEditing;
-    const entity = this.node?.props?.entity;
+    const entity = this.entityName;
     if (!entity) { this.cancelInlineEdit(); return; }
     try {
       await updateRow(entity, rowId, { [field]: this.inlineDraft });
@@ -749,7 +757,7 @@ export class StudioTableLive extends LitElement {
   }
 
   private renderCellContent(rowId: string, field: string, value: any) {
-  const editing = this.inlineEditing?.rowId === rowId && this.inlineEditing?.field === field;
+    const editing = this.inlineEditing?.rowId === rowId && this.inlineEditing?.field === field;
     if (!editing) {
       return html`<div>${value == null ? '' : String(value)}</div>`;
     }
@@ -789,7 +797,7 @@ export class StudioTableLive extends LitElement {
 
   private readonly onBulkAction = async (action: string) => {
     const ids = Array.from(this.selectedIds);
-    const entity = this.node?.props?.entity;
+    const entity = this.entityName;
     // Fire event regardless, to allow external listeners
     this.dispatchEvent(new CustomEvent('bulk-action', { detail: { action, selectedIds: ids, entity }, bubbles: true, composed: true }));
     if (!entity || ids.length === 0) return;
@@ -816,7 +824,7 @@ export class StudioTableLive extends LitElement {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${entity}-export-${new Date().toISOString().slice(0,19).replaceAll(/[:T]/g,'-')}.csv`;
+          a.download = `${entity}-export-${new Date().toISOString().slice(0, 19).replaceAll(/[:T]/g, '-')}.csv`;
           document.body.appendChild(a);
           a.click();
           a.remove();
@@ -885,12 +893,12 @@ export class StudioTableLive extends LitElement {
       const label = fd.label || fd.name;
       const rawValue = this.viewRow[fd.name];
       const type = fd.type || this.inferValueType(rawValue);
-      
+
       // Apply FLS: Hide non-readable fields
       if (this.fieldPermissions && !canReadField(fd.name, this.fieldPermissions.readable)) {
         return html``; // Field hidden (user cannot read)
       }
-      
+
       if (this.editMode) return this.renderEditableField(fd, label, type);
       const display = this.formatDisplayValue(type, rawValue);
       return html`<div class="view-field"><label>${label}</label><div class="view-value">${display}</div></div>`;
@@ -899,11 +907,11 @@ export class StudioTableLive extends LitElement {
 
   private renderEditableField(fd: any, label: string, type: string) {
     const current = this.editValues[fd.name];
-    
+
     // Apply FLS: Disable non-editable fields
     const disabled = this.fieldPermissions && !canEditField(fd.name, this.fieldPermissions.editable);
     const lockIcon = disabled ? ' 🔒' : '';
-    
+
     if (type === 'textarea') {
       return html`<div class="view-field"><label>${label}${lockIcon}</label><textarea style="resize:vertical;min-height:70px;font-size:0.8rem;" .value=${current ?? ''} ?disabled=${disabled} title=${disabled ? 'Field is read-only (no edit permission)' : ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLTextAreaElement).value)}></textarea></div>`;
     }
@@ -948,13 +956,13 @@ export class StudioTableLive extends LitElement {
 
   private formatDate(v: any): string {
     if (!v) return '';
-  try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toLocaleString(); } catch {}
+    try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toLocaleString(); } catch { }
     return String(v);
   }
 
   private toDateInputValue(v: any): string {
     if (!v) return '';
-  try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0,10); } catch {}
+    try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10); } catch { }
     return '';
   }
 

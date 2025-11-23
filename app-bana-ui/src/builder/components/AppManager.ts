@@ -31,14 +31,19 @@ export class AppManager extends LitElement {
     this.apps = appStore.listApps();
   }
 
-  private handleCreateApp() {
-    this.showCreateModal = true;
-    this.formName = '';
-    this.formDescription = '';
-    this.formTemplate = 'single-page';
+  private handleCreateApp = (e?: Event) => {
+    e?.stopPropagation();
+    // Use setTimeout to prevent the click event from immediately closing the modal
+    setTimeout(() => {
+      this.showCreateModal = true;
+      this.formName = '';
+      this.formDescription = '';
+      this.formTemplate = 'single-page';
+    }, 0);
   }
 
-  private handleSelectApp() {
+  private handleSelectApp = (e?: Event) => {
+    e?.stopPropagation();
     this.isLoadingApps = true;
     this.appsLoadError = null;
     appStore.loadApps()
@@ -55,13 +60,15 @@ export class AppManager extends LitElement {
       });
   }
 
-  private handleCloseModal() {
+  private handleCloseModal = (e?: Event) => {
+    e?.stopPropagation();
     this.showCreateModal = false;
     this.showSelectModal = false;
   }
 
-  private async handleSubmitCreate(e: Event) {
+  private handleSubmitCreate = async (e: Event) => {
     e.preventDefault();
+    e.stopPropagation();
 
     if (!this.formName.trim()) {
       alert('Please enter an app name');
@@ -84,7 +91,7 @@ export class AppManager extends LitElement {
     }
   }
 
-  private async handleSelectExistingApp(appId: string) {
+  private handleSelectExistingApp = async (appId: string) => {
     try {
       await appStore.setCurrentApp(appId);
       this.showSelectModal = false;
@@ -96,7 +103,7 @@ export class AppManager extends LitElement {
     }
   }
 
-  private async handleDeleteApp(appId: string, appName: string, e: Event) {
+  private handleDeleteApp = async (appId: string, appName: string, e: Event) => {
     e.stopPropagation();
 
     if (!confirm(`Are you sure you want to delete "${appName}"? This will delete all pages in this app.`)) {

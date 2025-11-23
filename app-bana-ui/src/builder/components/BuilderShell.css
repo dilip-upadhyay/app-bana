@@ -29,6 +29,7 @@
   overflow: hidden;
   padding: 12px 0 12px 12px;
   position: relative;
+  min-height: 0;
 }
 
 .left-panel-tabs {
@@ -152,4 +153,3 @@ studio-builder-inspector {
   background: #3b82f6;
   height: 100px;
 }
-

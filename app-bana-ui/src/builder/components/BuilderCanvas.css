@@ -20,6 +20,7 @@
   align-items: center;
   gap: 4px;
   user-select: none;
+  border: 2px solid transparent; /* Reserve space for borders */
 }
 
 .node[data-selected='true'] {
@@ -58,8 +59,17 @@ button.inline {
   outline: 1px solid #94a3b8;
 }
 
-.node.drag-over {
+.node.drop-inside {
   outline: 2px dashed #2563eb;
+  background-color: rgba(37, 99, 235, 0.1);
+}
+
+.node.drop-before {
+  border-top-color: #2563eb;
+}
+
+.node.drop-after {
+  border-bottom-color: #2563eb;
 }
 
 .palette-backdrop {
@@ -170,4 +180,3 @@ button.inline {
   height: 1px;
   overflow: hidden;
 }
-
