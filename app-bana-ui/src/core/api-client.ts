@@ -363,9 +363,21 @@ export async function updateRow(entity: string, id: string|number, data: Record<
 export async function getFieldPermissions(entityName: string): Promise<{readable: string[], editable: string[]}> {
   const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
   try {
-    // For now, return all fields as accessible (Phase 1 - no JWT integration yet)
-    // In Phase 2, this will call /api/field-permissions/check with userId from JWT
-    return { readable: ['*'], editable: ['*'] };
+    // Call the FLS endpoints we just created
+    const [readableResp, editableResp] = await Promise.all([
+      fetch(`${base}/api/field-permissions/readable?entity=${encodeURIComponent(entityName)}`),
+      fetch(`${base}/api/field-permissions/editable?entity=${encodeURIComponent(entityName)}`)
+    ]);
+    
+    if (!readableResp.ok || !editableResp.ok) {
+      console.warn('FLS API returned error, defaulting to full access');
+      return { readable: ['*'], editable: ['*'] };
+    }
+    
+    const readable = await readableResp.json() as string[];
+    const editable = await editableResp.json() as string[];
+    
+    return { readable, editable };
   } catch (error) {
     console.warn('FLS API not available, defaulting to full access:', error);
     return { readable: ['*'], editable: ['*'] };
