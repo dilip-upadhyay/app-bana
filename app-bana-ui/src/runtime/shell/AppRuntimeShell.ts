@@ -64,7 +64,7 @@ export class AppRuntimeShell extends LitElement {
 
   private navigateToPage(pageId: string) {
     const page = this.runtimeState?.pages.find(p => p.id === pageId);
-    
+
     if (!page) {
       this.error = `Page not found: ${pageId}`;
       return;
@@ -79,7 +79,7 @@ export class AppRuntimeShell extends LitElement {
     url.searchParams.set('pageId', pageId);
     globalThis.history.pushState({}, '', url.toString());
 
-  // No imperative re-render; Lit will update reactively.
+    // No imperative re-render; Lit will update reactively.
   }
 
   // Remove direct DOM manipulation. Page content is rendered via Lit's template.
@@ -116,21 +116,45 @@ export class AppRuntimeShell extends LitElement {
     const { app, pages, mode } = this.runtimeState;
     const isPreviewMode = mode === 'preview' || mode === 'development';
 
+    // In preview mode, show page tabs but no AppBana header/branding
+    if (isPreviewMode) {
+      return html`
+        <div class="runtime-shell preview-only">
+          <!-- Page Navigation Tabs (Part of the app) -->
+          ${pages.length > 1 ? html`
+            <nav class="page-tabs">
+              ${pages.map(page => html`
+                <button
+                  class="page-tab ${page.id === this.currentPageId ? 'active' : ''}"
+                  @click=${() => this.handlePageTabClick(page.id)}
+                >
+                  ${page.name}
+                </button>
+              `)}
+            </nav>
+          ` : ''}
+
+          <!-- Page Content -->
+          <main class="runtime-content full-page">
+            ${this.error ? html`
+              <div class="error-message">
+                <h3>Error</h3>
+                <p>${this.error}</p>
+              </div>
+            ` : ''}
+            ${this.currentPage ? renderPageTemplate(this.currentPage) : html`<div>Loading...</div>`}
+          </main>
+        </div>
+      `;
+    }
+
+    // Production mode shows full navigation
     return html`
       <div class="runtime-shell">
         <!-- Header -->
         <header class="runtime-header">
           <div class="header-left">
             <h1 class="app-title">${app.name}</h1>
-            ${isPreviewMode ? html`<span class="preview-badge">PREVIEW</span>` : ''}
-          </div>
-          
-          <div class="header-right">
-            ${isPreviewMode ? html`
-              <button class="btn-back-to-studio" @click=${this.handleBackToStudio}>
-                ← Back to Studio
-              </button>
-            ` : ''}
           </div>
         </header>
 

@@ -25,20 +25,22 @@ export class AppRoot extends LitElement {
     const path = window.location.pathname;
     const hash = window.location.hash;
     const searchParams = new URLSearchParams(window.location.search);
-    
+
     // Check for runtime state parameter (new preview mode)
     const stateParam = searchParams.get('state');
     if (stateParam) {
+      // Hide AppBana Studio chrome for preview mode
+      this.hideStudioChrome();
       await this.loadAppRuntime(stateParam);
       return;
     }
-    
+
     // Legacy: If hash-based routing is present, load page from app store
     if (hash && hash.startsWith('#/')) {
       await this.loadPageByHash(hash.substring(1)); // Remove the '#' prefix
       return;
     }
-    
+
     if (path.includes('/studio')) {
       await ensureCoreRegistered();
       if (path.includes('/studio') && !path.includes('/studio/builder')) {
@@ -49,7 +51,22 @@ export class AppRoot extends LitElement {
       }
     }
   }
-  
+
+  /**
+   * Hide AppBana Studio sidebar and header for preview/runtime mode
+   */
+  private hideStudioChrome() {
+    const style = document.createElement('style');
+    style.textContent = `
+      app-sidebar { display: none !important; }
+      .app-shell-header { display: none !important; }
+      .app-layout { display: block !important; }
+      .app-layout-main { width: 100% !important; }
+      .app-main { padding: 0 !important; max-width: none !important; }
+    `;
+    document.head.appendChild(style);
+  }
+
   /**
    * Load and render app runtime with full context
    * This is the NEW proper way to preview/run apps
@@ -94,7 +111,7 @@ export class AppRoot extends LitElement {
       // Create and mount the AppRuntimeShell component
       const shell = document.createElement('app-runtime-shell');
       (shell as any).runtimeState = fullRuntimeState;
-      
+
       // Clear existing content and mount shell
       host.innerHTML = '';
       host.appendChild(shell);
@@ -121,32 +138,32 @@ export class AppRoot extends LitElement {
     await ensureCoreRegistered();
     const host = this.renderRoot.querySelector('#app-content') as HTMLElement | null;
     if (!host) return;
-    
+
     // Load page metadata from localStorage (AppStore uses hierarchical structure)
     const appsListJson = localStorage.getItem('appbana.apps.list');
     if (!appsListJson) {
       host.innerHTML = '<div style="padding: 2rem; color: red;">No apps found. Please create an app in Studio first.</div>';
       return;
     }
-    
+
     const appIds: string[] = JSON.parse(appsListJson);
     let targetPage: PageMeta | null = null;
-    const allPages: {appId: string, pageName: string, pagePath: string}[] = [];
-    
+    const allPages: { appId: string, pageName: string, pagePath: string }[] = [];
+
     // Find the page with matching path across all apps
     for (const appId of appIds) {
       const appJson = localStorage.getItem(`appbana.apps.${appId}`);
       if (!appJson) continue;
-      
+
       const app = JSON.parse(appJson);
       console.log('[AppRoot] Checking app:', appId, 'Pages:', app.pages?.length || 0);
-      
+
       if (app.pages) {
         // Collect all pages for debugging
         for (const p of app.pages) {
           allPages.push({ appId, pageName: p.name, pagePath: p.path });
         }
-        
+
         targetPage = app.pages.find((p: PageMeta) => p.path === path);
         if (targetPage) {
           console.log('[AppRoot] Found matching page:', targetPage.name);
@@ -154,7 +171,7 @@ export class AppRoot extends LitElement {
         }
       }
     }
-    
+
     if (targetPage) {
       console.log('[AppRoot] Rendering page:', targetPage.name, 'at path:', path);
       renderPage(targetPage, host);
@@ -169,7 +186,7 @@ export class AppRoot extends LitElement {
       `;
     }
   }
-  
+
   connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener('popstate', this._onPop);
@@ -181,7 +198,7 @@ export class AppRoot extends LitElement {
     window.removeEventListener('hashchange', this._onHashChange);
   }
   private _onPop = () => { this.requestUpdate(); };
-  private _onHashChange = () => { 
+  private _onHashChange = () => {
     this.requestUpdate();
     const hash = window.location.hash;
     if (hash && hash.startsWith('#/')) {
@@ -194,17 +211,17 @@ export class AppRoot extends LitElement {
     const hash = window.location.hash;
     const searchParams = new URLSearchParams(window.location.search);
     const stateParam = searchParams.get('state');
-    
+
     // New runtime mode - full app context with navigation
     if (stateParam) {
       return html`<div id="app-runtime" style="width: 100%; height: 100vh; display: flex; flex-direction: column;"></div>`;
     }
-    
+
     // Legacy: Hash-based routing for preview pages
     if (hash && hash.startsWith('#/')) {
       return html`<div id="app-content" style="width: 100%; height: 100%;"></div>`;
     }
-    
+
     if (path.includes('/builder') && !path.includes('/studio/builder')) {
       return html`<schema-builder></schema-builder>`;
     } else if (path.includes('/explorer')) {
