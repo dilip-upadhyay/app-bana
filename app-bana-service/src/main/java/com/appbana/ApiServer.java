@@ -1271,6 +1271,90 @@ public class ApiServer {
             }
         });
         
+        // Get readable fields for current user on an entity
+        router.get("/api/field-permissions/readable", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String userId = null;
+            
+            if (authEnabled(cfg)) {
+                userId = extractUserId(req, cfg);
+                if (userId == null) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            } else {
+                // If auth disabled, return wildcard access
+                res.json(200, Map.of("fields", List.of("*"), "message", "Authentication disabled - all fields readable"));
+                return;
+            }
+            
+            String entityName = req.query("entity");
+            if (entityName == null || entityName.isBlank()) {
+                res.json(400, Map.of("error", "entity parameter required"));
+                return;
+            }
+            
+            if (permissionService == null) {
+                res.json(503, Map.of("error", "Permission service not available"));
+                return;
+            }
+            
+            try {
+                List<String> readableFields = permissionService.getReadableFields(userId, entityName);
+                res.json(200, Map.of(
+                    "entity", entityName,
+                    "userId", userId,
+                    "fields", readableFields,
+                    "count", readableFields.size()
+                ));
+            } catch (Exception e) {
+                LOG.error("Failed to get readable fields for user {} entity {}", userId, entityName, e);
+                res.json(500, errorDetails(e));
+            }
+        });
+        
+        // Get editable fields for current user on an entity
+        router.get("/api/field-permissions/editable", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String userId = null;
+            
+            if (authEnabled(cfg)) {
+                userId = extractUserId(req, cfg);
+                if (userId == null) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            } else {
+                // If auth disabled, return wildcard access
+                res.json(200, Map.of("fields", List.of("*"), "message", "Authentication disabled - all fields editable"));
+                return;
+            }
+            
+            String entityName = req.query("entity");
+            if (entityName == null || entityName.isBlank()) {
+                res.json(400, Map.of("error", "entity parameter required"));
+                return;
+            }
+            
+            if (permissionService == null) {
+                res.json(503, Map.of("error", "Permission service not available"));
+                return;
+            }
+            
+            try {
+                List<String> editableFields = permissionService.getEditableFields(userId, entityName);
+                res.json(200, Map.of(
+                    "entity", entityName,
+                    "userId", userId,
+                    "fields", editableFields,
+                    "count", editableFields.size()
+                ));
+            } catch (Exception e) {
+                LOG.error("Failed to get editable fields for user {} entity {}", userId, entityName, e);
+                res.json(500, errorDetails(e));
+            }
+        });
+        
         router.get("/api/field-permissions/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
@@ -1345,7 +1429,7 @@ public class ApiServer {
                 if (inserted > 0) {
                     // Clear permission cache for all users (permissions changed)
                     if (permissionService != null) {
-                        permissionService.clearCache(null);
+                        permissionService.clearAllCaches();
                     }
                     res.json(201, Map.of("id", id, "message", "Field permission created"));
                 } else {
@@ -1401,7 +1485,7 @@ public class ApiServer {
                     if (updated > 0) {
                         // Clear permission cache for all users (permissions changed)
                         if (permissionService != null) {
-                            permissionService.clearCache(null);
+                            permissionService.clearAllCaches();
                         }
                         res.json(200, Map.of("updated", updated, "message", "Field permission updated"));
                     } else {
@@ -1432,7 +1516,7 @@ public class ApiServer {
                 if (deleted > 0) {
                     // Clear permission cache for all users (permissions changed)
                     if (permissionService != null) {
-                        permissionService.clearCache(null);
+                        permissionService.clearAllCaches();
                     }
                     res.json(200, Map.of("deleted", deleted, "message", "Field permission deleted"));
                 } else {
@@ -1542,6 +1626,23 @@ public class ApiServer {
                         res.json(200, out);
                     } else {
                         Map<String,Object> out = listAdvanced(schema, limit, offset, q, fieldsParam, sortParam, filters);
+                        
+                        // Apply FLS filtering to advanced query results
+                        if (permissionService != null && authEnabled(cfg)) {
+                            String userId = extractUserId(req, cfg);
+                            if (userId != null && out.get("data") instanceof List<?> dataList) {
+                                List<Map<String,Object>> filtered = new ArrayList<>();
+                                for (Object item : dataList) {
+                                    if (item instanceof Map<?,?> row) {
+                                        @SuppressWarnings("unchecked")
+                                        Map<String,Object> typedRow = (Map<String,Object>) row;
+                                        filtered.add(permissionService.filterReadableFields(userId, entity, typedRow));
+                                    }
+                                }
+                                out.put("data", filtered);
+                            }
+                        }
+                        
                         res.json(200, out);
                     }
                 }
@@ -1684,6 +1785,19 @@ public class ApiServer {
                     LOG.warn("Bulk export failed for {} id {}: {}", entity, idStr, e.getMessage());
                 }
             }
+            
+            // Apply FLS filtering if PermissionService available
+            if (permissionService != null && authEnabled(cfg)) {
+                String userId = extractUserId(req, cfg);
+                if (userId != null) {
+                    List<Map<String,Object>> filtered = new ArrayList<>();
+                    for (Map<String,Object> row : rows) {
+                        filtered.add(permissionService.filterReadableFields(userId, entity, row));
+                    }
+                    rows = filtered;
+                }
+            }
+            
             res.json(200, Map.of("count", rows.size(), "rows", rows));
         });
 
