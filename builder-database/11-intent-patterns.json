@@ -220,6 +220,57 @@
       ],
       "actions": ["handle_smalltalk"],
       "use_smalltalk_engine": true
+    },
+    {
+      "id": "field_level_security",
+      "name": "Field-Level Security (FLS)",
+      "description": "User wants to hide/protect/restrict access to specific fields based on roles",
+      "confidence_threshold": 0.75,
+      "patterns": [
+        {
+          "type": "keyword",
+          "keywords": ["hide", "protect", "restrict", "secure", "lock", "mask"],
+          "must_contain": ["field", "column", "attribute", "property", "data"],
+          "weight": 0.9
+        },
+        {
+          "type": "keyword",
+          "keywords": ["only", "can't see", "cannot see", "shouldn't see", "shouldn't access"],
+          "context_required": "role_context",
+          "weight": 0.85
+        },
+        {
+          "type": "security_keywords",
+          "keywords": ["salary", "ssn", "social security", "credit card", "password", "confidential", "sensitive", "private", "phi", "pii"],
+          "weight": 0.95
+        },
+        {
+          "type": "compliance_keywords",
+          "keywords": ["hipaa", "pci-dss", "gdpr", "compliance", "audit", "regulatory"],
+          "weight": 0.9
+        }
+      ],
+      "examples": [
+        "Hide salary field from non-HR users",
+        "Only managers can see employee SSN",
+        "Protect patient medical records (HIPAA)",
+        "Nurses cannot see patient billing information",
+        "Make salary read-only for managers",
+        "HR can edit benefits, managers can only view"
+      ],
+      "actions": ["suggest_field_permission", "create_field_permission_records"],
+      "response_template": "I can configure Field-Level Security to {action} the '{field}' field for {role}. This will ensure HIPAA/PCI-DSS compliance. Shall I create the field permission?",
+      "technical_implementation": {
+        "entity": "FieldPermission",
+        "table": "field_permission",
+        "fields": ["role_id", "entity_name", "field_name", "readable", "editable"],
+        "apiEndpoints": [
+          "POST /api/field-permissions",
+          "GET /api/field-permissions/readable?entity=User",
+          "GET /api/field-permissions/editable?entity=User"
+        ],
+        "uiComponent": "StudioTableLive automatically hides/disables fields"
+      }
     }
   ],
   "fallback_strategy": {
