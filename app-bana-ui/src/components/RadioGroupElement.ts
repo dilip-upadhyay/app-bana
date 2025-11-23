@@ -1,17 +1,21 @@
-import { BaseElement } from '../core/BaseElement';
+import { FormElement } from './FormElement';
 import { registerComponent } from '../core/registry';
 
 /**
- * StudioRadioGroup - Radio button group component
+ * StudioRadioGroup - Radio button group component with Field-Level Security (FLS)
  * Options format: JSON array or comma-separated values
  */
-export class RadioGroupElement extends BaseElement {
+export class RadioGroupElement extends FormElement {
   static get observedAttributes() {
-    return ['label', 'name', 'value', 'options', 'required', 'disabled', 'layout'];
+    return ['label', 'name', 'value', 'options', 'required', 'disabled', 'layout', 'entity'];
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
     this.requestRender();
+  }
+
+  async connectedCallback() {
+    await this.loadFieldPermissionsFromAttribute();
   }
 
   private parseOptions(): Array<{ value: string; label: string }> {
@@ -44,24 +48,36 @@ export class RadioGroupElement extends BaseElement {
   }
 
   protected render(): string {
+    const fieldName = this.getAttribute('name') || 'radio-group';
+    
+    // FLS: Hide non-readable fields
+    if (this.isFieldHidden(fieldName)) {
+      return this.renderHiddenField();
+    }
+    
     const label = this.getAttribute('label') || '';
-    const name = this.getAttribute('name') || 'radio-group';
     const value = this.getAttribute('value') || '';
     const required = this.hasAttribute('required');
     const disabled = this.hasAttribute('disabled');
     const layout = this.getAttribute('layout') || 'vertical';
     const options = this.parseOptions();
 
+    // FLS: Disable non-editable fields
+    const flsDisabled = this.isFieldDisabled(fieldName);
+    const isDisabled = disabled || flsDisabled;
+    const lockIcon = flsDisabled ? this.getLockIcon() : '';
+    const title = flsDisabled ? this.getDisabledTooltip() : '';
+
     const optionsHtml = options.map((opt, index) => {
-      const radioId = `${name}-${index}`;
+      const radioId = `${fieldName}-${index}`;
       const inputAttrs = [
         `type="radio"`,
-        `name="${name}"`,
+        `name="${fieldName}"`,
         `value="${opt.value}"`,
         `id="${radioId}"`,
         value === opt.value ? 'checked' : '',
         required && index === 0 ? 'required' : '',
-        disabled ? 'disabled' : ''
+        isDisabled ? 'disabled' : ''
       ].filter(Boolean).join(' ');
 
       return `
@@ -74,7 +90,7 @@ export class RadioGroupElement extends BaseElement {
     }).join('');
 
     return `
-      ${label ? `<div part="group-label" class="group-label">${label}${required ? '<span class="required">*</span>' : ''}</div>` : ''}
+      ${label ? `<div part="group-label" class="group-label" ${title ? `title="${title}"` : ''}>${label}${lockIcon}${required ? '<span class="required">*</span>' : ''}</div>` : ''}
       <div part="options-container" class="options-container ${layout}">
         ${optionsHtml}
       </div>

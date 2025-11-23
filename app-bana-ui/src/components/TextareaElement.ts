@@ -1,19 +1,30 @@
-import { BaseElement } from '../core/BaseElement';
+import { FormElement } from './FormElement';
 import { registerComponent } from '../core/registry';
 
 /**
- * StudioTextarea - Multi-line text input component
+ * StudioTextarea - Multi-line text input component with Field-Level Security (FLS)
  */
-export class TextareaElement extends BaseElement {
+export class TextareaElement extends FormElement {
   static get observedAttributes() {
-    return ['label', 'placeholder', 'value', 'required', 'disabled', 'rows', 'maxlength', 'name'];
+    return ['label', 'placeholder', 'value', 'required', 'disabled', 'rows', 'maxlength', 'name', 'entity'];
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
     this.requestRender();
   }
 
+  async connectedCallback() {
+    await this.loadFieldPermissionsFromAttribute();
+  }
+
   protected render(): string {
+    const fieldName = this.getAttribute('name') || '';
+    
+    // FLS: Hide non-readable fields
+    if (this.isFieldHidden(fieldName)) {
+      return this.renderHiddenField();
+    }
+    
     const label = this.getAttribute('label') || '';
     const placeholder = this.getAttribute('placeholder') || '';
     const value = this.getAttribute('value') || '';
@@ -22,16 +33,23 @@ export class TextareaElement extends BaseElement {
     const rows = this.getAttribute('rows') || '4';
     const maxlength = this.getAttribute('maxlength') || '';
 
+    // FLS: Disable non-editable fields
+    const flsDisabled = this.isFieldDisabled(fieldName);
+    const isDisabled = disabled || flsDisabled;
+    const lockIcon = flsDisabled ? this.getLockIcon() : '';
+    const title = flsDisabled ? this.getDisabledTooltip() : '';
+
     const textareaAttrs = [
       `placeholder="${placeholder}"`,
       `rows="${rows}"`,
       required ? 'required' : '',
-      disabled ? 'disabled' : '',
-      maxlength ? `maxlength="${maxlength}"` : ''
+      isDisabled ? 'disabled' : '',
+      maxlength ? `maxlength="${maxlength}"` : '',
+      title ? `title="${title}"` : ''
     ].filter(Boolean).join(' ');
 
     return `
-      ${label ? `<label part="label">${label}${required ? '<span class="required">*</span>' : ''}</label>` : ''}
+      ${label ? `<label part="label">${label}${lockIcon}${required ? '<span class="required">*</span>' : ''}</label>` : ''}
       <textarea part="textarea" ${textareaAttrs}>${value}</textarea>
       ${maxlength ? `<div class="char-count"><span class="current">${value.length}</span> / ${maxlength}</div>` : ''}
     `;

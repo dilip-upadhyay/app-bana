@@ -1,21 +1,27 @@
-import { BaseElement } from '../core/BaseElement';
+import { FormElement } from './FormElement';
 import { registerComponent } from '../core/registry';
 
 /**
- * StudioInput - Universal text input component
- * Supports: text, email, password, number, tel, url, date, datetime-local
+ * StudioInput - Universal text input component with Field-Level Security (FLS)
+ * Supports: text, email, password, number, tel, url, date, datetime-local, time
+ * 
+ * FLS Features:
+ * - Hides fields user cannot read (non-readable)
+ * - Disables fields user cannot edit (read-only) with 🔒 icon
+ * - Loads permissions from 'entity' attribute
  */
-export class InputElement extends BaseElement {
+export class InputElement extends FormElement {
   static get observedAttributes() {
-    return ['type', 'label', 'placeholder', 'value', 'required', 'disabled', 'min', 'max', 'pattern', 'name'];
+    return ['type', 'label', 'placeholder', 'value', 'required', 'disabled', 'min', 'max', 'pattern', 'name', 'entity'];
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
     this.requestRender();
   }
 
-  connectedCallback() {
+  async connectedCallback() {
     this.setupEventListeners();
+    await this.loadFieldPermissionsFromAttribute();
   }
 
   private setupEventListeners() {
@@ -47,6 +53,13 @@ export class InputElement extends BaseElement {
   }
 
   protected render(): string {
+    const fieldName = this.getAttribute('name') || '';
+    
+    // FLS: Hide non-readable fields
+    if (this.isFieldHidden(fieldName)) {
+      return this.renderHiddenField();
+    }
+    
     const label = this.getAttribute('label') || '';
     const placeholder = this.getAttribute('placeholder') || '';
     const value = this.getAttribute('value') || '';
@@ -57,19 +70,26 @@ export class InputElement extends BaseElement {
     const pattern = this.getAttribute('pattern') || '';
     const type = this.getInputType();
 
+    // FLS: Disable non-editable fields
+    const flsDisabled = this.isFieldDisabled(fieldName);
+    const isDisabled = disabled || flsDisabled;
+    const lockIcon = flsDisabled ? this.getLockIcon() : '';
+    const title = flsDisabled ? this.getDisabledTooltip() : '';
+
     const inputAttrs = [
       `type="${type}"`,
       `placeholder="${placeholder}"`,
       `value="${value}"`,
       required ? 'required' : '',
-      disabled ? 'disabled' : '',
+      isDisabled ? 'disabled' : '',
       min ? `min="${min}"` : '',
       max ? `max="${max}"` : '',
-      pattern ? `pattern="${pattern}"` : ''
+      pattern ? `pattern="${pattern}"` : '',
+      title ? `title="${title}"` : ''
     ].filter(Boolean).join(' ');
 
     return `
-      ${label ? `<label part="label">${label}${required ? '<span class="required">*</span>' : ''}</label>` : ''}
+      ${label ? `<label part="label">${label}${lockIcon}${required ? '<span class="required">*</span>' : ''}</label>` : ''}
       <input part="input" ${inputAttrs} />
     `;
   }

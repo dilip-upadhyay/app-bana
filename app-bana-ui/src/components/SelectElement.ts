@@ -1,17 +1,21 @@
-import { BaseElement } from '../core/BaseElement';
+import { FormElement } from './FormElement';
 import { registerComponent } from '../core/registry';
 
 /**
- * StudioSelect - Dropdown select component
+ * StudioSelect - Dropdown select component with Field-Level Security (FLS)
  * Options format: JSON array or comma-separated values
  */
-export class SelectElement extends BaseElement {
+export class SelectElement extends FormElement {
   static get observedAttributes() {
-    return ['label', 'value', 'options', 'placeholder', 'required', 'disabled', 'name'];
+    return ['label', 'value', 'options', 'placeholder', 'required', 'disabled', 'name', 'entity'];
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
     this.requestRender();
+  }
+
+  async connectedCallback() {
+    await this.loadFieldPermissionsFromAttribute();
   }
 
   private parseOptions(): Array<{ value: string; label: string }> {
@@ -44,6 +48,13 @@ export class SelectElement extends BaseElement {
   }
 
   protected render(): string {
+    const fieldName = this.getAttribute('name') || '';
+    
+    // FLS: Hide non-readable fields
+    if (this.isFieldHidden(fieldName)) {
+      return this.renderHiddenField();
+    }
+    
     const label = this.getAttribute('label') || '';
     const value = this.getAttribute('value') || '';
     const placeholder = this.getAttribute('placeholder') || 'Select an option';
@@ -51,9 +62,16 @@ export class SelectElement extends BaseElement {
     const disabled = this.hasAttribute('disabled');
     const options = this.parseOptions();
 
+    // FLS: Disable non-editable fields
+    const flsDisabled = this.isFieldDisabled(fieldName);
+    const isDisabled = disabled || flsDisabled;
+    const lockIcon = flsDisabled ? this.getLockIcon() : '';
+    const title = flsDisabled ? this.getDisabledTooltip() : '';
+
     const selectAttrs = [
       required ? 'required' : '',
-      disabled ? 'disabled' : ''
+      isDisabled ? 'disabled' : '',
+      title ? `title="${title}"` : ''
     ].filter(Boolean).join(' ');
 
     const optionsHtml = [
@@ -64,7 +82,7 @@ export class SelectElement extends BaseElement {
     ].join('');
 
     return `
-      ${label ? `<label part="label">${label}${required ? '<span class="required">*</span>' : ''}</label>` : ''}
+      ${label ? `<label part="label">${label}${lockIcon}${required ? '<span class="required">*</span>' : ''}</label>` : ''}
       <select part="select" ${selectAttrs}>
         ${optionsHtml}
       </select>

@@ -1,16 +1,20 @@
-import { BaseElement } from '../core/BaseElement';
+import { FormElement } from './FormElement';
 import { registerComponent } from '../core/registry';
 
 /**
- * StudioCheckbox - Single checkbox input component
+ * StudioCheckbox - Checkbox component with Field-Level Security (FLS)
  */
-export class CheckboxElement extends BaseElement {
+export class CheckboxElement extends FormElement {
   static get observedAttributes() {
-    return ['label', 'checked', 'disabled', 'name', 'value'];
+    return ['label', 'checked', 'required', 'disabled', 'name', 'entity'];
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
     this.requestRender();
+  }
+
+  async connectedCallback() {
+    await this.loadFieldPermissionsFromAttribute();
   }
 
   protected render(): string {
