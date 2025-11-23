@@ -26,23 +26,23 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
   if (node.type === 'table') {
     return html`<studio-table-live .node=${node}></studio-table-live>`;
   } else if (node.type === 'container') {
-    return html`<my-container .node=${node}>${children}</my-container>`;
+    return html`<studio-container .node=${node}>${children}</studio-container>`;
   } else if (node.type === 'text') {
-    return html`<my-text .node=${node}></my-text>`;
+    return html`<studio-text .node=${node}></studio-text>`;
   } else if (node.type === 'button') {
-    return html`<my-button .node=${node}></my-button>`;
+    return html`<studio-button .node=${node}></studio-button>`;
   } else if (node.type === 'form') {
-    return html`<my-form .node=${node}>${children}</my-form>`;
+    return html`<studio-form .node=${node}>${children}</studio-form>`;
   } else if (node.type === 'header') {
-    return html`<my-header .node=${node}></my-header>`;
+    return html`<studio-header .node=${node}></studio-header>`;
   } else if (node.type === 'list') {
-    return html`<my-list .node=${node}>${children}</my-list>`;
+    return html`<studio-list .node=${node}>${children}</studio-list>`;
   } else if (node.type === 'card') {
-    return html`<my-card .node=${node}>${children}</my-card>`;
+    return html`<studio-card .node=${node}>${children}</studio-card>`;
   } else if (node.type === 'detail') {
-    return html`<my-detail .node=${node}>${children}</my-detail>`;
+    return html`<studio-detail .node=${node}>${children}</studio-detail>`;
   } else if (node.type === 'dashboard') {
-    return html`<my-dashboard .node=${node}>${children}</my-dashboard>`;
+    return html`<studio-dashboard .node=${node}>${children}</studio-dashboard>`;
   } else if (node.type === 'unknown') {
     return html`<studio-unknown .node=${node}></studio-unknown>`;
   }
@@ -97,7 +97,7 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): H
   (el as HTMLElement).setAttribute('data-component-id', node.id); // For live preview selection
   if (node.props) {
     // Assign props as attributes when they are simple scalars, else direct property
-    for (const [k,v] of Object.entries(node.props)) {
+    for (const [k, v] of Object.entries(node.props)) {
       if (v == null) continue;
       if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
         (el as HTMLElement).setAttribute(k, String(v));
