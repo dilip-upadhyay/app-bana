@@ -300,7 +300,7 @@ export interface TableFetchOptions {
   sort?: string;
   page?: number; // 1-based page number
   offset?: number; // explicit override if provided (takes precedence over page)
-  filters?: Record<string,string>; // per-column filters (exact match server-side)
+  filters?: Record<string, string>; // per-column filters (exact match server-side)
 }
 
 /**
@@ -325,7 +325,7 @@ export async function fetchTableData(entity: string, fields: string[], options: 
   };
   if (options.filters) {
     const filterPairs: string[] = [];
-    for (const [k,v] of Object.entries(options.filters)) {
+    for (const [k, v] of Object.entries(options.filters)) {
       if (v && v.trim() !== '') {
         // backend expects raw value; encode to be safe
         filterPairs.push(`${encodeURIComponent(k)}:${encodeURIComponent(v.trim())}`);
@@ -338,19 +338,19 @@ export async function fetchTableData(entity: string, fields: string[], options: 
 }
 
 /** Bulk delete records by ids */
-export async function bulkDelete(entity: string, ids: (string|number)[]) {
+export async function bulkDelete(entity: string, ids: (string | number)[]) {
   const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
   return apiClient.post(`${base}/api/${entity}/bulk-delete`, { ids });
 }
 
 /** Bulk export records by ids; returns { count, rows } */
-export async function bulkExport(entity: string, ids: (string|number)[]) {
+export async function bulkExport(entity: string, ids: (string | number)[]) {
   const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
   return apiClient.post(`${base}/api/${entity}/bulk-export`, { ids });
 }
 
 /** Update single row by id */
-export async function updateRow(entity: string, id: string|number, data: Record<string,any>) {
+export async function updateRow(entity: string, id: string | number, data: Record<string, any>) {
   const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
   return apiClient.put(`${base}/api/${entity}/${id}`, data);
 }
@@ -360,7 +360,7 @@ export async function updateRow(entity: string, id: string|number, data: Record<
  */
 
 /** Get field permissions for current user and entity */
-export async function getFieldPermissions(entityName: string): Promise<{readable: string[], editable: string[]}> {
+export async function getFieldPermissions(entityName: string): Promise<{ readable: string[], editable: string[] }> {
   const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
   try {
     // Call the FLS endpoints we just created
@@ -368,15 +368,15 @@ export async function getFieldPermissions(entityName: string): Promise<{readable
       fetch(`${base}/api/field-permissions/readable?entity=${encodeURIComponent(entityName)}`),
       fetch(`${base}/api/field-permissions/editable?entity=${encodeURIComponent(entityName)}`)
     ]);
-    
+
     if (!readableResp.ok || !editableResp.ok) {
       console.warn('FLS API returned error, defaulting to full access');
       return { readable: ['*'], editable: ['*'] };
     }
-    
+
     const readable = await readableResp.json() as string[];
     const editable = await editableResp.json() as string[];
-    
+
     return { readable, editable };
   } catch (error) {
     console.warn('FLS API not available, defaulting to full access:', error);
@@ -385,11 +385,19 @@ export async function getFieldPermissions(entityName: string): Promise<{readable
 }
 
 /** Check if field is readable for current user */
-export function canReadField(fieldName: string, readableFields: string[]): boolean {
+export function canReadField(fieldName: string, readableFields: string[] | undefined | null): boolean {
+  if (!readableFields || !Array.isArray(readableFields)) {
+    console.warn('canReadField called with invalid readableFields:', readableFields);
+    return true; // Default to allowing read if permissions are invalid
+  }
   return readableFields.includes('*') || readableFields.includes(fieldName);
 }
 
 /** Check if field is editable for current user */
-export function canEditField(fieldName: string, editableFields: string[]): boolean {
+export function canEditField(fieldName: string, editableFields: string[] | undefined | null): boolean {
+  if (!editableFields || !Array.isArray(editableFields)) {
+    console.warn('canEditField called with invalid editableFields:', editableFields);
+    return true; // Default to allowing edit if permissions are invalid
+  }
   return editableFields.includes('*') || editableFields.includes(fieldName);
 }
