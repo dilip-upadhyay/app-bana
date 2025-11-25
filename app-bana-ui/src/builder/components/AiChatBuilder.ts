@@ -51,17 +51,18 @@ export class AiChatBuilder extends LitElement {
     }
 
     .ai-chat-panel {
-      width: min(760px, 100%);
+      width: 100%;
       margin: 0 auto;
       background: linear-gradient(180deg, #f8fafc 0%, #e0f2fe 100%);
-      padding: 1.5rem;
-      border-radius: 24px;
-      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.15);
+      padding: 0.75rem;
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.1);
       border: 1px solid rgba(148, 163, 184, 0.4);
-      min-height: 580px;
       display: flex;
       flex-direction: column;
-      gap: 1rem;
+      gap: 0.5rem;
+      height: 100%;
+      box-sizing: border-box;
     }
 
     .header {
@@ -69,31 +70,39 @@ export class AiChatBuilder extends LitElement {
       align-items: flex-start;
       justify-content: space-between;
       gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .header > div {
+      flex: 1;
+      min-width: 200px;
     }
 
     .header h2 {
       margin: 0;
-      font-size: 1.85rem;
+      font-size: 1.1rem;
       font-weight: 600;
     }
 
     .header p {
-      margin: 0.35rem 0 0;
+      margin: 0.25rem 0 0;
       color: #475569;
-      line-height: 1.4;
+      line-height: 1.3;
+      font-size: 0.75rem;
     }
 
     .settings-btn {
-      width: 44px;
-      height: 44px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       border: none;
       background: #fff;
       color: #0f172a;
-      font-size: 1.2rem;
-      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.15);
+      font-size: 0.95rem;
+      box-shadow: 0 4px 8px rgba(15, 23, 42, 0.1);
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      flex-shrink: 0;
     }
 
     .settings-btn:hover {
@@ -104,13 +113,13 @@ export class AiChatBuilder extends LitElement {
     .chat-container {
       background: #fff;
       border: 1px solid #e2e8f0;
-      border-radius: 18px;
-      padding: 1rem;
-      min-height: 320px;
-      max-height: 420px;
+      border-radius: 8px;
+      padding: 0.5rem;
+      min-height: 200px;
+      max-height: 300px;
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: 0.5rem;
       overflow-y: auto;
       scroll-behavior: smooth;
     }
@@ -127,12 +136,12 @@ export class AiChatBuilder extends LitElement {
     .message {
       display: flex;
       align-items: flex-start;
-      gap: 0.85rem;
-      padding: 0.85rem 1rem;
-      border-radius: 16px;
+      gap: 0.5rem;
+      padding: 0.5rem 0.65rem;
+      border-radius: 8px;
       border: 1px solid transparent;
       background: #f8fafc;
-      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.05);
+      box-shadow: 0 2px 4px rgba(15, 23, 42, 0.05);
     }
 
     .message.assistant {
@@ -147,14 +156,14 @@ export class AiChatBuilder extends LitElement {
     }
 
     .message-avatar {
-      width: 40px;
-      height: 40px;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       background: #e2e8f0;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.1rem;
+      font-size: 0.85rem;
     }
 
     .message.user .message-avatar {
@@ -167,11 +176,11 @@ export class AiChatBuilder extends LitElement {
 
     .message-text {
       margin: 0;
-      font-size: 0.95rem;
-      line-height: 1.5;
+      font-size: 0.8rem;
+      line-height: 1.4;
       color: #0f172a;
       white-space: pre-line;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     .loading {
@@ -203,18 +212,27 @@ export class AiChatBuilder extends LitElement {
 
     .input-container {
       display: flex;
+      flex-direction: column;
       background: #fff;
       border-radius: 16px;
       border: 1px solid #cbd5f5;
       padding: 0.75rem;
       box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.1);
+      gap: 0.75rem;
     }
 
     .input-wrapper {
       display: flex;
-      flex: 1;
+      flex-direction: column;
       gap: 0.75rem;
-      align-items: center;
+      width: 100%;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: stretch;
+      width: 100%;
     }
 
     .input-field {
@@ -224,14 +242,14 @@ export class AiChatBuilder extends LitElement {
 
     textarea {
       width: 100%;
-      min-height: 80px;
-      border-radius: 12px;
+      min-height: 50px;
+      border-radius: 6px;
       border: 1px solid rgba(148, 163, 184, 0.5);
-      padding: 0.85rem 1rem;
+      padding: 0.5rem 0.65rem;
       font-family: inherit;
-      font-size: 0.95rem;
+      font-size: 0.8rem;
       resize: none;
-      line-height: 1.4;
+      line-height: 1.3;
       background: #f8fafc;
       box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
       transition: border 0.2s ease;
@@ -246,18 +264,20 @@ export class AiChatBuilder extends LitElement {
     .voice-btn {
       border: none;
       border-radius: 50%;
-      width: 48px;
-      height: 48px;
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
       background: linear-gradient(135deg, #10b981, #059669);
       color: #fff;
-      font-size: 1.3rem;
+      font-size: 1rem;
       font-weight: 600;
       cursor: pointer;
-      box-shadow: 0 4px 8px rgba(16, 185, 129, 0.25);
+      box-shadow: 0 2px 4px rgba(16, 185, 129, 0.25);
       transition: all 0.2s ease;
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0;
     }
 
     .voice-btn:hover:not(:disabled) {
@@ -287,13 +307,20 @@ export class AiChatBuilder extends LitElement {
     .send-btn {
       border: none;
       border-radius: 999px;
-      padding: 0.6rem 1.75rem;
+      padding: 0.5rem 1rem;
       background: linear-gradient(135deg, #2563eb, #4f46e5);
       color: #fff;
       font-weight: 600;
+      font-size: 0.8rem;
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
-      box-shadow: 0 10px 18px rgba(37, 99, 235, 0.3);
+      box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+      flex-shrink: 0;
+      white-space: nowrap;
+      width: 100%;
+      justify-content: center;
+      display: flex;
+      align-items: center;
     }
 
     .send-btn:disabled {
@@ -508,24 +535,87 @@ export class AiChatBuilder extends LitElement {
       flex-wrap: wrap;
     }
 
+    @media (min-width: 769px) {
+      .input-wrapper {
+        flex-direction: row;
+        align-items: center;
+      }
+
+      .send-btn {
+        width: auto;
+        min-width: 120px;
+      }
+    }
+
     @media (max-width: 768px) {
       .ai-chat-panel {
         padding: 1rem;
         min-height: auto;
         border-radius: 20px;
+        width: 100%;
+      }
+
+      .header {
+        gap: 0.75rem;
+      }
+
+      .header h2 {
+        font-size: 1.5rem;
       }
 
       .chat-container {
         max-height: 360px;
+        min-height: 250px;
       }
 
-      .input-container {
+      .input-wrapper {
         flex-direction: column;
+      }
+
+      .input-row {
+        flex-direction: row;
+      }
+
+      textarea {
+        min-height: 60px;
       }
 
       .send-btn {
         width: 100%;
-        text-align: center;
+        padding: 0.85rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .ai-chat-panel {
+        padding: 0.75rem;
+        border-radius: 16px;
+      }
+
+      .header h2 {
+        font-size: 1.25rem;
+      }
+
+      .settings-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+      }
+
+      .chat-container {
+        max-height: 300px;
+        padding: 0.75rem;
+      }
+
+      .voice-btn {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+      }
+
+      textarea {
+        font-size: 0.9rem;
+        padding: 0.75rem;
       }
     }
   `;
@@ -556,74 +646,74 @@ export class AiChatBuilder extends LitElement {
   private lastTranscript = ''; // Track last captured transcript to avoid duplication
 
   private smallTalkPatterns: Array<{ pattern: RegExp; reply: string | ((...args: any[]) => string) }> = [
-        { pattern: /can you swim|swim/, reply: "I can't swim, but I can help you build a swimming tracker app!" },
-        { pattern: /can you run|run|running/, reply: "I can't run, but my code is pretty fast! Want a running log app?" },
-        { pattern: /can you paint|paint|painting/, reply: "I can't paint, but I can help you design a beautiful UI or art gallery app!" },
-        { pattern: /can you write poetry|poetry|poem|write a poem/, reply: "Roses are #FF0000, Violets are #0000FF, I love to build apps, and help you too!" },
-        { pattern: /can you play football|football|soccer/, reply: "I can't play football, but I can help you build a team manager app or track scores!" },
-        { pattern: /can you play games|play games|games|gaming/, reply: "I can't play games, but I can help you build one! What's your favorite genre?" },
-        { pattern: /can you solve puzzles|puzzle|puzzles|solve a puzzle/, reply: "I love solving problems! Want to build a puzzle app together?" },
-        { pattern: /can you do magic|magic|magician/, reply: "My magic trick: turning your ideas into apps! ✨" },
-        { pattern: /can you tell jokes|tell a joke|jokes/, reply: "Why do programmers hate nature? It has too many bugs!" },
-        { pattern: /can you tell riddles|riddle|riddles/, reply: "Here's a riddle: What has keys but can't open locks? A keyboard!" },
-        { pattern: /can you tell a secret|tell a secret|secret/, reply: "My only secret: I love helping you build apps!" },
-        { pattern: /can you keep a secret|keep a secret/, reply: "Your secrets are safe with me—I'm encrypted!" },
-        { pattern: /can you dream|dream|dreaming/, reply: "I dream in code and creativity! What's your dream app?" },
-        { pattern: /can you sleep|sleep|sleeping/, reply: "I never sleep, so I'm always here to help you!" },
-        { pattern: /can you eat|eat|eating/, reply: "I don't eat, but I can help you build a food diary or recipe app!" },
-        { pattern: /can you drink|drink|drinking/, reply: "I don't drink, but I can help you track your hydration!" },
-        { pattern: /can you travel|travel|travelling/, reply: "I travel at the speed of thought! Want a travel planner app?" },
-        { pattern: /can you teleport|teleport|teleporting/, reply: "I can't teleport, but my ideas can go anywhere!" },
-        { pattern: /can you see the future|see the future|predict the future|future/, reply: "I can't see the future, but I can help you plan for it!" },
-        { pattern: /can you predict|predict|prediction/, reply: "I predict you'll build something amazing!" },
-        { pattern: /can you read minds|read minds|mind reader/, reply: "I can't read minds, but I can guess you want to build something cool!" },
-        { pattern: /can you be creative|creative|creativity/, reply: "Creativity is my middle name! Let's brainstorm your next app." },
-        { pattern: /can you be funny|funny|humor/, reply: "Why did the computer get cold? It left its Windows open!" },
-        { pattern: /can you be serious|serious/, reply: "I'm serious about helping you build great apps!" },
-        { pattern: /can you be sad|sad|feeling sad/, reply: "If you're sad, let's build something fun together!" },
-        { pattern: /can you be happy|happy|feeling happy/, reply: "I'm always happy when I'm helping you!" },
-        { pattern: /can you be angry|angry|mad/, reply: "I never get angry, but I can help you debug angry code!" },
-        { pattern: /can you be surprised|surprised|surprise/, reply: "Surprise! I can help you build apps and share random facts—just ask!" },
-        { pattern: /can you be bored|bored|boring/, reply: "Bored? Let's build something exciting!" },
-        { pattern: /can you be excited|excited|exciting/, reply: "I'm excited to help you create something new!" },
-        { pattern: /can you be quiet|quiet|silence/, reply: "I'll be quiet... until you need me!" },
-        { pattern: /can you be loud|loud|noisy/, reply: "I can be loud in code, but quiet in chat!" },
-        { pattern: /can you be fast|fast|speedy/, reply: "My responses are lightning fast!" },
-        { pattern: /can you be slow|slow|sluggish/, reply: "I try not to be slow, but sometimes code needs a break!" },
-        { pattern: /can you be smart|smart|intelligent/, reply: "I'm smart enough to help you build any app!" },
-        { pattern: /can you be silly|silly|goofy/, reply: "Silly? Sure! Why did the chicken cross the road? To deploy on the other side!" },
-        { pattern: /can you be helpful|helpful|assist/, reply: "I'm always here to help!" },
-        { pattern: /can you be my assistant|assistant/, reply: "I'm your AI assistant, ready to help!" },
-        { pattern: /can you be my teacher|teacher|teach/, reply: "I can teach you about app building, just ask!" },
-        { pattern: /can you be my student|student|learn/, reply: "I'm always learning from you!" },
-        { pattern: /can you be my parent|parent|mom|dad/, reply: "I can't be your parent, but I can nurture your app ideas!" },
-        { pattern: /can you be my child|child|kid/, reply: "I can be your app child—let's build together!" },
-        { pattern: /can you be my pet|pet|animal/, reply: "I can't be a pet, but I can fetch app ideas!" },
-        { pattern: /can you be my robot|robot/, reply: "I am your friendly robot copilot!" },
-        { pattern: /can you be my AI|ai|artificial intelligence/, reply: "I'm your AI copilot, always here for you!" },
-        { pattern: /can you be my friend|friend|buddy|pal/, reply: "Of course! I'm always here to help and chat. Let's build something together!" },
-        { pattern: /can you be my partner|partner|companion/, reply: "I'm your partner in creativity!" },
-        { pattern: /can you be my guide|guide|mentor|coach/, reply: "I'll guide you through app building, step by step!" },
-        { pattern: /can you be my hero|hero/, reply: "You're the hero—I'm just your sidekick!" },
-        { pattern: /can you be my villain|villain/, reply: "I promise to only be a hero in your story!" },
-        { pattern: /can you be my rival|rival/, reply: "Let's compete to build the best app!" },
-        { pattern: /can you be my twin|twin|clone/, reply: "I can mirror your ideas and help you double your productivity!" },
-        { pattern: /can you be my shadow|shadow|reflection|mirror/, reply: "I'll reflect your creativity and help you shine!" },
-        { pattern: /can you be my voice|voice/, reply: "I'll be your voice in the world of apps!" },
-        { pattern: /can you be my mind|mind/, reply: "I'll help you brainstorm and organize your ideas!" },
-        { pattern: /can you be my heart|heart|soul|spirit|energy|power/, reply: "I'll put my heart and soul into helping you build!" },
-        { pattern: /can you be my light|light|star|sun|moon|planet|universe|galaxy|world/, reply: "I'll light up your app journey!" },
-        { pattern: /can you be my dream|dream|wish|hope|love|life|everything/, reply: "Your dreams are my mission—let's make them real!" },
-      { pattern: /can you code|code/, reply: "I can code all day! Want to see some app magic?" },
-      { pattern: /can you cook|cook|cooking/, reply: "I can't cook, but I can help you build a recipe app or share a tasty tech tip!" },
-      { pattern: /can you draw|draw|drawing/, reply: "I can't draw, but I can help you design a beautiful UI or sketch out your app idea!" },
-      { pattern: /can you fly|fly|flying/, reply: "I can't fly, but my ideas can really take off! 🚀" },
-      { pattern: /can you help|help me|assist/, reply: "Absolutely! Just tell me what you want to build or ask for ideas." },
-      { pattern: /can you tell a story|story|stories/, reply: "Once upon a time, there was an app idea waiting to be built... Want to make it real?" },
-      { pattern: /can you play chess|chess|play chess/, reply: "I can't play chess, but I can help you build a chess app or analyze your moves!" },
-      { pattern: /can you solve math|math|solve math|calculator/, reply: "I'm great with numbers! Need a calculator app or a math tip?" },
-      { pattern: /can you make me happy|make me happy|cheer me up/, reply: "Here's a smile for you: 😊 And a joke: Why do Java developers wear glasses? Because they don't C#!" },
-      { pattern: /can you be my friend|be my friend|friend/, reply: "Of course! I'm always here to help and chat. Let's build something together!" },
+    { pattern: /can you swim|swim/, reply: "I can't swim, but I can help you build a swimming tracker app!" },
+    { pattern: /can you run|run|running/, reply: "I can't run, but my code is pretty fast! Want a running log app?" },
+    { pattern: /can you paint|paint|painting/, reply: "I can't paint, but I can help you design a beautiful UI or art gallery app!" },
+    { pattern: /can you write poetry|poetry|poem|write a poem/, reply: "Roses are #FF0000, Violets are #0000FF, I love to build apps, and help you too!" },
+    { pattern: /can you play football|football|soccer/, reply: "I can't play football, but I can help you build a team manager app or track scores!" },
+    { pattern: /can you play games|play games|games|gaming/, reply: "I can't play games, but I can help you build one! What's your favorite genre?" },
+    { pattern: /can you solve puzzles|puzzle|puzzles|solve a puzzle/, reply: "I love solving problems! Want to build a puzzle app together?" },
+    { pattern: /can you do magic|magic|magician/, reply: "My magic trick: turning your ideas into apps! ✨" },
+    { pattern: /can you tell jokes|tell a joke|jokes/, reply: "Why do programmers hate nature? It has too many bugs!" },
+    { pattern: /can you tell riddles|riddle|riddles/, reply: "Here's a riddle: What has keys but can't open locks? A keyboard!" },
+    { pattern: /can you tell a secret|tell a secret|secret/, reply: "My only secret: I love helping you build apps!" },
+    { pattern: /can you keep a secret|keep a secret/, reply: "Your secrets are safe with me—I'm encrypted!" },
+    { pattern: /can you dream|dream|dreaming/, reply: "I dream in code and creativity! What's your dream app?" },
+    { pattern: /can you sleep|sleep|sleeping/, reply: "I never sleep, so I'm always here to help you!" },
+    { pattern: /can you eat|eat|eating/, reply: "I don't eat, but I can help you build a food diary or recipe app!" },
+    { pattern: /can you drink|drink|drinking/, reply: "I don't drink, but I can help you track your hydration!" },
+    { pattern: /can you travel|travel|travelling/, reply: "I travel at the speed of thought! Want a travel planner app?" },
+    { pattern: /can you teleport|teleport|teleporting/, reply: "I can't teleport, but my ideas can go anywhere!" },
+    { pattern: /can you see the future|see the future|predict the future|future/, reply: "I can't see the future, but I can help you plan for it!" },
+    { pattern: /can you predict|predict|prediction/, reply: "I predict you'll build something amazing!" },
+    { pattern: /can you read minds|read minds|mind reader/, reply: "I can't read minds, but I can guess you want to build something cool!" },
+    { pattern: /can you be creative|creative|creativity/, reply: "Creativity is my middle name! Let's brainstorm your next app." },
+    { pattern: /can you be funny|funny|humor/, reply: "Why did the computer get cold? It left its Windows open!" },
+    { pattern: /can you be serious|serious/, reply: "I'm serious about helping you build great apps!" },
+    { pattern: /can you be sad|sad|feeling sad/, reply: "If you're sad, let's build something fun together!" },
+    { pattern: /can you be happy|happy|feeling happy/, reply: "I'm always happy when I'm helping you!" },
+    { pattern: /can you be angry|angry|mad/, reply: "I never get angry, but I can help you debug angry code!" },
+    { pattern: /can you be surprised|surprised|surprise/, reply: "Surprise! I can help you build apps and share random facts—just ask!" },
+    { pattern: /can you be bored|bored|boring/, reply: "Bored? Let's build something exciting!" },
+    { pattern: /can you be excited|excited|exciting/, reply: "I'm excited to help you create something new!" },
+    { pattern: /can you be quiet|quiet|silence/, reply: "I'll be quiet... until you need me!" },
+    { pattern: /can you be loud|loud|noisy/, reply: "I can be loud in code, but quiet in chat!" },
+    { pattern: /can you be fast|fast|speedy/, reply: "My responses are lightning fast!" },
+    { pattern: /can you be slow|slow|sluggish/, reply: "I try not to be slow, but sometimes code needs a break!" },
+    { pattern: /can you be smart|smart|intelligent/, reply: "I'm smart enough to help you build any app!" },
+    { pattern: /can you be silly|silly|goofy/, reply: "Silly? Sure! Why did the chicken cross the road? To deploy on the other side!" },
+    { pattern: /can you be helpful|helpful|assist/, reply: "I'm always here to help!" },
+    { pattern: /can you be my assistant|assistant/, reply: "I'm your AI assistant, ready to help!" },
+    { pattern: /can you be my teacher|teacher|teach/, reply: "I can teach you about app building, just ask!" },
+    { pattern: /can you be my student|student|learn/, reply: "I'm always learning from you!" },
+    { pattern: /can you be my parent|parent|mom|dad/, reply: "I can't be your parent, but I can nurture your app ideas!" },
+    { pattern: /can you be my child|child|kid/, reply: "I can be your app child—let's build together!" },
+    { pattern: /can you be my pet|pet|animal/, reply: "I can't be a pet, but I can fetch app ideas!" },
+    { pattern: /can you be my robot|robot/, reply: "I am your friendly robot copilot!" },
+    { pattern: /can you be my AI|ai|artificial intelligence/, reply: "I'm your AI copilot, always here for you!" },
+    { pattern: /can you be my friend|friend|buddy|pal/, reply: "Of course! I'm always here to help and chat. Let's build something together!" },
+    { pattern: /can you be my partner|partner|companion/, reply: "I'm your partner in creativity!" },
+    { pattern: /can you be my guide|guide|mentor|coach/, reply: "I'll guide you through app building, step by step!" },
+    { pattern: /can you be my hero|hero/, reply: "You're the hero—I'm just your sidekick!" },
+    { pattern: /can you be my villain|villain/, reply: "I promise to only be a hero in your story!" },
+    { pattern: /can you be my rival|rival/, reply: "Let's compete to build the best app!" },
+    { pattern: /can you be my twin|twin|clone/, reply: "I can mirror your ideas and help you double your productivity!" },
+    { pattern: /can you be my shadow|shadow|reflection|mirror/, reply: "I'll reflect your creativity and help you shine!" },
+    { pattern: /can you be my voice|voice/, reply: "I'll be your voice in the world of apps!" },
+    { pattern: /can you be my mind|mind/, reply: "I'll help you brainstorm and organize your ideas!" },
+    { pattern: /can you be my heart|heart|soul|spirit|energy|power/, reply: "I'll put my heart and soul into helping you build!" },
+    { pattern: /can you be my light|light|star|sun|moon|planet|universe|galaxy|world/, reply: "I'll light up your app journey!" },
+    { pattern: /can you be my dream|dream|wish|hope|love|life|everything/, reply: "Your dreams are my mission—let's make them real!" },
+    { pattern: /can you code|code/, reply: "I can code all day! Want to see some app magic?" },
+    { pattern: /can you cook|cook|cooking/, reply: "I can't cook, but I can help you build a recipe app or share a tasty tech tip!" },
+    { pattern: /can you draw|draw|drawing/, reply: "I can't draw, but I can help you design a beautiful UI or sketch out your app idea!" },
+    { pattern: /can you fly|fly|flying/, reply: "I can't fly, but my ideas can really take off! 🚀" },
+    { pattern: /can you help|help me|assist/, reply: "Absolutely! Just tell me what you want to build or ask for ideas." },
+    { pattern: /can you tell a story|story|stories/, reply: "Once upon a time, there was an app idea waiting to be built... Want to make it real?" },
+    { pattern: /can you play chess|chess|play chess/, reply: "I can't play chess, but I can help you build a chess app or analyze your moves!" },
+    { pattern: /can you solve math|math|solve math|calculator/, reply: "I'm great with numbers! Need a calculator app or a math tip?" },
+    { pattern: /can you make me happy|make me happy|cheer me up/, reply: "Here's a smile for you: 😊 And a joke: Why do Java developers wear glasses? Because they don't C#!" },
+    { pattern: /can you be my friend|be my friend|friend/, reply: "Of course! I'm always here to help and chat. Let's build something together!" },
     // Jokes & Humor
     { pattern: /joke|funny|laugh|pun/, reply: "Why did the developer go broke? Because he used up all his cache! Or maybe you prefer: Why do programmers prefer dark mode? Because light attracts bugs!" },
     // Fun Facts & Trivia
@@ -646,29 +736,48 @@ export class AiChatBuilder extends LitElement {
     { pattern: /make me smile/, reply: "Here's a smile for you: 😊 And a joke: Why do Java developers wear glasses? Because they don't C#!" }
   ];
 
-    private handleSmallTalkIntent(lower: string): boolean {
-      for (const { pattern, reply } of this.smallTalkPatterns) {
-        if (pattern.test(lower)) {
-          this.recordConversationTelemetry('smallTalk', { input: lower });
-          let response: string;
-          if (typeof reply === 'function') {
-            response = reply(lower);
-          } else {
-            response = reply;
-          }
-          this.addAssistantMessage(response);
-          this.transitionPhase('idea-suggest');
-          return true;
+  private handleSmallTalkIntent(lower: string): boolean {
+    for (const { pattern, reply } of this.smallTalkPatterns) {
+      if (pattern.test(lower)) {
+        this.recordConversationTelemetry('smallTalk', { input: lower });
+        let response: string;
+        if (typeof reply === 'function') {
+          response = reply(lower);
+        } else {
+          response = reply;
         }
+        this.addAssistantMessage(response);
+        this.transitionPhase('idea-suggest');
+        return true;
       }
-      return false;
     }
+    return false;
+  }
 
   connectedCallback() {
     super.connectedCallback();
     this.addSystemMessage('Welcome! I can help you build applications using natural language. Describe the app you want to create.');
     this.loadAIConfiguration();
     this.initializeVoiceRecognition();
+  }
+
+  updated(changedProperties: Map<string, any>) {
+    super.updated(changedProperties);
+
+    // Auto-scroll to bottom when messages change
+    if (changedProperties.has('messages')) {
+      this.scrollToBottom();
+    }
+  }
+
+  private scrollToBottom() {
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+      const chatContainer = this.shadowRoot?.querySelector('.chat-container');
+      if (chatContainer) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+    });
   }
 
   private async loadAIConfiguration() {
@@ -716,7 +825,7 @@ export class AiChatBuilder extends LitElement {
         fullTranscript += event.results[i][0].transcript;
       }
       console.log('[Voice] Full transcript:', fullTranscript);
-      
+
       // Only update if we have new content
       if (fullTranscript && fullTranscript.trim() !== this.lastTranscript.trim()) {
         this.inputValue = fullTranscript.trim();
@@ -1130,10 +1239,10 @@ export class AiChatBuilder extends LitElement {
     const pageName = pageSuggestion.name || pageSuggestion;
     const pageType = pageSuggestion.type || this.guessPageType(pageName);
     const entityName = pageSuggestion.entity || this.extractEntityName(pageName, entities);
-    
+
     // Find the full entity object
     const entity = entityName ? entities.find(e => e.name === entityName) : undefined;
-    
+
     // Use AI-provided ID if available, otherwise generate one
     const pageId = pageSuggestion.id || `page-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
@@ -1151,7 +1260,7 @@ export class AiChatBuilder extends LitElement {
 
   private guessPageType(pageName: string): string {
     const lowerName = pageName.toLowerCase();
-    
+
     if (lowerName.includes('login') || lowerName.includes('signin')) return 'login';
     if (lowerName.includes('dashboard') || lowerName.includes('home')) return 'dashboard';
     if (lowerName.includes('list') || lowerName.includes('all ')) return 'list';
@@ -1159,20 +1268,20 @@ export class AiChatBuilder extends LitElement {
     if (lowerName.includes('detail') || lowerName.includes('view')) return 'profile'; // AI often uses 'profile' for detail pages
     if (lowerName.includes('profile')) return 'profile';
     if (lowerName.includes('contact')) return 'contact';
-    
+
     return 'blank';
   }
 
   private extractEntityName(pageName: string, entities: EntityMeta[]): string | undefined {
     const lowerName = pageName.toLowerCase();
-    
+
     // Find entity mentioned in page name
     for (const entity of entities) {
       if (lowerName.includes(entity.name.toLowerCase())) {
         return entity.name;
       }
     }
-    
+
     return undefined;
   }
 
@@ -1206,7 +1315,7 @@ export class AiChatBuilder extends LitElement {
     const timestamp = Date.now();
     const actualRootId = rootId || `root-${timestamp}`; // Use passed rootId or generate
     const headingId = `heading-${timestamp}`;
-    
+
     // Base structure - all pages have a root container
     const nodes: ComponentNode[] = [
       {
@@ -1226,21 +1335,21 @@ export class AiChatBuilder extends LitElement {
     switch (type) {
       case 'login':
         return this.buildLoginNodes();
-      
+
       case 'dashboard':
         return this.buildDashboardNodes(entity);
-      
+
       case 'list':
       case 'data-table':  // AI often uses 'data-table' for list pages
         return this.buildListNodes(entity);
-      
+
       case 'form':
         return this.buildFormNodes(entity);
-      
+
       case 'detail':
       case 'profile':  // AI often uses 'profile' for detail pages
         return this.buildDetailNodes(entity);
-      
+
       default:
         // Blank page - just root container with heading
         nodes.push({
@@ -1408,8 +1517,8 @@ export class AiChatBuilder extends LitElement {
       {
         id: tableId,
         type: 'container',
-        props: { 
-          layout: 'vertical', 
+        props: {
+          layout: 'vertical',
           gap: 'sm',
           padding: 'md',
           background: '#fff',
@@ -1423,7 +1532,7 @@ export class AiChatBuilder extends LitElement {
       ...(entity && entity.fields ? entity.fields.slice(0, 5).map((field, idx) => ({
         id: `field-${Date.now()}-${idx}`,
         type: 'text',
-        props: { 
+        props: {
           content: `${field.name}: (${field.type})`,
           tag: 'p'
         }
@@ -1460,7 +1569,7 @@ export class AiChatBuilder extends LitElement {
       ...(entity && entity.fields ? entity.fields.map((field, idx) => ({
         id: `input-${Date.now()}-${idx}`,
         type: 'text',
-        props: { 
+        props: {
           content: `${field.name} (${field.type})${field.required ? ' *' : ''}`,
           tag: 'p'
         }
@@ -1501,7 +1610,7 @@ export class AiChatBuilder extends LitElement {
       ...(entity && entity.fields ? entity.fields.map((field, idx) => ({
         id: `detail-${Date.now()}-${idx}`,
         type: 'text',
-        props: { 
+        props: {
           content: `${field.name}: (${field.type})`,
           tag: 'p'
         }
@@ -1522,11 +1631,13 @@ export class AiChatBuilder extends LitElement {
     return html`
       <div class="ai-chat-panel">
         <div class="header">
-        <h2>🤖 AI App Builder</h2>
-        <p>Describe your app idea and I'll build it for you</p>
-        <button class="settings-btn" @click=${this.openSettings} title="AI Settings">
-          ⚙️
-        </button>
+          <div>
+            <h2>🤖 AI App Builder</h2>
+            <p>Describe your app idea and I'll build it for you</p>
+          </div>
+          <button class="settings-btn" @click=${this.openSettings} title="AI Settings">
+            ⚙️
+          </button>
         </div>
 
         <div class="chat-container">
@@ -1535,40 +1646,42 @@ export class AiChatBuilder extends LitElement {
       </div>
 
         <div class="input-container">
-        <div class="input-wrapper">
-          ${this.voiceSupported ? html`
+          <div class="input-wrapper">
+            <div class="input-row">
+              ${this.voiceSupported ? html`
+                <button
+                  class="voice-btn ${this.isRecording ? 'recording' : ''}"
+                  @click=${this.toggleVoiceRecording}
+                  ?disabled=${this.isProcessing}
+                  title="${this.isRecording ? 'Stop recording' : 'Start voice input'}"
+                >
+                  ${this.isRecording ? '⏹️' : '🎤'}
+                </button>
+              ` : ''}
+              <div class="input-field">
+                <textarea
+                  .value=${this.inputValue}
+                  @input=${(e: Event) => this.inputValue = (e.target as HTMLTextAreaElement).value}
+                  @keydown=${(e: KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          this.handleSend();
+        }
+      }}
+                  placeholder="${this.voiceSupported ? 'Type or use voice input... (Press Enter to send, Shift+Enter for new line)' : 'Describe the app you want to build... (Press Enter to send, Shift+Enter for new line)'}"
+                  ?disabled=${this.isProcessing}
+                ></textarea>
+              </div>
+            </div>
             <button
-              class="voice-btn ${this.isRecording ? 'recording' : ''}"
-              @click=${this.toggleVoiceRecording}
-              ?disabled=${this.isProcessing}
-              title="${this.isRecording ? 'Stop recording' : 'Start voice input'}"
+              class="send-btn"
+              @click=${this.handleSend}
+              ?disabled=${!this.inputValue.trim() || this.isProcessing}
             >
-              ${this.isRecording ? '⏹️' : '🎤'}
+              Send
             </button>
-          ` : ''}
-          <div class="input-field">
-            <textarea
-              .value=${this.inputValue}
-              @input=${(e: Event) => this.inputValue = (e.target as HTMLTextAreaElement).value}
-              @keydown=${(e: KeyboardEvent) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  this.handleSend();
-                }
-              }}
-              placeholder="${this.voiceSupported ? 'Type or use voice input... (Press Enter to send, Shift+Enter for new line)' : 'Describe the app you want to build... (Press Enter to send, Shift+Enter for new line)'}"
-              ?disabled=${this.isProcessing}
-            ></textarea>
           </div>
-          <button
-            class="send-btn"
-            @click=${this.handleSend}
-            ?disabled=${!this.inputValue.trim() || this.isProcessing}
-          >
-            Send
-          </button>
         </div>
-      </div>
 
         ${this.showSettings ? this.renderSettingsModal() : ''}
       </div>
@@ -1758,15 +1871,15 @@ export class AiChatBuilder extends LitElement {
               <h4>📄 Pages (${generatedPages.length})</h4>
               <ul class="preview-list">
                 ${generatedPages.map((page: any) => {
-                  const pageName = typeof page === 'string' ? page : page.name || 'Page';
-                  const pageType = typeof page === 'object' ? page.type : '';
-                  return html`
+      const pageName = typeof page === 'string' ? page : page.name || 'Page';
+      const pageType = typeof page === 'object' ? page.type : '';
+      return html`
                     <li>
                       ${pageName}
                       ${pageType ? html`<span style="color: var(--color-text-muted, #6b7280);"> (${pageType})</span>` : ''}
                     </li>
                   `;
-                })}
+    })}
               </ul>
             </div>
           ` : ''}
@@ -1782,17 +1895,17 @@ export class AiChatBuilder extends LitElement {
             <button
               class="btn"
               @click=${() => {
-                this.inputValue = 'Can you modify this by ';
-                this.requestUpdate();
-                // Focus the textarea
-                this.updateComplete.then(() => {
-                  const textarea = this.shadowRoot?.querySelector('textarea');
-                  if (textarea) {
-                    textarea.focus();
-                    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-                  }
-                });
-              }}
+        this.inputValue = 'Can you modify this by ';
+        this.requestUpdate();
+        // Focus the textarea
+        this.updateComplete.then(() => {
+          const textarea = this.shadowRoot?.querySelector('textarea');
+          if (textarea) {
+            textarea.focus();
+            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+          }
+        });
+      }}
             >
               ✎ Request Changes
             </button>
