@@ -11,19 +11,95 @@ export interface State {
     name: string;
     color?: string;
     description?: string;
+    position?: { x: number; y: number };
 }
 
 /**
- * Transition between states
+ * Transition between states with conditional logic
  */
 export interface Transition {
     id: string;
     from: string;  // state id
     to: string;    // state id
     label?: string;
+
+    // Conditional logic
+    condition?: TransitionCondition;
+
+    // Role-based security
     roles?: string[];  // Roles allowed to trigger this transition
-    condition?: string;  // Optional condition expression
+
+    // Priority for evaluation (lower number = higher priority)
+    priority?: number;
+
+    // Mark as fallback (ELSE condition)
+    isFallback?: boolean;
+
+    // Analytics
+    analytics?: {
+        timesEvaluated: number;
+        timesTrue: number;
+        timesFalse: number;
+        avgExecutionTime: number;
+    };
 }
+
+/**
+ * Condition for a transition
+ */
+export interface TransitionCondition {
+    // Expression to evaluate (e.g., "amount > 10000")
+    expression: string;
+
+    // Human-readable description
+    description?: string;
+
+    // Natural language representation
+    naturalLanguage?: string;
+
+    // Fields referenced (for validation)
+    fields?: string[];
+
+    // Operator used
+    operator?: ConditionOperator;
+
+    // Field being compared
+    field?: string;
+
+    // Value to compare against
+    value?: any;
+}
+
+/**
+ * Condition operators
+ */
+export type ConditionOperator =
+    | 'equals'
+    | 'notEquals'
+    | 'greaterThan'
+    | 'lessThan'
+    | 'greaterThanOrEqual'
+    | 'lessThanOrEqual'
+    | 'contains'
+    | 'notContains'
+    | 'startsWith'
+    | 'endsWith'
+    | 'isEmpty'
+    | 'isNotEmpty'
+    | 'in'
+    | 'notIn';
+
+/**
+ * Field type for condition validation
+ */
+export type FieldType =
+    | 'string'
+    | 'number'
+    | 'boolean'
+    | 'date'
+    | 'datetime'
+    | 'array'
+    | 'object';
 
 /**
  * State Machine definition

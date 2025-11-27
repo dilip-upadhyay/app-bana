@@ -5,21 +5,30 @@
 
 import { LitElement, html, css } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
-import type { StateMachine, State, Transition } from '../../models/workflow';
+import type { StateMachine, State, Transition, TransitionCondition, FieldType } from '../../models/workflow';
 import { workflowStorage } from '../../services/WorkflowStorage';
+import './ConditionBuilder';
 
 @customElement('state-machine-designer')
 export class StateMachineDesigner extends LitElement {
 
-    @property({ type: String }) entityName?: string;
-    @property({ type: String }) machineId?: string;
+  @property({ type: String }) entityName?: string;
+  @property({ type: String }) machineId?: string;
 
-    @state() private machine: StateMachine | null = null;
-    @state() private selectedState: string | null = null;
-    @state() private selectedTransition: string | null = null;
-    @state() private editMode: 'state' | 'transition' | null = null;
+  @state() private machine: StateMachine | null = null;
+  @state() private selectedState: string | null = null;
+  @state() private selectedTransition: string | null = null;
+  @state() private editMode: 'state' | 'transition' | null = null;
 
-    static styles = css`
+  // Drag and drop state
+  @state() private draggingStateId: string | null = null;
+  @state() private dragOffset: { x: number; y: number } = { x: 0, y: 0 };
+  @state() private scale: number = 1;
+  @state() private panOffset: { x: number; y: number } = { x: 0, y: 0 };
+  @state() private isPanning: boolean = false;
+  @state() private lastMousePos: { x: number; y: number } = { x: 0, y: 0 };
+
+  static styles = css`
     :host {
       display: flex;
       flex-direction: column;
@@ -33,6 +42,7 @@ export class StateMachineDesigner extends LitElement {
       gap: 1rem;
       padding: 1rem;
       overflow: hidden;
+      min-height: 0; /* Important for nested flex scrolling */
     }
 
     .canvas-panel {
@@ -43,6 +53,8 @@ export class StateMachineDesigner extends LitElement {
       padding: 2rem;
       overflow: auto;
       position: relative;
+      height: 100%; /* Ensure it fills container */
+      box-sizing: border-box;
     }
 
     .properties-panel {
@@ -54,6 +66,9 @@ export class StateMachineDesigner extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 1rem;
+      overflow-y: auto; /* Enable scrolling for long lists */
+      height: 100%; /* Ensure it fills container */
+      box-sizing: border-box;
     }
 
     .toolbar {
@@ -91,24 +106,67 @@ export class StateMachineDesigner extends LitElement {
 
     .state {
       position: absolute;
-      padding: 1rem 1.5rem;
+      padding: 0;
+      width: 180px;
       border-radius: 12px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      cursor: move;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      min-width: 120px;
-      text-align: center;
+      background: white;
+      cursor: grab;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      transition: box-shadow 0.2s, transform 0.2s;
       user-select: none;
+      border: 1px solid rgba(0,0,0,0.05);
+      overflow: hidden;
+    }
+
+    .state:active {
+      cursor: grabbing;
+    }
+
+    .state:hover {
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      transform: translateY(-2px);
     }
 
     .state.selected {
-      box-shadow: 0 0 0 3px #fbbf24;
+      box-shadow: 0 0 0 2px #3b82f6, 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     }
 
-    .state-name {
+    .state-header {
+      padding: 0.75rem 1rem;
+      color: white;
       font-weight: 600;
       font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .state-body {
+      padding: 0.75rem 1rem;
+      font-size: 0.8rem;
+      color: #475569;
+    }
+
+    .state-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .connector-dot {
+      width: 12px;
+      height: 12px;
+      background: white;
+      border: 2px solid #94a3b8;
+      border-radius: 50%;
+      position: absolute;
+      transition: all 0.2s;
+    }
+
+    .connector-dot:hover {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      transform: scale(1.2);
     }
 
     .transitions-list {
@@ -170,160 +228,160 @@ export class StateMachineDesigner extends LitElement {
     }
   `;
 
-    async connectedCallback() {
-        super.connectedCallback();
-        await this.loadStateMachine();
+  async connectedCallback() {
+    super.connectedCallback();
+    await this.loadStateMachine();
+  }
+
+  private async loadStateMachine() {
+    if (this.machineId) {
+      this.machine = await workflowStorage.getStateMachine(this.machineId);
+    } else if (this.entityName) {
+      this.machine = await workflowStorage.getStateMachineByEntity(this.entityName);
     }
 
-    private async loadStateMachine() {
-        if (this.machineId) {
-            this.machine = await workflowStorage.getStateMachine(this.machineId);
-        } else if (this.entityName) {
-            this.machine = await workflowStorage.getStateMachineByEntity(this.entityName);
-        }
+    // Create default machine if none exists
+    if (!this.machine && this.entityName) {
+      this.machine = {
+        id: this.generateId(),
+        name: `${this.entityName} Workflow`,
+        entityName: this.entityName,
+        states: [
+          { id: this.generateId(), name: 'Draft', color: '#6b7280' },
+          { id: this.generateId(), name: 'Submitted', color: '#3b82f6' },
+          { id: this.generateId(), name: 'Approved', color: '#10b981' },
+          { id: this.generateId(), name: 'Rejected', color: '#ef4444' }
+        ],
+        transitions: [],
+        initialState: ''
+      };
 
-        // Create default machine if none exists
-        if (!this.machine && this.entityName) {
-            this.machine = {
-                id: this.generateId(),
-                name: `${this.entityName} Workflow`,
-                entityName: this.entityName,
-                states: [
-                    { id: this.generateId(), name: 'Draft', color: '#6b7280' },
-                    { id: this.generateId(), name: 'Submitted', color: '#3b82f6' },
-                    { id: this.generateId(), name: 'Approved', color: '#10b981' },
-                    { id: this.generateId(), name: 'Rejected', color: '#ef4444' }
-                ],
-                transitions: [],
-                initialState: ''
-            };
-
-            // Set initial state to first state
-            if (this.machine.states.length > 0) {
-                this.machine.initialState = this.machine.states[0].id;
-            }
-        }
+      // Set initial state to first state
+      if (this.machine.states.length > 0) {
+        this.machine.initialState = this.machine.states[0].id;
+      }
     }
+  }
 
-    private generateId(): string {
-        return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  private generateId(): string {
+    return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private async saveMachine() {
+    if (!this.machine) return;
+
+    await workflowStorage.saveStateMachine(this.machine);
+    this.dispatchEvent(new CustomEvent('machine-saved', {
+      detail: { machine: this.machine },
+      bubbles: true,
+      composed: true
+    }));
+  }
+
+  private addState() {
+    if (!this.machine) return;
+
+    const newState: State = {
+      id: this.generateId(),
+      name: `State ${this.machine.states.length + 1}`,
+      color: '#6366f1'
+    };
+
+    this.machine = {
+      ...this.machine,
+      states: [...this.machine.states, newState]
+    };
+
+    this.selectedState = newState.id;
+    this.editMode = 'state';
+  }
+
+  private deleteState(stateId: string) {
+    if (!this.machine) return;
+
+    // Remove state
+    this.machine = {
+      ...this.machine,
+      states: this.machine.states.filter(s => s.id !== stateId),
+      // Remove transitions involving this state
+      transitions: this.machine.transitions.filter(
+        t => t.from !== stateId && t.to !== stateId
+      )
+    };
+
+    if (this.selectedState === stateId) {
+      this.selectedState = null;
     }
+  }
 
-    private async saveMachine() {
-        if (!this.machine) return;
+  private addTransition() {
+    if (!this.machine || this.machine.states.length < 2) return;
 
-        await workflowStorage.saveStateMachine(this.machine);
-        this.dispatchEvent(new CustomEvent('machine-saved', {
-            detail: { machine: this.machine },
-            bubbles: true,
-            composed: true
-        }));
+    const newTransition: Transition = {
+      id: this.generateId(),
+      from: this.machine.states[0].id,
+      to: this.machine.states[1].id,
+      label: 'Transition',
+      roles: []
+    };
+
+    this.machine = {
+      ...this.machine,
+      transitions: [...this.machine.transitions, newTransition]
+    };
+
+    this.selectedTransition = newTransition.id;
+    this.editMode = 'transition';
+  }
+
+  private deleteTransition(transitionId: string) {
+    if (!this.machine) return;
+
+    this.machine = {
+      ...this.machine,
+      transitions: this.machine.transitions.filter(t => t.id !== transitionId)
+    };
+
+    if (this.selectedTransition === transitionId) {
+      this.selectedTransition = null;
     }
+  }
 
-    private addState() {
-        if (!this.machine) return;
+  private updateStateName(stateId: string, name: string) {
+    if (!this.machine) return;
 
-        const newState: State = {
-            id: this.generateId(),
-            name: `State ${this.machine.states.length + 1}`,
-            color: '#6366f1'
-        };
+    this.machine = {
+      ...this.machine,
+      states: this.machine.states.map(s =>
+        s.id === stateId ? { ...s, name } : s
+      )
+    };
+  }
 
-        this.machine = {
-            ...this.machine,
-            states: [...this.machine.states, newState]
-        };
+  private updateStateColor(stateId: string, color: string) {
+    if (!this.machine) return;
 
-        this.selectedState = newState.id;
-        this.editMode = 'state';
-    }
+    this.machine = {
+      ...this.machine,
+      states: this.machine.states.map(s =>
+        s.id === stateId ? { ...s, color } : s
+      )
+    };
+  }
 
-    private deleteState(stateId: string) {
-        if (!this.machine) return;
+  private updateTransition(transitionId: string, updates: Partial<Transition>) {
+    if (!this.machine) return;
 
-        // Remove state
-        this.machine = {
-            ...this.machine,
-            states: this.machine.states.filter(s => s.id !== stateId),
-            // Remove transitions involving this state
-            transitions: this.machine.transitions.filter(
-                t => t.from !== stateId && t.to !== stateId
-            )
-        };
+    this.machine = {
+      ...this.machine,
+      transitions: this.machine.transitions.map(t =>
+        t.id === transitionId ? { ...t, ...updates } : t
+      )
+    };
+  }
 
-        if (this.selectedState === stateId) {
-            this.selectedState = null;
-        }
-    }
-
-    private addTransition() {
-        if (!this.machine || this.machine.states.length < 2) return;
-
-        const newTransition: Transition = {
-            id: this.generateId(),
-            from: this.machine.states[0].id,
-            to: this.machine.states[1].id,
-            label: 'Transition',
-            roles: []
-        };
-
-        this.machine = {
-            ...this.machine,
-            transitions: [...this.machine.transitions, newTransition]
-        };
-
-        this.selectedTransition = newTransition.id;
-        this.editMode = 'transition';
-    }
-
-    private deleteTransition(transitionId: string) {
-        if (!this.machine) return;
-
-        this.machine = {
-            ...this.machine,
-            transitions: this.machine.transitions.filter(t => t.id !== transitionId)
-        };
-
-        if (this.selectedTransition === transitionId) {
-            this.selectedTransition = null;
-        }
-    }
-
-    private updateStateName(stateId: string, name: string) {
-        if (!this.machine) return;
-
-        this.machine = {
-            ...this.machine,
-            states: this.machine.states.map(s =>
-                s.id === stateId ? { ...s, name } : s
-            )
-        };
-    }
-
-    private updateStateColor(stateId: string, color: string) {
-        if (!this.machine) return;
-
-        this.machine = {
-            ...this.machine,
-            states: this.machine.states.map(s =>
-                s.id === stateId ? { ...s, color } : s
-            )
-        };
-    }
-
-    private updateTransition(transitionId: string, updates: Partial<Transition>) {
-        if (!this.machine) return;
-
-        this.machine = {
-            ...this.machine,
-            transitions: this.machine.transitions.map(t =>
-                t.id === transitionId ? { ...t, ...updates } : t
-            )
-        };
-    }
-
-    private renderToolbar() {
-        return html`
+  private renderToolbar() {
+    return html`
       <div class="toolbar">
         <button class="btn btn-primary" @click=${this.addState}>
           ➕ Add State
@@ -340,49 +398,264 @@ export class StateMachineDesigner extends LitElement {
         </button>
       </div>
     `;
+  }
+
+  private handleMouseDown(e: MouseEvent, stateId: string) {
+    e.stopPropagation();
+    this.draggingStateId = stateId;
+    const state = this.machine?.states.find(s => s.id === stateId);
+    if (state && state.position) {
+      this.dragOffset = {
+        x: e.clientX - state.position.x,
+        y: e.clientY - state.position.y
+      };
+    } else {
+      // Fallback if no position yet
+      const el = (e.target as HTMLElement).closest('.state') as HTMLElement;
+      const rect = el.getBoundingClientRect();
+      this.dragOffset = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
     }
 
-    private renderCanvas() {
-        if (!this.machine || this.machine.states.length === 0) {
-            return html`
+    this.selectedState = stateId;
+    this.selectedTransition = null;
+    this.editMode = 'state';
+  }
+
+  private handleMouseMove(e: MouseEvent) {
+    if (this.draggingStateId && this.machine) {
+      const x = e.clientX - this.dragOffset.x;
+      const y = e.clientY - this.dragOffset.y;
+
+      this.machine = {
+        ...this.machine,
+        states: this.machine.states.map(s =>
+          s.id === this.draggingStateId
+            ? { ...s, position: { x, y } }
+            : s
+        )
+      };
+    }
+  }
+
+  private handleMouseUp() {
+    this.draggingStateId = null;
+  }
+
+  private renderCanvas() {
+    if (!this.machine || this.machine.states.length === 0) {
+      return html`
         <div class="empty-state">
           <p>No states defined</p>
           <p>Click "Add State" to get started</p>
         </div>
       `;
-        }
-
-        // Simple grid layout for states
-        return html`
-      ${this.machine.states.map((state, index) => {
-            const x = 50 + (index % 3) * 200;
-            const y = 50 + Math.floor(index / 3) * 150;
-
-            return html`
-          <div
-            class="state ${this.selectedState === state.id ? 'selected' : ''}"
-            style="left: ${x}px; top: ${y}px; background: ${state.color || '#6366f1'}"
-            @click=${() => {
-                    this.selectedState = state.id;
-                    this.editMode = 'state';
-                }}
-          >
-            <div class="state-name">${state.name}</div>
-            <div class="state-count">
-              ${this.machine!.initialState === state.id ? '⭐ Initial' : ''}
-            </div>
-          </div>
-        `;
-        })}
-    `;
     }
 
-    private renderPropertiesPanel() {
-        const selectedState = this.machine?.states.find(s => s.id === this.selectedState);
-        const selectedTrans = this.machine?.transitions.find(t => t.id === this.selectedTransition);
+    // Ensure all states have positions and calculate bounds
+    let maxX = 0;
+    let maxY = 0;
 
-        if (this.editMode === 'state' && selectedState) {
-            return html`
+    this.machine.states.forEach((state, index) => {
+      if (!state.position) {
+        state.position = {
+          x: 100 + (index % 4) * 250,
+          y: 100 + Math.floor(index / 4) * 200
+        };
+      }
+
+      // Update bounds (assuming card width ~200px, height ~150px)
+      maxX = Math.max(maxX, state.position.x + 250);
+      maxY = Math.max(maxY, state.position.y + 200);
+    });
+
+    // Add some padding
+    const containerWidth = Math.max(100, maxX + 100);
+    const containerHeight = Math.max(100, maxY + 100);
+
+    return html`
+      <div 
+        style="
+          min-width: 100%; 
+          min-height: 100%; 
+          width: ${containerWidth}px;
+          height: ${containerHeight}px;
+          position: relative; 
+          overflow: visible;
+        "
+        @mousemove=${this.handleMouseMove}
+        @mouseup=${this.handleMouseUp}
+        @mouseleave=${this.handleMouseUp}
+      >
+        <!-- SVG layer for transitions (arrows) -->
+        <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;">
+          <defs>
+            <marker
+              id="arrowhead"
+              markerWidth="10"
+              markerHeight="7"
+              refX="9"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+            </marker>
+            <marker
+              id="arrowhead-selected"
+              markerWidth="10"
+              markerHeight="7"
+              refX="9"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" />
+            </marker>
+          </defs>
+          
+          ${this.machine.transitions.map(transition => {
+      const fromState = this.machine!.states.find(s => s.id === transition.from);
+      const toState = this.machine!.states.find(s => s.id === transition.to);
+
+      if (!fromState?.position || !toState?.position) return '';
+
+      const startX = fromState.position.x + 180; // Right side
+      const startY = fromState.position.y + 40;  // Middle height approx
+      const endX = toState.position.x;           // Left side
+      const endY = toState.position.y + 40;
+
+      // Bezier curve control points
+      const dist = Math.abs(endX - startX);
+      const cp1x = startX + dist * 0.5;
+      const cp1y = startY;
+      const cp2x = endX - dist * 0.5;
+      const cp2y = endY;
+
+      const pathData = `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
+      const isSelected = this.selectedTransition === transition.id;
+
+      return html`
+              <g 
+                class="transition-group" 
+                style="cursor: pointer; pointer-events: stroke;"
+                @click=${(e: Event) => {
+          e.stopPropagation();
+          this.selectedTransition = transition.id;
+          this.selectedState = null;
+          this.editMode = 'transition';
+        }}
+              >
+                <!-- Invisible wider path for easier clicking -->
+                <path
+                  d="${pathData}"
+                  stroke="transparent"
+                  stroke-width="20"
+                  fill="none"
+                  style="pointer-events: stroke;"
+                />
+                
+                <!-- Visible path -->
+                <path
+                  d="${pathData}"
+                  stroke="${isSelected ? '#3b82f6' : '#94a3b8'}"
+                  stroke-width="${isSelected ? '3' : '2'}"
+                  fill="none"
+                  marker-end="url(#arrowhead${isSelected ? '-selected' : ''})"
+                  style="pointer-events: none;"
+                />
+
+                <!-- Label on path -->
+                ${transition.label ? html`
+                  <foreignObject 
+                    x="${(startX + endX) / 2 - 50}" 
+                    y="${(startY + endY) / 2 - 15}" 
+                    width="100" 
+                    height="30"
+                    style="pointer-events: none;"
+                  >
+                    <div style="text-align: center;">
+                      <span style="
+                        background: white; 
+                        padding: 2px 8px; 
+                        border-radius: 12px; 
+                        border: 1px solid ${isSelected ? '#3b82f6' : '#e2e8f0'};
+                        font-size: 11px;
+                        color: ${isSelected ? '#3b82f6' : '#64748b'};
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                      ">
+                        ${transition.label}
+                      </span>
+                    </div>
+                  </foreignObject>
+                ` : ''}
+              </g>
+            `;
+    })}
+        </svg>
+
+        <!-- State nodes -->
+        ${this.machine.states.map((state) => {
+      if (!state.position) return '';
+
+      return html`
+            <div
+              class="state ${this.selectedState === state.id ? 'selected' : ''}"
+              style="
+                left: ${state.position.x}px; 
+                top: ${state.position.y}px;
+              "
+              @mousedown=${(e: MouseEvent) => this.handleMouseDown(e, state.id)}
+            >
+              <div class="state-header" style="background: ${state.color || '#6366f1'}">
+                <span>${state.name}</span>
+                ${this.machine!.initialState === state.id ? '⭐' : ''}
+              </div>
+              <div class="state-body">
+                ${state.description || 'No description'}
+                <div class="state-actions">
+                  <!-- Future: Add quick actions here -->
+                </div>
+              </div>
+              
+              <!-- Connectors -->
+              <div class="connector-dot" style="top: 50%; right: -6px; transform: translateY(-50%);"></div>
+              <div class="connector-dot" style="top: 50%; left: -6px; transform: translateY(-50%);"></div>
+            </div>
+          `;
+    })}
+      </div>
+    `;
+  }
+
+  /**
+   * Get available fields for condition building
+   * TODO: Pull from actual entity schema
+   */
+  private getAvailableFields(): Array<{ name: string; type: FieldType; label: string }> {
+    // For now, return sample fields for Appointment entity
+    // In production, this would query the entity schema
+    return [
+      { name: 'amount', type: 'number', label: 'Amount' },
+      { name: 'status', type: 'string', label: 'Status' },
+      { name: 'customerType', type: 'string', label: 'Customer Type' },
+      { name: 'priority', type: 'string', label: 'Priority' },
+      { name: 'createdDate', type: 'date', label: 'Created Date' },
+      { name: 'assignedTo', type: 'string', label: 'Assigned To' },
+      { name: 'isUrgent', type: 'boolean', label: 'Is Urgent' },
+    ];
+  }
+
+  private handleConditionChange(transitionId: string, condition: TransitionCondition) {
+    this.updateTransition(transitionId, { condition });
+  }
+
+  private renderPropertiesPanel() {
+    const selectedState = this.machine?.states.find(s => s.id === this.selectedState);
+    const selectedTrans = this.machine?.transitions.find(t => t.id === this.selectedTransition);
+
+    if (this.editMode === 'state' && selectedState) {
+      return html`
         <h3 style="margin: 0 0 1rem;">State Properties</h3>
         
         <div class="form-group">
@@ -391,8 +664,8 @@ export class StateMachineDesigner extends LitElement {
             type="text"
             .value=${selectedState.name}
             @input=${(e: Event) =>
-                    this.updateStateName(selectedState.id, (e.target as HTMLInputElement).value)
-                }
+          this.updateStateName(selectedState.id, (e.target as HTMLInputElement).value)
+        }
           />
         </div>
 
@@ -402,9 +675,27 @@ export class StateMachineDesigner extends LitElement {
             type="color"
             .value=${selectedState.color || '#6366f1'}
             @input=${(e: Event) =>
-                    this.updateStateColor(selectedState.id, (e.target as HTMLInputElement).value)
-                }
+          this.updateStateColor(selectedState.id, (e.target as HTMLInputElement).value)
+        }
           />
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input
+              type="checkbox"
+              .checked=${this.machine!.initialState === selectedState.id}
+              @change=${(e: Event) => {
+          if ((e.target as HTMLInputElement).checked) {
+            this.machine = {
+              ...this.machine!,
+              initialState: selectedState.id
+            };
+          }
+        }}
+            />
+            Set as Initial State
+          </label>
         </div>
 
         <button 
@@ -415,24 +706,35 @@ export class StateMachineDesigner extends LitElement {
           🗑️ Delete State
         </button>
       `;
-        }
+    }
 
-        if (this.editMode === 'transition' && selectedTrans) {
-            return html`
+    if (this.editMode === 'transition' && selectedTrans) {
+      const fromState = this.machine!.states.find(s => s.id === selectedTrans.from);
+      const toState = this.machine!.states.find(s => s.id === selectedTrans.to);
+
+      return html`
         <h3 style="margin: 0 0 1rem;">Transition Properties</h3>
+        
+        <div style="padding: 0.75rem; background: #f1f5f9; border-radius: 6px; margin-bottom: 1rem;">
+          <strong>${fromState?.name || 'Unknown'}</strong> 
+          <span style="color: #64748b;">→</span> 
+          <strong>${toState?.name || 'Unknown'}</strong>
+        </div>
         
         <div class="form-group">
           <label>From State</label>
           <select
             .value=${selectedTrans.from}
             @change=${(e: Event) =>
-                    this.updateTransition(selectedTrans.id, {
-                        from: (e.target as HTMLSelectElement).value
-                    })
-                }
+          this.updateTransition(selectedTrans.id, {
+            from: (e.target as HTMLSelectElement).value
+          })
+        }
           >
             ${this.machine!.states.map(s => html`
-              <option value=${s.id}>${s.name}</option>
+              <option value=${s.id} ?selected=${s.id === selectedTrans.from}>
+                ${s.name}
+              </option>
             `)}
           </select>
         </div>
@@ -442,28 +744,102 @@ export class StateMachineDesigner extends LitElement {
           <select
             .value=${selectedTrans.to}
             @change=${(e: Event) =>
-                    this.updateTransition(selectedTrans.id, {
-                        to: (e.target as HTMLSelectElement).value
-                    })
-                }
+          this.updateTransition(selectedTrans.id, {
+            to: (e.target as HTMLSelectElement).value
+          })
+        }
           >
             ${this.machine!.states.map(s => html`
-              <option value=${s.id}>${s.name}</option>
+              <option value=${s.id} ?selected=${s.id === selectedTrans.to}>
+                ${s.name}
+              </option>
             `)}
           </select>
         </div>
 
         <div class="form-group">
-          <label>Label</label>
+          <label>Label (e.g., "Submit", "Approve")</label>
           <input
             type="text"
             .value=${selectedTrans.label || ''}
+            placeholder="Transition action"
             @input=${(e: Event) =>
-                    this.updateTransition(selectedTrans.id, {
-                        label: (e.target as HTMLInputElement).value
-                    })
-                }
+          this.updateTransition(selectedTrans.id, {
+            label: (e.target as HTMLInputElement).value
+          })
+        }
           />
+        </div>
+
+        <div class="form-group">
+          <label>Priority (optional)</label>
+          <input
+            type="number"
+            .value=${selectedTrans.priority || ''}
+            placeholder="1 = highest priority"
+            @input=${(e: Event) => {
+          const value = (e.target as HTMLInputElement).value;
+          this.updateTransition(selectedTrans.id, {
+            priority: value ? parseInt(value) : undefined
+          });
+        }}
+          />
+          <small style="color: #64748b; font-size: 0.75rem;">
+            Lower numbers = higher priority when evaluating conditions
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>Allowed Roles (comma-separated)</label>
+          <input
+            type="text"
+            .value=${(selectedTrans.roles || []).join(', ')}
+            placeholder="admin, manager"
+            @input=${(e: Event) => {
+          const value = (e.target as HTMLInputElement).value;
+          const roles = value.split(',').map(r => r.trim()).filter(r => r);
+          this.updateTransition(selectedTrans.id, { roles });
+        }}
+          />
+          <small style="color: #64748b; font-size: 0.75rem;">
+            Only these roles can trigger this transition
+          </small>
+        </div>
+
+        <!-- Condition Builder -->
+        <div class="form-group">
+          <label style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Condition (optional)</span>
+            ${selectedTrans.condition ? html`
+              <span style="font-size: 0.7rem; color: #10b981;">✓ Condition set</span>
+            ` : ''}
+          </label>
+          <condition-builder
+            .condition=${selectedTrans.condition}
+            .availableFields=${this.getAvailableFields()}
+            .compact=${false}
+            @condition-changed=${(e: CustomEvent) =>
+          this.handleConditionChange(selectedTrans.id, e.detail)
+        }
+          ></condition-builder>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input
+              type="checkbox"
+              .checked=${selectedTrans.isFallback || false}
+              @change=${(e: Event) => {
+          this.updateTransition(selectedTrans.id, {
+            isFallback: (e.target as HTMLInputElement).checked
+          });
+        }}
+            />
+            Fallback transition (ELSE)
+          </label>
+          <small style="color: #64748b; font-size: 0.75rem;">
+            Use this transition if no other conditions match
+          </small>
         </div>
 
         <button 
@@ -474,34 +850,72 @@ export class StateMachineDesigner extends LitElement {
           🗑️ Delete Transition
         </button>
       `;
-        }
-
-        return html`
-      <h3 style="margin: 0 0 1rem;">Transitions</h3>
-      <div class="transitions-list">
-        ${this.machine?.transitions.map(t => {
-            const fromState = this.machine!.states.find(s => s.id === t.from);
-            const toState = this.machine!.states.find(s => s.id === t.to);
-
-            return html`
-            <div 
-              class="transition-item ${this.selectedTransition === t.id ? 'selected' : ''}"
-              @click=${() => {
-                    this.selectedTransition = t.id;
-                    this.editMode = 'transition';
-                }}
-            >
-              ${fromState?.name || 'Unknown'} → ${toState?.name || 'Unknown'}
-              ${t.label ? `(${t.label})` : ''}
-            </div>
-          `;
-        })}
-      </div>
-    `;
     }
 
-    render() {
-        return html`
+    // Default: Show all transitions
+    return html`
+      <h3 style="margin: 0 0 1rem;">
+        Transitions (${this.machine?.transitions.length || 0})
+      </h3>
+      
+      ${!this.machine || this.machine.transitions.length === 0 ? html`
+        <p style="color: #94a3b8; font-size: 0.875rem; text-align: center; padding: 2rem 0;">
+          No transitions defined.<br/>
+          Click "Add Transition" to create one.
+        </p>
+      ` : html`
+        <div class="transitions-list">
+          ${this.machine!.transitions.map(t => {
+      const fromState = this.machine!.states.find(s => s.id === t.from);
+      const toState = this.machine!.states.find(s => s.id === t.to);
+
+      return html`
+              <div 
+                class="transition-item ${this.selectedTransition === t.id ? 'selected' : ''}"
+                @click=${() => {
+          this.selectedTransition = t.id;
+          this.selectedState = null;
+          this.editMode = 'transition';
+        }}
+              >
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.25rem;">
+                  <div style="font-weight: 600;">
+                    ${t.label || 'Untitled'}
+                  </div>
+                  ${t.priority ? html`
+                    <span style="font-size: 0.7rem; background: #fbbf24; color: white; padding: 0.125rem 0.375rem; border-radius: 3px;">
+                      P${t.priority}
+                    </span>
+                  ` : ''}
+                </div>
+                <div style="font-size: 0.75rem; color: #64748b;">
+                  ${fromState?.name || 'Unknown'} → ${toState?.name || 'Unknown'}
+                </div>
+                ${t.condition ? html`
+                  <div style="font-size: 0.7rem; color: #10b981; margin-top: 0.25rem;">
+                    ⚡ ${t.condition.naturalLanguage || t.condition.expression}
+                  </div>
+                ` : ''}
+                ${t.isFallback ? html`
+                  <div style="font-size: 0.7rem; color: #8b5cf6; margin-top: 0.25rem;">
+                    🔄 ELSE (Fallback)
+                  </div>
+                ` : ''}
+                ${t.roles && t.roles.length > 0 ? html`
+                  <div style="font-size: 0.7rem; color: #3b82f6; margin-top: 0.25rem;">
+                    🔒 ${t.roles.join(', ')}
+                  </div>
+                ` : ''}
+              </div>
+            `;
+    })}
+        </div>
+      `}
+    `;
+  }
+
+  render() {
+    return html`
       ${this.renderToolbar()}
       <div class="designer-container">
         <div class="canvas-panel">
@@ -512,5 +926,5 @@ export class StateMachineDesigner extends LitElement {
         </div>
       </div>
     `;
-    }
+  }
 }
