@@ -494,23 +494,23 @@ export class StateMachineDesigner extends LitElement {
           <defs>
             <marker
               id="arrowhead"
-              markerWidth="10"
-              markerHeight="7"
-              refX="9"
-              refY="3.5"
+              markerWidth="12"
+              markerHeight="12"
+              refX="10"
+              refY="6"
               orient="auto"
             >
-              <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+              <path d="M0,0 L12,6 L0,12 L3,6 Z" fill="#64748b" />
             </marker>
             <marker
               id="arrowhead-selected"
-              markerWidth="10"
-              markerHeight="7"
-              refX="9"
-              refY="3.5"
+              markerWidth="12"
+              markerHeight="12"
+              refX="10"
+              refY="6"
               orient="auto"
             >
-              <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" />
+              <path d="M0,0 L12,6 L0,12 L3,6 Z" fill="#3b82f6" />
             </marker>
           </defs>
           
@@ -527,9 +527,12 @@ export class StateMachineDesigner extends LitElement {
 
       // Bezier curve control points
       const dist = Math.abs(endX - startX);
-      const cp1x = startX + dist * 0.5;
+      // Increase curvature for better visibility
+      const controlDist = Math.max(dist * 0.5, 50);
+
+      const cp1x = startX + controlDist;
       const cp1y = startY;
-      const cp2x = endX - dist * 0.5;
+      const cp2x = endX - controlDist;
       const cp2y = endY;
 
       const pathData = `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
@@ -558,11 +561,11 @@ export class StateMachineDesigner extends LitElement {
                 <!-- Visible path -->
                 <path
                   d="${pathData}"
-                  stroke="${isSelected ? '#3b82f6' : '#94a3b8'}"
-                  stroke-width="${isSelected ? '3' : '2'}"
+                  stroke="${isSelected ? '#3b82f6' : '#64748b'}"
+                  stroke-width="${isSelected ? '3' : '2.5'}"
                   fill="none"
                   marker-end="url(#arrowhead${isSelected ? '-selected' : ''})"
-                  style="pointer-events: none;"
+                  style="pointer-events: none; transition: all 0.2s;"
                 />
 
                 <!-- Label on path -->
