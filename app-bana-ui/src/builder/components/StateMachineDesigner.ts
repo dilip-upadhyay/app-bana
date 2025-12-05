@@ -33,88 +33,122 @@ export class StateMachineDesigner extends LitElement {
       display: flex;
       flex-direction: column;
       height: 100%;
-      background: #f8f9fa;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     }
 
     .designer-container {
       display: flex;
       flex: 1;
-      gap: 1rem;
-      padding: 1rem;
+      gap: 1.5rem;
+      padding: 1.5rem;
       overflow: hidden;
-      min-height: 0; /* Important for nested flex scrolling */
+      min-height: 0;
     }
 
     .canvas-panel {
       flex: 1;
-      background: white;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
-      padding: 2rem;
+      background: #ffffff;
+      border-radius: 16px;
+      border: none;
+      padding: 0;
       overflow: auto;
       position: relative;
-      height: 100%; /* Ensure it fills container */
+      height: 100%;
       box-sizing: border-box;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+      background-image: 
+        radial-gradient(circle at 1px 1px, rgba(0,0,0,0.03) 1px, transparent 0);
+      background-size: 20px 20px;
     }
 
     .properties-panel {
-      width: 300px;
+      width: 380px;
       background: white;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
-      padding: 1rem;
+      border-radius: 16px;
+      border: none;
+      padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 1rem;
-      overflow-y: auto; /* Enable scrolling for long lists */
-      height: 100%; /* Ensure it fills container */
+      overflow: hidden;
+      height: 100%;
       box-sizing: border-box;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
     }
 
     .toolbar {
       display: flex;
+      gap: 0.75rem;
+      padding: 1.5rem;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      align-items: center;
+    }
+
+    .toolbar-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #1e293b;
+      margin-right: auto;
+      display: flex;
+      align-items: center;
       gap: 0.5rem;
-      padding: 1rem;
-      background: white;
-      border-bottom: 1px solid #e2e8f0;
     }
 
     .btn {
-      padding: 0.5rem 1rem;
-      border: 1px solid #cbd5e0;
-      border-radius: 4px;
+      padding: 0.625rem 1.25rem;
+      border: none;
+      border-radius: 10px;
       background: white;
       cursor: pointer;
       font-size: 0.875rem;
-      transition: all 0.2s;
+      font-weight: 500;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
     .btn:hover {
-      background: #f7fafc;
-      border-color: #4299e1;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .btn:active {
+      transform: translateY(0);
     }
 
     .btn-primary {
-      background: #3b82f6;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
-      border-color: #3b82f6;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
     }
 
     .btn-primary:hover {
-      background: #2563eb;
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-success:hover {
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
     }
 
     .state {
       position: absolute;
       padding: 0;
-      width: 180px;
-      border-radius: 12px;
+      width: 200px;
+      border-radius: 16px;
       background: white;
       cursor: grab;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-      transition: box-shadow 0.2s, transform 0.2s;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.05);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       user-select: none;
-      border: 1px solid rgba(0,0,0,0.05);
       overflow: hidden;
       z-index: 5;
     }
@@ -124,108 +158,277 @@ export class StateMachineDesigner extends LitElement {
     }
 
     .state:hover {
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-      transform: translateY(-2px);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.18), 0 0 0 2px rgba(102, 126, 234, 0.3);
+      transform: translateY(-4px) scale(1.02);
     }
 
     .state.selected {
-      box-shadow: 0 0 0 2px #3b82f6, 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 16px 48px rgba(102, 126, 234, 0.3), 0 0 0 3px #667eea;
+      transform: scale(1.05);
     }
 
     .state-header {
-      padding: 0.75rem 1rem;
+      padding: 1rem 1.25rem;
       color: white;
       font-weight: 600;
-      font-size: 0.95rem;
+      font-size: 1rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      background: linear-gradient(135deg, var(--state-color, #667eea) 0%, var(--state-color-dark, #764ba2) 100%);
     }
 
     .state-body {
-      padding: 0.75rem 1rem;
-      font-size: 0.8rem;
-      color: #475569;
+      padding: 1rem 1.25rem;
+      font-size: 0.875rem;
+      color: #64748b;
+      min-height: 60px;
+      background: white;
     }
 
     .state-actions {
       display: flex;
       gap: 0.5rem;
-      margin-top: 0.5rem;
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .state-action-btn {
+      padding: 0.375rem 0.75rem;
+      border-radius: 8px;
+      border: none;
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .state-action-btn:hover {
+      background: #e2e8f0;
+      transform: translateY(-1px);
     }
 
     .connector-dot {
-      width: 12px;
-      height: 12px;
+      width: 16px;
+      height: 16px;
       background: white;
-      border: 2px solid #94a3b8;
+      border: 3px solid #667eea;
       border-radius: 50%;
       position: absolute;
-      transition: all 0.2s;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: crosshair;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }
 
     .connector-dot:hover {
-      background: #3b82f6;
-      border-color: #3b82f6;
-      transform: scale(1.2);
+      background: #667eea;
+      border-color: #667eea;
+      transform: scale(1.4);
+      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    }
+
+    .connector-dot.active {
+      background: #10b981;
+      border-color: #10b981;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.3); }
     }
 
     .transitions-list {
-      margin-top: 1rem;
+      margin-top: 0;
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 0.75rem;
+      padding: 1.25rem;
+      overflow-y: auto;
+      flex: 1;
     }
 
     .transition-item {
-      padding: 0.75rem;
-      background: #f8fafc;
-      border-radius: 6px;
-      border: 1px solid #e2e8f0;
+      padding: 1rem;
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border-radius: 12px;
+      border: 2px solid transparent;
       cursor: pointer;
-      font-size: 0.85rem;
+      font-size: 0.875rem;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .transition-item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+      opacity: 0;
+      transition: opacity 0.2s;
     }
 
     .transition-item:hover {
-      background: #edf2f7;
-      border-color: #cbd5e0;
+      background: white;
+      border-color: #e2e8f0;
+      transform: translateX(4px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .transition-item:hover::before {
+      opacity: 1;
     }
 
     .transition-item.selected {
+      background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+      border-color: #667eea;
+      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.2);
+    }
+
+    .transition-item.selected::before {
+      opacity: 1;
+    }
+
+    .transition-label {
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .transition-path {
+      font-size: 0.75rem;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .transition-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      margin-top: 0.5rem;
+    }
+
+    .badge-condition {
       background: #dbeafe;
-      border-color: #3b82f6;
+      color: #1e40af;
+    }
+
+    .badge-role {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .badge-fallback {
+      background: #f3e8ff;
+      color: #6b21a8;
+    }
+
+    .badge-priority {
+      background: #fee2e2;
+      color: #991b1b;
     }
 
     .form-group {
       display: flex;
       flex-direction: column;
+      gap: 0.625rem;
+    }
+
+    label {
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
       gap: 0.5rem;
     }
 
-    .form-group label {
-      font-size: 0.85rem;
-      font-weight: 500;
-      color: #475569;
+    input,
+    select {
+      border-radius: 10px;
+      border: 2px solid #e2e8f0;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+      background: white;
+      color: #1e293b;
     }
 
-    .form-group input,
-    .form-group select {
-      padding: 0.5rem;
-      border: 1px solid #cbd5e0;
-      border-radius: 4px;
-      font-size: 0.875rem;
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #667eea;
+    }
+
+    small {
+      color: #64748b;
+      font-size: 0.75rem;
+      line-height: 1.4;
+    }
+
+    .panel-header {
+      padding: 1.25rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-weight: 600;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .panel-content {
+      padding: 1.25rem;
+      overflow-y: auto;
+      flex: 1;
     }
 
     .empty-state {
       text-align: center;
-      padding: 3rem;
+      padding: 4rem 2rem;
       color: #94a3b8;
     }
 
-    .state-count {
-      font-size: 0.75rem;
-      color: rgba(255, 255, 255, 0.8);
-      margin-top: 0.25rem;
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .btn-delete {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      margin-top: auto;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    }
+
+    .btn-delete:hover {
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
     }
   `;
 
@@ -384,6 +587,10 @@ export class StateMachineDesigner extends LitElement {
   private renderToolbar() {
     return html`
       <div class="toolbar">
+        <div class="toolbar-title">
+          <span>🎨</span>
+          <span>Workflow Designer</span>
+        </div>
         <button class="btn btn-primary" @click=${this.addState}>
           ➕ Add State
         </button>
@@ -394,8 +601,8 @@ export class StateMachineDesigner extends LitElement {
         >
           🔀 Add Transition
         </button>
-        <button class="btn btn-primary" @click=${this.saveMachine}>
-          💾 Save
+        <button class="btn btn-success" @click=${this.saveMachine}>
+          💾 Save Workflow
         </button>
       </div>
     `;
@@ -667,36 +874,39 @@ export class StateMachineDesigner extends LitElement {
 
     if (this.editMode === 'state' && selectedState) {
       return html`
-        <h3 style="margin: 0 0 1rem;">State Properties</h3>
-        
-        <div class="form-group">
-          <label>State Name</label>
-          <input
-            type="text"
-            .value=${selectedState.name}
-            @input=${(e: Event) =>
+        <div class="panel-header">
+          <span>⚙️</span>
+          <span>State Properties</span>
+        </div>
+        <div class="panel-content">
+          <div class="form-group">
+            <label>State Name</label>
+            <input
+              type="text"
+              .value=${selectedState.name}
+              @input=${(e: Event) =>
           this.updateStateName(selectedState.id, (e.target as HTMLInputElement).value)
         }
-          />
-        </div>
+            />
+          </div>
 
-        <div class="form-group">
-          <label>Color</label>
-          <input
-            type="color"
-            .value=${selectedState.color || '#6366f1'}
-            @input=${(e: Event) =>
+          <div class="form-group">
+            <label>Color Theme</label>
+            <input
+              type="color"
+              .value=${selectedState.color || '#6366f1'}
+              @input=${(e: Event) =>
           this.updateStateColor(selectedState.id, (e.target as HTMLInputElement).value)
         }
-          />
-        </div>
+            />
+          </div>
 
-        <div class="form-group">
-          <label>
-            <input
-              type="checkbox"
-              .checked=${this.machine!.initialState === selectedState.id}
-              @change=${(e: Event) => {
+          <div class="form-group">
+            <label style="cursor: pointer;">
+              <input
+                type="checkbox"
+                .checked=${this.machine!.initialState === selectedState.id}
+                @change=${(e: Event) => {
           if ((e.target as HTMLInputElement).checked) {
             this.machine = {
               ...this.machine!,
@@ -704,18 +914,19 @@ export class StateMachineDesigner extends LitElement {
             };
           }
         }}
-            />
-            Set as Initial State
-          </label>
-        </div>
+              />
+              <span>Set as Initial State ⭐</span>
+            </label>
+            <small>The workflow starts from this state</small>
+          </div>
 
-        <button 
-          class="btn" 
-          style="background: #ef4444; color: white; margin-top: auto;"
-          @click=${() => this.deleteState(selectedState.id)}
-        >
-          🗑️ Delete State
-        </button>
+          <button 
+            class="btn btn-delete"
+            @click=${() => this.deleteState(selectedState.id)}
+          >
+            🗑️ Delete State
+          </button>
+        </div>
       `;
     }
 
@@ -724,156 +935,159 @@ export class StateMachineDesigner extends LitElement {
       const toState = this.machine!.states.find(s => s.id === selectedTrans.to);
 
       return html`
-        <h3 style="margin: 0 0 1rem;">Transition Properties</h3>
-        
-        <div style="padding: 0.75rem; background: #f1f5f9; border-radius: 6px; margin-bottom: 1rem;">
-          <strong>${fromState?.name || 'Unknown'}</strong> 
-          <span style="color: #64748b;">→</span> 
-          <strong>${toState?.name || 'Unknown'}</strong>
+        <div class="panel-header">
+          <span>🔀</span>
+          <span>Transition Properties</span>
         </div>
-        
-        <div class="form-group">
-          <label>From State</label>
-          <select
-            .value=${selectedTrans.from}
-            @change=${(e: Event) =>
+        <div class="panel-content">
+          <div style="padding: 1rem; background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 12px; margin-bottom: 1.5rem; border: 2px solid #c7d2fe;">
+            <div class="transition-path">
+              <strong style="color: #4338ca;">${fromState?.name || 'Unknown'}</strong> 
+              <span style="color: #667eea; font-size: 1.2rem;">→</span> 
+              <strong style="color: #4338ca;">${toState?.name || 'Unknown'}</strong>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>From State</label>
+            <select
+              .value=${selectedTrans.from}
+              @change=${(e: Event) =>
           this.updateTransition(selectedTrans.id, {
             from: (e.target as HTMLSelectElement).value
           })
         }
-          >
-            ${this.machine!.states.map(s => html`
-              <option value=${s.id} ?selected=${s.id === selectedTrans.from}>
-                ${s.name}
-              </option>
-            `)}
-          </select>
-        </div>
+            >
+              ${this.machine!.states.map(s => html`
+                <option value=${s.id} ?selected=${s.id === selectedTrans.from}>
+                  ${s.name}
+                </option>
+              `)}
+            </select>
+          </div>
 
-        <div class="form-group">
-          <label>To State</label>
-          <select
-            .value=${selectedTrans.to}
-            @change=${(e: Event) =>
+          <div class="form-group">
+            <label>To State</label>
+            <select
+              .value=${selectedTrans.to}
+              @change=${(e: Event) =>
           this.updateTransition(selectedTrans.id, {
             to: (e.target as HTMLSelectElement).value
           })
         }
-          >
-            ${this.machine!.states.map(s => html`
-              <option value=${s.id} ?selected=${s.id === selectedTrans.to}>
-                ${s.name}
-              </option>
-            `)}
-          </select>
-        </div>
+            >
+              ${this.machine!.states.map(s => html`
+                <option value=${s.id} ?selected=${s.id === selectedTrans.to}>
+                  ${s.name}
+                </option>
+              `)}
+            </select>
+          </div>
 
-        <div class="form-group">
-          <label>Label (e.g., "Submit", "Approve")</label>
-          <input
-            type="text"
-            .value=${selectedTrans.label || ''}
-            placeholder="Transition action"
-            @input=${(e: Event) =>
+          <div class="form-group">
+            <label>Label</label>
+            <input
+              type="text"
+              .value=${selectedTrans.label || ''}
+              placeholder="e.g., Submit, Approve, Reject"
+              @input=${(e: Event) =>
           this.updateTransition(selectedTrans.id, {
             label: (e.target as HTMLInputElement).value
           })
         }
-          />
-        </div>
+            />
+            <small>This label appears on the arrow</small>
+          </div>
 
-        <div class="form-group">
-          <label>Priority (optional)</label>
-          <input
-            type="number"
-            .value=${selectedTrans.priority || ''}
-            placeholder="1 = highest priority"
-            @input=${(e: Event) => {
+          <div class="form-group">
+            <label>Priority</label>
+            <input
+              type="number"
+              .value=${selectedTrans.priority || ''}
+              placeholder="1 = highest priority"
+              min="1"
+              @input=${(e: Event) => {
           const value = (e.target as HTMLInputElement).value;
           this.updateTransition(selectedTrans.id, {
             priority: value ? parseInt(value) : undefined
           });
         }}
-          />
-          <small style="color: #64748b; font-size: 0.75rem;">
-            Lower numbers = higher priority when evaluating conditions
-          </small>
-        </div>
+            />
+            <small>💡 Lower numbers = higher priority when evaluating conditions</small>
+          </div>
 
-        <div class="form-group">
-          <label>Allowed Roles (comma-separated)</label>
-          <input
-            type="text"
-            .value=${(selectedTrans.roles || []).join(', ')}
-            placeholder="admin, manager"
-            @input=${(e: Event) => {
+          <div class="form-group">
+            <label>Allowed Roles</label>
+            <input
+              type="text"
+              .value=${(selectedTrans.roles || []).join(', ')}
+              placeholder="admin, manager, user"
+              @input=${(e: Event) => {
           const value = (e.target as HTMLInputElement).value;
           const roles = value.split(',').map(r => r.trim()).filter(r => r);
           this.updateTransition(selectedTrans.id, { roles });
         }}
-          />
-          <small style="color: #64748b; font-size: 0.75rem;">
-            Only these roles can trigger this transition
-          </small>
-        </div>
+            />
+            <small>🔒 Only these roles can trigger this transition</small>
+          </div>
 
-        <!-- Condition Builder -->
-        <div class="form-group">
-          <label style="display: flex; justify-content: space-between; align-items: center;">
-            <span>Condition (optional)</span>
-            ${selectedTrans.condition ? html`
-              <span style="font-size: 0.7rem; color: #10b981;">✓ Condition set</span>
-            ` : ''}
-          </label>
-          <condition-builder
-            .condition=${selectedTrans.condition}
-            .availableFields=${this.getAvailableFields()}
-            .compact=${false}
-            @condition-changed=${(e: CustomEvent) =>
+          <div class="form-group">
+            <label style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Condition</span>
+              ${selectedTrans.condition ? html`
+                <span class="transition-badge badge-condition">✓ Active</span>
+              ` : ''}
+            </label>
+            <condition-builder
+              .condition=${selectedTrans.condition}
+              .availableFields=${this.getAvailableFields()}
+              .compact=${false}
+              @condition-changed=${(e: CustomEvent) =>
           this.handleConditionChange(selectedTrans.id, e.detail)
         }
-          ></condition-builder>
-        </div>
+            ></condition-builder>
+            <small>⚡ This transition only fires when the condition is true</small>
+          </div>
 
-        <div class="form-group">
-          <label>
-            <input
-              type="checkbox"
-              .checked=${selectedTrans.isFallback || false}
-              @change=${(e: Event) => {
+          <div class="form-group">
+            <label style="cursor: pointer;">
+              <input
+                type="checkbox"
+                .checked=${selectedTrans.isFallback || false}
+                @change=${(e: Event) => {
           this.updateTransition(selectedTrans.id, {
             isFallback: (e.target as HTMLInputElement).checked
           });
         }}
-            />
-            Fallback transition (ELSE)
-          </label>
-          <small style="color: #64748b; font-size: 0.75rem;">
-            Use this transition if no other conditions match
-          </small>
-        </div>
+              />
+              <span>Fallback Transition (ELSE) 🔄</span>
+            </label>
+            <small>Use this transition if no other conditions match</small>
+          </div>
 
-        <button 
-          class="btn" 
-          style="background: #ef4444; color: white; margin-top: auto;"
-          @click=${() => this.deleteTransition(selectedTrans.id)}
-        >
-          🗑️ Delete Transition
-        </button>
+          <button 
+            class="btn btn-delete"
+            @click=${() => this.deleteTransition(selectedTrans.id)}
+          >
+            🗑️ Delete Transition
+          </button>
+        </div>
       `;
     }
 
     // Default: Show all transitions
     return html`
-      <h3 style="margin: 0 0 1rem;">
-        Transitions (${this.machine?.transitions.length || 0})
-      </h3>
+      <div class="panel-header">
+        <span>📋</span>
+        <span>Transitions (${this.machine?.transitions.length || 0})</span>
+      </div>
       
       ${!this.machine || this.machine.transitions.length === 0 ? html`
-        <p style="color: #94a3b8; font-size: 0.875rem; text-align: center; padding: 2rem 0;">
-          No transitions defined.<br/>
-          Click "Add Transition" to create one.
-        </p>
+        <div class="empty-state">
+          <div class="empty-state-icon">🔀</div>
+          <p style="font-weight: 600; margin-bottom: 0.5rem;">No transitions yet</p>
+          <p style="font-size: 0.875rem;">Click "Add Transition" to connect your states</p>
+        </div>
       ` : html`
         <div class="transitions-list">
           ${this.machine!.transitions.map(t => {
@@ -889,31 +1103,29 @@ export class StateMachineDesigner extends LitElement {
           this.editMode = 'transition';
         }}
               >
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.25rem;">
-                  <div style="font-weight: 600;">
-                    ${t.label || 'Untitled'}
-                  </div>
+                <div class="transition-label">
+                  <span>${t.label || 'Untitled Transition'}</span>
                   ${t.priority ? html`
-                    <span style="font-size: 0.7rem; background: #fbbf24; color: white; padding: 0.125rem 0.375rem; border-radius: 3px;">
-                      P${t.priority}
-                    </span>
+                    <span class="transition-badge badge-priority">P${t.priority}</span>
                   ` : ''}
                 </div>
-                <div style="font-size: 0.75rem; color: #64748b;">
-                  ${fromState?.name || 'Unknown'} → ${toState?.name || 'Unknown'}
+                <div class="transition-path">
+                  <span>${fromState?.name || 'Unknown'}</span>
+                  <span style="color: #667eea;">→</span>
+                  <span>${toState?.name || 'Unknown'}</span>
                 </div>
                 ${t.condition ? html`
-                  <div style="font-size: 0.7rem; color: #10b981; margin-top: 0.25rem;">
+                  <div class="transition-badge badge-condition">
                     ⚡ ${t.condition.naturalLanguage || t.condition.expression}
                   </div>
                 ` : ''}
                 ${t.isFallback ? html`
-                  <div style="font-size: 0.7rem; color: #8b5cf6; margin-top: 0.25rem;">
+                  <div class="transition-badge badge-fallback">
                     🔄 ELSE (Fallback)
                   </div>
                 ` : ''}
                 ${t.roles && t.roles.length > 0 ? html`
-                  <div style="font-size: 0.7rem; color: #3b82f6; margin-top: 0.25rem;">
+                  <div class="transition-badge badge-role">
                     🔒 ${t.roles.join(', ')}
                   </div>
                 ` : ''}
