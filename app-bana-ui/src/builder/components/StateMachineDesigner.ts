@@ -3,7 +3,7 @@
  * Visual editor for creating state machines with states and transitions
  */
 
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, svg } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import type { StateMachine, State, Transition, TransitionCondition, FieldType } from '../../models/workflow';
 import { workflowStorage } from '../../services/WorkflowStorage';
@@ -116,6 +116,7 @@ export class StateMachineDesigner extends LitElement {
       user-select: none;
       border: 1px solid rgba(0,0,0,0.05);
       overflow: hidden;
+      z-index: 5;
     }
 
     .state:active {
@@ -490,7 +491,13 @@ export class StateMachineDesigner extends LitElement {
         @mouseleave=${this.handleMouseUp}
       >
         <!-- SVG layer for transitions (arrows) -->
-        <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;">
+        <svg 
+          width="${containerWidth}" 
+          height="${containerHeight}"
+          viewBox="0 0 ${containerWidth} ${containerHeight}"
+          style="position: absolute; top: 0; left: 0; z-index: 10; pointer-events: auto;"
+          xmlns="http://www.w3.org/2000/svg"
+        >
           <defs>
             <marker
               id="arrowhead"
@@ -518,16 +525,17 @@ export class StateMachineDesigner extends LitElement {
       const fromState = this.machine!.states.find(s => s.id === transition.from);
       const toState = this.machine!.states.find(s => s.id === transition.to);
 
-      if (!fromState?.position || !toState?.position) return '';
+      if (!fromState || !toState || !fromState.position || !toState.position) {
+        return svg``;
+      }
 
-      const startX = fromState.position.x + 180; // Right side
-      const startY = fromState.position.y + 40;  // Middle height approx
-      const endX = toState.position.x;           // Left side
-      const endY = toState.position.y + 40;
+      const startX = fromState.position.x + 180; // Right side of source state
+      const startY = fromState.position.y + 60;  // Middle height of state card
+      const endX = toState.position.x;           // Left side of target state
+      const endY = toState.position.y + 60;      // Middle height of state card
 
       // Bezier curve control points
       const dist = Math.abs(endX - startX);
-      // Increase curvature for better visibility
       const controlDist = Math.max(dist * 0.5, 50);
 
       const cp1x = startX + controlDist;
@@ -535,37 +543,37 @@ export class StateMachineDesigner extends LitElement {
       const cp2x = endX - controlDist;
       const cp2y = endY;
 
-      const pathData = `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
+      const pathData = `M ${startX},${startY} C ${cp1x},${cp1y} ${cp2x},${cp2y} ${endX},${endY}`;
       const isSelected = this.selectedTransition === transition.id;
 
-      return html`
+      return svg`
               <g 
-                class="transition-group" 
-                style="cursor: pointer; pointer-events: stroke;"
+                class="transition-group"
                 @click=${(e: Event) => {
           e.stopPropagation();
           this.selectedTransition = transition.id;
           this.selectedState = null;
           this.editMode = 'transition';
+          this.requestUpdate();
         }}
               >
                 <!-- Invisible wider path for easier clicking -->
                 <path
                   d="${pathData}"
-                  stroke="transparent"
+                  stroke="rgba(0,0,0,0.1)"
                   stroke-width="20"
                   fill="none"
-                  style="pointer-events: stroke;"
+                  style="cursor: pointer; pointer-events: stroke;"
                 />
                 
-                <!-- Visible path -->
+                <!-- Visible path with arrow -->
                 <path
                   d="${pathData}"
                   stroke="${isSelected ? '#3b82f6' : '#64748b'}"
-                  stroke-width="${isSelected ? '3' : '2.5'}"
+                  stroke-width="${isSelected ? '4' : '3'}"
                   fill="none"
                   marker-end="url(#arrowhead${isSelected ? '-selected' : ''})"
-                  style="pointer-events: none; transition: all 0.2s;"
+                  style="cursor: pointer; pointer-events: stroke;"
                 />
 
                 <!-- Label on path -->

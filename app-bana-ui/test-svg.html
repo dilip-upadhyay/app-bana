@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SVG Arrow Test</title>
+</head>
+<body style="padding: 50px;">
+  <h1>SVG Arrow Test - Do you see a red arrow below?</h1>
+  
+  <svg width="400" height="200" style="border: 1px solid black;">
+    <defs>
+      <marker
+        id="arrowTest"
+        markerWidth="12"
+        markerHeight="12"
+        refX="10"
+        refY="6"
+        orient="auto"
+      >
+        <path d="M0,0 L12,6 L0,12 L3,6 Z" fill="red" />
+      </marker>
+    </defs>
+    
+    <path
+      d="M 50 100 L 350 100"
+      stroke="red"
+      stroke-width="10"
+      marker-end="url(#arrowTest)"
+    />
+    
+    <text x="200" y="50" text-anchor="middle">If you see a thick red arrow, SVG works!</text>
+  </svg>
+  
+  <p style="margin-top: 20px;">
+    If you DON'T see the arrow above, there's a browser issue with SVG rendering.
+    <br>Please open this file in your browser and share a screenshot.
+  </p>
+</body>
+</html>
