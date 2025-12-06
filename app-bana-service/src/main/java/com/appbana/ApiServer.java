@@ -352,6 +352,20 @@ public class ApiServer {
 
     public static com.appbana.api.Router buildRouter() {
         com.appbana.api.Router router = new com.appbana.api.Router();
+        
+        // Initialize workflow engine
+        com.appbana.workflow.api.WorkflowApi.initialize();
+        
+        // Workflow endpoints
+        router.post("/api/workflows", com.appbana.workflow.api.WorkflowApi.createOrUpdateWorkflow());
+        router.get("/api/workflows", com.appbana.workflow.api.WorkflowApi.listWorkflows());
+        router.get("/api/workflows/{id}", com.appbana.workflow.api.WorkflowApi.getWorkflow());
+        router.post("/api/workflows/{id}/publish", com.appbana.workflow.api.WorkflowApi.publishWorkflow());
+        router.post("/api/workflows/{id}/start", com.appbana.workflow.api.WorkflowApi.startWorkflow());
+        router.get("/api/my-tasks", com.appbana.workflow.api.WorkflowApi.getMyTasks());
+        router.post("/api/my-tasks/{tokenId}/complete", com.appbana.workflow.api.WorkflowApi.completeTask());
+        router.get("/api/workflow-instances", com.appbana.workflow.api.WorkflowApi.listInstances());
+        
         // Agent memory endpoints
         router.get("/api/agent/memory", com.appbana.api.AgentMemoryApi.memoryHandler());
         router.post("/api/agent/memory/clear", com.appbana.api.AgentMemoryApi.clearMemoryHandler());
@@ -1541,6 +1555,12 @@ public class ApiServer {
                 // after image
                 Map<String,Object> after = getById(schema, String.valueOf(id));
                 AuditLogService.log("INSERT", schema.getName(), String.valueOf(id), actor, null, after);
+                
+                // Workflow PostOperationHook: Check and auto-start workflows
+                com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
+                    schema.getName(), "ON_CREATE", String.valueOf(id), after
+                );
+                
                 res.json(201, Map.of("id", id));
             } catch (SQLException e) {
                 LOG.error("Insert failed for entity {}", entity, e);
@@ -1704,7 +1724,14 @@ public class ApiServer {
                 Map<String,Object> before = getById(schema, idStr);
                 int updated = updateById(schema, idStr, data);
                 Map<String,Object> after = updated>0? getById(schema, idStr): null;
-                if (updated>0) AuditLogService.log("UPDATE", schema.getName(), idStr, actor, before, after);
+                if (updated>0) {
+                    AuditLogService.log("UPDATE", schema.getName(), idStr, actor, before, after);
+                    
+                    // Workflow PostOperationHook: Check and auto-start workflows
+                    com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
+                        schema.getName(), "ON_UPDATE", idStr, after
+                    );
+                }
                 res.json(200, Map.of("updated", updated));
             } catch (SQLException e) {
                 LOG.error("Update failed for entity {} id {}", entity, idStr, e);
