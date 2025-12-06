@@ -33,6 +33,7 @@ export class StateMachineDesigner extends LitElement {
   @state() private connectingFrom: string | null = null; // State ID when creating connection
   @state() private elementType: 'state' | 'decision' = 'state';
   @state() private showMinimap: boolean = false;
+  @state() private showPropertiesPanel: boolean = true;
 
   static styles = css`
     :host {
@@ -200,6 +201,15 @@ export class StateMachineDesigner extends LitElement {
       height: 100%;
       box-sizing: border-box;
       box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .properties-panel.collapsed {
+      width: 60px;
+    }
+
+    .properties-panel.collapsed .panel-content {
+      display: none;
     }
 
     .toolbar {
@@ -527,6 +537,23 @@ export class StateMachineDesigner extends LitElement {
       display: flex;
       align-items: center;
       gap: 0.75rem;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s;
+    }
+
+    .panel-header:hover {
+      background: linear-gradient(135deg, #5568d3 0%, #653a8b 100%);
+    }
+
+    .panel-toggle {
+      margin-left: auto;
+      font-size: 1.25rem;
+      transition: transform 0.3s;
+    }
+
+    .panel-toggle.collapsed {
+      transform: rotate(180deg);
     }
 
     .panel-content {
@@ -1502,9 +1529,10 @@ export class StateMachineDesigner extends LitElement {
 
     if (this.editMode === 'state' && selectedState) {
       return html`
-        <div class="panel-header">
+        <div class="panel-header" @click=${() => this.showPropertiesPanel = !this.showPropertiesPanel}>
           <span>⚙️</span>
           <span>State Properties</span>
+          <span class="panel-toggle ${!this.showPropertiesPanel ? 'collapsed' : ''}">◀</span>
         </div>
         <div class="panel-content">
           <div class="form-group">
@@ -1579,9 +1607,10 @@ export class StateMachineDesigner extends LitElement {
       const toState = this.machine!.states.find(s => s.id === selectedTrans.to);
 
       return html`
-        <div class="panel-header">
+        <div class="panel-header" @click=${() => this.showPropertiesPanel = !this.showPropertiesPanel}>
           <span>🔀</span>
           <span>Transition Properties</span>
+          <span class="panel-toggle ${!this.showPropertiesPanel ? 'collapsed' : ''}">◀</span>
         </div>
         <div class="panel-content">
           <div style="padding: 1rem; background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 12px; margin-bottom: 1.5rem; border: 2px solid #c7d2fe;">
@@ -1721,9 +1750,10 @@ export class StateMachineDesigner extends LitElement {
 
     // Default: Show all transitions
     return html`
-      <div class="panel-header">
+      <div class="panel-header" @click=${() => this.showPropertiesPanel = !this.showPropertiesPanel}>
         <span>📋</span>
         <span>Transitions (${this.machine?.transitions.length || 0})</span>
+        <span class="panel-toggle ${!this.showPropertiesPanel ? 'collapsed' : ''}">◀</span>
       </div>
       
       ${!this.machine || this.machine.transitions.length === 0 ? html`
@@ -1798,7 +1828,7 @@ export class StateMachineDesigner extends LitElement {
           ${this.renderZoomControls()}
           ${this.showMinimap ? this.renderMinimap() : ''}
         </div>
-        <div class="properties-panel">
+        <div class="properties-panel ${!this.showPropertiesPanel ? 'collapsed' : ''}">
           ${this.renderPropertiesPanel()}
         </div>
       </div>
