@@ -10,13 +10,12 @@ import './PropertiesPanel';
 import './AppManager';
 import './EntityManager';
 import './AiChatBuilder';
-import './StateMachineDesigner';
 
 @customElement('studio-builder-shell')
 export class BuilderShell extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
-  @state() private activeLeftTab: 'components' | 'entities' | 'ai-builder' | 'workflows' = 'components';
+  @state() private activeLeftTab: 'components' | 'entities' | 'ai-builder' = 'components';
   @state() private leftPanelWidth = 300; // Default width in pixels
   private isResizing = false;
   private startX = 0;
@@ -100,15 +99,12 @@ export class BuilderShell extends LitElement {
     if (this.activeLeftTab === 'entities') {
       return html`<studio-entity-manager></studio-entity-manager>`;
     }
-    // Workflows now render in center panel, not here
     return html`<ai-chat-builder></ai-chat-builder>`;
   }
 
   render() {
     // Set CSS custom property for dynamic width
     this.style.setProperty('--left-panel-width', `${this.leftPanelWidth}px`);
-
-    const isWorkflowView = this.activeLeftTab === 'workflows';
 
     return html`
       <!-- Top: App Manager -->
@@ -122,7 +118,7 @@ export class BuilderShell extends LitElement {
       </div>
 
       <!-- Left: Tabbed Panel (Component Library or Entity Manager or AI Builder) -->
-      <div class="library-panel" style="${isWorkflowView ? 'display: none;' : ''}">
+      <div class="library-panel">
         <div class="left-panel-tabs">
           <button 
             class="tab ${this.activeLeftTab === 'components' ? 'active' : ''}"
@@ -133,11 +129,6 @@ export class BuilderShell extends LitElement {
             class="tab ${this.activeLeftTab === 'entities' ? 'active' : ''}"
             @click=${() => this.activeLeftTab = 'entities'}>
             Entities
-          </button>
-          <button 
-            class="tab ${this.activeLeftTab === 'workflows' ? 'active' : ''}"
-            @click=${() => this.activeLeftTab = 'workflows'}>
-            🔄 Workflows
           </button>
           <button 
             class="tab ${this.activeLeftTab === 'ai-builder' ? 'active' : ''}"
@@ -156,20 +147,13 @@ export class BuilderShell extends LitElement {
         ></div>
       </div>
 
-      <!-- Center: Live Preview (WYSIWYG Canvas) OR Workflow Designer -->
-      <div class="center-panel" style="${isWorkflowView ? 'grid-column: library / inspector;' : ''}">
-        ${isWorkflowView ? html`
-          <!-- Full-width workflow designer -->
-          <div style="display: flex; flex-direction: column; height: 100%; background: white; border-radius: 8px;">
-            <state-machine-designer entityName="Appointment"></state-machine-designer>
-          </div>
-        ` : html`
-          <studio-live-preview></studio-live-preview>
-        `}
+      <!-- Center: Live Preview (WYSIWYG Canvas) -->
+      <div class="center-panel">
+        <studio-live-preview></studio-live-preview>
       </div>
 
       <!-- Right: Properties Panel -->
-      <div class="right-panel" style="${isWorkflowView ? 'display: none;' : ''}">
+      <div class="right-panel">
         <studio-properties-panel></studio-properties-panel>
       </div>
     `;
