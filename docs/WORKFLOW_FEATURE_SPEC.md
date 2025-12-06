@@ -1,38 +1,397 @@
-# AppBana Workflow Automation
+# AppBana Workflow Automation - Architecture & Implementation Plan
 
-**Visual Business Process Designer**
+**Version 2.0** | Last Updated: December 6, 2025
 
 ---
 
-## Overview
+## Executive Summary
 
-AppBana's **Workflow Designer** empowers business users to create sophisticated approval processes and automated workflows through an intuitive visual interface. Design complex business logic without writing code - simply drag, drop, and configure.
+AppBana's **Workflow Automation** transforms the platform from a data-entry tool into a **process orchestration engine**. This document incorporates comprehensive architectural feedback to ensure production-grade reliability, scalability, and alignment with AppBana's metadata-driven philosophy.
+
+### Core Principles
+
+1. **Metadata-Driven**: Workflows stored as versioned JSON files
+2. **ACID-Compliant Runtime**: Workflow state persisted in SQL for reliability
+3. **Event-Driven Architecture**: Automatic triggers on entity CRUD operations
+4. **Human + System Tasks**: Support both manual approvals and automated actions
+5. **Deep Integration**: Seamless connection to AppBana's Pages, Entities, and AI Builder
+
+---
+
+## Critical Architectural Decisions
+
+### ✅ Task Type Differentiation (Phase 1 - Critical)
+
+**Problem**: Original spec grouped everything as "Standard State", causing confusion between tasks that wait for humans vs. tasks that execute immediately.
+
+**Solution**: Explicit task types in data model:
+- **USER_TASK**: Workflow pauses, waits for human input (e.g., "Manager Approval")
+- **SERVICE_TASK**: Executes instantly, non-blocking (e.g., "Update Status", "Send Email")
+- **WAIT_STATE**: Time-based pause (e.g., "Wait 2 days before escalation")
+- **DECISION**: Conditional router (XOR gateway)
+- **START/END**: Entry and exit points
+
+**Impact**: Engine knows which tasks to persist and which to execute immediately, preventing deadlocks.
+
+---
+
+### ✅ Workflow Versioning (Phase 1 - Critical)
+
+**Problem**: Deferred to Phase 5, but running workflows will break when definitions change.
+
+**Solution**: Version locking from Day 1:
+- Each workflow has `version` field (integer, auto-incremented)
+- Running instances store `workflowVersionId` (immutable)
+- Instances complete on their original version
+- New instances use latest ACTIVE version
+- UI shows version selector: "Deploy v2" vs "Keep v1 running"
+
+**Impact**: Zero downtime deployments, no data corruption.
+
+---
+
+### ✅ Assignment Logic (Phase 1 - Critical)
+
+**Problem**: "Roles" attached to transitions, but assignment is a state-level concern.
+
+**Solution**: Assignment configuration on USER_TASK:
+```typescript
+assignment: {
+  type: 'USER' | 'ROLE' | 'QUEUE' | 'DYNAMIC';
+  value: string; // User ID, Role name, or expression like "${Order.owner.managerId}"
+}
+```
+
+**Examples**:
+- Static: `{ type: 'USER', value: 'user-123' }`
+- Role-based: `{ type: 'ROLE', value: 'Manager' }`
+- Dynamic: `{ type: 'DYNAMIC', value: '${Order.createdBy.manager}' }`
+- Queue: `{ type: 'QUEUE', value: 'finance-team' }` (Phase 2: requires claim mechanism)
+
+---
+
+### ✅ SLA & Timeouts (Phase 2 - High Priority)
+
+**Problem**: No handling for stalled workflows.
+
+**Solution**: Timeout configuration on USER_TASK:
+```typescript
+timeout: {
+  duration: string;        // '24h', '3d', '1w'
+  action: 'ESCALATE' | 'AUTO_TRANSITION' | 'NOTIFY';
+  targetNodeId?: string;   // For escalation
+  notifyUsers?: string[];  // For reminders
+}
+```
+
+**Backend**: Java `ScheduledExecutorService` polls `APPBANA_WF_TOKEN` table every 5 minutes, triggers actions on expired tasks.
+
+---
+
+### ✅ Parallel Execution (Phase 3 - Medium Priority)
+
+**Problem**: Current design assumes XOR (choose one path). Real workflows need AND (do both).
+
+**Solution**: 
+- **Phase 1**: XOR only (Decision nodes)
+- **Phase 3**: Add `PARALLEL_GATEWAY` (Fork) and `JOIN_GATEWAY` (Wait for all)
+
+**Example Use Case**: "Onboarding needs IT setup AND HR setup simultaneously"
+
+---
+
+### ✅ Draft vs. Published Workflows (Phase 1 - Critical)
+
+**Problem**: Direct editing of active workflows corrupts running instances.
+
+**Solution**: Workflow status field:
+- `DRAFT`: Editable, not executable
+- `ACTIVE`: Read-only, used by runtime
+- `ARCHIVED`: Historical, hidden from UI
+
+**UI Flow**: Edit Draft → Click "Publish" → Creates new version → Activates v2
 
 ---
 
 ## Key Capabilities
 
 ### Visual Process Design
-- **Drag & Drop Interface**: Build workflows visually with an intuitive canvas
-- **Smart Element Palette**: Choose from States, Decisions, Start/End points
-- **Auto-Layout**: Automatically organize complex workflows
-- **Zoom & Pan**: Navigate large processes with ease
+- **Drag & Drop Interface**: Salesforce Flow-inspired canvas
+- **Task Type Palette**: User Task, Service Task, Decision, Wait, Start/End
+- **Auto-Layout**: Hierarchical topological sort algorithm
+- **Zoom & Pan**: 0.1x - 3x with mouse wheel
+- **Minimap**: Overview navigator for complex workflows
 
 ### Multi-Entity Orchestration
-- **Cross-Entity Logic**: Create workflows spanning multiple data entities
-- **Smart Routing**: Route records based on data conditions across entities
-- **Example**: Route orders based on both order amount AND customer credit limit
+- **Cross-Entity Conditions**: `Order.amount > Customer.creditLimit`
+- **Related Entity Detection**: Parse foreign keys to prioritize related entities
+- **Entity Context Per State**: Each task operates on a specific entity
+- **Example**: Order workflow can read Customer data for approval logic
 
 ### Intelligent Decision Making
-- **Conditional Branching**: Route workflows based on business rules
-- **Cross-Entity Comparisons**: Compare values across related entities
-- **Priority-Based Evaluation**: Control the order of condition checking
-- **Fallback Paths**: Define default routes when no condition matches
+- **Expression-Based Rules**: Java expression parser (MVEL or SpEL)
+- **Priority-Based Evaluation**: Top-to-bottom rule checking
+- **Mandatory ELSE Path**: UI enforces fallback to prevent orphan tokens
+- **Natural Language Preview**: "When Order amount is greater than 50000"
 
-### Dynamic Form Integration
-- **Auto-Generated Forms**: Forms created automatically from your data structure
-- **Existing Page Integration**: Use your pre-built forms
-- **Field-Level Control**: Choose exactly which fields to show in each step
+### Dynamic Actions
+- **onEntry Actions**: Execute when entering a state (e.g., "Send notification")
+- **onExit Actions**: Execute when leaving a state (e.g., "Update status field")
+- **Service Task Types**: Update Record, Send Email, Webhook
+- **Audit Integration**: All transitions logged to `appbana_audit`
+
+---
+
+## Data Models (Revised Architecture)
+
+### 1. Workflow Metadata (`WorkflowMeta`) - JSON Storage
+
+Stored in: `apps/{appId}/workflows/{workflowId}.json`
+
+```typescript
+export interface WorkflowMeta {
+  id: string;                    // "order_approval_workflow"
+  appId: string;                 // Parent app ID
+  name: string;                  // "Order Approval Process"
+  version: number;               // Auto-incremented on publish (1, 2, 3...)
+  status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+  
+  // Trigger: How workflow starts
+  trigger: {
+    entityId: string;            // "Order"
+    event: 'ON_CREATE' | 'ON_UPDATE' | 'ON_DELETE' | 'MANUAL';
+    condition?: string;          // Optional: "amount > 0"
+  };
+  
+  // Primary entity for the workflow
+  entities: {
+    primary: string;             // "Order"
+    available: string[];         // ["Order", "Customer", "Approver"]
+  };
+  
+  // Workflow graph
+  nodes: WorkflowNode[];
+  transitions: WorkflowTransition[];
+  
+  // Metadata
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### 2. Workflow Nodes (Discriminated Union)
+
+```typescript
+export type WorkflowNode = 
+  | StartNode 
+  | EndNode 
+  | UserTaskNode 
+  | ServiceTaskNode 
+  | DecisionNode 
+  | WaitNode;
+
+// Base interface
+interface BaseNode {
+  id: string;
+  name: string;
+  position?: { x: number; y: number };
+  color?: string;
+}
+
+// ========== USER TASK (Human Interaction) ==========
+export interface UserTaskNode extends BaseNode {
+  type: 'USER_TASK';
+  
+  // Entity context
+  entityContext: string;         // "Order"
+  
+  // Assignment: WHO does this task?
+  assignment: {
+    type: 'USER' | 'ROLE' | 'QUEUE' | 'DYNAMIC';
+    value: string;               // User ID, Role name, or "${Order.owner.managerId}"
+  };
+  
+  // UI: WHAT page to show?
+  pageConfig: {
+    mode: 'AUTO_GENERATE' | 'EXISTING_PAGE' | 'NONE';
+    pageId?: string;             // If EXISTING_PAGE
+    formMode?: 'CREATE' | 'EDIT' | 'VIEW'; // If AUTO_GENERATE
+    fieldsToShow?: string[];     // If AUTO_GENERATE
+  };
+  
+  // Actions: WHAT to do on entry/exit?
+  onEntry?: Action[];            // e.g., [{ type: 'SEND_EMAIL', to: '${assignee}' }]
+  onExit?: Action[];             // e.g., [{ type: 'UPDATE_FIELD', field: 'status', value: 'In Progress' }]
+  
+  // SLA: WHEN to escalate?
+  timeout?: {
+    duration: string;            // "24h", "3d", "1w"
+    action: 'ESCALATE' | 'AUTO_TRANSITION' | 'NOTIFY';
+    targetNodeId?: string;       // For ESCALATE
+    notifyUsers?: string[];      // For NOTIFY
+  };
+}
+
+// ========== SERVICE TASK (Automated Action) ==========
+export interface ServiceTaskNode extends BaseNode {
+  type: 'SERVICE_TASK';
+  
+  entityContext: string;         // "Order"
+  
+  // What to execute?
+  action: {
+    type: 'UPDATE_RECORD' | 'SEND_EMAIL' | 'WEBHOOK' | 'SCRIPT';
+    config: Record<string, any>;
+  };
+  
+  // Examples:
+  // UPDATE_RECORD: { field: 'status', value: 'Approved' }
+  // SEND_EMAIL: { to: '${Order.owner.email}', template: 'approval_notification' }
+  // WEBHOOK: { url: 'https://api.example.com/notify', method: 'POST', body: {...} }
+}
+
+// ========== DECISION (Conditional Router) ==========
+export interface DecisionNode extends BaseNode {
+  type: 'DECISION';
+  
+  entityContext: string;         // "Order"
+  
+  // Outgoing paths (evaluated top-to-bottom)
+  branches: DecisionBranch[];
+}
+
+export interface DecisionBranch {
+  id: string;
+  label: string;                 // "High Amount"
+  priority: number;              // Lower = higher priority (1, 2, 3...)
+  condition: string | 'ELSE';    // "amount > 50000" or "ELSE"
+  targetNodeId: string;          // Next node ID
+  
+  // Cross-entity support
+  crossEntity?: {
+    leftEntity: string;          // "Order"
+    leftField: string;           // "amount"
+    operator: ConditionOperator;
+    rightEntity: string;         // "Customer"
+    rightField: string;          // "creditLimit"
+  };
+}
+
+// ========== WAIT STATE (Time-based Pause) ==========
+export interface WaitNode extends BaseNode {
+  type: 'WAIT';
+  
+  duration: string;              // "2h", "1d", "3d"
+  
+  onTimeout?: {
+    targetNodeId: string;        // Where to go after waiting
+  };
+}
+
+// ========== START / END ==========
+export interface StartNode extends BaseNode {
+  type: 'START';
+}
+
+export interface EndNode extends BaseNode {
+  type: 'END';
+  
+  // Final action (optional)
+  outcome?: 'SUCCESS' | 'CANCELLED' | 'REJECTED';
+  onEntry?: Action[];            // e.g., Update final status
+}
+```
+
+### 3. Supporting Types
+
+```typescript
+// Actions executed on state entry/exit
+export interface Action {
+  type: 'UPDATE_FIELD' | 'SEND_EMAIL' | 'WEBHOOK' | 'CREATE_RECORD';
+  config: Record<string, any>;
+}
+
+// Transitions (visual connections)
+export interface WorkflowTransition {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  label?: string;                // Optional label for the arrow
+}
+
+// Condition operators
+export type ConditionOperator = 
+  | 'EQUALS' 
+  | 'NOT_EQUALS' 
+  | 'GREATER_THAN' 
+  | 'LESS_THAN' 
+  | 'GREATER_THAN_OR_EQUAL' 
+  | 'LESS_THAN_OR_EQUAL' 
+  | 'CONTAINS' 
+  | 'NOT_CONTAINS' 
+  | 'STARTS_WITH' 
+  | 'ENDS_WITH' 
+  | 'IS_EMPTY' 
+  | 'IS_NOT_EMPTY' 
+  | 'IN' 
+  | 'NOT_IN';
+```
+
+### 4. Runtime Data Model (SQL Tables)
+
+#### Table: `APPBANA_WF_DEFINITION`
+Stores workflow metadata (redundant with JSON files for query performance).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | VARCHAR(255) | PK, workflow ID |
+| `app_id` | VARCHAR(255) | FK to app |
+| `name` | VARCHAR(500) | Display name |
+| `version` | INTEGER | Version number |
+| `status` | VARCHAR(20) | DRAFT, ACTIVE, ARCHIVED |
+| `trigger_entity` | VARCHAR(255) | Entity ID |
+| `trigger_event` | VARCHAR(20) | ON_CREATE, ON_UPDATE, MANUAL |
+| `definition_json` | CLOB/TEXT | Full JSON blob |
+| `created_at` | TIMESTAMP | Creation time |
+| `created_by` | VARCHAR(255) | User ID |
+
+**Indexes**: `(app_id, status)`, `(trigger_entity, trigger_event)`
+
+#### Table: `APPBANA_WF_INSTANCE`
+Stores running workflow processes.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `instance_id` | VARCHAR(36) | PK, UUID |
+| `workflow_id` | VARCHAR(255) | FK to definition |
+| `workflow_version` | INTEGER | **CRITICAL: Version lock** |
+| `entity_id` | VARCHAR(255) | Business record ID (e.g., Order ID) |
+| `entity_type` | VARCHAR(255) | Entity name (e.g., "Order") |
+| `status` | VARCHAR(20) | RUNNING, PAUSED, COMPLETED, FAILED, CANCELLED |
+| `current_node_id` | VARCHAR(255) | Current state (for single-token workflows) |
+| `created_at` | TIMESTAMP | Start time |
+| `completed_at` | TIMESTAMP | End time |
+| `context_data` | CLOB/TEXT | JSON for variables (Phase 2) |
+
+**Indexes**: `(entity_id, entity_type)`, `(workflow_id, status)`, `(status, created_at)`
+
+#### Table: `APPBANA_WF_TOKEN`
+Stores individual task assignments (supports parallel execution in Phase 3).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `token_id` | VARCHAR(36) | PK, UUID |
+| `instance_id` | VARCHAR(36) | FK to instance |
+| `node_id` | VARCHAR(255) | Current node ID |
+| `node_type` | VARCHAR(20) | USER_TASK, WAIT, SERVICE_TASK |
+| `assigned_user_id` | VARCHAR(255) | Assignee (if USER_TASK) |
+| `assigned_at` | TIMESTAMP | Assignment time |
+| `due_at` | TIMESTAMP | Deadline (for SLA) |
+| `status` | VARCHAR(20) | ACTIVE, COMPLETED, ESCALATED |
+| `payload` | CLOB/TEXT | Task-specific data (JSON) |
+
+**Indexes**: `(instance_id)`, `(assigned_user_id, status)`, `(due_at)`
 
 ---
 
@@ -112,6 +471,344 @@ IF Order.amount > Customer.creditLimit
 IF Approver.isAvailable = true AND Order.priority = 'High'
    THEN Immediate_Review
    ELSE Queue_For_Review
+```
+
+---
+
+## Backend Architecture & API
+
+### 1. Workflow Engine (`WorkflowEngine.java`)
+
+Core execution engine integrated into `ApiServer.java`.
+
+**Key Responsibilities**:
+1. **Trigger Detection**: Listen to entity CRUD operations via PostOperationHooks
+2. **Instance Creation**: Create workflow instances when triggers match
+3. **State Transition**: Move tokens from node to node
+4. **Condition Evaluation**: Parse and evaluate expressions (MVEL/SpEL)
+5. **Action Execution**: Execute onEntry/onExit actions
+6. **Audit Logging**: Log all transitions to `appbana_audit`
+
+**Core Methods**:
+```java
+public class WorkflowEngine {
+    // Create new workflow instance
+    public WorkflowInstance startWorkflow(
+        String workflowId, 
+        String entityId, 
+        Map<String, Object> entityData
+    );
+    
+    // Evaluate if workflow should start (trigger condition)
+    public boolean shouldTrigger(
+        WorkflowMeta workflow, 
+        String event, 
+        Map<String, Object> entityData
+    );
+    
+    // Advance workflow to next node
+    public void transition(
+        String instanceId, 
+        String tokenId, 
+        String outcome, 
+        Map<String, Object> userData
+    );
+    
+    // Evaluate decision branches
+    public String evaluateDecision(
+        DecisionNode decision, 
+        Map<String, Object> entityData,
+        Map<String, Map<String, Object>> relatedEntities
+    );
+    
+    // Execute actions (onEntry/onExit)
+    public void executeActions(
+        List<Action> actions, 
+        Map<String, Object> context
+    );
+    
+    // Fetch related entity data for cross-entity conditions
+    public Map<String, Object> fetchRelatedEntity(
+        String entityType, 
+        String relatedEntityId
+    );
+}
+```
+
+### 2. Expression Evaluator
+
+Use **MVEL** (Lightweight) or **Spring Expression Language** (SpEL) for condition parsing.
+
+**Example with MVEL**:
+```java
+import org.mvel2.MVEL;
+
+public class ExpressionEvaluator {
+    public boolean evaluate(String expression, Map<String, Object> context) {
+        try {
+            Object result = MVEL.eval(expression, context);
+            return result instanceof Boolean ? (Boolean) result : false;
+        } catch (Exception e) {
+            logger.error("Expression evaluation failed: {}", expression, e);
+            return false;
+        }
+    }
+}
+
+// Usage:
+// expression: "amount > 5000 && status == 'Pending'"
+// context: { "amount": 10000, "status": "Pending" }
+// result: true
+```
+
+**Cross-Entity Expression**:
+```java
+// expression: "Order.amount > Customer.creditLimit"
+Map<String, Object> context = Map.of(
+    "Order", orderData,
+    "Customer", customerData
+);
+evaluate("Order.amount > Customer.creditLimit", context);
+```
+
+### 3. PostOperationHook Integration
+
+Modify `ApiServer.java` to trigger workflows on entity changes:
+
+```java
+// In handleEntityCreate() method
+private void handleEntityCreate(HttpExchange exchange, String entityName) throws IOException {
+    // Existing CRUD logic...
+    String entityId = createdRecord.get("id").toString();
+    Map<String, Object> entityData = createdRecord;
+    
+    // NEW: Workflow trigger
+    workflowEngine.checkAndStartWorkflows(
+        entityName, 
+        "ON_CREATE", 
+        entityId, 
+        entityData
+    );
+    
+    // Continue with response...
+}
+```
+
+**checkAndStartWorkflows() Implementation**:
+```java
+public void checkAndStartWorkflows(
+    String entityType, 
+    String event, 
+    String entityId, 
+    Map<String, Object> entityData
+) {
+    // Find all ACTIVE workflows for this entity+event
+    List<WorkflowMeta> workflows = workflowStorage.findByTrigger(entityType, event);
+    
+    for (WorkflowMeta workflow : workflows) {
+        // Check trigger condition (if any)
+        if (workflow.getTrigger().getCondition() != null) {
+            boolean conditionMet = expressionEvaluator.evaluate(
+                workflow.getTrigger().getCondition(), 
+                entityData
+            );
+            if (!conditionMet) continue;
+        }
+        
+        // Start workflow
+        WorkflowInstance instance = startWorkflow(workflow.getId(), entityId, entityData);
+        logger.info("Started workflow {} for entity {}", workflow.getName(), entityId);
+    }
+}
+```
+
+### 4. Scheduler for Timeouts/SLA
+
+Use Java's `ScheduledExecutorService` to poll for overdue tasks:
+
+```java
+public class WorkflowScheduler {
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    
+    public void start() {
+        // Check every 5 minutes
+        scheduler.scheduleAtFixedRate(
+            this::checkTimeouts, 
+            0, 
+            5, 
+            TimeUnit.MINUTES
+        );
+    }
+    
+    private void checkTimeouts() {
+        // Find all tokens with due_at < NOW and status = ACTIVE
+        List<WorkflowToken> overdueTokens = tokenRepository.findOverdue(Instant.now());
+        
+        for (WorkflowToken token : overdueTokens) {
+            WorkflowNode node = getNodeById(token.getNodeId());
+            
+            if (node instanceof UserTaskNode userTask) {
+                handleTaskTimeout(token, userTask.getTimeout());
+            } else if (node instanceof WaitNode waitNode) {
+                // Auto-transition after wait duration
+                transition(token.getInstanceId(), token.getId(), "TIMEOUT", Map.of());
+            }
+        }
+    }
+    
+    private void handleTaskTimeout(WorkflowToken token, TimeoutConfig timeout) {
+        switch (timeout.getAction()) {
+            case ESCALATE:
+                // Move to escalation node
+                transition(token.getInstanceId(), token.getId(), "ESCALATE", Map.of());
+                break;
+            case NOTIFY:
+                // Send reminder notification
+                notificationService.sendReminder(token.getAssignedUserId(), token);
+                // Extend due date
+                token.setDueAt(Instant.now().plus(Duration.parse(timeout.getDuration())));
+                break;
+            case AUTO_TRANSITION:
+                // Force transition with default outcome
+                transition(token.getInstanceId(), token.getId(), "AUTO", Map.of());
+                break;
+        }
+    }
+}
+```
+
+### 5. REST API Endpoints
+
+#### **Workflow Definition Management** (Studio)
+
+```
+GET    /api/workflows?appId={appId}
+       → List all workflows for app (all versions)
+
+GET    /api/workflows/{workflowId}?version={version}
+       → Get specific workflow definition (defaults to latest)
+
+POST   /api/workflows
+       → Create new workflow (starts as DRAFT, version 1)
+
+PUT    /api/workflows/{workflowId}
+       → Update workflow (only if status=DRAFT)
+
+POST   /api/workflows/{workflowId}/publish
+       → Publish workflow (DRAFT → ACTIVE, increment version)
+
+DELETE /api/workflows/{workflowId}?version={version}
+       → Archive workflow version (ACTIVE → ARCHIVED)
+```
+
+#### **Workflow Runtime** (Execution)
+
+```
+POST   /api/workflows/{workflowId}/start
+       Body: { "entityId": "order-123" }
+       → Manually start workflow instance
+
+GET    /api/my-tasks
+       Query: status=ACTIVE&limit=50
+       → Get current user's pending tasks (USER_TASK tokens)
+
+GET    /api/my-tasks/{tokenId}
+       → Get task details + linked page
+
+POST   /api/my-tasks/{tokenId}/complete
+       Body: { "outcome": "Approve", "data": {...} }
+       → Complete task, advance workflow
+
+GET    /api/workflow-instances?entityId={entityId}
+       → Get all workflow instances for an entity
+
+GET    /api/workflow-instances/{instanceId}
+       → Get instance status + current node
+```
+
+#### **Admin/Monitoring**
+
+```
+GET    /api/admin/workflows/instances?status=RUNNING
+       → List all running instances (admin only)
+
+GET    /api/admin/workflows/{workflowId}/metrics
+       → Performance metrics (avg time per state, bottlenecks)
+
+POST   /api/admin/workflows/instances/{instanceId}/cancel
+       → Emergency workflow termination
+```
+
+### 6. Flyway Migration (SQL Schema)
+
+**File**: `V3__workflow_tables.sql`
+
+```sql
+-- Workflow definitions
+CREATE TABLE IF NOT EXISTS appbana_wf_definition (
+    id VARCHAR(255) PRIMARY KEY,
+    app_id VARCHAR(255) NOT NULL,
+    name VARCHAR(500) NOT NULL,
+    version INTEGER NOT NULL,
+    status VARCHAR(20) NOT NULL, -- DRAFT, ACTIVE, ARCHIVED
+    trigger_entity VARCHAR(255),
+    trigger_event VARCHAR(20),
+    definition_json CLOB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    UNIQUE(id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wf_def_app_status 
+ON appbana_wf_definition(app_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_wf_def_trigger 
+ON appbana_wf_definition(trigger_entity, trigger_event, status);
+
+-- Workflow instances
+CREATE TABLE IF NOT EXISTS appbana_wf_instance (
+    instance_id VARCHAR(36) PRIMARY KEY,
+    workflow_id VARCHAR(255) NOT NULL,
+    workflow_version INTEGER NOT NULL,
+    entity_id VARCHAR(255) NOT NULL,
+    entity_type VARCHAR(255) NOT NULL,
+    status VARCHAR(20) NOT NULL, -- RUNNING, PAUSED, COMPLETED, FAILED
+    current_node_id VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    context_data CLOB,
+    FOREIGN KEY (workflow_id, workflow_version) 
+        REFERENCES appbana_wf_definition(id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wf_inst_entity 
+ON appbana_wf_instance(entity_id, entity_type);
+
+CREATE INDEX IF NOT EXISTS idx_wf_inst_status 
+ON appbana_wf_instance(status, created_at);
+
+-- Workflow tokens (tasks)
+CREATE TABLE IF NOT EXISTS appbana_wf_token (
+    token_id VARCHAR(36) PRIMARY KEY,
+    instance_id VARCHAR(36) NOT NULL,
+    node_id VARCHAR(255) NOT NULL,
+    node_type VARCHAR(20) NOT NULL,
+    assigned_user_id VARCHAR(255),
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    due_at TIMESTAMP,
+    status VARCHAR(20) NOT NULL, -- ACTIVE, COMPLETED, ESCALATED
+    payload CLOB,
+    FOREIGN KEY (instance_id) REFERENCES appbana_wf_instance(instance_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wf_token_instance 
+ON appbana_wf_token(instance_id);
+
+CREATE INDEX IF NOT EXISTS idx_wf_token_assignee 
+ON appbana_wf_token(assigned_user_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_wf_token_due 
+ON appbana_wf_token(due_at) WHERE status = 'ACTIVE';
 ```
 
 ---
@@ -469,11 +1166,253 @@ IF Approver.isAvailable = true AND Order.priority = 'High'
 
 ---
 
+## Implementation Roadmap (Revised)
+
+### 🔴 Phase 1: Backend Engine + Data Model (Weeks 1-2) - CRITICAL
+
+**Goal**: Production-ready workflow execution engine with no UI
+
+**Backend Tasks**:
+1. **Database Schema** (V3__workflow_tables.sql)
+   - `appbana_wf_definition` table
+   - `appbana_wf_instance` table
+   - `appbana_wf_token` table
+   - Indexes for performance
+
+2. **Core Engine** (`WorkflowEngine.java`)
+   - `startWorkflow()` - Create instances
+   - `transition()` - Move between nodes
+   - `evaluateDecision()` - Branch logic
+   - `executeActions()` - onEntry/onExit actions
+
+3. **Expression Evaluator** (`ExpressionEvaluator.java`)
+   - MVEL integration
+   - Cross-entity context support
+   - Error handling
+
+4. **PostOperationHooks** (modify `ApiServer.java`)
+   - Hook into handleEntityCreate/Update/Delete
+   - Auto-start workflows on triggers
+   - checkAndStartWorkflows() implementation
+
+5. **Storage Layer** (`WorkflowStorage.java`)
+   - Save/load WorkflowMeta JSON
+   - Query by trigger (entity + event)
+   - Version management
+
+6. **REST API Endpoints**:
+   - POST `/api/workflows` - Create workflow
+   - GET `/api/workflows/{id}` - Get definition
+   - POST `/api/workflows/{id}/publish` - Publish (DRAFT → ACTIVE)
+   - POST `/api/workflows/{id}/start` - Manual start
+   - GET `/api/my-tasks` - User task inbox
+   - POST `/api/my-tasks/{tokenId}/complete` - Complete task
+
+**Frontend Tasks** (Minimal):
+- Update `workflow.ts` with new type definitions (UserTaskNode, ServiceTaskNode, etc.)
+- Create `WorkflowMeta` TypeScript interfaces matching Java
+
+**Testing**:
+- Unit tests: Expression evaluation, decision logic
+- Integration tests: API → Create workflow → Trigger → Complete task
+- Manual test: Postman/PowerShell scripts
+
+**Success Criteria**:
+- ✅ Can POST workflow JSON to `/api/workflows`
+- ✅ Creating an Order auto-starts workflow
+- ✅ GET `/api/my-tasks` returns pending tasks
+- ✅ POST `/api/my-tasks/{id}/complete` advances workflow
+
+---
+
+### 🟡 Phase 2: Visual Designer (Weeks 3-4)
+
+**Goal**: Drag-and-drop workflow builder UI
+
+**Frontend Tasks**:
+1. **Refactor BuilderCanvas** for workflow mode
+   - `mode` prop: `'page'` | `'workflow'`
+   - Render workflow nodes instead of UI components
+   - SVG line rendering for transitions
+
+2. **Element Palette** (`WorkflowPalette.ts`)
+   - Drag User Task, Service Task, Decision, Wait, Start, End
+   - Type icons and labels
+
+3. **Properties Panels**:
+   - **UserTaskNode Properties**:
+     - Entity selector
+     - Assignment config (User/Role/Dynamic)
+     - Page config (None/Auto/Existing)
+     - Timeout/SLA config
+     - onEntry/onExit actions
+   - **ServiceTaskNode Properties**:
+     - Action type dropdown
+     - Config JSON editor
+   - **DecisionNode Properties**:
+     - Outgoing paths list
+     - Per-path condition builder
+     - Priority ordering (drag-drop)
+     - ELSE path toggle
+   - **WaitNode Properties**:
+     - Duration input
+     - Target node selector
+
+4. **Workflow Manager Tab** (Studio)
+   - List all workflows
+   - Version history
+   - Publish/Archive buttons
+   - Status badges (DRAFT/ACTIVE/ARCHIVED)
+
+5. **Condition Builder** (`ConditionBuilder.ts`)
+   - Entity selector
+   - Field selector (from schema)
+   - Operator dropdown
+   - Value input OR cross-entity field selector
+   - Natural language preview
+
+**Success Criteria**:
+- ✅ Create workflow visually
+- ✅ Add User Task with assignment
+- ✅ Add Decision with 2+ branches
+- ✅ Save workflow JSON (matches Phase 1 schema)
+- ✅ Publish workflow (DRAFT → ACTIVE)
+
+---
+
+### 🟡 Phase 3: Runtime Integration (Weeks 5-6)
+
+**Goal**: End-user task management and execution
+
+**Frontend Tasks**:
+1. **My Tasks Inbox** (`MyTasksInbox.ts`)
+   - List assigned tasks
+   - Filters: By entity, by workflow, by due date
+   - Task cards with:
+     - Entity icon
+     - Workflow name
+     - Task name
+     - Due date (with urgency indicator)
+     - Quick actions (Open, Claim)
+
+2. **Task Detail Page** (`TaskDetailPage.ts`)
+   - Load task token from API
+   - Fetch linked PageMeta (if exists)
+   - Render form (Auto-generate or Existing)
+   - Action buttons (Approve, Reject, custom outcomes)
+   - Comment/history section
+
+3. **AppRuntimeShell Integration**:
+   - Task notification badge
+   - "My Tasks" menu item
+   - Check for active tasks on record open
+   - Override default view with workflow page
+
+4. **Workflow Instance Viewer** (Admin):
+   - Visual flow with current state highlighted
+   - Timeline of transitions
+   - Token details
+   - Metrics (time in each state)
+
+**Backend Tasks**:
+1. **WorkflowScheduler.java**:
+   - Background thread for SLA monitoring
+   - Check every 5 minutes
+   - Handle ESCALATE/NOTIFY/AUTO_TRANSITION
+
+2. **Audit Integration**:
+   - Log all transitions to `appbana_audit`
+   - Format: `{ action: 'WORKFLOW_TRANSITION', from: 'Draft', to: 'Approval' }`
+
+**Success Criteria**:
+- ✅ User sees pending tasks in inbox
+- ✅ Clicking task opens correct form
+- ✅ Completing task advances workflow
+- ✅ SLA escalations trigger automatically
+- ✅ All transitions logged to audit
+
+---
+
+### 🟢 Phase 4: Advanced Features (Weeks 7-8)
+
+**Goal**: Parallel execution, advanced actions, AI integration
+
+**Features**:
+1. **Parallel Gateway (Fork/Join)**:
+   - New node types: `PARALLEL_FORK`, `PARALLEL_JOIN`
+   - Multiple simultaneous tokens per instance
+   - Join waits for all incoming tokens
+
+2. **Advanced Actions**:
+   - Send Email (with templates)
+   - Webhook (HTTP POST/PUT/GET)
+   - Create/Update Record (cross-entity)
+   - Script execution (sandboxed)
+
+3. **Queue Assignment**:
+   - Task pools for teams
+   - Claim mechanism (one user takes ownership)
+   - Load balancing
+
+4. **AI Builder Integration** (`AiChatBuilder.ts`):
+   - Intent: `CREATE_WORKFLOW`
+   - Prompt: "Create expense approval workflow for amounts over $500"
+   - Generate `WorkflowMeta` JSON
+   - Insert into canvas
+
+5. **Workflow Templates**:
+   - Pre-built workflows (Loan Approval, Expense Reimbursement, etc.)
+   - Template gallery
+   - One-click install
+
+**Success Criteria**:
+- ✅ Fork workflow into 2 parallel paths, join later
+- ✅ Send email action works
+- ✅ AI chat generates workflow from description
+- ✅ Install template from gallery
+
+---
+
+### 🟣 Phase 5: Performance & Polish (Week 9)
+
+**Goal**: Production hardening
+
+**Tasks**:
+1. **Validation**:
+   - UI: Prevent orphan nodes
+   - UI: Enforce ELSE path on decisions
+   - API: Validate workflow JSON schema
+   - API: Prevent circular loops (max depth check)
+
+2. **Performance**:
+   - Index optimization (SQL)
+   - Workflow definition caching (5-minute TTL)
+   - Lazy load workflow graphs (>100 nodes)
+
+3. **Error Handling**:
+   - Expression evaluation errors → log, skip transition
+   - Missing related entity → graceful degradation
+   - Workflow crashes → mark instance as FAILED
+
+4. **Documentation**:
+   - User guide: Creating first workflow
+   - Developer guide: Adding custom actions
+   - API reference: OpenAPI spec
+
+5. **Testing**:
+   - Load testing: 1000 concurrent instances
+   - Stress testing: 500-node workflows
+   - Security: Permission checks on task completion
+
+**Success Criteria**:
+- ✅ 10,000+ active instances with <100ms query time
+- ✅ 500-node workflow loads in <2 seconds
+- ✅ All API endpoints documented in OpenAPI
+- ✅ Zero data loss on server crash (ACID compliance)
+
+---
+
 ## Visual Designer Interface
-
-### Intuitive Canvas
-
-### **Phase 1: Foundation (Current Sprint)**
 
 #### 1.1 Visual Designer
 - ✅ Salesforce Flow-inspired canvas with drag-drop
@@ -1133,8 +2072,134 @@ START (New Customer)
              → VERIFY_DOCUMENTS (loop)
 ```
 
+```
+
 ---
 
+## Summary: Key Improvements from Architectural Review
+
+### Critical Changes Implemented
+
+1. **Task Type Differentiation** ✅
+   - Replaced generic "Standard State" with explicit types: USER_TASK, SERVICE_TASK, WAIT
+   - Engine now knows which tasks to persist vs execute immediately
+   - Prevents workflow deadlocks
+
+2. **Workflow Versioning** ✅
+   - Moved from Phase 5 to Phase 1 (backend engine)
+   - Instances lock to specific version on creation
+   - Zero-downtime deployments now possible
+   - No data corruption when workflows are updated
+
+3. **Assignment Logic** ✅
+   - Moved from transitions to USER_TASK nodes
+   - Support for 4 assignment types: User, Role, Queue, Dynamic
+   - Dynamic expressions: `${Order.owner.managerId}`
+
+4. **SLA & Timeouts** ✅
+   - Added timeout configuration to USER_TASK nodes
+   - Three escalation actions: ESCALATE, AUTO_TRANSITION, NOTIFY
+   - Background scheduler polls every 5 minutes
+
+5. **Backend-First Approach** ✅
+   - Phase 1 now builds headless engine BEFORE UI
+   - Can test via API/Postman before building designer
+   - Reduces risk of UI building features backend can't support
+
+6. **ACID-Compliant Runtime** ✅
+   - Workflow state stored in SQL tables, not just JSON
+   - Server crash recovery via database persistence
+   - Transactional state transitions
+
+7. **Audit Integration** ✅
+   - All workflow transitions logged to `appbana_audit`
+   - Compliance-ready (SOC2, HIPAA tracking)
+
+8. **Expression-Based Conditions** ✅
+   - MVEL integration for complex business rules
+   - Cross-entity support: `Order.amount > Customer.creditLimit`
+   - No hard-coded operators, full flexibility
+
+### Architecture Alignment with AppBana
+
+1. **Metadata Storage**:
+   - Workflow definitions: JSON files in `apps/{appId}/workflows/`
+   - Runtime state: SQL tables (`appbana_wf_*`)
+   - Follows same pattern as Pages/Entities
+
+2. **Event-Driven Integration**:
+   - PostOperationHooks listen to entity CRUD
+   - Auto-start workflows on entity creation/update
+   - Seamless integration with existing ApiServer
+
+3. **UI Reuse**:
+   - BuilderCanvas refactored for dual mode (page/workflow)
+   - Properties panel pattern consistent with page builder
+   - Same drag-drop UX philosophy
+
+4. **AI Builder Integration**:
+   - New intent: `CREATE_WORKFLOW`
+   - Generates WorkflowMeta JSON from natural language
+   - Consistent with existing AI capabilities
+
+### Roadmap Changes
+
+**Before (Original Plan)**:
+- Phase 1: Visual Foundation
+- Phase 2: Decision Logic
+- Phase 3: Cross-Entity
+- Phase 4: Runtime Execution ❌ Too late!
+
+**After (Revised Plan)**:
+- **Phase 1: Backend Engine** (Weeks 1-2) 🔴
+  - Database schema, WorkflowEngine, PostOperationHooks, REST API
+  - Can execute workflows via API before UI exists
+- **Phase 2: Visual Designer** (Weeks 3-4) 🟡
+  - Drag-drop canvas, properties panels, save JSON
+- **Phase 3: Runtime Integration** (Weeks 5-6) 🟡
+  - Task inbox, AppRuntimeShell integration, scheduler
+- **Phase 4: Advanced Features** (Weeks 7-8) 🟢
+  - Parallel execution, AI integration, templates
+- **Phase 5: Polish** (Week 9) 🟣
+  - Performance, validation, documentation
+
+### Risk Mitigation
+
+| Risk | Original Status | New Status |
+|------|----------------|------------|
+| Running workflows break on definition update | ⚠️ High (deferred to Phase 5) | ✅ Mitigated (versioning in Phase 1) |
+| UI builds features backend can't execute | ⚠️ High (UI first) | ✅ Mitigated (backend first) |
+| Workflow engine hangs on user tasks | ⚠️ Critical (no task type distinction) | ✅ Mitigated (USER_TASK vs SERVICE_TASK) |
+| Complex workflows cause performance issues | ⚠️ Medium (no plan) | ✅ Mitigated (SQL indexes, caching, lazy load) |
+| No assignment logic for tasks | ⚠️ High (roles on transitions) | ✅ Mitigated (assignment config on USER_TASK) |
+
+### Next Steps (Immediate)
+
+**Week 1-2 (Phase 1 - Backend Engine)**:
+1. Day 1: Create Flyway migration `V3__workflow_tables.sql` (3 tables)
+2. Day 2-3: Implement `WorkflowEngine.java` (6 core methods)
+3. Day 4: Integrate MVEL for expression evaluation
+4. Day 5: Add PostOperationHooks to `ApiServer.java`
+5. Day 6-7: Implement 6 REST API endpoints
+6. Day 8: Create `WorkflowStorage.java` (JSON file I/O)
+7. Day 9: Unit tests for engine and expressions
+8. Day 10: Integration testing with Postman/PowerShell
+
+**Success Gate**: Must demonstrate workflow creation, trigger, and completion via API before proceeding to Phase 2.
+
+---
+
+**Document Version:** 2.0 (Revised Architecture)  
 **Document Owner:** Engineering Team  
 **Last Updated:** December 6, 2025  
-**Next Review:** End of Phase 1 (December 13, 2025)
+**Next Review:** End of Phase 1 (December 20, 2025)
+
+**Contributors:**
+- Architecture Review: Gemini AI (Workflow Expert)
+- Implementation Plan: GitHub Copilot
+- Alignment with AppBana: Dilip Upadhyay
+
+**References:**
+- Original Spec: WORKFLOW_FEATURE_SPEC.md v1.0
+- Architectural Feedback: https://gemini.google.com/share/41c089a858b1
+- AppBana Docs: 01-ARCHITECTURE.md, 02-DEVELOPMENT_GUIDE.md
