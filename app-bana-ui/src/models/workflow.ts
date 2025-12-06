@@ -12,6 +12,7 @@ export interface State {
     color?: string;
     description?: string;
     position?: { x: number; y: number };
+    type?: 'state' | 'decision' | 'start' | 'end'; // Node type for visual distinction
 }
 
 /**

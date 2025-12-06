@@ -27,6 +27,12 @@ export class StateMachineDesigner extends LitElement {
   @state() private panOffset: { x: number; y: number } = { x: 0, y: 0 };
   @state() private isPanning: boolean = false;
   @state() private lastMousePos: { x: number; y: number } = { x: 0, y: 0 };
+  
+  // New Salesforce Flow features
+  @state() private showElementPalette: boolean = true;
+  @state() private connectingFrom: string | null = null; // State ID when creating connection
+  @state() private elementType: 'state' | 'decision' = 'state';
+  @state() private showMinimap: boolean = false;
 
   static styles = css`
     :host {
@@ -43,6 +49,127 @@ export class StateMachineDesigner extends LitElement {
       padding: 1.5rem;
       overflow: hidden;
       min-height: 0;
+    }
+
+    .element-palette {
+      width: 280px;
+      background: white;
+      border-radius: 16px;
+      border: none;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      height: 100%;
+      box-sizing: border-box;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    }
+
+    .palette-header {
+      padding: 1.25rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-weight: 600;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .palette-content {
+      padding: 1.25rem;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .palette-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .palette-section-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .palette-item {
+      padding: 1rem;
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border-radius: 12px;
+      border: 2px solid #e2e8f0;
+      cursor: grab;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      user-select: none;
+    }
+
+    .palette-item:hover {
+      background: white;
+      border-color: #667eea;
+      transform: translateX(4px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    }
+
+    .palette-item:active {
+      cursor: grabbing;
+      transform: scale(0.98);
+    }
+
+    .palette-item-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+
+    .palette-item-icon.state {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .palette-item-icon.decision {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white;
+    }
+
+    .palette-item-icon.start {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+    }
+
+    .palette-item-icon.end {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+    }
+
+    .palette-item-content {
+      flex: 1;
+    }
+
+    .palette-item-title {
+      font-weight: 600;
+      color: #1e293b;
+      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .palette-item-desc {
+      font-size: 0.75rem;
+      color: #64748b;
+      line-height: 1.4;
     }
 
     .canvas-panel {
@@ -430,6 +557,120 @@ export class StateMachineDesigner extends LitElement {
     .btn-delete:hover {
       box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
     }
+
+    .zoom-controls {
+      position: absolute;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      background: white;
+      border-radius: 12px;
+      padding: 0.5rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      z-index: 100;
+    }
+
+    .zoom-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      background: white;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      transition: all 0.2s;
+      color: #475569;
+      font-weight: 600;
+    }
+
+    .zoom-btn:hover {
+      background: #f1f5f9;
+      color: #667eea;
+      transform: scale(1.1);
+    }
+
+    .zoom-level {
+      padding: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748b;
+      text-align: center;
+    }
+
+    .minimap {
+      position: absolute;
+      bottom: 1.5rem;
+      left: 1.5rem;
+      width: 200px;
+      height: 150px;
+      background: white;
+      border-radius: 12px;
+      border: 2px solid #e2e8f0;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      overflow: hidden;
+      z-index: 100;
+    }
+
+    .minimap-canvas {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .minimap-viewport {
+      position: absolute;
+      border: 2px solid #667eea;
+      background: rgba(102, 126, 234, 0.1);
+      cursor: move;
+    }
+
+    .state.decision {
+      border-radius: 0;
+      transform: rotate(45deg);
+      width: 140px;
+      height: 140px;
+    }
+
+    .state.decision .state-header,
+    .state.decision .state-body {
+      transform: rotate(-45deg);
+    }
+
+    .state.start {
+      border-radius: 50%;
+      width: 100px;
+      height: 100px;
+      padding: 0;
+    }
+
+    .state.start .state-header {
+      border-radius: 50%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .state.end {
+      border-radius: 50%;
+      width: 100px;
+      height: 100px;
+      padding: 0;
+      border: 4px solid currentColor;
+    }
+
+    .state.end .state-header {
+      border-radius: 50%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   `;
 
   async connectedCallback() {
@@ -469,6 +710,24 @@ export class StateMachineDesigner extends LitElement {
 
   private generateId(): string {
     return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private darkenColor(hex: string, percent: number = 20): string {
+    // Remove # if present
+    hex = hex.replace('#', '');
+    
+    // Convert to RGB
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    
+    // Darken
+    const newR = Math.max(0, Math.floor(r * (1 - percent / 100)));
+    const newG = Math.max(0, Math.floor(g * (1 - percent / 100)));
+    const newB = Math.max(0, Math.floor(b * (1 - percent / 100)));
+    
+    // Convert back to hex
+    return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
   }
 
   private async saveMachine() {
@@ -562,6 +821,17 @@ export class StateMachineDesigner extends LitElement {
     };
   }
 
+  private updateStateType(stateId: string, type: 'state' | 'decision' | 'start' | 'end') {
+    if (!this.machine) return;
+
+    this.machine = {
+      ...this.machine,
+      states: this.machine.states.map(s =>
+        s.id === stateId ? { ...s, type } : s
+      )
+    };
+  }
+
   private updateStateColor(stateId: string, color: string) {
     if (!this.machine) return;
 
@@ -591,6 +861,9 @@ export class StateMachineDesigner extends LitElement {
           <span>🎨</span>
           <span>Workflow Designer</span>
         </div>
+        <button class="btn" @click=${() => this.showElementPalette = !this.showElementPalette}>
+          ${this.showElementPalette ? '◀' : '▶'} Palette
+        </button>
         <button class="btn btn-primary" @click=${this.addState}>
           ➕ Add State
         </button>
@@ -601,9 +874,127 @@ export class StateMachineDesigner extends LitElement {
         >
           🔀 Add Transition
         </button>
+        <button class="btn" @click=${this.autoLayout}>
+          🎯 Auto Layout
+        </button>
+        <button class="btn" @click=${() => this.showMinimap = !this.showMinimap}>
+          🗺️ Minimap
+        </button>
         <button class="btn btn-success" @click=${this.saveMachine}>
           💾 Save Workflow
         </button>
+      </div>
+    `;
+  }
+
+  private renderElementPalette() {
+    return html`
+      <div class="element-palette">
+        <div class="palette-header">
+          <span>🧩</span>
+          <span>Elements</span>
+        </div>
+        <div class="palette-content">
+          <div class="palette-section">
+            <div class="palette-section-title">Flow Elements</div>
+            
+            <div class="palette-item" draggable="true" @dragstart="${(e: DragEvent) => this.handlePaletteDragStart(e, 'state')}">
+              <div class="palette-item-icon state">
+                <span>▢</span>
+              </div>
+              <div class="palette-item-content">
+                <div class="palette-item-title">State</div>
+                <div class="palette-item-desc">Standard workflow state</div>
+              </div>
+            </div>
+
+            <div class="palette-item" draggable="true" @dragstart="${(e: DragEvent) => this.handlePaletteDragStart(e, 'decision')}">
+              <div class="palette-item-icon decision">
+                <span>◆</span>
+              </div>
+              <div class="palette-item-content">
+                <div class="palette-item-title">Decision</div>
+                <div class="palette-item-desc">Conditional branching</div>
+              </div>
+            </div>
+
+            <div class="palette-item" draggable="true" @dragstart="${(e: DragEvent) => this.handlePaletteDragStart(e, 'start')}">
+              <div class="palette-item-icon start">
+                <span>▶</span>
+              </div>
+              <div class="palette-item-content">
+                <div class="palette-item-title">Start</div>
+                <div class="palette-item-desc">Initial state marker</div>
+              </div>
+            </div>
+
+            <div class="palette-item" draggable="true" @dragstart="${(e: DragEvent) => this.handlePaletteDragStart(e, 'end')}">
+              <div class="palette-item-icon end">
+                <span>◉</span>
+              </div>
+              <div class="palette-item-content">
+                <div class="palette-item-title">End</div>
+                <div class="palette-item-desc">Terminal state</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderZoomControls() {
+    return html`
+      <div class="zoom-controls">
+        <button class="zoom-btn" @click=${() => this.zoomIn()} title="Zoom In">+</button>
+        <div class="zoom-level">${Math.round(this.scale * 100)}%</div>
+        <button class="zoom-btn" @click=${() => this.zoomOut()} title="Zoom Out">−</button>
+        <button class="zoom-btn" @click=${() => this.resetZoom()} title="Reset Zoom">⊙</button>
+      </div>
+    `;
+  }
+
+  private renderMinimap() {
+    if (!this.machine || this.machine.states.length === 0) return '';
+    
+    // Calculate bounds of all states
+    const positions = this.machine.states
+      .filter(s => s.position)
+      .map(s => s.position!);
+    
+    if (positions.length === 0) return '';
+
+    const minX = Math.min(...positions.map(p => p.x));
+    const maxX = Math.max(...positions.map(p => p.x)) + 200; // state width
+    const minY = Math.min(...positions.map(p => p.y));
+    const maxY = Math.max(...positions.map(p => p.y)) + 200;
+
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const scale = Math.min(200 / width, 150 / height);
+
+    return html`
+      <div class="minimap">
+        <div class="minimap-canvas">
+          ${this.machine.states.map(state => {
+            if (!state.position) return '';
+            const x = (state.position.x - minX) * scale;
+            const y = (state.position.y - minY) * scale;
+            const size = 20 * scale;
+            return html`
+              <div style="
+                position: absolute;
+                left: ${x}px;
+                top: ${y}px;
+                width: ${size}px;
+                height: ${size}px;
+                background: ${state.color || '#667eea'};
+                border-radius: 4px;
+                opacity: 0.7;
+              "></div>
+            `;
+          })}
+        </div>
       </div>
     `;
   }
@@ -650,6 +1041,174 @@ export class StateMachineDesigner extends LitElement {
 
   private handleMouseUp() {
     this.draggingStateId = null;
+  }
+
+  // Palette drag handlers
+  private handlePaletteDragStart(e: DragEvent, type: 'state' | 'decision' | 'start' | 'end') {
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('text/plain', type);
+      this.elementType = type as 'state' | 'decision';
+    }
+  }
+
+  private handleCanvasDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }
+
+  private handleCanvasDrop(e: DragEvent) {
+    e.preventDefault();
+    if (!e.dataTransfer || !this.machine) return;
+
+    const type = e.dataTransfer.getData('text/plain') as 'state' | 'decision' | 'start' | 'end';
+    if (!type) return;
+
+    // Get drop position relative to canvas
+    const canvas = e.currentTarget as HTMLElement;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left + canvas.scrollLeft - 100; // Center the element
+    const y = e.clientY - rect.top + canvas.scrollTop - 75;
+
+    const newState: State = {
+      id: this.generateId(),
+      name: type === 'decision' ? `Decision ${this.machine.states.filter(s => s.type === 'decision').length + 1}` :
+            type === 'start' ? 'Start' :
+            type === 'end' ? 'End' :
+            `State ${this.machine.states.filter(s => !s.type || s.type === 'state').length + 1}`,
+      color: type === 'decision' ? '#f59e0b' : 
+             type === 'start' ? '#10b981' : 
+             type === 'end' ? '#ef4444' : 
+             '#6366f1',
+      type: type,
+      position: { x, y }
+    };
+
+    this.machine = {
+      ...this.machine,
+      states: [...this.machine.states, newState]
+    };
+
+    // Auto-select the new state
+    this.selectedState = newState.id;
+    this.editMode = 'state';
+  }
+
+  // Canvas handlers for zoom/pan
+  private handleWheel(e: WheelEvent) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    this.scale = Math.max(0.1, Math.min(3, this.scale + delta));
+  }
+
+  private handleCanvasMouseDown(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('canvas-panel')) {
+      this.isPanning = true;
+      this.lastMousePos = { x: e.clientX, y: e.clientY };
+      this.selectedState = null;
+      this.selectedTransition = null;
+      this.editMode = null;
+    }
+  }
+
+  private handleCanvasMouseMove(e: MouseEvent) {
+    if (this.isPanning) {
+      const dx = e.clientX - this.lastMousePos.x;
+      const dy = e.clientY - this.lastMousePos.y;
+      this.panOffset = {
+        x: this.panOffset.x + dx,
+        y: this.panOffset.y + dy
+      };
+      this.lastMousePos = { x: e.clientX, y: e.clientY };
+    }
+  }
+
+  private handleCanvasMouseUp() {
+    this.isPanning = false;
+  }
+
+  // Zoom controls
+  private zoomIn() {
+    this.scale = Math.min(3, this.scale + 0.2);
+  }
+
+  private zoomOut() {
+    this.scale = Math.max(0.1, this.scale - 0.2);
+  }
+
+  private resetZoom() {
+    this.scale = 1;
+    this.panOffset = { x: 0, y: 0 };
+  }
+
+  // Auto-layout algorithm
+  private autoLayout() {
+    if (!this.machine || this.machine.states.length === 0) return;
+
+    // Simple hierarchical layout
+    const layers: string[][] = this.calculateLayers();
+    const layerHeight = 200;
+    const stateWidth = 250;
+
+    layers.forEach((layer, layerIndex) => {
+      const y = layerIndex * layerHeight + 50;
+      layer.forEach((stateId, index) => {
+        const x = index * stateWidth + 50 + (layerIndex % 2) * (stateWidth / 4);
+        const state = this.machine!.states.find(s => s.id === stateId);
+        if (state) {
+          state.position = { x, y };
+        }
+      });
+    });
+
+    this.machine = { ...this.machine };
+  }
+
+  private calculateLayers(): string[][] {
+    if (!this.machine) return [];
+
+    const layers: string[][] = [];
+    const visited = new Set<string>();
+    const layer0 = [this.machine.initialState || this.machine.states[0]?.id];
+    
+    if (!layer0[0]) return [];
+    
+    layers.push(layer0);
+    visited.add(layer0[0]);
+
+    let currentLayer = 0;
+    while (currentLayer < layers.length && currentLayer < 10) { // Max 10 layers
+      const nextLayer: string[] = [];
+      
+      for (const stateId of layers[currentLayer]) {
+        const transitions = this.machine.transitions.filter(t => t.from === stateId);
+        for (const transition of transitions) {
+          if (!visited.has(transition.to)) {
+            nextLayer.push(transition.to);
+            visited.add(transition.to);
+          }
+        }
+      }
+
+      if (nextLayer.length > 0) {
+        layers.push(nextLayer);
+      }
+      currentLayer++;
+    }
+
+    // Add any unvisited states to the last layer
+    const unvisited = this.machine.states
+      .filter(s => !visited.has(s.id))
+      .map(s => s.id);
+    
+    if (unvisited.length > 0) {
+      layers.push(unvisited);
+    }
+
+    return layers;
   }
 
   private renderCanvas() {
@@ -816,16 +1375,85 @@ export class StateMachineDesigner extends LitElement {
         ${this.machine.states.map((state) => {
       if (!state.position) return '';
 
+      const nodeType = state.type || 'state';
+      const stateColor = state.color || '#6366f1';
+
+      // Decision nodes use diamond shape
+      if (nodeType === 'decision') {
+        return html`
+            <div
+              class="state decision ${this.selectedState === state.id ? 'selected' : ''}"
+              style="
+                left: ${state.position.x}px; 
+                top: ${state.position.y}px;
+                --state-color: ${stateColor};
+                --state-color-dark: ${this.darkenColor(stateColor)};
+              "
+              @mousedown=${(e: MouseEvent) => this.handleMouseDown(e, state.id)}
+            >
+              <div class="state-header">
+                <span>◆ ${state.name}</span>
+              </div>
+              <div class="connector-dot" style="top: 50%; right: -6px; transform: translateY(-50%);"></div>
+              <div class="connector-dot" style="top: 50%; left: -6px; transform: translateY(-50%);"></div>
+            </div>
+          `;
+      }
+
+      // Start nodes use circle
+      if (nodeType === 'start') {
+        return html`
+            <div
+              class="state start ${this.selectedState === state.id ? 'selected' : ''}"
+              style="
+                left: ${state.position.x}px; 
+                top: ${state.position.y}px;
+                --state-color: ${stateColor};
+                --state-color-dark: ${this.darkenColor(stateColor)};
+              "
+              @mousedown=${(e: MouseEvent) => this.handleMouseDown(e, state.id)}
+            >
+              <div class="state-header">
+                <span>▶</span>
+              </div>
+              <div class="connector-dot" style="top: 50%; right: -6px; transform: translateY(-50%);"></div>
+            </div>
+          `;
+      }
+
+      // End nodes use double circle
+      if (nodeType === 'end') {
+        return html`
+            <div
+              class="state end ${this.selectedState === state.id ? 'selected' : ''}"
+              style="
+                left: ${state.position.x}px; 
+                top: ${state.position.y}px;
+                color: ${stateColor};
+              "
+              @mousedown=${(e: MouseEvent) => this.handleMouseDown(e, state.id)}
+            >
+              <div class="state-header">
+                <span>◉</span>
+              </div>
+              <div class="connector-dot" style="top: 50%; left: -6px; transform: translateY(-50%);"></div>
+            </div>
+          `;
+      }
+
+      // Standard state nodes
       return html`
             <div
               class="state ${this.selectedState === state.id ? 'selected' : ''}"
               style="
                 left: ${state.position.x}px; 
                 top: ${state.position.y}px;
+                --state-color: ${stateColor};
+                --state-color-dark: ${this.darkenColor(stateColor)};
               "
               @mousedown=${(e: MouseEvent) => this.handleMouseDown(e, state.id)}
             >
-              <div class="state-header" style="background: ${state.color || '#6366f1'}">
+              <div class="state-header">
                 <span>${state.name}</span>
                 ${this.machine!.initialState === state.id ? '⭐' : ''}
               </div>
@@ -888,6 +1516,22 @@ export class StateMachineDesigner extends LitElement {
           this.updateStateName(selectedState.id, (e.target as HTMLInputElement).value)
         }
             />
+          </div>
+
+          <div class="form-group">
+            <label>Node Type</label>
+            <select
+              .value=${selectedState.type || 'state'}
+              @change=${(e: Event) =>
+          this.updateStateType(selectedState.id, (e.target as HTMLSelectElement).value as any)
+        }
+            >
+              <option value="state">📦 Standard State</option>
+              <option value="decision">◆ Decision (Diamond)</option>
+              <option value="start">▶ Start (Circle)</option>
+              <option value="end">◉ End (Circle)</option>
+            </select>
+            <small>Visual shape of this node</small>
           </div>
 
           <div class="form-group">
@@ -1141,8 +1785,18 @@ export class StateMachineDesigner extends LitElement {
     return html`
       ${this.renderToolbar()}
       <div class="designer-container">
-        <div class="canvas-panel">
+        ${this.showElementPalette ? this.renderElementPalette() : ''}
+        <div class="canvas-panel" 
+          @wheel="${this.handleWheel}" 
+          @mousedown="${this.handleCanvasMouseDown}" 
+          @mousemove="${this.handleCanvasMouseMove}" 
+          @mouseup="${this.handleCanvasMouseUp}"
+          @dragover="${this.handleCanvasDragOver}"
+          @drop="${this.handleCanvasDrop}"
+        >
           ${this.renderCanvas()}
+          ${this.renderZoomControls()}
+          ${this.showMinimap ? this.renderMinimap() : ''}
         </div>
         <div class="properties-panel">
           ${this.renderPropertiesPanel()}
