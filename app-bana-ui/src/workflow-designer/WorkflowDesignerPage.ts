@@ -35,11 +35,7 @@ export class WorkflowDesignerPage extends LitElement {
       width: 100%;
       background: #f8fafc;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      position: relative;
     }
 
     .grid-container {

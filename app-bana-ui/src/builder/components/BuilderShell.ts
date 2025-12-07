@@ -113,7 +113,12 @@ export class BuilderShell extends LitElement {
     // Full-page mode for Workflow Designer
     if (this.activeLeftTab === 'workflow') {
       this.setAttribute('data-workflow-mode', 'true');
-      return html`<workflow-designer-page></workflow-designer-page>`;
+      return html`
+        <div class="app-manager-panel">
+          <studio-app-manager></studio-app-manager>
+        </div>
+        <workflow-designer-page></workflow-designer-page>
+      `;
     }
 
     this.removeAttribute('data-workflow-mode');
