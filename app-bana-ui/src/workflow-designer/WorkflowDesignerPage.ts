@@ -3,7 +3,7 @@
 
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { WorkflowMetadata, NodeMetadata } from './models/WorkflowMetadata';
+import { WorkflowMetadata, NodeMetadata, ConnectionMetadata } from './models/WorkflowMetadata';
 import './components/NodePalette';
 import './components/WorkflowCanvas';
 
@@ -19,6 +19,7 @@ export class WorkflowDesignerPage extends LitElement {
   };
 
   @state() private selectedNodeId?: string;
+  @state() private selectedConnectionId?: string;
 
   static styles = css`
     :host {
@@ -165,9 +166,13 @@ export class WorkflowDesignerPage extends LitElement {
           class="canvas"
           .metadata=${this.workflowMetadata}
           .selectedNodeId=${this.selectedNodeId}
+          .selectedConnectionId=${this.selectedConnectionId}
           @node-add=${this.handleNodeAdd}
           @node-move=${this.handleNodeMove}
           @node-select=${this.handleNodeSelect}
+          @connection-add=${this.handleConnectionAdd}
+          @connection-select=${this.handleConnectionSelect}
+          @connection-delete=${this.handleConnectionDelete}
         ></workflow-canvas>
 
         <div class="properties">
@@ -178,10 +183,26 @@ export class WorkflowDesignerPage extends LitElement {
   }
 
   private renderPropertiesPanel() {
+    if (this.selectedConnectionId) {
+      const conn = this.workflowMetadata.connections.find(c => c.id === this.selectedConnectionId);
+      if (conn) {
+        return html`
+          <h3>Connection Properties</h3>
+          <p>ID: ${conn.id}</p>
+          <p>From: ${conn.from}</p>
+          <p>To: ${conn.to}</p>
+          <button class="btn btn-secondary" style="color: red; margin-top: 16px;" 
+            @click=${() => this.deleteConnection(conn.id)}>
+            Delete Connection
+          </button>
+        `;
+      }
+    }
+
     if (!this.selectedNodeId) {
       return html`
         <div class="properties-empty">
-          Select a node to edit its properties
+          Select a node or connection to edit its properties
         </div>
       `;
     }
@@ -205,6 +226,7 @@ export class WorkflowDesignerPage extends LitElement {
 
     // Select the newly added node
     this.selectedNodeId = node.id;
+    this.selectedConnectionId = undefined;
   }
 
   private handleNodeMove(e: CustomEvent) {
@@ -219,6 +241,43 @@ export class WorkflowDesignerPage extends LitElement {
 
   private handleNodeSelect(e: CustomEvent) {
     this.selectedNodeId = e.detail.nodeId;
+    this.selectedConnectionId = undefined;
+  }
+
+  private handleConnectionAdd(e: CustomEvent) {
+    const { connection } = e.detail;
+
+    // Check if connection already exists
+    const exists = this.workflowMetadata.connections.some(
+      c => c.from === connection.from && c.to === connection.to
+    );
+
+    if (!exists) {
+      this.workflowMetadata = {
+        ...this.workflowMetadata,
+        connections: [...this.workflowMetadata.connections, connection]
+      };
+    }
+
+    this.selectedConnectionId = connection.id;
+    this.selectedNodeId = undefined;
+  }
+
+  private handleConnectionSelect(e: CustomEvent) {
+    this.selectedConnectionId = e.detail.connectionId;
+    this.selectedNodeId = undefined;
+  }
+
+  private handleConnectionDelete(e: CustomEvent) {
+    this.deleteConnection(e.detail.connectionId);
+  }
+
+  private deleteConnection(connectionId: string) {
+    this.workflowMetadata = {
+      ...this.workflowMetadata,
+      connections: this.workflowMetadata.connections.filter(c => c.id !== connectionId)
+    };
+    this.selectedConnectionId = undefined;
   }
 
   private handleValidate() {

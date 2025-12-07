@@ -20,10 +20,9 @@ export class WorkflowCanvas extends LitElement {
 
   @state() private isDragging = false;
   @state() private dragOffset = { x: 0, y: 0 };
-  @state() private connectionDraft?: { sourceNodeId: string; mouseX: number; mouseY: number };
+  @state() private connectionDraft?: { sourceNodeId: string; startX: number; startY: number; mouseX: number; mouseY: number };
 
   @query('.canvas-container') private canvasEl?: HTMLDivElement;
-
   private panzoom?: any;
 
   static styles = css`
@@ -45,6 +44,7 @@ export class WorkflowCanvas extends LitElement {
         radial-gradient(circle, #cbd5e1 1px, transparent 1px);
       background-size: 20px 20px;
       cursor: grab;
+      transform-origin: 0 0; /* Important for Panzoom */
     }
 
     .canvas-container.dragging {
@@ -96,6 +96,7 @@ export class WorkflowCanvas extends LitElement {
       border-radius: 8px;
       padding: 8px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      z-index: 10;
     }
 
     .zoom-btn {
@@ -157,14 +158,21 @@ export class WorkflowCanvas extends LitElement {
         minScale: 0.3,
         step: 0.1,
         canvas: true,
-        panOnlyWhenZoomed: false
+        panOnlyWhenZoomed: true, // Allow interaction with nodes without pressing keys
+        excludeClass: 'node', // Allow dragging nodes
       });
 
       // Enable zoom with mouse wheel
       this.canvasEl.addEventListener('wheel', (e) => {
         if (!e.ctrlKey && !e.metaKey) {
-          e.preventDefault();
-          this.panzoom?.zoomWithWheel(e);
+          // If NOT holding ctrl/meta, we pan? No, usually wheel zooms or scrolls. 
+          // Let's standard: Wheel = Zoom (Google Maps style) or Ctrl+Wheel = Zoom
+          // For now, let's say Ctrl+Wheel = Zoom, Wheel = Pan?
+          // Actually, PanZoom handles wheel zooming if enabled.
+
+          if (e.ctrlKey) {
+            this.panzoom?.zoomWithWheel(e);
+          }
         }
       });
     }
@@ -185,31 +193,23 @@ export class WorkflowCanvas extends LitElement {
         @dragleave=${this.handleDragLeave}
         @mousemove=${this.handleMouseMove}
         @mouseup=${this.handleMouseUp}
+        @mousedown=${this.handleMouseDown}
       >
-        ${this.metadata.nodes.length === 0 ? this.renderEmptyState() : ''}
+        ${this.metadata.nodes?.length === 0 ? this.renderEmptyState() : ''}
         
         <!-- Connections layer (SVG) - Below nodes -->
         <div class="connections-layer">
-          ${this.metadata.connections?.map(conn => html`
-            <workflow-connection
-              .metadata=${conn}
-              .nodes=${this.metadata.nodes}
-              .selected=${conn.id === this.selectedConnectionId}
-              @connection-click=${() => this.handleConnectionClick(conn.id)}
-            ></workflow-connection>
-          `)}
-          
-          <!-- Draft connection while dragging -->
+          ${this.renderConnections()}
           ${this.connectionDraft ? this.renderDraftConnection() : ''}
         </div>
 
         <!-- Nodes layer - Above connections -->
         <div class="nodes-layer">
-          ${this.metadata.nodes.map(node => html`
+          ${this.metadata.nodes?.map(node => html`
             <workflow-node
               .metadata=${node}
               .selected=${node.id === this.selectedNodeId}
-              @click=${() => this.handleNodeClick(node.id)}
+              @click=${(e: Event) => this.handleNodeClick(e, node.id)}
               @node-drag-start=${this.handleNodeDragStart}
               @connection-start=${this.handleConnectionStart}
               type=${node.type}
@@ -233,6 +233,50 @@ export class WorkflowCanvas extends LitElement {
     `;
   }
 
+  private renderConnections() {
+    return this.metadata.connections?.map(conn => {
+      const sourceNode = this.metadata.nodes.find(n => n.id === conn.from);
+      const targetNode = this.metadata.nodes.find(n => n.id === conn.to);
+
+      if (!sourceNode || !targetNode) return '';
+
+      // Simple anchor calculation: Right of Source -> Left of Target
+      // Assuming node width ~150px, height ~80px.
+      // TODO: Get actual dimensions if possible or use smarter anchoring
+      const startX = sourceNode.position.x + 160; // Right edge
+      const startY = sourceNode.position.y + 40;  // Center Y
+
+      const endX = targetNode.position.x;         // Left edge
+      const endY = targetNode.position.y + 40;    // Center Y
+
+      return html`
+        <workflow-connection
+          .startX=${startX}
+          .startY=${startY}
+          .endX=${endX}
+          .endY=${endY}
+          type="curved"
+          @click=${(e: Event) => this.handleConnectionClick(e, conn.id)}
+        ></workflow-connection>
+      `;
+    });
+  }
+
+  private renderDraftConnection() {
+    if (!this.connectionDraft) return '';
+
+    return html`
+      <workflow-connection
+        .startX=${this.connectionDraft.startX}
+        .startY=${this.connectionDraft.startY}
+        .endX=${this.connectionDraft.mouseX}
+        .endY=${this.connectionDraft.mouseY}
+        type="straight"
+        style="opacity: 0.6; pointer-events: none;"
+      ></workflow-connection>
+    `;
+  }
+
   private renderEmptyState() {
     return html`
       <div class="empty-state">
@@ -245,6 +289,7 @@ export class WorkflowCanvas extends LitElement {
   }
 
   private handleDragOver(e: DragEvent) {
+    if (this.connectionDraft) return; // Don't handle dragover if drawing connection
     e.preventDefault();
     e.dataTransfer!.dropEffect = 'copy';
     this.canvasEl?.classList.add('drag-over');
@@ -259,10 +304,13 @@ export class WorkflowCanvas extends LitElement {
     this.canvasEl?.classList.remove('drag-over');
 
     const rect = this.canvasEl!.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Use panzoom scale/pan to adjust coordinates
+    const scale = this.panzoom?.getScale() || 1;
+    const pan = this.panzoom?.getPan() || { x: 0, y: 0 };
 
-    // Check if dragging an existing node (from canvas)
+    const x = (e.clientX - rect.left - pan.x) / scale;
+    const y = (e.clientY - rect.top - pan.y) / scale;
+
     const nodeId = e.dataTransfer!.getData('node-id');
     if (nodeId) {
       // Moving existing node
@@ -274,13 +322,10 @@ export class WorkflowCanvas extends LitElement {
       return;
     }
 
-    // Check if dragging a new node (from palette)
     const data = e.dataTransfer!.getData('application/json');
     if (!data) return;
 
     const template = JSON.parse(data);
-
-    // Create new node
     const newNode: NodeMetadata = {
       id: `${template.type.toLowerCase()}-${Date.now()}`,
       type: template.type,
@@ -296,9 +341,19 @@ export class WorkflowCanvas extends LitElement {
     }));
   }
 
-  private handleNodeClick(nodeId: string) {
+  private handleNodeClick(e: Event, nodeId: string) {
+    e.stopPropagation();
     this.dispatchEvent(new CustomEvent('node-select', {
       detail: { nodeId },
+      bubbles: true,
+      composed: true
+    }));
+  }
+
+  private handleConnectionClick(e: Event, connectionId: string) {
+    e.stopPropagation();
+    this.dispatchEvent(new CustomEvent('connection-select', {
+      detail: { connectionId },
       bubbles: true,
       composed: true
     }));
@@ -308,22 +363,117 @@ export class WorkflowCanvas extends LitElement {
     this.isDragging = true;
   }
 
-  private zoomIn() {
-    this.panzoom?.zoomIn();
+  private handleMouseDown(e: MouseEvent) {
+    // If clicking on canvas (not node/conn), clear selection
+    if (e.target === this.canvasEl || e.target === this) {
+      this.dispatchEvent(new CustomEvent('node-select', { detail: { nodeId: undefined } }));
+    }
   }
 
-  private zoomOut() {
-    this.panzoom?.zoomOut();
+  // ========== Connection Management ==========
+
+  private handleConnectionStart(e: CustomEvent) {
+    e.stopPropagation();
+    const { nodeId, event } = e.detail;
+    const mouseEvent = event as MouseEvent;
+
+    // Get source position
+    const sourceNode = this.metadata.nodes.find(n => n.id === nodeId);
+    if (!sourceNode) return;
+
+    // Use actual mouse position for start of drag? 
+    // Or snap to handle? Snapping to handle is better visually.
+    // For now, lets use the calculated "Right" handle position of the source node
+    const startX = sourceNode.position.x + 160;
+    const startY = sourceNode.position.y + 40;
+
+    // Calculate canvas-relative mouse position for end
+    const rect = this.canvasEl!.getBoundingClientRect();
+    const scale = this.panzoom?.getScale() || 1;
+    const pan = this.panzoom?.getPan() || { x: 0, y: 0 };
+
+    const mouseX = (mouseEvent.clientX - rect.left - pan.x) / scale;
+    const mouseY = (mouseEvent.clientY - rect.top - pan.y) / scale;
+
+    this.connectionDraft = {
+      sourceNodeId: nodeId,
+      startX,
+      startY,
+      mouseX,
+      mouseY
+    };
+
+    this.selectedNodeId = undefined;
+    this.selectedConnectionId = undefined;
   }
 
-  private resetZoom() {
-    this.panzoom?.reset();
+  private handleMouseMove(e: MouseEvent) {
+    if (this.connectionDraft) {
+      const rect = this.canvasEl!.getBoundingClientRect();
+      const scale = this.panzoom?.getScale() || 1;
+      const pan = this.panzoom?.getPan() || { x: 0, y: 0 };
+
+      const mouseX = (e.clientX - rect.left - pan.x) / scale;
+      const mouseY = (e.clientY - rect.top - pan.y) / scale;
+
+      this.connectionDraft = {
+        ...this.connectionDraft,
+        mouseX, // Update end position
+        mouseY
+      };
+    }
   }
 
-  // ========== Keyboard Handlers ==========
+  private handleMouseUp(e: MouseEvent) {
+    if (this.connectionDraft) {
+      // Logic to find if we dropped on a handle/node
+      // Since SVG overlay might block mouse events or we are dragging, we use elementFromPoint
+      // But we are in Shadow DOM, so standard elementFromPoint might be tricky?
+      // Actually, e.target should work if we are listening on canvas.
+
+      // We need to see if we possess a node under the mouse.
+      // e.target might be the canvas because the draft connection line pointer-events: none.
+
+      // Let's use `composedPath` to find if we are over a node handle.
+      const path = e.composedPath();
+      const handle = path.find(el => (el as Element).classList?.contains('handle'));
+
+      if (handle) {
+        // Find the workflow-node parent
+        const nodeEl = path.find(el => (el as Element).tagName === 'WORKFLOW-NODE') as any;
+        if (nodeEl && nodeEl.metadata) {
+          const targetNodeId = nodeEl.metadata.id;
+
+          if (targetNodeId !== this.connectionDraft.sourceNodeId) {
+            // Create connection
+            const newConnection: ConnectionMetadata = {
+              id: `conn-${Date.now()}`,
+              from: this.connectionDraft.sourceNodeId,
+              to: targetNodeId
+            };
+
+            this.dispatchEvent(new CustomEvent('connection-add', {
+              detail: { connection: newConnection },
+              bubbles: true,
+              composed: true
+            }));
+          }
+        }
+      }
+
+      this.connectionDraft = undefined;
+    }
+
+    this.isDragging = false;
+  }
+
+  // ========== Zoom Controls ==========
+
+  private zoomIn() { this.panzoom?.zoomIn(); }
+  private zoomOut() { this.panzoom?.zoomOut(); }
+  private resetZoom() { this.panzoom?.reset(); }
 
   private handleKeyDown = (e: KeyboardEvent) => {
-    // Delete/Backspace: Remove selected connection
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (this.selectedConnectionId) {
         e.preventDefault();
@@ -335,118 +485,9 @@ export class WorkflowCanvas extends LitElement {
         this.selectedConnectionId = undefined;
       }
     }
-    
-    // Escape: Cancel draft connection
     if (e.key === 'Escape') {
-      if (this.connectionDraft) {
-        this.connectionDraft = undefined;
-      }
-    }
-  }
-
-  // ========== Connection Management ==========
-
-  private handleConnectionStart(e: CustomEvent) {
-    e.stopPropagation();
-    const { nodeId, handle } = e.detail;
-    
-    // Start draft connection
-    this.connectionDraft = {
-      sourceNodeId: nodeId,
-      mouseX: e.detail.clientX || 0,
-      mouseY: e.detail.clientY || 0
-    };
-    
-    // Clear any node selection when starting connection
-    this.selectedNodeId = undefined;
-    this.selectedConnectionId = undefined;
-  }
-
-  private handleMouseMove(e: MouseEvent) {
-    if (this.connectionDraft) {
-      const rect = this.canvasEl?.getBoundingClientRect();
-      if (rect) {
-        this.connectionDraft = {
-          ...this.connectionDraft,
-          mouseX: e.clientX - rect.left,
-          mouseY: e.clientY - rect.top
-        };
-      }
-    }
-  }
-
-  private handleMouseUp(e: MouseEvent) {
-    if (this.connectionDraft) {
-      // Check if mouse is over a valid target handle
-      const target = e.target as HTMLElement;
-      const handle = target.closest('.connection-handle');
-      
-      if (handle) {
-        const targetNodeEl = handle.closest('workflow-node') as any;
-        const targetNodeId = targetNodeEl?.metadata?.id;
-        
-        if (targetNodeId && targetNodeId !== this.connectionDraft.sourceNodeId) {
-          // Create new connection
-          const newConnection: ConnectionMetadata = {
-            id: `conn-${Date.now()}`,
-            from: this.connectionDraft.sourceNodeId,
-            to: targetNodeId
-          };
-          
-          this.dispatchEvent(new CustomEvent('connection-add', {
-            detail: { connection: newConnection },
-            bubbles: true,
-            composed: true
-          }));
-        }
-      }
-      
-      // Clear draft connection
       this.connectionDraft = undefined;
     }
-  }
-
-  private handleConnectionClick(connectionId: string) {
-    // Clear node selection
-    this.selectedNodeId = undefined;
-    
-    // Select connection
-    this.selectedConnectionId = connectionId;
-    
-    this.dispatchEvent(new CustomEvent('connection-select', {
-      detail: { connectionId },
-      bubbles: true,
-      composed: true
-    }));
-  }
-
-  private renderDraftConnection() {
-    if (!this.connectionDraft) return '';
-    
-    const sourceNode = this.metadata.nodes.find(n => n.id === this.connectionDraft!.sourceNodeId);
-    if (!sourceNode) return '';
-    
-    // Calculate source center (node is 150x80)
-    const sourceX = sourceNode.position.x + 75;
-    const sourceY = sourceNode.position.y + 40;
-    
-    // Target is current mouse position
-    const targetX = this.connectionDraft.mouseX;
-    const targetY = this.connectionDraft.mouseY;
-    
-    return html`
-      <svg 
-        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"
-      >
-        <path
-          d="M ${sourceX} ${sourceY} L ${targetX} ${targetY}"
-          stroke="#3b82f6"
-          stroke-width="2"
-          stroke-dasharray="5,5"
-          fill="none"
-        />
-      </svg>
-    `;
   }
 }
 

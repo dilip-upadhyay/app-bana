@@ -1,158 +1,70 @@
-// Workflow Connection Component
-// SVG line connecting two workflow nodes
-
-import { LitElement, html, svg, css } from 'lit';
+import { LitElement, html, css, svg } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import { ConnectionMetadata, NodeMetadata } from '../models/WorkflowMetadata';
 
 @customElement('workflow-connection')
 export class WorkflowConnection extends LitElement {
-  @property({ type: Object }) metadata!: ConnectionMetadata;
-  @property({ type: Array }) nodes: NodeMetadata[] = [];
-  @property({ type: Boolean }) selected = false;
+  @property({ type: Number }) startX = 0;
+  @property({ type: Number }) startY = 0;
+  @property({ type: Number }) endX = 0;
+  @property({ type: Number }) endY = 0;
+  @property({ type: String }) type: 'straight' | 'curved' = 'curved';
 
   static styles = css`
     :host {
-      display: block;
-      pointer-events: none;
-    }
-
-    svg {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
       pointer-events: none;
-      overflow: visible;
-    }
-
-    path {
-      pointer-events: stroke;
-      cursor: pointer;
-      transition: stroke-width 0.2s;
-    }
-
-    path:hover {
-      stroke-width: 3;
-    }
-
-    path.selected {
-      stroke: #2563eb;
-      stroke-width: 3;
-    }
-
-    .arrow {
-      fill: #64748b;
-    }
-
-    .arrow.selected {
-      fill: #2563eb;
+      z-index: 5; /* Below nodes (10) but above background */
     }
   `;
 
   render() {
-    const sourceNode = this.nodes.find(n => n.id === this.metadata.from);
-    const targetNode = this.nodes.find(n => n.id === this.metadata.to);
-
-    if (!sourceNode || !targetNode) {
-      return html``;
-    }
-
-    // Calculate center points of nodes
-    const sourceCenter = {
-      x: sourceNode.position.x + 75, // Assuming 150px node width
-      y: sourceNode.position.y + 40  // Assuming 80px node height
-    };
-
-    const targetCenter = {
-      x: targetNode.position.x + 75,
-      y: targetNode.position.y + 40
-    };
-
-    // Calculate bezier curve control points for smooth connections
-    const dx = targetCenter.x - sourceCenter.x;
-    const dy = targetCenter.y - sourceCenter.y;
-    
-    // Control points for horizontal curves
-    const controlOffset = Math.abs(dx) * 0.5;
-    const control1 = {
-      x: sourceCenter.x + controlOffset,
-      y: sourceCenter.y
-    };
-    const control2 = {
-      x: targetCenter.x - controlOffset,
-      y: targetCenter.y
-    };
-
-    const pathD = `M ${sourceCenter.x} ${sourceCenter.y} 
-                   C ${control1.x} ${control1.y}, 
-                     ${control2.x} ${control2.y}, 
-                     ${targetCenter.x} ${targetCenter.y}`;
-
-    // Calculate arrow position (at target)
-    const arrowAngle = Math.atan2(dy, dx);
-    const arrowSize = 10;
+    const pathData = this.getPathData();
 
     return html`
-      <svg>
+      <svg width="100%" height="100%" style="overflow: visible;">
+        <!-- Background thick line for easier selection (future) -->
+        <!-- <path d="${pathData}" stroke="transparent" stroke-width="10" fill="none" style="pointer-events: stroke; cursor: pointer;" /> -->
+        
+        <!-- Visible connection line -->
+        <path 
+          d="${pathData}" 
+          stroke="#94a3b8" 
+          stroke-width="2" 
+          fill="none"
+          marker-end="url(#arrowhead)"
+        />
+        
         <defs>
-          <marker
-            id="arrowhead-${this.metadata.id}"
-            markerWidth="10"
-            markerHeight="10"
-            refX="9"
-            refY="3"
-            orient="auto"
-            markerUnits="strokeWidth"
-          >
-            <path
-              d="M0,0 L0,6 L9,3 z"
-              class="arrow ${this.selected ? 'selected' : ''}"
-            />
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
           </marker>
         </defs>
-
-        <path
-          d="${pathD}"
-          fill="none"
-          stroke="#64748b"
-          stroke-width="2"
-          marker-end="url(#arrowhead-${this.metadata.id})"
-          class="${this.selected ? 'selected' : ''}"
-          @click=${this.handleClick}
-        />
-
-        ${this.metadata.label ? this.renderLabel(sourceCenter, targetCenter) : ''}
       </svg>
     `;
   }
 
-  private renderLabel(source: { x: number; y: number }, target: { x: number; y: number }) {
-    const midX = (source.x + target.x) / 2;
-    const midY = (source.y + target.y) / 2;
+  private getPathData(): string {
+    const { startX, startY, endX, endY } = this;
 
-    return svg`
-      <text
-        x="${midX}"
-        y="${midY - 10}"
-        text-anchor="middle"
-        font-size="12"
-        fill="#64748b"
-        style="pointer-events: none;"
-      >
-        ${this.metadata.label}
-      </text>
-    `;
-  }
+    if (this.type === 'straight') {
+      return `M ${startX} ${startY} L ${endX} ${endY}`;
+    }
 
-  private handleClick(e: MouseEvent) {
-    e.stopPropagation();
-    this.dispatchEvent(new CustomEvent('connection-click', {
-      detail: { connectionId: this.metadata.id },
-      bubbles: true,
-      composed: true
-    }));
+    // Curved (Bezier)
+    // Calculate control points for a smooth curve
+    const deltaX = Math.abs(endX - startX);
+    const controlPointOffset = Math.max(deltaX * 0.5, 50);
+
+    const cp1x = startX + controlPointOffset;
+    const cp1y = startY;
+    const cp2x = endX - controlPointOffset;
+    const cp2y = endY;
+
+    return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
   }
 }
 

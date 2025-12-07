@@ -16,7 +16,7 @@ import '../../workflow-designer/WorkflowDesignerPage';
 export class BuilderShell extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
-  @state() private activeLeftTab: 'components' | 'entities' | 'ai-builder' | 'workflow' = 'components';
+  @state() private activeLeftTab = 'components' as 'components' | 'entities' | 'ai-builder' | 'workflow';
   @state() private leftPanelWidth = 300; // Default width in pixels
   private isResizing = false;
   private startX = 0;
@@ -101,7 +101,7 @@ export class BuilderShell extends LitElement {
       return html`<studio-entity-manager></studio-entity-manager>`;
     }
     if (this.activeLeftTab === 'workflow') {
-      return html`<workflow-canvas .metadata=${{nodes: [], connections: []}}></workflow-canvas>`;
+      return html`<workflow-canvas .metadata=${{ nodes: [], connections: [] }}></workflow-canvas>`;
     }
     return html`<ai-chat-builder></ai-chat-builder>`;
   }
