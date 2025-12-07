@@ -10,12 +10,13 @@ import './PropertiesPanel';
 import './AppManager';
 import './EntityManager';
 import './AiChatBuilder';
+import '../../workflow-designer/WorkflowDesignerPage';
 
 @customElement('studio-builder-shell')
 export class BuilderShell extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
-  @state() private activeLeftTab: 'components' | 'entities' | 'ai-builder' = 'components';
+  @state() private activeLeftTab: 'components' | 'entities' | 'ai-builder' | 'workflow' = 'components';
   @state() private leftPanelWidth = 300; // Default width in pixels
   private isResizing = false;
   private startX = 0;
@@ -99,12 +100,20 @@ export class BuilderShell extends LitElement {
     if (this.activeLeftTab === 'entities') {
       return html`<studio-entity-manager></studio-entity-manager>`;
     }
+    if (this.activeLeftTab === 'workflow') {
+      return html`<workflow-canvas .metadata=${{nodes: [], connections: []}}></workflow-canvas>`;
+    }
     return html`<ai-chat-builder></ai-chat-builder>`;
   }
 
   render() {
     // Set CSS custom property for dynamic width
     this.style.setProperty('--left-panel-width', `${this.leftPanelWidth}px`);
+
+    // Full-page mode for Workflow Designer
+    if (this.activeLeftTab === 'workflow') {
+      return html`<workflow-designer-page></workflow-designer-page>`;
+    }
 
     return html`
       <!-- Top: App Manager -->
@@ -129,6 +138,11 @@ export class BuilderShell extends LitElement {
             class="tab ${this.activeLeftTab === 'entities' ? 'active' : ''}"
             @click=${() => this.activeLeftTab = 'entities'}>
             Entities
+          </button>
+          <button 
+            class="tab ${this.activeLeftTab === 'workflow' ? 'active' : ''}"
+            @click=${() => this.activeLeftTab = 'workflow'}>
+            ⚡ Workflow
           </button>
           <button 
             class="tab ${this.activeLeftTab === 'ai-builder' ? 'active' : ''}"

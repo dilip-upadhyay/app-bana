@@ -165,3 +165,17 @@ studio-builder-inspector {
   background: #3b82f6;
   height: 100px;
 }
+/* Full-page panel for Workflow Designer */
+.full-page-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: calc(100vh - 64px); /* Account for app-manager height */
+  padding: 0;
+}
+
+workflow-canvas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
