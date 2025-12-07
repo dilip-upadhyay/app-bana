@@ -5,8 +5,11 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { WorkflowMetadata, NodeMetadata, ConnectionMetadata } from './models/WorkflowMetadata';
 import { WorkflowValidator } from './utils/WorkflowValidator';
+import { WorkflowHistory } from './utils/WorkflowHistory';
 import './components/NodePalette';
 import './components/WorkflowCanvas';
+
+const STORAGE_KEY = 'workflow-designer-draft';
 
 @customElement('workflow-designer-page')
 export class WorkflowDesignerPage extends LitElement {
@@ -22,6 +25,8 @@ export class WorkflowDesignerPage extends LitElement {
   @state() private selectedNodeId?: string;
   @state() private selectedConnectionId?: string;
   @state() private validationResult?: { errors: string[], warnings: string[] };
+
+  private history = new WorkflowHistory();
 
   static styles = css`
     :host {
@@ -299,6 +304,76 @@ export class WorkflowDesignerPage extends LitElement {
     }
   `;
 
+  connectedCallback() {
+    super.connectedCallback();
+    this.loadFromStorage();
+    window.addEventListener('keydown', this.handleKeyDown);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('keydown', this.handleKeyDown);
+  }
+
+  private loadFromStorage() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        this.workflowMetadata = JSON.parse(saved);
+        // Clear history on load so we don't undo into empty state
+        this.history = new WorkflowHistory();
+      }
+    } catch (e) {
+      console.error('Failed to load workflow draft', e);
+    }
+  }
+
+  private saveToStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.workflowMetadata));
+    } catch (e) {
+      console.error('Failed to save workflow draft', e);
+    }
+  }
+
+  private updateMetadata(newMetadata: WorkflowMetadata) {
+    this.history.push(this.workflowMetadata);
+    this.workflowMetadata = newMetadata;
+    this.saveToStorage();
+    this.requestUpdate();
+  }
+
+  private handleKeyDown = (e: KeyboardEvent) => {
+    // Undo: Cmd+Z or Ctrl+Z
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      this.undo();
+    }
+    // Redo: Cmd+Shift+Z or Ctrl+Shift+Z or Ctrl+Y
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      this.redo();
+    }
+  };
+
+  private undo() {
+    const prev = this.history.undo(this.workflowMetadata);
+    if (prev) {
+      this.workflowMetadata = prev;
+      this.saveToStorage();
+      this.selectedNodeId = undefined;
+      this.selectedConnectionId = undefined;
+    }
+  }
+
+  private redo() {
+    const next = this.history.redo(this.workflowMetadata);
+    if (next) {
+      this.workflowMetadata = next;
+      this.saveToStorage();
+    }
+  }
+
   render() {
     return html`
       <div class="grid-container">
@@ -515,19 +590,20 @@ export class WorkflowDesignerPage extends LitElement {
   }
 
   private handlePropertyChange(nodeId: string, field: keyof NodeMetadata, value: any) {
-    this.workflowMetadata = {
+    const newMetadata = {
       ...this.workflowMetadata,
       nodes: this.workflowMetadata.nodes.map(n =>
         n.id === nodeId ? { ...n, [field]: value } : n
       )
     };
+    this.updateMetadata(newMetadata);
   }
 
   private handleNodePropertyChange(nodeId: string, propertyName: string, value: any) {
     const node = this.workflowMetadata.nodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    this.workflowMetadata = {
+    const newMetadata = {
       ...this.workflowMetadata,
       nodes: this.workflowMetadata.nodes.map(n =>
         n.id === nodeId ? {
@@ -536,26 +612,30 @@ export class WorkflowDesignerPage extends LitElement {
         } : n
       )
     };
+    this.updateMetadata(newMetadata);
   }
 
   private handleNodeAdd(e: CustomEvent) {
     const { node } = e.detail;
-    this.workflowMetadata = {
+    const newMetadata = {
       ...this.workflowMetadata,
       nodes: [...this.workflowMetadata.nodes, node]
     };
+    this.updateMetadata(newMetadata);
     this.selectedNodeId = node.id;
     this.selectedConnectionId = undefined;
   }
 
   private handleNodeMove(e: CustomEvent) {
     const { nodeId, position } = e.detail;
+    // Update local state without history to prevent flooding stack
     this.workflowMetadata = {
       ...this.workflowMetadata,
       nodes: this.workflowMetadata.nodes.map((n: NodeMetadata) =>
         n.id === nodeId ? { ...n, position } : n
       )
     };
+    this.saveToStorage();
   }
 
   private handleNodeSelect(e: CustomEvent) {
@@ -569,10 +649,11 @@ export class WorkflowDesignerPage extends LitElement {
       c => c.from === connection.from && c.to === connection.to
     );
     if (!exists) {
-      this.workflowMetadata = {
+      const newMetadata = {
         ...this.workflowMetadata,
         connections: [...this.workflowMetadata.connections, connection]
       };
+      this.updateMetadata(newMetadata);
     }
     this.selectedConnectionId = connection.id;
     this.selectedNodeId = undefined;
@@ -588,10 +669,11 @@ export class WorkflowDesignerPage extends LitElement {
   }
 
   private deleteConnection(connectionId: string) {
-    this.workflowMetadata = {
+    const newMetadata = {
       ...this.workflowMetadata,
       connections: this.workflowMetadata.connections.filter(c => c.id !== connectionId)
     };
+    this.updateMetadata(newMetadata);
     this.selectedConnectionId = undefined;
   }
 
@@ -612,7 +694,9 @@ export class WorkflowDesignerPage extends LitElement {
   }
 
   private async handleSave() {
-    alert('Save functionality coming in Phase 3...');
+    // Explicit save (mostly for UX as we auto-save)
+    this.saveToStorage();
+    alert('Workflow saved!');
   }
 
   private async handlePublish() {

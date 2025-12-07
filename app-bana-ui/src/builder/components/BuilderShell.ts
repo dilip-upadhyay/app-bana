@@ -143,8 +143,7 @@ export class BuilderShell extends LitElement {
             Entities
           </button>
           <button 
-            // @ts-ignore
-            class="tab ${this.activeLeftTab === 'workflow' ? 'active' : ''}"
+            class="tab ${(this.activeLeftTab as any) === 'workflow' ? 'active' : ''}"
             @click=${() => this.activeLeftTab = 'workflow'}>
             ⚡ Workflow
           </button>
