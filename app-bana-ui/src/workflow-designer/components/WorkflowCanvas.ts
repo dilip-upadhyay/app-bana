@@ -4,8 +4,9 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state, query } from 'lit/decorators.js';
 import Panzoom from '@panzoom/panzoom';
-import { WorkflowMetadata, NodeMetadata } from '../models/WorkflowMetadata';
+import { WorkflowMetadata, NodeMetadata, ConnectionMetadata } from '../models/WorkflowMetadata';
 import './WorkflowNode';
+import './WorkflowConnection';
 
 @customElement('workflow-canvas')
 export class WorkflowCanvas extends LitElement {
@@ -15,9 +16,11 @@ export class WorkflowCanvas extends LitElement {
   })
   metadata!: WorkflowMetadata;
   @property() selectedNodeId?: string;
+  @property() selectedConnectionId?: string;
 
   @state() private isDragging = false;
   @state() private dragOffset = { x: 0, y: 0 };
+  @state() private connectionDraft?: { sourceNodeId: string; mouseX: number; mouseY: number };
 
   @query('.canvas-container') private canvasEl?: HTMLDivElement;
 
@@ -52,11 +55,30 @@ export class WorkflowCanvas extends LitElement {
       background-color: #eff6ff;
     }
 
+    .connections-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+    
+    .connections-layer workflow-connection {
+      pointer-events: all;
+    }
+    
+    .connections-layer svg {
+      pointer-events: none;
+    }
+
     .nodes-layer {
       position: relative;
       width: 100%;
       height: 100%;
       pointer-events: none;
+      z-index: 2;
     }
     
     .nodes-layer > * {
@@ -121,6 +143,12 @@ export class WorkflowCanvas extends LitElement {
     }
   `;
 
+  connectedCallback() {
+    super.connectedCallback();
+    // Add keyboard event listener for deletion and cancel
+    window.addEventListener('keydown', this.handleKeyDown);
+  }
+
   firstUpdated() {
     if (this.canvasEl) {
       // Initialize PanZoom
@@ -145,6 +173,7 @@ export class WorkflowCanvas extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this.panzoom?.destroy();
+    window.removeEventListener('keydown', this.handleKeyDown);
   }
 
   render() {
@@ -154,9 +183,27 @@ export class WorkflowCanvas extends LitElement {
         @dragover=${this.handleDragOver}
         @drop=${this.handleDrop}
         @dragleave=${this.handleDragLeave}
+        @mousemove=${this.handleMouseMove}
+        @mouseup=${this.handleMouseUp}
       >
         ${this.metadata.nodes.length === 0 ? this.renderEmptyState() : ''}
         
+        <!-- Connections layer (SVG) - Below nodes -->
+        <div class="connections-layer">
+          ${this.metadata.connections?.map(conn => html`
+            <workflow-connection
+              .metadata=${conn}
+              .nodes=${this.metadata.nodes}
+              .selected=${conn.id === this.selectedConnectionId}
+              @connection-click=${() => this.handleConnectionClick(conn.id)}
+            ></workflow-connection>
+          `)}
+          
+          <!-- Draft connection while dragging -->
+          ${this.connectionDraft ? this.renderDraftConnection() : ''}
+        </div>
+
+        <!-- Nodes layer - Above connections -->
         <div class="nodes-layer">
           ${this.metadata.nodes.map(node => html`
             <workflow-node
@@ -164,6 +211,7 @@ export class WorkflowCanvas extends LitElement {
               .selected=${node.id === this.selectedNodeId}
               @click=${() => this.handleNodeClick(node.id)}
               @node-drag-start=${this.handleNodeDragStart}
+              @connection-start=${this.handleConnectionStart}
               type=${node.type}
             ></workflow-node>
           `)}
@@ -270,6 +318,135 @@ export class WorkflowCanvas extends LitElement {
 
   private resetZoom() {
     this.panzoom?.reset();
+  }
+
+  // ========== Keyboard Handlers ==========
+
+  private handleKeyDown = (e: KeyboardEvent) => {
+    // Delete/Backspace: Remove selected connection
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (this.selectedConnectionId) {
+        e.preventDefault();
+        this.dispatchEvent(new CustomEvent('connection-delete', {
+          detail: { connectionId: this.selectedConnectionId },
+          bubbles: true,
+          composed: true
+        }));
+        this.selectedConnectionId = undefined;
+      }
+    }
+    
+    // Escape: Cancel draft connection
+    if (e.key === 'Escape') {
+      if (this.connectionDraft) {
+        this.connectionDraft = undefined;
+      }
+    }
+  }
+
+  // ========== Connection Management ==========
+
+  private handleConnectionStart(e: CustomEvent) {
+    e.stopPropagation();
+    const { nodeId, handle } = e.detail;
+    
+    // Start draft connection
+    this.connectionDraft = {
+      sourceNodeId: nodeId,
+      mouseX: e.detail.clientX || 0,
+      mouseY: e.detail.clientY || 0
+    };
+    
+    // Clear any node selection when starting connection
+    this.selectedNodeId = undefined;
+    this.selectedConnectionId = undefined;
+  }
+
+  private handleMouseMove(e: MouseEvent) {
+    if (this.connectionDraft) {
+      const rect = this.canvasEl?.getBoundingClientRect();
+      if (rect) {
+        this.connectionDraft = {
+          ...this.connectionDraft,
+          mouseX: e.clientX - rect.left,
+          mouseY: e.clientY - rect.top
+        };
+      }
+    }
+  }
+
+  private handleMouseUp(e: MouseEvent) {
+    if (this.connectionDraft) {
+      // Check if mouse is over a valid target handle
+      const target = e.target as HTMLElement;
+      const handle = target.closest('.connection-handle');
+      
+      if (handle) {
+        const targetNodeEl = handle.closest('workflow-node') as any;
+        const targetNodeId = targetNodeEl?.metadata?.id;
+        
+        if (targetNodeId && targetNodeId !== this.connectionDraft.sourceNodeId) {
+          // Create new connection
+          const newConnection: ConnectionMetadata = {
+            id: `conn-${Date.now()}`,
+            from: this.connectionDraft.sourceNodeId,
+            to: targetNodeId
+          };
+          
+          this.dispatchEvent(new CustomEvent('connection-add', {
+            detail: { connection: newConnection },
+            bubbles: true,
+            composed: true
+          }));
+        }
+      }
+      
+      // Clear draft connection
+      this.connectionDraft = undefined;
+    }
+  }
+
+  private handleConnectionClick(connectionId: string) {
+    // Clear node selection
+    this.selectedNodeId = undefined;
+    
+    // Select connection
+    this.selectedConnectionId = connectionId;
+    
+    this.dispatchEvent(new CustomEvent('connection-select', {
+      detail: { connectionId },
+      bubbles: true,
+      composed: true
+    }));
+  }
+
+  private renderDraftConnection() {
+    if (!this.connectionDraft) return '';
+    
+    const sourceNode = this.metadata.nodes.find(n => n.id === this.connectionDraft!.sourceNodeId);
+    if (!sourceNode) return '';
+    
+    // Calculate source center (node is 150x80)
+    const sourceX = sourceNode.position.x + 75;
+    const sourceY = sourceNode.position.y + 40;
+    
+    // Target is current mouse position
+    const targetX = this.connectionDraft.mouseX;
+    const targetY = this.connectionDraft.mouseY;
+    
+    return html`
+      <svg 
+        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"
+      >
+        <path
+          d="M ${sourceX} ${sourceY} L ${targetX} ${targetY}"
+          stroke="#3b82f6"
+          stroke-width="2"
+          stroke-dasharray="5,5"
+          fill="none"
+        />
+      </svg>
+    `;
   }
 }
 
