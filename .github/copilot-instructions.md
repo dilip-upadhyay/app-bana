@@ -5,32 +5,48 @@ AppBana is a **metadata-driven platform** generating end-to-end functionality fr
 
 ---
 
-## CRITICAL PRIORITIES (November 2025)
+## CURRENT PRIORITIES (December 2025)
 
-### 1. Authentication Phase 1 - Enterprise Features 🔴 HIGHEST PRIORITY
-**Status**: Week 1-2 of 6-week implementation (90% COMPLETE)  
-**Grade**: 6/10 → 8.0/10 (Enterprise-Ready for FLS)  
-**Impact**: $500K-2M ARR unlock (Healthcare/Finance TAM: $80M-160M)
+### 1. Workflow Automation Phase 1 🔴 ACTIVE SPRINT
+**Status**: 95% Complete (Runtime verification pending)  
+**Branch**: dev-workflow  
+**Impact**: Core platform capability - enables approval flows, maker-checker patterns, SLA tracking
 
-**Field-Level Security (FLS)** - ✅ 90% Complete (PRODUCTION READY):
-- ✅ Database: `field_permission` table + 4 indexes + view + stored procedure + seed data
-- ✅ Entity: `FieldPermission.java` (185 lines, Lombok, wildcard support)
-- ✅ Service: `PermissionService.java` (400+ lines, 6 methods, 5-min cache, admin bypass)
-- ✅ REST API: GET/PUT filtering + 5 FLS CRUD endpoints (COMPLETE)
-- ✅ UI: StudioTableLive hides non-readable fields, disables non-editable with 🔒 (COMPLETE)
-- ✅ AI Integration: Intent patterns detect "hide salary" phrases
-- ⏳ Testing: Manual testing complete, JUnit tests pending (10% remaining)
-- ⏳ Tests: JUnit tests for PermissionService (0% - HIGH PRIORITY)
+**Completed** (December 7, 2025):
+- ✅ **Database**: 4 workflow tables (`appbana_wf_definition`, `appbana_wf_instance`, `appbana_wf_token`, `appbana_wf_history`)
+- ✅ **REST API**: 8 endpoints (workflow CRUD, publish, start, task management)
+- ✅ **Services**: WorkflowService (CRUD + publish), WorkflowExecutionService (trigger + execute)
+- ✅ **Triggers**: PostOperationHooks integration for entity creation events
+- ✅ **Bug Fixes**: Flyway placeholders, H2 compatibility, CLOB serialization, Jackson LocalDateTime
+
+**Remaining** (5%):
+- ⏳ Runtime verification: Full end-to-end workflow test (create → publish → trigger → task → complete)
+- ⏳ Debug logging: Ensure trigger logic fires correctly
 
 **Next Steps**:
-1. Add JUnit tests for `PermissionService` (7 test scenarios)
-2. Update `FormElement.ts` for field masking
-3. Document FLS API in OpenAPI spec
-4. Test with Postman/PowerShell
+1. Test complete workflow execution cycle
+2. Fix any runtime issues discovered
+3. Begin Phase 2: SLA tracking, timeouts, parallel task execution
 
-**Upcoming** (Weeks 2-6): Profile Layer → Role Hierarchy → Session Management → Multi-Tenancy
+**Reference**: [WORKFLOW_PHASE1_STATUS_DEC7_2025.md](../docs/WORKFLOW_PHASE1_STATUS_DEC7_2025.md)
 
-### 2. AI Builder Experience (ONGOING)
+### 2. Authentication Phase 1 - Field-Level Security ✅ PRODUCTION READY
+**Status**: 90% Complete (JUnit tests pending)  
+**Impact**: $500K-2M ARR unlock (Healthcare/Finance compliance: HIPAA, PCI-DSS)
+
+**Completed**:
+- ✅ Database: `field_permission` table with indexes and views
+- ✅ Service: `PermissionService` (400+ lines, cached, admin bypass)
+- ✅ REST API: GET/PUT filtering + 5 FLS CRUD endpoints
+- ✅ UI: StudioTableLive field hiding and disabling with 🔒 icon
+- ✅ AI Integration: Intent patterns for "hide salary" phrases
+
+**Remaining**:
+- ⏳ JUnit tests for PermissionService (7 test scenarios - HIGH PRIORITY)
+
+**Reference**: [FIELD_LEVEL_SECURITY.md](../docs/FIELD_LEVEL_SECURITY.md)
+
+### 3. AI Builder Experience (ONGOING)
 For **any new feature**:
 - Surface via AI Builder conversational interface
 - Update `AiAppGeneratorService` for AI-driven capability
@@ -108,85 +124,34 @@ cd ..; mvn clean package -DskipTests    # Fat JAR with UI embedded
 
 ## Database Migrations (Flyway)
 
-**Status**: ✅ Integrated (November 22, 2025)
-
-**Overview**:
-- Flyway OSS Edition 10.4.1 manages all database schema changes
-- Migrations run automatically on application startup
-- Location: `src/main/resources/db/migration/`
-- Convention: `V{version}__{description}.sql` (e.g., `V1__auth_schema.sql`)
+**Status**: ✅ Integrated (Flyway OSS 10.4.1)  
+**Location**: `src/main/resources/db/migration/`  
+**Convention**: `V{version}__{description}.sql`
 
 **Current Migrations**:
-1. **V1__auth_schema.sql** - Authentication foundation
-   - Tables: `user`, `role`, `permission`, `user_role`, `role_permission`
-   - Seed data: 3 default roles (admin, manager, user)
-   - Seed data: 14 default permissions (user:*, role:*, permission:*, app:*)
-   - Default admin user: `admin@appbana.com` / `admin123`
+- **V1__auth_schema.sql** - User/Role/Permission tables + seed data
+- **V2__field_level_security.sql** - FLS tables + 20+ permissions + view
+- **V3-V5__** - Additional system tables
+- **V6__workflow_tables.sql** - Workflow tables (definition, instance, token, history)
 
-2. **V2__field_level_security.sql** - Field-Level Security (FLS)
-   - Table: `field_permission` (role_id, entity_name, field_name, can_read, can_edit)
-   - Seed data: 20+ field permissions for 5 roles (admin, manager, user, hr, finance)
-   - View: `v_effective_field_permissions` (combines user's all roles)
-
-**Development Mode**:
-- Flyway `.clean()` runs on every startup (drops all objects)
-- All migrations re-run from scratch
-- **DO NOT use in production** - would delete all data!
-
-**Creating New Migrations**:
-```sql
--- File: V3__your_feature_name.sql
--- Always use IF NOT EXISTS for safety
-CREATE TABLE IF NOT EXISTS your_table (
-    id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Add indexes
-CREATE INDEX IF NOT EXISTS idx_your_table_name ON your_table(name);
-
--- Seed data (optional)
-INSERT INTO your_table (id, name) VALUES 
-    (RANDOM_UUID(), 'Sample Data');
-```
-
-**Column Naming Convention**:
-- Use `can_read`, `can_edit`, `can_delete` (not `readable`, `editable`)
-- Matches Java boolean getter conventions: `canRead()`, `canEdit()`
+**Development Mode**: Flyway runs `.clean()` on startup (drops all objects - **DEV ONLY!**)  
+⚠️ **DO NOT use in production** - would delete all data!
 
 **Testing Migrations**:
-```powershell
-# Terminal 3 (NOT Terminal 1!)
-# 1. Stop backend
-Stop-Process -Name java -Force
-
-# 2. Delete database to test fresh migration
-Remove-Item -Path "c:\Users\dilip\git\app-bana\data\appbana*" -Force
-
-# 3. Rebuild
-cd c:\Users\dilip\git\app-bana
+```bash
+# macOS/Linux
+cd $PROJECT_ROOT
+rm -f data/appbana.*
 mvn clean package -DskipTests
-
-# 4. Start backend (Terminal 1 - don't run commands here!)
 java -jar app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar
-
-# 5. Watch logs for Flyway output:
-# [main] INFO org.flywaydb.core.internal.command.DbMigrate - Migrating schema "PUBLIC" to version "1 - auth schema"
-# [main] INFO org.flywaydb.core.internal.command.DbMigrate - Migrating schema "PUBLIC" to version "2 - field level security"
-# [main] INFO org.flywaydb.core.internal.command.DbMigrate - Successfully applied 2 migrations to schema "PUBLIC"
 ```
 
-**Production Configuration** (Future):
-```java
-// Remove .cleanDisabled(false) and .clean() calls
-Flyway flyway = Flyway.configure()
-        .dataSource(cfg.getJdbcUrl(), cfg.getUsername(), cfg.getPassword())
-        .locations("classpath:db/migration")
-        .load();
+**Column Naming**: Use `can_read`, `can_edit` (not `readable`, `editable`) - matches Java getter conventions
 
-int migrationsApplied = flyway.migrate().migrationsExecuted;
-```
+**Detailed Guide**: See [DEVELOPMENT_GUIDE.md](../docs/02-DEVELOPMENT_GUIDE.md#database-migrations) for:
+- Creating new migrations (templates, best practices)
+- Production configuration (disable `.clean()`)
+- Troubleshooting migration failures
 
 ---
 
@@ -314,5 +279,5 @@ Invoke-WebRequest -Uri "http://localhost:8080/apps" | Select-Object StatusCode
 ---
 
 **Last Updated**: December 7, 2025  
-**Current Sprint**: Workflow Phase 1 verification (95% complete)  
-**Next Sprint**: Workflow Phase 1 completion → Phase 2 (SLA, timeouts)
+**Current Sprint**: Workflow Phase 1 completion (95% → 100%) + Runtime verification  
+**Next Sprint**: Workflow Phase 2 (SLA, timeouts, parallel execution) + Auth JUnit tests
