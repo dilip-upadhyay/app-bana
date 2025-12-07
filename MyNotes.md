@@ -117,17 +117,36 @@ Entity, REST API, GraphQL, SQL, CSV, JSON, WebSocket, etc.
 
 ## 🔥 Priority Features to Build
 
-### Phase 1: Enterprise Essentials (Must-Have)
-1. **User Authentication & RBAC** 🔴 CRITICAL
+### ✅ Recently Completed (December 2025)
+**Workflow Automation - Phase 1** 🎉 COMPLETE
+- ✅ Workflow engine with START, END, USER_TASK, SERVICE_TASK, DECISION nodes
+- ✅ Auto-trigger on entity CREATE/UPDATE events
+- ✅ Trigger condition evaluation (MVEL expressions)
+- ✅ Task assignment (USER, ROLE, QUEUE, DYNAMIC)
+- ✅ My Tasks API for user inbox
+- ✅ Conditional routing based on outcomes
+- ✅ Workflow versioning (DRAFT → ACTIVE)
+- ✅ Complete end-to-end testing
+- **Status**: 100% tested and working
+- **Date**: December 7, 2025
+
+### Phase 1: Core Platform Features (Next 3-4 Months)
+
+1. **Visual Workflow Designer** 🔥 TOP PRIORITY
+   - Drag-and-drop workflow builder
+   - Pure Lit + Web Components (no React)
+   - Node palette, canvas, properties panel
+   - JSON conversion and validation
+   - Auto-layout algorithm
+   - Effort: 3-4 weeks
+   - **Why #1**: Workflow backend is done, needs UI for non-technical users
+
+2. **User Authentication & RBAC** 🔴 CRITICAL
    - Multi-user support with roles
    - Field-level & record-level security
+   - JWT authentication
    - Effort: 4-6 weeks
-
-2. **Workflow Automation** 🔴 HIGH
-   - Approval processes
-   - Email notifications
-   - Scheduled tasks
-   - Effort: 3-4 weeks
+   - **Why #2**: Foundation already 60% done, critical for production
 
 3. **Report Builder** 🔴 HIGH
    - Custom reports with filters
@@ -139,6 +158,7 @@ Entity, REST API, GraphQL, SQL, CSV, JSON, WebSocket, etc.
    - Track all changes
    - Compliance requirement
    - Effort: 2 weeks
+
 
 ### Phase 2: Professional Features
 5. **Visual Page Builder** - Drag-drop UI editor (4 weeks)

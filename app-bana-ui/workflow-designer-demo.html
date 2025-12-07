@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow Designer Demo - AppBana</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+        }
+
+        workflow-designer-page {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+
+<body>
+    <workflow-designer-page></workflow-designer-page>
+
+    <!-- Development build with all components -->
+    <script type="module">
+        // Import all workflow designer components
+        import './src/workflow-designer/index.ts';
+
+        console.log('🎨 Workflow Designer loaded!');
+        console.log('📝 Drag nodes from the palette to the canvas to start designing');
+    </script>
+</body>
+
+</html>
