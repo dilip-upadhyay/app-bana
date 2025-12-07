@@ -22,12 +22,17 @@ export class WorkflowDesignerPage extends LitElement {
 
   static styles = css`
     :host {
-      display: grid;
-      grid-template-columns: 250px 1fr 300px;
-      grid-template-rows: 60px 1fr;
+      display: block;
       height: 100vh;
       background: #f8fafc;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .grid-container {
+      display: grid;
+      grid-template-columns: 250px 1fr 300px;
+      grid-template-rows: 60px 1fr;
+      height: 100%;
     }
 
     .toolbar {
@@ -127,36 +132,38 @@ export class WorkflowDesignerPage extends LitElement {
 
   render() {
     return html`
-      <div class="toolbar">
-        <div class="toolbar-left">
-          <span class="workflow-name">${this.workflowMetadata.name}</span>
-          <span class="workflow-status">Draft v${this.workflowMetadata.version}</span>
+      <div class="grid-container">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <span class="workflow-name">${this.workflowMetadata.name}</span>
+            <span class="workflow-status">Draft v${this.workflowMetadata.version}</span>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-secondary" @click=${this.handleValidate}>
+              ✓ Validate
+            </button>
+            <button class="btn btn-secondary" @click=${this.handleSave}>
+              💾 Save
+            </button>
+            <button class="btn btn-primary" @click=${this.handlePublish}>
+              🚀 Publish
+            </button>
+          </div>
         </div>
-        <div class="toolbar-right">
-          <button class="btn btn-secondary" @click=${this.handleValidate}>
-            ✓ Validate
-          </button>
-          <button class="btn btn-secondary" @click=${this.handleSave}>
-            💾 Save
-          </button>
-          <button class="btn btn-primary" @click=${this.handlePublish}>
-            🚀 Publish
-          </button>
+
+        <node-palette class="palette"></node-palette>
+
+        <workflow-canvas
+          class="canvas"
+          .metadata=${this.workflowMetadata}
+          .selectedNodeId=${this.selectedNodeId}
+          @node-add=${this.handleNodeAdd}
+          @node-select=${this.handleNodeSelect}
+        ></workflow-canvas>
+
+        <div class="properties">
+          ${this.renderPropertiesPanel()}
         </div>
-      </div>
-
-      <node-palette class="palette"></node-palette>
-
-      <workflow-canvas
-        class="canvas"
-        .metadata=${this.workflowMetadata}
-        .selectedNodeId=${this.selectedNodeId}
-        @node-add=${this.handleNodeAdd}
-        @node-select=${this.handleNodeSelect}
-      ></workflow-canvas>
-
-      <div class="properties">
-        ${this.renderPropertiesPanel()}
       </div>
     `;
   }
