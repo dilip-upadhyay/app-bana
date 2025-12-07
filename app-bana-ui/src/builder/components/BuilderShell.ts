@@ -160,7 +160,7 @@ export class BuilderShell extends LitElement {
         <div class="app-manager-panel">
           <studio-app-manager></studio-app-manager>
         </div>
-        <workflow-designer-page></workflow-designer-page>
+        <workflow-designer-page .appId=${appStore.getCurrentApp()?.id}></workflow-designer-page>
       `;
     }
 

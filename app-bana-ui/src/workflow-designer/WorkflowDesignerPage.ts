@@ -1,18 +1,21 @@
 // Workflow Designer Page Component
 // Main container that orchestrates all workflow designer components
 
-import { LitElement, html, css } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { LitElement, html, css, PropertyValues } from 'lit';
+import { customElement, state, property } from 'lit/decorators.js';
 import { WorkflowMetadata, NodeMetadata, ConnectionMetadata } from './models/WorkflowMetadata';
 import { WorkflowValidator } from './utils/WorkflowValidator';
 import { WorkflowHistory } from './utils/WorkflowHistory';
 import './components/NodePalette';
 import './components/WorkflowCanvas';
 
-const STORAGE_KEY = 'workflow-designer-draft';
+
+const STORAGE_KEY_PREFIX = 'workflow-designer-draft-';
 
 @customElement('workflow-designer-page')
 export class WorkflowDesignerPage extends LitElement {
+  @property({ type: String }) appId: string | null = null;
+
   @state() private workflowMetadata: WorkflowMetadata = {
     id: `workflow-${Date.now()}`,
     name: 'Untitled Workflow',
@@ -311,22 +314,66 @@ export class WorkflowDesignerPage extends LitElement {
     window.removeEventListener('keydown', this.handleKeyDown);
   }
 
+  updated(changedProperties: PropertyValues) {
+    if (changedProperties.has('appId')) {
+      const oldAppId = changedProperties.get('appId');
+      if (oldAppId !== this.appId) {
+        // App switched, reload data
+        this.history = new WorkflowHistory(); // Reset history
+
+        if (this.appId) {
+          this.loadFromStorage();
+        } else {
+          // No app selected, reset to default state
+          this.workflowMetadata = this.createEmptyWorkflow();
+          this.selectedNodeId = undefined;
+          this.selectedConnectionId = undefined;
+        }
+      }
+    }
+  }
+
+  private createEmptyWorkflow(): WorkflowMetadata {
+    return {
+      id: `workflow-${Date.now()}`,
+      name: 'Untitled Workflow',
+      version: 1,
+      schemaVersion: '1.0.0',
+      nodes: [],
+      connections: []
+    };
+  }
+
+  private getStorageKey(): string | null {
+    if (!this.appId) return null;
+    return `${STORAGE_KEY_PREFIX}${this.appId}`;
+  }
+
   private loadFromStorage() {
+    const key = this.getStorageKey();
+    if (!key) return;
+
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(key);
       if (saved) {
         this.workflowMetadata = JSON.parse(saved);
-        // Clear history on load so we don't undo into empty state
         this.history = new WorkflowHistory();
+      } else {
+        // New app, start fresh
+        this.workflowMetadata = this.createEmptyWorkflow();
       }
     } catch (e) {
       console.error('Failed to load workflow draft', e);
+      this.workflowMetadata = this.createEmptyWorkflow();
     }
   }
 
   private saveToStorage() {
+    const key = this.getStorageKey();
+    if (!key) return;
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.workflowMetadata));
+      localStorage.setItem(key, JSON.stringify(this.workflowMetadata));
     } catch (e) {
       console.error('Failed to save workflow draft', e);
     }
