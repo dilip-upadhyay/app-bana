@@ -127,7 +127,7 @@ INSERT INTO appbana_wf_definition (
     'Simple maker-checker workflow for payment requests over $10,000',
     'PaymentRequest',
     'ON_CREATE',
-    '$${PaymentRequest.amount > 10000}',
+    '$${PaymentRequest.AMOUNT > 10000}',
     1,
     'ACTIVE',
     '{

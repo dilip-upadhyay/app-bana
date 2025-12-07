@@ -44,7 +44,7 @@ WORKFLOW_DEF=$(cat <<EOF
   "description": "Simple maker-checker for testing",
   "triggerEntity": "PaymentRequest",
   "triggerEvent": "ON_CREATE",
-  "triggerCondition": "\${PaymentRequest.amount > 1000}",
+  "triggerCondition": "\${PaymentRequest.AMOUNT > 1000}",
   "status": "DRAFT",
   "definition": {
     "id": "test-payment-workflow",

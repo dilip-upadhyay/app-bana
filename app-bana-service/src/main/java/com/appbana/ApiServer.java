@@ -1554,12 +1554,18 @@ public class ApiServer {
                 long id = insertRecord(schema, data);
                 // after image
                 Map<String,Object> after = getById(schema, String.valueOf(id));
+                LOG.info("Entity created: {} id={}, after={}", schema.getName(), id, after != null ? "present" : "NULL");
                 AuditLogService.log("INSERT", schema.getName(), String.valueOf(id), actor, null, after);
                 
                 // Workflow PostOperationHook: Check and auto-start workflows
-                com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
-                    schema.getName(), "ON_CREATE", String.valueOf(id), after
-                );
+                if (after != null) {
+                    LOG.info("Calling checkAndStartWorkflows for {} ON_CREATE id={}", schema.getName(), id);
+                    com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
+                        schema.getName(), "ON_CREATE", String.valueOf(id), after
+                    );
+                } else {
+                    LOG.warn("Skipping workflow trigger - after image is null for {} id={}", schema.getName(), id);
+                }
                 
                 res.json(201, Map.of("id", id));
             } catch (SQLException e) {

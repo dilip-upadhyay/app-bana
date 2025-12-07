@@ -440,6 +440,9 @@ public class WorkflowApi {
      * Called from PostOperationHooks after entity INSERT/UPDATE
      */
     public static void checkAndStartWorkflows(String entityType, String event, String entityId, Map<String, Object> entityData) {
+        LOG.info("checkAndStartWorkflows called: entityType={}, event={}, entityId={}, entityData keys={}", 
+            entityType, event, entityId, entityData != null ? entityData.keySet() : "NULL");
+        
         try (Connection conn = JdbcManager.getConnection()) {
             // Find active workflows for this entity+event
             String sql = """
@@ -447,20 +450,34 @@ public class WorkflowApi {
                 WHERE trigger_entity = ? AND trigger_event = ? AND status = 'ACTIVE'
                 """;
             
+            LOG.info("Searching for workflows: trigger_entity={}, trigger_event={}", entityType, event);
+            
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, entityType);
                 ps.setString(2, event);
                 
+                int workflowCount = 0;
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
+                        workflowCount++;
                         String workflowId = rs.getString("id");
                         String condition = rs.getString("trigger_condition");
+                        
+                        // Unescape Flyway placeholder: $$ -> $
+                        if (condition != null && condition.contains("$${")) {
+                            condition = condition.replace("$${", "${");
+                            LOG.debug("Unescaped trigger condition for workflow {}", workflowId);
+                        }
+                        
+                        LOG.info("Found workflow #{}: id={}, condition={}", workflowCount, workflowId, condition);
                         
                         // Evaluate trigger condition
                         Map<String, Object> context = com.appbana.workflow.ExpressionEvaluator.createContext(entityType, entityData);
                         LOG.info("Evaluating trigger for workflow: {} | condition: {} | context keys: {} | entity data: {}", 
                             workflowId, condition, context.keySet(), entityData);
                         boolean shouldTrigger = com.appbana.workflow.ExpressionEvaluator.evaluateCondition(condition, context);
+                        
+                        LOG.info("Trigger evaluation result: shouldTrigger={}", shouldTrigger);
                         
                         if (shouldTrigger) {
                             try {
@@ -471,9 +488,13 @@ public class WorkflowApi {
                             } catch (Exception e) {
                                 LOG.error("Failed to auto-start workflow: {}", workflowId, e);
                             }
+                        } else {
+                            LOG.info("Workflow {} NOT triggered - condition not met", workflowId);
                         }
                     }
                 }
+                
+                LOG.info("checkAndStartWorkflows complete: found {} workflows", workflowCount);
             }
         } catch (Exception e) {
             LOG.error("Failed to check workflows for entity: {}/{}", entityType, entityId, e);
