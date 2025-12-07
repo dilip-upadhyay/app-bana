@@ -269,6 +269,50 @@ Invoke-WebRequest -Uri "http://localhost:8080/apps" | Select-Object StatusCode
 
 ---
 
-**Last Updated**: November 22, 2025  
-**Current Sprint**: FLS REST API integration (Week 1-2)  
-**Next Sprint**: Profile Layer (Week 2-3)
+## 📚 Essential Documentation References
+
+**ALWAYS refer to these docs when working on related features:**
+
+### Core Architecture & Development
+- **[docs/01-ARCHITECTURE.md](../docs/01-ARCHITECTURE.md)** - System architecture, metadata-driven flow, tech stack
+- **[docs/02-DEVELOPMENT_GUIDE.md](../docs/02-DEVELOPMENT_GUIDE.md)** - Setup, build, run, troubleshooting
+- **[docs/03-ROADMAP.md](../docs/03-ROADMAP.md)** - Product roadmap, Q4 2025 delivery phases
+- **[docs/04-USER_MANUAL.md](../docs/04-USER_MANUAL.md)** - User guide for app builders
+
+### Strategic Planning
+- **[docs/STRATEGIC_PLAN_SUMMARY.md](../docs/STRATEGIC_PLAN_SUMMARY.md)** - 5-minute executive summary (5 critical gaps, ROI)
+- **[docs/STRATEGIC_PLAN_FINAL.md](../docs/STRATEGIC_PLAN_FINAL.md)** - Complete strategic analysis (read for UX decisions)
+
+### Security & Authentication
+- **[docs/AUTH_RBAC_DESIGN.md](../docs/AUTH_RBAC_DESIGN.md)** - RBAC architecture (User/Role/Permission model)
+- **[docs/AUTH_PHASE1_IMPLEMENTATION.md](../docs/AUTH_PHASE1_IMPLEMENTATION.md)** - 6-week auth implementation roadmap
+- **[docs/FIELD_LEVEL_SECURITY.md](../docs/FIELD_LEVEL_SECURITY.md)** - ✅ FLS complete guide (HIPAA/PCI-DSS compliance)
+  - Admin guide, API reference, testing scenarios
+  - **Reference this for ANY FLS-related work**
+
+### Workflow Automation
+- **[docs/WORKFLOW_FEATURE_SPEC.md](../docs/WORKFLOW_FEATURE_SPEC.md)** - Complete workflow architecture (2200+ lines)
+  - Task types, versioning, maker-checker patterns
+  - **Reference this for ANY workflow-related work**
+- **[docs/WORKFLOW_PHASE1_STATUS_DEC7_2025.md](../docs/WORKFLOW_PHASE1_STATUS_DEC7_2025.md)** - Current status (95% complete)
+  - Achievement summary, bug fixes, next steps
+  - **Check this before continuing workflow work**
+
+### AI & Technical Reference
+- **[docs/AI_BUILDER_SPEC.md](../docs/AI_BUILDER_SPEC.md)** - AI builder architecture, intent classification
+- **[docs/JAVA21_QUICK_REFERENCE.md](../docs/JAVA21_QUICK_REFERENCE.md)** - Java 21 features (virtual threads, records, etc.)
+
+### Complete Documentation Index
+- **[docs/README.md](../docs/README.md)** - Complete navigation hub with role-based guides
+
+**Documentation Status (December 7, 2025)**:
+- ✅ Consolidated from 70+ files to 15 essential docs
+- ✅ Zero duplicate content
+- ✅ Clear hierarchy by domain
+- ✅ Role-based navigation in README
+
+---
+
+**Last Updated**: December 7, 2025  
+**Current Sprint**: Workflow Phase 1 verification (95% complete)  
+**Next Sprint**: Workflow Phase 1 completion → Phase 2 (SLA, timeouts)
