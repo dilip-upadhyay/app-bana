@@ -45,3 +45,19 @@ We are ready to start **Phase 2: Node Connections** from a clean slate.
 - **Codebase**: Clean (no prototype code).
 - **Server**: Running (`npm run dev`).
 - **Tests**: All Phase 1 manual tests passed.
+
+### 5. Phase 6 Completed (Interaction Completeness)
+- **Node Deletion**: Implemented with UI button and Keyboard shortcuts (`Backspace`, `Delete`).
+- **Connection Deletion**: Auto-removal of connections when node is deleted.
+- **Export/Publish**: `handlePublish` now downloads the workflow as JSON.
+- **Persistence**: `localStorage` and `HistoryStack` (Undo/Redo) fully integrated.
+
+---
+
+## ⏭️ Next Steps (Phase 7: Advanced UX)
+
+Now that core interaction is complete, we can focus on:
+1. **Intelligent Node Placement**: Auto-layout or smarter initial placement.
+2. **Minimap**: For large workflows.
+3. **Multi-Selection**: Drag selection box to move/delete multiple items.
+4. **Copy/Paste**: `Cmd+C`/`Cmd+V` support.

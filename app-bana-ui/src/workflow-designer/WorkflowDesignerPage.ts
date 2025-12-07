@@ -344,6 +344,10 @@ export class WorkflowDesignerPage extends LitElement {
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
+    // Ignore key events if user is typing in an input or textarea
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
     // Undo: Cmd+Z or Ctrl+Z
     if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
       e.preventDefault();
@@ -353,6 +357,15 @@ export class WorkflowDesignerPage extends LitElement {
     if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
       e.preventDefault();
       this.redo();
+    }
+    // Delete: Backspace or Delete
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault();
+      if (this.selectedNodeId) {
+        this.deleteNode(this.selectedNodeId);
+      } else if (this.selectedConnectionId) {
+        this.deleteConnection(this.selectedConnectionId);
+      }
     }
   };
 
@@ -372,6 +385,17 @@ export class WorkflowDesignerPage extends LitElement {
       this.workflowMetadata = next;
       this.saveToStorage();
     }
+  }
+
+  private deleteNode(nodeId: string) {
+    const newMetadata = {
+      ...this.workflowMetadata,
+      nodes: this.workflowMetadata.nodes.filter(n => n.id !== nodeId),
+      // Also remove any connections linked to this node
+      connections: this.workflowMetadata.connections.filter(c => c.from !== nodeId && c.to !== nodeId)
+    };
+    this.updateMetadata(newMetadata);
+    this.selectedNodeId = undefined;
   }
 
   render() {
@@ -488,6 +512,12 @@ export class WorkflowDesignerPage extends LitElement {
       <div class="divider"></div>
 
       ${this.renderTypeSpecificProperties(node)}
+
+      <div class="actions-footer">
+        <button class="btn btn-secondary btn-danger" @click=${() => this.deleteNode(node.id)}>
+          Delete Node
+        </button>
+      </div>
     `;
   }
 
@@ -700,7 +730,30 @@ export class WorkflowDesignerPage extends LitElement {
   }
 
   private async handlePublish() {
-    alert('Publish functionality coming in Phase 3...');
+    // 1. Validate
+    const validation = WorkflowValidator.validate(this.workflowMetadata);
+    this.validationResult = { errors: validation.errors, warnings: validation.warnings };
+
+    if (!validation.valid && validation.errors.length > 0) {
+      console.warn('Cannot publish invalid workflow', validation.errors);
+      return;
+    }
+
+    // 2. Export
+    console.log('Publishing workflow:', this.workflowMetadata);
+    const blob = new Blob([JSON.stringify(this.workflowMetadata, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    // Auto-download for now as proof
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${this.workflowMetadata.name.toLowerCase().replace(/\s+/g, '-')}-v${this.workflowMetadata.version}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    alert(`Workflow exported to JSON!\nCheck your downloads.`);
   }
 }
 
