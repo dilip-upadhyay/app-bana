@@ -22,22 +22,44 @@ export class BuilderShell extends LitElement {
   private startX = 0;
   private startWidth = 0;
 
+  @state() private hasActiveApp = false;
+  private unsubscribeAppStore?: () => void;
+
   connectedCallback(): void {
     super.connectedCallback();
     console.log('[BuilderShell] Initializing...');
 
-    // Check if there's a current app, if not, prompt user to create one
-    const currentApp = appStore.getCurrentApp();
-    if (currentApp) {
-      console.log('[BuilderShell] Current app loaded:', currentApp.name);
-    } else {
-      console.log('[BuilderShell] No app selected - user needs to create or select an app');
-    }
+    // Subscribe to store changes
+    this.unsubscribeAppStore = appStore.onChange(() => {
+      this.checkActiveApp();
+    });
+
+    // Initial check
+    this.checkActiveApp();
 
     // Load saved panel width from localStorage
     const savedWidth = localStorage.getItem('builder-left-panel-width');
     if (savedWidth) {
       this.leftPanelWidth = parseInt(savedWidth, 10);
+    }
+
+    this.requestUpdate();
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.unsubscribeAppStore) {
+      this.unsubscribeAppStore();
+    }
+  }
+
+  private checkActiveApp() {
+    const app = appStore.getCurrentApp();
+    this.hasActiveApp = !!app;
+
+    // If we're on workflow tab but lost the active app, switch to components
+    if (this.activeLeftTab === 'workflow' && !this.hasActiveApp) {
+      this.activeLeftTab = 'components';
     }
 
     this.requestUpdate();
@@ -101,6 +123,13 @@ export class BuilderShell extends LitElement {
       return html`<studio-entity-manager></studio-entity-manager>`;
     }
     if (this.activeLeftTab === 'workflow') {
+      if (!this.hasActiveApp) {
+        return html`
+          <div style="padding: 24px; text-align: center; color: #64748b;">
+            <p>Please select or create an app to design workflows.</p>
+          </div>
+        `;
+      }
       return html`<workflow-canvas .metadata=${{ nodes: [], connections: [] }}></workflow-canvas>`;
     }
     return html`<ai-chat-builder></ai-chat-builder>`;
@@ -113,6 +142,20 @@ export class BuilderShell extends LitElement {
     // Full-page mode for Workflow Designer
     if (this.activeLeftTab === 'workflow') {
       this.setAttribute('data-workflow-mode', 'true');
+
+      if (!this.hasActiveApp) {
+        return html`
+          <div class="app-manager-panel">
+            <studio-app-manager></studio-app-manager>
+          </div>
+          <div style="flex: 1; display: flex; align-items: center; justify-content: center; background: #f8fafc; color: #64748b; flex-direction: column; gap: 16px;">
+            <div style="font-size: 48px;">⚡</div>
+            <h2 style="margin: 0; font-weight: 600; color: #1e293b;">Workflow Designer</h2>
+            <p style="margin: 0;">Select an app from the header to start building workflows.</p>
+          </div>
+        `;
+      }
+
       return html`
         <div class="app-manager-panel">
           <studio-app-manager></studio-app-manager>
