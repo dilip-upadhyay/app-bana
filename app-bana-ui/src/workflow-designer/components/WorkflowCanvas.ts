@@ -9,7 +9,11 @@ import './WorkflowNode';
 
 @customElement('workflow-canvas')
 export class WorkflowCanvas extends LitElement {
-  @property({ type: Object }) metadata!: WorkflowMetadata;
+  @property({
+    type: Object,
+    hasChanged: () => true  // Force update even if object reference is same
+  })
+  metadata!: WorkflowMetadata;
   @property() selectedNodeId?: string;
 
   @state() private isDragging = false;
@@ -49,11 +53,14 @@ export class WorkflowCanvas extends LitElement {
     }
 
     .nodes-layer {
-      position: absolute;
-      width: 200%;
-      height: 200%;
-      left: -50%;
-      top: -50%;
+      position: relative;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    
+    .nodes-layer > * {
+      pointer-events: all;
     }
 
     .zoom-controls {

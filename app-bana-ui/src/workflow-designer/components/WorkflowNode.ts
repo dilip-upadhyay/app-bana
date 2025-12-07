@@ -8,10 +8,10 @@ import { getNodeIcon, getNodeColor } from '../models/NodeTypes';
 
 @customElement('workflow-node')
 export class WorkflowNode extends LitElement {
-    @property({ type: Object }) metadata!: NodeMetadata;
-    @property({ type: Boolean }) selected = false;
+  @property({ type: Object }) metadata!: NodeMetadata;
+  @property({ type: Boolean }) selected = false;
 
-    static styles = css`
+  static styles = css`
     :host {
       display: block;
       position: absolute;
@@ -116,18 +116,17 @@ export class WorkflowNode extends LitElement {
     }
   `;
 
-    render() {
-        const nodeColor = getNodeColor(this.metadata.type);
-        const style = `
-      left: ${this.metadata.position.x}px;
-      top: ${this.metadata.position.y}px;
-      --node-color: ${nodeColor};
-    `;
+  render() {
+    const nodeColor = getNodeColor(this.metadata.type);
 
-        return html`
+    // Apply position to :host element (which has position: absolute)
+    this.style.left = `${this.metadata.position.x}px`;
+    this.style.top = `${this.metadata.position.y}px`;
+    this.style.setProperty('--node-color', nodeColor);
+
+    return html`
       <div 
         class="node ${this.selected ? 'selected' : ''}"
-        style=${style}
         draggable="true"
         @dragstart=${this.handleDragStart}
       >
@@ -147,59 +146,59 @@ export class WorkflowNode extends LitElement {
         </div>
       </div>
     `;
-    }
+  }
 
-    private renderNodeBody() {
-        switch (this.metadata.type) {
-            case 'USER_TASK':
-                const assignee = this.metadata.properties.assignedUserId ||
-                    this.metadata.properties.assignedRole ||
-                    'Unassigned';
-                return html`
+  private renderNodeBody() {
+    switch (this.metadata.type) {
+      case 'USER_TASK':
+        const assignee = this.metadata.properties.assignedUserId ||
+          this.metadata.properties.assignedRole ||
+          'Unassigned';
+        return html`
           <div class="node-body">
             👤 ${assignee}
           </div>
         `;
 
-            case 'SERVICE_TASK':
-                const action = this.metadata.properties.serviceAction || 'No action';
-                return html`
+      case 'SERVICE_TASK':
+        const action = this.metadata.properties.serviceAction || 'No action';
+        return html`
           <div class="node-body">
             ${action}
           </div>
         `;
 
-            default:
-                return '';
-        }
+      default:
+        return '';
     }
+  }
 
-    private handleDragStart(e: DragEvent) {
-        e.stopPropagation();
-        e.dataTransfer!.effectAllowed = 'move';
-        e.dataTransfer!.setData('node-id', this.metadata.id);
+  private handleDragStart(e: DragEvent) {
+    e.stopPropagation();
+    e.dataTransfer!.effectAllowed = 'move';
+    e.dataTransfer!.setData('node-id', this.metadata.id);
 
-        this.dispatchEvent(new CustomEvent('node-drag-start', {
-            detail: { nodeId: this.metadata.id },
-            bubbles: true,
-            composed: true
-        }));
-    }
+    this.dispatchEvent(new CustomEvent('node-drag-start', {
+      detail: { nodeId: this.metadata.id },
+      bubbles: true,
+      composed: true
+    }));
+  }
 
-    private handleConnectionStart(e: MouseEvent) {
-        e.stopPropagation();
-        e.preventDefault();
+  private handleConnectionStart(e: MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
 
-        this.dispatchEvent(new CustomEvent('connection-start', {
-            detail: { nodeId: this.metadata.id, event: e },
-            bubbles: true,
-            composed: true
-        }));
-    }
+    this.dispatchEvent(new CustomEvent('connection-start', {
+      detail: { nodeId: this.metadata.id, event: e },
+      bubbles: true,
+      composed: true
+    }));
+  }
 }
 
 declare global {
-    interface HTMLElementTagNameMap {
-        'workflow-node': WorkflowNode;
-    }
+  interface HTMLElementTagNameMap {
+    'workflow-node': WorkflowNode;
+  }
 }
