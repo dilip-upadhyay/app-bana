@@ -136,6 +136,105 @@ export class WorkflowDesignerPage extends LitElement {
       padding: 32px 16px;
       color: #94a3b8;
       font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .empty-icon {
+      font-size: 24px;
+      color: #cbd5e1;
+    }
+
+    .properties-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .properties-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      background: #f1f5f9;
+      color: #64748b;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #1e293b;
+      background: white;
+      transition: all 0.2s;
+      box-sizing: border-box; /* Ensure padding doesn't affect width */
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-group input:disabled {
+      background: #f8fafc;
+      color: #94a3b8;
+    }
+
+    .divider {
+      height: 1px;
+      background: #f1f5f9;
+      margin: 20px 0;
+    }
+
+    .actions-footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid #f1f5f9;
+    }
+
+    .btn-danger {
+      width: 100%;
+      background: #fef2f2;
+      color: #ef4444;
+      border: 1px solid #fee2e2;
+    }
+
+    .btn-danger:hover {
+      background: #fee2e2;
+      border-color: #fecaca;
     }
   `;
 
@@ -187,14 +286,31 @@ export class WorkflowDesignerPage extends LitElement {
       const conn = this.workflowMetadata.connections.find(c => c.id === this.selectedConnectionId);
       if (conn) {
         return html`
-          <h3>Connection Properties</h3>
-          <p>ID: ${conn.id}</p>
-          <p>From: ${conn.from}</p>
-          <p>To: ${conn.to}</p>
-          <button class="btn btn-secondary" style="color: red; margin-top: 16px;" 
-            @click=${() => this.deleteConnection(conn.id)}>
-            Delete Connection
-          </button>
+          <div class="properties-header">
+            <h3>Connection</h3>
+            <span class="badge">Connection</span>
+          </div>
+          
+          <div class="form-group">
+            <label>ID</label>
+            <input type="text" value="${conn.id}" readonly disabled />
+          </div>
+
+          <div class="form-group">
+            <label>From Node</label>
+            <input type="text" value="${conn.from}" readonly disabled />
+          </div>
+
+          <div class="form-group">
+            <label>To Node</label>
+            <input type="text" value="${conn.to}" readonly disabled />
+          </div>
+
+          <div class="actions-footer">
+            <button class="btn btn-secondary btn-danger" @click=${() => this.deleteConnection(conn.id)}>
+              Delete Connection
+            </button>
+          </div>
         `;
       }
     }
@@ -202,7 +318,8 @@ export class WorkflowDesignerPage extends LitElement {
     if (!this.selectedNodeId) {
       return html`
         <div class="properties-empty">
-          Select a node or connection to edit its properties
+          <div class="empty-icon">⚙️</div>
+          <p>Select a node or connection to edit its properties</p>
         </div>
       `;
     }
@@ -211,10 +328,111 @@ export class WorkflowDesignerPage extends LitElement {
     if (!node) return '';
 
     return html`
-      <h3>${node.type} Properties</h3>
-      <p>Properties panel coming in next phase...</p>
-      <p>Node: ${node.label}</p>
+      <div class="properties-header">
+        <h3>${node.type}</h3>
+        <span class="badge">${node.type}</span>
+      </div>
+
+      <div class="form-group">
+        <label>Label</label>
+        <input 
+          type="text" 
+          .value=${node.label} 
+          @input=${(e: Event) => this.handlePropertyChange(node.id, 'label', (e.target as HTMLInputElement).value)}
+        />
+      </div>
+
+      <div class="form-group">
+        <label>ID</label>
+        <input type="text" value="${node.id}" readonly disabled />
+      </div>
+
+      <div class="divider"></div>
+
+      ${this.renderTypeSpecificProperties(node)}
     `;
+  }
+
+  private renderTypeSpecificProperties(node: NodeMetadata) {
+    switch (node.type) {
+      case 'USER_TASK':
+        return html`
+          <div class="form-group">
+            <label>Assigned User / Role</label>
+            <input 
+              type="text" 
+              placeholder="e.g. admin, manager"
+              .value=${node.properties.assignedUserId || node.properties.assignedRole || ''}
+              @input=${(e: Event) => this.handleNodePropertyChange(node.id, 'assignedRole', (e.target as HTMLInputElement).value)}
+            />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea 
+              rows="3"
+              .value=${node.properties.description || ''}
+              @input=${(e: Event) => this.handleNodePropertyChange(node.id, 'description', (e.target as HTMLTextAreaElement).value)}
+            ></textarea>
+          </div>
+        `;
+
+      case 'SERVICE_TASK':
+        return html`
+          <div class="form-group">
+            <label>Service Action</label>
+            <select 
+              .value=${node.properties.serviceAction || ''}
+              @change=${(e: Event) => this.handleNodePropertyChange(node.id, 'serviceAction', (e.target as HTMLSelectElement).value)}
+            >
+              <option value="">Select Action...</option>
+              <option value="send-email">Send Email</option>
+              <option value="update-database">Update Database</option>
+              <option value="call-api">Call External API</option>
+              <option value="generate-report">Generate Report</option>
+            </select>
+          </div>
+        `;
+
+      case 'DECISION':
+        return html`
+          <div class="form-group">
+            <label>Condition Expression (MVEL)</label>
+            <textarea 
+              rows="3"
+              placeholder="e.g. amount > 1000"
+              .value=${node.properties.condition || ''}
+              @input=${(e: Event) => this.handleNodePropertyChange(node.id, 'condition', (e.target as HTMLTextAreaElement).value)}
+            ></textarea>
+          </div>
+        `;
+
+      default:
+        return html``;
+    }
+  }
+
+  private handlePropertyChange(nodeId: string, field: keyof NodeMetadata, value: any) {
+    this.workflowMetadata = {
+      ...this.workflowMetadata,
+      nodes: this.workflowMetadata.nodes.map(n =>
+        n.id === nodeId ? { ...n, [field]: value } : n
+      )
+    };
+  }
+
+  private handleNodePropertyChange(nodeId: string, propertyName: string, value: any) {
+    const node = this.workflowMetadata.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    this.workflowMetadata = {
+      ...this.workflowMetadata,
+      nodes: this.workflowMetadata.nodes.map(n =>
+        n.id === nodeId ? {
+          ...n,
+          properties: { ...n.properties, [propertyName]: value }
+        } : n
+      )
+    };
   }
 
   private handleNodeAdd(e: CustomEvent) {
