@@ -4,6 +4,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { WorkflowMetadata, NodeMetadata, ConnectionMetadata } from './models/WorkflowMetadata';
+import { WorkflowValidator } from './utils/WorkflowValidator';
 import './components/NodePalette';
 import './components/WorkflowCanvas';
 
@@ -20,6 +21,7 @@ export class WorkflowDesignerPage extends LitElement {
 
   @state() private selectedNodeId?: string;
   @state() private selectedConnectionId?: string;
+  @state() private validationResult?: { errors: string[], warnings: string[] };
 
   static styles = css`
     :host {
@@ -197,7 +199,7 @@ export class WorkflowDesignerPage extends LitElement {
       color: #1e293b;
       background: white;
       transition: all 0.2s;
-      box-sizing: border-box; /* Ensure padding doesn't affect width */
+      box-sizing: border-box;
     }
 
     .form-group input:focus,
@@ -235,6 +237,65 @@ export class WorkflowDesignerPage extends LitElement {
     .btn-danger:hover {
       background: #fee2e2;
       border-color: #fecaca;
+    }
+
+    .validation-toast {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      padding: 16px;
+      width: 400px;
+      z-index: 100;
+      animation: slide-up 0.3s ease-out;
+    }
+
+    @keyframes slide-up {
+      from { transform: translate(-50%, 20px); opacity: 0; }
+      to { transform: translate(-50%, 0); opacity: 1; }
+    }
+
+    .validation-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .validation-close {
+      cursor: pointer;
+      color: #94a3b8;
+    }
+
+    .validation-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .validation-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 13px;
+      padding: 8px;
+      border-radius: 6px;
+    }
+
+    .validation-item.error {
+      background: #fef2f2;
+      color: #991b1b;
+    }
+
+    .validation-item.warning {
+      background: #fffbeb;
+      color: #92400e;
     }
   `;
 
@@ -277,6 +338,8 @@ export class WorkflowDesignerPage extends LitElement {
         <div class="properties">
           ${this.renderPropertiesPanel()}
         </div>
+
+        ${this.renderValidationToast()}
       </div>
     `;
   }
@@ -411,6 +474,46 @@ export class WorkflowDesignerPage extends LitElement {
     }
   }
 
+  private renderValidationToast() {
+    if (!this.validationResult) return '';
+
+    const { errors, warnings } = this.validationResult;
+
+    if (errors.length === 0 && warnings.length === 0) {
+      return html`
+        <div class="validation-toast">
+          <div class="validation-header">
+            <span style="color: #16a34a">✓ Workflow is valid</span>
+            <span class="validation-close" @click=${() => this.validationResult = undefined}>×</span>
+          </div>
+        </div>
+      `;
+    }
+
+    return html`
+      <div class="validation-toast">
+        <div class="validation-header">
+          <span>Validation Issues</span>
+          <span class="validation-close" @click=${() => this.validationResult = undefined}>×</span>
+        </div>
+        <div class="validation-list">
+          ${errors.map(err => html`
+            <div class="validation-item error">
+              <span>🚫</span>
+              <span>${err}</span>
+            </div>
+          `)}
+          ${warnings.map(warn => html`
+            <div class="validation-item warning">
+              <span>⚠️</span>
+              <span>${warn}</span>
+            </div>
+          `)}
+        </div>
+      </div>
+    `;
+  }
+
   private handlePropertyChange(nodeId: string, field: keyof NodeMetadata, value: any) {
     this.workflowMetadata = {
       ...this.workflowMetadata,
@@ -441,8 +544,6 @@ export class WorkflowDesignerPage extends LitElement {
       ...this.workflowMetadata,
       nodes: [...this.workflowMetadata.nodes, node]
     };
-
-    // Select the newly added node
     this.selectedNodeId = node.id;
     this.selectedConnectionId = undefined;
   }
@@ -464,19 +565,15 @@ export class WorkflowDesignerPage extends LitElement {
 
   private handleConnectionAdd(e: CustomEvent) {
     const { connection } = e.detail;
-
-    // Check if connection already exists
     const exists = this.workflowMetadata.connections.some(
       c => c.from === connection.from && c.to === connection.to
     );
-
     if (!exists) {
       this.workflowMetadata = {
         ...this.workflowMetadata,
         connections: [...this.workflowMetadata.connections, connection]
       };
     }
-
     this.selectedConnectionId = connection.id;
     this.selectedNodeId = undefined;
   }
@@ -499,7 +596,19 @@ export class WorkflowDesignerPage extends LitElement {
   }
 
   private handleValidate() {
-    alert('Validation coming in Phase 4...');
+    const result = WorkflowValidator.validate(this.workflowMetadata);
+    this.validationResult = {
+      errors: result.errors,
+      warnings: result.warnings
+    };
+
+    if (result.valid) {
+      setTimeout(() => {
+        if (this.validationResult && this.validationResult.errors.length === 0) {
+          this.validationResult = undefined;
+        }
+      }, 3000);
+    }
   }
 
   private async handleSave() {
