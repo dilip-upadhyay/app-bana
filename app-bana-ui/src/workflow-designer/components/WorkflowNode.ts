@@ -116,14 +116,19 @@ export class WorkflowNode extends LitElement {
     }
   `;
 
+  updated(changedProperties: Map<string, any>) {
+    super.updated(changedProperties);
+
+    // Only update position if metadata changed
+    if (changedProperties.has('metadata')) {
+      const nodeColor = getNodeColor(this.metadata.type);
+      this.style.left = `${this.metadata.position.x}px`;
+      this.style.top = `${this.metadata.position.y}px`;
+      this.style.setProperty('--node-color', nodeColor);
+    }
+  }
+
   render() {
-    const nodeColor = getNodeColor(this.metadata.type);
-
-    // Apply position to :host element (which has position: absolute)
-    this.style.left = `${this.metadata.position.x}px`;
-    this.style.top = `${this.metadata.position.y}px`;
-    this.style.setProperty('--node-color', nodeColor);
-
     return html`
       <div 
         class="node ${this.selected ? 'selected' : ''}"

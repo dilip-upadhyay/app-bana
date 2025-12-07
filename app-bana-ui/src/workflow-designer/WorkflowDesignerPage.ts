@@ -158,6 +158,7 @@ export class WorkflowDesignerPage extends LitElement {
           .metadata=${this.workflowMetadata}
           .selectedNodeId=${this.selectedNodeId}
           @node-add=${this.handleNodeAdd}
+          @node-move=${this.handleNodeMove}
           @node-select=${this.handleNodeSelect}
         ></workflow-canvas>
 
@@ -196,6 +197,16 @@ export class WorkflowDesignerPage extends LitElement {
 
     // Select the newly added node
     this.selectedNodeId = node.id;
+  }
+
+  private handleNodeMove(e: CustomEvent) {
+    const { nodeId, position } = e.detail;
+    this.workflowMetadata = {
+      ...this.workflowMetadata,
+      nodes: this.workflowMetadata.nodes.map((n: NodeMetadata) =>
+        n.id === nodeId ? { ...n, position } : n
+      )
+    };
   }
 
   private handleNodeSelect(e: CustomEvent) {

@@ -210,15 +210,27 @@ export class WorkflowCanvas extends LitElement {
     e.preventDefault();
     this.canvasEl?.classList.remove('drag-over');
 
+    const rect = this.canvasEl!.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Check if dragging an existing node (from canvas)
+    const nodeId = e.dataTransfer!.getData('node-id');
+    if (nodeId) {
+      // Moving existing node
+      this.dispatchEvent(new CustomEvent('node-move', {
+        detail: { nodeId, position: { x, y } },
+        bubbles: true,
+        composed: true
+      }));
+      return;
+    }
+
+    // Check if dragging a new node (from palette)
     const data = e.dataTransfer!.getData('application/json');
     if (!data) return;
 
     const template = JSON.parse(data);
-    const rect = this.canvasEl!.getBoundingClientRect();
-
-    // Calculate drop position relative to canvas
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
 
     // Create new node
     const newNode: NodeMetadata = {
