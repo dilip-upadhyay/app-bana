@@ -22,11 +22,13 @@ import java.util.function.BiConsumer;
  */
 public class WorkflowApi {
     private static final Logger LOG = LoggerFactory.getLogger(WorkflowApi.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
     private static WorkflowEngine engine;
     
-    static {
-        mapper.findAndRegisterModules(); // Support Java 8 date/time
+    private static ObjectMapper getMapper() {
+        ObjectMapper m = new ObjectMapper();
+        m.findAndRegisterModules();
+        LOG.debug("ObjectMapper created with {} modules", m.getRegisteredModuleIds().size());
+        return m;
     }
     
     public static void initialize() {
@@ -62,7 +64,7 @@ public class WorkflowApi {
                 String triggerEvent = (String) payload.get("triggerEvent");
                 String triggerCondition = (String) payload.get("triggerCondition");
                 String status = (String) payload.getOrDefault("status", "DRAFT");
-                String definitionJson = mapper.writeValueAsString(payload.get("definition"));
+                String definitionJson = getMapper().writeValueAsString(payload.get("definition"));
                 
                 if (id == null || id.isBlank()) {
                     id = UUID.randomUUID().toString();
@@ -210,12 +212,22 @@ public class WorkflowApi {
                             }
                         }
                         
-                        res.json(200, workflows);
+                        LOG.info("Found {} workflows, attempting to serialize", workflows.size());
+                        
+                        // Serialize manually with proper ObjectMapper
+                        try {
+                            String json = getMapper().writeValueAsString(workflows);
+                            LOG.info("Successfully serialized workflows");
+                            res.text(200, json, "application/json");
+                        } catch (Exception jsonEx) {
+                            LOG.error("Failed to serialize workflows", jsonEx);
+                            res.text(500, "{\"error\":\"" + jsonEx.getMessage() + "\"}", "application/json");
+                        }
                     }
                 }
             } catch (Exception e) {
                 LOG.error("Failed to list workflows", e);
-                res.json(500, Map.of("error", e.getMessage()));
+                res.text(500, "{\"error\":\"" + e.getMessage() + "\"}", "application/json");
             }
         };
     }
@@ -292,7 +304,9 @@ public class WorkflowApi {
                     String sql = """
                         SELECT * FROM v_my_active_tasks 
                         WHERE assigned_user_id = ? OR assigned_role IN (
-                            SELECT role_name FROM user_role WHERE user_id = ?
+                            SELECT r.name FROM user_role ur 
+                            JOIN role r ON ur.role_id = r.id 
+                            WHERE ur.user_id = ?
                         )
                         ORDER BY due_at ASC NULLS LAST, arrived_at ASC
                         """;
@@ -344,7 +358,7 @@ public class WorkflowApi {
                 Map<String, Object> payload = req.readJson(new TypeReference<>() {});
                 
                 String outcome = (String) payload.get("outcome");
-                String taskData = mapper.writeValueAsString(payload.get("taskData"));
+                String taskData = getMapper().writeValueAsString(payload.get("taskData"));
                 String userId = "system"; // TODO: Get from JWT
                 
                 getEngine().completeTask(tokenId, outcome, taskData, userId);
@@ -444,6 +458,8 @@ public class WorkflowApi {
                         
                         // Evaluate trigger condition
                         Map<String, Object> context = com.appbana.workflow.ExpressionEvaluator.createContext(entityType, entityData);
+                        LOG.info("Evaluating trigger for workflow: {} | condition: {} | context keys: {} | entity data: {}", 
+                            workflowId, condition, context.keySet(), entityData);
                         boolean shouldTrigger = com.appbana.workflow.ExpressionEvaluator.evaluateCondition(condition, context);
                         
                         if (shouldTrigger) {

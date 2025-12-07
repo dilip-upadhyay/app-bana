@@ -16,7 +16,7 @@ import java.util.*;
 import java.util.function.BiConsumer;
 
 public class Router {
-    private static final ObjectMapper M = new ObjectMapper();
+    private static final ObjectMapper M = new ObjectMapper().findAndRegisterModules();
 
     private static class Route {
         final String method;

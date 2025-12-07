@@ -1971,6 +1971,11 @@ public class ApiServer {
             for (int i = 1; i <= cols; i++) {
                 String name = md.getColumnLabel(i);
                 Object val = rs.getObject(i);
+                // Convert CLOB to String for JSON serialization
+                if (val instanceof java.sql.Clob) {
+                    java.sql.Clob clob = (java.sql.Clob) val;
+                    val = clob.getSubString(1, (int) clob.length());
+                }
                 row.put(name, val);
             }
             list.add(row);

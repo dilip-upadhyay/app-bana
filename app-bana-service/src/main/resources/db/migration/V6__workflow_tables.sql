@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS appbana_wf_definition (
     description TEXT,
     trigger_entity VARCHAR(100),          -- Entity name (e.g., "PaymentRequest", "LeaveRequest")
     trigger_event VARCHAR(50),            -- ON_CREATE | ON_UPDATE | ON_DELETE | MANUAL
-    trigger_condition TEXT,               -- MVEL expression (e.g., "${PaymentRequest.amount > 10000}")
+    trigger_condition TEXT,               -- MVEL expression (e.g., "$${PaymentRequest.amount > 10000}")
     version INTEGER NOT NULL DEFAULT 1,   -- Auto-incremented on publish
     status VARCHAR(20) NOT NULL,          -- DRAFT | ACTIVE | ARCHIVED
     definition_json TEXT NOT NULL,        -- Full workflow JSON (nodes, transitions, assignment rules)
@@ -32,7 +32,6 @@ CREATE TABLE IF NOT EXISTS appbana_wf_definition (
 -- Indexes for workflow definition queries
 CREATE INDEX IF NOT EXISTS idx_wf_def_app_status ON appbana_wf_definition(app_id, status);
 CREATE INDEX IF NOT EXISTS idx_wf_def_trigger ON appbana_wf_definition(trigger_entity, trigger_event);
-CREATE INDEX IF NOT EXISTS idx_wf_def_active ON appbana_wf_definition(app_id, status) WHERE status = 'ACTIVE';
 
 -- =====================================================
 -- Table 2: Workflow Instances (Runtime State)
@@ -99,11 +98,11 @@ CREATE TABLE IF NOT EXISTS appbana_wf_token (
 
 -- Indexes for token queries (critical for performance)
 CREATE INDEX IF NOT EXISTS idx_wf_token_instance ON appbana_wf_token(workflow_instance_id);
-CREATE INDEX IF NOT EXISTS idx_wf_token_user ON appbana_wf_token(assigned_user_id, status) WHERE status = 'ACTIVE';
-CREATE INDEX IF NOT EXISTS idx_wf_token_role ON appbana_wf_token(assigned_role, status) WHERE status = 'ACTIVE';
-CREATE INDEX IF NOT EXISTS idx_wf_token_queue ON appbana_wf_token(assigned_queue, status) WHERE status = 'ACTIVE';
-CREATE INDEX IF NOT EXISTS idx_wf_token_sla ON appbana_wf_token(due_at, sla_status) WHERE status = 'ACTIVE' AND due_at IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_wf_token_overdue ON appbana_wf_token(due_at) WHERE status = 'ACTIVE' AND sla_status = 'OVERDUE';
+CREATE INDEX IF NOT EXISTS idx_wf_token_user ON appbana_wf_token(assigned_user_id, status);
+CREATE INDEX IF NOT EXISTS idx_wf_token_role ON appbana_wf_token(assigned_role, status);
+CREATE INDEX IF NOT EXISTS idx_wf_token_queue ON appbana_wf_token(assigned_queue, status);
+CREATE INDEX IF NOT EXISTS idx_wf_token_sla ON appbana_wf_token(due_at, sla_status);
+CREATE INDEX IF NOT EXISTS idx_wf_token_overdue ON appbana_wf_token(due_at);
 
 -- =====================================================
 -- Seed Data: Sample Workflow for Testing
@@ -128,7 +127,7 @@ INSERT INTO appbana_wf_definition (
     'Simple maker-checker workflow for payment requests over $10,000',
     'PaymentRequest',
     'ON_CREATE',
-    '${PaymentRequest.amount > 10000}',
+    '$${PaymentRequest.amount > 10000}',
     1,
     'ACTIVE',
     '{
@@ -145,7 +144,7 @@ INSERT INTO appbana_wf_definition (
                 "type": "USER_TASK",
                 "label": "Review Payment Request",
                 "assignmentType": "DYNAMIC",
-                "assignmentExpression": "${PaymentRequest.createdBy.manager}",
+                "assignmentExpression": "$${PaymentRequest.createdBy.manager}",
                 "slaHours": 24,
                 "formFields": [
                     {"name": "comments", "type": "textarea", "required": false},
@@ -158,7 +157,7 @@ INSERT INTO appbana_wf_definition (
                 "label": "Update Status to Approved",
                 "serviceAction": "UPDATE_ENTITY",
                 "entityType": "PaymentRequest",
-                "updates": {"status": "APPROVED", "approvedAt": "${NOW}"}
+                "updates": {"status": "APPROVED", "approvedAt": "$${NOW}"}
             },
             "rejected": {
                 "id": "rejected",
@@ -166,7 +165,7 @@ INSERT INTO appbana_wf_definition (
                 "label": "Update Status to Rejected",
                 "serviceAction": "UPDATE_ENTITY",
                 "entityType": "PaymentRequest",
-                "updates": {"status": "REJECTED", "rejectedAt": "${NOW}"}
+                "updates": {"status": "REJECTED", "rejectedAt": "$${NOW}"}
             },
             "end": {
                 "id": "end",
@@ -176,9 +175,9 @@ INSERT INTO appbana_wf_definition (
         },
         "transitions": [
             {"from": "start", "to": "review", "condition": null},
-            {"from": "review", "to": "approved", "condition": "${outcome == ''APPROVE''}", "label": "Approve"},
-            {"from": "review", "to": "rejected", "condition": "${outcome == ''REJECT''}", "label": "Reject"},
-            {"from": "review", "to": "start", "condition": "${outcome == ''SEND_BACK''}", "label": "Send Back"},
+            {"from": "review", "to": "approved", "condition": "$${outcome == ''APPROVE''}", "label": "Approve"},
+            {"from": "review", "to": "rejected", "condition": "$${outcome == ''REJECT''}", "label": "Reject"},
+            {"from": "review", "to": "start", "condition": "$${outcome == ''SEND_BACK''}", "label": "Send Back"},
             {"from": "approved", "to": "end", "condition": null},
             {"from": "rejected", "to": "end", "condition": null}
         ]

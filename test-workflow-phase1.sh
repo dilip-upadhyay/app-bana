@@ -140,7 +140,7 @@ SCHEMA=$(cat <<EOF
 {
   "name": "PaymentRequest",
   "fields": [
-    {"name": "id", "type": "number", "required": true},
+    {"name": "id", "type": "integer", "primaryKey": true, "autoIncrement": true},
     {"name": "amount", "type": "number", "required": true},
     {"name": "description", "type": "text", "required": false},
     {"name": "status", "type": "text", "required": false}
