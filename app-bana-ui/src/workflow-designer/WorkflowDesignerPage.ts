@@ -23,9 +23,15 @@ export class WorkflowDesignerPage extends LitElement {
   static styles = css`
     :host {
       display: block;
-      height: 100vh;
+      height: 100%;
+      width: 100%;
       background: #f8fafc;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
     }
 
     .grid-container {
@@ -33,6 +39,8 @@ export class WorkflowDesignerPage extends LitElement {
       grid-template-columns: 250px 1fr 300px;
       grid-template-rows: 60px 1fr;
       height: 100%;
+      width: 100%;
+      gap: 0;
     }
 
     .toolbar {
