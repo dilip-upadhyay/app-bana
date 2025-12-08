@@ -351,7 +351,19 @@ export class WorkflowCanvas extends LitElement {
   private handleDragOver(e: DragEvent) {
     if (this.connectionDraft) return; // Don't handle dragover if drawing connection
     e.preventDefault();
-    e.dataTransfer!.dropEffect = 'move';
+
+    // Check if dragging an existing node or a new template
+    const types = e.dataTransfer!.types;
+    // Note: types is DOMStringList in some browsers, but Array.includes works in newer ones
+    // Safer to use Array.from or just check logic
+    if (types.includes && types.includes('node-id')) {
+      e.dataTransfer!.dropEffect = 'move';
+    } else if (types.indexOf && types.indexOf('node-id') !== -1) {
+      e.dataTransfer!.dropEffect = 'move';
+    } else {
+      e.dataTransfer!.dropEffect = 'copy';
+    }
+
     this.canvasEl?.classList.add('drag-over');
   }
 
