@@ -52,30 +52,48 @@ public class ApiServer {
         }
     }
 
-    public static Map<String,String> parseQuery(String query){
-        Map<String,String> map = new HashMap<>();
-        if(query==null||query.isEmpty()) return map;
-        for(String part: query.split("&")){
+    public static Map<String, String> parseQuery(String query) {
+        Map<String, String> map = new HashMap<>();
+        if (query == null || query.isEmpty())
+            return map;
+        for (String part : query.split("&")) {
             int i = part.indexOf('=');
-            if(i>0) map.put(part.substring(0,i), part.substring(i+1));
-            else map.put(part, "");
+            if (i > 0)
+                map.put(part.substring(0, i), part.substring(i + 1));
+            else
+                map.put(part, "");
         }
         return map;
     }
 
     public static Integer parseInteger(String s) {
-        if (s == null || s.isBlank()) return null;
-        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return null; }
+        if (s == null || s.isBlank())
+            return null;
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (Exception e) {
+            return null;
+        }
     }
+
     public static Long parseLong(String s) {
-        if (s == null || s.isBlank()) return null;
-        try { return Long.parseLong(s.trim()); } catch (Exception e) { return null; }
+        if (s == null || s.isBlank())
+            return null;
+        try {
+            return Long.parseLong(s.trim());
+        } catch (Exception e) {
+            return null;
+        }
     }
+
     public static Boolean parseBoolean(String s) {
-        if (s == null || s.isBlank()) return null;
+        if (s == null || s.isBlank())
+            return null;
         String v = s.trim().toLowerCase();
-        if ("true".equals(v) || "1".equals(v) || "yes".equals(v) || "y".equals(v)) return true;
-        if ("false".equals(v) || "0".equals(v) || "no".equals(v) || "n".equals(v)) return false;
+        if ("true".equals(v) || "1".equals(v) || "yes".equals(v) || "y".equals(v))
+            return true;
+        if ("false".equals(v) || "0".equals(v) || "no".equals(v) || "n".equals(v))
+            return false;
         return null;
     }
 
@@ -89,7 +107,7 @@ public class ApiServer {
     public static String buildJdbcUrl(Map<String, String> data) {
         String type = Optional.ofNullable(data.get("type")).orElse("").toLowerCase();
         String params = Optional.ofNullable(data.get("params")).orElse("").trim();
-        
+
         // Java 21 switch expression - no fall-through, no break, cleaner code
         String baseUrl = switch (type) {
             case "h2" -> {
@@ -98,12 +116,14 @@ public class ApiServer {
                     String name = Optional.ofNullable(data.get("h2MemName")).filter(s -> !s.isBlank()).orElse("test");
                     yield "jdbc:h2:mem:" + name + ";DB_CLOSE_DELAY=-1";
                 } else {
-                    String file = Optional.ofNullable(data.get("h2File")).filter(s -> !s.isBlank()).orElse("./data/appbana");
+                    String file = Optional.ofNullable(data.get("h2File")).filter(s -> !s.isBlank())
+                            .orElse("./data/appbana");
                     yield "jdbc:h2:" + file + ";AUTO_SERVER=TRUE";
                 }
             }
             case "sqlite" -> {
-                String file = Optional.ofNullable(data.get("sqliteFile")).filter(s -> !s.isBlank()).orElse("/path/to/file.db");
+                String file = Optional.ofNullable(data.get("sqliteFile")).filter(s -> !s.isBlank())
+                        .orElse("/path/to/file.db");
                 yield "jdbc:sqlite:" + file;
             }
             case "postgres" -> {
@@ -143,7 +163,7 @@ public class ApiServer {
             }
             default -> null; // Unknown database type
         };
-        
+
         // Append additional params (except for SQL Server which was handled above)
         if (baseUrl != null && !params.isEmpty() && !"mssql".equals(type)) {
             String separator = (type.equals("h2")) ? ";" : "?";
@@ -152,15 +172,16 @@ public class ApiServer {
             }
             return baseUrl + separator + params.replaceAll("[&?]+", (type.equals("h2")) ? ";" : "&");
         }
-        
+
         return baseUrl;
     }
 
     public static String sanitizeUrl(String url) {
-        if (url == null) return null;
+        if (url == null)
+            return null;
         String u = url;
         // Mask common password keys in query or ;key=value formats
-        String[] keys = {"password", "pwd", "pass"};
+        String[] keys = { "password", "pwd", "pass" };
         for (String k : keys) {
             // mask in ?k=...& or &k=...& patterns
             u = u.replaceAll("(?i)([?&]" + k + ")=([^&;]+)", "$1=***");
@@ -183,21 +204,27 @@ public class ApiServer {
     }
 
     public static boolean authEnabled(AppConfig cfg) {
-        return cfg.getAdminToken() != null && !cfg.getAdminToken().isBlank() || cfg.getReadToken() != null && !cfg.getReadToken().isBlank();
+        return cfg.getAdminToken() != null && !cfg.getAdminToken().isBlank()
+                || cfg.getReadToken() != null && !cfg.getReadToken().isBlank();
     }
+
     public static String extractToken(com.appbana.api.Router.HttpRequest req) {
         String tok = req.header("X-AppBana-Token");
         if (tok == null || tok.isBlank()) {
             String auth = req.header("Authorization");
-            if (auth != null && auth.toLowerCase(Locale.ROOT).startsWith("bearer ")) tok = auth.substring(7).trim();
+            if (auth != null && auth.toLowerCase(Locale.ROOT).startsWith("bearer "))
+                tok = auth.substring(7).trim();
         }
         return tok;
     }
-    
+
     /**
      * Extract user ID from request for FLS checks
      * 
-     * <p>For now, uses token as user ID. In Phase 2, will decode JWT to get actual user ID.</p>
+     * <p>
+     * For now, uses token as user ID. In Phase 2, will decode JWT to get actual
+     * user ID.
+     * </p>
      * 
      * @param req HTTP request
      * @param cfg App configuration
@@ -223,40 +250,42 @@ public class ApiServer {
         }
         return null;
     }
-    
+
     public static boolean hasAdmin(String token, AppConfig cfg) {
         String at = cfg.getAdminToken();
         return at != null && !at.isBlank() && at.equals(token);
     }
+
     public static boolean hasRead(String token, AppConfig cfg) {
-        if (hasAdmin(token, cfg)) return true;
+        if (hasAdmin(token, cfg))
+            return true;
         String rt = cfg.getReadToken();
         return rt != null && !rt.isBlank() && rt.equals(token);
     }
 
     public static void startJdk(int port) throws IOException {
         AppConfig cfg = ConfigManager.getConfig();
-        
+
         // Run Flyway migrations BEFORE initializing services
         try {
             LOG.info("Running Flyway database migrations...");
             Flyway flyway = Flyway.configure()
                     .dataSource(cfg.getJdbcUrl(), cfg.getUsername(), cfg.getPassword())
                     .locations("classpath:db/migration")
-                    .cleanDisabled(false)  // Allow clean for development
+                    .cleanDisabled(false) // Allow clean for development
                     .load();
-            
+
             // Clean and recreate schema (DEVELOPMENT ONLY)
             LOG.warn("Cleaning database - all data will be lost (development mode)");
             flyway.clean();
-            
+
             int migrationsApplied = flyway.migrate().migrationsExecuted;
             LOG.info("Flyway migrations complete: {} migrations applied", migrationsApplied);
         } catch (Exception e) {
             LOG.error("Flyway migration failed: {}", e.getMessage(), e);
             throw new RuntimeException("Database migration failed", e);
         }
-        
+
         // Initialize PermissionService with datasource
         try {
             javax.sql.DataSource dataSource = new com.zaxxer.hikari.HikariDataSource();
@@ -269,7 +298,7 @@ public class ApiServer {
             LOG.warn("Failed to initialize PermissionService: {}", e.getMessage());
             permissionService = null;
         }
-        
+
         // Always start the HTTP server (can redirect to HTTPS if configured)
         HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
         configureServer(httpServer);
@@ -287,8 +316,12 @@ public class ApiServer {
                 try {
                     char[] kp = keyPass != null ? keyPass.toCharArray() : ksPass.toCharArray();
                     char[] ksp = ksPass.toCharArray();
-                    KeyStore ks = KeyStore.getInstance(ksPath.toLowerCase().endsWith(".p12") || ksPath.toLowerCase().endsWith(".pkcs12") ? "PKCS12" : "JKS");
-                    try (FileInputStream fis = new FileInputStream(ksPath)) { ks.load(fis, ksp); }
+                    KeyStore ks = KeyStore.getInstance(
+                            ksPath.toLowerCase().endsWith(".p12") || ksPath.toLowerCase().endsWith(".pkcs12") ? "PKCS12"
+                                    : "JKS");
+                    try (FileInputStream fis = new FileInputStream(ksPath)) {
+                        ks.load(fis, ksp);
+                    }
                     KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                     kmf.init(ks, kp);
                     SSLContext sslContext = SSLContext.getInstance("TLS");
@@ -296,7 +329,8 @@ public class ApiServer {
 
                     HttpsServer httpsServer = HttpsServer.create(new InetSocketAddress(httpsPort), 0);
                     httpsServer.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
-                        @Override public void configure(HttpsParameters params) {
+                        @Override
+                        public void configure(HttpsParameters params) {
                             try {
                                 SSLContext c = getSSLContext();
                                 SSLEngine engine = c.createSSLEngine();
@@ -322,11 +356,13 @@ public class ApiServer {
                         httpServer.removeContext("/");
                         httpServer.createContext("/", ex -> {
                             try {
-                                String host = Optional.ofNullable(ex.getRequestHeaders().getFirst("Host")).orElse("localhost");
+                                String host = Optional.ofNullable(ex.getRequestHeaders().getFirst("Host"))
+                                        .orElse("localhost");
                                 // strip port from Host if present
                                 String hostOnly = host;
                                 int idx = host.indexOf(":");
-                                if (idx >= 0) hostOnly = host.substring(0, idx);
+                                if (idx >= 0)
+                                    hostOnly = host.substring(0, idx);
                                 URI uri = ex.getRequestURI();
                                 String loc = "https://" + hostOnly + ":" + httpsPort + uri.toString();
                                 Headers h = ex.getResponseHeaders();
@@ -352,10 +388,10 @@ public class ApiServer {
 
     public static com.appbana.api.Router buildRouter() {
         com.appbana.api.Router router = new com.appbana.api.Router();
-        
+
         // Initialize workflow engine
         com.appbana.workflow.api.WorkflowApi.initialize();
-        
+
         // Workflow endpoints
         router.post("/api/workflows", com.appbana.workflow.api.WorkflowApi.createOrUpdateWorkflow());
         router.get("/api/workflows", com.appbana.workflow.api.WorkflowApi.listWorkflows());
@@ -365,7 +401,7 @@ public class ApiServer {
         router.get("/api/my-tasks", com.appbana.workflow.api.WorkflowApi.getMyTasks());
         router.post("/api/my-tasks/{tokenId}/complete", com.appbana.workflow.api.WorkflowApi.completeTask());
         router.get("/api/workflow-instances", com.appbana.workflow.api.WorkflowApi.listInstances());
-        
+
         // Agent memory endpoints
         router.get("/api/agent/memory", com.appbana.api.AgentMemoryApi.memoryHandler());
         router.post("/api/agent/memory/clear", com.appbana.api.AgentMemoryApi.clearMemoryHandler());
@@ -384,7 +420,7 @@ public class ApiServer {
                 long elapsed = System.currentTimeMillis() - start;
                 AppConfig cfg = ConfigManager.getConfig();
                 String active = cfg.getActiveDatasource();
-                Map<String,Object> out = new LinkedHashMap<>();
+                Map<String, Object> out = new LinkedHashMap<>();
                 out.put("ok", true);
                 out.put("activeDatasource", active);
                 out.put("dbProduct", md.getDatabaseProductName());
@@ -393,7 +429,7 @@ public class ApiServer {
                 res.json(200, out);
             } catch (Exception ce) {
                 long elapsed = System.currentTimeMillis() - start;
-                Map<String,Object> out = errorDetails(ce);
+                Map<String, Object> out = errorDetails(ce);
                 out.put("elapsedMs", elapsed);
                 res.json(503, out);
             }
@@ -402,13 +438,16 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             try {
                 List<String> names = SchemaManager.listSchemaNames();
-                List<Map<String,Object>> out = new ArrayList<>();
+                List<Map<String, Object>> out = new ArrayList<>();
                 for (String n : names) {
-                    Map<String,Object> m = new HashMap<>();
+                    Map<String, Object> m = new HashMap<>();
                     m.put("entity", n);
                     List<String> eps = new ArrayList<>();
                     eps.add("POST /api/" + n);
@@ -429,14 +468,18 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             try {
                 List<String> names = SchemaManager.listSchemaNames();
                 List<com.appbana.model.EntitySchema> schemas = new ArrayList<>();
                 for (String n : names) {
                     com.appbana.model.EntitySchema s = SchemaManager.loadSchema(n);
-                    if (s != null) schemas.add(s);
+                    if (s != null)
+                        schemas.add(s);
                 }
                 String spec = com.appbana.OpenApiGenerator.generate(schemas);
                 res.text(200, spec, "application/json; charset=utf-8");
@@ -449,15 +492,27 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             String pageS = req.query("page");
             String sizeS = req.query("size");
             String q = req.query("q");
             if (pageS != null || sizeS != null || q != null) {
-                int page = 1; int size = 10;
-                try { if (pageS != null) page = Integer.parseInt(pageS); } catch (Exception ignored) {}
-                try { if (sizeS != null) size = Integer.parseInt(sizeS); } catch (Exception ignored) {}
+                int page = 1;
+                int size = 10;
+                try {
+                    if (pageS != null)
+                        page = Integer.parseInt(pageS);
+                } catch (Exception ignored) {
+                }
+                try {
+                    if (sizeS != null)
+                        size = Integer.parseInt(sizeS);
+                } catch (Exception ignored) {
+                }
                 List<String> names = SchemaManager.listSchemaNames(page, size, q);
                 res.json(200, names);
             } else {
@@ -469,28 +524,41 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             String name = req.pathParam("name");
             EntitySchema schema = SchemaManager.loadSchema(name);
-            if (schema == null) { res.json(404, Map.of("error","not found")); return; }
+            if (schema == null) {
+                res.json(404, Map.of("error", "not found"));
+                return;
+            }
             res.json(200, schema);
         });
         router.post("/schema", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             boolean preview = "true".equalsIgnoreCase(Optional.ofNullable(req.query("preview")).orElse("false"));
-            EntitySchema schema = req.readJson(new TypeReference<>(){});
-            if (schema.getName() == null || schema.getName().isEmpty()) { res.json(400, Map.of("error","missing schema name")); return; }
+            EntitySchema schema = req.readJson(new TypeReference<>() {
+            });
+            if (schema.getName() == null || schema.getName().isEmpty()) {
+                res.json(400, Map.of("error", "missing schema name"));
+                return;
+            }
             if (preview) {
                 List<String> plan = SchemaManager.generateMigrationPlan(schema);
                 res.json(200, plan);
             } else {
                 SchemaManager.saveSchema(schema);
-                res.json(201, Map.of("status","ok"));
+                res.json(201, Map.of("status", "ok"));
             }
         });
         // --- NEW: schema summaries (name + datasource) ---
@@ -498,7 +566,10 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             try {
                 res.json(200, SchemaManager.listSchemaSummaries());
@@ -511,11 +582,14 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             String name = req.pathParam("name");
             try {
-                List<Map<String,Object>> hist = SchemaManager.listMigrations(name);
+                List<Map<String, Object>> hist = SchemaManager.listMigrations(name);
                 res.json(200, hist);
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
@@ -526,34 +600,41 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             String name = req.pathParam("name");
             boolean drop = "true".equalsIgnoreCase(Optional.ofNullable(req.query("dropTable")).orElse("false"));
             try {
                 boolean ok = SchemaManager.deleteSchema(name, drop);
-                if (!ok) { res.json(404, Map.of("error","not found")); return; }
-                res.json(200, Map.of("status","deleted","dropTable", drop));
+                if (!ok) {
+                    res.json(404, Map.of("error", "not found"));
+                    return;
+                }
+                res.json(200, Map.of("status", "deleted", "dropTable", drop));
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
 
         // ==================== AI GENERATION ENDPOINT ====================
-        
+
         // ==================== AI ENDPOINTS ====================
-        
+
         // AI-powered app generation
         router.post("/api/ai/generate", (req, res) -> {
             try {
-                AiAppGeneratorService.GenerationRequest genReq = req.readJson(new TypeReference<>(){});
+                AiAppGeneratorService.GenerationRequest genReq = req.readJson(new TypeReference<>() {
+                });
                 // Allow action-only requests (e.g., { action: "listApps" })
-                if ((genReq.description == null || genReq.description.trim().isEmpty()) 
+                if ((genReq.description == null || genReq.description.trim().isEmpty())
                         && (genReq.action == null || genReq.action.trim().isEmpty())) {
                     res.json(400, Map.of("error", "description is required"));
                     return;
                 }
-                
+
                 AiAppGeneratorService.GenerationResult result = AiAppGeneratorService.generateApp(genReq);
                 res.json(200, result);
             } catch (Exception e) {
@@ -561,34 +642,35 @@ public class ApiServer {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
-        
+
         // Get AI configuration
         router.get("/api/ai/config", (req, res) -> {
             try {
                 AppConfig config = ConfigManager.getConfig();
                 Map<String, Object> aiConfig = Map.of(
-                    "provider", config.getAiProvider() != null ? config.getAiProvider() : "",
-                    "openaiModel", config.getOpenaiModel(),
-                    "anthropicModel", config.getAnthropicModel(),
-                    "ollamaUrl", config.getOllamaUrl(),
-                    "ollamaModel", config.getOllamaModel(),
-                    "isEnabled", AiProviderFactory.isAiEnabled(config),
-                    "hasOpenaiKey", config.getOpenaiApiKey() != null && !config.getOpenaiApiKey().isEmpty(),
-                    "hasAnthropicKey", config.getAnthropicApiKey() != null && !config.getAnthropicApiKey().isEmpty()
-                );
+                        "provider", config.getAiProvider() != null ? config.getAiProvider() : "",
+                        "openaiModel", config.getOpenaiModel(),
+                        "anthropicModel", config.getAnthropicModel(),
+                        "ollamaUrl", config.getOllamaUrl(),
+                        "ollamaModel", config.getOllamaModel(),
+                        "isEnabled", AiProviderFactory.isAiEnabled(config),
+                        "hasOpenaiKey", config.getOpenaiApiKey() != null && !config.getOpenaiApiKey().isEmpty(),
+                        "hasAnthropicKey",
+                        config.getAnthropicApiKey() != null && !config.getAnthropicApiKey().isEmpty());
                 res.json(200, aiConfig);
             } catch (Exception e) {
                 LOG.error("Failed to get AI config", e);
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
-        
+
         // Update AI configuration
         router.put("/api/ai/config", (req, res) -> {
             try {
-                Map<String, Object> updates = req.readJson(new TypeReference<>(){});
+                Map<String, Object> updates = req.readJson(new TypeReference<>() {
+                });
                 AppConfig config = ConfigManager.getConfig();
-                
+
                 if (updates.containsKey("provider")) {
                     config.setAiProvider((String) updates.get("provider"));
                 }
@@ -610,7 +692,7 @@ public class ApiServer {
                 if (updates.containsKey("ollamaModel")) {
                     config.setOllamaModel((String) updates.get("ollamaModel"));
                 }
-                
+
                 ConfigManager.saveConfig(config);
                 res.json(200, Map.of("success", true, "message", "AI configuration updated"));
             } catch (Exception e) {
@@ -618,56 +700,53 @@ public class ApiServer {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
-        
+
         // Test AI connection
         router.post("/api/ai/test", (req, res) -> {
             try {
                 AppConfig config = ConfigManager.getConfig();
-                
+
                 if (!AiProviderFactory.isAiEnabled(config)) {
                     res.json(400, Map.of("success", false, "message", "AI provider not configured"));
                     return;
                 }
-                
+
                 AiProvider provider = AiProviderFactory.createProvider(config);
                 boolean connected = provider.testConnection();
-                
+
                 res.json(200, Map.of(
-                    "success", connected,
-                    "provider", provider.getProviderName(),
-                    "message", connected ? "Connection successful" : "Connection failed"
-                ));
+                        "success", connected,
+                        "provider", provider.getProviderName(),
+                        "message", connected ? "Connection successful" : "Connection failed"));
             } catch (Exception e) {
                 LOG.error("AI connection test failed", e);
                 res.json(500, Map.of("success", false, "message", e.getMessage()));
             }
         });
-        
+
         // List available AI providers
         router.get("/api/ai/providers", (req, res) -> {
             List<Map<String, Object>> providers = List.of(
-                Map.of(
-                    "id", "openai",
-                    "name", "OpenAI",
-                    "description", "GPT-4 and other OpenAI models (requires API key)",
-                    "models", List.of("gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo")
-                ),
-                Map.of(
-                    "id", "anthropic",
-                    "name", "Anthropic",
-                    "description", "Claude 3.5 Sonnet and other Anthropic models (requires API key)",
-                    "models", List.of("claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307")
-                ),
-                Map.of(
-                    "id", "ollama",
-                    "name", "Ollama",
-                    "description", "Local AI models (requires Ollama installation)",
-                    "models", List.of("llama3.1", "llama3.2", "mistral", "codellama", "phi3")
-                )
-            );
+                    Map.of(
+                            "id", "openai",
+                            "name", "OpenAI",
+                            "description", "GPT-4 and other OpenAI models (requires API key)",
+                            "models", List.of("gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo")),
+                    Map.of(
+                            "id", "anthropic",
+                            "name", "Anthropic",
+                            "description", "Claude 3.5 Sonnet and other Anthropic models (requires API key)",
+                            "models",
+                            List.of("claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229",
+                                    "claude-3-haiku-20240307")),
+                    Map.of(
+                            "id", "ollama",
+                            "name", "Ollama",
+                            "description", "Local AI models (requires Ollama installation)",
+                            "models", List.of("llama3.1", "llama3.2", "mistral", "codellama", "phi3")));
             res.json(200, providers);
         });
-        
+
         // Intent Cache Stats
         router.get("/api/ai/cache/stats", (req, res) -> {
             try {
@@ -678,7 +757,7 @@ public class ApiServer {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
-        
+
         // Clear Intent Cache
         router.post("/api/ai/cache/clear", (req, res) -> {
             try {
@@ -689,7 +768,7 @@ public class ApiServer {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
-        
+
         // Remove Cache Entry
         router.delete("/api/ai/cache/entry", (req, res) -> {
             try {
@@ -705,7 +784,7 @@ public class ApiServer {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
-        
+
         // SmallTalk Cache Stats
         router.get("/api/ai/smalltalk-cache/stats", (req, res) -> {
             try {
@@ -716,7 +795,7 @@ public class ApiServer {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
-        
+
         // Clear SmallTalk Cache
         router.post("/api/ai/smalltalk-cache/clear", (req, res) -> {
             try {
@@ -727,7 +806,7 @@ public class ApiServer {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
-        
+
         // Remove SmallTalk Cache Entry
         router.delete("/api/ai/smalltalk-cache/entry", (req, res) -> {
             try {
@@ -745,7 +824,7 @@ public class ApiServer {
         });
 
         // ==================== APP ENDPOINTS ====================
-        
+
         // List all apps
         router.get("/apps", (req, res) -> {
             try {
@@ -789,7 +868,8 @@ public class ApiServer {
         // Create new app
         router.post("/apps", (req, res) -> {
             try {
-                AppMetadata app = req.readJson(new TypeReference<AppMetadata>(){});
+                AppMetadata app = req.readJson(new TypeReference<AppMetadata>() {
+                });
                 if (app.getName() == null || app.getName().isEmpty()) {
                     res.json(400, Map.of("error", "App name is required"));
                     return;
@@ -811,7 +891,8 @@ public class ApiServer {
         router.put("/apps/{id}", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                AppMetadata updates = req.readJson(new TypeReference<AppMetadata>(){});
+                AppMetadata updates = req.readJson(new TypeReference<AppMetadata>() {
+                });
                 AppMetadata updated = AppManager.updateApp(appId, updates);
                 res.json(200, updated);
             } catch (IllegalArgumentException e) {
@@ -831,6 +912,35 @@ public class ApiServer {
                     return;
                 }
                 res.json(200, Map.of("status", "deleted", "id", appId));
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Get app workflow
+        router.get("/apps/{id}/workflow", (req, res) -> {
+            String appId = req.pathParam("id");
+            try {
+                Map<String, Object> workflow = AppManager.getWorkflow(appId);
+                if (workflow == null) {
+                    // Return empty object if no workflow exists yet
+                    res.json(200, Map.of());
+                    return;
+                }
+                res.json(200, workflow);
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Save app workflow
+        router.put("/apps/{id}/workflow", (req, res) -> {
+            String appId = req.pathParam("id");
+            try {
+                Map<String, Object> workflow = req.readJson(new TypeReference<Map<String, Object>>() {
+                });
+                AppManager.saveWorkflow(appId, workflow);
+                res.json(200, Map.of("status", "ok"));
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
             }
@@ -858,7 +968,8 @@ public class ApiServer {
             String pageId = req.pathParam("pageId");
             try {
                 @SuppressWarnings("unchecked")
-                Map<String, Object> page = req.readJson(new TypeReference<Map<String, Object>>(){});
+                Map<String, Object> page = req.readJson(new TypeReference<Map<String, Object>>() {
+                });
                 AppManager.savePage(appId, pageId, page);
                 res.json(200, Map.of("status", "saved", "appId", appId, "pageId", pageId));
             } catch (Exception e) {
@@ -886,7 +997,10 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             AppConfig cfgNow = ConfigManager.getConfig();
             String active = cfgNow.getActiveDatasource();
@@ -921,7 +1035,10 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             AppConfig cfgNow = ConfigManager.getConfig();
             String active = cfgNow.getActiveDatasource();
@@ -955,11 +1072,18 @@ public class ApiServer {
             AppConfig cfgAuth = ConfigManager.getConfig();
             if (authEnabled(cfgAuth)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfgAuth)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfgAuth)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
-            Map<String, String> data = req.readJson(new TypeReference<>() {});
+            Map<String, String> data = req.readJson(new TypeReference<>() {
+            });
             String name = data.get("name");
-            if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
+            if (name == null || name.isBlank()) {
+                res.json(400, Map.of("error", "name required"));
+                return;
+            }
             String url = data.get("url");
             String user = data.get("username");
             String pw = data.get("password");
@@ -967,7 +1091,8 @@ public class ApiServer {
             String type = data.get("type");
             if (url == null || url.isBlank()) {
                 String built = buildJdbcUrl(data);
-                if (built != null && !built.isBlank()) url = built;
+                if (built != null && !built.isBlank())
+                    url = built;
             }
             Integer maxPoolSize = parseInteger(data.get("maxPoolSize"));
             Integer minIdle = parseInteger(data.get("minIdle"));
@@ -981,19 +1106,32 @@ public class ApiServer {
             boolean found = false;
             for (DatasourceConfig ds : cfgNow.getDatasources()) {
                 if (name.equals(ds.getName())) {
-                    if (url != null) ds.setJdbcUrl(url);
-                    if (user != null) ds.setUsername(user);
-                    if (drv != null) ds.setDriver(drv);
-                    if (type != null) ds.setType(type);
-                    if (pw != null && !pw.isBlank()) ds.setPassword(pw);
-                    if (maxPoolSize != null) ds.setMaxPoolSize(maxPoolSize);
-                    if (minIdle != null) ds.setMinIdle(minIdle);
-                    if (connectionTimeoutMs != null) ds.setConnectionTimeoutMs(connectionTimeoutMs);
-                    if (idleTimeoutMs != null) ds.setIdleTimeoutMs(idleTimeoutMs);
-                    if (maxLifetimeMs != null) ds.setMaxLifetimeMs(maxLifetimeMs);
-                    if (autoCommit != null) ds.setAutoCommit(autoCommit);
-                    if (poolName != null) ds.setPoolName(poolName);
-                    found = true; break;
+                    if (url != null)
+                        ds.setJdbcUrl(url);
+                    if (user != null)
+                        ds.setUsername(user);
+                    if (drv != null)
+                        ds.setDriver(drv);
+                    if (type != null)
+                        ds.setType(type);
+                    if (pw != null && !pw.isBlank())
+                        ds.setPassword(pw);
+                    if (maxPoolSize != null)
+                        ds.setMaxPoolSize(maxPoolSize);
+                    if (minIdle != null)
+                        ds.setMinIdle(minIdle);
+                    if (connectionTimeoutMs != null)
+                        ds.setConnectionTimeoutMs(connectionTimeoutMs);
+                    if (idleTimeoutMs != null)
+                        ds.setIdleTimeoutMs(idleTimeoutMs);
+                    if (maxLifetimeMs != null)
+                        ds.setMaxLifetimeMs(maxLifetimeMs);
+                    if (autoCommit != null)
+                        ds.setAutoCommit(autoCommit);
+                    if (poolName != null)
+                        ds.setPoolName(poolName);
+                    found = true;
+                    break;
                 }
             }
             if (!found) {
@@ -1001,7 +1139,8 @@ public class ApiServer {
                 ds.setName(name);
                 ds.setJdbcUrl(url);
                 ds.setUsername(user);
-                if (pw != null && !pw.isBlank()) ds.setPassword(pw);
+                if (pw != null && !pw.isBlank())
+                    ds.setPassword(pw);
                 ds.setDriver(drv);
                 ds.setType(type);
                 ds.setMaxPoolSize(maxPoolSize);
@@ -1027,9 +1166,13 @@ public class ApiServer {
             AppConfig cfgAuth = ConfigManager.getConfig();
             if (authEnabled(cfgAuth)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfgAuth)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfgAuth)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
-            Map<String, String> data = req.readJson(new TypeReference<>() {});
+            Map<String, String> data = req.readJson(new TypeReference<>() {
+            });
             String name = data.get("name");
             String url = data.get("url");
             String user = data.get("username");
@@ -1037,11 +1180,14 @@ public class ApiServer {
             String drv = data.get("driver");
             String type = data.get("type");
             Integer timeoutSec = parseInteger(data.get("timeoutSec"));
-            if (timeoutSec == null || timeoutSec <= 0) timeoutSec = 5;
-            if (timeoutSec > 60) timeoutSec = 60; // cap
+            if (timeoutSec == null || timeoutSec <= 0)
+                timeoutSec = 5;
+            if (timeoutSec > 60)
+                timeoutSec = 60; // cap
             if (url == null || url.isBlank()) {
                 String built = buildJdbcUrl(data);
-                if (built != null && !built.isBlank()) url = built;
+                if (built != null && !built.isBlank())
+                    url = built;
             }
             DatasourceConfig toPersist = null;
             if ((url == null || url.isBlank()) && name != null && !name.isBlank()) {
@@ -1049,27 +1195,43 @@ public class ApiServer {
                 for (DatasourceConfig ds : cfgNow.getDatasources()) {
                     if (name.equals(ds.getName())) {
                         url = ds.getJdbcUrl();
-                        if (user == null) user = ds.getUsername();
-                        if (pw == null || pw.isBlank()) pw = ds.getPassword();
-                        if (drv == null) drv = ds.getDriver();
-                        if (type == null) type = ds.getType();
+                        if (user == null)
+                            user = ds.getUsername();
+                        if (pw == null || pw.isBlank())
+                            pw = ds.getPassword();
+                        if (drv == null)
+                            drv = ds.getDriver();
+                        if (type == null)
+                            type = ds.getType();
                         toPersist = ds;
                         break;
                     }
                 }
             }
-            if (url == null || url.isBlank()) { res.json(200, Map.of("ok", false, "error", "jdbc url is required or constructible from fields")); return; }
+            if (url == null || url.isBlank()) {
+                res.json(200, Map.of("ok", false, "error", "jdbc url is required or constructible from fields"));
+                return;
+            }
             String driver = DriverUtil.inferDriver(type, url, drv);
-            try { if (driver != null) Class.forName(driver); } catch (Throwable t) { res.json(200, Map.of("ok", false, "error", "driver not found: "+driver)); return; }
+            try {
+                if (driver != null)
+                    Class.forName(driver);
+            } catch (Throwable t) {
+                res.json(200, Map.of("ok", false, "error", "driver not found: " + driver));
+                return;
+            }
             long start = System.currentTimeMillis();
             java.sql.DriverManager.setLoginTimeout(timeoutSec);
             Properties props = new Properties();
-            if (user != null) props.setProperty("user", user);
-            if (pw != null && !pw.isEmpty()) props.setProperty("password", pw);
-            try (Connection c = (props.isEmpty()? java.sql.DriverManager.getConnection(url) : java.sql.DriverManager.getConnection(url, props))) {
+            if (user != null)
+                props.setProperty("user", user);
+            if (pw != null && !pw.isEmpty())
+                props.setProperty("password", pw);
+            try (Connection c = (props.isEmpty() ? java.sql.DriverManager.getConnection(url)
+                    : java.sql.DriverManager.getConnection(url, props))) {
                 DatabaseMetaData md = c.getMetaData();
                 long elapsed = System.currentTimeMillis() - start;
-                Map<String,Object> out = new LinkedHashMap<>();
+                Map<String, Object> out = new LinkedHashMap<>();
                 out.put("ok", true);
                 out.put("message", "Connected");
                 out.put("url", sanitizeUrl(url));
@@ -1112,14 +1274,24 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
-            Map<String, String> data = req.readJson(new TypeReference<>() {});
+            Map<String, String> data = req.readJson(new TypeReference<>() {
+            });
             String name = data.get("name");
-            if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
+            if (name == null || name.isBlank()) {
+                res.json(400, Map.of("error", "name required"));
+                return;
+            }
             AppConfig cfgNow = ConfigManager.getConfig();
             boolean exists = cfgNow.getDatasources().stream().anyMatch(d -> name.equals(d.getName()));
-            if (!exists) { res.json(404, Map.of("error","not found")); return; }
+            if (!exists) {
+                res.json(404, Map.of("error", "not found"));
+                return;
+            }
             cfgNow.setActiveDatasource(name);
             try {
                 ConfigManager.saveConfig(cfgNow);
@@ -1134,16 +1306,25 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
-            Map<String, String> data = req.readJson(new TypeReference<>() {});
+            Map<String, String> data = req.readJson(new TypeReference<>() {
+            });
             String name = data.get("name");
-            if (name == null || name.isBlank()) { res.json(400, Map.of("error","name required")); return; }
+            if (name == null || name.isBlank()) {
+                res.json(400, Map.of("error", "name required"));
+                return;
+            }
             AppConfig cfgNow = ConfigManager.getConfig();
             cfgNow.getDatasources().removeIf(d -> name.equals(d.getName()));
             if (name.equals(cfgNow.getActiveDatasource())) {
-                if (!cfgNow.getDatasources().isEmpty()) cfgNow.setActiveDatasource(cfgNow.getDatasources().getFirst().getName());
-                else cfgNow.setActiveDatasource(null);
+                if (!cfgNow.getDatasources().isEmpty())
+                    cfgNow.setActiveDatasource(cfgNow.getDatasources().getFirst().getName());
+                else
+                    cfgNow.setActiveDatasource(null);
             }
             try {
                 ConfigManager.saveConfig(cfgNow);
@@ -1158,25 +1339,40 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             String name = req.query("name");
             Integer timeoutSec = parseInteger(req.query("timeoutSec"));
-            if (timeoutSec == null || timeoutSec <= 0) timeoutSec = 3;
-            if (timeoutSec > 60) timeoutSec = 60;
+            if (timeoutSec == null || timeoutSec <= 0)
+                timeoutSec = 3;
+            if (timeoutSec > 60)
+                timeoutSec = 60;
             AppConfig cfgNow = ConfigManager.getConfig();
             DatasourceConfig target = null;
             if (name != null && !name.isBlank()) {
                 for (DatasourceConfig d : cfgNow.getDatasources()) {
-                    if (name.equals(d.getName())) { target = d; break; }
+                    if (name.equals(d.getName())) {
+                        target = d;
+                        break;
+                    }
                 }
-                if (target == null) { res.json(404, Map.of("ok", false, "error", "datasource not found")); return; }
+                if (target == null) {
+                    res.json(404, Map.of("ok", false, "error", "datasource not found"));
+                    return;
+                }
             } else {
                 String active = cfgNow.getActiveDatasource();
                 for (DatasourceConfig d : cfgNow.getDatasources()) {
-                    if (active != null && active.equals(d.getName())) { target = d; break; }
+                    if (active != null && active.equals(d.getName())) {
+                        target = d;
+                        break;
+                    }
                 }
-                if (target == null && !cfgNow.getDatasources().isEmpty()) target = cfgNow.getDatasources().getFirst();
+                if (target == null && !cfgNow.getDatasources().isEmpty())
+                    target = cfgNow.getDatasources().getFirst();
             }
             String url = target.getJdbcUrl();
             String user = target.getUsername();
@@ -1184,16 +1380,25 @@ public class ApiServer {
             String driver = target.getDriver();
             String type = target.getType();
             driver = DriverUtil.inferDriver(type, url, driver);
-            try { if (driver != null) Class.forName(driver); } catch (Throwable t) { res.json(200, Map.of("ok", false, "error", "driver not found: "+driver)); return; }
+            try {
+                if (driver != null)
+                    Class.forName(driver);
+            } catch (Throwable t) {
+                res.json(200, Map.of("ok", false, "error", "driver not found: " + driver));
+                return;
+            }
             long start = System.currentTimeMillis();
             java.sql.DriverManager.setLoginTimeout(timeoutSec);
             Properties props = new Properties();
-            if (user != null) props.setProperty("user", user);
-            if (pw != null && !pw.isEmpty()) props.setProperty("password", pw);
-            try (Connection c = (props.isEmpty()? java.sql.DriverManager.getConnection(url) : java.sql.DriverManager.getConnection(url, props))) {
+            if (user != null)
+                props.setProperty("user", user);
+            if (pw != null && !pw.isEmpty())
+                props.setProperty("password", pw);
+            try (Connection c = (props.isEmpty() ? java.sql.DriverManager.getConnection(url)
+                    : java.sql.DriverManager.getConnection(url, props))) {
                 DatabaseMetaData md = c.getMetaData();
                 long elapsed = System.currentTimeMillis() - start;
-                Map<String,Object> out = new LinkedHashMap<>();
+                Map<String, Object> out = new LinkedHashMap<>();
                 out.put("ok", true);
                 out.put("name", target.getName());
                 out.put("url", sanitizeUrl(url));
@@ -1215,16 +1420,35 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             String entity = req.query("entity");
             String pk = req.query("pk");
-            int limit = 50; int offset = 0;
-            try { String ls = req.query("limit"); if (ls!=null) limit = Integer.parseInt(ls); } catch (Exception ignored) {}
-            try { String os = req.query("offset"); if (os!=null) offset = Integer.parseInt(os); } catch (Exception ignored) {}
-            if (limit <=0) limit = 50; if (limit>500) limit = 500; if (offset<0) offset=0;
+            int limit = 50;
+            int offset = 0;
             try {
-                Map<String,Object> out = AuditLogService.query(entity, pk, limit, offset);
+                String ls = req.query("limit");
+                if (ls != null)
+                    limit = Integer.parseInt(ls);
+            } catch (Exception ignored) {
+            }
+            try {
+                String os = req.query("offset");
+                if (os != null)
+                    offset = Integer.parseInt(os);
+            } catch (Exception ignored) {
+            }
+            if (limit <= 0)
+                limit = 50;
+            if (limit > 500)
+                limit = 500;
+            if (offset < 0)
+                offset = 0;
+            try {
+                Map<String, Object> out = AuditLogService.query(entity, pk, limit, offset);
                 res.json(200, out);
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
@@ -1236,16 +1460,19 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
-            
+
             String roleId = req.query("roleId");
             String entityName = req.query("entityName");
-            
+
             try (Connection conn = JdbcManager.getConnection()) {
                 StringBuilder sql = new StringBuilder("SELECT * FROM field_permission WHERE 1=1");
                 List<Object> params = new ArrayList<>();
-                
+
                 if (roleId != null && !roleId.isBlank()) {
                     sql.append(" AND role_id = ?");
                     params.add(roleId);
@@ -1254,18 +1481,18 @@ public class ApiServer {
                     sql.append(" AND entity_name = ?");
                     params.add(entityName);
                 }
-                
+
                 sql.append(" ORDER BY entity_name, field_name");
-                
+
                 try (PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
                     for (int i = 0; i < params.size(); i++) {
                         stmt.setObject(i + 1, params.get(i));
                     }
-                    
+
                     try (ResultSet rs = stmt.executeQuery()) {
-                        List<Map<String,Object>> permissions = new ArrayList<>();
+                        List<Map<String, Object>> permissions = new ArrayList<>();
                         while (rs.next()) {
-                            Map<String,Object> perm = new LinkedHashMap<>();
+                            Map<String, Object> perm = new LinkedHashMap<>();
                             perm.put("id", rs.getString("id"));
                             perm.put("roleId", rs.getString("role_id"));
                             perm.put("entityName", rs.getString("entity_name"));
@@ -1284,12 +1511,12 @@ public class ApiServer {
                 res.json(500, errorDetails(e));
             }
         });
-        
+
         // Get readable fields for current user on an entity
         router.get("/api/field-permissions/readable", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             String userId = null;
-            
+
             if (authEnabled(cfg)) {
                 userId = extractUserId(req, cfg);
                 if (userId == null) {
@@ -1298,40 +1525,40 @@ public class ApiServer {
                 }
             } else {
                 // If auth disabled, return wildcard access
-                res.json(200, Map.of("fields", List.of("*"), "message", "Authentication disabled - all fields readable"));
+                res.json(200,
+                        Map.of("fields", List.of("*"), "message", "Authentication disabled - all fields readable"));
                 return;
             }
-            
+
             String entityName = req.query("entity");
             if (entityName == null || entityName.isBlank()) {
                 res.json(400, Map.of("error", "entity parameter required"));
                 return;
             }
-            
+
             if (permissionService == null) {
                 res.json(503, Map.of("error", "Permission service not available"));
                 return;
             }
-            
+
             try {
                 List<String> readableFields = permissionService.getReadableFields(userId, entityName);
                 res.json(200, Map.of(
-                    "entity", entityName,
-                    "userId", userId,
-                    "fields", readableFields,
-                    "count", readableFields.size()
-                ));
+                        "entity", entityName,
+                        "userId", userId,
+                        "fields", readableFields,
+                        "count", readableFields.size()));
             } catch (Exception e) {
                 LOG.error("Failed to get readable fields for user {} entity {}", userId, entityName, e);
                 res.json(500, errorDetails(e));
             }
         });
-        
+
         // Get editable fields for current user on an entity
         router.get("/api/field-permissions/editable", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             String userId = null;
-            
+
             if (authEnabled(cfg)) {
                 userId = extractUserId(req, cfg);
                 if (userId == null) {
@@ -1340,52 +1567,55 @@ public class ApiServer {
                 }
             } else {
                 // If auth disabled, return wildcard access
-                res.json(200, Map.of("fields", List.of("*"), "message", "Authentication disabled - all fields editable"));
+                res.json(200,
+                        Map.of("fields", List.of("*"), "message", "Authentication disabled - all fields editable"));
                 return;
             }
-            
+
             String entityName = req.query("entity");
             if (entityName == null || entityName.isBlank()) {
                 res.json(400, Map.of("error", "entity parameter required"));
                 return;
             }
-            
+
             if (permissionService == null) {
                 res.json(503, Map.of("error", "Permission service not available"));
                 return;
             }
-            
+
             try {
                 List<String> editableFields = permissionService.getEditableFields(userId, entityName);
                 res.json(200, Map.of(
-                    "entity", entityName,
-                    "userId", userId,
-                    "fields", editableFields,
-                    "count", editableFields.size()
-                ));
+                        "entity", entityName,
+                        "userId", userId,
+                        "fields", editableFields,
+                        "count", editableFields.size()));
             } catch (Exception e) {
                 LOG.error("Failed to get editable fields for user {} entity {}", userId, entityName, e);
                 res.json(500, errorDetails(e));
             }
         });
-        
+
         router.get("/api/field-permissions/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
-            
+
             String id = req.pathParam("id");
-            
+
             try (Connection conn = JdbcManager.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement("SELECT * FROM field_permission WHERE id = ?")) {
-                
+                    PreparedStatement stmt = conn.prepareStatement("SELECT * FROM field_permission WHERE id = ?")) {
+
                 stmt.setString(1, id);
-                
+
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
-                        Map<String,Object> perm = new LinkedHashMap<>();
+                        Map<String, Object> perm = new LinkedHashMap<>();
                         perm.put("id", rs.getString("id"));
                         perm.put("roleId", rs.getString("role_id"));
                         perm.put("entityName", rs.getString("entity_name"));
@@ -1404,32 +1634,37 @@ public class ApiServer {
                 res.json(500, errorDetails(e));
             }
         });
-        
+
         router.post("/api/field-permissions", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
-            
-            Map<String, Object> data = req.readJson(new TypeReference<>() {});
-            
+
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+
             String roleId = (String) data.get("roleId");
             String entityName = (String) data.get("entityName");
             String fieldName = (String) data.get("fieldName");
             Boolean canRead = (Boolean) data.getOrDefault("canRead", false);
             Boolean canEdit = (Boolean) data.getOrDefault("canEdit", false);
-            
+
             if (roleId == null || entityName == null || fieldName == null) {
                 res.json(400, Map.of("error", "roleId, entityName, and fieldName are required"));
                 return;
             }
-            
+
             try (Connection conn = JdbcManager.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(
-                     "INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit, created_at, updated_at) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
-                
+                    PreparedStatement stmt = conn.prepareStatement(
+                            "INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit, created_at, updated_at) "
+                                    +
+                                    "VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
+
                 String id = java.util.UUID.randomUUID().toString();
                 stmt.setString(1, id);
                 stmt.setString(2, roleId);
@@ -1437,9 +1672,9 @@ public class ApiServer {
                 stmt.setString(4, fieldName);
                 stmt.setBoolean(5, canRead);
                 stmt.setBoolean(6, canEdit);
-                
+
                 int inserted = stmt.executeUpdate();
-                
+
                 if (inserted > 0) {
                     // Clear permission cache for all users (permissions changed)
                     if (permissionService != null) {
@@ -1454,29 +1689,33 @@ public class ApiServer {
                 res.json(500, errorDetails(e));
             }
         });
-        
+
         router.put("/api/field-permissions/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
-            
+
             String id = req.pathParam("id");
-            Map<String, Object> data = req.readJson(new TypeReference<>() {});
-            
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+
             Boolean canRead = (Boolean) data.get("canRead");
             Boolean canEdit = (Boolean) data.get("canEdit");
-            
+
             if (canRead == null && canEdit == null) {
                 res.json(400, Map.of("error", "At least one of canRead or canEdit must be provided"));
                 return;
             }
-            
+
             try (Connection conn = JdbcManager.getConnection()) {
                 StringBuilder sql = new StringBuilder("UPDATE field_permission SET updated_at = CURRENT_TIMESTAMP");
                 List<Object> params = new ArrayList<>();
-                
+
                 if (canRead != null) {
                     sql.append(", can_read = ?");
                     params.add(canRead);
@@ -1485,17 +1724,17 @@ public class ApiServer {
                     sql.append(", can_edit = ?");
                     params.add(canEdit);
                 }
-                
+
                 sql.append(" WHERE id = ?");
                 params.add(id);
-                
+
                 try (PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
                     for (int i = 0; i < params.size(); i++) {
                         stmt.setObject(i + 1, params.get(i));
                     }
-                    
+
                     int updated = stmt.executeUpdate();
-                    
+
                     if (updated > 0) {
                         // Clear permission cache for all users (permissions changed)
                         if (permissionService != null) {
@@ -1511,22 +1750,25 @@ public class ApiServer {
                 res.json(500, errorDetails(e));
             }
         });
-        
+
         router.delete("/api/field-permissions/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
-            
+
             String id = req.pathParam("id");
-            
+
             try (Connection conn = JdbcManager.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement("DELETE FROM field_permission WHERE id = ?")) {
-                
+                    PreparedStatement stmt = conn.prepareStatement("DELETE FROM field_permission WHERE id = ?")) {
+
                 stmt.setString(1, id);
                 int deleted = stmt.executeUpdate();
-                
+
                 if (deleted > 0) {
                     // Clear permission cache for all users (permissions changed)
                     if (permissionService != null) {
@@ -1545,28 +1787,40 @@ public class ApiServer {
         // CRUD endpoints via router
         router.post("/api/{entity}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
+            String actor = "anonymous";
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
             String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
-            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
-            Map<String, Object> data = req.readJson(new TypeReference<>() {});
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
             try {
                 long id = insertRecord(schema, data);
                 // after image
-                Map<String,Object> after = getById(schema, String.valueOf(id));
-                LOG.info("Entity created: {} id={}, after={}", schema.getName(), id, after != null ? "present" : "NULL");
+                Map<String, Object> after = getById(schema, String.valueOf(id));
+                LOG.info("Entity created: {} id={}, after={}", schema.getName(), id,
+                        after != null ? "present" : "NULL");
                 AuditLogService.log("INSERT", schema.getName(), String.valueOf(id), actor, null, after);
-                
+
                 // Workflow PostOperationHook: Check and auto-start workflows
                 if (after != null) {
                     LOG.info("Calling checkAndStartWorkflows for {} ON_CREATE id={}", schema.getName(), id);
                     com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
-                        schema.getName(), "ON_CREATE", String.valueOf(id), after
-                    );
+                            schema.getName(), "ON_CREATE", String.valueOf(id), after);
                 } else {
                     LOG.warn("Skipping workflow trigger - after image is null for {} id={}", schema.getName(), id);
                 }
-                
+
                 res.json(201, Map.of("id", id));
             } catch (SQLException e) {
                 LOG.error("Insert failed for entity {}", entity, e);
@@ -1575,25 +1829,50 @@ public class ApiServer {
         });
         router.post("/api/{entity}/batch", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
+            String actor = "anonymous";
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
             String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
-            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
-            List<Map<String,Object>> payload;
-            try { payload = req.readJson(new TypeReference<>(){}); } catch (Exception e){ res.json(400, Map.of("error","invalid json array")); return; }
-            if (payload == null) { res.json(400, Map.of("error","array required")); return; }
-            int max = 1000; // safety cap
-            if (payload.size() > max) { res.json(400, Map.of("error","batch too large","max",max)); return; }
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+            List<Map<String, Object>> payload;
             try {
-                Map<String,Object> out = insertBatch(schema, payload);
+                payload = req.readJson(new TypeReference<>() {
+                });
+            } catch (Exception e) {
+                res.json(400, Map.of("error", "invalid json array"));
+                return;
+            }
+            if (payload == null) {
+                res.json(400, Map.of("error", "array required"));
+                return;
+            }
+            int max = 1000; // safety cap
+            if (payload.size() > max) {
+                res.json(400, Map.of("error", "batch too large", "max", max));
+                return;
+            }
+            try {
+                Map<String, Object> out = insertBatch(schema, payload);
                 Object idsObj = out.get("ids");
                 if (idsObj instanceof List<?> idList) {
                     for (Object idVal : idList) {
-                        if (idVal == null) continue;
+                        if (idVal == null)
+                            continue;
                         try {
-                            Map<String,Object> after = getById(schema, String.valueOf(idVal));
+                            Map<String, Object> after = getById(schema, String.valueOf(idVal));
                             AuditLogService.log("INSERT", schema.getName(), String.valueOf(idVal), actor, null, after);
-                        } catch (Exception ignore) { }
+                        } catch (Exception ignore) {
+                        }
                     }
                 }
                 res.json(201, out);
@@ -1606,11 +1885,17 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
-            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
             String limitS = req.query("limit");
             String offsetS = req.query("offset");
             String q = req.query("q");
@@ -1618,24 +1903,40 @@ public class ApiServer {
             String sortParam = req.query("sort");
             String filterParam = req.query("filter");
             String countFlag = req.query("count");
-            Map<String,Object> filters = parseFilters(filterParam, schema);
+            Map<String, Object> filters = parseFilters(filterParam, schema);
             boolean countOnly = "true".equalsIgnoreCase(countFlag) || (countFlag != null && countFlag.equals("1"));
-            Integer limit = null; Integer offset = null;
-            boolean anyAdv = countOnly || q!=null || fieldsParam!=null || sortParam!=null || filterParam!=null || limitS!=null || offsetS!=null;
-            if (limitS != null || offsetS != null || q!=null || fieldsParam!=null || sortParam!=null || filterParam!=null) {
-                try { limit = limitS != null ? Integer.parseInt(limitS) : 50; } catch (Exception ignore) { limit = 50; }
-                try { offset = offsetS != null ? Integer.parseInt(offsetS) : 0; } catch (Exception ignore) { offset = 0; }
-                if (limit <= 0) limit = 50; if (limit > 500) limit = 500; if (offset < 0) offset = 0;
+            Integer limit = null;
+            Integer offset = null;
+            boolean anyAdv = countOnly || q != null || fieldsParam != null || sortParam != null || filterParam != null
+                    || limitS != null || offsetS != null;
+            if (limitS != null || offsetS != null || q != null || fieldsParam != null || sortParam != null
+                    || filterParam != null) {
+                try {
+                    limit = limitS != null ? Integer.parseInt(limitS) : 50;
+                } catch (Exception ignore) {
+                    limit = 50;
+                }
+                try {
+                    offset = offsetS != null ? Integer.parseInt(offsetS) : 0;
+                } catch (Exception ignore) {
+                    offset = 0;
+                }
+                if (limit <= 0)
+                    limit = 50;
+                if (limit > 500)
+                    limit = 500;
+                if (offset < 0)
+                    offset = 0;
             }
             try {
                 if (!anyAdv) {
-                    List<Map<String,Object>> rows = listAll(schema);
+                    List<Map<String, Object>> rows = listAll(schema);
                     // Apply FLS filtering if PermissionService available
                     if (permissionService != null && authEnabled(cfg)) {
                         String userId = extractUserId(req, cfg);
                         if (userId != null) {
-                            List<Map<String,Object>> filtered = new ArrayList<>();
-                            for (Map<String,Object> row : rows) {
+                            List<Map<String, Object>> filtered = new ArrayList<>();
+                            for (Map<String, Object> row : rows) {
                                 filtered.add(permissionService.filterReadableFields(userId, entity, row));
                             }
                             rows = filtered;
@@ -1645,30 +1946,33 @@ public class ApiServer {
                 } else {
                     if (countOnly) {
                         long total = countOnly(schema, q, filters);
-                        Map<String,Object> out = new LinkedHashMap<>();
+                        Map<String, Object> out = new LinkedHashMap<>();
                         out.put("total", total);
-                        if (q != null && !q.isBlank()) out.put("query", q);
-                        if (!filters.isEmpty()) out.put("filters", filters);
+                        if (q != null && !q.isBlank())
+                            out.put("query", q);
+                        if (!filters.isEmpty())
+                            out.put("filters", filters);
                         res.json(200, out);
                     } else {
-                        Map<String,Object> out = listAdvanced(schema, limit, offset, q, fieldsParam, sortParam, filters);
-                        
+                        Map<String, Object> out = listAdvanced(schema, limit, offset, q, fieldsParam, sortParam,
+                                filters);
+
                         // Apply FLS filtering to advanced query results
                         if (permissionService != null && authEnabled(cfg)) {
                             String userId = extractUserId(req, cfg);
                             if (userId != null && out.get("data") instanceof List<?> dataList) {
-                                List<Map<String,Object>> filtered = new ArrayList<>();
+                                List<Map<String, Object>> filtered = new ArrayList<>();
                                 for (Object item : dataList) {
-                                    if (item instanceof Map<?,?> row) {
+                                    if (item instanceof Map<?, ?> row) {
                                         @SuppressWarnings("unchecked")
-                                        Map<String,Object> typedRow = (Map<String,Object>) row;
+                                        Map<String, Object> typedRow = (Map<String, Object>) row;
                                         filtered.add(permissionService.filterReadableFields(userId, entity, typedRow));
                                     }
                                 }
                                 out.put("data", filtered);
                             }
                         }
-                        
+
                         res.json(200, out);
                     }
                 }
@@ -1681,16 +1985,22 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
             EntitySchema schema = SchemaManager.loadSchema(entity);
-            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
             try {
-                Map<String,Object> row = getById(schema, idStr);
+                Map<String, Object> row = getById(schema, idStr);
                 if (row == null) {
-                    res.json(404, Map.of("error","not found"));
+                    res.json(404, Map.of("error", "not found"));
                 } else {
                     // Apply FLS filtering if PermissionService available
                     if (permissionService != null && authEnabled(cfg)) {
@@ -1708,12 +2018,24 @@ public class ApiServer {
         });
         router.put("/api/{entity}/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
+            String actor = "anonymous";
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
             EntitySchema schema = SchemaManager.loadSchema(entity);
-            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
-            Map<String, Object> data = req.readJson(new TypeReference<>() {});
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
             try {
                 // Apply FLS validation if PermissionService available
                 if (permissionService != null && authEnabled(cfg)) {
@@ -1727,16 +2049,15 @@ public class ApiServer {
                         }
                     }
                 }
-                Map<String,Object> before = getById(schema, idStr);
+                Map<String, Object> before = getById(schema, idStr);
                 int updated = updateById(schema, idStr, data);
-                Map<String,Object> after = updated>0? getById(schema, idStr): null;
-                if (updated>0) {
+                Map<String, Object> after = updated > 0 ? getById(schema, idStr) : null;
+                if (updated > 0) {
                     AuditLogService.log("UPDATE", schema.getName(), idStr, actor, before, after);
-                    
+
                     // Workflow PostOperationHook: Check and auto-start workflows
                     com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
-                        schema.getName(), "ON_UPDATE", idStr, after
-                    );
+                            schema.getName(), "ON_UPDATE", idStr, after);
                 }
                 res.json(200, Map.of("updated", updated));
             } catch (SQLException e) {
@@ -1746,15 +2067,27 @@ public class ApiServer {
         });
         router.delete("/api/{entity}/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
+            String actor = "anonymous";
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
             EntitySchema schema = SchemaManager.loadSchema(entity);
-            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
             try {
-                Map<String,Object> before = getById(schema, idStr);
+                Map<String, Object> before = getById(schema, idStr);
                 int deleted = deleteById(schema, idStr);
-                if (deleted>0) AuditLogService.log("DELETE", schema.getName(), idStr, actor, before, null);
+                if (deleted > 0)
+                    AuditLogService.log("DELETE", schema.getName(), idStr, actor, before, null);
                 res.json(200, Map.of("deleted", deleted));
             } catch (SQLException e) {
                 LOG.error("Delete failed for entity {} id {}", entity, idStr, e);
@@ -1765,23 +2098,43 @@ public class ApiServer {
         // Bulk delete: POST to accept JSON body { ids: [..] } for safety across proxies
         router.post("/api/{entity}/bulk-delete", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous"; if (authEnabled(cfg)) { String tok = extractToken(req); actor = (tok!=null&&!tok.isBlank())?tok:"anonymous"; if (!hasAdmin(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; } }
+            String actor = "anonymous";
+            if (authEnabled(cfg)) {
+                String tok = extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
             String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
-            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
-            Map<String,Object> body = req.readJson(new TypeReference<>(){});
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+            Map<String, Object> body = req.readJson(new TypeReference<>() {
+            });
             Object idsObj = body != null ? body.get("ids") : null;
-            if (!(idsObj instanceof List<?> ids)) { res.json(400, Map.of("error","ids array required")); return; }
-            int max = 1000; if (ids.size() > max) { res.json(400, Map.of("error","too many ids","max",max)); return; }
+            if (!(idsObj instanceof List<?> ids)) {
+                res.json(400, Map.of("error", "ids array required"));
+                return;
+            }
+            int max = 1000;
+            if (ids.size() > max) {
+                res.json(400, Map.of("error", "too many ids", "max", max));
+                return;
+            }
             int deletedCount = 0;
             List<Object> deletedIds = new ArrayList<>();
             for (Object idVal : ids) {
-                if (idVal == null) continue;
+                if (idVal == null)
+                    continue;
                 String idStr = String.valueOf(idVal);
                 try {
-                    Map<String,Object> before = getById(schema, idStr);
+                    Map<String, Object> before = getById(schema, idStr);
                     int d = deleteById(schema, idStr);
-                    if (d>0) {
+                    if (d > 0) {
                         deletedCount += d;
                         deletedIds.add(idVal);
                         AuditLogService.log("DELETE", schema.getName(), idStr, actor, before, null);
@@ -1798,46 +2151,65 @@ public class ApiServer {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {
                 String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) { res.json(401, Map.of("error","unauthorized")); return; }
+                if (!hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
             }
             String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
-            if (schema == null) { res.json(404, Map.of("error","unknown entity")); return; }
-            Map<String,Object> body = req.readJson(new TypeReference<>(){});
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+            Map<String, Object> body = req.readJson(new TypeReference<>() {
+            });
             Object idsObj = body != null ? body.get("ids") : null;
-            if (!(idsObj instanceof List<?> ids)) { res.json(400, Map.of("error","ids array required")); return; }
-            int max = 5000; if (ids.size() > max) { res.json(400, Map.of("error","too many ids","max",max)); return; }
-            List<Map<String,Object>> rows = new ArrayList<>();
+            if (!(idsObj instanceof List<?> ids)) {
+                res.json(400, Map.of("error", "ids array required"));
+                return;
+            }
+            int max = 5000;
+            if (ids.size() > max) {
+                res.json(400, Map.of("error", "too many ids", "max", max));
+                return;
+            }
+            List<Map<String, Object>> rows = new ArrayList<>();
             for (Object idVal : ids) {
-                if (idVal == null) continue;
+                if (idVal == null)
+                    continue;
                 String idStr = String.valueOf(idVal);
                 try {
-                    Map<String,Object> row = getById(schema, idStr);
-                    if (row != null) rows.add(row);
+                    Map<String, Object> row = getById(schema, idStr);
+                    if (row != null)
+                        rows.add(row);
                 } catch (SQLException e) {
                     LOG.warn("Bulk export failed for {} id {}: {}", entity, idStr, e.getMessage());
                 }
             }
-            
+
             // Apply FLS filtering if PermissionService available
             if (permissionService != null && authEnabled(cfg)) {
                 String userId = extractUserId(req, cfg);
                 if (userId != null) {
-                    List<Map<String,Object>> filtered = new ArrayList<>();
-                    for (Map<String,Object> row : rows) {
+                    List<Map<String, Object>> filtered = new ArrayList<>();
+                    for (Map<String, Object> row : rows) {
                         filtered.add(permissionService.filterReadableFields(userId, entity, row));
                     }
                     rows = filtered;
                 }
             }
-            
+
             res.json(200, Map.of("count", rows.size(), "rows", rows));
         });
 
         // Serve static UI pages for servlet containers
         router.get("/ui/builder", (req, res) -> {
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/builder.html")) {
-                if (is == null) { res.text(404, "Not found", "text/plain; charset=utf-8"); return; }
+                if (is == null) {
+                    res.text(404, "Not found", "text/plain; charset=utf-8");
+                    return;
+                }
                 String html = new String(is.readAllBytes());
                 res.text(200, html, "text/html; charset=utf-8");
             } catch (IOException ioe) {
@@ -1847,7 +2219,10 @@ public class ApiServer {
         });
         router.get("/ui/datasource", (req, res) -> {
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/datasource.html")) {
-                if (is == null) { res.text(404, "Not found", "text/plain; charset=utf-8"); return; }
+                if (is == null) {
+                    res.text(404, "Not found", "text/plain; charset=utf-8");
+                    return;
+                }
                 String html = new String(is.readAllBytes());
                 res.text(200, html, "text/html; charset=utf-8");
             } catch (IOException ioe) {
@@ -1857,7 +2232,10 @@ public class ApiServer {
         });
         router.get("/ui/swagger", (req, res) -> {
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/swagger.html")) {
-                if (is == null) { res.text(404, "Not found", "text/plain; charset=utf-8"); return; }
+                if (is == null) {
+                    res.text(404, "Not found", "text/plain; charset=utf-8");
+                    return;
+                }
                 String html = new String(is.readAllBytes());
                 res.text(200, html, "text/html; charset=utf-8");
             } catch (IOException ioe) {
@@ -1866,7 +2244,8 @@ public class ApiServer {
             }
         });
         router.get("/ui/studio", (req, res) -> {
-            // Prefer built SPA index; fallback to static studio.html (Phase A demo) if build not present
+            // Prefer built SPA index; fallback to static studio.html (Phase A demo) if
+            // build not present
             try (InputStream primary = ApiServer.class.getResourceAsStream("/ui/dist/index.html")) {
                 if (primary != null) {
                     String html = new String(primary.readAllBytes());
@@ -1882,7 +2261,9 @@ public class ApiServer {
                     res.text(200, html, "text/html; charset=utf-8");
                     return;
                 }
-                res.text(503, "Studio UI missing. Run ./run-ui.sh build to generate dist or ensure studio.html packaged.", "text/plain; charset=utf-8");
+                res.text(503,
+                        "Studio UI missing. Run ./run-ui.sh build to generate dist or ensure studio.html packaged.",
+                        "text/plain; charset=utf-8");
             } catch (IOException ioe) {
                 LOG.error("Failed to serve /ui/studio", ioe);
                 res.text(500, "Internal Server Error", "text/plain; charset=utf-8");
@@ -1892,7 +2273,8 @@ public class ApiServer {
             // Alias to studio index (SPA handles internal routing for /explorer path)
             try (InputStream is = ApiServer.class.getResourceAsStream("/ui/dist/index.html")) {
                 if (is == null) {
-                    res.text(503, "UI build missing. Run ./run-ui.sh build (or npm run build) to generate /ui/dist.", "text/plain; charset=utf-8");
+                    res.text(503, "UI build missing. Run ./run-ui.sh build (or npm run build) to generate /ui/dist.",
+                            "text/plain; charset=utf-8");
                     return;
                 }
                 String html = new String(is.readAllBytes());
@@ -1915,14 +2297,22 @@ public class ApiServer {
                     return;
                 }
                 String mimeType = "application/octet-stream";
-                if (path.endsWith(".html")) mimeType = "text/html";
-                else if (path.endsWith(".css")) mimeType = "text/css";
-                else if (path.endsWith(".js")) mimeType = "application/javascript";
-                else if (path.endsWith(".json")) mimeType = "application/json";
-                else if (path.endsWith(".png")) mimeType = "image/png";
-                else if (path.endsWith(".jpg") || path.endsWith(".jpeg")) mimeType = "image/jpeg";
-                else if (path.endsWith(".gif")) mimeType = "image/gif";
-                else if (path.endsWith(".svg")) mimeType = "image/svg+xml";
+                if (path.endsWith(".html"))
+                    mimeType = "text/html";
+                else if (path.endsWith(".css"))
+                    mimeType = "text/css";
+                else if (path.endsWith(".js"))
+                    mimeType = "application/javascript";
+                else if (path.endsWith(".json"))
+                    mimeType = "application/json";
+                else if (path.endsWith(".png"))
+                    mimeType = "image/png";
+                else if (path.endsWith(".jpg") || path.endsWith(".jpeg"))
+                    mimeType = "image/jpeg";
+                else if (path.endsWith(".gif"))
+                    mimeType = "image/gif";
+                else if (path.endsWith(".svg"))
+                    mimeType = "image/svg+xml";
 
                 res.bytes(200, is.readAllBytes(), mimeType);
             } catch (IOException e) {
@@ -1939,9 +2329,12 @@ public class ApiServer {
 
         // Root routes via router
         server.createContext("/", exchange -> {
-            try { router.handle(exchange); } catch (IOException ioe) { LOG.error("Router handle failed", ioe); }
+            try {
+                router.handle(exchange);
+            } catch (IOException ioe) {
+                LOG.error("Router handle failed", ioe);
+            }
         });
-
 
         // Use virtual threads per server
         server.setExecutor(r -> Thread.ofVirtual().start(r));
@@ -1949,9 +2342,11 @@ public class ApiServer {
 
     // CRUD helpers extracted from EntityHandler
     private static String quote(String id) {
-        if (id == null) return null;
+        if (id == null)
+            return null;
         return '"' + id.toUpperCase() + '"';
     }
+
     private static Object parseId(String idStr, EntitySchema.Field pk) {
         String t = pk.getType().toLowerCase();
         try {
@@ -1968,6 +2363,7 @@ public class ApiServer {
             return idStr;
         }
     }
+
     private static List<Map<String, Object>> toList(ResultSet rs) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
         ResultSetMetaData md = rs.getMetaData();
@@ -1988,10 +2384,12 @@ public class ApiServer {
         }
         return list;
     }
+
     private static Object coerceAndValidate(EntitySchema.Field f, Object raw) {
         // required
         if (raw == null) {
-            if (f.isRequired()) throw new IllegalArgumentException("field '" + f.getName() + "' is required");
+            if (f.isRequired())
+                throw new IllegalArgumentException("field '" + f.getName() + "' is required");
             return null;
         }
         String t = f.getType().toLowerCase();
@@ -2001,30 +2399,41 @@ public class ApiServer {
                 case "integer":
                     if (raw instanceof Number) {
                         long lv = ((Number) raw).longValue();
-                        if (f.getMin() != null && lv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                        if (f.getMax() != null && lv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        if (f.getMin() != null && lv < f.getMin())
+                            throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                        if (f.getMax() != null && lv > f.getMax())
+                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                         return (int) lv;
                     }
                     int iv = Integer.parseInt(raw.toString());
-                    if (f.getMin() != null && iv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                    if (f.getMax() != null && iv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    if (f.getMin() != null && iv < f.getMin())
+                        throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                    if (f.getMax() != null && iv > f.getMax())
+                        throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                     return iv;
                 case "long":
                     if (raw instanceof Number) {
                         long lv = ((Number) raw).longValue();
-                        if (f.getMin() != null && lv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                        if (f.getMax() != null && lv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        if (f.getMin() != null && lv < f.getMin())
+                            throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                        if (f.getMax() != null && lv > f.getMax())
+                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                         return lv;
                     }
                     long lv = Long.parseLong(raw.toString());
-                    if (f.getMin() != null && lv < f.getMin()) throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                    if (f.getMax() != null && lv > f.getMax()) throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    if (f.getMin() != null && lv < f.getMin())
+                        throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                    if (f.getMax() != null && lv > f.getMax())
+                        throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                     return lv;
                 case "boolean":
-                    if (raw instanceof Boolean) return raw;
+                    if (raw instanceof Boolean)
+                        return raw;
                     String s = raw.toString().toLowerCase();
-                    if ("true".equals(s) || "1".equals(s)) return true;
-                    if ("false".equals(s) || "0".equals(s)) return false;
+                    if ("true".equals(s) || "1".equals(s))
+                        return true;
+                    if ("false".equals(s) || "0".equals(s))
+                        return false;
                     throw new IllegalArgumentException("field '" + f.getName() + "' invalid boolean");
                 case "date":
                 case "timestamp":
@@ -2045,9 +2454,12 @@ public class ApiServer {
                 case "string":
                 default:
                     String str = raw.toString();
-                    if (f.getLength() != null && str.length() > f.getLength()) throw new IllegalArgumentException("field '" + f.getName() + "' length exceeds " + f.getLength());
+                    if (f.getLength() != null && str.length() > f.getLength())
+                        throw new IllegalArgumentException(
+                                "field '" + f.getName() + "' length exceeds " + f.getLength());
                     if (f.getPattern() != null && !f.getPattern().isEmpty()) {
-                        if (!Pattern.compile(f.getPattern()).matcher(str).matches()) throw new IllegalArgumentException("field '" + f.getName() + "' does not match pattern");
+                        if (!Pattern.compile(f.getPattern()).matcher(str).matches())
+                            throw new IllegalArgumentException("field '" + f.getName() + "' does not match pattern");
                     }
                     return str;
             }
@@ -2055,9 +2467,12 @@ public class ApiServer {
             throw new IllegalArgumentException("field '" + f.getName() + "' invalid format");
         }
     }
-    private static java.sql.Connection schemaConnection(com.appbana.model.EntitySchema schema) throws java.sql.SQLException {
+
+    private static java.sql.Connection schemaConnection(com.appbana.model.EntitySchema schema)
+            throws java.sql.SQLException {
         return JdbcManager.getConnection(schema != null ? schema.getDatasourceName() : null);
     }
+
     public static long insertRecord(EntitySchema schema, Map<String, Object> data) throws SQLException {
         List<EntitySchema.Field> fields = schema.getFields();
         List<String> cols = new ArrayList<>();
@@ -2073,27 +2488,36 @@ public class ApiServer {
             Object val = coerceAndValidate(f, raw);
             values.add(val);
         }
-        String sql = "INSERT INTO " + quote(schema.getName()) + " (" + String.join(",", cols) + ") VALUES (" + String.join(",", placeholders) + ")";
-        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        String sql = "INSERT INTO " + quote(schema.getName()) + " (" + String.join(",", cols) + ") VALUES ("
+                + String.join(",", placeholders) + ")";
+        try (Connection c = schemaConnection(schema);
+                PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             for (int i = 0; i < values.size(); i++) {
                 ps.setObject(i + 1, values.get(i));
             }
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
-                if (rs.next()) return rs.getLong(1);
+                if (rs.next())
+                    return rs.getLong(1);
             }
         }
         return -1;
     }
+
     public static List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {
         String sql = "SELECT * FROM " + quote(schema.getName());
-        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+        try (Connection c = schemaConnection(schema);
+                PreparedStatement ps = c.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
             return toList(rs);
         }
     }
+
     public static Map<String, Object> getById(EntitySchema schema, String id) throws SQLException {
-        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
-        if (pk == null) return null;
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
+                .orElse(null);
+        if (pk == null)
+            return null;
         String sql = "SELECT * FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
@@ -2103,13 +2527,17 @@ public class ApiServer {
             }
         }
     }
+
     public static int updateById(EntitySchema schema, String id, Map<String, Object> data) throws SQLException {
-        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
-        if (pk == null) return 0;
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
+                .orElse(null);
+        if (pk == null)
+            return 0;
         List<String> set = new ArrayList<>();
         List<Object> vals = new ArrayList<>();
         for (EntitySchema.Field f : schema.getFields()) {
-            if (f.isPrimaryKey()) continue;
+            if (f.isPrimaryKey())
+                continue;
             if (data.containsKey(f.getName())) {
                 Object raw = data.get(f.getName());
                 Object val = coerceAndValidate(f, raw);
@@ -2117,18 +2545,24 @@ public class ApiServer {
                 vals.add(val);
             }
         }
-        if (set.isEmpty()) return 0;
-        String sql = "UPDATE " + quote(schema.getName()) + " SET " + String.join(",", set) + " WHERE " + quote(pk.getName()) + " = ?";
+        if (set.isEmpty())
+            return 0;
+        String sql = "UPDATE " + quote(schema.getName()) + " SET " + String.join(",", set) + " WHERE "
+                + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = 1;
-            for (Object v : vals) ps.setObject(i++, v);
+            for (Object v : vals)
+                ps.setObject(i++, v);
             ps.setObject(i, parseId(id, pk));
             return ps.executeUpdate();
         }
     }
+
     public static int deleteById(EntitySchema schema, String id) throws SQLException {
-        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
-        if (pk == null) return 0;
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
+                .orElse(null);
+        if (pk == null)
+            return 0;
         String sql = "DELETE FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
@@ -2136,52 +2570,76 @@ public class ApiServer {
         }
     }
 
-    private static Map<String,Object> parseFilters(String raw, EntitySchema schema) {
-        Map<String,Object> map = new LinkedHashMap<>();
-        if (raw == null || raw.isBlank()) return map;
+    private static Map<String, Object> parseFilters(String raw, EntitySchema schema) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        if (raw == null || raw.isBlank())
+            return map;
         String[] pairs = raw.split(",");
-        Map<String,EntitySchema.Field> fieldMap = new HashMap<>();
-        for (EntitySchema.Field f: schema.getFields()) fieldMap.put(f.getName().toLowerCase(), f);
-        for (String p: pairs) {
+        Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
+        for (EntitySchema.Field f : schema.getFields())
+            fieldMap.put(f.getName().toLowerCase(), f);
+        for (String p : pairs) {
             int idx = p.indexOf(":");
-            if (idx <= 0) continue;
+            if (idx <= 0)
+                continue;
             String name = p.substring(0, idx).trim();
-            String val = p.substring(idx+1).trim();
-            if (name.isEmpty()) continue;
+            String val = p.substring(idx + 1).trim();
+            if (name.isEmpty())
+                continue;
             EntitySchema.Field f = fieldMap.get(name.toLowerCase());
-            if (f == null) continue; // ignore unknown
+            if (f == null)
+                continue; // ignore unknown
             Object parsed = parseFilterValue(f, val);
             map.put(f.getName(), parsed); // use canonical case
         }
         return map;
     }
+
     private static Object parseFilterValue(EntitySchema.Field f, String v) {
         String t = f.getType().toLowerCase();
         try {
             switch (t) {
-                case "int": case "integer": return Integer.parseInt(v);
-                case "long": return Long.parseLong(v);
-                case "boolean": return ("true".equalsIgnoreCase(v) || "1".equals(v));
-                case "date": case "timestamp":
-                    // Accept only valid ISO-8601 instant strings; if parsing fails treat as raw literal (DB may coerce or fail at execution time)
-                    try { return Timestamp.from(Instant.parse(v)); } catch (Exception ignored) { return v; }
-                default: return v; // string/text or unhandled types
+                case "int":
+                case "integer":
+                    return Integer.parseInt(v);
+                case "long":
+                    return Long.parseLong(v);
+                case "boolean":
+                    return ("true".equalsIgnoreCase(v) || "1".equals(v));
+                case "date":
+                case "timestamp":
+                    // Accept only valid ISO-8601 instant strings; if parsing fails treat as raw
+                    // literal (DB may coerce or fail at execution time)
+                    try {
+                        return Timestamp.from(Instant.parse(v));
+                    } catch (Exception ignored) {
+                        return v;
+                    }
+                default:
+                    return v; // string/text or unhandled types
             }
-        } catch (Exception e) { return v; }
+        } catch (Exception e) {
+            return v;
+        }
     }
 
-    private static long countOnly(EntitySchema schema, String q, Map<String,Object> filters) throws SQLException {
+    private static long countOnly(EntitySchema schema, String q, Map<String, Object> filters) throws SQLException {
         StringBuilder where = new StringBuilder();
         List<Object> params = new ArrayList<>();
         buildWhere(schema, q, filters, where, params);
         String sql = "SELECT COUNT(*) FROM " + quote(schema.getName()) + where;
         try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql)) {
-            for (int i=0;i<params.size();i++) ps.setObject(i+1, params.get(i));
-            try (ResultSet rs = ps.executeQuery()) { rs.next(); return rs.getLong(1); }
+            for (int i = 0; i < params.size(); i++)
+                ps.setObject(i + 1, params.get(i));
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
         }
     }
 
-    private static void buildWhere(EntitySchema schema, String q, Map<String,Object> filters, StringBuilder where, List<Object> params) {
+    private static void buildWhere(EntitySchema schema, String q, Map<String, Object> filters, StringBuilder where,
+            List<Object> params) {
         List<String> parts = new ArrayList<>();
         if (q != null && !q.isBlank()) {
             String uq = q.trim().toUpperCase();
@@ -2193,48 +2651,65 @@ public class ApiServer {
                     params.add("%" + uq + "%");
                 }
             }
-            if (!likeParts.isEmpty()) parts.add("(" + String.join(" OR ", likeParts) + ")");
+            if (!likeParts.isEmpty())
+                parts.add("(" + String.join(" OR ", likeParts) + ")");
         }
         if (filters != null && !filters.isEmpty()) {
-            Map<String,EntitySchema.Field> fieldMap = new HashMap<>();
-            for (EntitySchema.Field f : schema.getFields()) fieldMap.put(f.getName().toLowerCase(), f);
-            for (Map.Entry<String,Object> e : filters.entrySet()) {
+            Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
+            for (EntitySchema.Field f : schema.getFields())
+                fieldMap.put(f.getName().toLowerCase(), f);
+            for (Map.Entry<String, Object> e : filters.entrySet()) {
                 EntitySchema.Field f = fieldMap.get(e.getKey().toLowerCase());
-                if (f == null) continue; // unknown
+                if (f == null)
+                    continue; // unknown
                 String t = f.getType().toLowerCase();
-                if ((t.equalsIgnoreCase("date") || t.equalsIgnoreCase("timestamp")) && e.getValue() instanceof String sVal) {
-                    // Attempt to parse; if invalid, skip predicate (treat as literal left in filters output)
+                if ((t.equalsIgnoreCase("date") || t.equalsIgnoreCase("timestamp"))
+                        && e.getValue() instanceof String sVal) {
+                    // Attempt to parse; if invalid, skip predicate (treat as literal left in
+                    // filters output)
                     boolean valid = false;
-                    try { java.time.Instant.parse(sVal); valid = true; } catch (Exception ignored) { }
-                    if (!valid) continue; // skip adding predicate, prevents DB parse error
+                    try {
+                        java.time.Instant.parse(sVal);
+                        valid = true;
+                    } catch (Exception ignored) {
+                    }
+                    if (!valid)
+                        continue; // skip adding predicate, prevents DB parse error
                 }
                 parts.add(quote(e.getKey()) + " = ?");
                 params.add(e.getValue());
             }
         }
-        if (!parts.isEmpty()) where.append(" WHERE ").append(String.join(" AND ", parts));
+        if (!parts.isEmpty())
+            where.append(" WHERE ").append(String.join(" AND ", parts));
     }
 
-    private static Map<String,Object> listAdvanced(EntitySchema schema, int limit, int offset, String q, String fieldsParam, String sortParam, Map<String,Object> filters) throws SQLException {
+    private static Map<String, Object> listAdvanced(EntitySchema schema, int limit, int offset, String q,
+            String fieldsParam, String sortParam, Map<String, Object> filters) throws SQLException {
         // Projection (preserve order, remove duplicates while keeping first occurrence)
         List<String> projection = new ArrayList<>();
         Set<String> seenProj = new HashSet<>();
-        Map<String,EntitySchema.Field> fieldMap = new HashMap<>();
-        for (EntitySchema.Field f: schema.getFields()) fieldMap.put(f.getName().toLowerCase(), f);
+        Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
+        for (EntitySchema.Field f : schema.getFields())
+            fieldMap.put(f.getName().toLowerCase(), f);
         if (fieldsParam != null && !fieldsParam.isBlank()) {
             for (String fn : fieldsParam.split(",")) {
-                String trimmed = fn.trim(); if (trimmed.isEmpty()) continue;
+                String trimmed = fn.trim();
+                if (trimmed.isEmpty())
+                    continue;
                 EntitySchema.Field f = fieldMap.get(trimmed.toLowerCase());
                 if (f != null) {
                     String canonical = f.getName();
-                    if (seenProj.add(canonical.toLowerCase())) projection.add(canonical);
+                    if (seenProj.add(canonical.toLowerCase()))
+                        projection.add(canonical);
                 }
             }
         }
         if (projection.isEmpty()) { // default all, preserve declared order
-            for (EntitySchema.Field f: schema.getFields()) {
+            for (EntitySchema.Field f : schema.getFields()) {
                 String canonical = f.getName();
-                if (seenProj.add(canonical.toLowerCase())) projection.add(canonical);
+                if (seenProj.add(canonical.toLowerCase()))
+                    projection.add(canonical);
             }
         }
         // Build WHERE
@@ -2249,62 +2724,83 @@ public class ApiServer {
         Set<String> seenSort = new HashSet<>();
         if (sortParam != null && !sortParam.isBlank()) {
             for (String token : sortParam.split(",")) {
-                String t = token.trim(); if (t.isEmpty()) continue;
+                String t = token.trim();
+                if (t.isEmpty())
+                    continue;
                 boolean desc = t.startsWith("-");
                 String name = desc ? t.substring(1) : (t.startsWith("+") ? t.substring(1) : t);
                 EntitySchema.Field f = fieldMap.get(name.toLowerCase());
-                if (f == null) continue;
+                if (f == null)
+                    continue;
                 String key = f.getName().toLowerCase();
                 if (seenSort.add(key)) {
-                    orderParts.add(quote(f.getName()) + (desc?" DESC":" ASC"));
+                    orderParts.add(quote(f.getName()) + (desc ? " DESC" : " ASC"));
                 }
             }
         }
         String orderClause = orderParts.isEmpty() ? "" : (" ORDER BY " + String.join(", ", orderParts));
         // Projection list with alias to preserve original casing
         List<String> selectCols = new ArrayList<>();
-        for (String col : projection) selectCols.add(quote(col) + " AS \""+col+"\"");
-        String dataSql = "SELECT " + String.join(",", selectCols) + " FROM " + quote(schema.getName()) + where + orderClause + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
+        for (String col : projection)
+            selectCols.add(quote(col) + " AS \"" + col + "\"");
+        String dataSql = "SELECT " + String.join(",", selectCols) + " FROM " + quote(schema.getName()) + where
+                + orderClause + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
         try (Connection c = schemaConnection(schema)) {
             try (PreparedStatement cps = c.prepareStatement(countSql)) {
-                for (int i=0;i<params.size();i++) cps.setObject(i+1, params.get(i));
-                try (ResultSet rs = cps.executeQuery()) { rs.next(); total = rs.getLong(1); }
+                for (int i = 0; i < params.size(); i++)
+                    cps.setObject(i + 1, params.get(i));
+                try (ResultSet rs = cps.executeQuery()) {
+                    rs.next();
+                    total = rs.getLong(1);
+                }
             }
-            List<Map<String,Object>> rows;
+            List<Map<String, Object>> rows;
             try (PreparedStatement dps = c.prepareStatement(dataSql)) {
-                int idx=1; for (Object p : params) dps.setObject(idx++, p);
+                int idx = 1;
+                for (Object p : params)
+                    dps.setObject(idx++, p);
                 dps.setInt(idx++, offset);
                 dps.setInt(idx, limit);
-                try (ResultSet rs = dps.executeQuery()) { rows = toList(rs); }
+                try (ResultSet rs = dps.executeQuery()) {
+                    rows = toList(rs);
+                }
             }
-            Map<String,Object> out = new LinkedHashMap<>();
+            Map<String, Object> out = new LinkedHashMap<>();
             out.put("rows", rows);
             out.put("total", total);
             out.put("limit", limit);
             out.put("offset", offset);
-            if (q != null && !q.isBlank()) out.put("query", q); // if no string fields existed, q is silently ignored (where part empty)
-            if (fieldsParam != null && !fieldsParam.isBlank()) out.put("fields", projection);
-            if (sortParam != null && !sortParam.isBlank()) out.put("sort", orderParts);
-            if (filters != null && !filters.isEmpty()) out.put("filters", filters);
+            if (q != null && !q.isBlank())
+                out.put("query", q); // if no string fields existed, q is silently ignored (where part empty)
+            if (fieldsParam != null && !fieldsParam.isBlank())
+                out.put("fields", projection);
+            if (sortParam != null && !sortParam.isBlank())
+                out.put("sort", orderParts);
+            if (filters != null && !filters.isEmpty())
+                out.put("filters", filters);
             return out;
         }
     }
 
-    private static Map<String,Object> insertBatch(EntitySchema schema, List<Map<String,Object>> batch) throws SQLException {
+    private static Map<String, Object> insertBatch(EntitySchema schema, List<Map<String, Object>> batch)
+            throws SQLException {
         List<EntitySchema.Field> fields = schema.getFields();
         List<EntitySchema.Field> insertable = new ArrayList<>();
         for (EntitySchema.Field f : fields) {
-            if (f.isPrimaryKey() && f.isAutoIncrement()) continue; // skip auto
+            if (f.isPrimaryKey() && f.isAutoIncrement())
+                continue; // skip auto
             insertable.add(f);
         }
-        String cols = String.join(",", insertable.stream().map(f->quote(f.getName())).toList());
+        String cols = String.join(",", insertable.stream().map(f -> quote(f.getName())).toList());
         String placeholders = String.join(",", Collections.nCopies(insertable.size(), "?"));
-        String sql = "INSERT INTO " + quote(schema.getName()) + (insertable.isEmpty()? " DEFAULT VALUES" : (" ("+cols+") VALUES ("+placeholders+")"));
+        String sql = "INSERT INTO " + quote(schema.getName())
+                + (insertable.isEmpty() ? " DEFAULT VALUES" : (" (" + cols + ") VALUES (" + placeholders + ")"));
         List<Long> ids = new ArrayList<>();
-        try (Connection c = schemaConnection(schema); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection c = schemaConnection(schema);
+                PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             c.setAutoCommit(false);
-            for (Map<String,Object> row : batch) {
-                int idx=1;
+            for (Map<String, Object> row : batch) {
+                int idx = 1;
                 for (EntitySchema.Field f : insertable) {
                     Object raw = row.get(f.getName());
                     Object val = coerceAndValidate(f, raw);
@@ -2314,18 +2810,22 @@ public class ApiServer {
             }
             ps.executeBatch();
             try (ResultSet rs = ps.getGeneratedKeys()) {
-                while (rs.next()) ids.add(rs.getLong(1));
-            } catch (SQLException ignore) { }
+                while (rs.next())
+                    ids.add(rs.getLong(1));
+            } catch (SQLException ignore) {
+            }
             c.commit();
         }
-        Map<String,Object> out = new LinkedHashMap<>();
+        Map<String, Object> out = new LinkedHashMap<>();
         out.put("inserted", batch.size());
-        if (!ids.isEmpty()) out.put("ids", ids);
+        if (!ids.isEmpty())
+            out.put("ids", ids);
         return out;
     }
 
     // Replace old listPaged with advanced version usage
-    private static Map<String,Object> listPaged(EntitySchema schema, int limit, int offset, String q) throws SQLException {
+    private static Map<String, Object> listPaged(EntitySchema schema, int limit, int offset, String q)
+            throws SQLException {
         return listAdvanced(schema, limit, offset, q, null, null, Collections.emptyMap());
     }
 

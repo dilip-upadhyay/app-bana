@@ -183,6 +183,14 @@ export class WorkflowNode extends LitElement {
     e.dataTransfer!.effectAllowed = 'move';
     e.dataTransfer!.setData('node-id', this.metadata.id);
 
+    // Calculate offset of mouse relative to node top-left
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+
+    e.dataTransfer!.setData('drag-offset-x', offsetX.toString());
+    e.dataTransfer!.setData('drag-offset-y', offsetY.toString());
+
     this.dispatchEvent(new CustomEvent('node-drag-start', {
       detail: { nodeId: this.metadata.id },
       bubbles: true,

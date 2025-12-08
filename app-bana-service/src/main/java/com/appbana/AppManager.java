@@ -21,6 +21,7 @@ import java.util.*;
 public class AppManager {
     private static final String APPS_DIR = "apps";
     private static final String APP_FILE = "app.json";
+    private static final String WORKFLOW_FILE = "workflow.json";
     private static final String PAGES_DIR = "pages";
     private static final ObjectMapper mapper = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);
@@ -201,7 +202,7 @@ public class AppManager {
         if (app.getEntities() == null) {
             return;
         }
-        
+
         for (Object entityObj : app.getEntities()) {
             try {
                 // Convert entity object to EntitySchema
@@ -224,18 +225,30 @@ public class AppManager {
         }
 
         // Update fields
-        if (updates.getName() != null) existing.setName(updates.getName());
-        if (updates.getDescription() != null) existing.setDescription(updates.getDescription());
-        if (updates.getVersion() != null) existing.setVersion(updates.getVersion());
-        if (updates.getAuthor() != null) existing.setAuthor(updates.getAuthor());
-        if (updates.getPages() != null) existing.setPages(updates.getPages());
-        if (updates.getDefaultPage() != null) existing.setDefaultPage(updates.getDefaultPage());
-        if (updates.getEntities() != null) existing.setEntities(updates.getEntities());
-        if (updates.getSchemas() != null) existing.setSchemas(updates.getSchemas());
-        if (updates.getNavigation() != null) existing.setNavigation(updates.getNavigation());
-        if (updates.getTheme() != null) existing.setTheme(updates.getTheme());
-        if (updates.getRoutes() != null) existing.setRoutes(updates.getRoutes());
-        if (updates.getMetadata() != null) existing.setMetadata(updates.getMetadata());
+        if (updates.getName() != null)
+            existing.setName(updates.getName());
+        if (updates.getDescription() != null)
+            existing.setDescription(updates.getDescription());
+        if (updates.getVersion() != null)
+            existing.setVersion(updates.getVersion());
+        if (updates.getAuthor() != null)
+            existing.setAuthor(updates.getAuthor());
+        if (updates.getPages() != null)
+            existing.setPages(updates.getPages());
+        if (updates.getDefaultPage() != null)
+            existing.setDefaultPage(updates.getDefaultPage());
+        if (updates.getEntities() != null)
+            existing.setEntities(updates.getEntities());
+        if (updates.getSchemas() != null)
+            existing.setSchemas(updates.getSchemas());
+        if (updates.getNavigation() != null)
+            existing.setNavigation(updates.getNavigation());
+        if (updates.getTheme() != null)
+            existing.setTheme(updates.getTheme());
+        if (updates.getRoutes() != null)
+            existing.setRoutes(updates.getRoutes());
+        if (updates.getMetadata() != null)
+            existing.setMetadata(updates.getMetadata());
 
         existing.setUpdated(System.currentTimeMillis());
 
@@ -289,7 +302,7 @@ public class AppManager {
 
         Path pageFile = getPagePath(appId, pageId);
         mapper.writeValue(pageFile.toFile(), page);
-        
+
         // Auto-update app's pages array (if page not already in list)
         try {
             AppMetadata app = getApp(appId);
@@ -303,7 +316,7 @@ public class AppManager {
             System.err.println("[AppManager] Warning: Failed to update app pages list: " + e.getMessage());
             // Continue - page file was saved successfully
         }
-        
+
         System.out.println("[AppManager] Saved page: " + appId + "/" + pageId);
     }
 
@@ -317,7 +330,7 @@ public class AppManager {
             return false;
         }
         Files.delete(pageFile);
-        
+
         // Auto-update app's pages array (remove deleted page)
         try {
             AppMetadata app = getApp(appId);
@@ -331,9 +344,41 @@ public class AppManager {
             System.err.println("[AppManager] Warning: Failed to update app pages list: " + e.getMessage());
             // Continue - page file was deleted successfully
         }
-        
+
         System.out.println("[AppManager] Deleted page: " + appId + "/" + pageId);
         return true;
+    }
+
+    /**
+     * Get workflow file path
+     */
+    private static Path getWorkflowPath(String appId) {
+        return getAppDirectory(appId).resolve(WORKFLOW_FILE);
+    }
+
+    /**
+     * Get workflow metadata
+     */
+    public static Map<String, Object> getWorkflow(String appId) throws IOException {
+        Path workflowFile = getWorkflowPath(appId);
+        if (!Files.exists(workflowFile)) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> workflow = mapper.readValue(workflowFile.toFile(), Map.class);
+        return workflow;
+    }
+
+    /**
+     * Save workflow metadata
+     */
+    public static void saveWorkflow(String appId, Map<String, Object> workflow) throws IOException {
+        Path workflowFile = getWorkflowPath(appId);
+        // Ensure app directory exists
+        Files.createDirectories(getAppDirectory(appId));
+
+        mapper.writeValue(workflowFile.toFile(), workflow);
+        System.out.println("[AppManager] Saved workflow for app: " + appId);
     }
 
     /**

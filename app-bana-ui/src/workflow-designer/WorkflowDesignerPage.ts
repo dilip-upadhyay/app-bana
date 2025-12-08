@@ -10,7 +10,10 @@ import './components/NodePalette';
 import './components/WorkflowCanvas';
 
 
+import { apiClient } from '../core/api-client';
+
 const STORAGE_KEY_PREFIX = 'workflow-designer-draft-';
+
 
 @customElement('workflow-designer-page')
 export class WorkflowDesignerPage extends LitElement {
@@ -25,9 +28,11 @@ export class WorkflowDesignerPage extends LitElement {
     connections: []
   };
 
-  @state() private selectedNodeId?: string;
+  @state() private selectedNodeIds = new Set<string>();
   @state() private selectedConnectionId?: string;
   @state() private validationResult?: { errors: string[], warnings: string[] };
+
+  private clipboard?: { nodes: NodeMetadata[], connections: ConnectionMetadata[] };
 
   private history = new WorkflowHistory();
 
@@ -326,7 +331,7 @@ export class WorkflowDesignerPage extends LitElement {
         } else {
           // No app selected, reset to default state
           this.workflowMetadata = this.createEmptyWorkflow();
-          this.selectedNodeId = undefined;
+          this.selectedNodeIds = new Set();
           this.selectedConnectionId = undefined;
         }
       }
@@ -349,33 +354,55 @@ export class WorkflowDesignerPage extends LitElement {
     return `${STORAGE_KEY_PREFIX}${this.appId}`;
   }
 
-  private loadFromStorage() {
-    const key = this.getStorageKey();
-    if (!key) return;
+  private async loadFromStorage() {
+    if (!this.appId) return;
 
     try {
-      const saved = localStorage.getItem(key);
-      if (saved) {
-        this.workflowMetadata = JSON.parse(saved);
+      // 1. Try to load from API
+      const workflow = await apiClient.get<WorkflowMetadata>(`/apps/${this.appId}/workflow`);
+
+      if (workflow && workflow.id) {
+        this.workflowMetadata = workflow;
         this.history = new WorkflowHistory();
       } else {
-        // New app, start fresh
-        this.workflowMetadata = this.createEmptyWorkflow();
+        // 2. If no workflow on server, check for local draft (migration path)
+        const key = this.getStorageKey();
+        if (key) {
+          const saved = localStorage.getItem(key);
+          if (saved) {
+            this.workflowMetadata = JSON.parse(saved);
+            this.history = new WorkflowHistory();
+            // Consolidate to server
+            this.saveToStorage();
+          } else {
+            // New workflow
+            this.workflowMetadata = this.createEmptyWorkflow();
+          }
+        } else {
+          this.workflowMetadata = this.createEmptyWorkflow();
+        }
       }
     } catch (e) {
-      console.error('Failed to load workflow draft', e);
+      console.error('Failed to load workflow', e);
+      // Fallback to local or empty on error
       this.workflowMetadata = this.createEmptyWorkflow();
     }
   }
 
-  private saveToStorage() {
-    const key = this.getStorageKey();
-    if (!key) return;
+  private async saveToStorage() {
+    if (!this.appId) return;
 
     try {
-      localStorage.setItem(key, JSON.stringify(this.workflowMetadata));
+      // Save to server
+      await apiClient.put(`/apps/${this.appId}/workflow`, this.workflowMetadata);
+
+      // Keep local backup just in case (optional, maybe remove allowed?)
+      const key = this.getStorageKey();
+      if (key) {
+        localStorage.setItem(key, JSON.stringify(this.workflowMetadata));
+      }
     } catch (e) {
-      console.error('Failed to save workflow draft', e);
+      console.error('Failed to save workflow', e);
     }
   }
 
@@ -404,20 +431,95 @@ export class WorkflowDesignerPage extends LitElement {
     // Delete: Backspace or Delete
     if (e.key === 'Backspace' || e.key === 'Delete') {
       e.preventDefault();
-      if (this.selectedNodeId) {
-        this.deleteNode(this.selectedNodeId);
+      if (this.selectedNodeIds.size > 0) {
+        this.deleteSelectedNodes();
       } else if (this.selectedConnectionId) {
         this.deleteConnection(this.selectedConnectionId);
       }
     }
+
+    // Copy: Cmd+C or Ctrl+C
+    if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+      e.preventDefault();
+      this.handleCopy();
+    }
+
+    // Paste: Cmd+V or Ctrl+V
+    if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+      e.preventDefault();
+      this.handlePaste();
+    }
   };
+
+  private handleCopy() {
+    if (this.selectedNodeIds.size === 0) return;
+
+    const nodesToCopy = this.workflowMetadata.nodes.filter(n => this.selectedNodeIds.has(n.id));
+    // Copy connections ONLY if both source and target are in the selection
+    const connectionsToCopy = this.workflowMetadata.connections.filter(c =>
+      this.selectedNodeIds.has(c.from) && this.selectedNodeIds.has(c.to)
+    );
+
+    this.clipboard = {
+      nodes: JSON.parse(JSON.stringify(nodesToCopy)),
+      connections: JSON.parse(JSON.stringify(connectionsToCopy))
+    };
+    console.log('Copied to clipboard:', this.clipboard);
+  }
+
+  private handlePaste() {
+    if (!this.clipboard || this.clipboard.nodes.length === 0) return;
+
+    // Create ID mapping: oldId -> newId
+    const idMap = new Map<string, string>();
+    const timestamp = Date.now();
+
+    // 1. Process Nodes
+    const newNodes = this.clipboard.nodes.map((node, index) => {
+      const newId = `${node.type.toLowerCase()}-${timestamp}-${index}`;
+      idMap.set(node.id, newId);
+
+      return {
+        ...node,
+        id: newId,
+        position: {
+          x: node.position.x + 20, // Offset position
+          y: node.position.y + 20
+        }
+      };
+    });
+
+    // 2. Process Connections (relink to new IDs)
+    const newConnections = this.clipboard.connections.map((conn, index) => {
+      return {
+        ...conn,
+        id: `conn-${timestamp}-${index}`,
+        from: idMap.get(conn.from)!,
+        to: idMap.get(conn.to)!
+      };
+    });
+
+    // 3. Add to metadata
+    const newMetadata = {
+      ...this.workflowMetadata,
+      nodes: [...this.workflowMetadata.nodes, ...newNodes],
+      connections: [...this.workflowMetadata.connections, ...newConnections]
+    };
+
+    this.updateMetadata(newMetadata);
+
+    // 4. Select the new nodes
+    this.selectedNodeIds = new Set(newNodes.map(n => n.id));
+    this.selectedConnectionId = undefined;
+  }
 
   private undo() {
     const prev = this.history.undo(this.workflowMetadata);
     if (prev) {
       this.workflowMetadata = prev;
       this.saveToStorage();
-      this.selectedNodeId = undefined;
+      this.saveToStorage();
+      this.selectedNodeIds = new Set();
       this.selectedConnectionId = undefined;
     }
   }
@@ -434,11 +536,54 @@ export class WorkflowDesignerPage extends LitElement {
     const newMetadata = {
       ...this.workflowMetadata,
       nodes: this.workflowMetadata.nodes.filter(n => n.id !== nodeId),
-      // Also remove any connections linked to this node
       connections: this.workflowMetadata.connections.filter(c => c.from !== nodeId && c.to !== nodeId)
     };
     this.updateMetadata(newMetadata);
-    this.selectedNodeId = undefined;
+    this.selectedNodeIds = new Set();
+  }
+
+  private deleteSelectedNodes() {
+    if (this.selectedNodeIds.size === 0) return;
+
+    const newMetadata = {
+      ...this.workflowMetadata,
+      nodes: this.workflowMetadata.nodes.filter(n => !this.selectedNodeIds.has(n.id)),
+      // Remove connections linked to any deleted node
+      connections: this.workflowMetadata.connections.filter(c =>
+        !this.selectedNodeIds.has(c.from) && !this.selectedNodeIds.has(c.to)
+      )
+    };
+    this.updateMetadata(newMetadata);
+    this.selectedNodeIds = new Set();
+  }
+
+  private handleNodeSelect(e: CustomEvent) {
+    const { nodeId, originalEvent } = e.detail;
+
+    // Check for modifier keys (Shift or Cmd/Ctrl)
+    const isMultiSelect = originalEvent?.shiftKey || originalEvent?.metaKey || originalEvent?.ctrlKey;
+
+    if (isMultiSelect) {
+      // Toggle selection
+      const newSet = new Set(this.selectedNodeIds);
+      if (nodeId) {
+        if (newSet.has(nodeId)) {
+          newSet.delete(nodeId);
+        } else {
+          newSet.add(nodeId);
+        }
+      }
+      this.selectedNodeIds = newSet;
+    } else {
+      // Single selection (replace)
+      if (nodeId) {
+        this.selectedNodeIds = new Set([nodeId]);
+      } else {
+        this.selectedNodeIds = new Set();
+      }
+    }
+
+    this.selectedConnectionId = undefined; // Clear connection selection when selecting nodes
   }
 
   render() {
@@ -467,7 +612,7 @@ export class WorkflowDesignerPage extends LitElement {
         <workflow-canvas
           class="canvas"
           .metadata=${this.workflowMetadata}
-          .selectedNodeId=${this.selectedNodeId}
+          .selectedNodeIds=${this.selectedNodeIds}
           .selectedConnectionId=${this.selectedConnectionId}
           @node-add=${this.handleNodeAdd}
           @node-move=${this.handleNodeMove}
@@ -520,7 +665,7 @@ export class WorkflowDesignerPage extends LitElement {
       }
     }
 
-    if (!this.selectedNodeId) {
+    if (this.selectedNodeIds.size === 0) {
       return html`
         <div class="properties-empty">
           <div class="empty-icon">⚙️</div>
@@ -529,7 +674,23 @@ export class WorkflowDesignerPage extends LitElement {
       `;
     }
 
-    const node = this.workflowMetadata.nodes.find((n: NodeMetadata) => n.id === this.selectedNodeId);
+    if (this.selectedNodeIds.size > 1) {
+      return html`
+        <div class="properties-empty">
+          <div class="empty-icon">📚</div>
+          <p>${this.selectedNodeIds.size} nodes selected</p>
+          <div class="actions-footer" style="width: 100%">
+            <button class="btn btn-secondary btn-danger" @click=${() => this.deleteSelectedNodes()}>
+              Delete ${this.selectedNodeIds.size} Nodes
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Single node selected
+    const nodeId = Array.from(this.selectedNodeIds)[0];
+    const node = this.workflowMetadata.nodes.find((n: NodeMetadata) => n.id === nodeId);
     if (!node) return '';
 
     return html`
@@ -695,26 +856,55 @@ export class WorkflowDesignerPage extends LitElement {
       nodes: [...this.workflowMetadata.nodes, node]
     };
     this.updateMetadata(newMetadata);
-    this.selectedNodeId = node.id;
+    this.updateMetadata(newMetadata);
+    this.selectedNodeIds = new Set([node.id]);
     this.selectedConnectionId = undefined;
   }
 
   private handleNodeMove(e: CustomEvent) {
     const { nodeId, position } = e.detail;
+
+    // Find the node being dragged to calculate delta
+    const draggedNode = this.workflowMetadata.nodes.find(n => n.id === nodeId);
+    if (!draggedNode) return;
+
+    // Calculate delta (new position - old position)
+    const dx = position.x - draggedNode.position.x;
+    const dy = position.y - draggedNode.position.y;
+
+    let newNodes = this.workflowMetadata.nodes;
+
+    if (this.selectedNodeIds.has(nodeId)) {
+      // If the dragged node is selected, move ALL selected nodes
+      newNodes = this.workflowMetadata.nodes.map(n => {
+        if (this.selectedNodeIds.has(n.id)) {
+          return {
+            ...n,
+            position: {
+              x: n.position.x + dx,
+              y: n.position.y + dy
+            }
+          };
+        }
+        return n;
+      });
+    } else {
+      // If dragging an unselected node, just move that one
+      // (Optionally, we could select it here, but let's stick to simple move)
+      newNodes = this.workflowMetadata.nodes.map(n =>
+        n.id === nodeId ? { ...n, position } : n
+      );
+    }
+
     // Update local state without history to prevent flooding stack
     this.workflowMetadata = {
       ...this.workflowMetadata,
-      nodes: this.workflowMetadata.nodes.map((n: NodeMetadata) =>
-        n.id === nodeId ? { ...n, position } : n
-      )
+      nodes: newNodes
     };
     this.saveToStorage();
   }
 
-  private handleNodeSelect(e: CustomEvent) {
-    this.selectedNodeId = e.detail.nodeId;
-    this.selectedConnectionId = undefined;
-  }
+
 
   private handleConnectionAdd(e: CustomEvent) {
     const { connection } = e.detail;
@@ -729,12 +919,12 @@ export class WorkflowDesignerPage extends LitElement {
       this.updateMetadata(newMetadata);
     }
     this.selectedConnectionId = connection.id;
-    this.selectedNodeId = undefined;
+    this.selectedNodeIds = new Set();
   }
 
   private handleConnectionSelect(e: CustomEvent) {
     this.selectedConnectionId = e.detail.connectionId;
-    this.selectedNodeId = undefined;
+    this.selectedNodeIds = new Set();
   }
 
   private handleConnectionDelete(e: CustomEvent) {

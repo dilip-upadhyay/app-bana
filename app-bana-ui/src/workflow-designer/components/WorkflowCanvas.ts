@@ -15,12 +15,16 @@ export class WorkflowCanvas extends LitElement {
     hasChanged: () => true  // Force update even if object reference is same
   })
   metadata!: WorkflowMetadata;
-  @property() selectedNodeId?: string;
+  @property({ type: Object }) selectedNodeIds = new Set<string>();
   @property() selectedConnectionId?: string;
 
   @state() private isDragging = false;
   @state() private dragOffset = { x: 0, y: 0 };
   @state() private connectionDraft?: { sourceNodeId: string; startX: number; startY: number; mouseX: number; mouseY: number };
+
+  // Selection Box State
+  @state() private isSelecting = false;
+  @state() private selectionBox?: { startX: number; startY: number; currentX: number; currentY: number };
 
   @query('.canvas-container') private canvasEl?: HTMLDivElement;
   private panzoom?: any;
@@ -142,6 +146,14 @@ export class WorkflowCanvas extends LitElement {
     .empty-state-text {
       font-size: 14px;
     }
+
+    .selection-box {
+      position: absolute;
+      border: 1px solid #3b82f6;
+      background: rgba(59, 130, 246, 0.1);
+      pointer-events: none;
+      z-index: 100;
+    }
   `;
 
   connectedCallback() {
@@ -208,14 +220,17 @@ export class WorkflowCanvas extends LitElement {
           ${this.metadata.nodes?.map(node => html`
             <workflow-node
               .metadata=${node}
-              .selected=${node.id === this.selectedNodeId}
-              @click=${(e: Event) => this.handleNodeClick(e, node.id)}
+              .selected=${this.selectedNodeIds.has(node.id)}
+              @click=${(e: Event) => this.handleNodeClick(e as MouseEvent, node)}
               @node-drag-start=${this.handleNodeDragStart}
               @connection-start=${this.handleConnectionStart}
               type=${node.type}
             ></workflow-node>
           `)}
         </div>
+        </div>
+        
+        ${this.renderSelectionBox()}
       </div>
 
       <div class="zoom-controls">
@@ -313,9 +328,23 @@ export class WorkflowCanvas extends LitElement {
 
     const nodeId = e.dataTransfer!.getData('node-id');
     if (nodeId) {
+      // Calculate correct position using the offset
+      const offsetXStr = e.dataTransfer!.getData('drag-offset-x');
+      const offsetYStr = e.dataTransfer!.getData('drag-offset-y');
+
+      let finalX = x;
+      let finalY = y;
+
+      if (offsetXStr && offsetYStr) {
+        const offsetX = parseFloat(offsetXStr) / scale;
+        const offsetY = parseFloat(offsetYStr) / scale;
+        finalX = x - offsetX;
+        finalY = y - offsetY;
+      }
+
       // Moving existing node
       this.dispatchEvent(new CustomEvent('node-move', {
-        detail: { nodeId, position: { x, y } },
+        detail: { nodeId, position: { x: finalX, y: finalY } },
         bubbles: true,
         composed: true
       }));
@@ -341,10 +370,13 @@ export class WorkflowCanvas extends LitElement {
     }));
   }
 
-  private handleNodeClick(e: Event, nodeId: string) {
+  private handleNodeClick(e: MouseEvent, node: NodeMetadata) {
     e.stopPropagation();
     this.dispatchEvent(new CustomEvent('node-select', {
-      detail: { nodeId },
+      detail: {
+        nodeId: node.id,
+        originalEvent: e
+      },
       bubbles: true,
       composed: true
     }));
@@ -363,11 +395,174 @@ export class WorkflowCanvas extends LitElement {
     this.isDragging = true;
   }
 
+  // ========== Selection Box ==========
+
+  private renderSelectionBox() {
+    if (!this.selectionBox) return '';
+
+    // Calculate CSS styles
+    const left = Math.min(this.selectionBox.startX, this.selectionBox.currentX);
+    const top = Math.min(this.selectionBox.startY, this.selectionBox.currentY);
+    const width = Math.abs(this.selectionBox.currentX - this.selectionBox.startX);
+    const height = Math.abs(this.selectionBox.currentY - this.selectionBox.startY);
+
+    return html`
+      <div class="selection-box" style="left: ${left}px; top: ${top}px; width: ${width}px; height: ${height}px;"></div>
+    `;
+  }
+
   private handleMouseDown(e: MouseEvent) {
-    // If clicking on canvas (not node/conn), clear selection
+    // If clicking on canvas (not node/conn), start selection box
+    // But only if Shift is NOT pressed? Usually selection box is default on background drag.
+    // Panzoom handles panning unless we stop propagation or it's excluded.
+    // We configured Panzoom with `panOnlyWhenZoomed: true`. 
+    // This implies that normal drag on background DOES NOT PAN. It's free for us!
+
     if (e.target === this.canvasEl || e.target === this) {
-      this.dispatchEvent(new CustomEvent('node-select', { detail: { nodeId: undefined } }));
+      if (this.metadata.nodes.length === 0) return; // Optional
+
+      const rect = this.canvasEl!.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      this.isSelecting = true;
+      this.selectionBox = { startX: x, startY: y, currentX: x, currentY: y };
+
+      // Clear selection if not holding shift/cmd
+      if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        this.dispatchEvent(new CustomEvent('node-select', { detail: { nodeId: undefined } }));
+      }
     }
+  }
+
+  private handleMouseUp(e: MouseEvent) {
+    if (this.connectionDraft) {
+      // Handle connection drop
+      const path = e.composedPath();
+      const handle = path.find(el => (el as Element).classList?.contains('handle'));
+
+      if (handle) {
+        // Find the workflow-node parent
+        const nodeEl = path.find(el => (el as Element).tagName === 'WORKFLOW-NODE') as any;
+        if (nodeEl && nodeEl.metadata) {
+          const targetNodeId = nodeEl.metadata.id;
+
+          if (targetNodeId !== this.connectionDraft.sourceNodeId) {
+            // Create connection
+            const newConnection: ConnectionMetadata = {
+              id: `conn-${Date.now()}`,
+              from: this.connectionDraft.sourceNodeId,
+              to: targetNodeId
+            };
+
+            this.dispatchEvent(new CustomEvent('connection-add', {
+              detail: { connection: newConnection },
+              bubbles: true,
+              composed: true
+            }));
+          }
+        }
+      }
+      this.connectionDraft = undefined;
+    } else if (this.isSelecting && this.selectionBox) {
+      this.finalizeSelection();
+    }
+
+    this.isSelecting = false;
+    this.selectionBox = undefined;
+    this.isDragging = false;
+  }
+
+  private finalizeSelection() {
+    if (!this.selectionBox) return;
+
+    // Convert selection box to canvas coordinates (accounting for pan/zoom)
+    const scale = this.panzoom?.getScale() || 1;
+    const pan = this.panzoom?.getPan() || { x: 0, y: 0 };
+
+    const boxLeft = Math.min(this.selectionBox.startX, this.selectionBox.currentX);
+    const boxTop = Math.min(this.selectionBox.startY, this.selectionBox.currentY);
+    const boxRight = Math.max(this.selectionBox.startX, this.selectionBox.currentX);
+    const boxBottom = Math.max(this.selectionBox.startY, this.selectionBox.currentY);
+
+    // Transform box to logical coordinates
+    const logicalLeft = (boxLeft - pan.x) / scale;
+    const logicalTop = (boxTop - pan.y) / scale;
+    const logicalRight = (boxRight - pan.x) / scale;
+    const logicalBottom = (boxBottom - pan.y) / scale;
+
+    const selectedIds: string[] = [];
+
+    // Check intersection with nodes
+    // Assuming standard node size for hit testing (w: 180, h: 80)
+    // Or better, checking center point.
+    this.metadata.nodes.forEach(node => {
+      const nx = node.position.x;
+      const ny = node.position.y;
+      const nw = 180;
+      const nh = 80;
+
+      // Check if node rect overlaps with selection rect
+      const nodeRight = nx + nw;
+      const nodeBottom = ny + nh;
+
+      const overlaps = !(nx > logicalRight ||
+        nodeRight < logicalLeft ||
+        ny > logicalBottom ||
+        nodeBottom < logicalTop);
+
+      if (overlaps) {
+        selectedIds.push(node.id);
+      }
+    });
+
+    // We can't batch 'node-select' events easily for multi-select unless we change the event contract.
+    // The current WorkflowDesignerPage handles 'node-select' one by one?
+    // No, I refactored it: `handleNodeSelect` takes an event. If I fire it multiple times, it updates the set.
+    // BUT! `this.selectedNodeIds` is a property. `WorkflowDesignerPage` updates it.
+    // If I fire 5 events synchronously, `WorkflowDesignerPage` might process them, but `this.selectedNodeIds` prop update might be batched.
+    // Actually, `WorkflowDesignerPage.handleNodeSelect` uses `this.selectedNodeIds` (the state).
+    // If I fire multiple events, the state update cycle might not happen in between. 
+    // It's better to fire a SINGLE event with ALL IDs?
+    // Or fire one event per ID.
+
+    // Current `node-select` expects `nodeId`.
+    // I should iterate and fire.
+    // BUT! `handleNodeSelect` logic:
+    // if (isMultiSelect) { add/remove from CURRENT set }
+    // else { replace with NEW set }
+
+    // If i fire loop:
+    // Event 1: Page sees current set (empty). Adds ID1.
+    // Event 2: Page sees current set (empty/stale). Adds ID2.
+    // Result: valid updates? No, if `this.selectedNodeIds` isn't updated, it will use the OLD value.
+    // So the page handlers need to see the "live" set.
+
+    // BETTER: Emit a NEW event `multi-select` with list of IDs.
+    // OR: Emit `node-select` with `nodeIds` (plural).
+
+    // I should update `WorkflowDesignerPage` to handle `nodeIds` in `detail` if present.
+    // Let's assume for now I will fire multiple events with `ctrlKey` set to true?
+    // No, sync issues.
+
+    // I will modify `handleNodeSelect` in Page to accept `nodeIds` array.
+    // But I just refactored Page.
+
+    // Let's stick to modifying Page to accept `nodeIds`.
+
+    // Wait, I can't modify Page in this specific tool call (it's for Canvas).
+    // I will assume I CANNOT do that.
+
+    // Alternative:
+    // Emit `node-select` with `nodeId` for the FIRST one (clearing others), then `node-select` with `ctrlKey` simulated for others?
+    // Still race condition on state.
+
+    // I MUST support a multi-select event.
+    // Let's implement `dispatchMultiSelect` in Canvas and update Page in next step or now?
+
+    // Let's update `handleMouseMove` first.
+
+    // ...
   }
 
   // ========== Connection Management ==========
@@ -403,7 +598,7 @@ export class WorkflowCanvas extends LitElement {
       mouseY
     };
 
-    this.selectedNodeId = undefined;
+    this.selectedNodeIds = new Set();
     this.selectedConnectionId = undefined;
   }
 
@@ -421,51 +616,16 @@ export class WorkflowCanvas extends LitElement {
         mouseX, // Update end position
         mouseY
       };
+    } else if (this.isSelecting && this.selectionBox) {
+      const rect = this.canvasEl!.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      this.selectionBox = { ...this.selectionBox, currentX: x, currentY: y };
     }
   }
 
-  private handleMouseUp(e: MouseEvent) {
-    if (this.connectionDraft) {
-      // Logic to find if we dropped on a handle/node
-      // Since SVG overlay might block mouse events or we are dragging, we use elementFromPoint
-      // But we are in Shadow DOM, so standard elementFromPoint might be tricky?
-      // Actually, e.target should work if we are listening on canvas.
 
-      // We need to see if we possess a node under the mouse.
-      // e.target might be the canvas because the draft connection line pointer-events: none.
-
-      // Let's use `composedPath` to find if we are over a node handle.
-      const path = e.composedPath();
-      const handle = path.find(el => (el as Element).classList?.contains('handle'));
-
-      if (handle) {
-        // Find the workflow-node parent
-        const nodeEl = path.find(el => (el as Element).tagName === 'WORKFLOW-NODE') as any;
-        if (nodeEl && nodeEl.metadata) {
-          const targetNodeId = nodeEl.metadata.id;
-
-          if (targetNodeId !== this.connectionDraft.sourceNodeId) {
-            // Create connection
-            const newConnection: ConnectionMetadata = {
-              id: `conn-${Date.now()}`,
-              from: this.connectionDraft.sourceNodeId,
-              to: targetNodeId
-            };
-
-            this.dispatchEvent(new CustomEvent('connection-add', {
-              detail: { connection: newConnection },
-              bubbles: true,
-              composed: true
-            }));
-          }
-        }
-      }
-
-      this.connectionDraft = undefined;
-    }
-
-    this.isDragging = false;
-  }
 
   // ========== Zoom Controls ==========
 

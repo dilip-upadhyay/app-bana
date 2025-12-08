@@ -54,10 +54,26 @@ We are ready to start **Phase 2: Node Connections** from a clean slate.
 
 ---
 
-## ⏭️ Next Steps (Phase 7: Advanced UX)
+### 6. Phase 6.5 Completed (App-Aware Persistence)
+- **App Context**: Workflow persistence is now keyed by `appId`.
+- **Auto-Switching**: Canvas automatically handles app switching, clearing or loading state.
+- **Integration**: `BuilderShell` header integrated with `WorkflowDesignerPage`.
 
-Now that core interaction is complete, we can focus on:
-1. **Intelligent Node Placement**: Auto-layout or smarter initial placement.
-2. **Minimap**: For large workflows.
-3. **Multi-Selection**: Drag selection box to move/delete multiple items.
-4. **Copy/Paste**: `Cmd+C`/`Cmd+V` support.
+---
+
+## ⏭️ Next Steps (Future Phases)
+
+Now that we have a solid foundation, we can choose between:
+
+### Phase 8: Backend Integration (Completed)
+- **Goal**: Persist workflows to server-side file system.
+- **Status**: ✅ Completed.
+- **Outcome**: Workflows are saved to `apps/{appId}/workflow.json` via REST API.
+
+### Phase 7: Advanced UX (In Progress)
+- **Goal**: UI polish and usability improvements.
+- **Features**:
+  - Multi-selection (drag box).
+  - Copy/Paste support.
+  - Minimap navigation.
+  - Undo/Redo toolbar buttons.
