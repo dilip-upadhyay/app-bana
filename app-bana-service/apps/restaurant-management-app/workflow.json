@@ -25,11 +25,15 @@
     "id" : "start-1765225744487-0",
     "type" : "START",
     "position" : {
-      "x" : 500,
-      "y" : 120
+      "x" : 140,
+      "y" : 260
     },
     "label" : "Start",
     "properties" : { }
   } ],
-  "connections" : [ ]
+  "connections" : [ {
+    "id" : "conn-1765226626538",
+    "from" : "start-1765225744487-0",
+    "to" : "start-1765225738166"
+  } ]
 }

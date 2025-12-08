@@ -36,6 +36,7 @@ export class WorkflowDesignerPage extends LitElement {
   @state() private validationResult?: { errors: string[], warnings: string[] };
   @state() private viewport = { x: 0, y: 0, width: 0, height: 0, scale: 1 };
   @state() private availableEntities: string[] = [];
+  @state() private isSettingsOpen = false;
 
   private clipboard?: { nodes: NodeMetadata[], connections: ConnectionMetadata[] };
 
@@ -311,6 +312,56 @@ export class WorkflowDesignerPage extends LitElement {
       background: #fffbeb;
       color: #92400e;
     }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fade-in 0.2s;
+    }
+
+    .modal-content {
+      background: white;
+      width: 500px;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: scale-up 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    }
+
+    .modal-header {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 8px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes scale-up {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
   `;
 
   connectedCallback() {
@@ -327,10 +378,20 @@ export class WorkflowDesignerPage extends LitElement {
 
   private async loadEntities() {
     try {
+      console.log('Loading entities from /schema...');
       const entities = await apiClient.get<string[]>('/schema');
-      this.availableEntities = entities || [];
+      console.log('Entities loaded:', entities);
+
+      if (!entities || entities.length === 0) {
+        console.warn('No entities returned from API. Using fallback/mock data for development.');
+        this.availableEntities = ['User', 'Order', 'Payment', 'Product', 'Customer', 'Invoice'];
+      } else {
+        this.availableEntities = entities;
+      }
     } catch (err) {
       console.error('Failed to load entities:', err);
+      // Fallback for debugging
+      this.availableEntities = ['User', 'Order', 'Payment', 'Product'];
     }
   }
 
@@ -614,83 +675,159 @@ export class WorkflowDesignerPage extends LitElement {
             <span class="workflow-status">Draft v${this.workflowMetadata.version}</span>
           </div>
           <div class="toolbar-right">
-            <button class="btn btn-secondary" @click=${this.handleValidate}>
-              ✓ Validate
-            </button>
-            <button class="btn btn-secondary" @click=${this.handleSave}>
-              💾 Save
-            </button>
-            <button class="btn btn-primary" @click=${this.handlePublish}>
-              🚀 Publish
-            </button>
+            <button class="btn btn-secondary" @click=${this.undo}>Undo</button>
+            <button class="btn btn-secondary" @click=${this.redo}>Redo</button>
+            <button class="btn btn-secondary" @click=${() => this.isSettingsOpen = true}>⚙ Settings</button>
+            <button class="btn btn-secondary" @click=${this.handleValidate}>Validate</button>
+            <button class="btn btn-primary" @click=${this.handlePublish}>Publish</button>
           </div>
         </div>
 
         <node-palette class="palette"></node-palette>
 
-        <workflow-canvas
-          class="canvas"
-          .metadata=${this.workflowMetadata}
-          .selectedNodeIds=${this.selectedNodeIds}
-          .selectedConnectionId=${this.selectedConnectionId}
-          @node-add=${this.handleNodeAdd}
-          @node-move=${this.handleNodeMove}
-          @node-select=${this.handleNodeSelect}
-          @connection-add=${this.handleConnectionAdd}
-          @connection-select=${this.handleConnectionSelect}
-          @connection-delete=${this.handleConnectionDelete}
-          @viewport-change=${this.handleViewportChange}
-        ></workflow-canvas>
+        <div class="canvas">
+          <workflow-canvas 
+            .metadata=${this.workflowMetadata}
+            .selectedNodeIds=${this.selectedNodeIds}
+            .selectedConnectionId=${this.selectedConnectionId}
+            @node-add=${this.handleNodeAdd}
+            @node-move=${this.handleNodeMove}
+            @node-select=${this.handleNodeSelect}
+            @connection-add=${this.handleConnectionAdd}
+            @connection-select=${this.handleConnectionSelect}
+            @connection-delete=${this.handleConnectionDelete}
+            @viewport-change=${this.handleViewportChange}
+          ></workflow-canvas>
+          
+          <workflow-minimap
+            .nodes=${this.workflowMetadata.nodes}
+            .viewport=${this.viewport}
+            @minimap-nav=${this.handleMinimapNav}
+          ></workflow-minimap>
 
-        <workflow-minimap
-          .nodes=${this.workflowMetadata.nodes}
-          .viewport=${this.viewport}
-          @minimap-nav=${this.handleMinimapNav}
-        ></workflow-minimap>
-
-        <div class="properties">
-          ${this.renderPropertiesPanel()}
+          ${this.renderValidationToast()}
         </div>
 
-        ${this.renderValidationToast()}
+        <div class="properties-panel">
+          ${this.selectedConnectionId
+        ? this.renderConnectionProperties()
+        : this.renderPropertiesPanel()
+      }
+        </div>
+      </div>
+      
+      ${this.renderSettingsModal()}
+    `;
+  }
+
+  private renderSettingsModal() {
+    if (!this.isSettingsOpen) return '';
+
+    return html`
+      <div class="modal-overlay" @click=${() => this.isSettingsOpen = false}>
+        <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="modal-header">Workflow Settings</div>
+          
+          <div class="form-group">
+            <label>Workflow Name</label>
+            <input 
+              type="text" 
+              .value=${this.workflowMetadata.name}
+              @input=${(e: Event) => this.handleMetadataChange('name', (e.target as HTMLInputElement).value)}
+            />
+          </div>
+
+          <div class="form-group">
+            <label>Trigger Entity</label>
+            <select
+              .value=${this.workflowMetadata.triggerEntity || ''}
+              @change=${(e: Event) => this.handleMetadataChange('triggerEntity', (e.target as HTMLSelectElement).value)}
+            >
+              <option value="">-- No Auto-Trigger --</option>
+              ${this.availableEntities.map(entity => html`
+                <option value=${entity} ?selected=${entity === this.workflowMetadata.triggerEntity}>${entity}</option>
+              `)}
+            </select>
+          </div>
+
+          ${this.workflowMetadata.triggerEntity ? html`
+            <div class="form-group">
+              <label>Trigger Event</label>
+              <select
+                .value=${this.workflowMetadata.triggerEvent || ''}
+                @change=${(e: Event) => this.handleMetadataChange('triggerEvent', (e.target as HTMLSelectElement).value)}
+              >
+                <option value="">Select Event...</option>
+                <option value="ON_CREATE">On Create</option>
+                <option value="ON_UPDATE">On Update</option>
+                <option value="ON_DELETE">On Delete</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Trigger Condition (MVEL)</label>
+              <textarea 
+                rows="3"
+                placeholder="e.g. status == 'PENDING' && amount > 1000"
+                .value=${this.workflowMetadata.triggerCondition || ''}
+                @input=${(e: Event) => this.handleMetadataChange('triggerCondition', (e.target as HTMLTextAreaElement).value)}
+              ></textarea>
+              <div class="help-text">Optional. Leave empty to trigger on all events.</div>
+            </div>
+          ` : ''}
+
+          <div class="modal-footer">
+            <button class="btn btn-primary" @click=${() => this.isSettingsOpen = false}>Close</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private handleMetadataChange(field: keyof WorkflowMetadata, value: any) {
+    const newMetadata = {
+      ...this.workflowMetadata,
+      [field]: value
+    };
+    this.updateMetadata(newMetadata);
+  }
+
+  private renderConnectionProperties() {
+    if (!this.selectedConnectionId) return '';
+
+    const conn = this.workflowMetadata.connections.find(c => c.id === this.selectedConnectionId);
+    if (!conn) return '';
+
+    return html`
+      <div class="properties-header">
+        <h3>Connection</h3>
+        <span class="badge">Connection</span>
+      </div>
+      
+      <div class="form-group">
+        <label>ID</label>
+        <input type="text" value="${conn.id}" readonly disabled />
+      </div>
+
+      <div class="form-group">
+        <label>From Node</label>
+        <input type="text" value="${conn.from}" readonly disabled />
+      </div>
+
+      <div class="form-group">
+        <label>To Node</label>
+        <input type="text" value="${conn.to}" readonly disabled />
+      </div>
+
+      <div class="actions-footer">
+        <button class="btn btn-secondary btn-danger" @click=${() => this.deleteConnection(conn.id)}>
+          Delete Connection
+        </button>
       </div>
     `;
   }
 
   private renderPropertiesPanel() {
-    if (this.selectedConnectionId) {
-      const conn = this.workflowMetadata.connections.find(c => c.id === this.selectedConnectionId);
-      if (conn) {
-        return html`
-          <div class="properties-header">
-            <h3>Connection</h3>
-            <span class="badge">Connection</span>
-          </div>
-          
-          <div class="form-group">
-            <label>ID</label>
-            <input type="text" value="${conn.id}" readonly disabled />
-          </div>
-
-          <div class="form-group">
-            <label>From Node</label>
-            <input type="text" value="${conn.from}" readonly disabled />
-          </div>
-
-          <div class="form-group">
-            <label>To Node</label>
-            <input type="text" value="${conn.to}" readonly disabled />
-          </div>
-
-          <div class="actions-footer">
-            <button class="btn btn-secondary btn-danger" @click=${() => this.deleteConnection(conn.id)}>
-              Delete Connection
-            </button>
-          </div>
-        `;
-      }
-    }
-
     if (this.selectedNodeIds.size === 0) {
       return html`
         <div class="properties-empty">
@@ -717,7 +854,7 @@ export class WorkflowDesignerPage extends LitElement {
     // Single node selected
     const nodeId = Array.from(this.selectedNodeIds)[0];
     const node = this.workflowMetadata.nodes.find((n: NodeMetadata) => n.id === nodeId);
-    if (!node) return '';
+    if (!node) return html``;
 
     return html`
       <div class="properties-header">

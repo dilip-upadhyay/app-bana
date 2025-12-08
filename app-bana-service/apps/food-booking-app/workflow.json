@@ -1,0 +1,21 @@
+{
+  "id" : "workflow-1765226985393",
+  "name" : "Untitled Workflow",
+  "version" : 1,
+  "schemaVersion" : "1.0.0",
+  "nodes" : [ {
+    "id" : "start-1765227027817",
+    "type" : "START",
+    "position" : {
+      "x" : 210,
+      "y" : 244.5
+    },
+    "label" : "Start",
+    "properties" : {
+      "entityName" : "Order"
+    }
+  } ],
+  "connections" : [ ],
+  "triggerEntity" : "User",
+  "triggerEvent" : "ON_UPDATE"
+}
