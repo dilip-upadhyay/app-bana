@@ -371,7 +371,37 @@ public class WorkflowEngine {
             ps.executeUpdate();
         }
 
-        // Phase 2: Implement UPDATE_ENTITY, SEND_EMAIL, etc.
+        // Implementation of Service Logic
+        String entityName = (String) nodeData.get("entityName");
+
+        if (serviceAction != null) {
+            switch (serviceAction) {
+                case "send-email" -> {
+                    log.info(">>> SIMULATION: Sending Email for Workflow Instance {}", instanceId);
+                    log.info("    To: [User Associated with Entity: {}]", entityName);
+                    log.info("    Subject: Notification from Workflow");
+                    log.info("    Body: Action required for {}", entityName);
+                }
+                case "update-database" -> {
+                    log.info(">>> SIMULATION: Updating Database Entity");
+                    log.info("    Entity: {}", entityName);
+                    log.info("    Operation: SET status = 'PROCESSED'");
+                    // In a real impl, we would use JdbcManager here to actually update the row
+                }
+                case "call-api" -> {
+                    log.info(">>> SIMULATION: Invoking External API");
+                    log.info("    Endpoint: https://api.example.com/webhooks/{}", entityName);
+                    log.info("    Method: POST");
+                }
+                case "generate-report" -> {
+                    log.info(">>> SIMULATION: Generating PDF Report");
+                    log.info("    Context: {}", entityName);
+                }
+                default -> log.warn("Unknown service action: {}", serviceAction);
+            }
+        } else {
+            log.warn("Service task {} has no action configured", nodeId);
+        }
     }
 
     /**
