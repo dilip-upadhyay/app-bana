@@ -14,8 +14,21 @@
     "properties" : {
       "entityName" : "Order"
     }
+  }, {
+    "id" : "end-1765227616144",
+    "type" : "END",
+    "position" : {
+      "x" : 604,
+      "y" : 268.5
+    },
+    "label" : "End",
+    "properties" : { }
   } ],
-  "connections" : [ ],
+  "connections" : [ {
+    "id" : "conn-1765227621412",
+    "from" : "start-1765227027817",
+    "to" : "end-1765227616144"
+  } ],
   "triggerEntity" : "User",
   "triggerEvent" : "ON_UPDATE"
 }

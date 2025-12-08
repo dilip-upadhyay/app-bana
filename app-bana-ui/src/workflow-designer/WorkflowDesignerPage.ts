@@ -679,7 +679,8 @@ export class WorkflowDesignerPage extends LitElement {
             <button class="btn btn-secondary" @click=${this.redo}>Redo</button>
             <button class="btn btn-secondary" @click=${() => this.isSettingsOpen = true}>⚙ Settings</button>
             <button class="btn btn-secondary" @click=${this.handleValidate}>Validate</button>
-            <button class="btn btn-primary" @click=${this.handlePublish}>Publish</button>
+            <button class="btn btn-secondary" @click=${this.handleExportJson}>Export JSON</button>
+            <button class="btn btn-primary" @click=${this.handlePublish} ?disabled=${!this.appId}>Publish</button>
           </div>
         </div>
 
@@ -1168,16 +1169,39 @@ export class WorkflowDesignerPage extends LitElement {
     this.validationResult = { errors: validation.errors, warnings: validation.warnings };
 
     if (!validation.valid && validation.errors.length > 0) {
-      console.warn('Cannot publish invalid workflow', validation.errors);
+      alert('Cannot publish invalid workflow. Please fix errors first.');
       return;
     }
 
-    // 2. Export
-    console.log('Publishing workflow:', this.workflowMetadata);
+    if (!this.appId) {
+      alert('Cannot publish: App ID missing.');
+      return;
+    }
+
+    try {
+      // 2. FORCE SAVE to backend first
+      // This ensures the backend has the workflow record before we try to publish it.
+      await this.saveToStorage();
+
+      // 3. Publish
+      // Note: saveToStorage might have updated the ID if the backend assigned a real one.
+      // But currently we use client-generated IDs. If backend expects something else, we might need to handle response from save.
+      await apiClient.post(`/api/workflows/${this.workflowMetadata.id}/publish`, {});
+      alert(`Workflow "${this.workflowMetadata.name}" published successfully!`);
+    } catch (err) {
+      console.error('Failed to publish workflow:', err);
+      // @ts-ignore
+      alert(`Failed to publish workflow: ${err.message || 'Unknown error'}`);
+    }
+  }
+
+  private handleExportJson() {
+    // 1. Export
+    console.log('Exporting workflow JSON:', this.workflowMetadata);
     const blob = new Blob([JSON.stringify(this.workflowMetadata, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
 
-    // Auto-download for now as proof
+    // Auto-download
     const a = document.createElement('a');
     a.href = url;
     a.download = `${this.workflowMetadata.name.toLowerCase().replace(/\s+/g, '-')} -v${this.workflowMetadata.version}.json`;
@@ -1185,8 +1209,6 @@ export class WorkflowDesignerPage extends LitElement {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
-    alert(`Workflow exported to JSON!\nCheck your downloads.`);
   }
 }
 
