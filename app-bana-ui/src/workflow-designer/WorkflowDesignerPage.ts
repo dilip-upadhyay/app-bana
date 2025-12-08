@@ -483,12 +483,16 @@ export class WorkflowDesignerPage extends LitElement {
       const newId = `${node.type.toLowerCase()}-${timestamp}-${index}`;
       idMap.set(node.id, newId);
 
+      const GRID_SIZE = 20;
+      const rawX = node.position.x + 20;
+      const rawY = node.position.y + 20;
+
       return {
         ...node,
         id: newId,
         position: {
-          x: node.position.x + 20, // Offset position
-          y: node.position.y + 20
+          x: Math.round(rawX / GRID_SIZE) * GRID_SIZE,
+          y: Math.round(rawY / GRID_SIZE) * GRID_SIZE
         }
       };
     });

@@ -389,7 +389,12 @@ export class WorkflowCanvas extends LitElement {
         finalY = y - offsetY;
       }
 
-      console.log('Moving node:', { nodeId, finalX, finalY });
+      // Snap to Grid
+      const GRID_SIZE = 20;
+      finalX = Math.round(finalX / GRID_SIZE) * GRID_SIZE;
+      finalY = Math.round(finalY / GRID_SIZE) * GRID_SIZE;
+
+      console.log('Moving node (snapped):', { nodeId, finalX, finalY });
 
       // Moving existing node
       this.dispatchEvent(new CustomEvent('node-move', {
