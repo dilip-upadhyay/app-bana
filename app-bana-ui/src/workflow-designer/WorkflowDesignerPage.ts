@@ -2,12 +2,14 @@
 // Main container that orchestrates all workflow designer components
 
 import { LitElement, html, css, PropertyValues } from 'lit';
-import { customElement, state, property } from 'lit/decorators.js';
+import { customElement, state, property, query } from 'lit/decorators.js';
 import { WorkflowMetadata, NodeMetadata, ConnectionMetadata } from './models/WorkflowMetadata';
 import { WorkflowValidator } from './utils/WorkflowValidator';
 import { WorkflowHistory } from './utils/WorkflowHistory';
 import './components/NodePalette';
 import './components/WorkflowCanvas';
+import './components/WorkflowMinimap';
+import { WorkflowCanvas } from './components/WorkflowCanvas';
 
 
 import { apiClient } from '../core/api-client';
@@ -18,6 +20,7 @@ const STORAGE_KEY_PREFIX = 'workflow-designer-draft-';
 @customElement('workflow-designer-page')
 export class WorkflowDesignerPage extends LitElement {
   @property({ type: String }) appId: string | null = null;
+  @query('workflow-canvas') private canvas?: WorkflowCanvas;
 
   @state() private workflowMetadata: WorkflowMetadata = {
     id: `workflow-${Date.now()}`,
@@ -31,6 +34,7 @@ export class WorkflowDesignerPage extends LitElement {
   @state() private selectedNodeIds = new Set<string>();
   @state() private selectedConnectionId?: string;
   @state() private validationResult?: { errors: string[], warnings: string[] };
+  @state() private viewport = { x: 0, y: 0, width: 0, height: 0, scale: 1 };
 
   private clipboard?: { nodes: NodeMetadata[], connections: ConnectionMetadata[] };
 
@@ -620,7 +624,14 @@ export class WorkflowDesignerPage extends LitElement {
           @connection-add=${this.handleConnectionAdd}
           @connection-select=${this.handleConnectionSelect}
           @connection-delete=${this.handleConnectionDelete}
+          @viewport-change=${this.handleViewportChange}
         ></workflow-canvas>
+
+        <workflow-minimap
+          .nodes=${this.workflowMetadata.nodes}
+          .viewport=${this.viewport}
+          @minimap-nav=${this.handleMinimapNav}
+        ></workflow-minimap>
 
         <div class="properties">
           ${this.renderPropertiesPanel()}
@@ -928,7 +939,16 @@ export class WorkflowDesignerPage extends LitElement {
   }
 
   private handleConnectionDelete(e: CustomEvent) {
-    this.deleteConnection(e.detail.connectionId);
+    this.deleteConnection(e.detail.connectionId.toString());
+  }
+
+  private handleViewportChange(e: CustomEvent) {
+    this.viewport = e.detail;
+  }
+
+  private handleMinimapNav(e: CustomEvent) {
+    const { x, y } = e.detail;
+    this.canvas?.setViewport(x, y);
   }
 
   private deleteConnection(connectionId: string) {

@@ -16,8 +16,8 @@
     "id" : "start-1765221791326",
     "type" : "START",
     "position" : {
-      "x" : 309,
-      "y" : 165.5
+      "x" : 66,
+      "y" : 156.5
     },
     "label" : "Start",
     "properties" : { }
@@ -25,8 +25,8 @@
     "id" : "end-1765221792465",
     "type" : "END",
     "position" : {
-      "x" : 398,
-      "y" : 362.5
+      "x" : 241,
+      "y" : 258.5
     },
     "label" : "End",
     "properties" : { }
@@ -70,8 +70,8 @@
     "id" : "service_task-1765221803767-0",
     "type" : "SERVICE_TASK",
     "position" : {
-      "x" : 638,
-      "y" : 254.5
+      "x" : 630,
+      "y" : 381.5
     },
     "label" : "Service Task",
     "properties" : { }
@@ -79,8 +79,8 @@
     "id" : "service_task-1765221804355-0",
     "type" : "SERVICE_TASK",
     "position" : {
-      "x" : 658,
-      "y" : 274.5
+      "x" : 416,
+      "y" : 344.5
     },
     "label" : "Service Task",
     "properties" : { }
@@ -88,8 +88,8 @@
     "id" : "start-1765223213976",
     "type" : "START",
     "position" : {
-      "x" : 54,
-      "y" : 106.5
+      "x" : 57,
+      "y" : 61.5
     },
     "label" : "Start",
     "properties" : { }

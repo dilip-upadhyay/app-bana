@@ -187,7 +187,52 @@ export class WorkflowCanvas extends LitElement {
           }
         }
       });
+
+      // Listen for panzoom changes
+      this.canvasEl.addEventListener('panzoomchange', ((e: CustomEvent) => {
+        const pan = this.panzoom.getPan();
+        const scale = this.panzoom.getScale();
+
+        // Canvas dimensions (viewport size)
+        const rect = this.canvasEl!.getBoundingClientRect();
+
+        this.dispatchEvent(new CustomEvent('viewport-change', {
+          detail: {
+            x: -pan.x / scale, // Convert to world coordinates
+            y: -pan.y / scale,
+            width: rect.width / scale,
+            height: rect.height / scale,
+            scale: scale
+          },
+          bubbles: true,
+          composed: true
+        }));
+      }) as EventListener);
     }
+  }
+
+  public setViewport(x: number, y: number) {
+    if (!this.panzoom || !this.canvasEl) return;
+
+    const scale = this.panzoom.getScale();
+    const rect = this.canvasEl.getBoundingClientRect();
+
+    // We want (x, y) to be the CENTER of the viewport
+    // Panzoom 'pan' is the offset of the top-left corner of the content
+    // Pan = -WorldPos * Scale
+
+    // Target Pan X = -(x - viewportWidth/2/scale) * scale ... almost
+    // Let's deduce:
+    // Viewport Width in World Units = rect.width / scale
+    // Top-Left World X = x - (rect.width / scale) / 2
+
+    const targetWorldLeft = x - (rect.width / scale) / 2;
+    const targetWorldTop = y - (rect.height / scale) / 2;
+
+    const targetPanX = -targetWorldLeft * scale;
+    const targetPanY = -targetWorldTop * scale;
+
+    this.panzoom.pan(targetPanX, targetPanY);
   }
 
   disconnectedCallback() {
