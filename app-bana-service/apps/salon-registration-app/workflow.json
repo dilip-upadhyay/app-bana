@@ -74,7 +74,9 @@
       "y" : -20
     },
     "label" : "Service Task",
-    "properties" : { }
+    "properties" : {
+      "serviceAction" : "send-email"
+    }
   }, {
     "id" : "service_task-1765221804355-0",
     "type" : "SERVICE_TASK",

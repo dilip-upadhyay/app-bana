@@ -35,6 +35,7 @@ export class WorkflowDesignerPage extends LitElement {
   @state() private selectedConnectionId?: string;
   @state() private validationResult?: { errors: string[], warnings: string[] };
   @state() private viewport = { x: 0, y: 0, width: 0, height: 0, scale: 1 };
+  @state() private availableEntities: string[] = [];
 
   private clipboard?: { nodes: NodeMetadata[], connections: ConnectionMetadata[] };
 
@@ -315,6 +316,7 @@ export class WorkflowDesignerPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.loadFromStorage();
+    this.loadEntities(); // Load available entities
     window.addEventListener('keydown', this.handleKeyDown);
   }
 
@@ -323,7 +325,16 @@ export class WorkflowDesignerPage extends LitElement {
     window.removeEventListener('keydown', this.handleKeyDown);
   }
 
-  updated(changedProperties: PropertyValues) {
+  private async loadEntities() {
+    try {
+      const entities = await apiClient.get<string[]>('/schema');
+      this.availableEntities = entities || [];
+    } catch (err) {
+      console.error('Failed to load entities:', err);
+    }
+  }
+
+  updated(changedProperties: Map<string, any>) {
     if (changedProperties.has('appId')) {
       const oldAppId = changedProperties.get('appId');
       if (oldAppId !== this.appId) {
@@ -731,6 +742,10 @@ export class WorkflowDesignerPage extends LitElement {
       <div class="divider"></div>
 
       ${this.renderTypeSpecificProperties(node)}
+      
+      <div class="divider"></div>
+      
+      ${this.renderEntitySelector(node)}
 
       <div class="actions-footer">
         <button class="btn btn-secondary btn-danger" @click=${() => this.deleteNode(node.id)}>
@@ -790,13 +805,37 @@ export class WorkflowDesignerPage extends LitElement {
               .value=${node.properties.condition || ''}
               @input=${(e: Event) => this.handleNodePropertyChange(node.id, 'condition', (e.target as HTMLTextAreaElement).value)}
             ></textarea>
+
           </div>
+
         `;
+
 
       default:
         return html``;
     }
   }
+
+  private renderEntitySelector(node: NodeMetadata) {
+    const currentEntity = node.properties.entityName || '';
+    return html`
+      <div class="form-group">
+        <label>Associated Entity</label>
+        <select 
+          .value=${currentEntity} 
+          @change=${(e: Event) => this.handleNodePropertyChange(node.id, 'entityName', (e.target as HTMLSelectElement).value)}
+        >
+          <option value="">-- Select Entity --</option>
+          ${this.availableEntities.map(entity => html`
+            <option value=${entity} ?selected=${entity === currentEntity}>${entity}</option>
+          `)}
+        </select>
+        <div class="help-text">Associate this task with a data entity.</div>
+      </div>
+    `;
+  }
+
+
 
   private renderValidationToast() {
     if (!this.validationResult) return '';
@@ -1004,7 +1043,7 @@ export class WorkflowDesignerPage extends LitElement {
     // Auto-download for now as proof
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${this.workflowMetadata.name.toLowerCase().replace(/\s+/g, '-')}-v${this.workflowMetadata.version}.json`;
+    a.download = `${this.workflowMetadata.name.toLowerCase().replace(/\s+/g, '-')} -v${this.workflowMetadata.version}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
