@@ -306,7 +306,7 @@ export class WorkflowCanvas extends LitElement {
   private handleDragOver(e: DragEvent) {
     if (this.connectionDraft) return; // Don't handle dragover if drawing connection
     e.preventDefault();
-    e.dataTransfer!.dropEffect = 'copy';
+    e.dataTransfer!.dropEffect = 'move';
     this.canvasEl?.classList.add('drag-over');
   }
 
@@ -327,6 +327,8 @@ export class WorkflowCanvas extends LitElement {
     const y = (e.clientY - rect.top - pan.y) / scale;
 
     const nodeId = e.dataTransfer!.getData('node-id');
+    console.log('Drop event:', { nodeId, rawX: x, rawY: y });
+
     if (nodeId) {
       // Calculate correct position using the offset
       const offsetXStr = e.dataTransfer!.getData('drag-offset-x');
@@ -341,6 +343,8 @@ export class WorkflowCanvas extends LitElement {
         finalX = x - offsetX;
         finalY = y - offsetY;
       }
+
+      console.log('Moving node:', { nodeId, finalX, finalY });
 
       // Moving existing node
       this.dispatchEvent(new CustomEvent('node-move', {
