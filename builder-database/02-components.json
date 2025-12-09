@@ -254,7 +254,11 @@
           "placeholder": "Enter your email",
           "required": true
         }
-      }
+      },
+      "implementationNotes": [
+        "MUST implement 'value' getter and setter to keep property in sync with internal input element",
+        "MUST implement 'attributeChangedCallback' to sync 'value' attribute to property"
+      ]
     },
     {
       "type": "textarea",
@@ -316,7 +320,11 @@
           "rows": "6",
           "maxlength": "500"
         }
-      }
+      },
+      "implementationNotes": [
+        "MUST implement 'value' getter and setter to keep property in sync with internal textarea",
+        "MUST implement 'attributeChangedCallback' to sync 'value' attribute to property"
+      ]
     },
     {
       "type": "select",
