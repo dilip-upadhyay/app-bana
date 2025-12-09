@@ -16,6 +16,13 @@
             "name": "LoanApplication",
             "fields": [
                 {
+                    "name": "id",
+                    "type": "int",
+                    "required": true,
+                    "primaryKey": true,
+                    "autoIncrement": true
+                },
+                {
                     "name": "applicantName",
                     "type": "text",
                     "required": true,
