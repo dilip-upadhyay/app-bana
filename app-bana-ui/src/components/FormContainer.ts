@@ -82,6 +82,22 @@ export class FormContainer extends BaseElement {
         const btn = target.closest('studio-button') || target.closest('button');
         if (!btn) return;
 
+        // Check for field updates (e.g. Approve/Reject buttons setting status)
+        const updateField = btn.getAttribute('update-field');
+        const updateValue = btn.getAttribute('update-value');
+
+        if (updateField && updateValue) {
+            // Find the input and update it
+            const input = this.querySelector(`[name="${updateField}"]`) as any;
+            if (input) {
+                if (input.value !== undefined) input.value = updateValue;
+                else input.setAttribute('value', updateValue);
+            } else {
+                // Create hidden input if it doesn't exist
+                // (Though ideally it should exist).
+            }
+        }
+
         // Check if it's a submit button
         const type = btn.getAttribute('type');
         if (type === 'submit') {

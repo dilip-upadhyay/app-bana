@@ -6,39 +6,10 @@ import { registerComponent } from '../core/registry';
  */
 export class InputElement extends FormElement {
   static get observedAttributes() {
-    return ['label', 'value', 'placeholder', 'type', 'required', 'disabled', 'name', 'entity'];
+    return ['label', 'value', 'placeholder', 'type', 'required', 'disabled', 'readonly', 'name', 'entity', 'readOnly'];
   }
 
-  attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
-    if (name === 'value') {
-      if (this.shadowRoot) {
-        const input = this.shadowRoot.querySelector('input');
-        if (input && _newValue !== null && input.value !== _newValue) {
-          input.value = _newValue;
-        }
-      }
-      // Skip re-render to preserve focus/cursor
-      return;
-    }
-    this.requestRender();
-  }
-
-  get value(): string {
-    const input = this.shadowRoot?.querySelector('input');
-    return input ? input.value : this.getAttribute('value') || '';
-  }
-
-  set value(val: string) {
-    const input = this.shadowRoot?.querySelector('input');
-    if (input) {
-      input.value = val;
-    }
-    this.setAttribute('value', val);
-  }
-
-  async connectedCallback() {
-    await this.loadFieldPermissionsFromAttribute();
-  }
+  // ... (existing code)
 
   protected render(): string {
     const fieldName = this.getAttribute('name') || '';
@@ -54,6 +25,7 @@ export class InputElement extends FormElement {
     const type = this.getAttribute('type') || 'text';
     const required = this.hasAttribute('required');
     const disabled = this.hasAttribute('disabled');
+    const readonly = this.hasAttribute('readonly') || this.hasAttribute('readOnly'); // Support both cases
 
     // FLS: Disable non-editable fields
     const flsDisabled = this.isFieldDisabled(fieldName);
@@ -67,6 +39,7 @@ export class InputElement extends FormElement {
       placeholder ? `placeholder="${placeholder}"` : '',
       required ? 'required' : '',
       isDisabled ? 'disabled' : '',
+      readonly ? 'readonly' : '',
       title ? `title="${title}"` : ''
     ].filter(Boolean).join(' ');
 

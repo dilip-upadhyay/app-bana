@@ -46,12 +46,22 @@ export class AppRuntimeShell extends LitElement {
 
     // Listen for custom navigation events from components (e.g. FormContainer)
     this.addEventListener('navigate', ((e: CustomEvent) => {
-      const path = e.detail.path;
-      if (path) {
+      const fullPath = e.detail.path;
+      if (fullPath) {
+        // Parse path and query
+        const [path, queryStr] = fullPath.split('?');
+
         // Resolve path to page ID
         const page = this.runtimeState?.pages.find(p => p.path === path);
+
         if (page) {
-          this.navigateToPage(page.id);
+          // Parse query params to object
+          const queryParams: Record<string, string> = {};
+          if (queryStr) {
+            const search = new URLSearchParams(queryStr);
+            search.forEach((v, k) => queryParams[k] = v);
+          }
+          this.navigateToPage(page.id, queryParams);
         } else {
           console.error('Page not found for path:', path);
         }
@@ -92,13 +102,20 @@ export class AppRuntimeShell extends LitElement {
       return;
     }
 
-    // Set initial page
-    const initialPageId = this.runtimeState.currentPageId || this.runtimeState.pages[0]?.id;
-    if (initialPageId) this.navigateToPage(initialPageId); else this.error = 'No pages found in app';
+    // Set initial page from URL if present
+    const url = new URL(globalThis.location.href);
+    const pageId = url.searchParams.get('pageId');
+
+    if (pageId) {
+      this.navigateToPage(pageId);
+    } else {
+      const initialPageId = this.runtimeState.currentPageId || this.runtimeState.pages[0]?.id;
+      if (initialPageId) this.navigateToPage(initialPageId); else this.error = 'No pages found in app';
+    }
     this._initialized = true;
   }
 
-  private navigateToPage(pageId: string) {
+  private navigateToPage(pageId: string, queryParams?: Record<string, string>) {
     const page = this.runtimeState?.pages.find(p => p.id === pageId);
 
     if (!page) {
@@ -113,14 +130,24 @@ export class AppRuntimeShell extends LitElement {
     // Update URL without reload
     const url = new URL(globalThis.location.href);
     url.searchParams.set('pageId', pageId);
+
+    // Merge new query params
+    if (queryParams) {
+      Object.entries(queryParams).forEach(([k, v]) => url.searchParams.set(k, v));
+    }
+
     globalThis.history.pushState({}, '', url.toString());
 
-    // No imperative re-render; Lit will update reactively.
+    // Request update to re-render with new context
+    this.requestUpdate();
   }
 
-  // Remove direct DOM manipulation. Page content is rendered via Lit's template.
-
-  // Removed duplicate render() method. Only one render() should exist below.
+  private getContext(): any {
+    const params = new URLSearchParams(window.location.search);
+    const query: Record<string, string> = {};
+    params.forEach((v, k) => query[k] = v);
+    return { query, user: { name: 'Guest' } }; // Add mock user context if needed
+  }
 
   private handleBackToStudio() {
     // Navigate back to studio with current app
@@ -151,6 +178,7 @@ export class AppRuntimeShell extends LitElement {
 
     const { app, pages, mode } = this.runtimeState;
     const isPreviewMode = mode === 'preview' || mode === 'development';
+    const context = this.getContext();
 
     // In preview mode, show page tabs but no AppBana header/branding
     if (isPreviewMode) {
@@ -178,7 +206,7 @@ export class AppRuntimeShell extends LitElement {
                 <p>${this.error}</p>
               </div>
             ` : ''}
-            ${this.currentPage ? renderPageTemplate(this.currentPage) : html`<div>Loading...</div>`}
+            ${this.currentPage ? renderPageTemplate(this.currentPage, context) : html`<div>Loading...</div>`}
           </main>
         </div>
       `;
@@ -216,7 +244,7 @@ export class AppRuntimeShell extends LitElement {
               <p>${this.error}</p>
             </div>
           ` : ''}
-    ${this.currentPage ? renderPageTemplate(this.currentPage) : html`<div>Loading...</div>`}
+    ${this.currentPage ? renderPageTemplate(this.currentPage, context) : html`<div>Loading...</div>`}
         </main>
       </div>
     `;

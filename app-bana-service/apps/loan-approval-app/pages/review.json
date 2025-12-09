@@ -52,48 +52,8 @@
                 "style": "background: white; padding: 32px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);"
             },
             "children": [
-                "info-display",
                 "decision-form"
             ]
-        },
-        {
-            "id": "info-display",
-            "type": "container",
-            "props": {
-                "style": "margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #f1f5f9;"
-            },
-            "children": [
-                "d-name",
-                "d-amount",
-                "d-score"
-            ]
-        },
-        {
-            "id": "d-name",
-            "type": "text",
-            "props": {
-                "tag": "div",
-                "text": "Applicant: {{record.applicantName}}",
-                "style": "font-size: 18px; font-weight: 500; margin-bottom: 8px;"
-            }
-        },
-        {
-            "id": "d-amount",
-            "type": "text",
-            "props": {
-                "tag": "div",
-                "text": "Amount: ${{record.amount}}",
-                "style": "font-size: 16px; margin-bottom: 8px;"
-            }
-        },
-        {
-            "id": "d-score",
-            "type": "text",
-            "props": {
-                "tag": "div",
-                "text": "Credit Score: {{record.creditScore}}",
-                "style": "font-size: 16px; color: #64748b;"
-            }
         },
         {
             "id": "decision-form",
@@ -104,9 +64,60 @@
                 "redirectOnSuccess": "/approvals"
             },
             "children": [
+                "group-applicant",
                 "f-comments",
+                "f-status-hidden",
                 "actions-row"
             ]
+        },
+        {
+            "id": "group-applicant",
+            "type": "container",
+            "props": {
+                "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #f1f5f9;"
+            },
+            "children": [
+                "f-name",
+                "f-amount",
+                "f-score",
+                "f-purpose"
+            ]
+        },
+        {
+            "id": "f-name",
+            "type": "input",
+            "props": {
+                "name": "applicantName",
+                "label": "Applicant Name",
+                "readOnly": true
+            }
+        },
+        {
+            "id": "f-amount",
+            "type": "input",
+            "props": {
+                "name": "amount",
+                "label": "Loan Amount",
+                "readOnly": true
+            }
+        },
+        {
+            "id": "f-score",
+            "type": "input",
+            "props": {
+                "name": "creditScore",
+                "label": "Credit Score",
+                "readOnly": true
+            }
+        },
+        {
+            "id": "f-purpose",
+            "type": "input",
+            "props": {
+                "name": "purpose",
+                "label": "Purpose",
+                "readOnly": true
+            }
         },
         {
             "id": "f-comments",
@@ -116,6 +127,14 @@
                 "label": "Manager Comments",
                 "placeholder": "Reason for approval/rejection...",
                 "rows": 4
+            }
+        },
+        {
+            "id": "f-status-hidden",
+            "type": "input",
+            "props": {
+                "name": "status",
+                "type": "hidden"
             }
         },
         {
@@ -136,7 +155,8 @@
                 "label": "✅ Approve Loan",
                 "type": "submit",
                 "style": "flex: 1; padding: 12px; background: #10b981; color: white; border-radius: 6px; border: none; font-weight: 600; cursor: pointer;",
-                "onClick": "record.status = 'APPROVED'"
+                "updateField": "status",
+                "updateValue": "APPROVED"
             }
         },
         {
@@ -146,7 +166,8 @@
                 "label": "❌ Reject Loan",
                 "type": "submit",
                 "style": "flex: 1; padding: 12px; background: #ef4444; color: white; border-radius: 6px; border: none; font-weight: 600; cursor: pointer;",
-                "onClick": "record.status = 'REJECTED'"
+                "updateField": "status",
+                "updateValue": "REJECTED"
             }
         }
     ]

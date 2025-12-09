@@ -8,49 +8,79 @@ import './StudioTableLive';
  * Returns a Lit html template for a PageMeta tree using the component registry.
  * Used for Lit-based reactive rendering.
  */
-export function renderPageTemplate(page: PageMeta): TemplateResult {
+// Helper for simple handle-bars style interpolation
+// e.g. interpolate("Hello {{user.name}}", { user: { name: "World" } }) -> "Hello World"
+function interpolate(text: string, context: any): string {
+  if (!text || typeof text !== 'string') return text;
+  return text.replace(/\{\{([^}]+)\}\}/g, (_, path) => {
+    const keys = path.trim().split('.');
+    let value = context;
+    for (const key of keys) {
+      if (value === undefined || value === null) return '';
+      value = value[key];
+    }
+    return value !== undefined ? String(value) : '';
+  });
+}
+
+/**
+ * Returns a Lit html template for a PageMeta tree using the component registry.
+ * Used for Lit-based reactive rendering.
+ */
+export function renderPageTemplate(page: PageMeta, context: any = {}): TemplateResult {
   const nodeMap = new Map(page.nodes.map(n => [n.id, n]));
   const root = nodeMap.get(page.rootId);
   if (!root) return html`<div class="error">Root node not found: ${page.rootId}</div>`;
-  return renderNodeTemplate(root, nodeMap);
+  return renderNodeTemplate(root, nodeMap, context);
 }
 
-function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentNode>): TemplateResult {
+function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentNode>, context: any): TemplateResult {
+  // Interpolate props
+  const props = { ...node.props };
+  for (const [key, value] of Object.entries(props)) {
+    if (typeof value === 'string') {
+      props[key] = interpolate(value, context);
+    }
+  }
+
+  // Create a proxy node with interpolated props to pass to render
+  const nodeWithData = { ...node, props };
+
   // Compose children recursively
   const children = (node.children ?? []).map(childId => {
     const child = nodeMap.get(childId);
-    return child ? renderNodeTemplate(child, nodeMap) : null;
+    return child ? renderNodeTemplate(child, nodeMap, context) : null;
   });
 
   // Explicit static tag names for each supported type
   if (node.type === 'table' || node.type === 'grid') {
-    return html`<studio-table-live .node=${node}></studio-table-live>`;
+    return html`<studio-table-live .node=${nodeWithData}></studio-table-live>`;
   } else if (node.type === 'container') {
-    return html`<studio-container .node=${node}>${children}</studio-container>`;
+    return html`<studio-container .node=${nodeWithData}>${children}</studio-container>`;
   } else if (node.type === 'text') {
-    return html`<studio-text .node=${node}></studio-text>`;
+    return html`<studio-text .node=${nodeWithData}></studio-text>`;
   } else if (node.type === 'button') {
-    return html`<studio-button .node=${node}></studio-button>`;
+    return html`<studio-button .node=${nodeWithData}></studio-button>`;
   } else if (node.type === 'form') {
-    return html`<studio-form .node=${node}>${children}</studio-form>`;
+    return html`<studio-form .node=${nodeWithData}>${children}</studio-form>`;
   } else if (node.type === 'header') {
-    return html`<studio-header .node=${node}></studio-header>`;
+    return html`<studio-header .node=${nodeWithData}></studio-header>`;
   } else if (node.type === 'list') {
-    return html`<studio-list .node=${node}>${children}</studio-list>`;
+    return html`<studio-list .node=${nodeWithData}>${children}</studio-list>`;
   } else if (node.type === 'card') {
-    return html`<studio-card .node=${node}>${children}</studio-card>`;
+    return html`<studio-card .node=${nodeWithData}>${children}</studio-card>`;
   } else if (node.type === 'detail') {
-    return html`<studio-detail .node=${node}>${children}</studio-detail>`;
+    return html`<studio-detail .node=${nodeWithData}>${children}</studio-detail>`;
   } else if (node.type === 'dashboard') {
-    return html`<studio-dashboard .node=${node}>${children}</studio-dashboard>`;
+    return html`<studio-dashboard .node=${nodeWithData}>${children}</studio-dashboard>`;
   } else if (node.type === 'unknown') {
-    return html`<studio-unknown .node=${node}></studio-unknown>`;
+    return html`<studio-unknown .node=${nodeWithData}></studio-unknown>`;
   } else if (node.type === 'input') {
-    return html`<studio-input .node=${node}></studio-input>`;
+    return html`<studio-input .node=${nodeWithData}></studio-input>`;
   } else if (node.type === 'select') {
-    return html`<studio-select .node=${node}></studio-select>`;
+    return html`<studio-select .node=${nodeWithData}></studio-select>`;
   } else if (node.type === 'textarea') {
-    return html`<studio-textarea .node=${node}></studio-textarea>`;
+    return html`<studio-textarea .node=${nodeWithData}></studio-textarea>`;
   }
   // Fallback for truly unknown types
   return html`<div class="unknown-component" id="${node.id}">Unknown component: ${node.type}</div>`;
@@ -60,26 +90,38 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
  * Renders a PageMeta tree to DOM using the component registry.
  * @param page PageMeta object
  * @param container DOM element to render into
+ * @param context context data for interpolation
  */
-export function renderPage(page: PageMeta, container: HTMLElement) {
+export function renderPage(page: PageMeta, container: HTMLElement, context: any = {}) {
   container.innerHTML = '';
   const nodeMap = new Map(page.nodes.map(n => [n.id, n]));
   const root = nodeMap.get(page.rootId);
   if (!root) throw new Error('Root node not found: ' + page.rootId);
-  container.appendChild(renderNode(root, nodeMap));
+  container.appendChild(renderNode(root, nodeMap, context));
 }
 
-function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): HTMLElement {
+function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>, context: any): HTMLElement {
+  // Interpolate props
+  const props = { ...node.props };
+  for (const [key, value] of Object.entries(props)) {
+    if (typeof value === 'string') {
+      props[key] = interpolate(value, context);
+    }
+  }
+
+  // Use interpolated props
+  const nodeWithData = { ...node, props };
+
   if (node.type === 'table' || node.type === 'grid') {
     // Runtime rendering: live data if in runtime, else preview
     if (window.location.pathname.includes('preview') || window.location.pathname.includes('runtime')) {
       // Use Lit component for robust async rendering
       const el = document.createElement('studio-table-live');
-      (el as any).node = node;
+      (el as any).node = nodeWithData;
       return el;
     } else {
       // Minimal preview
-      return requireTablePreview(node);
+      return requireTablePreview(nodeWithData);
     }
   }
   let ctor = getComponent(node.type);
@@ -101,9 +143,10 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): H
   const el = new ctor();
   (el as HTMLElement).setAttribute('id', node.id);
   (el as HTMLElement).setAttribute('data-component-id', node.id); // For live preview selection
-  if (node.props) {
-    // Assign props as attributes when they are simple scalars, else direct property
-    for (const [k, v] of Object.entries(node.props)) {
+
+  if (props) {
+    // Assign interpolated props
+    for (const [k, v] of Object.entries(props)) {
       if (v == null) continue;
       if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
         (el as HTMLElement).setAttribute(k, String(v));
@@ -115,7 +158,7 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): H
   if (node.children) {
     for (const childId of node.children) {
       const child = nodeMap.get(childId);
-      if (child) el.appendChild(renderNode(child, nodeMap));
+      if (child) el.appendChild(renderNode(child, nodeMap, context));
     }
   }
   if (node.style?.classes) (el as HTMLElement).classList.add(...node.style.classes);
