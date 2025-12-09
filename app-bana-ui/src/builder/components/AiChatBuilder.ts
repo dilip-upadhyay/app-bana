@@ -1155,34 +1155,40 @@ export class AiChatBuilder extends LitElement {
               `Great! To help you better, could you answer a few quick questions?\n${questions}`
             );
           }
-        } else if (result.appName || result.appDescription || result.entities || result.pages) {
-          // Render app summary in chat
-          let appSummary = `**App Name:** ${result.appName || ''}\n`;
-          appSummary += `**Description:** ${result.appDescription || ''}\n`;
-          if (Array.isArray(result.entities) && result.entities.length > 0) {
-            appSummary += `**Entities:**\n`;
-            for (const entity of result.entities) {
-              appSummary += `- ${entity.name}\n`;
-              if (Array.isArray(entity.fields)) {
-                for (const field of entity.fields) {
-                  appSummary += `    - ${field.name} (${field.type})\n`;
+        } else {
+          // Fallback or just reply
+          if (result.payload?.reply) {
+            this.addAssistantMessage(result.payload.reply);
+          }
+
+          if (result.appName || result.appDescription || result.entities || result.pages) {
+            // Render app summary in chat (APPENDED after reply if any)
+            let appSummary = `**App Name:** ${result.appName || ''}\n`;
+            appSummary += `**Description:** ${result.appDescription || ''}\n`;
+            if (Array.isArray(result.entities) && result.entities.length > 0) {
+              appSummary += `**Entities:**\n`;
+              for (const entity of result.entities) {
+                appSummary += `- ${entity.name}\n`;
+                if (Array.isArray(entity.fields)) {
+                  for (const field of entity.fields) {
+                    appSummary += `    - ${field.name} (${field.type})\n`;
+                  }
                 }
               }
             }
-          }
-          if (Array.isArray(result.pages) && result.pages.length > 0) {
-            appSummary += `**Pages:**\n`;
-            for (const page of result.pages) {
-              appSummary += `- ${page.name || page.id || JSON.stringify(page)}\n`;
+            if (Array.isArray(result.pages) && result.pages.length > 0) {
+              appSummary += `**Pages:**\n`;
+              for (const page of result.pages) {
+                appSummary += `- ${page.name || page.id || JSON.stringify(page)}\n`;
+              }
             }
+            // Add call-to-action
+            appSummary += `\n**Ready to create this app?** Just say 'yes, create it' or 'build the app'!`;
+            this.addAssistantMessage(appSummary);
+          } else if (!result.payload?.reply) {
+            // Only show generic message if we didn't show a reply OR an app summary
+            this.addAssistantMessage('AI generated response.');
           }
-          // Add call-to-action
-          appSummary += `\n**Ready to create this app?** Just say 'yes, create it' or 'build the app'!`;
-          this.addAssistantMessage(appSummary);
-        } else if (result.payload?.reply) {
-          this.addAssistantMessage(result.payload.reply);
-        } else {
-          this.addAssistantMessage('AI generated response.');
         }
       } else {
         this.addAssistantMessage(result.error || 'AI did not return a valid response.');

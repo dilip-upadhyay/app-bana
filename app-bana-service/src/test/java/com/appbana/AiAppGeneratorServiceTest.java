@@ -25,4 +25,21 @@ public class AiAppGeneratorServiceTest {
         String s = AiAppGeneratorService.sanitizeAiJson(raw);
         assertEquals(raw, s);
     }
+
+    @Test
+    void testParseAiResponse_withReply() throws Exception {
+        String json = """
+                {
+                    "reply": "Hello! I built your app.",
+                    "appName": "Test App",
+                    "entities": [],
+                    "pages": []
+                }
+                """;
+        AiAppGeneratorService.GenerationResult result = AiAppGeneratorService.parseAiResponse(json);
+        assertTrue(result.success);
+        assertEquals("Test App", result.appName);
+        assertNotNull(result.payload);
+        assertEquals("Hello! I built your app.", result.payload.get("reply"));
+    }
 }
