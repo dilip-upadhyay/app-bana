@@ -2,7 +2,6 @@
   "version": "1.1.0",
   "lastUpdated": "2025-11-22T00:00:00Z",
   "description": "All available UI components in AppBana with properties and usage examples",
-  
   "categories": [
     "Layout Components",
     "Form Components",
@@ -10,7 +9,6 @@
     "Navigation Components",
     "Data Components"
   ],
-
   "components": [
     {
       "type": "container",
@@ -22,25 +20,43 @@
       "props": {
         "layout": {
           "type": "string",
-          "values": ["vertical", "horizontal", "grid"],
+          "values": [
+            "vertical",
+            "horizontal",
+            "grid"
+          ],
           "default": "vertical",
           "description": "Layout direction for children"
         },
         "gap": {
           "type": "string",
-          "values": ["sm", "md", "lg"],
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
           "default": "md",
           "description": "Spacing between children"
         },
         "padding": {
           "type": "string",
-          "values": ["none", "sm", "md", "lg"],
+          "values": [
+            "none",
+            "sm",
+            "md",
+            "lg"
+          ],
           "default": "md",
           "description": "Internal padding"
         },
         "align": {
           "type": "string",
-          "values": ["start", "center", "end", "stretch"],
+          "values": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ],
           "default": "stretch",
           "description": "Cross-axis alignment"
         }
@@ -54,7 +70,54 @@
           "gap": "md",
           "padding": "lg"
         },
-        "children": ["child1", "child2"]
+        "children": [
+          "child1",
+          "child2"
+        ]
+      }
+    },
+    {
+      "type": "studio-form",
+      "name": "FormContainer",
+      "category": "Form Components",
+      "file": "src/components/FormContainer.ts",
+      "description": "Container that handles data loading and submission for an entity record.",
+      "baseClass": "BaseElement",
+      "customElement": "studio-form",
+      "props": {
+        "entity": {
+          "type": "string",
+          "required": true,
+          "description": "Entity name to creaet/update (e.g. 'Customer')"
+        },
+        "record-id": {
+          "type": "string",
+          "description": "ID of record to update. If omitted, creates new record."
+        },
+        "redirect-on-success": {
+          "type": "string",
+          "description": "Path to navigate to after successful save (e.g. '/customers')"
+        }
+      },
+      "children": true,
+      "features": [
+        "Auto-load record data",
+        "Auto-collect input values",
+        "Handies API submission",
+        "Show/Hide success/error messages"
+      ],
+      "example": {
+        "id": "form1",
+        "type": "studio-form",
+        "props": {
+          "entity": "Ticket",
+          "redirect-on-success": "/tickets"
+        },
+        "children": [
+          "input-title",
+          "textarea-desc",
+          "btn-submit"
+        ]
       }
     },
     {
@@ -72,13 +135,23 @@
         },
         "variant": {
           "type": "string",
-          "values": ["primary", "danger", "success", "outline", "ghost"],
+          "values": [
+            "primary",
+            "danger",
+            "success",
+            "outline",
+            "ghost"
+          ],
           "default": "primary",
           "description": "Visual style variant"
         },
         "size": {
           "type": "string",
-          "values": ["sm", "md", "lg"],
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
           "default": "md",
           "description": "Button size"
         },
@@ -89,7 +162,9 @@
         }
       },
       "children": false,
-      "events": ["click"],
+      "events": [
+        "click"
+      ],
       "example": {
         "id": "btn1",
         "type": "button",
@@ -111,7 +186,17 @@
       "props": {
         "type": {
           "type": "string",
-          "values": ["text", "email", "password", "number", "tel", "url", "date", "datetime-local", "time"],
+          "values": [
+            "text",
+            "email",
+            "password",
+            "number",
+            "tel",
+            "url",
+            "date",
+            "datetime-local",
+            "time"
+          ],
           "default": "text",
           "description": "Input type"
         },
@@ -156,7 +241,10 @@
         }
       },
       "children": false,
-      "events": ["input", "change"],
+      "events": [
+        "input",
+        "change"
+      ],
       "example": {
         "id": "email1",
         "type": "input",
@@ -215,7 +303,10 @@
         }
       },
       "children": false,
-      "events": ["input", "change"],
+      "events": [
+        "input",
+        "change"
+      ],
       "example": {
         "id": "description1",
         "type": "textarea",
@@ -270,7 +361,9 @@
         }
       },
       "children": false,
-      "events": ["change"],
+      "events": [
+        "change"
+      ],
       "example": {
         "id": "country1",
         "type": "select",
@@ -316,7 +409,9 @@
         }
       },
       "children": false,
-      "events": ["change"],
+      "events": [
+        "change"
+      ],
       "example": {
         "id": "terms1",
         "type": "checkbox",
@@ -366,13 +461,18 @@
         },
         "layout": {
           "type": "string",
-          "values": ["vertical", "horizontal"],
+          "values": [
+            "vertical",
+            "horizontal"
+          ],
           "default": "vertical",
           "description": "Layout direction"
         }
       },
       "children": false,
-      "events": ["change"],
+      "events": [
+        "change"
+      ],
       "example": {
         "id": "gender1",
         "type": "radio-group",
@@ -399,13 +499,23 @@
         },
         "variant": {
           "type": "string",
-          "values": ["heading", "subheading", "body", "caption", "label"],
+          "values": [
+            "heading",
+            "subheading",
+            "body",
+            "caption",
+            "label"
+          ],
           "default": "body",
           "description": "Typography style"
         },
         "align": {
           "type": "string",
-          "values": ["left", "center", "right"],
+          "values": [
+            "left",
+            "center",
+            "right"
+          ],
           "default": "left",
           "description": "Text alignment"
         },
@@ -452,7 +562,11 @@
           "columns": 3,
           "gap": "24px"
         },
-        "children": ["item1", "item2", "item3"]
+        "children": [
+          "item1",
+          "item2",
+          "item3"
+        ]
       }
     },
     {
@@ -474,8 +588,17 @@
         }
       },
       "children": false,
-      "fields": ["username", "email", "password", "confirmPassword"],
-      "validation": ["required", "email format", "password match"],
+      "fields": [
+        "username",
+        "email",
+        "password",
+        "confirmPassword"
+      ],
+      "validation": [
+        "required",
+        "email format",
+        "password match"
+      ],
       "example": {
         "id": "regForm1",
         "type": "user-registration-form",
@@ -497,7 +620,11 @@
       "props": {},
       "children": false,
       "usage": "Studio Builder only",
-      "features": ["Drag-drop support", "Category filtering", "Component preview"]
+      "features": [
+        "Drag-drop support",
+        "Category filtering",
+        "Component preview"
+      ]
     },
     {
       "type": "entity-explorer",
@@ -509,7 +636,12 @@
       "props": {},
       "children": false,
       "usage": "Studio Builder only",
-      "features": ["Entity CRUD", "Field editor", "Relationship editor", "SQL preview"]
+      "features": [
+        "Entity CRUD",
+        "Field editor",
+        "Relationship editor",
+        "SQL preview"
+      ]
     },
     {
       "type": "studio-table-live",
@@ -527,7 +659,12 @@
         "fields": {
           "type": "array",
           "description": "Column definitions (name, label, type) to render",
-          "items": { "type": "object", "required": ["name"] }
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ]
+          }
         },
         "pageSize": {
           "type": "number",
@@ -545,7 +682,10 @@
         },
         "bulkActions": {
           "type": "array",
-          "default": ["delete", "export"],
+          "default": [
+            "delete",
+            "export"
+          ],
           "description": "List of actions (delete/export) shown when rows selected"
         },
         "confirmDelete": {
@@ -564,7 +704,10 @@
         },
         "viewMode": {
           "type": "string",
-          "values": ["dynamic", "custom"],
+          "values": [
+            "dynamic",
+            "custom"
+          ],
           "default": "dynamic",
           "description": "Determines whether the view modal reuses selected columns or custom field list"
         },
@@ -575,7 +718,16 @@
         "theme": {
           "type": "string",
           "default": "default",
-          "values": ["default", "minimal", "dark", "striped", "compact", "soft", "auto", "custom"],
+          "values": [
+            "default",
+            "minimal",
+            "dark",
+            "striped",
+            "compact",
+            "soft",
+            "auto",
+            "custom"
+          ],
           "description": "Preset theme; select \"custom\" to override tokens"
         },
         "themeTokens": {
@@ -621,15 +773,36 @@
         "props": {
           "entity": "contacts",
           "fields": [
-            { "name": "id", "label": "ID", "type": "text" },
-            { "name": "name", "label": "Name", "type": "text" },
-            { "name": "email", "label": "Email", "type": "text" },
-            { "name": "status", "label": "Status", "type": "text" }
+            {
+              "name": "id",
+              "label": "ID",
+              "type": "text"
+            },
+            {
+              "name": "name",
+              "label": "Name",
+              "type": "text"
+            },
+            {
+              "name": "email",
+              "label": "Email",
+              "type": "text"
+            },
+            {
+              "name": "status",
+              "label": "Status",
+              "type": "text"
+            }
           ],
           "pageSize": 25,
           "multiSelect": true,
-          "actions": ["view"],
-          "bulkActions": ["delete", "export"],
+          "actions": [
+            "view"
+          ],
+          "bulkActions": [
+            "delete",
+            "export"
+          ],
           "confirmDelete": true,
           "viewMode": "dynamic",
           "theme": "default"
@@ -756,15 +929,22 @@
           "ideaPromptPattern": "(what should i build|suggest (?:an|some)? app|ideas (?:for|to build)|decide what to build|choose (?:an|a)? app)"
         },
         "telemetry": {
-          "events": ["greeting", "idea", "decision"],
+          "events": [
+            "greeting",
+            "idea",
+            "decision"
+          ],
           "destination": "AppStore.recordTelemetry",
-          "payload": ["persona", "phase", "detail"]
+          "payload": [
+            "persona",
+            "phase",
+            "detail"
+          ]
         }
       },
       "children": false
     }
   ],
-
   "registrationPattern": {
     "file": "src/core/registry.ts",
     "method": "registerComponent(type, constructor)",
@@ -772,23 +952,29 @@
     "bootstrap": "ensureCoreRegistered()",
     "example": "registerComponent('my-component', () => import('../components/MyComponent'));"
   },
-
   "componentStructure": {
     "baseElement": {
       "file": "src/core/BaseElement.ts",
       "pattern": "String-based HTML rendering",
-      "lifecycle": ["connectedCallback", "attributeChangedCallback", "render", "styles"],
+      "lifecycle": [
+        "connectedCallback",
+        "attributeChangedCallback",
+        "render",
+        "styles"
+      ],
       "usage": "Legacy - prefer Lit for new components"
     },
     "litElement": {
       "library": "Lit 3.1.4",
       "pattern": "Tagged template literals with html``",
       "reactivity": "@state() decorator",
-      "lifecycle": ["connectedCallback", "render"],
+      "lifecycle": [
+        "connectedCallback",
+        "render"
+      ],
       "usage": "Preferred for new components"
     }
   },
-
   "stylingPatterns": {
     "cssImports": "Always use ?inline suffix: import styles from './Component.css?inline';",
     "shadowDOM": true,
