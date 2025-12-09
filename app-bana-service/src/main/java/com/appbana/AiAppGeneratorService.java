@@ -648,6 +648,23 @@ public class AiAppGeneratorService {
             LOG.info("[AI Context] Injected conversation context into system prompt");
         }
 
+        // NEW: Inject current app schema for modification
+        if (request.options != null && request.options.containsKey("currentAppId")) {
+            String currentAppId = String.valueOf(request.options.get("currentAppId"));
+            if (currentAppId != null && !currentAppId.equals("null") && !currentAppId.isBlank()) {
+                try {
+                    com.appbana.model.AppMetadata currentApp = AppManager.getApp(currentAppId);
+                    if (currentApp != null) {
+                        String schemaContext = buildAppSchemaContext(currentApp);
+                        systemPrompt = schemaContext + "\n\n" + systemPrompt;
+                        LOG.info("[AI Context] Injected FULL APP SCHEMA for app: {}", currentAppId);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("[AI Context] Failed to inject app context for {}: {}", currentAppId, e.getMessage());
+                }
+            }
+        }
+
         String userPrompt = request != null ? request.description : "";
 
         // If this is a retry with error feedback, append correction instructions
@@ -2578,6 +2595,36 @@ public class AiAppGeneratorService {
                 "Great! I'm glad you like the design. Would you like me to create the %s now? " +
                         "Just say 'yes, create it' or 'build the app' and I'll generate it for you!",
                 appType);
+    }
+
+    private static String buildAppSchemaContext(com.appbana.model.AppMetadata app) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append("📝 CURRENT APP CONTEXT (You are modifying this app):\n");
+            sb.append("AppName: ").append(app.getName()).append("\n");
+            sb.append("Description: ").append(app.getDescription() != null ? app.getDescription() : "").append("\n");
+
+            sb.append("Existing Entities:\n");
+            if (app.getEntities() != null) {
+                for (Object entityObj : app.getEntities()) {
+                    sb.append(MAPPER.writeValueAsString(entityObj)).append("\n");
+                }
+            }
+
+            sb.append("Existing Pages: ");
+            if (app.getPages() != null) {
+                sb.append(String.join(", ", app.getPages()));
+            } else {
+                sb.append("None");
+            }
+            sb.append("\n\n");
+            sb.append(
+                    "INSTRUCTION: The user wants to modify THIS app. Respect existing entities/fields unless asked to change them.");
+            return sb.toString();
+        } catch (Exception e) {
+            LOG.warn("Failed to build app schema context", e);
+            return "Current App: " + app.getName();
+        }
     }
 
     /**

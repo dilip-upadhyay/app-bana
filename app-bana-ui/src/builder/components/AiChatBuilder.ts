@@ -1101,9 +1101,16 @@ export class AiChatBuilder extends LitElement {
     try {
       // Prepare the payload for backend AI
       const userId = 'default'; // Replace with actual user/session ID if available
+
+      // Get current app ID from store or context
+      const currentAppId = appStore.getCurrentApp()?.id || this.conversationContext.currentAppId;
+
       const payload = {
         description: input,
-        options: { userId },
+        options: {
+          userId,
+          currentAppId: currentAppId
+        },
         messages: this.messages.map(m => ({ role: m.role, content: m.content })),
         conversationContext: this.conversationContext
       };
