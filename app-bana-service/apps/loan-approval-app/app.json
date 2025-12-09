@@ -1,0 +1,71 @@
+{
+    "id": "loan-approval-app",
+    "name": "Loan Approval System",
+    "description": "Maker-Checker system for processing loan applications",
+    "version": "1.0.0",
+    "created": 1729500000000,
+    "updated": 1729500000000,
+    "pages": [
+        "home",
+        "apply",
+        "approvals",
+        "review"
+    ],
+    "entities": [
+        {
+            "name": "LoanApplication",
+            "fields": [
+                {
+                    "name": "applicantName",
+                    "type": "text",
+                    "required": true,
+                    "primaryKey": false,
+                    "autoIncrement": false
+                },
+                {
+                    "name": "amount",
+                    "type": "currency",
+                    "required": true,
+                    "primaryKey": false,
+                    "autoIncrement": false
+                },
+                {
+                    "name": "purpose",
+                    "type": "text",
+                    "required": true,
+                    "primaryKey": false,
+                    "autoIncrement": false
+                },
+                {
+                    "name": "creditScore",
+                    "type": "number",
+                    "required": true,
+                    "primaryKey": false,
+                    "autoIncrement": false
+                },
+                {
+                    "name": "status",
+                    "type": "status",
+                    "required": true,
+                    "primaryKey": false,
+                    "autoIncrement": false,
+                    "options": [
+                        "PENDING",
+                        "APPROVED",
+                        "REJECTED"
+                    ]
+                },
+                {
+                    "name": "managerComments",
+                    "type": "longtext",
+                    "required": false,
+                    "primaryKey": false,
+                    "autoIncrement": false
+                }
+            ]
+        }
+    ],
+    "routes": {
+        "basePath": "/loan-approval-app"
+    }
+}

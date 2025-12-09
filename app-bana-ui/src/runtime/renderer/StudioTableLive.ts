@@ -353,6 +353,7 @@ export class StudioTableLive extends LitElement {
 
   async connectedCallback() {
     super.connectedCallback();
+    console.log('[StudioTableLive] Connected. Node:', this.node);
     // Load field permissions for FLS
     await this.loadFieldPermissions();
   }
@@ -368,7 +369,12 @@ export class StudioTableLive extends LitElement {
     }
   }
 
-  protected updated(): void {
+  protected updated(changedProperties: Map<string, any>): void {
+    if (changedProperties.has('node')) {
+      console.log('[StudioTableLive] Node property changed:', this.node);
+      this.initializeTable();
+    }
+
     if (this.confirmOpen) {
       const card = this.shadowRoot?.getElementById('confirmCard') as HTMLElement | null;
       card?.focus?.();
@@ -387,7 +393,12 @@ export class StudioTableLive extends LitElement {
   }
 
   private async initializeTable() {
+    console.log('[StudioTableLive] Initializing table...');
     if (!this.entityName || !Array.isArray(this.node?.props?.fields) || this.node?.props?.fields.length === 0) {
+      console.error('[StudioTableLive] Configuration Missing:', {
+        entityName: this.entityName,
+        fields: this.node?.props?.fields
+      });
       this.error = 'No entity or columns selected.';
       return;
     }
@@ -504,7 +515,7 @@ export class StudioTableLive extends LitElement {
     </div>`;
   }
 
-  private buildHeader(fields: any[], actions: string[], multiSelect: boolean, rowsOnPage: any[]) {
+  private buildHeader(fields: any[], actions: (string | { label: string; onClick: string })[], multiSelect: boolean, rowsOnPage: any[]) {
     const allChecked = multiSelect && rowsOnPage.length > 0 && rowsOnPage.every(r => this.selectedIds.has(String(this.getRowId(r))));
     return html`<tr>
       ${multiSelect ? html`<th><input type="checkbox" aria-label="Select all on page" .checked=${allChecked} @change=${this.onSelectAllChange}></th>` : ''}
@@ -513,7 +524,7 @@ export class StudioTableLive extends LitElement {
     </tr>`;
   }
 
-  private buildFilterRow(fields: any[], actions: string[], multiSelect: boolean) {
+  private buildFilterRow(fields: any[], actions: (string | { label: string; onClick: string })[], multiSelect: boolean) {
     return html`<tr class="filter-row">
       ${multiSelect ? html`<th></th>` : ''}
       ${fields.map((f: any) => html`<th>
@@ -523,7 +534,7 @@ export class StudioTableLive extends LitElement {
     </tr>`;
   }
 
-  private buildBody(rows: any[], fields: any[], actions: string[], multiSelect: boolean) {
+  private buildBody(rows: any[], fields: any[], actions: (string | { label: string; onClick: string })[], multiSelect: boolean) {
     return rows.map((row: any) => {
       const id = String(this.getRowId(row));
       const checked = this.selectedIds.has(id);
@@ -531,7 +542,12 @@ export class StudioTableLive extends LitElement {
         ${multiSelect ? html`<td><input type="checkbox" aria-label="Select row" .checked=${checked} @change=${(e: Event) => this.onRowSelectChange(id, e)}></td>` : ''}
         ${fields.map((f: any) => html`<td class="cell" @dblclick=${() => this.startInlineCellEdit(id, f.name, row[f.name])}>${this.renderCellContent(id, f.name, row[f.name])}</td>`)}
         ${actions.length > 0 ? html`<td class="table-actions">
-          ${actions.map((action: string) => html`<button aria-label="${action} row" @click=${() => this.handleRowAction(action, row)}>${action.charAt(0).toUpperCase() + action.slice(1)}</button>`)}
+          ${actions.map((action) => {
+        const isString = typeof action === 'string';
+        const label = isString ? (action as string).charAt(0).toUpperCase() + (action as string).slice(1) : (action as { label: string }).label;
+        const handler = isString ? () => this.handleRowAction(action as string, row) : () => this.handleCustomAction(action as { onClick: string }, row);
+        return html`<button aria-label="${label} row" @click=${handler}>${label}</button>`;
+      })}
         </td>` : ''}
       </tr>`;
     });
@@ -604,7 +620,7 @@ export class StudioTableLive extends LitElement {
   render() {
     if (this.loading) return html`<div>Loading table data...</div>`;
     const fields = Array.isArray(this.node?.props?.fields) ? this.node.props.fields : [];
-    const actions: string[] = this.node?.props?.actions || [];
+    const actions: (string | { label: string; onClick: string })[] = this.node?.props?.actions || [];
     const multiSelect: boolean = Boolean(this.node?.props?.multiSelect);
     const rows = (this.data?.rows && this.data.rows.length > 0)
       ? this.data.rows
@@ -768,6 +784,30 @@ export class StudioTableLive extends LitElement {
         <button @click=${() => this.cancelInlineEdit()} aria-label="Cancel cell edit">✖</button>
       </div>
     </div>`;
+  }
+
+  private handleCustomAction(action: { onClick: string }, row: any) {
+    try {
+      // Evaluate the onClick string in a context where 'row' and 'navigate' are available
+      const navigate = (path: string) => {
+        // Prefer window.navigate if available (Runtime Shell shim)
+        if ((window as any).navigate) {
+          (window as any).navigate(path);
+        } else {
+          // Fallback to custom event
+          this.dispatchEvent(new CustomEvent('navigate', { detail: { path }, bubbles: true, composed: true }));
+        }
+      };
+
+      // Create a function that takes 'row' and 'navigate' as arguments
+      // The action.onClick string (e.g., "navigate('/foo')") matches this if 'navigate' is in scope
+      // We pass 'navigate' as a parameter to the dynamic function so it's available
+      const func = new Function('row', 'navigate', action.onClick);
+      func(row, navigate);
+    } catch (e) {
+      console.error('Failed to execute custom action', e);
+      this.showToast('Action failed: ' + (e as Error).message);
+    }
   }
 
   private readonly handleRowAction = (action: string, row: any) => {

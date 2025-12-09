@@ -10,7 +10,30 @@ export class InputElement extends FormElement {
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
+    if (name === 'value') {
+      if (this.shadowRoot) {
+        const input = this.shadowRoot.querySelector('input');
+        if (input && _newValue !== null && input.value !== _newValue) {
+          input.value = _newValue;
+        }
+      }
+      // Skip re-render to preserve focus/cursor
+      return;
+    }
     this.requestRender();
+  }
+
+  get value(): string {
+    const input = this.shadowRoot?.querySelector('input');
+    return input ? input.value : this.getAttribute('value') || '';
+  }
+
+  set value(val: string) {
+    const input = this.shadowRoot?.querySelector('input');
+    if (input) {
+      input.value = val;
+    }
+    this.setAttribute('value', val);
   }
 
   async connectedCallback() {

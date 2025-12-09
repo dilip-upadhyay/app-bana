@@ -4,8 +4,8 @@
   "description" : "Application for booking appointments at a salon with services and customer management",
   "version" : "1.0.0",
   "created" : 1763579413807,
-  "updated" : 1763579413807,
-  "pages" : [ ],
+  "updated" : 1765228178623,
+  "pages" : [ "home" ],
   "entities" : [ {
     "name" : "Customer",
     "fields" : [ {

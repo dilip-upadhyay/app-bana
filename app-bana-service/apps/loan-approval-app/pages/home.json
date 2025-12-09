@@ -1,0 +1,128 @@
+{
+    "metaVersion": 1,
+    "id": "home",
+    "name": "Home",
+    "path": "/",
+    "rootId": "root",
+    "nodes": [
+        {
+            "id": "root",
+            "type": "container",
+            "props": {
+                "style": "padding: 40px; text-align: center; max-width: 800px; margin: 0 auto;"
+            },
+            "children": [
+                "title",
+                "subtitle",
+                "actions-grid"
+            ]
+        },
+        {
+            "id": "title",
+            "type": "text",
+            "props": {
+                "tag": "h1",
+                "text": "🏦 Loan Approval System",
+                "style": "color: #1e293b; margin-bottom: 16px;"
+            }
+        },
+        {
+            "id": "subtitle",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Select your role to proceed",
+                "style": "color: #64748b; margin-bottom: 48px; font-size: 18px;"
+            }
+        },
+        {
+            "id": "actions-grid",
+            "type": "container",
+            "props": {
+                "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 24px;"
+            },
+            "children": [
+                "maker-card",
+                "checker-card"
+            ]
+        },
+        {
+            "id": "maker-card",
+            "type": "container",
+            "props": {
+                "style": "padding: 32px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); transition: transform 0.2s;"
+            },
+            "children": [
+                "maker-icon",
+                "maker-title",
+                "maker-btn"
+            ]
+        },
+        {
+            "id": "maker-icon",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "📝",
+                "style": "font-size: 48px; margin-bottom: 16px;"
+            }
+        },
+        {
+            "id": "maker-title",
+            "type": "text",
+            "props": {
+                "tag": "h3",
+                "text": "New Application",
+                "style": "margin-bottom: 16px; font-weight: 600;"
+            }
+        },
+        {
+            "id": "maker-btn",
+            "type": "button",
+            "props": {
+                "label": "Apply Now",
+                "style": "width: 100%; padding: 12px; background: #3b82f6; color: white; border-radius: 6px; border: none; cursor: pointer;",
+                "onClick": "navigate('/apply')"
+            }
+        },
+        {
+            "id": "checker-card",
+            "type": "container",
+            "props": {
+                "style": "padding: 32px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);"
+            },
+            "children": [
+                "checker-icon",
+                "checker-title",
+                "checker-btn"
+            ]
+        },
+        {
+            "id": "checker-icon",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "👮",
+                "style": "font-size: 48px; margin-bottom: 16px;"
+            }
+        },
+        {
+            "id": "checker-title",
+            "type": "text",
+            "props": {
+                "tag": "h3",
+                "text": "Manager Dashboard",
+                "style": "margin-bottom: 16px; font-weight: 600;"
+            }
+        },
+        {
+            "id": "checker-btn",
+            "type": "button",
+            "props": {
+                "label": "View Approvals",
+                "style": "width: 100%; padding: 12px; background: #10b981; color: white; border-radius: 6px; border: none; cursor: pointer;",
+                "onClick": "navigate('/approvals')"
+            }
+        }
+    ]
+}

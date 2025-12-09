@@ -12,11 +12,46 @@ export abstract class BaseElement extends HTMLElement {
     this._mount();
   }
 
+  connectedCallback() {
+    // Base implementation
+  }
+
+
+  /**
+   * Universal property setter for Lit-based rendering.
+   * Takes the full ComponentNode and applies props as attributes
+   * so that the component can render correctly even when used with .node binding.
+   */
+  set node(data: any) {
+    if (data && data.props) {
+      for (const [key, value] of Object.entries(data.props)) {
+        if (value === null || value === undefined) continue;
+
+        // Handle boolean values
+        if (typeof value === 'boolean') {
+          if (value) {
+            this.setAttribute(key, '');
+          } else {
+            this.removeAttribute(key);
+          }
+        }
+        // Handle objects/arrays (serialize them)
+        else if (typeof value === 'object') {
+          this.setAttribute(key, JSON.stringify(value));
+        }
+        // Handle strings/numbers
+        else {
+          this.setAttribute(key, String(value));
+        }
+      }
+    }
+  }
+
   /**
    * Lifecycle hook called when the component is first initialized.
    * Subclasses can override this to set up initial state.
    */
-  protected onInit(): void {}
+  protected onInit(): void { }
 
   /**
    * Subclasses must implement this method to return the HTML string for the component's template.
@@ -54,7 +89,7 @@ export abstract class BaseElement extends HTMLElement {
   attributeChangedCallback(name: string, _oldValue: string | null, newValue: string | null) {
     // Basic reflection from attribute to state
     if (this.state[name] !== newValue) {
-        this.setState({ [name]: newValue });
+      this.setState({ [name]: newValue });
     }
   }
 

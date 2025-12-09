@@ -6,8 +6,30 @@ export class TextareaElement extends FormElement {
     return ['label', 'value', 'placeholder', 'rows', 'required', 'disabled', 'name', 'entity'];
   }
 
-  attributeChangedCallback() {
+  attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
+    if (name === 'value') {
+      if (this.shadowRoot) {
+        const textarea = this.shadowRoot.querySelector('textarea');
+        if (textarea && _newValue !== null && textarea.value !== _newValue) {
+          textarea.value = _newValue;
+        }
+      }
+      return;
+    }
     this.requestRender();
+  }
+
+  get value(): string {
+    const textarea = this.shadowRoot?.querySelector('textarea');
+    return textarea ? textarea.value : this.getAttribute('value') || '';
+  }
+
+  set value(val: string) {
+    const textarea = this.shadowRoot?.querySelector('textarea');
+    if (textarea) {
+      textarea.value = val;
+    }
+    this.setAttribute('value', val);
   }
 
   async connectedCallback() {

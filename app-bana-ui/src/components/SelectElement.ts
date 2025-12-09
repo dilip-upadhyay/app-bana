@@ -11,7 +11,29 @@ export class SelectElement extends FormElement {
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
+    if (name === 'value') {
+      if (this.shadowRoot) {
+        const select = this.shadowRoot.querySelector('select');
+        if (select && _newValue !== null && select.value !== _newValue) {
+          select.value = _newValue;
+        }
+      }
+      return;
+    }
     this.requestRender();
+  }
+
+  get value(): string {
+    const select = this.shadowRoot?.querySelector('select');
+    return select ? select.value : this.getAttribute('value') || '';
+  }
+
+  set value(val: string) {
+    const select = this.shadowRoot?.querySelector('select');
+    if (select) {
+      select.value = val;
+    }
+    this.setAttribute('value', val);
   }
 
   async connectedCallback() {

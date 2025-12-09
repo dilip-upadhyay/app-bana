@@ -23,7 +23,7 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
   });
 
   // Explicit static tag names for each supported type
-  if (node.type === 'table') {
+  if (node.type === 'table' || node.type === 'grid') {
     return html`<studio-table-live .node=${node}></studio-table-live>`;
   } else if (node.type === 'container') {
     return html`<studio-container .node=${node}>${children}</studio-container>`;
@@ -45,6 +45,12 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
     return html`<studio-dashboard .node=${node}>${children}</studio-dashboard>`;
   } else if (node.type === 'unknown') {
     return html`<studio-unknown .node=${node}></studio-unknown>`;
+  } else if (node.type === 'input') {
+    return html`<studio-input .node=${node}></studio-input>`;
+  } else if (node.type === 'select') {
+    return html`<studio-select .node=${node}></studio-select>`;
+  } else if (node.type === 'textarea') {
+    return html`<studio-textarea .node=${node}></studio-textarea>`;
   }
   // Fallback for truly unknown types
   return html`<div class="unknown-component" id="${node.id}">Unknown component: ${node.type}</div>`;
@@ -64,7 +70,7 @@ export function renderPage(page: PageMeta, container: HTMLElement) {
 }
 
 function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): HTMLElement {
-  if (node.type === 'table') {
+  if (node.type === 'table' || node.type === 'grid') {
     // Runtime rendering: live data if in runtime, else preview
     if (window.location.pathname.includes('preview') || window.location.pathname.includes('runtime')) {
       // Use Lit component for robust async rendering

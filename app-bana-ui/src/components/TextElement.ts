@@ -3,7 +3,7 @@ import { registerComponent } from '../core/registry';
 
 export class TextElement extends FormElement {
   static get observedAttributes() {
-    return ['content', 'tag', 'align', 'color'];
+    return ['content', 'text', 'tag', 'align', 'color'];
   }
 
   attributeChangedCallback() {
@@ -11,7 +11,7 @@ export class TextElement extends FormElement {
   }
 
   protected render(): string {
-    const content = this.getAttribute('content') || 'Text content';
+    const content = this.getAttribute('content') || this.getAttribute('text') || 'Text content';
     const tag = this.getAttribute('tag') || 'p';
 
     // Sanitize tag to prevent XSS (basic check)

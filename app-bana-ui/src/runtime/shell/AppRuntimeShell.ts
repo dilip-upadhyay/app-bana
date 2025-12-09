@@ -5,6 +5,12 @@ import { PageMeta } from '../../models/metadata.js';
 import { renderPageTemplate } from '../renderer/Renderer.js';
 import shellStyles from './AppRuntimeShell.css?inline';
 import { ensureCoreRegistered } from '../../core/registry.js';
+// Explicitly import form components to ensure they are registered in the bundle
+import '../../components/InputElement';
+import '../../components/SelectElement';
+import '../../components/TextareaElement';
+import '../../components/ButtonElement';
+import '../../components/FormContainer';
 
 /**
  * AppRuntimeShell - Main container for app preview/production runtime
@@ -37,10 +43,40 @@ export class AppRuntimeShell extends LitElement {
   async connectedCallback() {
     super.connectedCallback();
     await ensureCoreRegistered();
+
+    // Listen for custom navigation events from components (e.g. FormContainer)
+    this.addEventListener('navigate', ((e: CustomEvent) => {
+      const path = e.detail.path;
+      if (path) {
+        // Resolve path to page ID
+        const page = this.runtimeState?.pages.find(p => p.path === path);
+        if (page) {
+          this.navigateToPage(page.id);
+        } else {
+          console.error('Page not found for path:', path);
+        }
+      }
+    }) as EventListener);
+
+    // Expose navigate globally for inline onclick handlers (e.g. "navigate('/apply')")
+    (window as any).navigate = (path: string) => {
+      this.dispatchEvent(new CustomEvent('navigate', {
+        bubbles: true,
+        composed: true,
+        detail: { path }
+      }));
+    };
+
     // Initialization happens once when runtimeState is first available
     if (this.runtimeState && !this._initialized) {
       this.initializeRuntime();
     }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    // Cleanup global
+    if ((window as any).navigate) delete (window as any).navigate;
   }
 
   willUpdate(changed: Map<string, any>) {
