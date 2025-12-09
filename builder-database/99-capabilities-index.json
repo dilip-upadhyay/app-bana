@@ -67,7 +67,8 @@
         "button",
         "input",
         "text",
-        "studio-table-live"
+        "studio-table-live",
+        "studio-form"
       ],
       "formComponents": [
         "input",
@@ -75,7 +76,8 @@
         "select",
         "checkbox",
         "radio-group",
-        "button"
+        "button",
+        "studio-form"
       ],
       "newInV1.1": [
         "input",
@@ -190,14 +192,16 @@
         "User",
         "Role",
         "Permission",
-        "FieldPermission"
+        "FieldPermission",
+        "Profile"
       ],
       "features": [
         "User Authentication",
         "RBAC",
         "JWT Tokens",
         "BCrypt Passwords",
-        "Field-Level Security"
+        "Field-Level Security",
+        "Permission Profiles"
       ],
       "endpoints": [
         "/api/auth/register",
@@ -243,34 +247,46 @@
         ],
         "savings": "30% cost reduction for repeated conversational queries",
         "implementation": "3-tier strategy: Pattern → Cache → GPT"
+      },
+      "agentMemory": {
+        "purpose": "Persist conversation history and user preferences",
+        "endpoints": [
+          "/api/agent/memory",
+          "/api/agent/preferences"
+        ],
+        "features": [
+          "Long-term memory",
+          "User feedback tracking",
+          "Preference management"
+        ]
       }
-    },
-    "workflows": {
-      "file": "12-workflows.json",
-      "version": "1.0",
-      "nodeTypes": [
-        "START",
-        "END",
-        "USER_TASK",
-        "SERVICE_TASK",
-        "DECISION",
-        "WAIT"
-      ],
-      "features": [
-        "Visual Designer",
-        "Maker-Checker",
-        "SLA Tracking",
-        "Auto-Assignment"
-      ],
-      "keyFiles": [
-        "com.appbana.workflow.WorkflowEngine",
-        "appbana_wf_definition"
-      ],
-      "apiEndpoints": [
-        "/api/workflows",
-        "/api/my-tasks"
-      ]
     }
+  },
+  "workflows": {
+    "file": "12-workflows.json",
+    "version": "1.0",
+    "nodeTypes": [
+      "START",
+      "END",
+      "USER_TASK",
+      "SERVICE_TASK",
+      "DECISION",
+      "WAIT"
+    ],
+    "features": [
+      "Visual Designer",
+      "Maker-Checker",
+      "SLA Tracking",
+      "Auto-Assignment"
+    ],
+    "keyFiles": [
+      "com.appbana.workflow.WorkflowEngine",
+      "appbana_wf_definition"
+    ],
+    "apiEndpoints": [
+      "/api/workflows",
+      "/api/my-tasks"
+    ]
   },
   "architectureOverview": {
     "file": "01-core-concepts.json",

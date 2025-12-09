@@ -296,6 +296,82 @@
         "response": "[{instanceId, status, currentNode}]",
         "status": 200
       }
+    ],
+    "agentMemory": [
+      {
+        "method": "GET",
+        "path": "/api/agent/memory",
+        "description": "Get conversation history",
+        "query": "?userId={id}",
+        "response": "HistoryEntry[]",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/agent/memory/clear",
+        "description": "Clear conversation history",
+        "query": "?userId={id}",
+        "response": "{ok: true}",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/agent/preferences",
+        "description": "Get user preferences",
+        "query": "?userId={id}",
+        "response": "Map<String, Object>",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/agent/preferences",
+        "description": "Set user preference",
+        "query": "?userId={id}",
+        "body": "{key: string, value: any}",
+        "response": "{ok: true}",
+        "status": 200
+      }
+    ],
+    "metadataIntelligence": [
+      {
+        "method": "POST",
+        "path": "/api/meta-intelligence/reload",
+        "description": "Reload intent patterns from disk",
+        "response": "{success: true}",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/meta-intelligence/classify",
+        "description": "Test intent classification",
+        "query": "?input={text}",
+        "response": "{intent: string, confidence: number}",
+        "status": 200
+      }
+    ],
+    "smallTalkCache": [
+      {
+        "method": "GET",
+        "path": "/api/ai/smalltalk-cache/stats",
+        "description": "Get cache statistics",
+        "response": "{stats: {size, totalHits}}",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/ai/smalltalk-cache/clear",
+        "description": "Clear cache",
+        "response": "{success: true}",
+        "status": 200
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/ai/smalltalk-cache/entry",
+        "description": "Remove cache entry",
+        "body": "{text: string}",
+        "response": "{success: true}",
+        "status": 200
+      }
     ]
   },
   "requestHeaders": {
