@@ -1493,6 +1493,9 @@ public class AiAppGeneratorService {
         result.appDescription = "Custom application";
         result.entities = new ArrayList<>();
         result.suggestedPages = new ArrayList<>();
+        result.payload = new HashMap<>();
+        result.payload.put(PAYLOAD_REPLY, "I've created a basic starting point for your " + result.appName
+                + "! 🚀 You can now add entities and pages to customize it further.");
         return result;
     }
 
