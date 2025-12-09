@@ -36,9 +36,19 @@ export class FormContainer extends BaseElement {
         super.connectedCallback();
         this.addEventListener('click', this.handleClick.bind(this));
         // Load data if recordId is present
+        this.checkAndLoadRecord();
+    }
+
+    attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
+        if (name === 'record-id' && newValue && newValue !== oldValue) {
+            this.loadRecord(newValue);
+        }
+    }
+
+    private checkAndLoadRecord() {
         const recordId = this.getAttribute('record-id') || this.getAttribute('recordId');
         if (recordId) {
-            await this.loadRecord(recordId);
+            this.loadRecord(recordId);
         }
     }
 
@@ -56,22 +66,41 @@ export class FormContainer extends BaseElement {
     }
 
     private populateForm(data: any) {
+        // Create a normalized map of data keys for case-insensitive lookup
+        const normalizedData: Record<string, any> = {};
+        if (data) {
+            Object.keys(data).forEach(key => {
+                normalizedData[key.toLowerCase()] = data[key];
+            });
+        }
+
+        // Helper to find value case-insensitively
+        const getValue = (name: string) => {
+            if (!name) return undefined;
+            // Try exact match first
+            if (data[name] !== undefined) return data[name];
+            // Try lowercase match
+            return normalizedData[name.toLowerCase()];
+        };
+
         // Find all studio-input, studio-select, etc.
         const inputs = this.querySelectorAll('studio-input, studio-select, studio-textarea');
         inputs.forEach((el: any) => {
             const name = el.getAttribute('name');
-            if (name && data[name] !== undefined) {
-                el.setAttribute('value', String(data[name]));
-                // If it supports .value property setting (it should via attributeChangedCallback usually)
-                if (el.value !== undefined) el.value = data[name];
+            const val = getValue(name);
+            if (name && val !== undefined) {
+                el.setAttribute('value', String(val));
+                // If it supports .value property setting
+                if (el.value !== undefined) el.value = val;
             }
         });
 
         // Also populate standard inputs if any
         const stdInputs = this.querySelectorAll('input, select, textarea');
         stdInputs.forEach((el: any) => {
-            if (el.name && data[el.name] !== undefined) {
-                el.value = data[el.name];
+            const val = getValue(el.name);
+            if (el.name && val !== undefined) {
+                el.value = val;
             }
         });
     }

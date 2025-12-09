@@ -60,7 +60,7 @@
             "type": "form",
             "props": {
                 "entity": "LoanApplication",
-                "recordId": "{{query.id}}",
+                "record-id": "{{query.id}}",
                 "redirectOnSuccess": "/approvals"
             },
             "children": [
