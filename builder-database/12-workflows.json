@@ -1,0 +1,167 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2025-12-10T00:00:00Z",
+  "capability": "workflows",
+  "description": "Business process automation with state-machine workflows, user tasks, and automated actions.",
+  
+  "concepts": {
+    "workflow": "A directed graph of nodes and transitions that coordinates human and system actions.",
+    "trigger": "Event that starts a workflow instance (e.g., entity creation, update, or manual).",
+    "node": "A step in the workflow (User Task, Service Task, Start, End).",
+    "transition": "A directed connection between nodes, optionally guarded by a condition.",
+    "token": "Represents the current execution position in the workflow instance."
+  },
+
+  "triggerEvents": [
+    "ON_CREATE",
+    "ON_UPDATE",
+    "ON_DELETE",
+    "MANUAL"
+  ],
+
+  "nodeTypes": [
+    {
+      "type": "START",
+      "description": "Entry point of the workflow. Only one allowed per workflow.",
+      "props": {
+        "id": "string (required, unique)",
+        "label": "string (display name)"
+      }
+    },
+    {
+      "type": "END",
+      "description": "Termination point. Workflow completes when token reaches here.",
+      "props": {
+        "id": "string (required, unique)",
+        "label": "string"
+      }
+    },
+    {
+      "type": "USER_TASK",
+      "description": "Pauses execution until a user or group performs an action.",
+      "props": {
+        "id": "string (required)",
+        "label": "string",
+        "assignmentType": {
+          "type": "enum",
+          "values": ["USER", "ROLE", "QUEUE", "DYNAMIC"],
+          "description": "Mechanism to assign the task."
+        },
+        "assignmentExpression": "string (optional, for DYNAMIC or specific IDs)",
+        "slaHours": "number (optional, hours until overdue)",
+        "formFields": {
+          "type": "array",
+          "itemType": "object",
+          "description": "Input fields user must complete",
+          "structure": {
+            "name": "string",
+            "type": "string (text|textarea|date|select|number)",
+            "required": "boolean",
+            "options": "string[] (for select)"
+          }
+        }
+      }
+    },
+    {
+      "type": "SERVICE_TASK",
+      "description": "Executes a system action automatically.",
+      "props": {
+        "id": "string (required)",
+        "label": "string",
+        "serviceAction": {
+          "type": "enum",
+          "values": ["UPDATE_ENTITY", "SEND_EMAIL", "WEBHOOK", "GENERATE_DOC"],
+          "description": "Type of system action to perform."
+        },
+        "entityType": "string (target entity type, e.g., 'PaymentRequest')",
+        "updates": "object (map of field names to values or expressions)"
+      }
+    },
+    {
+      "type": "DECISION",
+      "description": "Evaluates conditions to route flow to different paths automatically.",
+      "props": {
+        "id": "string",
+        "label": "string",
+        "expression": "string (MVEL expression returning boolean or string)"
+      }
+    },
+    {
+      "type": "WAIT",
+      "description": "Pauses execution for a set duration or until a date.",
+      "props": {
+        "id": "string",
+        "label": "string",
+        "duration": "string (ISO8601 duration or expression)"
+      }
+    }
+  ],
+
+  "transitionSchema": {
+    "from": "string (source node ID)",
+    "to": "string (target node ID)",
+    "condition": "string (optional MVEL expression, e.g., '${outcome == \"APPROVE\"}')",
+    "label": "string (display label for the arrow)"
+  },
+
+  "expressions": {
+    "language": "MVEL",
+    "contextVariables": [
+      "entity (the triggering entity)",
+      "initiator (user who triggered)",
+      "now (current timestamp)",
+      "outcome (result of previous user task)"
+    ],
+    "examples": [
+      "${entity.amount > 1000}",
+      "${outcome == 'APPROVE'}",
+      "${initiator.department == 'Sales'}"
+    ]
+  },
+
+  "examples": [
+    {
+      "title": "Payment Approval",
+      "triggerEntity": "PaymentRequest",
+      "triggerEvent": "ON_CREATE",
+      "triggerCondition": "${entity.amount > 1000}",
+      "workflowJson": {
+        "nodes": {
+          "start": { "type": "START", "label": "Start" },
+          "manager_review": {
+            "type": "USER_TASK",
+            "label": "Manager Review",
+            "assignmentType": "DYNAMIC",
+            "assignmentExpression": "${entity.owner.manager}",
+            "formFields": [
+              { "name": "reason", "type": "textarea" },
+              { "name": "decision", "type": "select", "options": ["APPROVE", "REJECT"] }
+            ]
+          },
+          "update_paid": {
+            "type": "SERVICE_TASK",
+            "label": "Mark Paid",
+            "serviceAction": "UPDATE_ENTITY",
+            "entityType": "PaymentRequest",
+            "updates": { "status": "PAID" }
+          },
+          "update_rejected": {
+            "type": "SERVICE_TASK",
+            "label": "Mark Rejected",
+            "serviceAction": "UPDATE_ENTITY",
+            "entityType": "PaymentRequest",
+            "updates": { "status": "REJECTED" }
+          },
+          "end": { "type": "END", "label": "End" }
+        },
+        "transitions": [
+          { "from": "start", "to": "manager_review" },
+          { "from": "manager_review", "to": "update_paid", "condition": "${outcome == 'APPROVE'}" },
+          { "from": "manager_review", "to": "update_rejected", "condition": "${outcome == 'REJECT'}" },
+          { "from": "update_paid", "to": "end" },
+          { "from": "update_rejected", "to": "end" }
+        ]
+      }
+    }
+  ]
+}
