@@ -1,6 +1,6 @@
 #FileLock
-#Wed Dec 10 00:43:49 IST 2025
-hostName=Dilip
-id=19b0488b6550647ff56849e86db69347c8e638ef704
+#Wed Dec 10 01:25:53 IST 2025
+hostName=localhost
+id=19aff4a88fc516b6ba70fa0a4b82f7b3859ab584dce
 method=file
-server=192.168.1.10\:50061
+server=localhost\:64788
