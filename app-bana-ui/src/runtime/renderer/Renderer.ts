@@ -2,12 +2,9 @@
 import { PageMeta, ComponentNode } from '../../models/metadata';
 import { getComponent } from '../../core/registry';
 import { html, TemplateResult } from 'lit';
-// Ensure table live component is registered for runtime rendering
 import './StudioTableLive';
-/**
- * Returns a Lit html template for a PageMeta tree using the component registry.
- * Used for Lit-based reactive rendering.
- */
+import '../../components/GridElement';
+
 // Helper for simple handle-bars style interpolation
 // e.g. interpolate("Hello {{user.name}}", { user: { name: "World" } }) -> "Hello World"
 function interpolate(text: string, context: any): string {
@@ -53,8 +50,20 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
   });
 
   // Explicit static tag names for each supported type
-  if (node.type === 'table' || node.type === 'grid') {
+  if (node.type === 'table') {
     return html`<studio-table-live .node=${nodeWithData}></studio-table-live>`;
+  } else if (node.type === 'app-grid') {
+    return html`
+       <app-grid
+         .rows=${Number(nodeWithData.props.rows || 2)}
+         .cols=${Number(nodeWithData.props.cols || 3)}
+         .gap=${nodeWithData.props.gap || '1rem'}
+         class="${node.style?.classes?.join(' ') || ''}"
+         style="${node.props?.style || ''}"
+       >
+         ${children}
+       </app-grid>
+     `;
   } else if (node.type === 'container') {
     return html`<studio-container .node=${nodeWithData}>${children}</studio-container>`;
   } else if (node.type === 'text') {
@@ -112,7 +121,7 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>, co
   // Use interpolated props
   const nodeWithData = { ...node, props };
 
-  if (node.type === 'table' || node.type === 'grid') {
+  if (node.type === 'table') {
     // Runtime rendering: live data if in runtime, else preview
     if (window.location.pathname.includes('preview') || window.location.pathname.includes('runtime')) {
       // Use Lit component for robust async rendering
@@ -120,10 +129,30 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>, co
       (el as any).node = nodeWithData;
       return el;
     } else {
-      // Minimal preview
       return requireTablePreview(nodeWithData);
     }
   }
+
+  if (node.type === 'app-grid') {
+    const el = document.createElement('app-grid');
+    el.setAttribute('rows', String(node.props?.rows || 2));
+    el.setAttribute('cols', String(node.props?.cols || 3));
+    el.setAttribute('gap', String(node.props?.gap || '1rem'));
+    el.setAttribute('id', node.id);
+    el.setAttribute('data-component-id', node.id);
+
+    if (node.style?.classes) el.classList.add(...node.style.classes);
+    if (node.props?.style) el.setAttribute('style', node.props.style);
+
+    if (node.children) {
+      for (const childId of node.children) {
+        const child = nodeMap.get(childId);
+        if (child) el.appendChild(renderNode(child, nodeMap, context));
+      }
+    }
+    return el;
+  }
+
   let ctor = getComponent(node.type);
   if (!ctor) {
     const unknownCtor = getComponent('unknown');

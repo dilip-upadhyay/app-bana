@@ -195,7 +195,7 @@ kbd {
 }
 
 .empty-container {
-  min-height: 120px;
+  min-height: 60px;
   border: 2px dashed var(--color-border, #d1d5db) !important;
   display: flex;
   align-items: center;

@@ -197,26 +197,58 @@ export class LivePreview extends LitElement {
     e.stopPropagation();
     if (!e.dataTransfer) return;
 
-    e.dataTransfer.dropEffect = 'copy';
+    // Prevent direct drops on app-grid (gaps), but ALLOW if over a shadow-cell
+    const node = this.page?.nodes.find(n => n.id === nodeId);
+    if (node?.type === 'app-grid') {
+      // Check Shadow DOM to see if we are over a cell
+      const gridEl = this.shadowRoot?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement;
+      // Note: LivePreview's renderNode renders inside LivePreview's shadowRoot or light DOM?
+      // LivePreview is a LitElement, so it has a shadowRoot. The app-grid is inside it.
+      // But we need the app-grid element itself.
+      // Let's find it in the DOM.
+      const appGrid = (e.target as HTMLElement).closest('app-grid');
 
-    // Calculate drop position based on mouse position
+      if (appGrid && appGrid.shadowRoot) {
+        const shadowEl = appGrid.shadowRoot.elementFromPoint(e.clientX, e.clientY);
+        const cell = shadowEl?.closest('.grid-cell');
+
+        if (cell) {
+          // We are over a cell! Allow drop, but conceptually we want to target the cell node, not the grid.
+          // However, handleDragOver is called with grid ID.
+          // We can't change the dragged ID here easily for the *caller*, 
+          // but we can set dropEffect = 'copy' to indicate it's valid.
+          e.dataTransfer.dropEffect = 'copy';
+          this.dropPosition = 'inside';
+          this.dragOverId = nodeId; // We still track grid as the ID for now, handleDrop will retarget
+          return;
+        }
+      }
+
+      // If not over a cell (e.g. over gap), block
+      e.dataTransfer.dropEffect = 'none';
+      this.dragOverId = null;
+      return;
+    }
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
     const y = e.clientY - rect.top;
     const height = rect.height;
 
     // For containers, prefer inside drop
-    const node = this.page?.nodes.find(n => n.id === nodeId);
     const isContainer = node && (node.type === 'container' || node.type === 'section' || node.type === 'div');
+    const isGridCell = isContainer && node.props?.['data-cell-index'] !== undefined;
 
-    if (isContainer && y > height * 0.2 && y < height * 0.8) {
+    if (isGridCell) {
+      // Grid cells are fixed structure; always drop inside
+      this.dropPosition = 'inside';
+    } else if (isContainer && y > height * 0.2 && y < height * 0.8) {
       this.dropPosition = 'inside';
     } else if (y < height * 0.3) {
       this.dropPosition = 'before';
     } else if (y > height * 0.7) {
       this.dropPosition = 'after';
     } else {
-      this.dropPosition = 'inside';
+      this.dropPosition = 'inside'; // Default fallback
     }
 
     this.dragOverId = nodeId;
@@ -294,20 +326,101 @@ export class LivePreview extends LitElement {
       }
 
       const template = data.template;
-      const newId = this.generateUniqueId(template.type || 'element');
+      const nestedNodes: ComponentNode[] = (template as any).nestedNodes || [];
+      const newRootId = this.generateUniqueId(template.type || 'element');
 
-      console.log('Creating node:', newId, template);
+      console.log('Creating node:', newRootId, template);
+
+      // Map for potentially re-linking internal refs (not strictly needed for simple grid but good practice)
+      const idMap = new Map<string, string>();
+      idMap.set(template.id || 'root', newRootId);
+      nestedNodes.forEach(node => {
+        idMap.set(node.id, this.generateUniqueId(node.type));
+      });
+
+      // Construct Root Node (Grid)
+      // Start with empty children if we have nested nodes, so we can add them safely via addNode
+      const childrenIds = nestedNodes.length > 0 ? undefined : template.children;
 
       const newNode: ComponentNode = {
-        id: newId,
+        id: newRootId,
         type: template.type || 'container',
         props: template.props || {},
-        children: template.children !== undefined ? template.children : undefined
+        children: childrenIds
       };
 
       const targetNode = this.page?.nodes.find(n => n.id === targetNodeId);
       if (!targetNode) {
         console.error('Target node not found:', targetNodeId);
+        return;
+      }
+
+      // Prevent dropping directly into app-grid (must drop in cells)
+      // BUT check if we can retarget to a cell first
+      if (targetNode.type === 'app-grid') {
+        const appGrid = this.shadowRoot?.querySelector(`[data-node-id="${targetNodeId}"]`);
+        let retargetedCellId: string | null = null;
+        let autoCreatedCellNode: ComponentNode | null = null;
+
+        if (appGrid && appGrid.shadowRoot) {
+          const shadowEl = appGrid.shadowRoot.elementFromPoint(e.clientX, e.clientY);
+          const cell = shadowEl?.closest('.grid-cell');
+          if (cell) {
+            const cellIndex = cell.getAttribute('data-cell');
+            if (cellIndex !== null) {
+              const childId = targetNode.children?.find(childId => {
+                const child = this.page?.nodes.find(n => n.id === childId);
+                return child?.props?.slot === `cell-${cellIndex}`;
+              });
+
+              if (childId) {
+                retargetedCellId = childId;
+                console.log(`Retargeting drop from Grid to Cell: ${retargetedCellId}`);
+              } else {
+                // Auto-repair: Cell container missing? Create it! 
+                console.log(`Cell container for slot cell-${cellIndex} missing. Auto-creating...`);
+                const newCellId = this.generateUniqueId('container');
+                const newCellNode: ComponentNode = {
+                  id: newCellId,
+                  type: 'container',
+                  props: {
+                    className: 'grid-cell',
+                    slot: `cell-${cellIndex}`,
+                    style: `min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;`,
+                    'data-cell-index': cellIndex
+                  },
+                  children: []
+                };
+                autoCreatedCellNode = newCellNode;
+                retargetedCellId = newCellId;
+              }
+            }
+          }
+        }
+
+        if (retargetedCellId) {
+          if (autoCreatedCellNode) {
+            // If we auto-generated a cell, add it AND the component directly
+            if (currentStore) {
+              // Add the Cell to the Grid
+              currentStore.addNode(targetNodeId, autoCreatedCellNode);
+              // Add the Component to the Cell
+              currentStore.addNode(autoCreatedCellNode.id, newNode);
+              this.showToast('✨ Auto-repaired grid cell & Added component');
+              console.log('Node added successfully via auto-repair!');
+            }
+            delete (window as any).__dragData;
+            this.dragOverId = null;
+            this.dropPosition = null;
+            return;
+          } else {
+            // Existing cell found, standard recursion
+            this.handleDrop(e, retargetedCellId);
+            return;
+          }
+        }
+
+        this.showToast('⚠️ Please drop INSIDE a grid cell box');
         return;
       }
 
@@ -318,28 +431,41 @@ export class LivePreview extends LitElement {
       console.log('Drop position:', this.dropPosition);
 
       if (this.dropPosition === 'before' || this.dropPosition === 'after') {
-        // Find parent of target
         const parent = this.page?.nodes.find(n => n.children?.includes(targetNodeId));
         if (parent) {
           parentId = parent.id;
           const targetIndex = parent.children!.indexOf(targetNodeId);
           index = this.dropPosition === 'before' ? targetIndex : targetIndex + 1;
-          console.log('Inserting at parent:', parentId, 'index:', index);
         } else {
-          // If no parent found (shouldn't happen), default to inside
           parentId = targetNodeId;
           index = undefined;
-          console.log('No parent found, using inside');
         }
-      } else {
-        console.log('Adding inside:', parentId);
       }
-      // else 'inside' - use targetNodeId as parent with undefined index (append)
 
       console.log('Adding node to store...');
-      currentStore.addNode(parentId, newNode, index);
-      console.log('Node added successfully!');
-      this.showToast(`✅ Added ${newNode.type}`);
+      if (currentStore) {
+        // Add Root Node
+        currentStore.addNode(parentId, newNode, index);
+
+        // Add Nested Nodes (Cells)
+        if (nestedNodes.length > 0) {
+          nestedNodes.forEach(oldNode => {
+            const newChildId = idMap.get(oldNode.id);
+            if (newChildId) {
+              const newChildNode: ComponentNode = {
+                ...oldNode,
+                id: newChildId,
+                props: JSON.parse(JSON.stringify(oldNode.props || {}))
+              };
+              // Add as child of the New Grid
+              currentStore?.addNode(newRootId, newChildNode);
+            }
+          });
+        }
+
+        console.log('Node added successfully!');
+        this.showToast(`✅ Added ${newNode.type}`);
+      }
 
       // Clean up global drag data
       delete (window as any).__dragData;
@@ -756,8 +882,6 @@ export class LivePreview extends LitElement {
             >
               ${gridChildren}
             </app-grid>
-             <div style="position: absolute; top:0; left:0; right:0; height: 20px; cursor: pointer; z-index: 10;" 
-                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>
         `;
 

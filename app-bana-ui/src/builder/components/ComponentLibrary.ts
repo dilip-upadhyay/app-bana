@@ -294,7 +294,8 @@ export class ComponentLibrary extends LitElement {
         props: {
           className: 'grid-cell',
           slot: `cell-${i}`, // CRITICAL: Assign to named slot in app-grid
-          style: `min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;`,
+          // Removed inline styles (border, min-height, bg) to let app-grid CSS handle it
+          style: `display: flex; flex-direction: column; gap: 0.5rem;`,
           'data-cell-index': String(i)
         },
         children: []
@@ -302,7 +303,7 @@ export class ComponentLibrary extends LitElement {
     }
 
     // Create configured grid template using app-grid
-    const gridTemplate: Partial<ComponentNode> = {
+    const gridTemplate: Partial<ComponentNode> & { nestedNodes?: ComponentNode[] } = {
       ...this.pendingGridTemplate.template,
       type: 'app-grid',
       props: {
@@ -311,7 +312,8 @@ export class ComponentLibrary extends LitElement {
         rows: this.gridRows,
         gap: '1rem'
       },
-      children: cellIds
+      children: cellIds,
+      nestedNodes: cellNodes // Pass the actual cell nodes to receive in LivePreview
     };
 
     // Dispatch event with grid and all cells
