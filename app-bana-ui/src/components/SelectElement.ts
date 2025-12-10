@@ -119,7 +119,7 @@ export class SelectElement extends FormElement {
       }
       label {
         display: block;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.2rem;
         font-size: var(--text-sm, 0.875rem);
         font-weight: 500;
         color: var(--color-text, #333);

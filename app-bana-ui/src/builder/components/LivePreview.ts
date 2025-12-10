@@ -946,10 +946,19 @@ export class LivePreview extends LitElement {
         const hasChildren = children && children.length > 0;
         const containerClasses = `${classes} ${node.props?.className || ''} ${hasChildren ? '' : 'empty-container'}`;
 
+        // HOTFIX: Override legacy hardcoded styles for grid cells to allow tight packing
+        let finalStyle = style;
+        if (node.props?.className === 'grid-cell') {
+          finalStyle = finalStyle
+            .replace(/padding:\s*[^;]+;?/g, '')
+            .replace(/gap:\s*[^;]+;?/g, '')
+            .replace(/min-height:\s*[^;]+;?/g, '');
+        }
+
         return html`
           <div
             class="${containerClasses}"
-            style="${style}"
+            style="${finalStyle}"
             slot="${node.props?.slot || ''}"
             data-node-id="${node.id}"
             @click=${(e: Event) => this.handleNodeClick(e, node.id)}

@@ -33,14 +33,6 @@
     },
     "children" : [ "input" ]
   }, {
-    "id" : "input",
-    "type" : "input",
-    "props" : {
-      "type" : "text",
-      "placeholder" : "Enter text...",
-      "className" : "input"
-    }
-  }, {
     "id" : "container-1",
     "type" : "container",
     "props" : {
@@ -49,14 +41,7 @@
       "style" : "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
       "data-cell-index" : "1"
     },
-    "children" : [ "select" ]
-  }, {
-    "id" : "select",
-    "type" : "select",
-    "props" : {
-      "className" : "select"
-    },
-    "children" : [ ]
+    "children" : [ "input-1" ]
   }, {
     "id" : "container-2",
     "type" : "container",
@@ -66,15 +51,7 @@
       "style" : "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
       "data-cell-index" : "2"
     },
-    "children" : [ "input-1" ]
-  }, {
-    "id" : "input-1",
-    "type" : "input",
-    "props" : {
-      "type" : "text",
-      "placeholder" : "Enter text...",
-      "className" : "input"
-    }
+    "children" : [ "input-2" ]
   }, {
     "id" : "container-3",
     "type" : "container",
@@ -84,15 +61,7 @@
       "style" : "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
       "data-cell-index" : "3"
     },
-    "children" : [ "input-2" ]
-  }, {
-    "id" : "input-2",
-    "type" : "input",
-    "props" : {
-      "type" : "text",
-      "placeholder" : "Enter text...",
-      "className" : "input"
-    }
+    "children" : [ "input-3" ]
   }, {
     "id" : "container-4",
     "type" : "container",
@@ -102,15 +71,7 @@
       "style" : "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
       "data-cell-index" : "4"
     },
-    "children" : [ "input-3" ]
-  }, {
-    "id" : "input-3",
-    "type" : "input",
-    "props" : {
-      "type" : "text",
-      "placeholder" : "Enter text...",
-      "className" : "input"
-    }
+    "children" : [ "input-4" ]
   }, {
     "id" : "container-5",
     "type" : "container",
@@ -120,9 +81,49 @@
       "style" : "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
       "data-cell-index" : "5"
     },
-    "children" : [ "input-4" ]
+    "children" : [ "input-5" ]
+  }, {
+    "id" : "input",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "Enter text...",
+      "className" : "input"
+    }
+  }, {
+    "id" : "input-1",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "Enter text...",
+      "className" : "input"
+    }
+  }, {
+    "id" : "input-2",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "Enter text...",
+      "className" : "input"
+    }
+  }, {
+    "id" : "input-3",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "Enter text...",
+      "className" : "input"
+    }
   }, {
     "id" : "input-4",
+    "type" : "input",
+    "props" : {
+      "type" : "text",
+      "placeholder" : "Enter text...",
+      "className" : "input"
+    }
+  }, {
+    "id" : "input-5",
     "type" : "input",
     "props" : {
       "type" : "text",

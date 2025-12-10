@@ -295,7 +295,7 @@ export class ComponentLibrary extends LitElement {
           className: 'grid-cell',
           slot: `cell-${i}`, // CRITICAL: Assign to named slot in app-grid
           // Removed inline styles (border, min-height, bg) to let app-grid CSS handle it
-          style: `display: flex; flex-direction: column; gap: 0.5rem;`,
+          style: `display: flex; flex-direction: column;`,
           'data-cell-index': String(i)
         },
         children: []

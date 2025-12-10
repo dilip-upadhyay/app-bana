@@ -43,6 +43,14 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
   // Create a proxy node with interpolated props to pass to render
   const nodeWithData = { ...node, props };
 
+  // HOTFIX: Override legacy hardcoded styles for grid cells in runtime
+  if (node.props?.className === 'grid-cell' && nodeWithData.props.style) {
+    nodeWithData.props.style = nodeWithData.props.style
+      .replace(/padding:\s*[^;]+;?/g, '')
+      .replace(/gap:\s*[^;]+;?/g, '')
+      .replace(/min-height:\s*[^;]+;?/g, '');
+  }
+
   // Compose children recursively
   const children = (node.children ?? []).map(childId => {
     const child = nodeMap.get(childId);

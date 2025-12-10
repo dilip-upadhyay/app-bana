@@ -29,21 +29,21 @@ export class GridElement extends LitElement {
     .grid-cell {
       min-height: var(--min-cell-height, auto);
       /* Remove default styling for filled cells */
-      border: 1px solid transparent; 
+      border: none; 
       border-radius: 4px;
       padding: 0; /* Remove padding so input fits tight */
       background: transparent;
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 0;
       position: relative;
       transition: all 0.2s ease;
     }
 
     .grid-cell.empty {
-       /* Style only empty cells to look like drop targets */
+       /* Style only empty cells to look like drop targets available via CSS var */
        min-height: 60px; /* Minimum height for drop target visibility */
-       border: 2px dashed #e5e7eb;
+       border: 2px dashed var(--grid-outline-color, transparent);
        background: #f9fafb;
        padding: 0.5rem;
     }
@@ -54,7 +54,7 @@ export class GridElement extends LitElement {
     }
     
     .grid-cell.empty:hover {
-       border-color: #6366f1;
+       border-color: var(--grid-outline-hover-color, transparent);
        background: #eef2ff;
     }
 
@@ -90,7 +90,7 @@ export class GridElement extends LitElement {
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 0; /* Reduced to 0 for tightest fit */
       /* removed min-height to allow auto-sizing */
     }
 
@@ -113,6 +113,34 @@ export class GridElement extends LitElement {
     }
   `;
 
+  updated() {
+    // robust check for slot content on every update
+    this.checkSlots();
+  }
+
+  private checkSlots() {
+    const slots = this.shadowRoot?.querySelectorAll('slot');
+    if (slots) {
+      slots.forEach(slot => {
+        const cell = slot.closest('.grid-cell');
+        if (cell) {
+          const assignedNodes = slot.assignedNodes({ flatten: true });
+          const hasContent = assignedNodes.some(n =>
+            n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
+          );
+
+          if (hasContent) {
+            cell.classList.remove('empty');
+            cell.classList.add('has-content');
+          } else {
+            cell.classList.add('empty');
+            cell.classList.remove('has-content');
+          }
+        }
+      });
+    }
+  }
+
   render() {
     const cells = [];
     const gridTemplateColumns = `repeat(${this.cols}, minmax(${this.minCellWidth}, 1fr))`;
@@ -122,14 +150,14 @@ export class GridElement extends LitElement {
         const cellIndex = row * this.cols + col;
         cells.push(html`
           <div
-            class="grid-cell empty"
+            class="grid-cell empty" /* Default to empty, updated() will correct it immediately */
             data-cell="${cellIndex}"
             data-row="${row}"
             data-col="${col}"
           >
             <span class="cell-label">R${row + 1}C${col + 1}</span>
             <div class="cell-content">
-              <slot name="cell-${cellIndex}" @slotchange=${this.handleSlotChange}>
+              <slot name="cell-${cellIndex}" @slotchange=${() => this.requestUpdate()}>
                 <div class="empty-hint">Drop here</div>
               </slot>
             </div>
@@ -149,23 +177,8 @@ export class GridElement extends LitElement {
   }
 
   handleSlotChange(e: Event) {
-    const slot = e.target as HTMLSlotElement;
-    const cell = slot.closest('.grid-cell');
-    if (cell) {
-      const assignedNodes = slot.assignedNodes({ flatten: true });
-      // Filter out empty text nodes to prevent false positives
-      const hasContent = assignedNodes.some(n =>
-        n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
-      );
-
-      if (hasContent) {
-        cell.classList.remove('empty');
-        cell.classList.add('has-content');
-      } else {
-        cell.classList.add('empty');
-        cell.classList.remove('has-content');
-      }
-    }
+    // Legacy handler, now redundant as we use updated() + requestUpdate(), but keeping for safety if called directly
+    this.requestUpdate();
   }
 }
 
