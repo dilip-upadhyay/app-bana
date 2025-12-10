@@ -73,13 +73,13 @@ export class PropertiesPanel extends LitElement {
 
   private updateSelectedNode() {
     if (!currentStore) return;
-  const selection = currentStore.getSelection();
-  this.selectedNode = selection;
+    const selection = currentStore.getSelection();
+    this.selectedNode = selection;
 
     if (selection) {
-  // Copy current props for editing
-  this.editingProps = selection.props ? { ...selection.props } : {};
-      
+      // Copy current props for editing
+      this.editingProps = selection.props ? { ...selection.props } : {};
+
       // Parse current dimensions from style
       const style = selection.props?.style || '';
       this.width = this.extractStyleValue(style, 'width') || '';
@@ -107,12 +107,12 @@ export class PropertiesPanel extends LitElement {
     let newStyle = currentStyle;
 
     // Remove old dimension properties
-  newStyle = newStyle.replaceAll(/width:\s*[^;]+;?/gi, '');
-  newStyle = newStyle.replaceAll(/height:\s*[^;]+;?/gi, '');
-  newStyle = newStyle.replaceAll(/min-width:\s*[^;]+;?/gi, '');
-  newStyle = newStyle.replaceAll(/min-height:\s*[^;]+;?/gi, '');
-  newStyle = newStyle.replaceAll(/max-width:\s*[^;]+;?/gi, '');
-  newStyle = newStyle.replaceAll(/max-height:\s*[^;]+;?/gi, '');
+    newStyle = newStyle.replaceAll(/width:\s*[^;]+;?/gi, '');
+    newStyle = newStyle.replaceAll(/height:\s*[^;]+;?/gi, '');
+    newStyle = newStyle.replaceAll(/min-width:\s*[^;]+;?/gi, '');
+    newStyle = newStyle.replaceAll(/min-height:\s*[^;]+;?/gi, '');
+    newStyle = newStyle.replaceAll(/max-width:\s*[^;]+;?/gi, '');
+    newStyle = newStyle.replaceAll(/max-height:\s*[^;]+;?/gi, '');
 
     // Add new dimensions
     const dimensions: string[] = [];
@@ -151,19 +151,19 @@ export class PropertiesPanel extends LitElement {
 
   private updateProperty(key: string, value: any) {
     if (!this.selectedNode || !currentStore) return;
-    
+
     // Update local state
     this.editingProps = { ...this.editingProps, [key]: value };
-    
+
     // Update the node in the store
     currentStore.updateProps(this.selectedNode.id, { [key]: value });
   }
 
   private getCommonProperties(): string[] {
     if (!this.selectedNode) return [];
-    
+
     const type = this.selectedNode.type;
-    
+
     // Define common editable properties by component type
     const propertyMap: Record<string, string[]> = {
       'text-input': ['label', 'placeholder', 'name', 'value', 'required', 'disabled'],
@@ -176,8 +176,10 @@ export class PropertiesPanel extends LitElement {
       'checkbox': ['label', 'name', 'checked', 'disabled'],
       'radio': ['label', 'name', 'value', 'checked', 'disabled'],
       'select': ['label', 'name', 'options', 'value', 'disabled'],
+      'app-grid': ['rows', 'cols', 'gap'],
+      'grid': ['rows', 'cols', 'gap'],
     };
-    
+
     return propertyMap[type] || [];
   }
 
@@ -243,12 +245,12 @@ export class PropertiesPanel extends LitElement {
                   <input type="checkbox"
                     .checked=${selectedFields.some((f: FieldMeta) => f.name === field.name)}
                     @change=${(e: Event) => {
-                      const checked = (e.target as HTMLInputElement).checked;
-                      let newFields = Array.isArray(selectedFields) ? [...selectedFields] : [];
-                      if (checked) newFields.push({ name: field.name, label: field.displayName || field.name });
-                      else newFields = newFields.filter((f: FieldMeta) => f.name !== field.name);
-                      this.updateProperty('fields', newFields);
-                    }}
+          const checked = (e.target as HTMLInputElement).checked;
+          let newFields = Array.isArray(selectedFields) ? [...selectedFields] : [];
+          if (checked) newFields.push({ name: field.name, label: field.displayName || field.name });
+          else newFields = newFields.filter((f: FieldMeta) => f.name !== field.name);
+          this.updateProperty('fields', newFields);
+        }}
                   /> ${field.displayName || field.name} (${field.type})
                 </label>
               `)}
@@ -277,24 +279,24 @@ export class PropertiesPanel extends LitElement {
           <div class="form-group">
             <label>View Mode</label>
             <select @change=${(e: Event) => this.updateProperty('viewMode', (e.target as HTMLSelectElement).value)}>
-              ${['dynamic','custom'].map(m => html`<option value="${m}" ?selected=${(this.editingProps.viewMode||'dynamic')===m}>${m}</option>`)}
+              ${['dynamic', 'custom'].map(m => html`<option value="${m}" ?selected=${(this.editingProps.viewMode || 'dynamic') === m}>${m}</option>`)}
             </select>
             <small style="display:block;font-size:11px;color:#64748b;margin-top:4px;">dynamic: auto-generate form from selected fields; custom: define explicit field list.</small>
           </div>
           ${(() => {
-            const mode = this.editingProps.viewMode || 'dynamic';
-            if (mode !== 'custom') return '';
-            const raw = this.editingProps.viewFormFieldsRaw || (this.editingProps.viewFormFields ? JSON.stringify(this.editingProps.viewFormFields, null, 2) : '[]');
-            return html`<div class="form-group">
+          const mode = this.editingProps.viewMode || 'dynamic';
+          if (mode !== 'custom') return '';
+          const raw = this.editingProps.viewFormFieldsRaw || (this.editingProps.viewFormFields ? JSON.stringify(this.editingProps.viewFormFields, null, 2) : '[]');
+          return html`<div class="form-group">
               <label>Custom View Form Fields (JSON Array)</label>
               <textarea rows="6" @input=${(e: Event) => {
-                const val = (e.target as HTMLTextAreaElement).value;
-                this.updateProperty('viewFormFieldsRaw', val);
-                try { const parsed = JSON.parse(val); if (Array.isArray(parsed)) this.updateProperty('viewFormFields', parsed); } catch {}
-              }} placeholder='[ { "name": "price", "label": "Price" }, { "name": "description", "label": "Description", "type": "textarea" } ]'>${raw}</textarea>
+              const val = (e.target as HTMLTextAreaElement).value;
+              this.updateProperty('viewFormFieldsRaw', val);
+              try { const parsed = JSON.parse(val); if (Array.isArray(parsed)) this.updateProperty('viewFormFields', parsed); } catch { }
+            }} placeholder='[ { "name": "price", "label": "Price" }, { "name": "description", "label": "Description", "type": "textarea" } ]'>${raw}</textarea>
               <small style="display:block;font-size:11px;color:#64748b;margin-top:4px;">Each item: { name, label?, type? }. Types supported: text, textarea, number (read-only for now).</small>
             </div>`;
-          })()}
+        })()}
           <div class="form-group">
             <label>Bulk Actions</label>
             <label><input type="checkbox" .checked=${(this.editingProps.bulkActions || []).includes('delete')} @change=${(e: Event) => this.toggleBulkAction('delete', e)} /> Delete</label>
@@ -309,10 +311,10 @@ export class PropertiesPanel extends LitElement {
           <div class="form-group">
             <label>Theme</label>
             <select @change=${(e: Event) => this.updateProperty('theme', (e.target as HTMLSelectElement).value)}>
-              ${['default','minimal','dark','striped','compact','soft','auto','custom'].map(t => html`<option value="${t}" ?selected=${(this.editingProps.theme||'default')===t}>${t}</option>`)}
+              ${['default', 'minimal', 'dark', 'striped', 'compact', 'soft', 'auto', 'custom'].map(t => html`<option value="${t}" ?selected=${(this.editingProps.theme || 'default') === t}>${t}</option>`)}
             </select>
           </div>
-          ${ (this.editingProps.theme === 'custom') ? html`
+          ${(this.editingProps.theme === 'custom') ? html`
             <div class="form-group">
               <label>Custom Theme Tokens (JSON)</label>
               <textarea rows="8"
@@ -324,9 +326,9 @@ export class PropertiesPanel extends LitElement {
         </div>
       `;
     }
-    
+
     const commonProps = this.getCommonProperties();
-    
+
     if (commonProps.length === 0) {
       return html``;
     }
@@ -336,77 +338,77 @@ export class PropertiesPanel extends LitElement {
         <h4>🔧 Component Properties</h4>
         
         ${commonProps.map(propKey => {
-          const currentValue = this.editingProps[propKey] ?? '';
-          const propType = this.getPropertyType(propKey);
-          
-          if (propType === 'boolean') {
-            return html`
+      const currentValue = this.editingProps[propKey] ?? '';
+      const propType = this.getPropertyType(propKey);
+
+      if (propType === 'boolean') {
+        return html`
               <div class="form-group">
                 <label class="checkbox-label">
                   <input
                     type="checkbox"
                     .checked=${currentValue === true || currentValue === 'true'}
                     @change=${(e: Event) => {
-                      const checked = (e.target as HTMLInputElement).checked;
-                      this.updateProperty(propKey, checked);
-                    }}
+            const checked = (e.target as HTMLInputElement).checked;
+            this.updateProperty(propKey, checked);
+          }}
                   />
                   <span>${this.formatPropertyLabel(propKey)}</span>
                 </label>
               </div>
             `;
-          }
-          
-          if (propType === 'number') {
-            return html`
+      }
+
+      if (propType === 'number') {
+        return html`
               <div class="form-group">
                 <label>${this.formatPropertyLabel(propKey)}</label>
                 <input
                   type="number"
                   .value=${String(currentValue)}
                   @input=${(e: Event) => {
-                    const value = (e.target as HTMLInputElement).value;
-                    this.updateProperty(propKey, value ? Number(value) : '');
-                  }}
+            const value = (e.target as HTMLInputElement).value;
+            this.updateProperty(propKey, value ? Number(value) : '');
+          }}
                   placeholder=${this.getPropertyPlaceholder(propKey)}
                 />
               </div>
             `;
-          }
-          
-          if (propType === 'textarea') {
-            return html`
+      }
+
+      if (propType === 'textarea') {
+        return html`
               <div class="form-group">
                 <label>${this.formatPropertyLabel(propKey)}</label>
                 <textarea
                   .value=${String(currentValue)}
                   @input=${(e: Event) => {
-                    const value = (e.target as HTMLTextAreaElement).value;
-                    this.updateProperty(propKey, value);
-                  }}
+            const value = (e.target as HTMLTextAreaElement).value;
+            this.updateProperty(propKey, value);
+          }}
                   placeholder=${this.getPropertyPlaceholder(propKey)}
                   rows="3"
                 ></textarea>
               </div>
             `;
-          }
-          
-          // Default: text input
-          return html`
+      }
+
+      // Default: text input
+      return html`
             <div class="form-group">
               <label>${this.formatPropertyLabel(propKey)}</label>
               <input
                 type="text"
                 .value=${String(currentValue)}
                 @input=${(e: Event) => {
-                  const value = (e.target as HTMLInputElement).value;
-                  this.updateProperty(propKey, value);
-                }}
+          const value = (e.target as HTMLInputElement).value;
+          this.updateProperty(propKey, value);
+        }}
                 placeholder=${this.getPropertyPlaceholder(propKey)}
               />
             </div>
           `;
-        })}
+    })}
       </div>
     `;
   }
@@ -431,9 +433,9 @@ export class PropertiesPanel extends LitElement {
 
   private getPropertyType(propKey: string): 'text' | 'number' | 'boolean' | 'textarea' {
     const booleanProps = ['required', 'disabled', 'checked'];
-    const numberProps = ['rows', 'level', 'width', 'height'];
+    const numberProps = ['rows', 'cols', 'level', 'width', 'height'];
     const textareaProps = ['content', 'options'];
-    
+
     if (booleanProps.includes(propKey)) return 'boolean';
     if (numberProps.includes(propKey)) return 'number';
     if (textareaProps.includes(propKey)) return 'textarea';
@@ -463,7 +465,7 @@ export class PropertiesPanel extends LitElement {
       'rows': '3',
       'level': '1-6',
     };
-    
+
     return placeholders[propKey] || '';
   }
 
@@ -472,7 +474,7 @@ export class PropertiesPanel extends LitElement {
   }
   private handleCustomThemeInput(e: Event) {
     const raw = (e.target as HTMLTextAreaElement).value;
-    let parsed: Record<string,string> = {};
+    let parsed: Record<string, string> = {};
     try { parsed = JSON.parse(raw); } catch { /* ignore parse errors; keep previous tokens */ }
     this.updateProperty('themeTokens', parsed);
   }

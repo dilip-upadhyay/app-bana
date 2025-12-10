@@ -10,15 +10,15 @@
     "props" : {
       "style" : "display: flex; flex-direction: column; min-height: 100vh;"
     },
-    "children" : [ "container" ]
+    "children" : [ "app-grid" ]
   }, {
-    "id" : "container",
-    "type" : "container",
+    "id" : "app-grid",
+    "type" : "app-grid",
     "props" : {
-      "className" : "grid",
-      "style" : "display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;",
-      "data-grid-rows" : "2",
-      "data-grid-cols" : "3"
+      "cols" : 3,
+      "rows" : 2,
+      "gap" : "1rem",
+      "className" : "grid"
     },
     "children" : [ ]
   } ]

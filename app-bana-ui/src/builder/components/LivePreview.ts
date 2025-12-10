@@ -744,7 +744,8 @@ export class LivePreview extends LitElement {
             <app-grid
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
-              columns="${node.props?.columns || 2}"
+              cols="${node.props?.cols || 2}"
+              rows="${node.props?.rows || 2}"
               gap="${node.props?.gap || '16px'}"
               data-node-id="${node.id}"
               @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
@@ -824,6 +825,7 @@ export class LivePreview extends LitElement {
           <div
             class="${containerClasses}"
             style="${style}"
+            slot="${node.props?.slot || ''}"
             data-node-id="${node.id}"
             @click=${(e: Event) => this.handleNodeClick(e, node.id)}
             @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
