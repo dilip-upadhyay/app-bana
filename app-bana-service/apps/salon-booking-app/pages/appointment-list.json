@@ -10,7 +10,7 @@
   "nodes" : [ {
     "type" : "container",
     "id" : "root-1765400594339",
-    "children" : [ "heading-root-1765400594339", "table-root-1765400594339" ],
+    "children" : [ "heading-root-1765400594339", "table-root-1765400594339", "container", "input", "container-1" ],
     "props" : {
       "padding" : "xl",
       "layout" : "vertical",
@@ -57,5 +57,36 @@
       "viewMode" : "dynamic",
       "theme" : "default"
     }
+  }, {
+    "id" : "container",
+    "type" : "container",
+    "props" : {
+      "className" : "container"
+    },
+    "children" : [ "select" ]
+  }, {
+    "id" : "select",
+    "type" : "select",
+    "props" : {
+      "className" : "select"
+    },
+    "children" : [ ]
+  }, {
+    "id" : "input",
+    "type" : "input",
+    "props" : {
+      "type" : "checkbox",
+      "className" : "checkbox"
+    }
+  }, {
+    "id" : "container-1",
+    "type" : "container",
+    "props" : {
+      "className" : "grid",
+      "style" : "display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;",
+      "data-grid-rows" : "2",
+      "data-grid-cols" : "3"
+    },
+    "children" : [ ]
   } ]
 }

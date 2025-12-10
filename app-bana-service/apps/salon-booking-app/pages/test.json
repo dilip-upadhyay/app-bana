@@ -1,0 +1,25 @@
+{
+  "metaVersion" : 1,
+  "id" : "test",
+  "name" : "test",
+  "path" : "/new-page",
+  "rootId" : "root",
+  "nodes" : [ {
+    "id" : "root",
+    "type" : "container",
+    "props" : {
+      "style" : "display: flex; flex-direction: column; min-height: 100vh;"
+    },
+    "children" : [ "container" ]
+  }, {
+    "id" : "container",
+    "type" : "container",
+    "props" : {
+      "className" : "grid",
+      "style" : "display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;",
+      "data-grid-rows" : "2",
+      "data-grid-cols" : "3"
+    },
+    "children" : [ ]
+  } ]
+}

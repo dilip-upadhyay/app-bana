@@ -4,8 +4,8 @@
   "description" : "A system for managing salon appointments, services, and customer information.",
   "version" : "1.0.0",
   "created" : 1765400594293,
-  "updated" : 1765400594344,
-  "pages" : [ "customer-list", "service-list", "appointment-scheduler", "appointment-list" ],
+  "updated" : 1765402444101,
+  "pages" : [ "customer-list", "service-list", "appointment-scheduler", "appointment-list", "test" ],
   "defaultPage" : "customer-list",
   "entities" : [ {
     "name" : "Customer",
