@@ -1,11 +1,12 @@
 {
   "id" : "salon-booking-app",
   "name" : "Salon Booking App",
-  "description" : "Salon booking system with customers, services, and appointments management.",
+  "description" : "A system for managing salon appointments, services, and customer information.",
   "version" : "1.0.0",
-  "created" : 1763408704487,
-  "updated" : 1763408704487,
-  "pages" : [ ],
+  "created" : 1765400594293,
+  "updated" : 1765400594344,
+  "pages" : [ "customer-list", "service-list", "appointment-scheduler", "appointment-list" ],
+  "defaultPage" : "customer-list",
   "entities" : [ {
     "name" : "Customer",
     "fields" : [ {
@@ -27,8 +28,8 @@
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "preferredContactMethod",
-      "type" : "status",
+      "name" : "notes",
+      "type" : "longtext",
       "required" : false,
       "primaryKey" : false,
       "autoIncrement" : false
@@ -36,7 +37,7 @@
   }, {
     "name" : "Service",
     "fields" : [ {
-      "name" : "name",
+      "name" : "title",
       "type" : "text",
       "required" : true,
       "primaryKey" : false,
@@ -48,14 +49,14 @@
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "duration",
-      "type" : "duration",
+      "name" : "price",
+      "type" : "currency",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "price",
-      "type" : "currency",
+      "name" : "duration",
+      "type" : "number",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
@@ -63,12 +64,6 @@
   }, {
     "name" : "Appointment",
     "fields" : [ {
-      "name" : "dateTime",
-      "type" : "datetime",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
       "name" : "customerId",
       "type" : "reference",
       "required" : true,
@@ -77,6 +72,12 @@
     }, {
       "name" : "serviceId",
       "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "appointmentDate",
+      "type" : "datetime",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false

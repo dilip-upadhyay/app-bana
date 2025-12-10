@@ -346,3 +346,21 @@ kbd {
     opacity: 0;
   }
 }
+
+/* Dark mode support to match Runtime */
+@media (prefers-color-scheme: dark) {
+  :host {
+    --color-surface: #1e293b;
+    --color-text: #f1f5f9;
+    --color-border: #334155;
+    --color-border-strong: #475569;
+    --color-text-secondary: #cbd5e1;
+  }
+  
+  /* Ensure canvas background stays light if that is the intended "paper" look, 
+     OR let it go dark? Runtime shell is white. 
+     LivePreview :host sets background: white.
+     We will keep :host background white to match Runtime Shell, 
+     but allow the VARIABLES to be dark for components.
+  */
+}
