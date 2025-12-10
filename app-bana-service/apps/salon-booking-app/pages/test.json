@@ -19,7 +19,7 @@
       "rows" : 2,
       "gap" : "0",
       "className" : "grid",
-      "minCellHeight" : "auto"
+      "minCellHeight" : "300px"
     },
     "children" : [ "container", "container-1", "container-2", "container-3", "container-4", "container-5" ]
   }, {

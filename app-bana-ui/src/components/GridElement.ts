@@ -37,7 +37,6 @@ export class GridElement extends LitElement {
       flex-direction: column;
       gap: 0;
       position: relative;
-      transition: all 0.2s ease;
     }
 
     .grid-cell.empty {
@@ -72,7 +71,8 @@ export class GridElement extends LitElement {
 
     .grid-cell.has-content:hover {
       /* Show subtle outline on hover for selection feedback if needed, else transparent */
-      border: 1px dashed var(--grid-outline-hover-color, transparent);
+      outline: 1px dashed var(--grid-outline-hover-color, transparent);
+      outline-offset: -1px;
     }
 
     .cell-label {
