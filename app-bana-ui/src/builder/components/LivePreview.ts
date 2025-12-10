@@ -499,6 +499,32 @@ export class LivePreview extends LitElement {
           </div>
         `;
 
+      case 'select':
+        return html`
+          <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <studio-select
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              label="${node.props?.label || ''}"
+              name="${node.props?.name || ''}"
+              value="${node.props?.value || ''}"
+              options="${typeof node.props?.options === 'string' ? node.props.options : JSON.stringify(node.props?.options || [])}"
+              placeholder="${node.props?.placeholder || ''}"
+              ?required=${node.props?.required}
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            ></studio-select>
+            <!-- Overlay to intercept clicks for selection -->
+            <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
+                 @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
+          </div>
+        `;
+
       case 'textarea':
         return html`
           <textarea
@@ -649,7 +675,7 @@ export class LivePreview extends LitElement {
     // We need to import it dynamically since it's not in the imports at the top
     import('../store/AppStore').then(({ appStore }) => {
       const currentApp = appStore.getCurrentApp();
-      
+
       if (!currentApp) {
         alert('No app selected. Please create or select an app first.');
         return;
@@ -665,7 +691,7 @@ export class LivePreview extends LitElement {
       // Encode state for URL (base64 encoded JSON)
       const stateParam = btoa(JSON.stringify(runtimeState));
       const previewUrl = `/index.html?state=${stateParam}`;
-      
+
       console.log('[LivePreview] Opening preview with state:', runtimeState);
       window.open(previewUrl, '_blank');
     }).catch((error) => {

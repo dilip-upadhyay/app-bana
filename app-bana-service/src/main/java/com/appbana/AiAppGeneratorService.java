@@ -23,7 +23,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import com.appbana.model.AppMetadata; // added for persistence defaultPage update
 import com.appbana.workflow.model.WorkflowDefinition; // added for workflow generation
-import com.appbana.JdbcManager; // added for workflow persistence
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;

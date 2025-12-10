@@ -47,7 +47,7 @@ export class FormContainer extends BaseElement {
 
     private checkAndLoadRecord() {
         const recordId = this.getAttribute('record-id') || this.getAttribute('recordId');
-        if (recordId) {
+        if (recordId && recordId !== 'undefined' && recordId !== 'null') {
             this.loadRecord(recordId);
         }
     }
