@@ -12,8 +12,13 @@ import '../../components/InputElement';
 import '../../components/SelectElement';
 import '../../components/TextareaElement';
 import '../../components/ButtonElement';
+import '../../components/ButtonElement';
 import '../../components/HTMLElements'; // For header, text, etc.
-import '../../components/GridElement';  // If used
+import '../../components/GridElement';  // For app-grid
+import '../../runtime/renderer/StudioTableLive'; // For studio-table-live
+import '../../components/CheckboxElement';
+import '../../components/RadioGroupElement';
+
 
 
 @customElement('studio-live-preview')
@@ -606,6 +611,146 @@ export class LivePreview extends LitElement {
           >
             ${node.props?.text || 'Link'}
           </a>
+        `;
+
+      case 'checkbox':
+        return html`
+          <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <studio-checkbox
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              label="${node.props?.label || ''}"
+              name="${node.props?.name || ''}"
+              value="${node.props?.value || 'on'}"
+              ?checked=${node.props?.checked}
+              ?disabled=${node.props?.disabled}
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            ></studio-checkbox>
+            <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
+                 @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
+          </div>
+        `;
+
+      case 'radio-group':
+        return html`
+          <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <studio-radio-group
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              label="${node.props?.label || ''}"
+              name="${node.props?.name || ''}"
+              value="${node.props?.value || ''}"
+              options="${typeof node.props?.options === 'string' ? node.props.options : JSON.stringify(node.props?.options || [])}"
+              layout="${node.props?.layout || 'vertical'}"
+              ?required=${node.props?.required}
+              ?disabled=${node.props?.disabled}
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            ></studio-radio-group>
+            <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
+                 @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
+          </div>
+        `;
+
+      case 'table':
+      case 'grid':
+      case 'studio-table-live':
+        // Map props correctly or pass entire node if component supports it (Renderer passes node)
+        // StudioTableLive takes properties directly or via accessors. Renderer.ts passes .node={nodeWithData}
+        // But StudioTableLive definition (JSON) shows props: entity, fields...
+        // We'll pass the whole node object as a property if supported, or individual props.
+        // Renderer.ts does: html`<studio-table-live .node=${nodeWithData}></studio-table-live>`
+        // Lit in LivePreview might not support .node property binding easily on custom element without explicit support?
+        // studio-table-live likely has a 'node' setter.
+
+        return html`
+          <div style="position: relative; display: block; width: 100%; min-height: 200px;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <studio-table-live
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              .node=${node}
+              entity="${node.props?.entity || ''}"
+              view-mode="${node.props?.viewMode || 'dynamic'}"
+              theme="${node.props?.theme || 'default'}"
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            ></studio-table-live>
+             <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
+                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
+          </div>
+        `;
+
+      case 'form':
+      case 'studio-form':
+        const formChildren = node.children?.map(childId => {
+          const childNode = this.page?.nodes.find(n => n.id === childId);
+          return childNode ? this.renderNode(childNode) : null;
+        });
+
+        return html`
+          <div style="position: relative; display: block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <studio-form
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              entity="${node.props?.entity || ''}"
+              record-id="${node.props?.['record-id'] || ''}"
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            >
+              ${formChildren}
+            </studio-form>
+             <div style="position: absolute; top:0; left:0; right:0; height: 20px; cursor: pointer; z-index: 10;" 
+                  @click=${(e: Event) => this.handleNodeClick(e, node.id)} title="Select Form"></div>
+          </div>
+        `;
+
+      case 'app-grid':
+        const gridChildren = node.children?.map(childId => {
+          const childNode = this.page?.nodes.find(n => n.id === childId);
+          return childNode ? this.renderNode(childNode) : null;
+        });
+
+        return html`
+          <div style="position: relative; display: block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <app-grid
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              columns="${node.props?.columns || 2}"
+              gap="${node.props?.gap || '16px'}"
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            >
+              ${gridChildren}
+            </app-grid>
+             <div style="position: absolute; top:0; left:0; right:0; height: 20px; cursor: pointer; z-index: 10;" 
+                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
+          </div>
         `;
 
       case 'header':
