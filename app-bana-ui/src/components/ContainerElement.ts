@@ -25,8 +25,6 @@ export class ContainerElement extends FormElement {
         flex-direction: ${layout};
         gap: ${gap};
         padding: ${padding};
-        border: 1px dashed #e5e7eb;
-        min-height: 50px;
       }
     `;
   }
