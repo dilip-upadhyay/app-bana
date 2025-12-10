@@ -393,6 +393,37 @@ export class PropertiesPanel extends LitElement {
             `;
       }
 
+      if (propType === 'spacing') {
+        // Map friendly labels to CSS values
+        const spacingOptions = [
+          { label: 'None', value: '0' },
+          { label: 'Very Small', value: '0.25rem' },
+          { label: 'Small', value: '0.5rem' },
+          { label: 'Medium', value: '1rem' },
+          { label: 'Large', value: '2rem' },
+          { label: 'Extra Large', value: '4rem' }
+        ];
+
+        return html`
+          <div class="form-group">
+            <label>${this.formatPropertyLabel(propKey)}</label>
+            <select
+              @change=${(e: Event) => this.updateProperty(propKey, (e.target as HTMLSelectElement).value)}
+            >
+              ${spacingOptions.map(opt => html`
+                <option value="${opt.value}" ?selected=${currentValue === opt.value}>
+                  ${opt.label}
+                </option>
+              `)}
+              <!-- Allow custom if not matching presets -->
+              ${!spacingOptions.some(o => o.value === currentValue) && currentValue ? html`
+                <option value="${currentValue}" selected>Custom (${currentValue})</option>
+              ` : ''}
+            </select>
+          </div>
+        `;
+      }
+
       // Default: text input
       return html`
             <div class="form-group">
@@ -431,14 +462,16 @@ export class PropertiesPanel extends LitElement {
     this.updateProperty('bulkActions', actions);
   }
 
-  private getPropertyType(propKey: string): 'text' | 'number' | 'boolean' | 'textarea' {
+  private getPropertyType(propKey: string): 'text' | 'number' | 'boolean' | 'textarea' | 'spacing' {
     const booleanProps = ['required', 'disabled', 'checked'];
     const numberProps = ['rows', 'cols', 'level', 'width', 'height'];
     const textareaProps = ['content', 'options'];
+    const spacingProps = ['gap'];
 
     if (booleanProps.includes(propKey)) return 'boolean';
     if (numberProps.includes(propKey)) return 'number';
     if (textareaProps.includes(propKey)) return 'textarea';
+    if (spacingProps.includes(propKey)) return 'spacing';
     return 'text';
   }
 

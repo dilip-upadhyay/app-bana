@@ -10,15 +10,29 @@
     "props" : {
       "style" : "display: flex; flex-direction: column; min-height: 100vh;"
     },
-    "children" : [ "app-grid" ]
+    "children" : [ "section", "app-grid", "select" ]
   }, {
     "id" : "app-grid",
     "type" : "app-grid",
     "props" : {
       "cols" : 3,
       "rows" : 2,
-      "gap" : "1rem",
+      "gap" : "0",
       "className" : "grid"
+    },
+    "children" : [ ]
+  }, {
+    "id" : "section",
+    "type" : "section",
+    "props" : {
+      "className" : "section"
+    },
+    "children" : [ ]
+  }, {
+    "id" : "select",
+    "type" : "select",
+    "props" : {
+      "className" : "select"
     },
     "children" : [ ]
   } ]
