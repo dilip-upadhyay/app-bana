@@ -1,0 +1,40 @@
+# Enhancing AI Builder
+
+- [x] Explore AI Builder Implementation <!-- id: 8 -->
+    - [x] Locate AI/Chat endpoints in Backend
+    - [x] Locate Chat UI in Frontend
+    - [x] Understand current Prompt/Context construction
+- [x] Design Improvements <!-- id: 9 -->
+    - [x] Define Scope Guardrails (System Prompt)
+    - [x] Improve "Human Friendliness" (Response formatting, suggestions)
+    - [x] Enhance Capabilities (Use builder-database effectively)
+- [x] Implement Changes <!-- id: 10 -->
+    - [x] Update System Instructions / Prompts
+    - [x] Update Frontend Chat UI (if needed)
+- [x] Verify Improvements <!-- id: 11 -->
+    - [x] Fix Grid Drag and Drop (handle nested cells correctly)
+    - [x] Fix Grid Runtime Rendering (Unknown component app-grid)
+- [ ] Verify fix with useres
+    - [x] Verify fallback templates include friendly replies
+- [x] Implement Context Injection (Modify Existing Apps) <!-- id: 12 -->
+    - [x] Update Frontend to send `currentAppId` <!-- id: 13 -->
+    - [x] Update Backend to fetch and inject full app metadata <!-- id: 14 -->
+    - [x] Verify AI can "see" and modify existing entities <!-- id: 15 -->
+- [ ] Implement Conversation-to-Workflow <!-- id: 16 -->
+    - [x] Explore Workflow Schema (`12-workflows.json`) <!-- id: 17 -->
+    - [x] Update System Prompts for Workflows <!-- id: 18 -->
+    - [x] Update Backend to Parse/Save Workflows <!-- id: 19 -->
+    - [ ] Verify Workflow Generation <!-- id: 20 -->
+- [ ] Implement AI Styling & Theming <!-- id: 21 -->
+    - [ ] Update `AppMetadata` with Theme options <!-- id: 22 -->
+    - [ ] Implement Theme CSS Generator <!-- id: 23 -->
+- [x] Debug UI Discrepancy between Canvas and Runtime <!-- id: 24 -->
+    - [x] Identify source of "Failed to load record" on "New Loan Application" page <!-- id: 25 -->
+    - [x] Fix data loading logic in FormContainer <!-- id: 26 -->
+    - [x] Verify visual consistency (Added select to LivePreview) <!-- id: 27 -->
+    - [x] Fix Grid Gaps & Runtime Artifacts (Dotted lines, Labels) <!-- id: 28 -->
+    - [ ] Frontend: Apply Theme Changes <!-- id: 24 -->
+- [ ] Implement Magic Data Seeding <!-- id: 25 -->
+    - [ ] Create `DataSeederService` <!-- id: 26 -->
+    - [ ] Define "Seed Data" Intent <!-- id: 27 -->
+    - [ ] Implement Generation Logic <!-- id: 28 -->
