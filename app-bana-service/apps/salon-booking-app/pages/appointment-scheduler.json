@@ -18,7 +18,7 @@
     }
   }, {
     "props" : {
-      "content" : "Appointment Scheduler",
+      "content" : "Appointment Scheduler1",
       "tag" : "h1"
     },
     "type" : "text",

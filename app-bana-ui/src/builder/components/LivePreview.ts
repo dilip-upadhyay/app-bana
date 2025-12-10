@@ -11,7 +11,7 @@ import '../../components/FormContainer';
 import '../../components/InputElement';
 import '../../components/SelectElement';
 import '../../components/TextareaElement';
-import '../../components/ButtonElement';
+import '../../components/TextElement';
 import '../../components/ButtonElement';
 import '../../components/HTMLElements'; // For header, text, etc.
 import '../../components/GridElement';  // For app-grid
@@ -461,21 +461,28 @@ export class LivePreview extends LitElement {
     // Render different node types
     switch (node.type) {
       case 'text':
-        const tag = unsafeStatic(node.props?.tag || 'p');
-        const text = node.props?.text || '';
-        const className = `${classes} ${node.props?.className || ''}`;
-
-        // Use unsafeStatic for dynamic tag names
-        return staticHtml`<${tag}
-            class="${className}"
-            style="${style}"
-            data-node-id="${node.id}"
-            @click=${(e: Event) => this.handleNodeClick(e, node.id)}
-            @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-            @mouseleave=${() => this.handleNodeMouseLeave()}
-            @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-            @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}>${text}</${tag}>`;
+        return html`
+          <div style="position: relative; display: block;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <studio-text
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              content="${node.props?.content || node.props?.text || ''}"
+              variant="${node.props?.variant || 'body'}"
+              align="${node.props?.align || 'left'}"
+              color="${node.props?.color || ''}"
+              tag="${node.props?.tag || 'p'}"
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            ></studio-text>
+            <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
+                 @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
+          </div>
+        `;
 
       case 'button':
         return html`
