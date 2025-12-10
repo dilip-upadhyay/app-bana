@@ -336,7 +336,7 @@ export class TreeStore {
   }
 
   private require(id: string): ComponentNode { const n = this.nodes.get(id); if (!n) throw new Error('node not found: ' + id); return n; }
-  private findParent(id: string): ComponentNode | null {
+  public findParent(id: string): ComponentNode | null {
     for (const n of this.nodes.values()) if (n.children?.includes(id)) return n; return null;
   }
   private isAncestor(ancestorId: string, maybeDesc: string): boolean {

@@ -873,6 +873,7 @@ export class LivePreview extends LitElement {
               cols="${node.props?.cols || 2}"
               rows="${node.props?.rows || 2}"
               gap="${node.props?.gap || '16px'}"
+              .minCellHeight="${node.props?.minCellHeight || 'auto'}"
               data-node-id="${node.id}"
               @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
               @mouseleave=${() => this.handleNodeMouseLeave()}

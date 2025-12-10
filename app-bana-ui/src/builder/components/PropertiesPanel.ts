@@ -176,8 +176,8 @@ export class PropertiesPanel extends LitElement {
       'checkbox': ['label', 'name', 'checked', 'disabled'],
       'radio': ['label', 'name', 'value', 'checked', 'disabled'],
       'select': ['label', 'name', 'options', 'value', 'disabled'],
-      'app-grid': ['rows', 'cols', 'gap'],
-      'grid': ['rows', 'cols', 'gap'],
+      'app-grid': ['rows', 'cols', 'gap', 'minCellHeight'],
+      'grid': ['rows', 'cols', 'gap', 'minCellHeight'],
     };
 
     return propertyMap[type] || [];
@@ -208,12 +208,42 @@ export class PropertiesPanel extends LitElement {
           </div>
         </div>
 
+        ${this.renderParentGridNavigation()}
+
         <div class="panel-body">
           <!-- Component Properties Section -->
           ${this.renderComponentProperties()}
         </div>
       </div>
     `;
+  }
+
+  private renderParentGridNavigation() {
+    if (!currentStore || !this.selectedNode) return '';
+    const parent = currentStore.findParent(this.selectedNode.id);
+
+    if (parent && (parent.type === 'app-grid' || parent.type === 'grid')) {
+      // Check if this node is a cell (has slot starting with cell-)
+      const slot = this.selectedNode.props?.slot;
+      const isCell = slot && String(slot).startsWith('cell-');
+
+      if (isCell) {
+        return html`
+           <div style="background: #eef2ff; border: 1px solid #6366f1; border-radius: 6px; padding: 12px; margin: 0 16px 16px 16px;">
+             <div style="font-size: 12px; color: #4338ca; margin-bottom: 8px; font-weight: 500;">
+               Currently editing a Grid Cell inside <strong>${parent.id}</strong>
+             </div>
+             <button 
+               style="width: 100%; padding: 8px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
+               @click=${() => currentStore?.select(parent.id)}
+             >
+               ⚙️ Configure Grid Properties
+             </button>
+           </div>
+         `;
+      }
+    }
+    return '';
   }
 
   private renderComponentProperties() {
@@ -394,37 +424,76 @@ export class PropertiesPanel extends LitElement {
       }
 
       if (propType === 'spacing') {
-        // Map friendly labels to CSS values
-        const spacingOptions = [
-          { label: 'None', value: '0' },
-          { label: 'Very Small', value: '0.25rem' },
-          { label: 'Small', value: '0.5rem' },
-          { label: 'Medium', value: '1rem' },
-          { label: 'Large', value: '2rem' },
-          { label: 'Extra Large', value: '4rem' }
+        const isHeight = propKey === 'minCellHeight';
+
+        // Define steps for stepping up/down
+        const options = isHeight ? [
+          { label: 'Auto', value: 'auto' },
+          { label: 'Compact (60px)', value: '60px' },
+          { label: 'Normal (100px)', value: '100px' },
+          { label: 'Medium (150px)', value: '150px' },
+          { label: 'Large (200px)', value: '200px' },
+          { label: 'Extra Large (300px)', value: '300px' }
+        ] : [
+          { label: 'None (0)', value: '0' },
+          { label: 'Tx (2px)', value: '2px' },
+          { label: 'Tiny (4px)', value: '0.25rem' },
+          { label: 'Small (8px)', value: '0.5rem' },
+          { label: 'Normal (16px)', value: '1rem' },
+          { label: 'Large (32px)', value: '2rem' },
+          { label: 'Huge (64px)', value: '4rem' }
         ];
+
+        // Find current index to enable/disable buttons
+        const normalize = (v: any) => String(v || (isHeight ? 'auto' : '1rem')).toLowerCase();
+        const currentVal = normalize(currentValue);
+        const currentIndex = options.findIndex(o => normalize(o.value) === currentVal);
+        const effectiveIndex = currentIndex === -1 ? 0 : currentIndex; // Default to 0 if custom/unknown
 
         return html`
           <div class="form-group">
             <label>${this.formatPropertyLabel(propKey)}</label>
-            <select
-              @change=${(e: Event) => this.updateProperty(propKey, (e.target as HTMLSelectElement).value)}
-            >
-              ${spacingOptions.map(opt => html`
-                <option value="${opt.value}" ?selected=${currentValue === opt.value}>
-                  ${opt.label}
-                </option>
-              `)}
-              <!-- Allow custom if not matching presets -->
-              ${!spacingOptions.some(o => o.value === currentValue) && currentValue ? html`
-                <option value="${currentValue}" selected>Custom (${currentValue})</option>
-              ` : ''}
-            </select>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <!-- Minus Button -->
+              <button 
+                type="button"
+                style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid #d1d5db; background: ${effectiveIndex <= 0 ? '#f3f4f6' : '#fff'}; cursor: pointer; border-radius: 4px;"
+                ?disabled=${effectiveIndex <= 0}
+                @click=${() => {
+            if (effectiveIndex > 0) this.updateProperty(propKey, options[effectiveIndex - 1].value);
+          }}
+              >
+                ➖
+              </button>
+
+              <!-- Dropdown -->
+              <select
+                style="flex: 1;"
+                @change=${(e: Event) => this.updateProperty(propKey, (e.target as HTMLSelectElement).value)}
+              >
+                ${options.map(opt => html`
+                  <option value="${opt.value}" ?selected=${normalize(opt.value) === currentVal}>
+                    ${opt.label}
+                  </option>
+                `)}
+                ${currentIndex === -1 && currentValue ? html`<option value="${currentValue}" selected>Custom (${currentValue})</option>` : ''}
+              </select>
+
+              <!-- Plus Button -->
+              <button 
+                type="button"
+                style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid #d1d5db; background: ${effectiveIndex >= options.length - 1 ? '#f3f4f6' : '#fff'}; cursor: pointer; border-radius: 4px;"
+                ?disabled=${effectiveIndex >= options.length - 1}
+                @click=${() => {
+            if (effectiveIndex < options.length - 1) this.updateProperty(propKey, options[effectiveIndex + 1].value);
+          }}
+              >
+                ➕
+              </button>
+            </div>
           </div>
         `;
       }
-
-      // Default: text input
       return html`
             <div class="form-group">
               <label>${this.formatPropertyLabel(propKey)}</label>
@@ -466,7 +535,7 @@ export class PropertiesPanel extends LitElement {
     const booleanProps = ['required', 'disabled', 'checked'];
     const numberProps = ['rows', 'cols', 'level', 'width', 'height'];
     const textareaProps = ['content', 'options'];
-    const spacingProps = ['gap'];
+    const spacingProps = ['gap', 'minCellHeight'];
 
     if (booleanProps.includes(propKey)) return 'boolean';
     if (numberProps.includes(propKey)) return 'number';
