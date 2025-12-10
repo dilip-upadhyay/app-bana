@@ -39,7 +39,8 @@ public class AiAppGeneratorService {
 
     private static final Logger LOG = LoggerFactory.getLogger(AiAppGeneratorService.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final TypeReference<Map<String, Object>> MAP_TYPE=new TypeReference<Map<String,Object>>(){};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<Map<String, Object>>() {
+    };
 
     private static final String ACTION_LIST_APPS = "listApps";
     private static final String ACTION_LOAD_APP = "loadApp";
@@ -1142,8 +1143,6 @@ public class AiAppGeneratorService {
         if (request.userId != null && !request.userId.isBlank())
             return request.userId;
         return DEFAULT_USER;
-    }
-
     }
 
     private static void postProcessAndPersistIfNeeded(GenerationResult result, GenerationRequest request) {
