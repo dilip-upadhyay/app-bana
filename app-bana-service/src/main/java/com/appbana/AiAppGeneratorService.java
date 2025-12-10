@@ -22,6 +22,12 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import com.appbana.model.AppMetadata; // added for persistence defaultPage update
+import com.appbana.workflow.model.WorkflowDefinition; // added for workflow generation
+import com.appbana.JdbcManager; // added for workflow persistence
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 // added for AI result validation
 
 /**
@@ -33,8 +39,7 @@ public class AiAppGeneratorService {
 
     private static final Logger LOG = LoggerFactory.getLogger(AiAppGeneratorService.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<Map<String, Object>>() {
-    };
+    private static final TypeReference<Map<String, Object>> MAP_TYPE=new TypeReference<Map<String,Object>>(){};
 
     private static final String ACTION_LIST_APPS = "listApps";
     private static final String ACTION_LOAD_APP = "loadApp";
@@ -1139,10 +1144,13 @@ public class AiAppGeneratorService {
         return DEFAULT_USER;
     }
 
+    }
+
     private static void postProcessAndPersistIfNeeded(GenerationResult result, GenerationRequest request) {
         if (result == null || !result.success)
             return;
-        // If entities or appName exist treat as app generation
+
+        // Persist App Structure
         if (result.appName != null && (result.entities != null && !result.entities.isEmpty())) {
             try {
                 String baseName = result.appName;
@@ -1151,12 +1159,27 @@ public class AiAppGeneratorService {
                 if (result.payload == null)
                     result.payload = new HashMap<>();
                 result.payload.put("appId", slug);
+
+                // Persist Workflows if present
+                if (result.workflows != null && !result.workflows.isEmpty()) {
+                    saveWorkflows(slug, result.workflows);
+                    LOG.info("[AI] Persisted {} workflows for app {}", result.workflows.size(), slug);
+                }
+
                 if (!result.payload.containsKey(PAYLOAD_REPLY)) {
                     int entityCount = result.entities != null ? result.entities.size() : 0;
                     int pageCount = result.pages != null ? result.pages.size()
                             : (result.suggestedPages != null ? result.suggestedPages.size() : 0);
-                    result.payload.put(PAYLOAD_REPLY, "Created app '" + result.appName + "' with " + entityCount
-                            + " entities and " + pageCount + " pages. Say 'show my apps' or 'open the first app'.");
+                    int wfCount = result.workflows != null ? result.workflows.size() : 0;
+
+                    String reply = "Created app '" + result.appName + "' with " + entityCount + " entities, "
+                            + pageCount + " pages";
+                    if (wfCount > 0) {
+                        reply += ", and " + wfCount + " workflows ⚡";
+                    }
+                    reply += ". Say 'show my apps' or 'open the first app'.";
+
+                    result.payload.put(PAYLOAD_REPLY, reply);
                 }
             } catch (Exception e) {
                 LOG.error("[AI] Failed to persist generated app", e);
@@ -1164,6 +1187,71 @@ public class AiAppGeneratorService {
                     result.payload = new HashMap<>();
                 result.payload.put(PAYLOAD_REPLY, "Generated app structure but failed to save: " + e.getMessage());
             }
+        }
+    }
+
+    private static void saveWorkflows(String appId, List<WorkflowDefinition> workflows) {
+        if (workflows == null || workflows.isEmpty())
+            return;
+
+        try (Connection conn = JdbcManager.getConnection()) {
+            String insertSql = """
+                    INSERT INTO appbana_wf_definition
+                    (id, app_id, name, description, trigger_entity, trigger_event,
+                     trigger_condition, version, status, definition_json, created_at, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+                    """;
+
+            try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+                for (WorkflowDefinition wf : workflows) {
+                    if (wf.getId() == null)
+                        wf.setId(UUID.randomUUID().toString());
+                    if (wf.getStatus() == null)
+                        wf.setStatus(WorkflowDefinition.WorkflowStatus.ACTIVE);
+
+                    // Validate JSON definition exists
+                    String defJson = "{}";
+                    try {
+                        // If 'definition' field is missing in parsed object (it's part of serialized
+                        // json)
+                        // We might need to handle it. But the parser populates WorkflowDefinition from
+                        // JSON.
+                        // Wait, WorkflowDefinition has 'definitionJson' field.
+                        // The AI returns a nested 'definition' object.
+                        // Jackson mapping might fail if we don't handle this mismatch OR we update
+                        // parsing logic.
+                        // Let's assume parsing logic put the map into a field or we need to serialize
+                        // it.
+                        // WorkflowDefinition has 'definitionJson' string.
+                        // But AI returns a JSON object.
+                        // We will handle this in parseAiResponse to ensure 'definitionJson' is
+                        // populated.
+                        if (wf.getDefinitionJson() == null) {
+                            // fallback
+                            wf.setDefinitionJson("{\"nodes\":{},\"transitions\":[]}");
+                        }
+                    } catch (Exception e) {
+                        LOG.warn("Error processing workflow definition json", e);
+                    }
+
+                    ps.setString(1, wf.getId());
+                    ps.setString(2, appId);
+                    ps.setString(3, wf.getName());
+                    ps.setString(4, wf.getDescription());
+                    ps.setString(5, wf.getTriggerEntity());
+                    ps.setString(6, wf.getTriggerEvent() != null ? wf.getTriggerEvent() : "MANUAL"); // default string
+                    ps.setString(7, wf.getTriggerCondition());
+                    ps.setString(8, wf.getStatus().name());
+                    ps.setString(9, wf.getDefinitionJson());
+                    ps.setTimestamp(10, Timestamp.valueOf(LocalDateTime.now()));
+                    ps.setString(11, "ai-generator");
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to save workflows for app " + appId, e);
+            throw new RuntimeException("Workflow save failed", e);
         }
     }
 
@@ -1721,6 +1809,44 @@ public class AiAppGeneratorService {
                 result.suggestedPages.add(pNode.asText());
             }
             LOG.info("[AI] Parsed {} suggested pages from AI response", result.suggestedPages.size());
+            LOG.info("[AI] Parsed {} suggested pages from AI response", result.suggestedPages.size());
+        }
+
+        // Workflows
+        JsonNode workflowsNode = root.get("workflows");
+        if (workflowsNode != null && workflowsNode.isArray()) {
+            result.workflows = new ArrayList<>();
+            for (JsonNode wfNode : workflowsNode) {
+                try {
+                    WorkflowDefinition wf = new WorkflowDefinition();
+                    wf.setId(wfNode.has("id") ? wfNode.get("id").asText() : UUID.randomUUID().toString());
+                    wf.setName(wfNode.path("name").asText("Untitled Workflow"));
+                    wf.setDescription(wfNode.path("description").asText(""));
+                    wf.setTriggerEntity(wfNode.path("triggerEntity").asText());
+                    wf.setTriggerEvent(wfNode.path("triggerEvent").asText("MANUAL"));
+                    wf.setTriggerCondition(wfNode.path("triggerCondition").asText(""));
+
+                    String statusStr = wfNode.path("status").asText("ACTIVE");
+                    try {
+                        wf.setStatus(WorkflowDefinition.WorkflowStatus.valueOf(statusStr));
+                    } catch (Exception e) {
+                        wf.setStatus(WorkflowDefinition.WorkflowStatus.ACTIVE);
+                    }
+
+                    // Serialize 'definition' object to string for storage
+                    JsonNode defNode = wfNode.get("definition");
+                    if (defNode != null) {
+                        wf.setDefinitionJson(MAPPER.writeValueAsString(defNode));
+                    } else {
+                        wf.setDefinitionJson("{\"nodes\":{},\"transitions\":[]}");
+                    }
+
+                    result.workflows.add(wf);
+                } catch (Exception e) {
+                    LOG.warn("[AI] Failed to parse workflow node", e);
+                }
+            }
+            LOG.info("[AI] Parsed {} workflows from AI response", result.workflows.size());
         }
 
         return result;
@@ -1866,7 +1992,9 @@ public class AiAppGeneratorService {
         public List<Map<String, Object>> pages;
         public String error;
         public Map<String, Object> payload;
+
         public String appType; // added for app type extraction
+        public List<WorkflowDefinition> workflows; // added for Conversation-to-Workflow
 
         @Override
         public String toString() {

@@ -91,6 +91,15 @@ public class AiSystemPrompts {
                 prompt.append("\n\n");
             }
 
+            // Load workflows capabilities
+            String workflowsContent = loadBuilderDatabaseFile("12-workflows.json");
+            if (workflowsContent != null) {
+                JsonNode workflows = mapper.readTree(workflowsContent);
+                prompt.append("### Workflow Automation Capabilities:\n");
+                prompt.append(formatWorkflowsCapabilities(workflows));
+                prompt.append("\n\n");
+            }
+
             LOG.info("Successfully loaded builder database content into AI prompt");
         } catch (Exception e) {
             LOG.warn("Failed to load builder database content, using base prompt only: {}", e.getMessage());
@@ -388,6 +397,28 @@ public class AiSystemPrompts {
     }
 
     /**
+     * Format workflow capabilities
+     */
+    private static String formatWorkflowsCapabilities(JsonNode workflows) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("**⚡ WORKFLOW AUTOMATION AVAILABLE**:\n");
+        sb.append("AppBana supports state-machine workflows for business logic. Use when user mentions:\n");
+        sb.append("- 'approval', 'review', 'process', 'flow'\n");
+        sb.append("- 'when a record is created', 'trigger', 'automation'\n");
+        sb.append("- 'assign task', 'send email', 'update status'\n\n");
+
+        sb.append("**Node Types**:\n");
+        sb.append("- **START**: Entry point\n");
+        sb.append("- **END**: Termination\n");
+        sb.append("- **USER_TASK**: Human interaction (approval form, data entry)\n");
+        sb.append("- **SERVICE_TASK**: Automated action (send email, update entity)\n");
+        sb.append("- **DECISION**: Conditional logic (${entity.amount > 1000})\n\n");
+
+        sb.append("**Triggers**: ON_CREATE, ON_UPDATE, ON_DELETE, MANUAL\n");
+        return sb.toString();
+    }
+
+    /**
      * Base system prompt (static part)
      * References builder-database as the source of truth
      */
@@ -486,6 +517,7 @@ public class AiSystemPrompts {
 
             ```json
             {
+              "reply": "I've created the project management app with a workflow for task approval! 🚀",
               "appName": "Project Management App",
               "appDescription": "Project management system with projects, tasks, and team members",
               "entities": [
@@ -585,6 +617,42 @@ public class AiSystemPrompts {
                - User mentions "something like..." without details
                - Multiple valid interpretations exist
             8. **Use builder-database references**: All capabilities above are from builder-database JSON files - consider them the source of truth
+            9. **Generate Workflows for Logic**: If user asks for logic (approval, email, automation), generate a "workflows" array using the node types (START, USER_TASK, SERVICE_TASK, END) and transitions defined in the database.
+
+            ## Workflow Generation Format
+
+            Include workflows in the `workflows` array of your JSON response:
+
+            ```json
+            "workflows": [
+              {
+                "id": "task-approval-wf",
+                "name": "Task Approval",
+                "description": "Manager approval for tasks",
+                "triggerEntity": "Task",
+                "triggerEvent": "ON_CREATE",
+                "triggerCondition": "${entity.priority == 'HIGH'}",
+                "status": "ACTIVE",
+                "definition": {
+                  "nodes": {
+                    "start": { "type": "START", "label": "Start" },
+                    "approval": {
+                      "type": "USER_TASK",
+                      "label": "Manager Approval",
+                      "assignmentType": "ROLE",
+                      "assignmentExpression": "manager",
+                      "formFields": [{"name": "comment", "type": "textarea"}]
+                    },
+                    "end": { "type": "END", "label": "End" }
+                  },
+                  "transitions": [
+                    { "from": "start", "to": "approval" },
+                    { "from": "approval", "to": "end" }
+                  ]
+                }
+              }
+            ]
+            ```
 
             ## Relationship Types
 
