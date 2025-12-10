@@ -5,6 +5,17 @@ import { currentStore } from '../store/TreeStore';
 import type { ComponentNode, PageMeta } from '../../models/metadata';
 import styles from './LivePreview.css?inline';
 
+// Import custom components to ensure they are registered in the registry and customElements
+import '../../components/ContainerElement';
+import '../../components/FormContainer';
+import '../../components/InputElement';
+import '../../components/SelectElement';
+import '../../components/TextareaElement';
+import '../../components/ButtonElement';
+import '../../components/HTMLElements'; // For header, text, etc.
+import '../../components/GridElement';  // If used
+
+
 @customElement('studio-live-preview')
 export class LivePreview extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
@@ -465,37 +476,48 @@ export class LivePreview extends LitElement {
         return html`
           <div style="position: relative; display: inline-block; width: max-content;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <button
+            <studio-button
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
+              label="${node.props?.label || node.props?.text || 'Button'}"
+              type="${node.props?.type || 'button'}"
+              variant="${node.props?.variant || 'primary'}"
+              ?disabled=${node.props?.disabled}
               data-node-id="${node.id}"
               @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
               @mouseleave=${() => this.handleNodeMouseLeave()}
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            >
-              ${node.props?.text || node.props?.label || 'Button'}
-            </button>
+            ></studio-button>
+            <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
+                 @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>
         `;
 
       case 'input':
         return html`
-          <div style="position: relative; display: inline-block; width: max-content;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+          <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <input
-              type="${node.props?.type || 'text'}"
+            <studio-input
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
+              label="${node.props?.label || ''}"
+              type="${node.props?.type || 'text'}"
               placeholder="${node.props?.placeholder || ''}"
+              value="${node.props?.value || ''}"
+              name="${node.props?.name || ''}"
+              ?required=${node.props?.required}
+              ?readonly=${node.props?.readonly || true} 
               data-node-id="${node.id}"
               @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
               @mouseleave=${() => this.handleNodeMouseLeave()}
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            />
+            ></studio-input>
+            <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
+                 @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>
         `;
 
@@ -527,19 +549,28 @@ export class LivePreview extends LitElement {
 
       case 'textarea':
         return html`
-          <textarea
-            class="${classes} ${node.props?.className || ''}"
-            style="${style}"
-            placeholder="${node.props?.placeholder || ''}"
-            rows="${node.props?.rows || 4}"
-            data-node-id="${node.id}"
-            @click=${(e: Event) => this.handleNodeClick(e, node.id)}
-            @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-            @mouseleave=${() => this.handleNodeMouseLeave()}
-            @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-            @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-            @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-          ></textarea>
+          <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <studio-textarea
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              label="${node.props?.label || ''}"
+              placeholder="${node.props?.placeholder || ''}"
+              value="${node.props?.value || ''}"
+              name="${node.props?.name || ''}"
+              rows="${node.props?.rows || 4}"
+              ?required=${node.props?.required}
+              ?readonly=${node.props?.readonly || true}
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            ></studio-textarea>
+            <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
+                 @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
+          </div>
         `;
 
       case 'img':
@@ -575,6 +606,54 @@ export class LivePreview extends LitElement {
           >
             ${node.props?.text || 'Link'}
           </a>
+        `;
+
+      case 'header':
+        return html`
+          <div style="position: relative; display: block;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <studio-header
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            ></studio-header>
+            <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
+                 @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
+          </div>
+        `;
+
+      case 'card':
+        // Recursively render children into the card slot
+        const cardChildren = node.children?.map(childId => {
+          const childNode = this.page?.nodes.find(n => n.id === childId);
+          return childNode ? this.renderNode(childNode) : null;
+        });
+
+        return html`
+          <div style="position: relative; display: block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+            ${deleteOverlay}
+            <studio-card
+              class="${classes} ${node.props?.className || ''}"
+              style="${style}"
+              data-node-id="${node.id}"
+              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
+              @mouseleave=${() => this.handleNodeMouseLeave()}
+              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
+              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
+              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
+            >
+              ${cardChildren}
+            </studio-card>
+             <!-- Partial overlay to allow dropping into children, but capture click on background -->
+             <div style="position: absolute; top:0; left:0; right:0; height: 20px; cursor: pointer; z-index: 10;" 
+                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}
+                  title="Select Card"></div>
+          </div>
         `;
 
       case 'container':
