@@ -8,6 +8,7 @@
   overflow: hidden;
   --grid-outline-color: #e5e7eb;
   --grid-outline-hover-color: #6366f1;
+  --grid-key-display: block;
 }
 
 .preview-container {

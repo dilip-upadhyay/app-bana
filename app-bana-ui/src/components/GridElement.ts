@@ -72,10 +72,11 @@ export class GridElement extends LitElement {
 
     .grid-cell.has-content:hover {
       /* Show subtle outline on hover for selection feedback if needed, else transparent */
-      border: 1px dashed #d1d5db;
+      border: 1px dashed var(--grid-outline-hover-color, transparent);
     }
 
     .cell-label {
+      display: var(--grid-key-display, none);
       position: absolute;
       top: 2px;
       left: 4px;
