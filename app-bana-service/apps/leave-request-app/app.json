@@ -1,0 +1,68 @@
+{
+  "id" : "leave-request-app",
+  "name" : "Leave Request App",
+  "description" : "Leave request management system for employees to submit leave requests and managers to approve them.",
+  "version" : "1.0.0",
+  "created" : 1765409433390,
+  "updated" : 1765409433418,
+  "pages" : [ "leave-request-form", "leave-requests-list", "leave-request-detail" ],
+  "defaultPage" : "leave-request-form",
+  "entities" : [ {
+    "name" : "Employee",
+    "fields" : [ {
+      "name" : "name",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "email",
+      "type" : "email",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "position",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "LeaveRequest",
+    "fields" : [ {
+      "name" : "employeeId",
+      "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "startDate",
+      "type" : "date",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "endDate",
+      "type" : "date",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "reason",
+      "type" : "longtext",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  } ],
+  "routes" : {
+    "basePath" : "/leave-request-app"
+  }
+}

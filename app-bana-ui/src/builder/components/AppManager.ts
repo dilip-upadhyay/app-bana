@@ -1,4 +1,5 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
+import './PipelineDashboard';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
 import type { AppMeta, AppListItem, CreateAppRequest } from '../../models/app-metadata';
@@ -11,6 +12,8 @@ export class AppManager extends LitElement {
   @state() private currentApp: AppMeta | undefined;
   @state() private showCreateModal = false;
   @state() private showSelectModal = false;
+  @state() private showPublishModal = false;
+  @state() private showPipelineModal = false;
   @state() private isLoadingApps = false;
   @state() private appsLoadError: string | null = null;
   @state() private apps: AppListItem[] = [];
@@ -19,6 +22,9 @@ export class AppManager extends LitElement {
   @state() private formName = '';
   @state() private formDescription = '';
   @state() private formTemplate: 'blank' | 'single-page' | 'multi-page' | 'dashboard' = 'single-page';
+
+  @state() private publishLabel = '';
+  @state() private publishDescription = '';
 
   connectedCallback() {
     super.connectedCallback();
@@ -64,6 +70,8 @@ export class AppManager extends LitElement {
     e?.stopPropagation();
     this.showCreateModal = false;
     this.showSelectModal = false;
+    this.showPublishModal = false;
+    this.showPipelineModal = false;
   }
 
   private handleSubmitCreate = async (e: Event) => {
@@ -183,12 +191,22 @@ export class AppManager extends LitElement {
             <button class="btn btn-primary" @click=${this.handleCreateApp}>
               ➕ New App
             </button>
+            ${this.currentApp ? html`
+              <button class="btn btn-success" @click=${this.handlePublishClick} style="background: #10b981; color: white; margin-left: 8px;">
+                🚀 Publish
+              </button>
+              <button class="btn" @click=${() => this.showPipelineModal = true} style="margin-left: 8px;" title="CD Pipeline">
+                🔄 Pipeline
+              </button>
+            ` : ''}
           </div>
         </div>
       </div>
 
       ${this.showCreateModal ? this.renderCreateModal() : ''}
       ${this.showSelectModal ? this.renderSelectModal() : ''}
+      ${this.showPublishModal ? this.renderPublishModal() : ''}
+      ${this.showPipelineModal ? this.renderPipelineModal() : ''}
     `;
   }
 
@@ -342,6 +360,111 @@ export class AppManager extends LitElement {
             <button class="btn" @click=${this.handleCloseModal}>
               Close
             </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  private handlePublishClick = (e: Event) => {
+    e.stopPropagation();
+    if (!this.currentApp) return;
+
+    // Default label: v1.0.{next} (we don't know next, so just v{Date})
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    this.publishLabel = `v${date}`;
+    this.publishDescription = '';
+    this.showPublishModal = true;
+  }
+
+  private handleSubmitPublish = async (e: Event) => {
+    e.preventDefault();
+    if (!this.currentApp) return;
+
+    try {
+      const response = await fetch(`/api/apps/${this.currentApp.id}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label: this.publishLabel,
+          description: this.publishDescription
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to create version');
+
+      const versionData = await response.json();
+
+      // Auto-deploy to DEV
+      const deployRes = await fetch(`/api/apps/${this.currentApp.id}/deploy/${versionData.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ environment: 'DEV' })
+      });
+
+      if (!deployRes.ok) console.warn('Auto-deploy to DEV failed');
+
+      this.showPublishModal = false;
+      this.showToast('✅ App published & deployed to DEV!');
+    } catch (error) {
+      console.error('Publish failed:', error);
+      alert('Failed to publish app');
+    }
+  }
+
+  private renderPublishModal() {
+    return html`
+      <div class="modal-overlay" @click=${this.handleCloseModal}>
+        <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h3>Publish Release</h3>
+            <button class="modal-close" @click=${this.handleCloseModal}>×</button>
+          </div>
+          <form @submit=${this.handleSubmitPublish}>
+            <div class="modal-body">
+              <div class="form-group">
+                <label>Version Label</label>
+                <input 
+                  type="text" 
+                  .value=${this.publishLabel}
+                  @input=${(e: Event) => this.publishLabel = (e.target as HTMLInputElement).value}
+                  required
+                  placeholder="v1.0.0"
+                />
+              </div>
+              <div class="form-group">
+                <label>Release Notes</label>
+                <textarea 
+                  .value=${this.publishDescription}
+                  @input=${(e: Event) => this.publishDescription = (e.target as HTMLTextAreaElement).value}
+                  placeholder="What's new in this release?"
+                  rows="4"
+                ></textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" @click=${this.handleCloseModal}>Cancel</button>
+              <button type="submit" class="btn btn-primary" style="background: #10b981;">🚀 Publish Release</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderPipelineModal() {
+    if (!this.currentApp) return '';
+    return html`
+      <div class="modal-overlay" @click=${this.handleCloseModal}>
+        <div class="modal" style="max-width: 1000px; width: 90%;" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h3>DevOps Pipeline: ${this.currentApp.name}</h3>
+            <button class="modal-close" @click=${this.handleCloseModal}>×</button>
+          </div>
+          <div class="modal-body" style="background: #f1f5f9; border-radius: 8px;">
+            <pipeline-dashboard .appId=${this.currentApp.id}></pipeline-dashboard>
+          </div>
+          <div class="modal-footer">
+            <button class="btn" @click=${this.handleCloseModal}>Close</button>
           </div>
         </div>
       </div>

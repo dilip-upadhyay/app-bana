@@ -1,0 +1,27 @@
+{
+  "id" : "leave-request-form",
+  "name" : "Leave Request Form",
+  "type" : "form",
+  "entity" : "LeaveRequest",
+  "fields" : [ "employeeId", "startDate", "endDate", "reason" ],
+  "actions" : [ "submit" ],
+  "rootId" : "root-1765409433409",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "type" : "container",
+    "id" : "root-1765409433409",
+    "children" : [ "heading-root-1765409433409" ],
+    "props" : {
+      "padding" : "xl",
+      "layout" : "vertical",
+      "gap" : "lg"
+    }
+  }, {
+    "props" : {
+      "content" : "Leave Request Form",
+      "tag" : "h1"
+    },
+    "type" : "text",
+    "id" : "heading-root-1765409433409"
+  } ]
+}

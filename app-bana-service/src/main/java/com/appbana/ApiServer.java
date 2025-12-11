@@ -402,6 +402,91 @@ public class ApiServer {
         router.post("/api/my-tasks/{tokenId}/complete", com.appbana.workflow.api.WorkflowApi.completeTask());
         router.get("/api/workflow-instances", com.appbana.workflow.api.WorkflowApi.listInstances());
 
+        // Release Management endpoints
+        com.appbana.service.ReleaseService releaseService = new com.appbana.service.ReleaseService();
+        router.post("/api/apps/{id}/versions", (req, res) -> {
+            try {
+                String appId = req.pathParam("id");
+                Map<String, String> body = req.readJson(new TypeReference<>() {
+                });
+                String label = body.get("label");
+                String desc = body.get("description");
+                String userId = extractUserId(req, ConfigManager.getConfig());
+
+                String versionId = releaseService.createVersion(appId, label, desc, userId);
+                res.json(201, Map.of("id", versionId, "status", "created"));
+            } catch (Exception e) {
+                LOG.error("Failed to create version", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        router.get("/api/apps/{id}/versions", (req, res) -> {
+            try {
+                String appId = req.pathParam("id");
+                res.json(200, releaseService.listVersions(appId));
+            } catch (Exception e) {
+                LOG.error("Failed to list versions", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        router.post("/api/apps/{id}/deploy/{versionId}", (req, res) -> {
+            try {
+                String appId = req.pathParam("id");
+                String versionId = req.pathParam("versionId");
+                // Try body first, then query, then default
+                String env = "PROD";
+                try {
+                    Map<String, String> body = req.readJson(new TypeReference<>() {
+                    });
+                    if (body != null && body.containsKey("environment")) {
+                        env = body.get("environment");
+                    }
+                } catch (Exception ignored) {
+                    // Body might be empty
+                }
+
+                if (req.query("env") != null) {
+                    env = req.query("env");
+                }
+
+                String userId = extractUserId(req, ConfigManager.getConfig());
+
+                releaseService.deployVersion(appId, versionId, userId, env);
+                res.json(200, Map.of("status", "deployed", "versionId", versionId, "env", env));
+            } catch (Exception e) {
+                LOG.error("Failed to deploy version", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        router.get("/api/apps/{id}/pipeline", (req, res) -> {
+            try {
+                String appId = req.pathParam("id");
+                res.json(200, releaseService.getPipelineStatus(appId));
+            } catch (Exception e) {
+                LOG.error("Failed to get pipeline status", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        router.get("/api/apps/{id}/env/{env}/full", (req, res) -> {
+            try {
+                String appId = req.pathParam("id");
+                String env = req.pathParam("env").toUpperCase();
+                Map<String, Object> snapshot = releaseService.getAppSnapshot(appId, env);
+                if (snapshot == null) {
+                    res.json(404, Map.of("error", "App not deployed to " + env));
+                } else {
+                    res.json(200, snapshot);
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to get app snapshot", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
         // Agent memory endpoints
         router.get("/api/agent/memory", com.appbana.api.AgentMemoryApi.memoryHandler());
         router.post("/api/agent/memory/clear", com.appbana.api.AgentMemoryApi.clearMemoryHandler());

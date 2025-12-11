@@ -1,0 +1,65 @@
+{
+  "id" : "leave-requests-list",
+  "name" : "Leave Requests List",
+  "type" : "data-table",
+  "entity" : "LeaveRequest",
+  "columns" : [ "employeeId", "startDate", "endDate", "reason", "status" ],
+  "actions" : [ "view", "approve", "reject" ],
+  "rootId" : "root-1765409433412",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "type" : "container",
+    "id" : "root-1765409433412",
+    "children" : [ "heading-root-1765409433412", "table-root-1765409433412" ],
+    "props" : {
+      "padding" : "xl",
+      "layout" : "vertical",
+      "gap" : "lg"
+    }
+  }, {
+    "props" : {
+      "content" : "Leave Requests List",
+      "tag" : "h1"
+    },
+    "type" : "text",
+    "id" : "heading-root-1765409433412"
+  }, {
+    "id" : "table-root-1765409433412",
+    "type" : "table",
+    "props" : {
+      "entity" : "LeaveRequest",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "employeeId",
+        "label" : "Employee Id",
+        "type" : "text"
+      }, {
+        "name" : "startDate",
+        "label" : "Start Date",
+        "type" : "date"
+      }, {
+        "name" : "endDate",
+        "label" : "End Date",
+        "type" : "date"
+      }, {
+        "name" : "reason",
+        "label" : "Reason",
+        "type" : "text"
+      }, {
+        "name" : "status",
+        "label" : "Status",
+        "type" : "text"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}
