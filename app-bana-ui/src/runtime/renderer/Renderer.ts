@@ -2,6 +2,7 @@
 import { PageMeta, ComponentNode } from '../../models/metadata';
 import { getComponent } from '../../core/registry';
 import { html, TemplateResult } from 'lit';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import './StudioTableLive';
 import '../../components/GridElement';
 
@@ -58,9 +59,9 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
   });
 
   // Explicit static tag names for each supported type
-  if (node.type === 'table') {
+  if (node.type === 'table' || (node.type === 'grid' && node.props?.entity)) {
     return html`<studio-table-live .node=${nodeWithData}></studio-table-live>`;
-  } else if (node.type === 'app-grid') {
+  } else if (node.type === 'app-grid' || node.type === 'grid') {
     return html`
        <app-grid
          .rows=${Number(nodeWithData.props.rows || 2)}
@@ -73,7 +74,7 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
        </app-grid>
      `;
   } else if (node.type === 'container') {
-    return html`<studio-container .node=${nodeWithData}>${children}</studio-container>`;
+    return html`<studio-container .node=${nodeWithData} slot=${ifDefined(nodeWithData.props?.slot)}>${children}</studio-container>`;
   } else if (node.type === 'text') {
     return html`<studio-text .node=${nodeWithData}></studio-text>`;
   } else if (node.type === 'button') {
@@ -129,7 +130,7 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>, co
   // Use interpolated props
   const nodeWithData = { ...node, props };
 
-  if (node.type === 'table') {
+  if (node.type === 'table' || (node.type === 'grid' && node.props?.entity)) {
     // Runtime rendering: live data if in runtime, else preview
     if (window.location.pathname.includes('preview') || window.location.pathname.includes('runtime')) {
       // Use Lit component for robust async rendering
@@ -141,7 +142,7 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>, co
     }
   }
 
-  if (node.type === 'app-grid') {
+  if (node.type === 'app-grid' || node.type === 'grid') {
     const el = document.createElement('app-grid');
     el.setAttribute('rows', String(node.props?.rows || 2));
     el.setAttribute('cols', String(node.props?.cols || 3));
