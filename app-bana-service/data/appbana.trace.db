@@ -44,3 +44,6 @@ org.h2.jdbc.JdbcSQLSyntaxErrorException: Column "ENVIRONMENT" must not be nullab
 	at org.flywaydb.core.Flyway.migrate(Flyway.java:147)
 	at com.appbana.ApiServer.startJdk(ApiServer.java:282)
 	at com.appbana.Main.main(Main.java:44)
+2025-12-12 03:46:24.333203+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "ALTER TABLE ""LOANAPPLICATION"" ALTER COLUMN ""ID"" SET DATA TYPE INT [*]AUTO_INCREMENT"; SQL statement:
+ALTER TABLE "LOANAPPLICATION" ALTER COLUMN "ID" SET DATA TYPE INT AUTO_INCREMENT [42000-222]

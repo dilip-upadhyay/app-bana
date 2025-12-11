@@ -487,6 +487,70 @@ public class ApiServer {
             }
         });
 
+        // Debug endpoints
+        router.get("/api/debug/schemas", (req, res) -> {
+            try {
+                res.json(200, SchemaManager.listSchemaSummaries());
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        router.get("/api/debug/schemas/names", (req, res) -> {
+            try {
+                res.json(200, SchemaManager.listSchemaNames());
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Restore schemas from app snapshot
+        router.post("/api/apps/{id}/restore-schemas", (req, res) -> {
+            String appId = req.pathParam("id");
+            String env = req.query("env");
+            if (env == null)
+                env = "DEV"; // default
+            try {
+                Map<String, Object> snapshot = releaseService.getAppSnapshot(appId, env);
+                if (snapshot == null) {
+                    res.json(404, Map.of("error", "App not deployed to " + env));
+                    return;
+                }
+
+                // Entities are stored as List of Maps or EntitySchema objects in the snapshot
+                Object entitiesObj = snapshot.get("entities");
+                int restored = 0;
+
+                if (entitiesObj instanceof List) {
+                    List<?> list = (List<?>) entitiesObj;
+                    for (Object item : list) {
+                        try {
+                            EntitySchema schema = null;
+                            if (item instanceof Map) {
+                                schema = M.convertValue(item, EntitySchema.class);
+                            } else if (item instanceof EntitySchema) {
+                                schema = (EntitySchema) item;
+                            }
+
+                            if (schema != null) {
+                                // Force save (upsert)
+                                SchemaManager.saveSchema(schema);
+                                restored++;
+                                LOG.info("Restored schema: {}", schema.getName());
+                            }
+                        } catch (Exception ex) {
+                            LOG.error("Failed to restore schema item", ex);
+                        }
+                    }
+                }
+
+                res.json(200, Map.of("message", "Restored " + restored + " schemas", "count", restored));
+            } catch (Exception e) {
+                LOG.error("Restore failed", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
         // Agent memory endpoints
         router.get("/api/agent/memory", com.appbana.api.AgentMemoryApi.memoryHandler());
         router.post("/api/agent/memory/clear", com.appbana.api.AgentMemoryApi.clearMemoryHandler());

@@ -20,7 +20,8 @@ public class SchemaManager {
 
     private static List<DatasourceConfig> allDatasources() {
         AppConfig cfg = ConfigManager.getConfig();
-        if (cfg.getDatasources() != null && !cfg.getDatasources().isEmpty()) return cfg.getDatasources();
+        if (cfg.getDatasources() != null && !cfg.getDatasources().isEmpty())
+            return cfg.getDatasources();
         // synthesize single datasource from root config for backwards compatibility
         DatasourceConfig ds = new DatasourceConfig();
         ds.setName(cfg.getName());
@@ -39,11 +40,13 @@ public class SchemaManager {
             String active = cfg.getActiveDatasource();
             if (cfg.getDatasources() != null) {
                 for (DatasourceConfig ds : cfg.getDatasources()) {
-                    if (ds.getName() != null && ds.getName().equals(active)) return ds;
+                    if (ds.getName() != null && ds.getName().equals(active))
+                        return ds;
                 }
             }
             // legacy single
-            if (cfg.getDatasources() != null && !cfg.getDatasources().isEmpty()) return cfg.getDatasources().get(0);
+            if (cfg.getDatasources() != null && !cfg.getDatasources().isEmpty())
+                return cfg.getDatasources().get(0);
             DatasourceConfig ds = new DatasourceConfig();
             ds.setName(cfg.getName());
             ds.setJdbcUrl(cfg.getJdbcUrl());
@@ -55,7 +58,8 @@ public class SchemaManager {
         // explicit name
         if (cfg.getDatasources() != null) {
             for (DatasourceConfig ds : cfg.getDatasources()) {
-                if (target.equals(ds.getName())) return ds;
+                if (target.equals(ds.getName()))
+                    return ds;
             }
         }
         throw new IllegalArgumentException("datasource not found: " + target);
@@ -63,18 +67,28 @@ public class SchemaManager {
 
     // Detect current dialect based on datasource (previously active only)
     private static String dialect(DatasourceConfig ds) {
-        if (ds == null) return "h2";
+        if (ds == null)
+            return "h2";
         String type = ds.getType();
         String url = ds.getJdbcUrl();
-        if (type != null && !type.isBlank()) return type.toLowerCase();
-        if (url == null) return "h2";
-        if (url.startsWith("jdbc:h2:")) return "h2";
-        if (url.startsWith("jdbc:postgresql:")) return "postgres";
-        if (url.startsWith("jdbc:mysql:")) return "mysql";
-        if (url.startsWith("jdbc:mariadb:")) return "mariadb";
-        if (url.startsWith("jdbc:sqlserver:")) return "mssql";
-        if (url.startsWith("jdbc:oracle:")) return "oracle";
-        if (url.startsWith("jdbc:sqlite:")) return "sqlite";
+        if (type != null && !type.isBlank())
+            return type.toLowerCase();
+        if (url == null)
+            return "h2";
+        if (url.startsWith("jdbc:h2:"))
+            return "h2";
+        if (url.startsWith("jdbc:postgresql:"))
+            return "postgres";
+        if (url.startsWith("jdbc:mysql:"))
+            return "mysql";
+        if (url.startsWith("jdbc:mariadb:"))
+            return "mariadb";
+        if (url.startsWith("jdbc:sqlserver:"))
+            return "mssql";
+        if (url.startsWith("jdbc:oracle:"))
+            return "oracle";
+        if (url.startsWith("jdbc:sqlite:"))
+            return "sqlite";
         return "h2";
     }
 
@@ -86,7 +100,8 @@ public class SchemaManager {
         try (Connection c = JdbcManager.getConnection(dsName)) {
             String json = M.writeValueAsString(schema);
             String d = dialect(ds);
-            // upsert by name; NOTE: name must be unique across ALL datasources (we do not enforce globally yet)
+            // upsert by name; NOTE: name must be unique across ALL datasources (we do not
+            // enforce globally yet)
             if ("postgres".equals(d)) {
                 String upsert = "INSERT INTO appbana_schemas(name, json) VALUES (?, ?) ON CONFLICT (name) DO UPDATE SET json = EXCLUDED.json";
                 try (PreparedStatement ps = c.prepareStatement(upsert)) {
@@ -101,12 +116,14 @@ public class SchemaManager {
                     ps.setString(2, json);
                     ps.executeUpdate();
                 } catch (SQLException e) {
-                    try (PreparedStatement ins = c.prepareStatement("INSERT INTO appbana_schemas(name, json) VALUES (?, ?)")) {
+                    try (PreparedStatement ins = c
+                            .prepareStatement("INSERT INTO appbana_schemas(name, json) VALUES (?, ?)")) {
                         ins.setString(1, schema.getName());
                         ins.setString(2, json);
                         ins.executeUpdate();
                     } catch (SQLException dup) {
-                        try (PreparedStatement upd = c.prepareStatement("UPDATE appbana_schemas SET json = ? WHERE name = ?")) {
+                        try (PreparedStatement upd = c
+                                .prepareStatement("UPDATE appbana_schemas SET json = ? WHERE name = ?")) {
                             upd.setString(1, json);
                             upd.setString(2, schema.getName());
                             upd.executeUpdate();
@@ -132,7 +149,8 @@ public class SchemaManager {
                         if (rs.next()) {
                             String json = rs.getString(1);
                             EntitySchema schema = M.readValue(json, EntitySchema.class);
-                            if (schema.getDatasourceName() == null || schema.getDatasourceName().isBlank()) schema.setDatasourceName(dsName); // backfill
+                            if (schema.getDatasourceName() == null || schema.getDatasourceName().isBlank())
+                                schema.setDatasourceName(dsName); // backfill
                             return schema;
                         }
                     }
@@ -168,7 +186,8 @@ public class SchemaManager {
                     if (f.getExistingName() != null && !f.getExistingName().isEmpty()) {
                         String old = f.getExistingName();
                         if (existing.containsKey(old.toLowerCase()) && !existing.containsKey(targetLower)) {
-                            String renameSql = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(old) + " RENAME TO " + quote(target);
+                            String renameSql = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(old)
+                                    + " RENAME TO " + quote(target);
                             try (Statement s = c.createStatement()) {
                                 s.execute(renameSql);
                                 recordMigration(c, schema.getName(), renameSql);
@@ -178,7 +197,8 @@ public class SchemaManager {
                         }
                     }
                     if (!existing.containsKey(targetLower)) {
-                        String alter = "ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " " + sqlType(f, d);
+                        String alter = "ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " "
+                                + sqlType(f, d);
                         try (Statement s = c.createStatement()) {
                             s.execute(alter);
                             recordMigration(c, schema.getName(), alter);
@@ -186,11 +206,14 @@ public class SchemaManager {
                     } else {
                         ColumnInfo info = existing.get(targetLower);
                         String desiredType = normalizeSqlType(sqlType(f, d));
-                        String currentType = normalizeSqlType(info.typeName + (info.size > 0 ? "(" + info.size + ")" : ""));
+                        String currentType = normalizeSqlType(
+                                info.typeName + (info.size > 0 ? "(" + info.size + ")" : ""));
                         if (!typesEquivalent(currentType, desiredType)) {
                             String alterType = "postgres".equals(d)
-                                    ? ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " TYPE " + sqlType(f, d))
-                                    : ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " SET DATA TYPE " + sqlType(f, d));
+                                    ? ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " TYPE "
+                                            + sqlType(f, d))
+                                    : ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name)
+                                            + " SET DATA TYPE " + sqlType(f, d));
                             try (Statement s = c.createStatement()) {
                                 s.execute(alterType);
                                 recordMigration(c, schema.getName(), alterType);
@@ -203,16 +226,21 @@ public class SchemaManager {
     }
 
     private static void recordMigration(Connection c, String schemaName, String sql) {
-        try (PreparedStatement ps = c.prepareStatement("INSERT INTO appbana_migrations (schema_name, sql) VALUES (?, ?)" ) ) {
+        try (PreparedStatement ps = c
+                .prepareStatement("INSERT INTO appbana_migrations (schema_name, sql) VALUES (?, ?)")) {
             ps.setString(1, schemaName);
             ps.setString(2, sql);
             ps.executeUpdate();
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static boolean typesEquivalent(String current, String desired) {
-        if (current == null || desired == null) return false;
-        // Normalize whitespace and remove auto-increment / identity decorations so we don't try to ALTER just to add AI (H2 disallows this form)
+        if (current == null || desired == null)
+            return false;
+        // Normalize whitespace and remove auto-increment / identity decorations so we
+        // don't try to ALTER just to add AI (H2 disallows this form)
         current = normalizeForCompare(current);
         desired = normalizeForCompare(desired);
         return current.equalsIgnoreCase(desired);
@@ -225,14 +253,29 @@ public class SchemaManager {
                 .replaceAll("(?i)SERIAL", "")
                 .replaceAll("\\s+", " ")
                 .trim();
-        // Treat numeric width for integer types as non-significant (H2 reports BIGINT(64), etc.)
+        // Treat numeric width for integer types as non-significant (H2 reports
+        // BIGINT(64), etc.)
         s = s.replaceAll("(?i)BIGINT\\(\\d+\\)", "BIGINT");
-        s = s.replaceAll("(?i)INT\\(\\d+\\)", "INT");
+        s = s.replaceAll("(?i)INT\\(\\d+\\)", "INTEGER"); // Normalize INT(x) -> INTEGER
         s = s.replaceAll("(?i)INTEGER\\(\\d+\\)", "INTEGER");
+
+        // Normalize basic types
+        if ("INT".equalsIgnoreCase(s))
+            return "INTEGER";
         return s;
     }
 
-    private static class ColumnInfo { String name; String typeName; int size; ColumnInfo(String name, String typeName, int size){this.name=name;this.typeName=typeName;this.size=size;} }
+    private static class ColumnInfo {
+        String name;
+        String typeName;
+        int size;
+
+        ColumnInfo(String name, String typeName, int size) {
+            this.name = name;
+            this.typeName = typeName;
+            this.size = size;
+        }
+    }
 
     private static void createTable(EntitySchema schema, Connection c, String dialect) throws SQLException {
         String table = schema.getName();
@@ -240,13 +283,15 @@ public class SchemaManager {
         String pk = null;
         for (EntitySchema.Field f : schema.getFields()) {
             String col = quote(f.getName()) + " " + sqlType(f, dialect);
-            if (f.isPrimaryKey()) pk = quote(f.getName());
+            if (f.isPrimaryKey())
+                pk = quote(f.getName());
             cols.add(col);
         }
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE TABLE IF NOT EXISTS ").append(quote(table)).append(" (");
         sb.append(String.join(", ", cols));
-        if (pk != null) sb.append(", PRIMARY KEY(").append(pk).append(")");
+        if (pk != null)
+            sb.append(", PRIMARY KEY(").append(pk).append(")");
         sb.append(")");
         try (Statement s = c.createStatement()) {
             s.execute(sb.toString());
@@ -255,27 +300,37 @@ public class SchemaManager {
     }
 
     private static void validateSchema(EntitySchema schema) {
-        if (schema == null) throw new IllegalArgumentException("schema cannot be null");
-        if (schema.getName() == null || schema.getName().trim().isEmpty()) throw new IllegalArgumentException("schema name required");
-        if (schema.getFields() == null || schema.getFields().isEmpty()) throw new IllegalArgumentException("at least one field required");
+        if (schema == null)
+            throw new IllegalArgumentException("schema cannot be null");
+        if (schema.getName() == null || schema.getName().trim().isEmpty())
+            throw new IllegalArgumentException("schema name required");
+        if (schema.getFields() == null || schema.getFields().isEmpty())
+            throw new IllegalArgumentException("at least one field required");
         boolean hasPk = false;
         Set<String> names = new HashSet<>();
         for (EntitySchema.Field f : schema.getFields()) {
-            if (f.getName() == null || f.getName().trim().isEmpty()) throw new IllegalArgumentException("field name required");
+            if (f.getName() == null || f.getName().trim().isEmpty())
+                throw new IllegalArgumentException("field name required");
             String lname = f.getName().toLowerCase();
-            if (names.contains(lname)) throw new IllegalArgumentException("duplicate field name: " + f.getName());
+            if (names.contains(lname))
+                throw new IllegalArgumentException("duplicate field name: " + f.getName());
             names.add(lname);
             if (f.isPrimaryKey()) {
-                if (hasPk) throw new IllegalArgumentException("only one primary key allowed");
+                if (hasPk)
+                    throw new IllegalArgumentException("only one primary key allowed");
                 hasPk = true;
                 if (f.isAutoIncrement()) {
                     String t = f.getType().toLowerCase();
-                    if (!("int".equals(t) || "integer".equals(t) || "long".equals(t))) throw new IllegalArgumentException("autoIncrement primary key must be integer/long");
+                    if (!("int".equals(t) || "integer".equals(t) || "long".equals(t)))
+                        throw new IllegalArgumentException("autoIncrement primary key must be integer/long");
                 }
             }
-            if (f.getType() == null || f.getType().trim().isEmpty()) throw new IllegalArgumentException("field type required for " + f.getName());
-            if (f.getLength() != null && f.getLength() <= 0) throw new IllegalArgumentException("length must be > 0 for " + f.getName());
-            if (f.getMin() != null && f.getMax() != null && f.getMin() > f.getMax()) throw new IllegalArgumentException("min cannot be greater than max for " + f.getName());
+            if (f.getType() == null || f.getType().trim().isEmpty())
+                throw new IllegalArgumentException("field type required for " + f.getName());
+            if (f.getLength() != null && f.getLength() <= 0)
+                throw new IllegalArgumentException("length must be > 0 for " + f.getName());
+            if (f.getMin() != null && f.getMax() != null && f.getMin() > f.getMax())
+                throw new IllegalArgumentException("min cannot be greater than max for " + f.getName());
         }
     }
 
@@ -286,33 +341,57 @@ public class SchemaManager {
             switch (t) {
                 case "string":
                 case "varchar":
-                    int len = (f.getLength() != null) ? f.getLength() : 255; return "VARCHAR(" + len + ")";
+                    int len = (f.getLength() != null) ? f.getLength() : 255;
+                    return "VARCHAR(" + len + ")";
                 case "int":
-                case "integer": return aiPk ? "SERIAL" : "INTEGER";
-                case "long": return aiPk ? "BIGSERIAL" : "BIGINT";
-                case "boolean": return "BOOLEAN";
+                case "integer":
+                    return aiPk ? "SERIAL" : "INTEGER";
+                case "long":
+                    return aiPk ? "BIGSERIAL" : "BIGINT";
+                case "boolean":
+                    return "BOOLEAN";
                 case "date":
-                case "timestamp": return "TIMESTAMP";
-                case "text": return "TEXT";
-                default: return "VARCHAR(255)";
+                case "timestamp":
+                    return "TIMESTAMP";
+                case "text":
+                    return "TEXT";
+                default:
+                    return "VARCHAR(255)";
             }
         }
         switch (t) {
             case "string":
-            case "varchar": int len = (f.getLength() != null) ? f.getLength() : 255; return "VARCHAR(" + len + ")" + (aiPk ? " AUTO_INCREMENT" : "");
+            case "varchar":
+                int len = (f.getLength() != null) ? f.getLength() : 255;
+                return "VARCHAR(" + len + ")" + (aiPk ? " AUTO_INCREMENT" : "");
             case "int":
-            case "integer": return "INT" + (aiPk ? " AUTO_INCREMENT" : "");
-            case "long": return "BIGINT" + (aiPk ? " AUTO_INCREMENT" : "");
-            case "boolean": return "BOOLEAN";
+            case "integer":
+                return "INT" + (aiPk ? " AUTO_INCREMENT" : "");
+            case "long":
+                return "BIGINT" + (aiPk ? " AUTO_INCREMENT" : "");
+            case "boolean":
+                return "BOOLEAN";
             case "date":
-            case "timestamp": return "TIMESTAMP";
-            case "text": return "CLOB";
-            default: return "VARCHAR(255)";
+            case "timestamp":
+                return "TIMESTAMP";
+            case "text":
+                return "CLOB";
+            default:
+                return "VARCHAR(255)";
         }
     }
 
-    private static String normalizeSqlType(String s) { if (s == null) return null; return s.replaceAll("\\s+", " ").trim(); }
-    private static String quote(String identifier) { if (identifier == null) return null; return "\"" + identifier.toUpperCase() + "\""; }
+    private static String normalizeSqlType(String s) {
+        if (s == null)
+            return null;
+        return s.replaceAll("\\s+", " ").trim();
+    }
+
+    private static String quote(String identifier) {
+        if (identifier == null)
+            return null;
+        return "\"" + identifier.toUpperCase() + "\"";
+    }
 
     // --- NEW: list schema names (all) ---
     public static List<String> listSchemaNames() {
@@ -321,26 +400,34 @@ public class SchemaManager {
             String dsName = ds.getName();
             try {
                 JdbcManager.ensureMetaTableFor(dsName);
-                try (Connection c = JdbcManager.getConnection(dsName); PreparedStatement ps = c.prepareStatement("SELECT name FROM appbana_schemas")) {
+                try (Connection c = JdbcManager.getConnection(dsName);
+                        PreparedStatement ps = c.prepareStatement("SELECT name FROM appbana_schemas")) {
                     try (ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) names.add(rs.getString(1));
+                        while (rs.next())
+                            names.add(rs.getString(1));
                     }
                 }
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
         return new ArrayList<>(names);
     }
 
-    // --- NEW: list schema names with pagination and optional search q (substring match) ---
+    // --- NEW: list schema names with pagination and optional search q (substring
+    // match) ---
     public static List<String> listSchemaNames(int page, int size, String q) {
         List<String> all = listSchemaNames();
         if (q != null && !q.isBlank()) {
             String lq = q.toLowerCase();
             all.removeIf(n -> !n.toLowerCase().contains(lq));
         }
-        if (page < 1) page = 1; if (size <= 0) size = 10;
+        if (page < 1)
+            page = 1;
+        if (size <= 0)
+            size = 10;
         int from = (page - 1) * size;
-        if (from >= all.size()) return List.of();
+        if (from >= all.size())
+            return List.of();
         int to = Math.min(from + size, all.size());
         return all.subList(from, to);
     }
@@ -357,20 +444,24 @@ public class SchemaManager {
             String table = schema.getName();
             DatabaseMetaData md = c.getMetaData();
             boolean exists;
-            try (ResultSet tables = md.getTables(null, null, table.toUpperCase(), null)) { exists = tables.next(); }
+            try (ResultSet tables = md.getTables(null, null, table.toUpperCase(), null)) {
+                exists = tables.next();
+            }
             String d = dialect(ds);
             if (!exists) {
                 List<String> cols = new ArrayList<>();
                 String pk = null;
                 for (EntitySchema.Field f : schema.getFields()) {
                     String col = quote(f.getName()) + " " + sqlType(f, d);
-                    if (f.isPrimaryKey()) pk = quote(f.getName());
+                    if (f.isPrimaryKey())
+                        pk = quote(f.getName());
                     cols.add(col);
                 }
                 StringBuilder sb = new StringBuilder();
                 sb.append("CREATE TABLE IF NOT EXISTS ").append(quote(table)).append(" (");
                 sb.append(String.join(", ", cols));
-                if (pk != null) sb.append(", PRIMARY KEY(").append(pk).append(")");
+                if (pk != null)
+                    sb.append(", PRIMARY KEY(").append(pk).append(")");
                 sb.append(")");
                 plan.add(sb.toString());
                 return plan;
@@ -390,7 +481,8 @@ public class SchemaManager {
                 if (f.getExistingName() != null && !f.getExistingName().isEmpty()) {
                     String old = f.getExistingName();
                     if (existing.containsKey(old.toLowerCase()) && !existing.containsKey(targetLower)) {
-                        String renameSql = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(old) + " RENAME TO " + quote(target);
+                        String renameSql = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(old) + " RENAME TO "
+                                + quote(target);
                         plan.add(renameSql);
                         ColumnInfo info = existing.remove(old.toLowerCase());
                         existing.put(targetLower, new ColumnInfo(target, info.typeName, info.size));
@@ -405,37 +497,44 @@ public class SchemaManager {
                     String currentType = normalizeSqlType(info.typeName + (info.size > 0 ? "(" + info.size + ")" : ""));
                     if (!typesEquivalent(currentType, desiredType)) {
                         String alterType = "postgres".equals(d)
-                                ? ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " TYPE " + sqlType(f, d))
-                                : ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " SET DATA TYPE " + sqlType(f, d));
+                                ? ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " TYPE "
+                                        + sqlType(f, d))
+                                : ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name)
+                                        + " SET DATA TYPE " + sqlType(f, d));
                         plan.add(alterType);
                     }
                 }
             }
             return plan;
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    public static List<Map<String,Object>> listMigrations(String schemaName) {
-        List<Map<String,Object>> out = new ArrayList<>();
+    public static List<Map<String, Object>> listMigrations(String schemaName) {
+        List<Map<String, Object>> out = new ArrayList<>();
         for (DatasourceConfig ds : allDatasources()) {
             String dsName = ds.getName();
             try {
                 JdbcManager.ensureMetaTableFor(dsName);
                 try (Connection c = JdbcManager.getConnection(dsName)) {
-                    try (PreparedStatement ps = c.prepareStatement("SELECT executed_at, sql FROM appbana_migrations WHERE schema_name = ? ORDER BY executed_at, id")) {
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "SELECT executed_at, sql FROM appbana_migrations WHERE schema_name = ? ORDER BY executed_at, id")) {
                         ps.setString(1, schemaName);
                         try (ResultSet rs = ps.executeQuery()) {
                             while (rs.next()) {
-                                Map<String,Object> m = new LinkedHashMap<>();
+                                Map<String, Object> m = new LinkedHashMap<>();
                                 m.put("datasource", dsName);
                                 m.put("executedAt", rs.getObject(1));
                                 m.put("sql", rs.getString(2));
                                 out.add(m);
                             }
                         }
-                    } catch (SQLException ignore) { }
+                    } catch (SQLException ignore) {
+                    }
                 }
-            } catch (Exception ignore) { }
+            } catch (Exception ignore) {
+            }
         }
         return out;
     }
@@ -443,7 +542,8 @@ public class SchemaManager {
     public static boolean deleteSchema(String name, boolean dropTable) {
         // find schema & datasource
         EntitySchema schema = loadSchema(name);
-        if (schema == null) return false;
+        if (schema == null)
+            return false;
         String dsName = schema.getDatasourceName();
         if (dsName == null || dsName.isBlank()) {
             // fallback to active datasource (legacy) - attempt deletion
@@ -458,13 +558,17 @@ public class SchemaManager {
             }
             if (dropTable) {
                 String sql = "DROP TABLE IF EXISTS \"" + name.toUpperCase() + "\"";
-                try (Statement s = c.createStatement()) { s.execute(sql); }
+                try (Statement s = c.createStatement()) {
+                    s.execute(sql);
+                }
                 // record migration note
-                try (PreparedStatement ps = c.prepareStatement("INSERT INTO appbana_migrations (schema_name, sql) VALUES (?, ?)");) {
+                try (PreparedStatement ps = c
+                        .prepareStatement("INSERT INTO appbana_migrations (schema_name, sql) VALUES (?, ?)");) {
                     ps.setString(1, name);
                     ps.setString(2, sql);
                     ps.executeUpdate();
-                } catch (SQLException ignore) { }
+                } catch (SQLException ignore) {
+                }
             }
             return true;
         } catch (Exception e) {
@@ -473,30 +577,34 @@ public class SchemaManager {
     }
 
     // --- NEW: list schema summaries (name + datasource) ---
-    public static List<Map<String,Object>> listSchemaSummaries() {
-        List<Map<String,Object>> out = new ArrayList<>();
+    public static List<Map<String, Object>> listSchemaSummaries() {
+        List<Map<String, Object>> out = new ArrayList<>();
         for (DatasourceConfig ds : allDatasources()) {
             String dsName = ds.getName();
             try {
                 JdbcManager.ensureMetaTableFor(dsName);
-                try (Connection c = JdbcManager.getConnection(dsName); PreparedStatement ps = c.prepareStatement("SELECT json FROM appbana_schemas")) {
+                try (Connection c = JdbcManager.getConnection(dsName);
+                        PreparedStatement ps = c.prepareStatement("SELECT json FROM appbana_schemas")) {
                     try (ResultSet rs = ps.executeQuery()) {
                         while (rs.next()) {
                             String json = rs.getString(1);
                             try {
                                 EntitySchema schema = M.readValue(json, EntitySchema.class);
-                                if (schema.getDatasourceName() == null || schema.getDatasourceName().isBlank()) schema.setDatasourceName(dsName); // backfill
-                                Map<String,Object> m = new LinkedHashMap<>();
+                                if (schema.getDatasourceName() == null || schema.getDatasourceName().isBlank())
+                                    schema.setDatasourceName(dsName); // backfill
+                                Map<String, Object> m = new LinkedHashMap<>();
                                 m.put("name", schema.getName());
                                 m.put("datasource", schema.getDatasourceName());
                                 out.add(m);
-                            } catch (Exception ignore) { }
+                            } catch (Exception ignore) {
+                            }
                         }
                     }
                 }
-            } catch (Exception ignore) { }
+            } catch (Exception ignore) {
+            }
         }
-        out.sort(Comparator.comparing(o -> (String)o.get("name")));
+        out.sort(Comparator.comparing(o -> (String) o.get("name")));
         return out;
     }
 }

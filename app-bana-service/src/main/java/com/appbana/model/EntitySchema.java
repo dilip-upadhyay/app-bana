@@ -1,14 +1,17 @@
 package com.appbana.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class EntitySchema {
     private String name;
     private List<Field> fields;
     private String datasourceName; // optional: target datasource for this schema's table
     private String modelKind; // 'relational' | 'document' | 'apiResource' (default: relational)
 
-    public EntitySchema() {}
+    public EntitySchema() {
+    }
 
     public EntitySchema(String name, List<Field> fields) {
         this.name = name;
@@ -47,6 +50,7 @@ public class EntitySchema {
         this.modelKind = modelKind;
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Field {
         private String name;
         private String type; // string, int, long, boolean, date
@@ -64,7 +68,8 @@ public class EntitySchema {
         private Integer order;
         private String existingName; // optional: used for rename mapping
 
-        public Field() {}
+        public Field() {
+        }
 
         public Field(String name, String type, boolean primaryKey, boolean autoIncrement, Integer length) {
             this.name = name;
