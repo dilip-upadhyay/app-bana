@@ -1595,6 +1595,12 @@ export class AiChatBuilder extends LitElement {
           appSummary += `- ${page.name || page.id || JSON.stringify(page)}\n`;
         }
       }
+      if (Array.isArray(result.workflows) && result.workflows.length > 0) {
+        appSummary += `**Workflows:**\n`;
+        for (const wf of result.workflows) {
+          appSummary += `- ${wf.name} (${wf.triggerEvent} on ${wf.triggerEntity})\n`;
+        }
+      }
     }
     return appSummary;
   }

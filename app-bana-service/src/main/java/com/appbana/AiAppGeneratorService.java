@@ -579,6 +579,16 @@ public class AiAppGeneratorService {
             return false;
         }
 
+        // FIX: Skip small talk for specific intent patterns (describe, context)
+        if (lower.matches(".*(which|what).*app.*(working|opened|editing|modifying).*") ||
+                lower.matches(".*current.*app.*") ||
+                lower.matches(".*app.*context.*") ||
+                lower.matches(".*describe.*app.*") ||
+                lower.matches(".*app.*summary.*") ||
+                lower.matches(".*show.*details.*")) {
+            return false;
+        }
+
         // PRIORITY: Check for explicit small talk patterns FIRST (ignore
         // normalizedAction)
         // These should ALWAYS be handled as small talk, even if classifier thinks
@@ -1709,7 +1719,10 @@ public class AiAppGeneratorService {
         // NEW: Detect context/describe queries
         if (lower.matches(".*(which|what).*app.*(working|opened|editing|modifying).*") ||
                 lower.matches(".*current.*app.*") ||
-                lower.matches(".*app.*context.*")) {
+                lower.matches(".*app.*context.*") ||
+                lower.matches(".*describe.*app.*") ||
+                lower.matches(".*app.*summary.*") ||
+                lower.matches(".*show.*details.*")) {
             out.put("action", "describeApp");
             out.put("options", new HashMap<>());
             return out;
