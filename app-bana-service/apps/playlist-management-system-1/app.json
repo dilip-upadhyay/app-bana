@@ -1,0 +1,107 @@
+{
+  "id" : "playlist-management-system-1",
+  "name" : "Project Management App",
+  "description" : "A comprehensive project management system to track projects, tasks, and team members effectively.",
+  "version" : "1.0.0",
+  "created" : 1765650079363,
+  "updated" : 1765650079444,
+  "pages" : [ "project-list", "project-detail", "task-board", "team-directory" ],
+  "defaultPage" : "project-list",
+  "entities" : [ {
+    "name" : "Project",
+    "fields" : [ {
+      "name" : "name",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "description",
+      "type" : "longtext",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "startDate",
+      "type" : "date",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "endDate",
+      "type" : "date",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Task",
+    "fields" : [ {
+      "name" : "title",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "description",
+      "type" : "longtext",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "dueDate",
+      "type" : "date",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "projectId",
+      "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "assignedTo",
+      "type" : "reference",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "TeamMember",
+    "fields" : [ {
+      "name" : "name",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "email",
+      "type" : "email",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "role",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  } ],
+  "routes" : {
+    "basePath" : "/playlist-management-system-1"
+  }
+}
