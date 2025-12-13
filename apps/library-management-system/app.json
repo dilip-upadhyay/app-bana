@@ -4,7 +4,7 @@
   "description" : "A system to track books, members, borrowing history, and due dates with late fee calculations.",
   "version" : "1.0.0",
   "created" : 1763666766282,
-  "updated" : 1763666766385,
+  "updated" : 1765627348832,
   "pages" : [ "book-list", "member-list", "borrowing-history", "book-detail", "member-detail" ],
   "defaultPage" : "book-list",
   "entities" : [ {
@@ -101,6 +101,10 @@
       "autoIncrement" : false
     } ]
   } ],
+  "theme" : {
+    "primaryColor" : "#ff007f",
+    "secondaryColor" : "#e51f1f"
+  },
   "routes" : {
     "basePath" : "/library-management-system"
   }

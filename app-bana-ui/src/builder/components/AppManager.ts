@@ -1,5 +1,6 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import './PipelineDashboard';
+import './ThemeEditor';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
 import type { AppMeta, AppListItem, CreateAppRequest } from '../../models/app-metadata';
@@ -14,6 +15,7 @@ export class AppManager extends LitElement {
   @state() private showSelectModal = false;
   @state() private showPublishModal = false;
   @state() private showPipelineModal = false;
+  @state() private showThemeModal = false;
   @state() private isLoadingApps = false;
   @state() private appsLoadError: string | null = null;
   @state() private apps: AppListItem[] = [];
@@ -72,6 +74,7 @@ export class AppManager extends LitElement {
     this.showSelectModal = false;
     this.showPublishModal = false;
     this.showPipelineModal = false;
+    this.showThemeModal = false;
   }
 
   private handleSubmitCreate = async (e: Event) => {
@@ -198,6 +201,9 @@ export class AppManager extends LitElement {
               <button class="btn" @click=${() => this.showPipelineModal = true} style="margin-left: 8px;" title="CD Pipeline">
                 🔄 Pipeline
               </button>
+              <button class="btn" @click=${() => this.showThemeModal = true} style="margin-left: 8px;" title="Appearance">
+                🎨 Theme
+              </button>
             ` : ''}
           </div>
         </div>
@@ -207,6 +213,7 @@ export class AppManager extends LitElement {
       ${this.showSelectModal ? this.renderSelectModal() : ''}
       ${this.showPublishModal ? this.renderPublishModal() : ''}
       ${this.showPipelineModal ? this.renderPipelineModal() : ''}
+      ${this.showThemeModal ? this.renderThemeModal() : ''}
     `;
   }
 
@@ -462,6 +469,26 @@ export class AppManager extends LitElement {
           </div>
           <div class="modal-body" style="background: #f1f5f9; border-radius: 8px;">
             <pipeline-dashboard .appId=${this.currentApp.id}></pipeline-dashboard>
+          </div>
+          <div class="modal-footer">
+            <button class="btn" @click=${this.handleCloseModal}>Close</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderThemeModal() {
+    if (!this.currentApp) return '';
+    return html`
+      <div class="modal-overlay" @click=${this.handleCloseModal}>
+        <div class="modal" style="max-width: 500px;" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h3>App Appearance</h3>
+            <button class="modal-close" @click=${this.handleCloseModal}>×</button>
+          </div>
+          <div class="modal-body">
+            <theme-editor .app=${this.currentApp}></theme-editor>
           </div>
           <div class="modal-footer">
             <button class="btn" @click=${this.handleCloseModal}>Close</button>

@@ -90,6 +90,7 @@ If you modify a component (e.g., add a prop to `GridElement`), but fail to updat
 - **Grid System**: Fully functional, resizable, tight layout, runtime-clean.
 - **Form Data**: `FormContainer` correctly loads data from API (fixed case-insensitivity issues).
 - **AI Context**: Builder sends full app metadata to AI for context-aware generation.
+- **Deployment Pipeline**: Full DEV/SIT/PROD lifecycle. Visual dashboard, one-click promotion, immutable versions, and "Launch" actions. Verified by user.
 
 ### In Progress / Pending 🚧
 - **Workflows**: Backend parsing exists, but Frontend UI for visualizing workflows is basic/missing.

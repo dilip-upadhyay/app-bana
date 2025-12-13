@@ -112,7 +112,33 @@ export class AppRuntimeShell extends LitElement {
       const initialPageId = this.runtimeState.currentPageId || this.runtimeState.pages[0]?.id;
       if (initialPageId) this.navigateToPage(initialPageId); else this.error = 'No pages found in app';
     }
+    this.applyTheme();
     this._initialized = true;
+  }
+
+  private applyTheme() {
+    if (!this.runtimeState?.app.theme) return;
+    const theme = this.runtimeState.app.theme;
+
+    if (theme.primaryColor) {
+      this.style.setProperty('--color-brand', theme.primaryColor);
+      // Simple darkening for accent - in real app use color manipulation lib
+      this.style.setProperty('--color-brand-accent', theme.primaryColor);
+      this.style.setProperty('--color-focus-ring', theme.primaryColor);
+    }
+
+    if (theme.secondaryColor) {
+      this.style.setProperty('--color-text-secondary', theme.secondaryColor);
+      this.style.setProperty('--color-border', theme.secondaryColor + '40'); // 25% opacity
+    }
+
+    if (theme.fontFamily) {
+      this.style.setProperty('--font-sans', theme.fontFamily);
+    }
+
+    // Apply Custom CSS if present
+    // Note: In Shadow DOM, this needs to be a style tag, or constructable stylesheet
+    // For now, we trust the host styles cascade or we might need a <style> tag in render
   }
 
   private navigateToPage(pageId: string, queryParams?: Record<string, string>) {

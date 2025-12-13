@@ -792,6 +792,25 @@ public class ApiServer {
             }
         });
 
+        // Generate App Theme
+        router.post("/api/ai/theme-generate", (req, res) -> {
+            try {
+                Map<String, String> body = req.readJson(new TypeReference<>() {
+                });
+                String desc = body.get("description");
+                if (desc == null || desc.isBlank()) {
+                    res.json(400, Map.of("error", "Description is required"));
+                    return;
+                }
+
+                Map<String, Object> theme = com.appbana.ai.AiThemeService.generateTheme(desc);
+                res.json(200, theme);
+            } catch (Exception e) {
+                LOG.error("Theme generation failed", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
         // Get AI configuration
         router.get("/api/ai/config", (req, res) -> {
             try {

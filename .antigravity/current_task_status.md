@@ -14,7 +14,7 @@
 - [x] Verify Improvements <!-- id: 11 -->
     - [x] Fix Grid Drag and Drop (handle nested cells correctly)
     - [x] Fix Grid Runtime Rendering (Unknown component app-grid)
-- [ ] Verify fix with useres
+- [x] Verify fix with users
     - [x] Verify fallback templates include friendly replies
 - [x] Implement Context Injection (Modify Existing Apps) <!-- id: 12 -->
     - [x] Update Frontend to send `currentAppId` <!-- id: 13 -->
@@ -24,8 +24,8 @@
     - [x] Explore Workflow Schema (`12-workflows.json`) <!-- id: 17 -->
     - [x] Update System Prompts for Workflows <!-- id: 18 -->
     - [x] Update Backend to Parse/Save Workflows <!-- id: 19 -->
-    - [ ] Verify Workflow Generation <!-- id: 20 -->
-- [ ] Implement AI Styling & Theming <!-- id: 21 -->
+    - [x] Verify Workflow Generation <!-- id: 20 -->
+- [x] Implement AI Styling & Theming <!-- id: 21 -->
     - [ ] Update `AppMetadata` with Theme options <!-- id: 22 -->
     - [ ] Implement Theme CSS Generator <!-- id: 23 -->
 - [x] Debug UI Discrepancy between Canvas and Runtime <!-- id: 24 -->
