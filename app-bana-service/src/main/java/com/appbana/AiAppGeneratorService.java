@@ -47,6 +47,7 @@ public class AiAppGeneratorService {
     private static final String ACTION_LIST_PAGES = "listPages";
     private static final String ACTION_OPEN_PAGE = "openPage";
     private static final String ACTION_GENERATE_APP = "generateApp";
+    private static final String ACTION_DESCRIBE_APP = "describeApp";
     private static final String PAYLOAD_APPS = "apps";
     private static final String PAYLOAD_ACTION = "action";
     private static final String PAYLOAD_REPLY = "reply";
@@ -131,6 +132,15 @@ public class AiAppGeneratorService {
 
             // Fallback to original flow for backward compatibility
             String normalizedAction = resolveAction(request);
+
+            // SPECIAL CASE: Check for "explain/describe" in text if metadata missed it
+            if (normalizedAction == null && (request.description.toLowerCase().contains("explain") ||
+                    request.description.toLowerCase().contains("describe") ||
+                    request.description.toLowerCase().contains("summary of"))) {
+                GenerationResult desc = handleStructuredAction(ACTION_DESCRIBE_APP, request);
+                if (desc != null && desc.success)
+                    return desc;
+            }
 
             // FIX #3: Handle "create pages" / "regenerate pages" requests
             if (isRegeneratePageRequest(request.description)) {
@@ -235,6 +245,16 @@ public class AiAppGeneratorService {
 
         // Handle specific intents from metadata
         switch (intent) {
+            case "describe_app":
+                return handleStructuredAction(ACTION_DESCRIBE_APP, request);
+            case "list_apps":
+                return handleStructuredAction(ACTION_LIST_APPS, request);
+            case "load_app":
+                return handleStructuredAction(ACTION_LOAD_APP, request);
+            case "delete_app":
+                return handleStructuredAction(ACTION_DELETE_APP, request);
+            case "list_pages":
+                return handleStructuredAction(ACTION_LIST_PAGES, request);
             case "greeting":
             case "smalltalk":
                 if (intentResult.shouldUseSmallTalk()) {
@@ -244,28 +264,6 @@ public class AiAppGeneratorService {
                     }
                 }
                 return null;
-
-            case "list_apps":
-                return buildAppsListResult();
-
-            case "describe_app":
-                GenerationResult describeRes = new GenerationResult();
-                describeRes.success = true;
-                describeRes.payload = new HashMap<>();
-                describeRes.payload.put("action", "describeApp");
-                return describeRes;
-
-            case "list_pages":
-                // Delegate to existing list pages handler which handles extraction
-                request.normalizedAction = ACTION_LIST_PAGES;
-                return handleListPages(request);
-
-            case "delete_app":
-                // Delegate to existing delete handler
-                return handleDeleteApp(request);
-
-            case "load_app":
-                return handleStructuredAction(ACTION_LOAD_APP, request);
 
             case "approve_continue":
                 // User approved - create app from context
@@ -1683,6 +1681,13 @@ public class AiAppGeneratorService {
         Map<String, Object> out = new HashMap<>();
         if (lower.matches(".*(list|show).*(apps|app list).*") || lower.contains("my apps")) {
             out.put("action", ACTION_LIST_APPS);
+            out.put("options", new HashMap<>());
+            return out;
+        }
+
+        if (lower.matches(".*(describe|explain|summary|overview).*(app|application|this).*") ||
+                lower.equals("explain app") || lower.equals("describe app")) {
+            out.put("action", ACTION_DESCRIBE_APP);
             out.put("options", new HashMap<>());
             return out;
         }
