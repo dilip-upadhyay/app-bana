@@ -3,9 +3,9 @@
   "name" : "Playlist List",
   "type" : "data-table",
   "entity" : "Playlist",
-  "columns" : [ "title", "description", "createdBy", "createdAt", "status" ],
+  "columns" : [ "title", "status", "createdAt" ],
   "actions" : [ "view", "edit", "delete", "create" ],
-  "rootId" : "root-1765647957573",
+  "rootId" : "root-1765648608840",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
     "type" : "container",
@@ -14,17 +14,17 @@
       "layout" : "vertical",
       "padding" : "xl"
     },
-    "children" : [ "heading-root-1765647957573", "table-root-1765647957573" ],
-    "id" : "root-1765647957573"
+    "children" : [ "heading-root-1765648608840", "table-root-1765648608840" ],
+    "id" : "root-1765648608840"
   }, {
-    "id" : "heading-root-1765647957573",
+    "id" : "heading-root-1765648608840",
     "type" : "text",
     "props" : {
       "tag" : "h1",
       "content" : "Playlist List"
     }
   }, {
-    "id" : "table-root-1765647957573",
+    "id" : "table-root-1765648608840",
     "type" : "table",
     "props" : {
       "entity" : "Playlist",

@@ -4,7 +4,7 @@
   "description" : "An app to manage playlists, songs, and user interactions with an approval system for new playlists.",
   "version" : "1.0.0",
   "created" : 1765634703448,
-  "updated" : 1765647957589,
+  "updated" : 1765648608859,
   "pages" : [ "playlist-list", "playlist-detail", "song-detail", "user-profile", "ad-approval", "approval-list" ],
   "defaultPage" : "playlist-list",
   "entities" : [ {

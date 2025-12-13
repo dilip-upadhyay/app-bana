@@ -3,9 +3,9 @@
   "name" : "Playlist Detail",
   "type" : "profile",
   "entity" : "Playlist",
-  "fields" : [ "title", "description", "createdBy", "createdAt", "status" ],
-  "relatedLists" : [ "songs", "approvals" ],
-  "rootId" : "root-1765647957576",
+  "fields" : [ "title", "description", "status", "createdAt" ],
+  "relatedLists" : [ "songs" ],
+  "rootId" : "root-1765648608840",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
     "type" : "container",
@@ -14,10 +14,10 @@
       "layout" : "vertical",
       "padding" : "xl"
     },
-    "children" : [ "heading-root-1765647957576" ],
-    "id" : "root-1765647957576"
+    "children" : [ "heading-root-1765648608840" ],
+    "id" : "root-1765648608840"
   }, {
-    "id" : "heading-root-1765647957576",
+    "id" : "heading-root-1765648608840",
     "type" : "text",
     "props" : {
       "tag" : "h1",

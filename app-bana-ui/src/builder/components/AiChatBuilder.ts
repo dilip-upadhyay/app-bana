@@ -394,40 +394,77 @@ export class AiChatBuilder extends LitElement {
   transform: translateY(-1px);
 }
 
-    .settings - modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  display: flex;
-  align - items: center;
-  justify - content: center;
-  padding: 1rem;
-  z - index: 1000;
-}
+    .settings-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 9999;
+      animation: fadeIn 0.2s ease;
+    }
 
-    .settings - content {
-  background: #fff;
-  border - radius: 20px;
-  padding: 1.5rem;
-  max - width: 520px;
-  width: 100 %;
-  box - shadow: 0 25px 45px rgba(15, 23, 42, 0.25);
-}
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
 
-    .settings - header {
-  display: flex;
-  align - items: center;
-  justify - content: space - between;
-  margin - bottom: 1rem;
-}
+    .settings-content {
+      background: #fff;
+      border-radius: 16px;
+      padding: 1.5rem;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
 
-    .close - btn {
-  background: transparent;
-  border: none;
-  font - size: 1.5rem;
-  cursor: pointer;
-  color: #475569;
-}
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .settings-header h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      line-height: 1;
+      cursor: pointer;
+      color: #64748b;
+      padding: 0.25rem;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+
+    .close-btn:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
 
     .settings - body {
   display: flex;
@@ -435,67 +472,82 @@ export class AiChatBuilder extends LitElement {
   gap: 1rem;
 }
 
-    .form - group {
-  display: flex;
-  flex - direction: column;
-  gap: 0.35rem;
-}
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
 
     label {
-  font - weight: 600;
-  font - size: 0.9rem;
-  color: #0f172a;
-}
+      font-weight: 500;
+      font-size: 0.9rem;
+      color: #334155;
+    }
 
-input,
-  select {
-  border - radius: 12px;
-  border: 1px solid #cbd5f5;
-  padding: 0.65rem 0.85rem;
-  font - size: 0.95rem;
-  font - family: inherit;
-  background: #f8fafc;
-}
+    input, select {
+      border-radius: 8px;
+      border: 1px solid #cbd5f5;
+      padding: 0.75rem;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: #f8fafc;
+      color: #0f172a;
+      transition: all 0.2s ease;
+      width: 100%;
+      box-sizing: border-box;
+    }
 
-input: focus,
-  select:focus {
-  outline: none;
-  border - color: #2563eb;
-  background: #fff;
-}
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
 
-    .form - help {
-  font - size: 0.8rem;
-  color: #475569;
-}
+    .form-help {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
 
-    .status - badge {
-  display: inline - flex;
-  align - items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.75rem;
-  border - radius: 999px;
-  font - weight: 600;
-  font - size: 0.85rem;
-}
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      width: fit-content;
+    }
 
-    .status - badge.success {
-  background: #dcfce7;
-  color: #15803d;
-}
+    .status-badge.success {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
 
-    .status - badge.info {
-  background: #e0f2fe;
-  color: #0369a1;
-}
+    .status-badge.info {
+      background: #e0f2fe;
+      color: #075985;
+      border: 1px solid #bae6fd;
+    }
 
-    .settings - footer {
-  margin - top: 1.25rem;
-  display: flex;
-  justify - content: space - between;
-  flex - wrap: wrap;
-  gap: 0.75rem;
-}
+    .status-badge.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .settings-footer {
+      margin-top: auto;
+      padding-top: 1rem;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
 
     .btn - group {
   display: flex;
@@ -2205,8 +2257,8 @@ input: focus,
       <div class="settings-modal" @click=${this.closeSettings}>
         <div class="settings-content" @click=${(e: Event) => e.stopPropagation()}>
           <div class="settings-header">
-            <h3>âš™ï¸ AI Settings</h3>
-            <button class="close-btn" @click=${this.closeSettings}>Ã—</button>
+            <h3>⚙️ AI Settings</h3>
+            <button class="close-btn" @click=${this.closeSettings}>×</button>
           </div>
 
           <div class="settings-body">
@@ -2332,15 +2384,13 @@ input: focus,
           </div>
 
           <div class="settings-footer">
-            <div class="btn-group">
-              <button
-                class="btn"
-                @click=${this.testAIConnection}
-                ?disabled=${!this.aiConfig.provider || this.isTestingConnection}
-              >
-                ${this.isTestingConnection ? 'Testing...' : 'Test Connection'}
-              </button>
-            </div>
+            <button
+              class="btn"
+              @click=${this.testAIConnection}
+              ?disabled=${!this.aiConfig.provider || this.isTestingConnection}
+            >
+              ${this.isTestingConnection ? 'Testing...' : 'Test Connection'}
+            </button>
             <div class="btn-group">
               <button class="btn" @click=${this.closeSettings}>
                 Cancel
