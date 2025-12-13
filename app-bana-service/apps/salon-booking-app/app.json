@@ -1,14 +1,14 @@
 {
   "id" : "salon-booking-app",
-  "name" : "Salon Booking App",
-  "description" : "A system for managing salon appointments, services, and customer information.",
+  "name" : "Project Management App",
+  "description" : "A comprehensive app for managing projects, tasks, and team collaboration.",
   "version" : "1.0.0",
   "created" : 1765400594293,
-  "updated" : 1765402444101,
-  "pages" : [ "customer-list", "service-list", "appointment-scheduler", "appointment-list", "test" ],
+  "updated" : 1765652476569,
+  "pages" : [ "customer-list", "service-list", "appointment-scheduler", "appointment-list", "test", "project-list", "project-detail", "task-board", "team-directory" ],
   "defaultPage" : "customer-list",
   "entities" : [ {
-    "name" : "Customer",
+    "name" : "Project",
     "fields" : [ {
       "name" : "name",
       "type" : "text",
@@ -16,26 +16,32 @@
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "email",
-      "type" : "email",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
-      "name" : "phone",
-      "type" : "phone",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
-      "name" : "notes",
+      "name" : "description",
       "type" : "longtext",
       "required" : false,
       "primaryKey" : false,
       "autoIncrement" : false
+    }, {
+      "name" : "startDate",
+      "type" : "date",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "endDate",
+      "type" : "date",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
     } ]
   }, {
-    "name" : "Service",
+    "name" : "Task",
     "fields" : [ {
       "name" : "title",
       "type" : "text",
@@ -49,41 +55,47 @@
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "price",
-      "type" : "currency",
+      "name" : "status",
+      "type" : "status",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "duration",
-      "type" : "number",
+      "name" : "dueDate",
+      "type" : "date",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "projectId",
+      "type" : "reference",
       "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "assignedTo",
+      "type" : "reference",
+      "required" : false,
       "primaryKey" : false,
       "autoIncrement" : false
     } ]
   }, {
-    "name" : "Appointment",
+    "name" : "TeamMember",
     "fields" : [ {
-      "name" : "customerId",
-      "type" : "reference",
+      "name" : "name",
+      "type" : "text",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "serviceId",
-      "type" : "reference",
+      "name" : "email",
+      "type" : "email",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "appointmentDate",
-      "type" : "datetime",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
-      "name" : "status",
-      "type" : "status",
+      "name" : "role",
+      "type" : "text",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false

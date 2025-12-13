@@ -1,5 +1,5 @@
 {
-  "lastUpdated" : 1765651676706,
+  "lastUpdated" : 1765653628216,
   "entries" : [ {
     "normalizedText" : "explain the app",
     "action" : {
@@ -14,18 +14,6 @@
     "lastAccessTime" : 1765649965784,
     "hitCount" : 0
   }, {
-    "normalizedText" : "i think you are missing the context we discussed i'm talking about the salon registration app that we wanted to create in that app description i don't see any option register the user can you add that and give me the final app",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1763579700334,
-    "lastAccessTime" : 1763579700334,
-    "hitCount" : 0
-  }, {
     "normalizedText" : "want to create a salon booking app with customer, service, appointment",
     "action" : {
       "action" : "generateApp",
@@ -38,6 +26,18 @@
     "lastAccessTime" : 1763408686768,
     "hitCount" : 0
   }, {
+    "normalizedText" : "i think you are missing the context we discussed i'm talking about the salon registration app that we wanted to create in that app description i don't see any option register the user can you add that and give me the final app",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763579700334,
+    "lastAccessTime" : 1763579700334,
+    "hitCount" : 0
+  }, {
     "normalizedText" : "i don't want you to sing i want the final version of the salon registration app that we were discussing",
     "action" : {
       "action" : "generateApp",
@@ -48,6 +48,20 @@
     },
     "createdTime" : 1763579621695,
     "lastAccessTime" : 1763579621695,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "i'm talking about the current app selected",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default",
+        "appId" : "loan-approval-app",
+        "currentAppId" : "loan-approval-app"
+      }
+    },
+    "createdTime" : 1765653628215,
+    "lastAccessTime" : 1765653628215,
     "hitCount" : 0
   }, {
     "normalizedText" : "i'm thinking to create an application for book booking the salon",
@@ -146,6 +160,19 @@
     },
     "createdTime" : 1765400576213,
     "lastAccessTime" : 1765400576213,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "i'm talking about the app you have opened",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default",
+        "currentAppId" : "salon-booking-app"
+      }
+    },
+    "createdTime" : 1765652460119,
+    "lastAccessTime" : 1765652460119,
     "hitCount" : 0
   } ]
 }

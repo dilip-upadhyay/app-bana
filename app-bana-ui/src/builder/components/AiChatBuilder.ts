@@ -1313,6 +1313,7 @@ export class AiChatBuilder extends LitElement {
         description: input,
         options: {
           userId,
+          appId: currentAppId,
           currentAppId: currentAppId
         },
         messages: this.messages.map(m => ({ role: m.role, content: m.content })),

@@ -565,7 +565,9 @@ public class AiAppGeneratorService {
                 lower.matches(".*app.*summary.*") ||
                 lower.matches(".*app.*overview.*") ||
                 lower.matches(".*app.*stats.*") ||
-                lower.matches(".*show.*details.*")) {
+                lower.matches(".*show.*details.*") ||
+                lower.contains("selected") ||
+                lower.contains("this app")) {
             return false;
         }
 
@@ -716,6 +718,12 @@ public class AiAppGeneratorService {
             Object appId = request.options.get("appId");
             if (appId != null && !String.valueOf(appId).isBlank())
                 return String.valueOf(appId);
+
+            // FIX: Check for currentAppId as well
+            Object currentAppId = request.options.get("currentAppId");
+            if (currentAppId != null && !String.valueOf(currentAppId).isBlank())
+                return String.valueOf(currentAppId);
+
             Object appName = request.options.get("appName");
             if (appName != null) {
                 List<Map<String, Object>> apps = safeListApps();
@@ -1686,7 +1694,11 @@ public class AiAppGeneratorService {
         }
 
         if (lower.matches(".*(describe|explain|summary|overview).*(app|application|this).*") ||
-                lower.equals("explain app") || lower.equals("describe app")) {
+                lower.equals("explain app") || lower.equals("describe app") ||
+                lower.matches(".*(what|tell|talk).*(about).*(app|application|this|selected|current).*") ||
+                lower.contains("app selected") ||
+                lower.contains("current app") ||
+                lower.contains("this app")) {
             out.put("action", ACTION_DESCRIBE_APP);
             out.put("options", new HashMap<>());
             return out;

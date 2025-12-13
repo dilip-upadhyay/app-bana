@@ -1,29 +1,29 @@
 {
   "id" : "loan-approval-app",
-  "name" : "Loan Approval App",
-  "description" : "A comprehensive application to manage loan approvals, applications, and customer information.",
+  "name" : "Current App",
+  "description" : "This app is designed to manage current tasks and activities.",
   "version" : "1.0.0",
   "created" : 1729500000000,
-  "updated" : 1765651691095,
-  "pages" : [ "home", "apply", "approvals", "review", "playlist-list", "track-list", "user-profile", "playlist-detail", "loan-list", "customer-list", "approval-list", "loan-detail", "customer-detail" ],
+  "updated" : 1765653642084,
+  "pages" : [ "home", "apply", "approvals", "review", "playlist-list", "track-list", "user-profile", "playlist-detail", "loan-list", "customer-list", "approval-list", "loan-detail", "customer-detail", "task-list", "task-detail", "user-directory" ],
   "defaultPage" : "home",
   "entities" : [ {
-    "name" : "LoanApplication",
+    "name" : "Task",
     "fields" : [ {
-      "name" : "amount",
-      "type" : "currency",
+      "name" : "title",
+      "type" : "text",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "term",
-      "type" : "number",
-      "required" : true,
+      "name" : "description",
+      "type" : "longtext",
+      "required" : false,
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "interestRate",
-      "type" : "decimal",
+      "name" : "dueDate",
+      "type" : "date",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
@@ -33,15 +33,9 @@
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
-    }, {
-      "name" : "customerId",
-      "type" : "long",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
     } ]
   }, {
-    "name" : "Customer",
+    "name" : "User",
     "fields" : [ {
       "name" : "name",
       "type" : "text",
@@ -55,42 +49,9 @@
       "primaryKey" : false,
       "autoIncrement" : false
     }, {
-      "name" : "phone",
-      "type" : "phone",
+      "name" : "role",
+      "type" : "text",
       "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
-      "name" : "address",
-      "type" : "longtext",
-      "required" : false,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    } ]
-  }, {
-    "name" : "ApprovalProcess",
-    "fields" : [ {
-      "name" : "loanId",
-      "type" : "long",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
-      "name" : "approvedBy",
-      "type" : "long",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
-      "name" : "approvalDate",
-      "type" : "datetime",
-      "required" : true,
-      "primaryKey" : false,
-      "autoIncrement" : false
-    }, {
-      "name" : "comments",
-      "type" : "longtext",
-      "required" : false,
       "primaryKey" : false,
       "autoIncrement" : false
     } ]

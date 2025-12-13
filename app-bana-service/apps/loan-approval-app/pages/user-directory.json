@@ -1,0 +1,57 @@
+{
+  "id" : "user-directory",
+  "name" : "User Directory",
+  "type" : "data-table",
+  "entity" : "User",
+  "columns" : [ "name", "email", "role" ],
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1765653642080",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "id" : "root-1765653642080",
+    "type" : "container",
+    "props" : {
+      "padding" : "xl",
+      "gap" : "lg",
+      "layout" : "vertical"
+    },
+    "children" : [ "heading-root-1765653642080", "table-root-1765653642080" ]
+  }, {
+    "props" : {
+      "content" : "User Directory",
+      "tag" : "h1"
+    },
+    "id" : "heading-root-1765653642080",
+    "type" : "text"
+  }, {
+    "id" : "table-root-1765653642080",
+    "type" : "table",
+    "props" : {
+      "entity" : "User",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "name",
+        "label" : "Name",
+        "type" : "text"
+      }, {
+        "name" : "email",
+        "label" : "Email",
+        "type" : "text"
+      }, {
+        "name" : "role",
+        "label" : "Role",
+        "type" : "text"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}

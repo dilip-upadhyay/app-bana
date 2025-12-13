@@ -1,0 +1,57 @@
+{
+  "id" : "team-directory",
+  "name" : "Team Directory",
+  "type" : "data-table",
+  "entity" : "TeamMember",
+  "columns" : [ "name", "email", "role" ],
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1765652476567",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765652476567",
+    "children" : [ "heading-root-1765652476567", "table-root-1765652476567" ]
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765652476567",
+    "props" : {
+      "content" : "Team Directory",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "table-root-1765652476567",
+    "type" : "table",
+    "props" : {
+      "entity" : "TeamMember",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "name",
+        "label" : "Name",
+        "type" : "text"
+      }, {
+        "name" : "email",
+        "label" : "Email",
+        "type" : "text"
+      }, {
+        "name" : "role",
+        "label" : "Role",
+        "type" : "text"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}

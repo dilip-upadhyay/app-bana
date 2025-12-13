@@ -1,0 +1,26 @@
+{
+  "id" : "task-detail",
+  "name" : "Task Detail",
+  "type" : "profile",
+  "entity" : "Task",
+  "fields" : [ "title", "description", "dueDate", "status" ],
+  "rootId" : "root-1765653642075",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "id" : "root-1765653642075",
+    "type" : "container",
+    "props" : {
+      "padding" : "xl",
+      "gap" : "lg",
+      "layout" : "vertical"
+    },
+    "children" : [ "heading-root-1765653642075" ]
+  }, {
+    "props" : {
+      "content" : "Task Detail",
+      "tag" : "h1"
+    },
+    "id" : "heading-root-1765653642075",
+    "type" : "text"
+  } ]
+}

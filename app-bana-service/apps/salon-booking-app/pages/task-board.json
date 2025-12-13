@@ -1,0 +1,28 @@
+{
+  "id" : "task-board",
+  "name" : "Task Board",
+  "type" : "board",
+  "entity" : "Task",
+  "groupBy" : "status",
+  "fields" : [ "title", "dueDate", "assignedTo" ],
+  "actions" : [ "view", "edit", "move" ],
+  "rootId" : "root-1765652476563",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765652476563",
+    "children" : [ "heading-root-1765652476563" ]
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765652476563",
+    "props" : {
+      "content" : "Task Board",
+      "tag" : "h1"
+    }
+  } ]
+}
