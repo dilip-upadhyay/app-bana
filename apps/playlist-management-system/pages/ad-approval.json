@@ -3,28 +3,28 @@
   "name" : "Ad Approval",
   "type" : "data-table",
   "entity" : "Ad",
-  "columns" : [ "content", "status" ],
+  "columns" : [ "content", "userId", "playlistId", "status" ],
   "actions" : [ "view", "approve", "reject" ],
-  "rootId" : "root-1765637190472",
+  "rootId" : "root-1765647957582",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "children" : [ "heading-root-1765637190472", "table-root-1765637190472" ],
-    "id" : "root-1765637190472",
     "type" : "container",
     "props" : {
-      "padding" : "xl",
       "gap" : "lg",
-      "layout" : "vertical"
-    }
+      "layout" : "vertical",
+      "padding" : "xl"
+    },
+    "children" : [ "heading-root-1765647957582", "table-root-1765647957582" ],
+    "id" : "root-1765647957582"
   }, {
+    "id" : "heading-root-1765647957582",
+    "type" : "text",
     "props" : {
       "tag" : "h1",
       "content" : "Ad Approval"
-    },
-    "id" : "heading-root-1765637190472",
-    "type" : "text"
+    }
   }, {
-    "id" : "table-root-1765637190472",
+    "id" : "table-root-1765647957582",
     "type" : "table",
     "props" : {
       "entity" : "Ad",

@@ -5,26 +5,26 @@
   "entity" : "Approval",
   "columns" : [ "playlistId", "approvedBy", "approvalDate", "status" ],
   "actions" : [ "view", "approve", "reject" ],
-  "rootId" : "root-1765637190476",
+  "rootId" : "root-1765647957582",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "children" : [ "heading-root-1765637190476", "table-root-1765637190476" ],
-    "id" : "root-1765637190476",
     "type" : "container",
     "props" : {
-      "padding" : "xl",
       "gap" : "lg",
-      "layout" : "vertical"
-    }
+      "layout" : "vertical",
+      "padding" : "xl"
+    },
+    "children" : [ "heading-root-1765647957582", "table-root-1765647957582" ],
+    "id" : "root-1765647957582"
   }, {
+    "id" : "heading-root-1765647957582",
+    "type" : "text",
     "props" : {
       "tag" : "h1",
       "content" : "Approval List"
-    },
-    "id" : "heading-root-1765637190476",
-    "type" : "text"
+    }
   }, {
-    "id" : "table-root-1765637190476",
+    "id" : "table-root-1765647957582",
     "type" : "table",
     "props" : {
       "entity" : "Approval",

@@ -4,27 +4,27 @@
   "type" : "data-table",
   "entity" : "Appointment",
   "columns" : [ "dateTime", "customerId", "serviceId", "status" ],
-  "actions" : [ "view", "edit", "delete" ],
-  "rootId" : "root-1765644037617",
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1765647866689",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "id" : "root-1765644037617",
     "type" : "container",
     "props" : {
-      "padding" : "xl",
       "gap" : "lg",
-      "layout" : "vertical"
+      "layout" : "vertical",
+      "padding" : "xl"
     },
-    "children" : [ "heading-root-1765644037617", "table-root-1765644037617" ]
+    "children" : [ "heading-root-1765647866689", "table-root-1765647866689" ],
+    "id" : "root-1765647866689"
   }, {
+    "id" : "heading-root-1765647866689",
+    "type" : "text",
     "props" : {
       "tag" : "h1",
       "content" : "Appointment List"
-    },
-    "id" : "heading-root-1765644037617",
-    "type" : "text"
+    }
   }, {
-    "id" : "table-root-1765644037617",
+    "id" : "table-root-1765647866689",
     "type" : "table",
     "props" : {
       "entity" : "Appointment",

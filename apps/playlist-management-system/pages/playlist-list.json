@@ -3,28 +3,28 @@
   "name" : "Playlist List",
   "type" : "data-table",
   "entity" : "Playlist",
-  "columns" : [ "title", "status", "createdAt" ],
+  "columns" : [ "title", "description", "createdBy", "createdAt", "status" ],
   "actions" : [ "view", "edit", "delete", "create" ],
-  "rootId" : "root-1765637190462",
+  "rootId" : "root-1765647957573",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "children" : [ "heading-root-1765637190462", "table-root-1765637190462" ],
-    "id" : "root-1765637190462",
     "type" : "container",
     "props" : {
-      "padding" : "xl",
       "gap" : "lg",
-      "layout" : "vertical"
-    }
+      "layout" : "vertical",
+      "padding" : "xl"
+    },
+    "children" : [ "heading-root-1765647957573", "table-root-1765647957573" ],
+    "id" : "root-1765647957573"
   }, {
+    "id" : "heading-root-1765647957573",
+    "type" : "text",
     "props" : {
       "tag" : "h1",
       "content" : "Playlist List"
-    },
-    "id" : "heading-root-1765637190462",
-    "type" : "text"
+    }
   }, {
-    "id" : "table-root-1765637190462",
+    "id" : "table-root-1765647957573",
     "type" : "table",
     "props" : {
       "entity" : "Playlist",

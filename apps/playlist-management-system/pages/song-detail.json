@@ -4,24 +4,24 @@
   "type" : "profile",
   "entity" : "Song",
   "fields" : [ "title", "artist", "album", "duration" ],
-  "relatedLists" : [ "playlists" ],
-  "rootId" : "root-1765637190470",
+  "relatedLists" : [ ],
+  "rootId" : "root-1765647957576",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "children" : [ "heading-root-1765637190470" ],
-    "id" : "root-1765637190470",
     "type" : "container",
     "props" : {
-      "padding" : "xl",
       "gap" : "lg",
-      "layout" : "vertical"
-    }
+      "layout" : "vertical",
+      "padding" : "xl"
+    },
+    "children" : [ "heading-root-1765647957576" ],
+    "id" : "root-1765647957576"
   }, {
+    "id" : "heading-root-1765647957576",
+    "type" : "text",
     "props" : {
       "tag" : "h1",
       "content" : "Song Detail"
-    },
-    "id" : "heading-root-1765637190470",
-    "type" : "text"
+    }
   } ]
 }

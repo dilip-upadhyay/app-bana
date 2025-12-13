@@ -298,6 +298,14 @@ public class AiAppGeneratorService {
                 LOG.info("[AI] Low confidence from metadata ({}), using GPT", intentResult.confidence);
                 return null;
 
+            case "refactor_entity":
+                request.action = "refactor_entity";
+                return null; // Fall through to runGenerationPipelines with specific action
+
+            case "add_relationship":
+                request.action = "add_relationship";
+                return null; // Fall through to runGenerationPipelines with specific action
+
             case "unknown":
                 // Unknown intent - use GPT
                 return null;
@@ -629,28 +637,11 @@ public class AiAppGeneratorService {
         AiProvider provider = AiProviderFactory.createProvider(config);
         String systemPrompt = AiSystemPrompts.getAppGenerationPrompt();
 
-        // Inject conversation context into system prompt
-        String contextPrompt = buildContextPrompt(request.userId);
+        // Inject conversation context (and app schema if modifying) into system prompt
+        String contextPrompt = buildContextPrompt(request);
         if (contextPrompt != null && !contextPrompt.isBlank()) {
             systemPrompt = contextPrompt + "\n\n" + systemPrompt;
             LOG.info("[AI Context] Injected conversation context into system prompt");
-        }
-
-        // NEW: Inject current app schema for modification
-        if (request.options != null && request.options.containsKey("currentAppId")) {
-            String currentAppId = String.valueOf(request.options.get("currentAppId"));
-            if (currentAppId != null && !currentAppId.equals("null") && !currentAppId.isBlank()) {
-                try {
-                    com.appbana.model.AppMetadata currentApp = AppManager.getApp(currentAppId);
-                    if (currentApp != null) {
-                        String schemaContext = buildAppSchemaContext(currentApp);
-                        systemPrompt = schemaContext + "\n\n" + systemPrompt;
-                        LOG.info("[AI Context] Injected FULL APP SCHEMA for app: {}", currentAppId);
-                    }
-                } catch (Exception e) {
-                    LOG.warn("[AI Context] Failed to inject app context for {}: {}", currentAppId, e.getMessage());
-                }
-            }
         }
 
         String userPrompt = request != null ? request.description : "";
@@ -998,6 +989,11 @@ public class AiAppGeneratorService {
                 return handleDescribeApp(request);
             case "listFields":
                 return handleListFields(request);
+            case "refactor_entity":
+            case "add_relationship":
+                // Allow fall-through to generation pipelines which will use the injected
+                // context
+                return null;
             case "help":
                 return handleHelp();
             default:
@@ -2780,16 +2776,39 @@ public class AiAppGeneratorService {
     /**
      * Build context prompt from conversation history to inject into system prompt
      */
-    private static String buildContextPrompt(String userId) {
+    private static String buildContextPrompt(GenerationRequest request) {
+        String userId = resolveUserId(request);
         ConversationContext ctx = getContext(userId);
 
-        // Only add context if we have meaningful information
-        if (ctx.lastDiscussedAppType == null && ctx.lastDiscussedAppDescription == null &&
-                ctx.discussedEntities.isEmpty() && ctx.lastCreatedAppId == null && ctx.lastOpenedAppId == null) {
-            return null;
+        StringBuilder contextBuilder = new StringBuilder();
+
+        // CRitICAL: If this is a modification request (refactor, add relationship),
+        // inject the FULL schema
+        boolean isModification = "refactor_entity".equals(request.action) ||
+                "add_relationship".equals(request.action) ||
+                "update_entity".equals(request.action);
+
+        String targetAppId = null;
+        if (request.options != null && request.options.get("currentAppId") != null) {
+            targetAppId = String.valueOf(request.options.get("currentAppId"));
+        }
+        if (targetAppId == null || "null".equals(targetAppId)) {
+            targetAppId = ctx.lastOpenedAppId != null ? ctx.lastOpenedAppId : ctx.lastCreatedAppId;
         }
 
-        StringBuilder contextBuilder = new StringBuilder();
+        if (isModification && targetAppId != null) {
+            try {
+                com.appbana.model.AppMetadata app = AppManager.getApp(targetAppId);
+                if (app != null) {
+                    String schemaContext = buildAppSchemaContext(app);
+                    contextBuilder.append(schemaContext);
+                    LOG.info("[AI Context] Injected FULL APP SCHEMA for modification: {}", targetAppId);
+                }
+            } catch (Exception e) {
+                LOG.warn("[AI Context] Failed to inject app schema for modification", e);
+            }
+        }
+
         contextBuilder.append("📝 CONVERSATION CONTEXT (for continuity):\n");
 
         if (ctx.lastDiscussedAppType != null) {

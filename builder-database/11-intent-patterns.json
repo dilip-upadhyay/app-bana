@@ -474,6 +474,76 @@
       ]
     },
     {
+      "id": "refactor_entity",
+      "name": "Refactor Entity",
+      "description": "User wants to rename, modify, or change fields of an existing entity",
+      "confidence_threshold": 0.75,
+      "patterns": [
+        {
+          "type": "keyword",
+          "keywords": [
+            "rename",
+            "modify",
+            "change",
+            "update",
+            "edit",
+            "convert"
+          ],
+          "must_contain": [
+            "entity",
+            "field",
+            "type",
+            "column"
+          ],
+          "weight": 0.85
+        },
+        {
+          "type": "entity_overlap",
+          "min_overlap": 1,
+          "source": "discussed_entities",
+          "weight": 0.9,
+          "description": "Boost if modifying an entity we are talking about"
+        }
+      ],
+      "actions": [
+        "refactor_entity"
+      ]
+    },
+    {
+      "id": "add_relationship",
+      "name": "Add Relationship",
+      "description": "User wants to create a relationship between two entities",
+      "confidence_threshold": 0.75,
+      "patterns": [
+        {
+          "type": "keyword",
+          "keywords": [
+            "link",
+            "connect",
+            "relationship",
+            "relate",
+            "associate",
+            "bind"
+          ],
+          "weight": 0.85
+        },
+        {
+          "type": "keyword",
+          "keywords": [
+            "has many",
+            "belongs to",
+            "one to one",
+            "one to many",
+            "many to many"
+          ],
+          "weight": 0.95
+        }
+      ],
+      "actions": [
+        "create_relationship"
+      ]
+    },
+    {
       "id": "greeting",
       "name": "Greeting",
       "description": "Simple greetings and pleasantries",
