@@ -1154,6 +1154,11 @@ export class AiChatBuilder extends LitElement {
             `✅ Created your ${this.conversationContext.appType || ''} (${result.payload.currentAppName || ''}).\nSay 'show my apps' or 'open the first app' to continue.`
           );
         }
+
+        const summary = this.generateAppSummaryMarkdown(result);
+        if (summary) {
+          this.addAssistantMessage(summary);
+        }
         return;
       }
       if (result && result.success) {
@@ -1566,6 +1571,32 @@ export class AiChatBuilder extends LitElement {
         }
       })) : [])
     ];
+  }
+
+  private generateAppSummaryMarkdown(result: any): string {
+    let appSummary = '';
+    if (result.appName || result.appDescription || (result.entities && result.entities.length > 0) || (result.pages && result.pages.length > 0)) {
+      appSummary += `**App Name:** ${result.appName || ''}\n`;
+      appSummary += `**Description:** ${result.appDescription || ''}\n`;
+      if (Array.isArray(result.entities) && result.entities.length > 0) {
+        appSummary += `**Entities:**\n`;
+        for (const entity of result.entities) {
+          appSummary += `- ${entity.name}\n`;
+          if (Array.isArray(entity.fields)) {
+            for (const field of entity.fields) {
+              appSummary += `    - ${field.name} (${field.type})\n`;
+            }
+          }
+        }
+      }
+      if (Array.isArray(result.pages) && result.pages.length > 0) {
+        appSummary += `**Pages:**\n`;
+        for (const page of result.pages) {
+          appSummary += `- ${page.name || page.id || JSON.stringify(page)}\n`;
+        }
+      }
+    }
+    return appSummary;
   }
 
   private buildFormNodes(entity?: EntityMeta): ComponentNode[] {

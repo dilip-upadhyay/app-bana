@@ -1346,6 +1346,12 @@ public class AiAppGeneratorService {
 
         // Track created app in context
         updateCreatedApp(request.userId, appId);
+        
+        // Return currentAppName in payload for frontend
+        if (result.payload == null) {
+            result.payload = new HashMap<>();
+        }
+        result.payload.put("currentAppName", result.appName);
 
         LOG.info("[AI] Persisted generated app '{}'", appId);
     }

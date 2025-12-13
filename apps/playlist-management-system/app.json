@@ -1,11 +1,11 @@
 {
   "id" : "playlist-management-system",
   "name" : "Playlist Management System",
-  "description" : "An app to manage playlists, songs, and user interactions.",
+  "description" : "An app to manage playlists, songs, and user interactions with an approval system for new playlists.",
   "version" : "1.0.0",
   "created" : 1765634703448,
-  "updated" : 1765634703499,
-  "pages" : [ "playlist-list", "playlist-detail", "song-detail", "user-profile" ],
+  "updated" : 1765637190483,
+  "pages" : [ "playlist-list", "playlist-detail", "song-detail", "user-profile", "ad-approval", "approval-list" ],
   "defaultPage" : "playlist-list",
   "entities" : [ {
     "name" : "Playlist",
@@ -30,6 +30,12 @@
     }, {
       "name" : "createdAt",
       "type" : "datetime",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false
@@ -90,6 +96,60 @@
     }, {
       "name" : "createdAt",
       "type" : "datetime",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Ad",
+    "fields" : [ {
+      "name" : "content",
+      "type" : "longtext",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "userId",
+      "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "playlistId",
+      "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Approval",
+    "fields" : [ {
+      "name" : "playlistId",
+      "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "approvedBy",
+      "type" : "reference",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "approvalDate",
+      "type" : "datetime",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
       "required" : true,
       "primaryKey" : false,
       "autoIncrement" : false

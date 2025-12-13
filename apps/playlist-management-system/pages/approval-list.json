@@ -1,15 +1,15 @@
 {
-  "id" : "playlist-list",
-  "name" : "Playlist List",
+  "id" : "approval-list",
+  "name" : "Approval List",
   "type" : "data-table",
-  "entity" : "Playlist",
-  "columns" : [ "title", "status", "createdAt" ],
-  "actions" : [ "view", "edit", "delete", "create" ],
-  "rootId" : "root-1765637190462",
+  "entity" : "Approval",
+  "columns" : [ "playlistId", "approvedBy", "approvalDate", "status" ],
+  "actions" : [ "view", "approve", "reject" ],
+  "rootId" : "root-1765637190476",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "children" : [ "heading-root-1765637190462", "table-root-1765637190462" ],
-    "id" : "root-1765637190462",
+    "children" : [ "heading-root-1765637190476", "table-root-1765637190476" ],
+    "id" : "root-1765637190476",
     "type" : "container",
     "props" : {
       "padding" : "xl",
@@ -19,34 +19,30 @@
   }, {
     "props" : {
       "tag" : "h1",
-      "content" : "Playlist List"
+      "content" : "Approval List"
     },
-    "id" : "heading-root-1765637190462",
+    "id" : "heading-root-1765637190476",
     "type" : "text"
   }, {
-    "id" : "table-root-1765637190462",
+    "id" : "table-root-1765637190476",
     "type" : "table",
     "props" : {
-      "entity" : "Playlist",
+      "entity" : "Approval",
       "fields" : [ {
         "name" : "id",
         "label" : "ID",
         "type" : "text"
       }, {
-        "name" : "title",
-        "label" : "Title",
+        "name" : "playlistId",
+        "label" : "Playlist Id",
         "type" : "text"
       }, {
-        "name" : "description",
-        "label" : "Description",
+        "name" : "approvedBy",
+        "label" : "Approved By",
         "type" : "text"
       }, {
-        "name" : "createdBy",
-        "label" : "Created By",
-        "type" : "text"
-      }, {
-        "name" : "createdAt",
-        "label" : "Created At",
+        "name" : "approvalDate",
+        "label" : "Approval Date",
         "type" : "datetime"
       }, {
         "name" : "status",

@@ -4,23 +4,24 @@
   "type" : "profile",
   "entity" : "User",
   "fields" : [ "name", "email", "createdAt" ],
-  "rootId" : "root-1765634703496",
+  "relatedLists" : [ "playlists" ],
+  "rootId" : "root-1765637190471",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "children" : [ "heading-root-1765634703496" ],
-    "props" : {
-      "layout" : "vertical",
-      "gap" : "lg",
-      "padding" : "xl"
-    },
+    "children" : [ "heading-root-1765637190471" ],
+    "id" : "root-1765637190471",
     "type" : "container",
-    "id" : "root-1765634703496"
+    "props" : {
+      "padding" : "xl",
+      "gap" : "lg",
+      "layout" : "vertical"
+    }
   }, {
-    "type" : "text",
-    "id" : "heading-root-1765634703496",
     "props" : {
       "tag" : "h1",
       "content" : "User Profile"
-    }
+    },
+    "id" : "heading-root-1765637190471",
+    "type" : "text"
   } ]
 }
