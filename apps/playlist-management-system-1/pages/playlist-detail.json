@@ -3,25 +3,25 @@
   "name" : "Playlist Detail",
   "type" : "profile",
   "entity" : "Playlist",
-  "fields" : [ "title", "description", "createdBy", "createdAt", "status" ],
+  "fields" : [ "title", "description", "createdAt", "updatedAt" ],
   "relatedLists" : [ "songs" ],
-  "rootId" : "root-1765648897190",
+  "rootId" : "root-1765649309077",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "type" : "container",
+    "children" : [ "heading-root-1765649309077" ],
     "props" : {
-      "gap" : "lg",
       "layout" : "vertical",
+      "gap" : "lg",
       "padding" : "xl"
     },
-    "children" : [ "heading-root-1765648897190" ],
-    "id" : "root-1765648897190"
+    "type" : "container",
+    "id" : "root-1765649309077"
   }, {
-    "id" : "heading-root-1765648897190",
     "type" : "text",
+    "id" : "heading-root-1765649309077",
     "props" : {
-      "tag" : "h1",
-      "content" : "Playlist Detail"
+      "content" : "Playlist Detail",
+      "tag" : "h1"
     }
   } ]
 }

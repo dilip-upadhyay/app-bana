@@ -45,6 +45,7 @@ public class AiAppGeneratorService {
     private static final String ACTION_LOAD_APP = "loadApp";
     private static final String ACTION_DELETE_APP = "deleteApp";
     private static final String ACTION_LIST_PAGES = "listPages";
+    private static final String ACTION_OPEN_PAGE = "openPage";
     private static final String ACTION_GENERATE_APP = "generateApp";
     private static final String PAYLOAD_APPS = "apps";
     private static final String PAYLOAD_ACTION = "action";
@@ -1705,6 +1706,29 @@ public class AiAppGeneratorService {
             out.put("options", opts);
             return out;
         }
+
+        // Handle "open/show/go to [page name] page"
+        if (lower.matches(".*(open|show|load|view|goto|display).*(page).*")) {
+            Map<String, Object> opts = new HashMap<>();
+            // Extract page name: "open Playlist List page" -> "Playlist List"
+            // Regex strategies:
+            // 1. "open [X] page"
+            Matcher m1 = Pattern.compile("(open|show|load|view|goto|display) (?:the )?([A-Za-z0-9 _-]+?) page")
+                    .matcher(lower);
+            if (m1.find()) {
+                opts.put("pageName", m1.group(2).trim());
+            } else {
+                // 2. Just capture everything between verb and "page"
+                Matcher m2 = Pattern.compile("(?:open|show|load|view|goto|display) (?:the )?(.+?) page").matcher(lower);
+                if (m2.find()) {
+                    opts.put("pageName", m2.group(1).trim());
+                }
+            }
+            out.put("action", ACTION_OPEN_PAGE);
+            out.put("options", opts);
+            return out;
+        }
+
         out.put("action", ACTION_GENERATE_APP);
         out.put("options", new HashMap<>());
         return out;

@@ -1,5 +1,5 @@
 {
-  "lastUpdated" : 1765648879142,
+  "lastUpdated" : 1765649299436,
   "entries" : [ {
     "normalizedText" : "i want to create food booking app",
     "action" : {
@@ -11,18 +11,6 @@
     },
     "createdTime" : 1763409586063,
     "lastAccessTime" : 1763409586063,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "i want to create something useful for customers to opt for salon servicve and book appointment. if they want they can also select specific salon guy at the time of booking appointment",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1763578298321,
-    "lastAccessTime" : 1763578298321,
     "hitCount" : 0
   }, {
     "normalizedText" : "explain the app",
@@ -37,6 +25,18 @@
     "createdTime" : 1765647853523,
     "lastAccessTime" : 1765648591060,
     "hitCount" : 2
+  }, {
+    "normalizedText" : "i want to create something useful for customers to opt for salon servicve and book appointment. if they want they can also select specific salon guy at the time of booking appointment",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763578298321,
+    "lastAccessTime" : 1763578298321,
+    "hitCount" : 0
   }, {
     "normalizedText" : "okay so now we have to add a new feature the feature is the playlist approval system so in that feature user can add playlist and it has to be approved by the application manager once application manager approves the playlist it should be visual and published",
     "action" : {
@@ -353,6 +353,19 @@
     },
     "createdTime" : 1765634680046,
     "lastAccessTime" : 1765634680046,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "open playlist list page",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default",
+        "currentAppId" : "playlist-management-system-1"
+      }
+    },
+    "createdTime" : 1765649299434,
+    "lastAccessTime" : 1765649299434,
     "hitCount" : 0
   } ]
 }

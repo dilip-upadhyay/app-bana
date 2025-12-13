@@ -53,7 +53,14 @@ export class PageManager extends LitElement {
       });
     }
 
+    window.addEventListener('request-page-navigation', this.handlePageNavigationRequest as EventListener);
+
     this.loadPages();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('request-page-navigation', this.handlePageNavigationRequest as EventListener);
   }
 
   private async loadPages() {
@@ -67,7 +74,7 @@ export class PageManager extends LitElement {
     console.log('[PageManager] Loading pages for app:', this.currentApp.name, 'Pages:', this.currentApp.pages);
 
     // Load all pages for current app
-    const pagePromises = this.currentApp.pages.map((pageId: string) => 
+    const pagePromises = this.currentApp.pages.map((pageId: string) =>
       appStore.loadPage(this.currentApp!.id, pageId)
     );
     this.pages = (await Promise.all(pagePromises))
@@ -157,10 +164,10 @@ export class PageManager extends LitElement {
       alert('Please enter a page name');
       return;
     }
-    
+
     // Move to template selection using setTimeout to ensure clean state transition
     this.showCreateModal = false;
-    
+
     // Use setTimeout to ensure the first modal is fully unmounted before showing the second
     setTimeout(() => {
       this.showTemplateModal = true;
@@ -249,7 +256,7 @@ export class PageManager extends LitElement {
   private handleContextMenu = (e: MouseEvent, pageId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     this.contextMenuVisible = true;
     this.contextMenuPageId = pageId;
     this.contextMenuX = e.clientX;
@@ -260,7 +267,7 @@ export class PageManager extends LitElement {
       this.contextMenuVisible = false;
       document.removeEventListener('click', closeMenu);
     };
-    
+
     // Delay to prevent immediate closure
     setTimeout(() => {
       document.addEventListener('click', closeMenu);
@@ -269,12 +276,12 @@ export class PageManager extends LitElement {
 
   private handleDuplicatePage = async (e: Event) => {
     e.stopPropagation();
-    
+
     if (!this.currentApp || !this.contextMenuPageId) return;
 
     const pageId = this.contextMenuPageId;
     const page = this.pages.find(p => p.id === pageId);
-    
+
     if (!page) {
       console.error('[PageManager] Page not found for duplication:', pageId);
       return;
@@ -282,19 +289,45 @@ export class PageManager extends LitElement {
     try {
       // Use AppStore's duplicatePage method
       const duplicatedPage = await appStore.duplicatePage(this.currentApp.id, pageId);
-      
+
       // Switch to the duplicated page
       this.isNewPage = true;
       this.currentPageId = duplicatedPage.id;
       this.switchToPage(duplicatedPage.id);
-      
+
       this.showToast(`📋 Duplicated "${page.name}" as "${duplicatedPage.name}"`);
-      
+
       // Close context menu
       this.contextMenuVisible = false;
     } catch (error) {
       console.error('[PageManager] Failed to duplicate page:', error);
       alert(error instanceof Error ? error.message : 'Failed to duplicate page');
+    }
+  }
+
+  private handlePageNavigationRequest = (e: CustomEvent) => {
+    const pageName = e.detail?.pageName;
+    if (!pageName || !this.pages.length) return;
+
+    console.log('[PageManager] AI requested page navigation:', pageName);
+
+    // Find page by name (case-insensitive)
+    const targetPage = this.pages.find(p => p.name.toLowerCase() === pageName.toLowerCase());
+
+    if (targetPage) {
+      this.switchToPage(targetPage.id);
+      this.showToast(`📄 Opened page: ${targetPage.name}`);
+    } else {
+      // Try identifying by entity name in page
+      // e.g. "Playlist List" -> matches page named "Playlist List"
+      // If no exact match, try fuzzy
+      const fuzzy = this.pages.find(p => p.name.toLowerCase().includes(pageName.toLowerCase()));
+      if (fuzzy) {
+        this.switchToPage(fuzzy.id);
+        this.showToast(`📄 Opened page: ${fuzzy.name}`);
+      } else {
+        console.warn('[PageManager] Page not found for navigation request:', pageName);
+      }
     }
   }
 
@@ -1073,7 +1106,7 @@ export class PageManager extends LitElement {
 
   private buildPageFromTemplate(pageId: string): PageMeta {
     console.log('[PageManager] buildPageFromTemplate - formName:', this.formName, 'formPath:', this.formPath);
-    
+
     // Check if using a pre-built template
     if (this.selectedTemplate !== 'custom') {
       return this.buildPrebuiltTemplate(pageId, this.selectedTemplate);
@@ -1545,9 +1578,9 @@ export class PageManager extends LitElement {
         <div 
           class="context-menu-item danger" 
           @click=${(e: Event) => {
-            this.contextMenuVisible = false;
-            this.handleDeletePage(page.id, page.name, e);
-          }}
+        this.contextMenuVisible = false;
+        this.handleDeletePage(page.id, page.name, e);
+      }}
         >
           <span class="context-menu-icon">🗑️</span>
           <span class="context-menu-label">Delete</span>

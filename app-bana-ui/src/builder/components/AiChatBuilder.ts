@@ -1367,6 +1367,20 @@ export class AiChatBuilder extends LitElement {
           });
           return;
         }
+        if (action === 'openPage') {
+          const pageName = result.payload.options?.pageName;
+          if (pageName) {
+            this.addAssistantMessage(`Opening page "${pageName}"...`);
+            this.dispatchEvent(new CustomEvent('request-page-navigation', {
+              detail: { pageName },
+              bubbles: true,
+              composed: true
+            }));
+          } else {
+            this.addAssistantMessage(`I couldn't identify which page to open.`);
+          }
+          return;
+        }
         if (result.needsMoreInfo && Array.isArray(result.followUpQuestions)) {
           // If the user's input is a greeting or personal question, use persona response
           const lowerInput = input.toLowerCase();
