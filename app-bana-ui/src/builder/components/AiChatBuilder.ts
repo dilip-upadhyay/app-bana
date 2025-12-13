@@ -2188,9 +2188,77 @@ export class AiChatBuilder extends LitElement {
     `;
   }
 
-  private handleConfirmCreate(message: ChatMessage) {
-    // TODO: Implement app creation logic here
-    this.addSystemMessage('App creation confirmed!');
+  private async handleConfirmCreate(message: ChatMessage) {
+    if (!message.metadata) return;
+
+    const { generatedApp, generatedEntities, generatedPages } = message.metadata;
+
+    if (!generatedApp) {
+      this.addSystemMessage('Error: No app data found to create.');
+      return;
+    }
+
+    try {
+      this.isProcessing = true;
+      this.addSystemMessage(`🚀 Initializing ${generatedApp.name || 'app'}...`);
+
+      // 1. Create the App
+      const app = await appStore.createApp({
+        name: generatedApp.name || 'New App',
+        description: generatedApp.description || 'AI Generated App'
+      });
+
+      if (!app) {
+        throw new Error('Failed to create application instance');
+      }
+
+      const appId = app.id;
+      this.thinkingStep = 'Setting up data structure...';
+
+      // 2. Create Entities
+      const entitiesToCreate = generatedEntities || [];
+      for (const entity of entitiesToCreate) {
+        // Ensure entity has required fields
+        if (!entity.name) continue;
+
+        // Add entity to store
+        await appStore.addEntity(appId, entity);
+        // Small delay to prevent UI freezing
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      this.thinkingStep = 'Generating pages...';
+
+      // 3. Create Pages
+      const pagesToCreate = generatedPages || [];
+      // If we have entities but no pages, suggest default pages
+      if (pagesToCreate.length === 0 && entitiesToCreate.length > 0) {
+        entitiesToCreate.forEach((entity: any) => {
+          pagesToCreate.push(`${entity.name} List`);
+          pagesToCreate.push(`${entity.name} Form`);
+        });
+      }
+
+      // Process pages
+      for (const pageSuggestion of pagesToCreate) {
+        await this.createPageFromSuggestion(appId, pageSuggestion, entitiesToCreate);
+        // Small delay
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      // 4. Finalize
+      await appStore.setCurrentApp(appId);
+      this.dispatchEvent(new CustomEvent('app-loaded', { detail: { appId }, bubbles: true, composed: true }));
+
+      this.addAssistantMessage(`✅ **${generatedApp.name}** has been created successfully with ${entitiesToCreate.length} entities and ${pagesToCreate.length} pages!`);
+
+    } catch (error) {
+      console.error('Failed to create app:', error);
+      this.addSystemMessage(`❌ Error creating app: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.isProcessing = false;
+      this.thinkingStep = '';
+    }
   }
 
   private async handleLoadAppFromPayload(appId: string) {

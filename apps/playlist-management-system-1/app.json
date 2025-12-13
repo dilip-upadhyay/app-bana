@@ -4,7 +4,7 @@
   "description" : "An app to manage playlists, songs, and user interactions.",
   "version" : "1.0.0",
   "created" : 1765635806319,
-  "updated" : 1765635806375,
+  "updated" : 1765648897195,
   "pages" : [ "playlist-list", "playlist-detail", "song-detail", "user-profile" ],
   "defaultPage" : "playlist-list",
   "entities" : [ {

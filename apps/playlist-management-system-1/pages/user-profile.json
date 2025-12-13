@@ -4,23 +4,24 @@
   "type" : "profile",
   "entity" : "User",
   "fields" : [ "name", "email", "createdAt" ],
-  "rootId" : "root-1765635806370",
+  "relatedLists" : [ ],
+  "rootId" : "root-1765648897193",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
+    "type" : "container",
     "props" : {
-      "layout" : "vertical",
       "gap" : "lg",
+      "layout" : "vertical",
       "padding" : "xl"
     },
-    "type" : "container",
-    "id" : "root-1765635806370",
-    "children" : [ "heading-root-1765635806370" ]
+    "children" : [ "heading-root-1765648897193" ],
+    "id" : "root-1765648897193"
   }, {
+    "id" : "heading-root-1765648897193",
     "type" : "text",
-    "id" : "heading-root-1765635806370",
     "props" : {
-      "content" : "User Profile",
-      "tag" : "h1"
+      "tag" : "h1",
+      "content" : "User Profile"
     }
   } ]
 }

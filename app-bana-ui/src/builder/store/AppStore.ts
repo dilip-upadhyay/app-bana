@@ -8,6 +8,7 @@
 
 import type { AppMeta, AppWithPages, CreateAppRequest, UpdateAppRequest, AppListItem } from '../../models/app-metadata';
 import type { PageMeta } from '../../models/metadata';
+import type { EntityMeta } from '../../models/entity-metadata';
 import { apiClient } from '../../core/api-client';
 
 export type ConversationTelemetryType = 'greeting' | 'idea' | 'decision' | 'smallTalk';
@@ -335,6 +336,36 @@ export class AppStore {
     await Promise.all(pagePromises);
 
     return { app, pages };
+  }
+
+  // ==================== Entity Management ====================
+
+  /**
+   * Add an entity to an app (async - saves to backend)
+   */
+  async addEntity(appId: string, entity: EntityMeta): Promise<void> {
+    const app = this.apps.get(appId);
+    if (!app) {
+      throw new Error(`App not found: ${appId}`);
+    }
+
+    if (!app.entities) {
+      app.entities = [];
+    }
+
+    // Check if entity already exists
+    const exists = app.entities.some(e => e.name === entity.name);
+    if (!exists) {
+      app.entities.push(entity);
+      app.updated = Date.now();
+
+      // Save entire app object since entities are embedded
+      await apiClient.put<AppMeta>(`/apps/${appId}`, app);
+
+      // Update local cache
+      this.apps.set(appId, app);
+      this.notify();
+    }
   }
 
   // ==================== Page Management ====================
