@@ -43,7 +43,7 @@ export class AppStore {
 
     try {
       // Load apps list from backend
-      const response = await apiClient.get<{apps: AppListItem[]}>('/apps');
+      const response = await apiClient.get<{ apps: AppListItem[] }>('/apps');
       const appsList = response.apps || [];
       // Populate apps map with summary data
       this.apps.clear();
@@ -67,6 +67,7 @@ export class AppStore {
       const currentId = localStorage.getItem(CURRENT_APP_KEY);
       if (currentId && this.apps.has(currentId)) {
         this.currentAppId = currentId;
+        this.notify(); // FIX: Notify listeners (AppManager) that session was restored
         // Load full app data for current app
         await this.loadFullApp(currentId);
       }
@@ -99,7 +100,7 @@ export class AppStore {
     try {
       const STORAGE_KEY_PREFIX = 'appbana.apps.';
       const APPS_LIST_KEY = 'appbana.apps.list';
-      
+
       const appsList = localStorage.getItem(APPS_LIST_KEY);
       if (appsList) {
         const appIds: string[] = JSON.parse(appsList);
@@ -175,7 +176,7 @@ export class AppStore {
    */
   async createApp(request: CreateAppRequest): Promise<AppMeta> {
     this.setLoading(true);
-    
+
     try {
       const id = this.generateAppId(request.name);
       const now = Date.now();
@@ -294,10 +295,10 @@ export class AppStore {
     }
     this.currentAppId = appId;
     localStorage.setItem(CURRENT_APP_KEY, appId);
-    
+
     // Load full app data with entities from backend
     await this.loadFullApp(appId);
-    
+
     this.notify();
   }
 
@@ -322,7 +323,7 @@ export class AppStore {
     if (!app) return undefined;
 
     const pages = new Map<string, PageMeta>();
-    
+
     // Load all pages in parallel
     const pagePromises = app.pages.map(async (pageId: string) => {
       const page = await this.loadPage(appId, pageId);
@@ -330,7 +331,7 @@ export class AppStore {
         pages.set(pageId, page);
       }
     });
-    
+
     await Promise.all(pagePromises);
 
     return { app, pages };
@@ -426,7 +427,7 @@ export class AppStore {
 
     // Generate new unique ID
     const newId = this.generateUniquePageId(app, sourcePage.id);
-    
+
     // Generate new name (e.g., "Dashboard" -> "Dashboard Copy")
     const newName = await this.generateCopyName(app, sourcePage.name);
 
@@ -467,17 +468,17 @@ export class AppStore {
     // Check if name already ends with " Copy" or " Copy N"
     const copyPattern = /^(.+?)( Copy)?( \d+)?$/;
     const match = copyPattern.exec(sourceName);
-    
+
     if (!match) {
       return `${sourceName} Copy`;
     }
 
     const baseName = match[1];
-    
+
     // Load all pages to get their names
     const pagePromises = app.pages.map(pageId => this.loadPage(app.id, pageId));
     const pages = await Promise.all(pagePromises);
-    
+
     // Find all pages with similar names
     const existingNames = new Set(
       pages
@@ -488,7 +489,7 @@ export class AppStore {
     // Try "Name Copy", "Name Copy 2", "Name Copy 3", etc.
     let newName = `${baseName} Copy`;
     let counter = 2;
-    
+
     while (existingNames.has(newName)) {
       newName = `${baseName} Copy ${counter}`;
       counter++;
@@ -640,10 +641,10 @@ export class AppStore {
    */
   async clearAll(): Promise<void> {
     // Delete all apps from backend
-    const deletePromises = Array.from(this.apps.keys()).map(appId => 
+    const deletePromises = Array.from(this.apps.keys()).map(appId =>
       this.deleteApp(appId)
     );
-    
+
     await Promise.all(deletePromises);
 
     this.apps.clear();
