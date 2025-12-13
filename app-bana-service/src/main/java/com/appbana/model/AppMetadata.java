@@ -24,18 +24,19 @@ public class AppMetadata {
     private String defaultPage;
 
     // Entities
-    private List<Object> entities;  // EntityMeta - will be Map for now
+    private List<Object> entities; // EntityMeta - will be Map for now
     private List<String> schemas;
 
     // Navigation
-    private Object navigation;  // NavigationMeta
+    private Object navigation; // NavigationMeta
 
     // Settings
     private AppTheme theme;
     private AppRoutes routes;
     private Map<String, Object> metadata;
 
-    public AppMetadata() {}
+    public AppMetadata() {
+    }
 
     public AppMetadata(String id, String name, String version) {
         this.id = id;
@@ -46,50 +47,125 @@ public class AppMetadata {
     }
 
     // Getters and Setters
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
+    public String getId() {
+        return id;
+    }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setId(String id) {
+        this.id = id;
+    }
 
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
+    public String getName() {
+        return name;
+    }
 
-    public String getVersion() { return version; }
-    public void setVersion(String version) { this.version = version; }
+    public void setName(String name) {
+        this.name = name;
+    }
 
-    public String getAuthor() { return author; }
-    public void setAuthor(String author) { this.author = author; }
+    public String getDescription() {
+        return description;
+    }
 
-    public Long getCreated() { return created; }
-    public void setCreated(Long created) { this.created = created; }
+    public void setDescription(String description) {
+        this.description = description;
+    }
 
-    public Long getUpdated() { return updated; }
-    public void setUpdated(Long updated) { this.updated = updated; }
+    public String getVersion() {
+        return version;
+    }
 
-    public List<String> getPages() { return pages; }
-    public void setPages(List<String> pages) { this.pages = pages; }
+    public void setVersion(String version) {
+        this.version = version;
+    }
 
-    public String getDefaultPage() { return defaultPage; }
-    public void setDefaultPage(String defaultPage) { this.defaultPage = defaultPage; }
+    public String getAuthor() {
+        return author;
+    }
 
-    public List<Object> getEntities() { return entities; }
-    public void setEntities(List<Object> entities) { this.entities = entities; }
+    public void setAuthor(String author) {
+        this.author = author;
+    }
 
-    public List<String> getSchemas() { return schemas; }
-    public void setSchemas(List<String> schemas) { this.schemas = schemas; }
+    public Long getCreated() {
+        return created;
+    }
 
-    public Object getNavigation() { return navigation; }
-    public void setNavigation(Object navigation) { this.navigation = navigation; }
+    public void setCreated(Long created) {
+        this.created = created;
+    }
 
-    public AppTheme getTheme() { return theme; }
-    public void setTheme(AppTheme theme) { this.theme = theme; }
+    public Long getUpdated() {
+        return updated;
+    }
 
-    public AppRoutes getRoutes() { return routes; }
-    public void setRoutes(AppRoutes routes) { this.routes = routes; }
+    public void setUpdated(Long updated) {
+        this.updated = updated;
+    }
 
-    public Map<String, Object> getMetadata() { return metadata; }
-    public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
+    public List<String> getPages() {
+        return pages;
+    }
+
+    public void setPages(List<String> pages) {
+        this.pages = pages;
+    }
+
+    public String getDefaultPage() {
+        return defaultPage;
+    }
+
+    public void setDefaultPage(String defaultPage) {
+        this.defaultPage = defaultPage;
+    }
+
+    public List<Object> getEntities() {
+        return entities;
+    }
+
+    public void setEntities(List<Object> entities) {
+        this.entities = entities;
+    }
+
+    public List<String> getSchemas() {
+        return schemas;
+    }
+
+    public void setSchemas(List<String> schemas) {
+        this.schemas = schemas;
+    }
+
+    public Object getNavigation() {
+        return navigation;
+    }
+
+    public void setNavigation(Object navigation) {
+        this.navigation = navigation;
+    }
+
+    public AppTheme getTheme() {
+        return theme;
+    }
+
+    public void setTheme(AppTheme theme) {
+        this.theme = theme;
+    }
+
+    public AppRoutes getRoutes() {
+        return routes;
+    }
+
+    public void setRoutes(AppRoutes routes) {
+        this.routes = routes;
+    }
+
+    public Map<String, Object> getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(Map<String, Object> metadata) {
+        this.metadata = metadata;
+    }
 
     /**
      * App theme configuration
@@ -102,20 +178,65 @@ public class AppMetadata {
         private Boolean darkMode;
         private String customCSS;
 
-        public String getPrimaryColor() { return primaryColor; }
-        public void setPrimaryColor(String primaryColor) { this.primaryColor = primaryColor; }
+        public String getPrimaryColor() {
+            return primaryColor;
+        }
 
-        public String getSecondaryColor() { return secondaryColor; }
-        public void setSecondaryColor(String secondaryColor) { this.secondaryColor = secondaryColor; }
+        public void setPrimaryColor(String primaryColor) {
+            this.primaryColor = primaryColor;
+        }
 
-        public String getFontFamily() { return fontFamily; }
-        public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; }
+        public String getSecondaryColor() {
+            return secondaryColor;
+        }
 
-        public Boolean getDarkMode() { return darkMode; }
-        public void setDarkMode(Boolean darkMode) { this.darkMode = darkMode; }
+        public void setSecondaryColor(String secondaryColor) {
+            this.secondaryColor = secondaryColor;
+        }
 
-        public String getCustomCSS() { return customCSS; }
-        public void setCustomCSS(String customCSS) { this.customCSS = customCSS; }
+        public String getFontFamily() {
+            return fontFamily;
+        }
+
+        public void setFontFamily(String fontFamily) {
+            this.fontFamily = fontFamily;
+        }
+
+        private String surfaceColor;
+
+        public String getSurfaceColor() {
+            return surfaceColor;
+        }
+
+        public void setSurfaceColor(String surfaceColor) {
+            this.surfaceColor = surfaceColor;
+        }
+
+        private String textColor;
+
+        public String getTextColor() {
+            return textColor;
+        }
+
+        public void setTextColor(String textColor) {
+            this.textColor = textColor;
+        }
+
+        public Boolean getDarkMode() {
+            return darkMode;
+        }
+
+        public void setDarkMode(Boolean darkMode) {
+            this.darkMode = darkMode;
+        }
+
+        public String getCustomCSS() {
+            return customCSS;
+        }
+
+        public void setCustomCSS(String customCSS) {
+            this.customCSS = customCSS;
+        }
     }
 
     /**
@@ -126,10 +247,20 @@ public class AppMetadata {
         private String basePath;
         private Map<String, String> pageRoutes;
 
-        public String getBasePath() { return basePath; }
-        public void setBasePath(String basePath) { this.basePath = basePath; }
+        public String getBasePath() {
+            return basePath;
+        }
 
-        public Map<String, String> getPageRoutes() { return pageRoutes; }
-        public void setPageRoutes(Map<String, String> pageRoutes) { this.pageRoutes = pageRoutes; }
+        public void setBasePath(String basePath) {
+            this.basePath = basePath;
+        }
+
+        public Map<String, String> getPageRoutes() {
+            return pageRoutes;
+        }
+
+        public void setPageRoutes(Map<String, String> pageRoutes) {
+            this.pageRoutes = pageRoutes;
+        }
     }
 }

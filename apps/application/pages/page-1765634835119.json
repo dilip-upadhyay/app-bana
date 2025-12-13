@@ -1,0 +1,24 @@
+{
+  "id" : "page-1765634835119",
+  "name" : "Create Form Page",
+  "rootId" : "root-1765634835119",
+  "nodes" : [ {
+    "id" : "root-1765634835119",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "children" : [ "heading-root-1765634835119" ]
+  }, {
+    "id" : "heading-root-1765634835119",
+    "type" : "text",
+    "props" : {
+      "tag" : "h1",
+      "content" : "Create Form Page"
+    }
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "form"
+}

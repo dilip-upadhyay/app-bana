@@ -1,0 +1,24 @@
+{
+  "id" : "page-1765634835117",
+  "name" : "Dashboard Page",
+  "rootId" : "root-1765634835118",
+  "nodes" : [ {
+    "id" : "root-1765634835118",
+    "type" : "container",
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "children" : [ "heading-root-1765634835118" ]
+  }, {
+    "id" : "heading-root-1765634835118",
+    "type" : "text",
+    "props" : {
+      "tag" : "h1",
+      "content" : "Dashboard Page"
+    }
+  } ],
+  "metaVersion" : "1.0.0",
+  "type" : "dashboard"
+}

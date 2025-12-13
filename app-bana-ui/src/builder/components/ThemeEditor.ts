@@ -266,6 +266,41 @@ export class ThemeEditor extends LitElement {
         this.textColor = '#0f172a';
         this.borderRadius = '0px';
         break;
+      case 'peach-fuzz':
+        this.primaryColor = '#ffbe98';
+        this.secondaryColor = '#d99f7e';
+        this.surfaceColor = '#fff9f5';
+        this.textColor = '#4a3b32';
+        this.borderRadius = '12px';
+        break;
+      case 'cyber-lime':
+        this.primaryColor = '#ccff00';
+        this.secondaryColor = '#88a80d';
+        this.surfaceColor = '#000000';
+        this.textColor = '#ccff00';
+        this.borderRadius = '0px';
+        break;
+      case 'blue-nova':
+        this.primaryColor = '#5b7c99';
+        this.secondaryColor = '#8f9ead';
+        this.surfaceColor = '#f4f7f6';
+        this.textColor = '#2c3e50';
+        this.borderRadius = '6px';
+        break;
+      case 'earthy-greens':
+        this.primaryColor = '#556b2f';
+        this.secondaryColor = '#8fbc8f';
+        this.surfaceColor = '#f5f5dc';
+        this.textColor = '#333333';
+        this.borderRadius = '4px';
+        break;
+      case 'luxury-dark':
+        this.primaryColor = '#cfb53b';
+        this.secondaryColor = '#a89f91';
+        this.surfaceColor = '#121212';
+        this.textColor = '#e0e0e0';
+        this.borderRadius = '2px';
+        break;
     }
     this.saveTheme();
   }
@@ -337,6 +372,11 @@ export class ThemeEditor extends LitElement {
             <option value="crimson-red">🔴 Crimson Red</option>
             <option value="midnight-violet">🌙 Midnight Violet (Dark)</option>
             <option value="corporate-gray">🏢 Corporate Gray</option>
+            <option value="peach-fuzz">🍑 Peach Fuzz (2024)</option>
+            <option value="cyber-lime">⚡ Cyber Lime</option>
+            <option value="blue-nova">🌌 Blue Nova</option>
+            <option value="earthy-greens">🌿 Earthy Greens</option>
+            <option value="luxury-dark">👑 Luxury Dark</option>
           </select>
         </div>
 

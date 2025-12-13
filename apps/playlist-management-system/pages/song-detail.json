@@ -1,0 +1,26 @@
+{
+  "id" : "song-detail",
+  "name" : "Song Detail",
+  "type" : "profile",
+  "entity" : "Song",
+  "fields" : [ "title", "artist", "album", "duration" ],
+  "rootId" : "root-1765634703492",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "children" : [ "heading-root-1765634703492" ],
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765634703492"
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765634703492",
+    "props" : {
+      "tag" : "h1",
+      "content" : "Song Detail"
+    }
+  } ]
+}

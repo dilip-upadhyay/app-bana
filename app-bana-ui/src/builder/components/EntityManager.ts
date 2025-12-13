@@ -644,11 +644,11 @@ export class EntityManager extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    
+
     // Load current app initially
     this.currentApp = appStore.getCurrentApp();
     this.loadEntities();
-    
+
     // Subscribe to app changes
     appStore.subscribe(() => {
       this.currentApp = appStore.getCurrentApp();
@@ -750,7 +750,7 @@ export class EntityManager extends LitElement {
         placeholder: `Enter field ${fieldNum}...`,
       },
     };
-    
+
     this.formData = {
       ...this.formData,
       fields: [...(this.formData.fields || []), newField],
@@ -786,7 +786,7 @@ export class EntityManager extends LitElement {
       required: false,
       displayName: `Relationship ${relNum}`,
     };
-    
+
     this.formData = {
       ...this.formData,
       relationships: [...(this.formData.relationships || []), newRelationship],
@@ -816,7 +816,7 @@ export class EntityManager extends LitElement {
 
     try {
       const entityId = this.formData.name.toLowerCase().replaceAll(/\s+/g, '-');
-      
+
       const tempEntity: EntityMeta = {
         id: entityId,
         name: this.formData.name || entityId,
@@ -839,7 +839,7 @@ export class EntityManager extends LitElement {
       };
 
       const sql = EntitySchemaConverter.generateDDL(tempEntity);
-      
+
       return html`
         <pre class="sql-preview-code">${sql}</pre>
       `;
@@ -968,7 +968,7 @@ export class EntityManager extends LitElement {
       fields: entity.fields || [],
       relationships: entity.relationships || [],
     };
-    
+
     // Open modal in edit mode
     this.showCreateModal = true;
   }
@@ -998,6 +998,51 @@ export class EntityManager extends LitElement {
     } catch (error) {
       console.error('Failed to delete entity:', error);
       this.showToast('Failed to delete entity', 'error');
+    }
+  }
+
+  private async handleSeedData(entity: EntityMeta) {
+    if (!confirm(`Generate sample data for "${entity.displayName}"?\n\nThis will use AI to create 5 realistic records.`)) {
+      return;
+    }
+
+    try {
+      this.showToast('Generating magic data... ✨', 'success');
+
+      // 1. Generate Data via AI
+      const response = await fetch('/api/ai/seed-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entityName: entity.displayName,
+          schema: entity.fields,
+          count: 5
+        })
+      });
+
+      if (!response.ok) throw new Error('Generation failed');
+      const data = await response.json();
+
+      // 2. Insert Data into DB
+      let successCount = 0;
+      for (const item of data) {
+        try {
+          const saveRes = await fetch(`/api/${entity.name}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item)
+          });
+          if (saveRes.ok) successCount++;
+        } catch (e) {
+          console.error('Failed to save item', item, e);
+        }
+      }
+
+      this.showToast(`Successfully seeded ${successCount} records for ${entity.displayName}! 🪄`, 'success');
+
+    } catch (error) {
+      console.error('Magic Seed failed:', error);
+      this.showToast('Failed to seed data. Is the app running?', 'error');
     }
   }
 
@@ -1149,6 +1194,13 @@ export class EntityManager extends LitElement {
             </svg>
           </button>
           <button
+            class="icon-btn"
+            @click=${() => this.handleSeedData(entity)}
+            title="✨ Magic Seed Data"
+          >
+            <span style="font-size: 14px;">✨</span>
+          </button>
+          <button
             class="icon-btn icon-btn-danger"
             @click=${() => this.handleDeleteEntity(entity.id)}
             title="Delete entity"
@@ -1257,8 +1309,8 @@ export class EntityManager extends LitElement {
                 <div class="section-content">
                   <div class="fields-list">
                       ${(this.formData.fields || []).map((field, index) => {
-                        const isIdField = field.name === 'id';
-                        return html`
+      const isIdField = field.name === 'id';
+      return html`
                         <div class="field-item">
                           <div class="field-row">
                             <input
@@ -1408,11 +1460,11 @@ export class EntityManager extends LitElement {
                             >
                               <option value="id">id (primary key - default)</option>
                               ${rel.toEntity ? (() => {
-                                const targetEntity = this.entities.find(e => e.id === rel.toEntity);
-                                return targetEntity?.fields?.filter(f => f.name !== 'id').map(field => html`
+          const targetEntity = this.entities.find(e => e.id === rel.toEntity);
+          return targetEntity?.fields?.filter(f => f.name !== 'id').map(field => html`
                                   <option value="${field.name}">${field.name} (${field.type})</option>
                                 `) || [];
-                              })() : ''}
+        })() : ''}
                             </select>
                           </div>
                           <div class="field-row">
@@ -1473,10 +1525,10 @@ export class EntityManager extends LitElement {
               @click=${this.handleSaveEntity}
               ?disabled=${this.loading}
             >
-              ${this.loading 
-                ? (isEditMode ? 'Updating...' : 'Creating...') 
-                : (isEditMode ? 'Update Entity' : 'Create Entity')
-              }
+              ${this.loading
+        ? (isEditMode ? 'Updating...' : 'Creating...')
+        : (isEditMode ? 'Update Entity' : 'Create Entity')
+      }
             </button>
           </div>
         </div>

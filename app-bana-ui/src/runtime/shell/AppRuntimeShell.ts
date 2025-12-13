@@ -37,6 +37,11 @@ export class AppRuntimeShell extends LitElement {
   @state()
   private error: string | null = null;
 
+  @state()
+  private showThemeModal: boolean = false;
+  @state()
+  private runtimeTheme: any = null;
+
   // Guard to avoid scheduling a second update inside updated()
   private _initialized: boolean = false;
 
@@ -129,7 +134,18 @@ export class AppRuntimeShell extends LitElement {
 
     if (theme.secondaryColor) {
       this.style.setProperty('--color-text-secondary', theme.secondaryColor);
-      this.style.setProperty('--color-border', theme.secondaryColor + '40'); // 25% opacity
+      this.style.setProperty('--color-border', theme.secondaryColor + '40');
+    }
+
+    if (theme.surfaceColor) {
+      this.style.setProperty('--color-surface', theme.surfaceColor);
+      // For simple theming, we'll make bg same or slightly darker than surface
+      this.style.setProperty('--color-bg', theme.surfaceColor);
+      this.style.setProperty('--tbl-container-bg', theme.surfaceColor);
+    }
+
+    if (theme.textColor) {
+      this.style.setProperty('--color-text', theme.textColor);
     }
 
     if (theme.fontFamily) {
@@ -139,6 +155,94 @@ export class AppRuntimeShell extends LitElement {
     // Apply Custom CSS if present
     // Note: In Shadow DOM, this needs to be a style tag, or constructable stylesheet
     // For now, we trust the host styles cascade or we might need a <style> tag in render
+  }
+
+  private openThemeModal() {
+    this.showThemeModal = true;
+  }
+
+  private closeThemeModal() {
+    this.showThemeModal = false;
+  }
+
+  private applyRuntimePreset(preset: string) {
+    let theme = {};
+    switch (preset) {
+      case 'modern-blue':
+        theme = { primaryColor: '#2563eb', secondaryColor: '#64748b', surfaceColor: '#ffffff', textColor: '#1e293b', fontFamily: 'Inter' };
+        break;
+      case 'forest-green':
+        theme = { primaryColor: '#059669', secondaryColor: '#3f6212', surfaceColor: '#f0fdf4', textColor: '#14532d', fontFamily: 'Inter' };
+        break;
+      case 'crimson-red':
+        theme = { primaryColor: '#dc2626', secondaryColor: '#7f1d1d', surfaceColor: '#fef2f2', textColor: '#450a0a', fontFamily: 'Inter' };
+        break;
+      case 'midnight-violet':
+        theme = { primaryColor: '#8b5cf6', secondaryColor: '#a78bfa', surfaceColor: '#1e1b4b', textColor: '#f5f3ff', fontFamily: 'Inter' };
+        break;
+      case 'peach-fuzz':
+        theme = { primaryColor: '#ffbe98', secondaryColor: '#d99f7e', surfaceColor: '#fff9f5', textColor: '#4a3b32', fontFamily: 'Outfit' };
+        break;
+      case 'cyber-lime':
+        theme = { primaryColor: '#ccff00', secondaryColor: '#88a80d', surfaceColor: '#000000', textColor: '#ccff00', fontFamily: 'Courier New' };
+        break;
+      case 'blue-nova':
+        theme = { primaryColor: '#5b7c99', secondaryColor: '#8f9ead', surfaceColor: '#f4f7f6', textColor: '#2c3e50', fontFamily: 'Inter' };
+        break;
+      case 'earthy-greens':
+        theme = { primaryColor: '#556b2f', secondaryColor: '#8fbc8f', surfaceColor: '#f5f5dc', textColor: '#333333', fontFamily: 'Georgia' };
+        break;
+      case 'luxury-dark':
+        theme = { primaryColor: '#cfb53b', secondaryColor: '#a89f91', surfaceColor: '#121212', textColor: '#e0e0e0', fontFamily: 'Playfair Display' };
+        break;
+    }
+    // Deep merge for runtime
+    if (this.runtimeState?.app) {
+      this.runtimeState.app.theme = { ...this.runtimeState.app.theme, ...theme };
+      this.applyTheme();
+      this.requestUpdate();
+    }
+  }
+
+  private async generateRuntimeTheme() {
+    const input = this.shadowRoot?.getElementById('runtimeMagicInput') as HTMLInputElement;
+    if (!input || !input.value.trim()) return;
+
+    const btn = input.nextElementSibling as HTMLButtonElement;
+    const originalText = btn.textContent;
+    btn.textContent = '...';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/ai/theme-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: input.value })
+      });
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+
+      const theme: any = {};
+      if (data.colors) {
+        theme.primaryColor = data.colors.brand;
+        theme.secondaryColor = data.colors.textSecondary;
+      }
+      if (data.radius?.sm) theme.borderRadius = data.radius.sm;
+
+      // Apply
+      if (this.runtimeState?.app) {
+        this.runtimeState.app.theme = { ...this.runtimeState.app.theme, ...theme };
+        this.applyTheme();
+        this.requestUpdate();
+      }
+      input.value = '';
+    } catch (e) {
+      console.error(e);
+      alert('Failed to generate theme');
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
   }
 
   private navigateToPage(pageId: string, queryParams?: Record<string, string>) {
@@ -246,6 +350,9 @@ export class AppRuntimeShell extends LitElement {
           <div class="header-left">
             <h1 class="app-title">${app.name}</h1>
           </div>
+          <div class="header-right" style="margin-left:auto;">
+             <button @click=${this.openThemeModal} style="background:transparent;border:none;cursor:pointer;font-size:1.2rem;" title="Change Theme">🎨</button>
+          </div>
         </header>
 
         <!-- Page Navigation Tabs -->
@@ -272,6 +379,45 @@ export class AppRuntimeShell extends LitElement {
           ` : ''}
     ${this.currentPage ? renderPageTemplate(this.currentPage, context) : html`<div>Loading...</div>`}
         </main>
+        
+        ${this.showThemeModal ? html`
+          <div class="modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;" @click=${this.closeThemeModal}>
+            <div class="modal" style="background:white;padding:24px;border-radius:12px;width:400px;max-width:90%;box-shadow:0 10px 25px rgba(0,0,0,0.2);" @click=${(e: Event) => e.stopPropagation()}>
+               <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
+                 <h3 style="margin:0;font-size:1.1rem;color:#1e293b;">Change Theme</h3>
+                 <button @click=${this.closeThemeModal} style="background:none;border:none;cursor:pointer;font-size:1.2rem;">×</button>
+               </div>
+               
+               <div style="margin-bottom:16px;">
+                 <label style="display:block;font-size:0.85rem;color:#64748b;margin-bottom:8px;">Presets</label>
+                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                   <button @click=${() => this.applyRuntimePreset('modern-blue')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:white;cursor:pointer;">🔵 Blue</button>
+                   <button @click=${() => this.applyRuntimePreset('forest-green')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:white;cursor:pointer;">🌲 Green</button>
+                   <button @click=${() => this.applyRuntimePreset('crimson-red')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:white;cursor:pointer;">🔴 Red</button>
+                   <button @click=${() => this.applyRuntimePreset('midnight-violet')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:white;cursor:pointer;">🌙 Violet</button>
+                   
+                   <button @click=${() => this.applyRuntimePreset('peach-fuzz')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:white;cursor:pointer;">🍑 Peach</button>
+                   <button @click=${() => this.applyRuntimePreset('cyber-lime')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:black;color:#ccff00;cursor:pointer;border-color:#ccff00;">⚡ Cyber</button>
+                   <button @click=${() => this.applyRuntimePreset('blue-nova')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:white;cursor:pointer;">🌌 Nova</button>
+                   <button @click=${() => this.applyRuntimePreset('earthy-greens')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:#f5f5dc;cursor:pointer;">🌿 Earth</button>
+                   <button @click=${() => this.applyRuntimePreset('luxury-dark')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:#121212;color:#cfb53b;cursor:pointer;border-color:#cfb53b;">👑 Lux</button>
+                  </div>
+                </div>
+               
+               <div style="margin-bottom:16px;border-top:1px solid #e2e8f0;padding-top:16px;">
+                 <label style="display:block;font-size:0.85rem;color:#64748b;margin-bottom:8px;">✨ Magic Theme (AI)</label>
+                 <div style="display:flex;gap:8px;">
+                   <input type="text" id="runtimeMagicInput" placeholder="e.g. Retro vaporwave..." style="flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:6px;">
+                   <button @click=${this.generateRuntimeTheme} style="padding:8px 12px;background:linear-gradient(135deg, #6366f1 0%, #a855f7 100%);color:white;border:none;border-radius:6px;cursor:pointer;">Generate</button>
+                 </div>
+               </div>
+
+               <p style="font-size:0.8rem;color:#94a3b8;font-style:italic;">
+                 Note: Runtime theme changes are temporary for this session.
+               </p>
+            </div>
+          </div>
+        `: ''}
       </div>
     `;
   }

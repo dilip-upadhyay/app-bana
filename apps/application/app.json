@@ -1,0 +1,35 @@
+{
+  "id" : "application",
+  "name" : "Application",
+  "description" : "Custom application",
+  "version" : "1.0.0",
+  "created" : 1765634835112,
+  "updated" : 1765634835120,
+  "pages" : [ "page-1765634835115", "page-1765634835117", "page-1765634835119" ],
+  "defaultPage" : "page-1765634835115",
+  "entities" : [ {
+    "name" : "Item",
+    "fields" : [ {
+      "name" : "id",
+      "type" : "long",
+      "required" : false,
+      "primaryKey" : true,
+      "autoIncrement" : true
+    }, {
+      "name" : "name",
+      "type" : "string",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "description",
+      "type" : "string",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  } ],
+  "routes" : {
+    "basePath" : "/application"
+  }
+}

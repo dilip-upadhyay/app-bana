@@ -1,0 +1,26 @@
+{
+  "id" : "user-profile",
+  "name" : "User Profile",
+  "type" : "profile",
+  "entity" : "User",
+  "fields" : [ "name", "email", "createdAt" ],
+  "rootId" : "root-1765634703496",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "children" : [ "heading-root-1765634703496" ],
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765634703496"
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765634703496",
+    "props" : {
+      "tag" : "h1",
+      "content" : "User Profile"
+    }
+  } ]
+}

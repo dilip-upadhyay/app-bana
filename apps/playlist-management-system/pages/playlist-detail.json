@@ -1,0 +1,27 @@
+{
+  "id" : "playlist-detail",
+  "name" : "Playlist Detail",
+  "type" : "profile",
+  "entity" : "Playlist",
+  "fields" : [ "title", "description", "createdAt" ],
+  "relatedLists" : [ "songs" ],
+  "rootId" : "root-1765634703488",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "children" : [ "heading-root-1765634703488" ],
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765634703488"
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765634703488",
+    "props" : {
+      "tag" : "h1",
+      "content" : "Playlist Detail"
+    }
+  } ]
+}

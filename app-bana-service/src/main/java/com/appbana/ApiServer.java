@@ -811,6 +811,29 @@ public class ApiServer {
             }
         });
 
+        // Generate Seed Data
+        router.post("/api/ai/seed-data", (req, res) -> {
+            try {
+                Map<String, Object> body = req.readJson(new TypeReference<>() {
+                });
+                String entityName = (String) body.get("entityName");
+                String schema = M.writeValueAsString(body.get("schema"));
+                Integer count = (Integer) body.getOrDefault("count", 5);
+
+                if (entityName == null || schema == null) {
+                    res.json(400, Map.of("error", "Entity Name and Schema are required"));
+                    return;
+                }
+
+                java.util.List<Map<String, Object>> data = com.appbana.ai.DataSeederService.generateData(entityName,
+                        schema, count);
+                res.json(200, data);
+            } catch (Exception e) {
+                LOG.error("Data seeding failed", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
         // Get AI configuration
         router.get("/api/ai/config", (req, res) -> {
             try {
