@@ -1346,7 +1346,7 @@ public class AiAppGeneratorService {
 
         // Track created app in context
         updateCreatedApp(request.userId, appId);
-        
+
         // Return currentAppName in payload for frontend
         if (result.payload == null) {
             result.payload = new HashMap<>();
@@ -1703,6 +1703,14 @@ public class AiAppGeneratorService {
         Map<String, Object> out = new HashMap<>();
         if (lower.matches(".*(list|show).*(apps|app list).*") || lower.contains("my apps")) {
             out.put("action", ACTION_LIST_APPS);
+            out.put("options", new HashMap<>());
+            return out;
+        }
+        // NEW: Detect context/describe queries
+        if (lower.matches(".*(which|what).*app.*(working|opened|editing|modifying).*") ||
+                lower.matches(".*current.*app.*") ||
+                lower.matches(".*app.*context.*")) {
+            out.put("action", "describeApp");
             out.put("options", new HashMap<>());
             return out;
         }
