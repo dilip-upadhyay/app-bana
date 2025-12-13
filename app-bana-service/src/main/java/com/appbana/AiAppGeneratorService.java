@@ -2744,8 +2744,14 @@ public class AiAppGeneratorService {
                 sb.append("None");
             }
             sb.append("\n\n");
-            sb.append(
-                    "INSTRUCTION: The user wants to modify THIS app. Respect existing entities/fields unless asked to change them.");
+            sb.append("\n\n");
+            sb.append("🚨 MODIFICATION MODE - CRITICAL INSTRUCTIONS:\n");
+            sb.append("1. The user wants to MODIFY this existing app. Do NOT create a new one.\n");
+            sb.append("2. PRESERVE existing entities and fields unless explicitly asked to delete/change them.\n");
+            sb.append("3. ADD the requested new features (entities, fields, pages) to the existing structure.\n");
+            sb.append("4. Return the COMPLETE updated JSON structure (Merging existing + new).\n");
+            sb.append("5. appName MUST match the Current App context ('").append(app.getName())
+                    .append("'). Do NOT change it.");
             return sb.toString();
         } catch (Exception e) {
             LOG.warn("Failed to build app schema context", e);

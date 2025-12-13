@@ -757,6 +757,14 @@ export class AiChatBuilder extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.addSystemMessage('Welcome! I can help you build applications using natural language. Describe the app you want to create.');
+
+    // Check for active app context
+    const currentApp = appStore.getCurrentApp();
+    if (currentApp) {
+      this.addSystemMessage(`📂 **Active Context**: Working on **${currentApp.name}**. I can help you modify entities, pages, or add new features to this app.`);
+      this.conversationContext.currentAppId = currentApp.id;
+    }
+
     this.loadAIConfiguration();
     this.initializeVoiceRecognition();
   }
