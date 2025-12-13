@@ -1,0 +1,57 @@
+{
+  "id" : "customer-list",
+  "name" : "Customer List",
+  "type" : "data-table",
+  "entity" : "Customer",
+  "columns" : [ "name", "email", "phone" ],
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1765644037601",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "id" : "root-1765644037601",
+    "type" : "container",
+    "props" : {
+      "padding" : "xl",
+      "gap" : "lg",
+      "layout" : "vertical"
+    },
+    "children" : [ "heading-root-1765644037601", "table-root-1765644037601" ]
+  }, {
+    "props" : {
+      "tag" : "h1",
+      "content" : "Customer List"
+    },
+    "id" : "heading-root-1765644037601",
+    "type" : "text"
+  }, {
+    "id" : "table-root-1765644037601",
+    "type" : "table",
+    "props" : {
+      "entity" : "Customer",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "name",
+        "label" : "Name",
+        "type" : "text"
+      }, {
+        "name" : "email",
+        "label" : "Email",
+        "type" : "text"
+      }, {
+        "name" : "phone",
+        "label" : "Phone",
+        "type" : "text"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}

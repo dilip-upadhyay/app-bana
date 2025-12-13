@@ -1,0 +1,61 @@
+{
+  "id" : "appointment-list",
+  "name" : "Appointment List",
+  "type" : "data-table",
+  "entity" : "Appointment",
+  "columns" : [ "dateTime", "customerId", "serviceId", "status" ],
+  "actions" : [ "view", "edit", "delete" ],
+  "rootId" : "root-1765644037617",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "id" : "root-1765644037617",
+    "type" : "container",
+    "props" : {
+      "padding" : "xl",
+      "gap" : "lg",
+      "layout" : "vertical"
+    },
+    "children" : [ "heading-root-1765644037617", "table-root-1765644037617" ]
+  }, {
+    "props" : {
+      "tag" : "h1",
+      "content" : "Appointment List"
+    },
+    "id" : "heading-root-1765644037617",
+    "type" : "text"
+  }, {
+    "id" : "table-root-1765644037617",
+    "type" : "table",
+    "props" : {
+      "entity" : "Appointment",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "dateTime",
+        "label" : "Date Time",
+        "type" : "datetime"
+      }, {
+        "name" : "customerId",
+        "label" : "Customer Id",
+        "type" : "text"
+      }, {
+        "name" : "serviceId",
+        "label" : "Service Id",
+        "type" : "text"
+      }, {
+        "name" : "status",
+        "label" : "Status",
+        "type" : "text"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}

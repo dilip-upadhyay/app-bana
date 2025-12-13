@@ -1,5 +1,5 @@
 {
-  "lastUpdated" : 1765637178257,
+  "lastUpdated" : 1765644022117,
   "entries" : [ {
     "normalizedText" : "i want to create food booking app",
     "action" : {
@@ -75,18 +75,6 @@
     "lastAccessTime" : 1765637128112,
     "hitCount" : 0
   }, {
-    "normalizedText" : "delete all apps",
-    "action" : {
-      "action" : "deleteApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1763323956034,
-    "lastAccessTime" : 1763323956034,
-    "hitCount" : 0
-  }, {
     "normalizedText" : "okay i want to have a new feature in theories management system i want to have a feature where user can add a playlist and you should go for the fuel and approvar will be the tally manager once tennis manager approves the newly added playlist should be showing under the palace it will it will come back to the requester for modification",
     "action" : {
       "action" : "generateApp",
@@ -98,6 +86,18 @@
     },
     "createdTime" : 1765635781899,
     "lastAccessTime" : 1765635781899,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "delete all apps",
+    "action" : {
+      "action" : "deleteApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763323956034,
+    "lastAccessTime" : 1763323956034,
     "hitCount" : 0
   }, {
     "normalizedText" : "show me app",
@@ -256,6 +256,19 @@
     },
     "createdTime" : 1763407727124,
     "lastAccessTime" : 1763407727124,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "explain app",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default",
+        "currentAppId" : "salon-booking-app-2"
+      }
+    },
+    "createdTime" : 1765644022117,
+    "lastAccessTime" : 1765644022117,
     "hitCount" : 0
   }, {
     "normalizedText" : "create a messaging application",

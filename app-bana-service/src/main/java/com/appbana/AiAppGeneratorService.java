@@ -247,6 +247,22 @@ public class AiAppGeneratorService {
             case "list_apps":
                 return buildAppsListResult();
 
+            case "describe_app":
+                GenerationResult describeRes = new GenerationResult();
+                describeRes.success = true;
+                describeRes.payload = new HashMap<>();
+                describeRes.payload.put("action", "describeApp");
+                return describeRes;
+
+            case "list_pages":
+                // Delegate to existing list pages handler which handles extraction
+                request.normalizedAction = ACTION_LIST_PAGES;
+                return handleListPages(request);
+
+            case "delete_app":
+                // Delegate to existing delete handler
+                return handleDeleteApp(request);
+
             case "load_app":
                 return handleStructuredAction(ACTION_LOAD_APP, request);
 
@@ -443,53 +459,6 @@ public class AiAppGeneratorService {
             return result;
         }
 
-        // Load/Open app commands
-        if (lower.matches(
-                "^(open|load|show|view|select) (the )?(first|second|third|fourth|fifth|\\d+(st|nd|rd|th)?) app$")
-                || lower.contains("open app")
-                || lower.contains("load app")
-                || lower.contains("open the app")
-                || (lower.startsWith("open ") && !lower.contains("create"))
-                || (lower.startsWith("load ") && !lower.contains("create"))) {
-            result.put("action", ACTION_LOAD_APP);
-            return result;
-        }
-
-        // Delete app commands
-        if (lower.matches("^(delete|remove|destroy) (the )?(first|second|third|fourth|fifth|\\d+(st|nd|rd|th)?) app$")
-                || lower.contains("delete app")
-                || lower.contains("remove app")
-                || lower.contains("delete this app")
-                || lower.contains("remove this app")) {
-            result.put("action", ACTION_DELETE_APP);
-            return result;
-        }
-
-        // List pages commands
-        if (lower.matches("^(show|list|display|get|view|see) (the )?pages?$")
-                || lower.equals("pages")
-                || lower.equals("my pages")
-                || lower.equals("what pages")
-                || lower.contains("list pages")
-                || lower.contains("show pages")
-                || lower.contains("list all pages")
-                || lower.contains("what pages does this app have")) {
-            result.put("action", ACTION_LIST_PAGES);
-            return result;
-        }
-
-        // Describe app / show entities commands
-        if (lower.matches("^(describe|explain|show|tell me about|what is) (this|the|my) app$")
-                || lower.contains("describe app")
-                || lower.contains("what entities")
-                || lower.contains("show entities")
-                || lower.contains("list entities")
-                || lower.contains("what does this app have")
-                || lower.contains("what's in this app")) {
-            result.put("action", "describeApp");
-            return result;
-        }
-
         // Show fields commands
         if (lower.matches("^(show|list|describe|what are the) fields? (of|for|in) \\w+$")
                 || lower.contains("show fields")
@@ -584,7 +553,11 @@ public class AiAppGeneratorService {
                 lower.matches(".*current.*app.*") ||
                 lower.matches(".*app.*context.*") ||
                 lower.matches(".*describe.*app.*") ||
+                lower.matches(".*explain.*app.*") ||
+                lower.matches(".*explian.*app.*") ||
                 lower.matches(".*app.*summary.*") ||
+                lower.matches(".*app.*overview.*") ||
+                lower.matches(".*app.*stats.*") ||
                 lower.matches(".*show.*details.*")) {
             return false;
         }
@@ -1716,17 +1689,7 @@ public class AiAppGeneratorService {
             out.put("options", new HashMap<>());
             return out;
         }
-        // NEW: Detect context/describe queries
-        if (lower.matches(".*(which|what).*app.*(working|opened|editing|modifying).*") ||
-                lower.matches(".*current.*app.*") ||
-                lower.matches(".*app.*context.*") ||
-                lower.matches(".*describe.*app.*") ||
-                lower.matches(".*app.*summary.*") ||
-                lower.matches(".*show.*details.*")) {
-            out.put("action", "describeApp");
-            out.put("options", new HashMap<>());
-            return out;
-        }
+
         if (lower.matches(".*(open|load).*(app).*")) {
             out.put("action", ACTION_LOAD_APP);
             out.put("options", new HashMap<>());
@@ -2028,6 +1991,7 @@ public class AiAppGeneratorService {
         public String userId;
         public Map<String, Object> options;
         public String action;
+        public String normalizedAction; // Added for metadata engine compatibility
         public Map<String, Object> conversationContext;
         public String mode;
     }

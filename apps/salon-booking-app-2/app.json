@@ -4,8 +4,9 @@
   "description" : "Appointment booking system for salon users to book services and manage appointments",
   "version" : "1.0.0",
   "created" : 1763665523516,
-  "updated" : 1763665523555,
-  "pages" : [ "appointment-booking" ],
+  "updated" : 1765644037621,
+  "pages" : [ "appointment-booking", "customer-list", "service-list", "appointment-list" ],
+  "defaultPage" : "appointment-booking",
   "entities" : [ {
     "name" : "Customer",
     "fields" : [ {

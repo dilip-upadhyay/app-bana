@@ -1,27 +1,27 @@
 {
   "id" : "appointment-booking",
-  "name" : "Book Appointment",
+  "name" : "Appointment Booking",
   "type" : "form",
   "entity" : "Appointment",
   "fields" : [ "dateTime", "customerId", "serviceId", "status" ],
   "actions" : [ "create" ],
-  "rootId" : "root-1763665523552",
+  "rootId" : "root-1765644037601",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "id" : "root-1763665523552",
+    "id" : "root-1765644037601",
     "type" : "container",
     "props" : {
       "padding" : "xl",
       "gap" : "lg",
       "layout" : "vertical"
     },
-    "children" : [ "heading-root-1763665523552" ]
+    "children" : [ "heading-root-1765644037601" ]
   }, {
     "props" : {
-      "content" : "Book Appointment",
-      "tag" : "h1"
+      "tag" : "h1",
+      "content" : "Appointment Booking"
     },
-    "id" : "heading-root-1763665523552",
+    "id" : "heading-root-1765644037601",
     "type" : "text"
   } ]
 }
