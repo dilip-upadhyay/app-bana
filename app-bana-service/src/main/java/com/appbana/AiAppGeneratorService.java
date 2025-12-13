@@ -1152,7 +1152,14 @@ public class AiAppGeneratorService {
         if (result.appName != null && (result.entities != null && !result.entities.isEmpty())) {
             try {
                 String baseName = result.appName;
-                String slug = generateUniqueAppId(sanitizeAppId(baseName));
+                String slug;
+                if (request.options != null && request.options.containsKey("currentAppId")) {
+                    slug = (String) request.options.get("currentAppId");
+                    LOG.info("[AI] Processing UPDATE for existing app '{}'", slug);
+                } else {
+                    slug = generateUniqueAppId(sanitizeAppId(baseName));
+                }
+
                 persistGeneratedApp(slug, result, request);
                 if (result.payload == null)
                     result.payload = new HashMap<>();
@@ -1255,13 +1262,28 @@ public class AiAppGeneratorService {
 
     private static void persistGeneratedApp(String appId, GenerationResult result, GenerationRequest request)
             throws IOException {
+
+        // Check if updating existing app
+        com.appbana.model.AppMetadata existing = null;
+        try {
+            existing = AppManager.getApp(appId);
+        } catch (Exception ignored) {
+        }
+
         // Build AppMetadata
         com.appbana.model.AppMetadata meta = new com.appbana.model.AppMetadata();
         meta.setId(appId);
         meta.setName(result.appName);
         meta.setDescription(result.appDescription != null ? result.appDescription : "Generated application");
         meta.setVersion("1.0.0");
-        meta.setPages(new ArrayList<>()); // will be populated via savePage
+
+        // Preserve existing pages if updating
+        if (existing != null && existing.getPages() != null) {
+            meta.setPages(new ArrayList<>(existing.getPages()));
+        } else {
+            meta.setPages(new ArrayList<>());
+        }
+
         // Convert entities (EntitySchema -> Map) for storage
         List<Object> entityMaps = new ArrayList<>();
         if (result.entities != null) {
@@ -1289,7 +1311,12 @@ public class AiAppGeneratorService {
         com.appbana.model.AppMetadata.AppRoutes routes = new com.appbana.model.AppMetadata.AppRoutes();
         routes.setBasePath("/" + appId);
         meta.setRoutes(routes);
-        AppManager.createApp(meta);
+
+        if (existing != null) {
+            AppManager.updateApp(appId, meta);
+        } else {
+            AppManager.createApp(meta);
+        }
 
         // Persist pages
         if (result.pages != null && !result.pages.isEmpty()) {

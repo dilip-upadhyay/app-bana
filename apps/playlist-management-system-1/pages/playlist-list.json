@@ -1,0 +1,65 @@
+{
+  "id" : "playlist-list",
+  "name" : "Playlist List",
+  "type" : "data-table",
+  "entity" : "Playlist",
+  "columns" : [ "title", "status", "createdAt" ],
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1765635806351",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765635806351",
+    "children" : [ "heading-root-1765635806351", "table-root-1765635806351" ]
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765635806351",
+    "props" : {
+      "content" : "Playlist List",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "table-root-1765635806351",
+    "type" : "table",
+    "props" : {
+      "entity" : "Playlist",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "title",
+        "label" : "Title",
+        "type" : "text"
+      }, {
+        "name" : "description",
+        "label" : "Description",
+        "type" : "text"
+      }, {
+        "name" : "createdBy",
+        "label" : "Created By",
+        "type" : "text"
+      }, {
+        "name" : "createdAt",
+        "label" : "Created At",
+        "type" : "datetime"
+      }, {
+        "name" : "status",
+        "label" : "Status",
+        "type" : "text"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}

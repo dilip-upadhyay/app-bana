@@ -1140,13 +1140,20 @@ export class AiChatBuilder extends LitElement {
       if (result.payload && result.payload.appType) {
         this.conversationContext.appType = result.payload.appType;
       }
-      // After app creation, show confirmation and next steps
+      // After app creation OR update, show confirmation
       if (result.success && result.payload && result.payload.appId) {
+        const isUpdate = currentAppId && currentAppId === result.payload.appId;
+
         this.conversationContext.currentAppId = result.payload.appId;
         this.conversationContext.currentAppName = result.payload.currentAppName;
-        this.addAssistantMessage(
-          `✅ Created your ${this.conversationContext.appType || ''} (${result.payload.currentAppName || ''}).\nSay 'show my apps' or 'open the first app' to continue.`
-        );
+
+        if (isUpdate) {
+          this.addAssistantMessage(`✅ Updated **${result.payload.currentAppName}** based on your request.`);
+        } else {
+          this.addAssistantMessage(
+            `✅ Created your ${this.conversationContext.appType || ''} (${result.payload.currentAppName || ''}).\nSay 'show my apps' or 'open the first app' to continue.`
+          );
+        }
         return;
       }
       if (result && result.success) {
