@@ -54,28 +54,30 @@ const THINKING_STEPS = [
 export class AiChatBuilder extends LitElement {
 
   static readonly styles = css`
-    .ai - chat - panel {
-  width: 100 %;
-  margin: 0 auto;
-  background: linear - gradient(180deg, #f8fafc 0 %, #e0f2fe 100 %);
-  padding: 0.75rem;
-  border - radius: 12px;
-  box - shadow: 0 8px 16px rgba(15, 23, 42, 0.1);
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  display: flex;
-  flex - direction: column;
-  gap: 0.5rem;
-  height: 100 %;
-  box - sizing: border - box;
-}
+    .ai-chat-panel {
+      width: 100%;
+      margin: 0 auto;
+      background: linear-gradient(180deg, #f8fafc 0%, #e0f2fe 100%);
+      padding: 0.75rem;
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.1);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      height: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
 
     .header {
-  display: flex;
-  align - items: flex - start;
-  justify - content: space - between;
-  gap: 1rem;
-  flex - wrap: wrap;
-}
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
 
     .header > div {
   flex: 1;
@@ -114,20 +116,19 @@ export class AiChatBuilder extends LitElement {
   box - shadow: 0 12px 24px rgba(15, 23, 42, 0.2);
 }
 
-    .chat - container {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border - radius: 8px;
-  padding: 0.5rem;
-  flex: 1; /* Allow it to grow */
-  min - height: 200px;
-  /* removed max-height */
-  display: flex;
-  flex - direction: column;
-  gap: 0.5rem;
-  overflow - y: auto;
-  scroll - behavior: smooth;
-}
+    .chat-container {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.5rem;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
 
     .chat - container:: -webkit - scrollbar {
   width: 8px;
@@ -225,6 +226,7 @@ export class AiChatBuilder extends LitElement {
       box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
       gap: 0.25rem;
       transition: box-shadow 0.2s ease, border-color 0.2s ease;
+      flex-shrink: 0;
     }
 
     .input-container:focus-within {
@@ -297,22 +299,22 @@ export class AiChatBuilder extends LitElement {
       box-shadow: none;
     }
 
-    .voice - btn:disabled {
-  opacity: 0.5;
-  cursor: not - allowed;
-}
+    .voice-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
 
-    .voice - btn.recording {
-  background: linear - gradient(135deg, #ef4444, #dc2626);
-  animation: pulse 1.5s ease -in -out infinite;
-}
+    .voice-btn.recording {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
 
-@keyframes pulse {
-  0 %, 100 % {
-    box- shadow: 0 4px 8px rgba(239, 68, 68, 0.25);
-}
-50 % {
-  box- shadow: 0 4px 16px rgba(239, 68, 68, 0.5);
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 4px 8px rgba(239, 68, 68, 0.25);
+      }
+      50% {
+        box-shadow: 0 4px 16px rgba(239, 68, 68, 0.5);
       }
     }
 
