@@ -115,8 +115,9 @@ export class AiChatBuilder extends LitElement {
       border: 1px solid #e2e8f0;
       border-radius: 8px;
       padding: 0.5rem;
+      flex: 1; /* Allow it to grow */
       min-height: 200px;
-      max-height: 300px;
+      /* removed max-height */
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
