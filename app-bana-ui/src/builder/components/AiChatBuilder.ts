@@ -755,19 +755,51 @@ export class AiChatBuilder extends LitElement {
     return false;
   }
 
+  private unsubscribeAppStore?: () => void;
+
   connectedCallback() {
     super.connectedCallback();
     this.addSystemMessage('Welcome! I can help you build applications using natural language. Describe the app you want to create.');
 
-    // Check for active app context
-    const currentApp = appStore.getCurrentApp();
-    if (currentApp) {
-      this.addSystemMessage(`📂 **Active Context**: Working on **${currentApp.name}**. I can help you modify entities, pages, or add new features to this app.`);
-      this.conversationContext.currentAppId = currentApp.id;
-    }
+    this.checkActiveContext(true);
+
+    // Subscribe to app changes
+    this.unsubscribeAppStore = appStore.onChange(() => {
+      this.checkActiveContext();
+    });
 
     this.loadAIConfiguration();
     this.initializeVoiceRecognition();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this.unsubscribeAppStore) {
+      this.unsubscribeAppStore();
+    }
+  }
+
+  private checkActiveContext(isInitial = false) {
+    const currentApp = appStore.getCurrentApp();
+    const newAppId = currentApp?.id;
+    const oldAppId = this.conversationContext.currentAppId;
+
+    // Detect change
+    if (oldAppId !== newAppId) {
+      this.conversationContext.currentAppId = newAppId;
+
+      if (currentApp) {
+        const msg = isInitial
+          ? `📂 **Active Context**: Working on **${currentApp.name}**. I can help you modify entities, pages, or add new features to this app.`
+          : `📂 **Active Context**: Switched to **${currentApp.name}**.`;
+        this.addSystemMessage(msg);
+      } else {
+        // Only show cleared message if we previously had an app
+        if (oldAppId) {
+          this.addSystemMessage(`ℹ️ **Context Cleared**: No app selected.`);
+        }
+      }
+    }
   }
 
   updated(changedProperties: Map<string, any>) {
