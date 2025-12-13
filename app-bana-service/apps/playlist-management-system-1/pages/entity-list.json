@@ -1,0 +1,57 @@
+{
+  "id" : "entity-list",
+  "name" : "Entity List",
+  "type" : "data-table",
+  "entity" : "Entity",
+  "columns" : [ "field1", "field3" ],
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1765651168956",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765651168956",
+    "children" : [ "heading-root-1765651168956", "table-root-1765651168956" ]
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765651168956",
+    "props" : {
+      "content" : "Entity List",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "table-root-1765651168956",
+    "type" : "table",
+    "props" : {
+      "entity" : "Entity",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "field1",
+        "label" : "Field1",
+        "type" : "text"
+      }, {
+        "name" : "field2",
+        "label" : "Field2",
+        "type" : "text"
+      }, {
+        "name" : "field3",
+        "label" : "Field3",
+        "type" : "text"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}

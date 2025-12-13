@@ -1,78 +1,101 @@
 {
-    "id": "loan-approval-app",
-    "name": "Loan Approval System",
-    "description": "Maker-Checker system for processing loan applications",
-    "version": "1.0.0",
-    "created": 1729500000000,
-    "updated": 1729500000000,
-    "pages": [
-        "home",
-        "apply",
-        "approvals",
-        "review"
-    ],
-    "entities": [
-        {
-            "name": "LoanApplication",
-            "fields": [
-                {
-                    "name": "id",
-                    "type": "int",
-                    "required": true,
-                    "primaryKey": true,
-                    "autoIncrement": true
-                },
-                {
-                    "name": "applicantName",
-                    "type": "text",
-                    "required": true,
-                    "primaryKey": false,
-                    "autoIncrement": false
-                },
-                {
-                    "name": "amount",
-                    "type": "currency",
-                    "required": true,
-                    "primaryKey": false,
-                    "autoIncrement": false
-                },
-                {
-                    "name": "purpose",
-                    "type": "text",
-                    "required": true,
-                    "primaryKey": false,
-                    "autoIncrement": false
-                },
-                {
-                    "name": "creditScore",
-                    "type": "number",
-                    "required": true,
-                    "primaryKey": false,
-                    "autoIncrement": false
-                },
-                {
-                    "name": "status",
-                    "type": "status",
-                    "required": true,
-                    "primaryKey": false,
-                    "autoIncrement": false,
-                    "options": [
-                        "PENDING",
-                        "APPROVED",
-                        "REJECTED"
-                    ]
-                },
-                {
-                    "name": "managerComments",
-                    "type": "longtext",
-                    "required": false,
-                    "primaryKey": false,
-                    "autoIncrement": false
-                }
-            ]
-        }
-    ],
-    "routes": {
-        "basePath": "/loan-approval-app"
-    }
+  "id" : "loan-approval-app",
+  "name" : "Loan Approval App",
+  "description" : "A comprehensive application to manage loan approvals, applications, and customer information.",
+  "version" : "1.0.0",
+  "created" : 1729500000000,
+  "updated" : 1765651691095,
+  "pages" : [ "home", "apply", "approvals", "review", "playlist-list", "track-list", "user-profile", "playlist-detail", "loan-list", "customer-list", "approval-list", "loan-detail", "customer-detail" ],
+  "defaultPage" : "home",
+  "entities" : [ {
+    "name" : "LoanApplication",
+    "fields" : [ {
+      "name" : "amount",
+      "type" : "currency",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "term",
+      "type" : "number",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "interestRate",
+      "type" : "decimal",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "status",
+      "type" : "status",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "customerId",
+      "type" : "long",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "Customer",
+    "fields" : [ {
+      "name" : "name",
+      "type" : "text",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "email",
+      "type" : "email",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "phone",
+      "type" : "phone",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "address",
+      "type" : "longtext",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  }, {
+    "name" : "ApprovalProcess",
+    "fields" : [ {
+      "name" : "loanId",
+      "type" : "long",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "approvedBy",
+      "type" : "long",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "approvalDate",
+      "type" : "datetime",
+      "required" : true,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    }, {
+      "name" : "comments",
+      "type" : "longtext",
+      "required" : false,
+      "primaryKey" : false,
+      "autoIncrement" : false
+    } ]
+  } ],
+  "routes" : {
+    "basePath" : "/loan-approval-app"
+  }
 }

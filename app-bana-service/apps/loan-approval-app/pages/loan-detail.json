@@ -1,0 +1,27 @@
+{
+  "id" : "loan-detail",
+  "name" : "Loan Detail",
+  "type" : "profile",
+  "entity" : "LoanApplication",
+  "fields" : [ "amount", "term", "interestRate", "status", "customerId" ],
+  "relatedLists" : [ "approvalProcess" ],
+  "rootId" : "root-1765651691090",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765651691090",
+    "children" : [ "heading-root-1765651691090" ]
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765651691090",
+    "props" : {
+      "content" : "Loan Detail",
+      "tag" : "h1"
+    }
+  } ]
+}

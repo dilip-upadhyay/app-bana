@@ -1,29 +1,6 @@
 {
-  "lastUpdated" : 1765650061141,
+  "lastUpdated" : 1765651676706,
   "entries" : [ {
-    "normalizedText" : "can you describe the app that is already opened and we are working on it righti can see you were in the active context",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default",
-        "currentAppId" : "playlist-management-system-1"
-      }
-    },
-    "createdTime" : 1765650061139,
-    "lastAccessTime" : 1765650061139,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "create a leave request app where employees submit leave requests and managers approve them if the duration is more than 3 days",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : { }
-    },
-    "createdTime" : 1765409420201,
-    "lastAccessTime" : 1765409420201,
-    "hitCount" : 0
-  }, {
     "normalizedText" : "explain the app",
     "action" : {
       "action" : "generateApp",
@@ -35,30 +12,6 @@
     },
     "createdTime" : 1765649965784,
     "lastAccessTime" : 1765649965784,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "sounds okay go ahead and create app",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1763579740152,
-    "lastAccessTime" : 1763579740152,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "want to create a salon booking app with customer, service, appointment",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1763408686768,
-    "lastAccessTime" : 1763408686768,
     "hitCount" : 0
   }, {
     "normalizedText" : "i think you are missing the context we discussed i'm talking about the salon registration app that we wanted to create in that app description i don't see any option register the user can you add that and give me the final app",
@@ -73,17 +26,16 @@
     "lastAccessTime" : 1763579700334,
     "hitCount" : 0
   }, {
-    "normalizedText" : "give me propmt for salon booking app",
+    "normalizedText" : "want to create a salon booking app with customer, service, appointment",
     "action" : {
       "action" : "generateApp",
       "target" : { },
       "options" : {
-        "userId" : "default",
-        "currentAppId" : "loan-approval-app"
+        "userId" : "default"
       }
     },
-    "createdTime" : 1765400576213,
-    "lastAccessTime" : 1765400576213,
+    "createdTime" : 1763408686768,
+    "lastAccessTime" : 1763408686768,
     "hitCount" : 0
   }, {
     "normalizedText" : "i don't want you to sing i want the final version of the salon registration app that we were discussing",
@@ -120,6 +72,80 @@
     },
     "createdTime" : 1763408902393,
     "lastAccessTime" : 1763408902393,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "can you describe the app that is already opened and we are working on it righti can see you were in the active context",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default",
+        "currentAppId" : "playlist-management-system-1"
+      }
+    },
+    "createdTime" : 1765650061139,
+    "lastAccessTime" : 1765650061139,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "create a leave request app where employees submit leave requests and managers approve them if the duration is more than 3 days",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : { }
+    },
+    "createdTime" : 1765409420201,
+    "lastAccessTime" : 1765409420201,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "sounds okay go ahead and create app",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1763579740152,
+    "lastAccessTime" : 1763579740152,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "i'm asking about the app opened",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default",
+        "currentAppId" : "playlist-management-system-1"
+      }
+    },
+    "createdTime" : 1765651160252,
+    "lastAccessTime" : 1765651244627,
+    "hitCount" : 1
+  }, {
+    "normalizedText" : "i'm asking about the app you opened",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default",
+        "currentAppId" : "loan-approval-app"
+      }
+    },
+    "createdTime" : 1765651676705,
+    "lastAccessTime" : 1765651676705,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "give me propmt for salon booking app",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default",
+        "currentAppId" : "loan-approval-app"
+      }
+    },
+    "createdTime" : 1765400576213,
+    "lastAccessTime" : 1765400576213,
     "hitCount" : 0
   } ]
 }

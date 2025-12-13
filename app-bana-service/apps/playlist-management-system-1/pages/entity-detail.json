@@ -1,0 +1,26 @@
+{
+  "id" : "entity-detail",
+  "name" : "Entity Detail",
+  "type" : "profile",
+  "entity" : "Entity",
+  "fields" : [ "field1", "field2", "field3" ],
+  "rootId" : "root-1765651168966",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765651168966",
+    "children" : [ "heading-root-1765651168966" ]
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765651168966",
+    "props" : {
+      "content" : "Entity Detail",
+      "tag" : "h1"
+    }
+  } ]
+}
