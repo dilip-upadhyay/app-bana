@@ -110,7 +110,7 @@ export class StudioTableLive extends LitElement {
       }
 
     .table-live th {
-      background: var(--tbl-header-bg, linear-gradient(90deg, #1e293b 0%, #1d4ed8 50%, #2563eb 100%));
+      background: var(--tbl-header-bg, var(--color-surface-alt, #f8fafc));
       color: var(--tbl-header-color, #fff);
       font-weight: 700;
       padding: 16px 18px;
@@ -166,7 +166,7 @@ export class StudioTableLive extends LitElement {
       padding: 7px 16px;
       border: none;
       border-radius: 6px;
-      background: #2563eb;
+      background: var(--color-brand, #2563eb);
       color: #fff;
       font-size: 15px;
       cursor: pointer;
@@ -178,7 +178,7 @@ export class StudioTableLive extends LitElement {
       margin-right: 0;
     }
     .table-actions button:hover {
-      background: #1e40af;
+      filter: brightness(0.9);
       box-shadow: 0 2px 8px rgba(30,64,175,0.12);
     }
     .table-actions button:focus-visible {

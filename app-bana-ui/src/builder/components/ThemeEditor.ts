@@ -5,7 +5,7 @@ import type { AppMeta } from '../../models/app-metadata';
 
 @customElement('theme-editor')
 export class ThemeEditor extends LitElement {
-    static styles = css`
+  static styles = css`
     :host {
       display: block;
       font-family: 'Inter', sans-serif;
@@ -161,91 +161,132 @@ export class ThemeEditor extends LitElement {
     }
   `;
 
-    @property({ type: Object }) app: AppMeta | undefined;
+  @property({ type: Object }) app: AppMeta | undefined;
 
-    @state() private magicPrompt = '';
-    @state() private isGenerating = false;
+  @state() private magicPrompt = '';
+  @state() private isGenerating = false;
 
-    // Local state for editing before save
-    @state() private primaryColor = '#2563eb';
-    @state() private secondaryColor = '#64748b';
-    @state() private surfaceColor = '#ffffff';
-    @state() private textColor = '#1e293b';
-    @state() private borderRadius = '4px';
+  // Local state for editing before save
+  @state() private primaryColor = '#2563eb';
+  @state() private secondaryColor = '#64748b';
+  @state() private surfaceColor = '#ffffff';
+  @state() private textColor = '#1e293b';
+  @state() private borderRadius = '4px';
 
-    connectedCallback() {
-        super.connectedCallback();
-        if (this.app?.theme) {
-            this.syncFromApp();
-        }
+  connectedCallback() {
+    super.connectedCallback();
+    if (this.app?.theme) {
+      this.syncFromApp();
     }
+  }
 
-    updated(changedProps: Map<string, any>) {
-        if (changedProps.has('app') && this.app) {
-            this.syncFromApp();
-        }
+  updated(changedProps: Map<string, any>) {
+    if (changedProps.has('app') && this.app) {
+      this.syncFromApp();
     }
+  }
 
-    private syncFromApp() {
-        if (!this.app?.theme) return;
-        this.primaryColor = this.app.theme.primaryColor || '#2563eb';
-        this.secondaryColor = this.app.theme.secondaryColor || '#64748b';
-        // We might need to expand AppTheme model to support more granular colors if needed
-        // For now we map what we have
+  private syncFromApp() {
+    if (!this.app?.theme) return;
+    this.primaryColor = this.app.theme.primaryColor || '#2563eb';
+    this.secondaryColor = this.app.theme.secondaryColor || '#64748b';
+    // We might need to expand AppTheme model to support more granular colors if needed
+    // For now we map what we have
+  }
+
+  private async generateTheme() {
+    if (!this.magicPrompt.trim()) return;
+
+    this.isGenerating = true;
+    try {
+      const res = await fetch('/api/ai/theme-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: this.magicPrompt })
+      });
+
+      if (!res.ok) throw new Error('Generation failed');
+
+      const theme = await res.json();
+
+      // Apply generated colors
+      if (theme.colors) {
+        this.primaryColor = theme.colors.brand;
+        this.secondaryColor = theme.colors.textSecondary;
+        this.surfaceColor = theme.colors.surface;
+        this.textColor = theme.colors.text;
+      }
+      if (theme.radius && theme.radius.sm) {
+        this.borderRadius = theme.radius.sm;
+      }
+
+      this.saveTheme();
+
+    } catch (e) {
+      alert('Failed to generate theme');
+    } finally {
+      this.isGenerating = false;
     }
+  }
 
-    private async generateTheme() {
-        if (!this.magicPrompt.trim()) return;
-
-        this.isGenerating = true;
-        try {
-            const res = await fetch('/api/ai/theme-generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ description: this.magicPrompt })
-            });
-
-            if (!res.ok) throw new Error('Generation failed');
-
-            const theme = await res.json();
-
-            // Apply generated colors
-            if (theme.colors) {
-                this.primaryColor = theme.colors.brand;
-                this.secondaryColor = theme.colors.textSecondary;
-                this.surfaceColor = theme.colors.surface;
-                this.textColor = theme.colors.text;
-            }
-            if (theme.radius && theme.radius.sm) {
-                this.borderRadius = theme.radius.sm;
-            }
-
-            this.saveTheme();
-
-        } catch (e) {
-            alert('Failed to generate theme');
-        } finally {
-            this.isGenerating = false;
-        }
+  private applyPreset(preset: string) {
+    switch (preset) {
+      case 'modern-blue':
+        this.primaryColor = '#2563eb';
+        this.secondaryColor = '#64748b';
+        this.surfaceColor = '#ffffff';
+        this.textColor = '#1e293b';
+        this.borderRadius = '4px';
+        break;
+      case 'forest-green':
+        this.primaryColor = '#059669';
+        this.secondaryColor = '#3f6212';
+        this.surfaceColor = '#f0fdf4';
+        this.textColor = '#14532d';
+        this.borderRadius = '6px';
+        break;
+      case 'crimson-red':
+        this.primaryColor = '#dc2626';
+        this.secondaryColor = '#7f1d1d';
+        this.surfaceColor = '#fef2f2';
+        this.textColor = '#450a0a';
+        this.borderRadius = '2px';
+        break;
+      case 'midnight-violet':
+        this.primaryColor = '#8b5cf6';
+        this.secondaryColor = '#a78bfa';
+        this.surfaceColor = '#1e1b4b';
+        this.textColor = '#f5f3ff';
+        this.borderRadius = '8px';
+        break;
+      case 'corporate-gray':
+        this.primaryColor = '#475569';
+        this.secondaryColor = '#94a3b8';
+        this.surfaceColor = '#f8fafc';
+        this.textColor = '#0f172a';
+        this.borderRadius = '0px';
+        break;
     }
+    this.saveTheme();
+  }
 
-    private saveTheme() {
-        if (!this.app) return;
+  private saveTheme() {
+    if (!this.app) return;
 
-        appStore.updateApp(this.app.id, {
-            theme: {
-                ...this.app.theme,
-                primaryColor: this.primaryColor,
-                secondaryColor: this.secondaryColor,
-                // We can store customized CSS variables in customCSS field if we expand the model
-                // For now, let's just save the core fields we have
-            }
-        });
-    }
+    appStore.updateApp(this.app.id, {
+      theme: {
+        ...this.app.theme,
+        primaryColor: this.primaryColor,
+        secondaryColor: this.secondaryColor,
+        // We can store customized CSS variables in customCSS field if we expand the model
+        // For now, let's just save the core fields we have
+      }
+    });
+  }
 
-    render() {
-        // Dynamic styles for preview
-        const previewStyles = `
+  render() {
+    // Dynamic styles for preview
+    const previewStyles = `
       --preview-brand: ${this.primaryColor};
       --preview-text: ${this.textColor};
       --preview-text-secondary: ${this.secondaryColor};
@@ -254,7 +295,7 @@ export class ThemeEditor extends LitElement {
       --preview-border: ${this.secondaryColor}40;
     `;
 
-        return html`
+    return html`
       <div class="editor-container">
         
         <!-- AI Generator -->
@@ -278,6 +319,25 @@ export class ThemeEditor extends LitElement {
               ${this.isGenerating ? 'Generating...' : '✨ Generate Theme'}
             </button>
           </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Presets -->
+        <div>
+          <div class="section-title">🎨 Presets</div>
+          <select 
+            class="magic-textarea" 
+            style="min-height:40px; padding:8px;"
+            @change=${(e: any) => this.applyPreset(e.target.value)}
+          >
+            <option value="">Select a preset...</option>
+            <option value="modern-blue">🔵 Modern Blue (Default)</option>
+            <option value="forest-green">🌲 Forest Green</option>
+            <option value="crimson-red">🔴 Crimson Red</option>
+            <option value="midnight-violet">🌙 Midnight Violet (Dark)</option>
+            <option value="corporate-gray">🏢 Corporate Gray</option>
+          </select>
         </div>
 
         <div class="divider"></div>
@@ -308,10 +368,10 @@ export class ThemeEditor extends LitElement {
 
       </div>
     `;
-    }
+  }
 
-    private renderColorInput(label: string, value: string, onChange: (val: string) => void) {
-        return html`
+  private renderColorInput(label: string, value: string, onChange: (val: string) => void) {
+    return html`
       <div class="color-field">
         <label class="color-label">${label}</label>
         <div class="color-input-wrapper">
@@ -330,5 +390,5 @@ export class ThemeEditor extends LitElement {
         </div>
       </div>
     `;
-    }
+  }
 }

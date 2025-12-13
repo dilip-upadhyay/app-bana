@@ -42,12 +42,30 @@ export class ButtonElement extends FormElement {
         transition: all 0.2s;
       }
       .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-      .primary { background: #3b82f6; color: white; }
-      .primary:hover:not(:disabled) { background: #2563eb; }
-      .secondary { background: white; border-color: #d1d5db; color: #374151; }
-      .secondary:hover:not(:disabled) { background: #f3f4f6; }
-      .danger { background: #ef4444; color: white; }
-      .danger:hover:not(:disabled) { background: #dc2626; }
+      .primary { 
+        background: var(--color-brand, #3b82f6); 
+        color: white; 
+        border-color: var(--color-brand, #3b82f6);
+      }
+      .primary:hover:not(:disabled) { 
+        filter: brightness(0.9);
+      }
+      .secondary { 
+        background: var(--color-surface, white); 
+        border-color: var(--color-border, #d1d5db); 
+        color: var(--color-text, #374151); 
+      }
+      .secondary:hover:not(:disabled) { 
+        background: var(--color-surface-alt, #f3f4f6); 
+      }
+      .danger { 
+        background: var(--color-danger, #ef4444); 
+        border-color: var(--color-danger, #ef4444);
+        color: white; 
+      }
+      .danger:hover:not(:disabled) { 
+        filter: brightness(0.9);
+      }
     `;
   }
 }
