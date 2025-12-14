@@ -2224,12 +2224,33 @@ public class AiAppGeneratorService {
      */
     private static void autoCompletePageComponents(Map<String, Object> page, List<Object> entities) {
         String pageType = String.valueOf(page.get("type"));
-        String entityName = String.valueOf(page.get("entity"));
+
+        if ("dashboard".equals(pageType)) {
+            autoCompleteDashboard(page);
+            return;
+        }
+
+        if ("board".equals(pageType)) {
+            // Fallback for board: treat as table for now until Kanban component exists
+            // We need to fetch the entity name to build the table
+            String entityName = String.valueOf(page.get("entity"));
+            if (entityName == null || "null".equals(entityName) || entityName.isEmpty()) {
+                entityName = inferEntityFromPageName(String.valueOf(page.get("name")), entities);
+                if (entityName != null)
+                    page.put("entity", entityName);
+            }
+            if (entityName != null && !"null".equals(entityName) && !entityName.isEmpty()) {
+                autoCompleteTable(page, entities, entityName);
+            }
+            return;
+        }
 
         // Only process data-table/list pages
         if (!"data-table".equals(pageType) && !"list".equals(pageType)) {
             return;
         }
+
+        String entityName = String.valueOf(page.get("entity"));
 
         // Try to infer entity from page name if not explicitly set
         if (entityName == null || "null".equals(entityName) || entityName.isEmpty()) {
@@ -2245,41 +2266,130 @@ public class AiAppGeneratorService {
             return;
         }
 
+        autoCompleteTable(page, entities, entityName);
+    }
+
+    private static void autoCompleteDashboard(Map<String, Object> page) {
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> metrics = (List<Map<String, Object>>) page.get("metrics");
+        if (metrics == null || metrics.isEmpty())
+            return;
+
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> nodes = (List<Map<String, Object>>) page.get("nodes");
-        if (nodes == null || nodes.isEmpty()) {
-            return;
+        if (nodes == null) {
+            nodes = new ArrayList<>();
+            page.put("nodes", nodes);
+        } else if (!(nodes instanceof ArrayList)) {
+            nodes = new ArrayList<>(nodes);
+            page.put("nodes", nodes);
         }
 
-        // Convert to mutable list if needed (immutable lists can't be modified)
+        // Check if visible components already exist
+        boolean hasContent = nodes.stream().anyMatch(n -> "grid".equals(n.get("type")) || "card".equals(n.get("type")));
+        if (hasContent)
+            return;
+
+        LOG.info("[AI] Scaffolding missing components for dashboard '{}'", page.get("name"));
+
+        String rootId = String.valueOf(page.get("rootId"));
+        String gridId = "grid-" + System.currentTimeMillis();
+
+        // Create Grid
+        Map<String, Object> gridNode = new LinkedHashMap<>();
+        gridNode.put("id", gridId);
+        gridNode.put("type", "grid");
+        gridNode.put("props", Map.of("cols", 4, "gap", "1rem"));
+        List<String> gridChildren = new ArrayList<>();
+        gridNode.put("children", gridChildren);
+        nodes.add(gridNode);
+
+        // Create Cards for Metrics
+        for (int i = 0; i < metrics.size(); i++) {
+            Map<String, Object> m = metrics.get(i);
+            String metricName = String.valueOf(m.getOrDefault("name", "Metric"));
+            String cardId = "stat-card-" + i + "-" + System.currentTimeMillis();
+            String labelId = cardId + "-label";
+            String valueId = cardId + "-value";
+
+            // Card Container
+            Map<String, Object> card = new LinkedHashMap<>();
+            card.put("id", cardId);
+            card.put("type", "container");
+            card.put("props", Map.of("padding", "lg", "style",
+                    "background: #1e293b; border-radius: 8px; border: 1px solid #334155;"));
+            card.put("children", List.of(labelId, valueId));
+            nodes.add(card);
+            gridChildren.add(cardId);
+
+            // Label
+            Map<String, Object> label = new LinkedHashMap<>();
+            label.put("id", labelId);
+            label.put("type", "text");
+            label.put("props", Map.of("content", metricName, "style", "color: #94a3b8; font-size: 0.875rem;"));
+            nodes.add(label);
+
+            // Value (Placeholder)
+            Map<String, Object> value = new LinkedHashMap<>();
+            value.put("id", valueId);
+            value.put("type", "text");
+            value.put("props", Map.of("content", "0", "style", "color: white; font-size: 2rem; font-weight: bold;"));
+            nodes.add(value);
+        }
+
+        // Add grid to root children
+        addChildToRoot(nodes, rootId, gridId);
+    }
+
+    private static void addChildToRoot(List<Map<String, Object>> nodes, String rootId, String childId) {
+        for (Map<String, Object> node : nodes) {
+            if (rootId.equals(node.get("id"))) {
+                @SuppressWarnings("unchecked")
+                List<String> children = (List<String>) node.get("children");
+                if (children == null) {
+                    children = new ArrayList<>();
+                    node.put("children", children);
+                } else if (!(children instanceof ArrayList)) {
+                    children = new ArrayList<>(children);
+                    node.put("children", children);
+                }
+                if (!children.contains(childId)) {
+                    children.add(childId);
+                }
+                break;
+            }
+        }
+    }
+
+    private static void autoCompleteTable(Map<String, Object> page, List<Object> entities, String entityName) {
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) page.get("nodes");
+        if (nodes == null || nodes.isEmpty())
+            return;
+
+        // Convert to mutable if needed
         if (!(nodes instanceof ArrayList)) {
             nodes = new ArrayList<>(nodes);
             page.put("nodes", nodes);
         }
 
-        // Check if table component already exists
         boolean hasTable = nodes.stream()
                 .anyMatch(n -> "table".equals(n.get("type")) || "studio-table-live".equals(n.get("type")));
+        if (hasTable)
+            return;
 
-        if (hasTable) {
-            return; // Already has table component
-        }
+        LOG.info("[AI] Auto-completing missing table component for page '{}' with entity '{}'", page.get("name"),
+                entityName);
 
-        LOG.info("[AI] Auto-completing missing table component for page '{}' with entity '{}'",
-                page.get("name"), entityName);
-
-        // Find the entity to get its fields
         Map<String, Object> entityMap = findEntityByName(entities, entityName);
         if (entityMap == null) {
             LOG.warn("[AI] Cannot auto-complete table: entity '{}' not found", entityName);
             return;
         }
 
-        // Build fields array for table component
         List<Map<String, Object>> fields = buildTableFields(entityMap);
-
-        // Create table component node
         String tableId = "table-" + page.get("rootId");
+
         Map<String, Object> tableNode = new LinkedHashMap<>();
         tableNode.put("id", tableId);
         tableNode.put("type", "table");
@@ -2296,41 +2406,8 @@ public class AiAppGeneratorService {
         tableProps.put("theme", "default");
         tableNode.put("props", tableProps);
 
-        // Add table to nodes
         nodes.add(tableNode);
-
-        // Update root container to include table in children
-        int rootNodeIndex = -1;
-        Map<String, Object> rootNode = null;
-        for (int i = 0; i < nodes.size(); i++) {
-            if (page.get("rootId").equals(nodes.get(i).get("id"))) {
-                rootNode = nodes.get(i);
-                rootNodeIndex = i;
-                break;
-            }
-        }
-
-        if (rootNode != null) {
-            // Ensure rootNode is mutable (convert if needed)
-            if (!(rootNode instanceof LinkedHashMap)) {
-                rootNode = new LinkedHashMap<>(rootNode);
-                nodes.set(rootNodeIndex, rootNode);
-            }
-
-            @SuppressWarnings("unchecked")
-            List<String> children = (List<String>) rootNode.get("children");
-            if (children != null && !children.contains(tableId)) {
-                // Ensure children list is mutable
-                if (!(children instanceof ArrayList)) {
-                    children = new ArrayList<>(children);
-                    rootNode.put("children", children);
-                }
-                children.add(tableId);
-            } else if (children == null) {
-                // Create new children list if none exists
-                rootNode.put("children", new ArrayList<>(List.of(tableId)));
-            }
-        }
+        addChildToRoot(nodes, String.valueOf(page.get("rootId")), tableId);
 
         LOG.info("[AI] ✓ Auto-completed table component with {} fields", fields.size());
     }
