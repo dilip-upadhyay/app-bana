@@ -38,8 +38,7 @@
         </nav>
         <div class="spacer"></div>
         <div class="flex gap-2" style="align-items:center;">
-          <input id="topToken" class="input" placeholder="Auth Token" style="width:180px;" />
-          <button id="saveTopToken" class="btn small outline" title="Save auth token">Save</button>
+          <div id="authContainer" style="display:flex; align-items:center; gap:8px;"></div>
           <button id="themeToggle" class="btn small ghost" title="Toggle theme">🌓</button>
         </div>
       </header>
@@ -51,15 +50,7 @@
   <script type="module" src="/src/index.ts"></script>
   <script>
     window.addEventListener('DOMContentLoaded', () => {
-      const input = document.getElementById('topToken');
-      const saveBtn = document.getElementById('saveTopToken');
-      if (input && saveBtn) {
-        input.value = localStorage.getItem('appbana_token') || '';
-        saveBtn.addEventListener('click', () => {
-          const v = input.value.replace(/[^\x20-\x7E]/g, '').trim();
-          if (v) localStorage.setItem('appbana_token', v); else localStorage.removeItem('appbana_token');
-        });
-      }
+      // 1. Theme Logic
       const toggle = document.getElementById('themeToggle');
       toggle?.addEventListener('click', () => {
         const html = document.documentElement;
@@ -68,6 +59,56 @@
         if (current === 'dark') { html.dataset.theme = 'light'; localStorage.setItem('appbana_theme', 'light'); return; }
         html.dataset.theme = ''; localStorage.removeItem('appbana_theme');
       });
+
+      // 2. Auth Logic
+      const authContainer = document.getElementById('authContainer');
+      const userJson = localStorage.getItem('appbana_user');
+      const token = localStorage.getItem('appbana_token');
+
+      if (userJson && token) {
+        try {
+          const user = JSON.parse(userJson);
+          // Show User Profile
+          authContainer.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-weight:600; font-size:0.9rem;">👤 ${user.name}</span>
+              <button id="logoutBtn" class="btn small outline" style="margin-left:8px;">Logout</button>
+            </div>
+          `;
+          document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('appbana_user');
+            localStorage.removeItem('appbana_token');
+            window.location.href = '/login';
+          });
+
+          // Hide Login/Register links if logged in
+          const nav = document.querySelector('nav');
+          const loginLink = nav.querySelector('a[href="/login"]');
+          const regLink = nav.querySelector('a[href="/register"]');
+          if (loginLink) loginLink.style.display = 'none';
+          if (regLink) regLink.style.display = 'none';
+
+        } catch (e) {
+          console.error('Invalid user data', e);
+          localStorage.removeItem('appbana_user'); // cleanup
+        }
+      } else {
+        // Show Token Input (Legacy/Dev mode)
+        authContainer.innerHTML = `
+           <input id="topToken" class="input" placeholder="Auth Token" style="width:180px;" />
+           <button id="saveTopToken" class="btn small outline" title="Save auth token">Save</button>
+        `;
+        const input = document.getElementById('topToken');
+        const saveBtn = document.getElementById('saveTopToken');
+        if (input && saveBtn) {
+          input.value = localStorage.getItem('appbana_token') || '';
+          saveBtn.addEventListener('click', () => {
+            const v = input.value.replace(/[^\x20-\x7E]/g, '').trim();
+            if (v) localStorage.setItem('appbana_token', v); else localStorage.removeItem('appbana_token');
+            window.location.reload(); // Reload to apply changes
+          });
+        }
+      }
     });
   </script>
 </body>

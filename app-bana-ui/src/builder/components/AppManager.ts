@@ -27,11 +27,25 @@ export class AppManager extends LitElement {
 
   @state() private publishLabel = '';
   @state() private publishDescription = '';
+  @state() private user: any = null;
 
   connectedCallback() {
     super.connectedCallback();
     appStore.onChange(() => this.updateState());
+
+    // Load user val
+    try {
+      const u = localStorage.getItem('appbana_user');
+      if (u) this.user = JSON.parse(u);
+    } catch (e) { console.error(e); }
+
     this.updateState();
+  }
+
+  private handleLogout = () => {
+    localStorage.removeItem('appbana_token');
+    localStorage.removeItem('appbana_user');
+    window.location.href = '/login';
   }
 
   private updateState() {
@@ -188,6 +202,12 @@ export class AppManager extends LitElement {
           </div>
 
           <div class="app-actions">
+            ${this.user ? html`
+              <div style="display:flex; align-items:center; margin-right:1rem; padding-right:1rem; border-right:1px solid rgba(255,255,255,0.2);">
+                <span style="margin-right:0.5rem; font-weight:500;">👤 ${this.user.name}</span>
+                <button class="btn small" style="padding:4px 8px; font-size:0.8rem;" @click=${this.handleLogout}>Logout</button>
+              </div>
+            ` : ''}
             <button class="btn" @click=${this.handleSelectApp}>
               📂 Open App
             </button>
