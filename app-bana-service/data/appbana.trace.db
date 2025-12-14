@@ -84,3 +84,11 @@ Caused by: java.lang.ClassNotFoundException: org.h2.mvstore.Chunk$PositionCompar
 	at java.base/jdk.internal.loader.ClassLoaders$AppClassLoader.loadClass(ClassLoaders.java:188)
 	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526)
 	... 18 more
+2025-12-14 21:32:39.765750+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "MERGE INTO appbana_wf_definition\000aKEY (id)\000a([*]id, app_id, name, description, trigger_entity, trigger_event,\000a trigger_condition, version, status, definition_json, created_at, created_by)\000aVALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)\000a"; expected "(, SELECT, TABLE, VALUES"; SQL statement:
+MERGE INTO appbana_wf_definition
+KEY (id)
+(id, app_id, name, description, trigger_entity, trigger_event,
+ trigger_condition, version, status, definition_json, created_at, created_by)
+VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+ [42001-222]
