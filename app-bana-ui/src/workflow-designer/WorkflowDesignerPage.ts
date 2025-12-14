@@ -439,12 +439,14 @@ export class WorkflowDesignerPage extends LitElement {
     try {
       // 1. Try to load from API
       // Backend returns { workflows: [...] } or just the workflow object
+      console.log('🔍 loadFromStorage: Fetching workflow for app:', this.appId);
       const response: any = await apiClient.get<any>(`/apps/${this.appId}/workflow`);
+      console.log('🔍 loadFromStorage: API Response:', response);
 
       let workflow: any = response;
       this.preloadedWorkflows = [];
 
-      // Handle list format (take the first one for now)
+      // Handle list format
       if (response && response.workflows && Array.isArray(response.workflows)) {
         this.preloadedWorkflows = response.workflows;
         if (response.workflows.length > 0) {
@@ -452,10 +454,16 @@ export class WorkflowDesignerPage extends LitElement {
         } else {
           workflow = null;
         }
+      } else if (response && response.id) {
+        // Handle single workflow response
+        console.log('🔍 loadFromStorage: Received single workflow object');
+        this.preloadedWorkflows = [response];
+        workflow = response;
       }
 
       if (workflow && workflow.id) {
         this.loadWorkflowIntoEditor(workflow);
+        this.requestUpdate();
       } else {
         // 2. If no workflow on server, check for local draft (migration path)
         const key = this.getStorageKey();
@@ -811,18 +819,21 @@ export class WorkflowDesignerPage extends LitElement {
             <span class="workflow-status">Draft v${this.workflowMetadata.version}</span>
           </div>
           <div class="toolbar-right">
-            ${this.preloadedWorkflows.length > 1 ? html`
+            ${html`
               <select 
                 class="workflow-selector" 
                 @change=${this.handleWorkflowChange} 
                 .value=${this.workflowMetadata.id}
                 style="padding: 6px; border-radius: 6px; border: 1px solid #e2e8f0; margin-right: 8px; max-width: 200px;"
               >
+                ${this.preloadedWorkflows.length === 0 ? html`<option value="">No other workflows</option>` : ''}
                 ${this.preloadedWorkflows.map(wf => html`
-                  <option value=${wf.id}>${wf.name || 'Untitled'}</option>
+                  <option value=${wf.id} ?selected=${wf.id === this.workflowMetadata.id}>
+                    ${wf.name || 'Untitled'}
+                  </option>
                 `)}
               </select>
-            ` : ''}
+            `}
 
             <button class="btn btn-secondary" @click=${this.undo}>Undo</button>
             <button class="btn btn-secondary" @click=${this.redo}>Redo</button>
