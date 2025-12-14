@@ -122,7 +122,18 @@ export class AppRuntimeShell extends LitElement {
       const initialPageId = this.runtimeState.currentPageId || this.runtimeState.pages[0]?.id;
       if (initialPageId) this.navigateToPage(initialPageId); else this.error = 'No pages found in app';
     }
-    this.applyTheme();
+    // Load persisted theme preference
+    const savedSystemTheme = localStorage.getItem('app-shell-system-theme');
+    const savedManualTheme = localStorage.getItem('app-shell-manual-preset');
+
+    if (savedSystemTheme === 'true') {
+      this.enableSystemTheme();
+    } else if (savedManualTheme) {
+      this.applyRuntimePreset(savedManualTheme, false);
+    } else {
+      this.applyTheme();
+    }
+
     this._initialized = true;
   }
 
@@ -190,6 +201,11 @@ export class AppRuntimeShell extends LitElement {
       if (this.useSystemTheme) this.applySystemTheme();
     };
     mm.addEventListener('change', this.systemThemeListener);
+
+    // Persist
+    localStorage.setItem('app-shell-system-theme', 'true');
+    localStorage.removeItem('app-shell-manual-preset');
+
     this.requestUpdate();
   }
 
@@ -199,6 +215,7 @@ export class AppRuntimeShell extends LitElement {
       window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', this.systemThemeListener);
       this.systemThemeListener = null;
     }
+    localStorage.setItem('app-shell-system-theme', 'false');
   }
 
   private applySystemTheme() {
@@ -208,7 +225,10 @@ export class AppRuntimeShell extends LitElement {
   }
 
   private applyRuntimePreset(preset: string, isSystemAuto = false) {
-    if (!isSystemAuto) this.disableSystemTheme(); // User manually selected a preset
+    if (!isSystemAuto) {
+      this.disableSystemTheme(); // User manually selected a preset
+      localStorage.setItem('app-shell-manual-preset', preset);
+    }
     let theme = {};
     switch (preset) {
       case 'modern-blue':
