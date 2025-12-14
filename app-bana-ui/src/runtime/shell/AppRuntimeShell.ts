@@ -42,6 +42,11 @@ export class AppRuntimeShell extends LitElement {
   @state()
   private runtimeTheme: any = null;
 
+  @state()
+  private useSystemTheme: boolean = false;
+
+  private systemThemeListener: ((e: MediaQueryListEvent) => void) | null = null;
+
   // Guard to avoid scheduling a second update inside updated()
   private _initialized: boolean = false;
 
@@ -173,7 +178,37 @@ export class AppRuntimeShell extends LitElement {
     this.showThemeModal = false;
   }
 
-  private applyRuntimePreset(preset: string) {
+  private enableSystemTheme() {
+    this.useSystemTheme = true;
+    this.applySystemTheme();
+
+    // Setup listener
+    const mm = window.matchMedia('(prefers-color-scheme: dark)');
+    if (this.systemThemeListener) mm.removeEventListener('change', this.systemThemeListener);
+
+    this.systemThemeListener = (e) => {
+      if (this.useSystemTheme) this.applySystemTheme();
+    };
+    mm.addEventListener('change', this.systemThemeListener);
+    this.requestUpdate();
+  }
+
+  private disableSystemTheme() {
+    this.useSystemTheme = false;
+    if (this.systemThemeListener) {
+      window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', this.systemThemeListener);
+      this.systemThemeListener = null;
+    }
+  }
+
+  private applySystemTheme() {
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    // Map system preferences to our best presets
+    this.applyRuntimePreset(isDark ? 'luxury-dark' : 'modern-blue', true);
+  }
+
+  private applyRuntimePreset(preset: string, isSystemAuto = false) {
+    if (!isSystemAuto) this.disableSystemTheme(); // User manually selected a preset
     let theme = {};
     switch (preset) {
       case 'modern-blue':
@@ -399,6 +434,7 @@ export class AppRuntimeShell extends LitElement {
                <div style="margin-bottom:16px;">
                  <label style="display:block;font-size:0.85rem;color:#64748b;margin-bottom:8px;">Presets</label>
                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                   <button @click=${() => this.enableSystemTheme()} style="grid-column:span 2;padding:8px;border:1px solid ${this.useSystemTheme ? '#3b82f6' : '#e2e8f0'};border-radius:6px;background:${this.useSystemTheme ? '#eff6ff' : 'white'};color:${this.useSystemTheme ? '#1e40af' : 'inherit'};cursor:pointer;font-weight:600;">💻 System (Auto)</button>
                    <button @click=${() => this.applyRuntimePreset('modern-blue')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:white;cursor:pointer;">🔵 Blue</button>
                    <button @click=${() => this.applyRuntimePreset('forest-green')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:white;cursor:pointer;">🌲 Green</button>
                    <button @click=${() => this.applyRuntimePreset('crimson-red')} style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:white;cursor:pointer;">🔴 Red</button>
