@@ -1185,48 +1185,41 @@ public class AiAppGeneratorService {
         if (workflows == null || workflows.isEmpty())
             return;
 
-        try (Connection conn = JdbcManager.getConnection()) {
-            String insertSql = """
-                    MERGE INTO appbana_wf_definition
-                    KEY (id)
-                    (id, app_id, name, description, trigger_entity, trigger_event,
-                     trigger_condition, version, status, definition_json, created_at, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-                    """;
+        try {
+            // Convert definitions to Maps
+            List<Map<String, Object>> wfMaps = new ArrayList<>();
+            for (WorkflowDefinition wf : workflows) {
+                if (wf.getId() == null)
+                    wf.setId(UUID.randomUUID().toString());
+                if (wf.getStatus() == null)
+                    wf.setStatus(WorkflowDefinition.WorkflowStatus.ACTIVE);
 
-            try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
-                for (WorkflowDefinition wf : workflows) {
-                    if (wf.getId() == null)
-                        wf.setId(UUID.randomUUID().toString());
-                    if (wf.getStatus() == null)
-                        wf.setStatus(WorkflowDefinition.WorkflowStatus.ACTIVE);
-
-                    // Validate JSON definition exists
-                    String defJson = "{}";
-                    try {
-                        if (wf.getDefinitionJson() == null) {
-                            // fallback
-                            wf.setDefinitionJson("{\"nodes\":{},\"transitions\":[]}");
-                        }
-                    } catch (Exception e) {
-                        LOG.warn("Error processing workflow definition json", e);
-                    }
-
-                    ps.setString(1, wf.getId());
-                    ps.setString(2, appId);
-                    ps.setString(3, wf.getName());
-                    ps.setString(4, wf.getDescription());
-                    ps.setString(5, wf.getTriggerEntity());
-                    ps.setString(6, wf.getTriggerEvent() != null ? wf.getTriggerEvent() : "MANUAL"); // default string
-                    ps.setString(7, wf.getTriggerCondition());
-                    ps.setString(8, wf.getStatus().name());
-                    ps.setString(9, wf.getDefinitionJson());
-                    ps.setTimestamp(10, Timestamp.valueOf(LocalDateTime.now()));
-                    ps.setString(11, "ai-generator");
-                    ps.addBatch();
+                // Ensure JSON definition is robust
+                if (wf.getDefinitionJson() == null) {
+                    wf.setDefinitionJson("{\"nodes\":{},\"transitions\":[]}");
                 }
-                ps.executeBatch();
+
+                Map<String, Object> wfMap = new HashMap<>();
+                wfMap.put("id", wf.getId());
+                wfMap.put("name", wf.getName());
+                wfMap.put("description", wf.getDescription());
+                wfMap.put("triggerEntity", wf.getTriggerEntity());
+                wfMap.put("triggerEvent", wf.getTriggerEvent() != null ? wf.getTriggerEvent() : "MANUAL");
+                wfMap.put("triggerCondition", wf.getTriggerCondition());
+                wfMap.put("status", wf.getStatus().name());
+                wfMap.put("definitionJson", wf.getDefinitionJson());
+                wfMap.put("version", 1);
+
+                wfMaps.add(wfMap);
             }
+
+            // Wrap in container map
+            Map<String, Object> container = new HashMap<>();
+            container.put("workflows", wfMaps);
+
+            // Persist via AppManager (to metadata table)
+            AppManager.saveWorkflow("default", appId, container);
+
         } catch (Exception e) {
             LOG.error("Failed to save workflows for app " + appId, e);
             throw new RuntimeException("Workflow save failed", e);
@@ -2137,18 +2130,50 @@ public class AiAppGeneratorService {
             out.put("metaVersion", "1.0.0");
         if (!out.containsKey("type"))
             out.put("type", guessPageType(String.valueOf(out.get("name"))));
+
         if (!out.containsKey("nodes")) {
             String rootId = String.valueOf(out.get("rootId"));
-            out.put("nodes", List.of(
-                    Map.of(
-                            "id", rootId,
-                            "type", "container",
-                            "props", Map.of("layout", "vertical", "gap", "lg", "padding", "xl"),
-                            "children", List.of("heading-" + rootId)),
-                    Map.of(
-                            "id", "heading-" + rootId,
-                            "type", "text",
-                            "props", Map.of("content", out.get("name"), "tag", "h1"))));
+            List<Map<String, Object>> nodes = new ArrayList<>();
+
+            // Root Container
+            Map<String, Object> root = new HashMap<>();
+            root.put("id", rootId);
+            root.put("type", "container");
+            Map<String, Object> rootProps = new HashMap<>();
+            rootProps.put("layout", "vertical");
+            rootProps.put("gap", "lg");
+            rootProps.put("padding", "xl");
+            root.put("props", rootProps);
+            List<String> rootChildren = new ArrayList<>();
+            rootChildren.add("heading-" + rootId);
+            root.put("children", rootChildren);
+            nodes.add(root);
+
+            // Heading
+            Map<String, Object> heading = new HashMap<>();
+            heading.put("id", "heading-" + rootId);
+            heading.put("type", "text");
+            Map<String, Object> headingProps = new HashMap<>();
+            headingProps.put("content", out.get("name"));
+            headingProps.put("tag", "h1");
+            heading.put("props", headingProps);
+            nodes.add(heading);
+
+            out.put("nodes", nodes);
+        } else {
+            // If nodes exist, ensure they are mutable (deep copy or wrapping)
+            Object nodesObj = out.get("nodes");
+            if (nodesObj instanceof List) {
+                List<Object> mutableNodes = new ArrayList<>();
+                for (Object nodeObj : (List<?>) nodesObj) {
+                    if (nodeObj instanceof Map) {
+                        mutableNodes.add(new HashMap<>((Map<?, ?>) nodeObj));
+                    } else {
+                        mutableNodes.add(nodeObj);
+                    }
+                }
+                out.put("nodes", mutableNodes);
+            }
         }
         return out;
     }

@@ -1,0 +1,16 @@
+{
+  "lastUpdated" : 1765737576516,
+  "entries" : [ {
+    "normalizedText" : "build a comprehensive enterprise hr management system with automated workflows. - **department**: name, code, location, manager. - **employee**: first name, last name, email, job title, department (link), manager (link), status (active/terminated). # 2. recruitment module (ats) - **jobposting**: title, department (link), status (open/closed). - **candidate**: name, email, applied for (link to jobposting), status (new, interviewing, offer, hired, rejected). # 3. time off module - **leaverequest**: employee (link), start date, end date, type (vacation/sick), reason, status (pending, approved, rejected). # 4. performance module - **performancereview**: employee (link), review period, rating (1-5), comments, status (draft, submitted, finalized). # 5. required workflows please generate the \"workflows\" array for: 1. \"leave approval flow\": - trigger: when a leaverequest is created. - step 1: manager approval (user task). - step 2: hr notification (service task - email). 2. \"candidate hiring flow\": - trigger: when candidate status changes to \"offer\". - step 1: generate offer letter (service task). - step 2: vp approval (user task). # 6. pages - \"hr dashboard\": dashboard with counts of active employees and open jobs. - \"recruitment board\": kanban board for candidates grouped by status. - \"leave portal\": list of my leaverequests with a \"create new\" button. - \"org chart\": employee directory list",
+    "action" : {
+      "action" : "loadApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1765736843965,
+    "lastAccessTime" : 1765737576515,
+    "hitCount" : 1
+  } ]
+}
