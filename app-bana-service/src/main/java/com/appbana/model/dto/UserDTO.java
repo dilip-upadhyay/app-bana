@@ -29,7 +29,6 @@ import java.time.LocalDateTime;
 public record UserDTO(
         Long id,
         String email,
-        String email,
         String name,
         String tenantId,
         String status,

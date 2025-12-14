@@ -1,0 +1,12 @@
+[ {
+  "id" : 1,
+  "email" : "dilip_upadhyay@outlook.com",
+  "passwordHash" : "Jabardast123#",
+  "name" : "Dilip Upadhyay",
+  "tenantId" : "t-a31af580",
+  "status" : "ACTIVE",
+  "createdAt" : [ 2025, 12, 14, 21, 16, 56, 935736100 ],
+  "lastLogin" : [ 2025, 12, 14, 21, 17, 49, 8871800 ],
+  "updatedAt" : [ 2025, 12, 14, 21, 17, 49, 8871800 ],
+  "active" : true
+} ]

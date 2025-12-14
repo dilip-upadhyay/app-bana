@@ -12,6 +12,7 @@ import com.sun.net.httpserver.*;
 import com.appbana.model.EntitySchema;
 import com.appbana.model.AppMetadata;
 import org.flywaydb.core.Flyway;
+import com.appbana.api.AuthenticationController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

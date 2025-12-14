@@ -2827,7 +2827,7 @@ public class AiAppGeneratorService {
 
         if (isModification && targetAppId != null) {
             try {
-                com.appbana.model.AppMetadata app = AppManager.getApp(targetAppId);
+                com.appbana.model.AppMetadata app = AppManager.getApp("default", targetAppId);
                 if (app != null) {
                     String schemaContext = buildAppSchemaContext(app);
                     contextBuilder.append(schemaContext);
