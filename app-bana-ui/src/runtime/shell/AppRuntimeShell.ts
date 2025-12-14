@@ -144,6 +144,14 @@ export class AppRuntimeShell extends LitElement {
       this.style.setProperty('--tbl-container-bg', theme.surfaceColor);
     }
 
+    if (theme.surfaceAltColor) {
+      this.style.setProperty('--color-surface-alt', theme.surfaceAltColor);
+      this.style.setProperty('--tbl-header-bg', theme.surfaceAltColor);
+    } else if (theme.surfaceColor) {
+      // Fallback: use surface color if alt not provided
+      this.style.setProperty('--color-surface-alt', theme.surfaceColor);
+    }
+
     if (theme.textColor) {
       this.style.setProperty('--color-text', theme.textColor);
     }
@@ -193,7 +201,7 @@ export class AppRuntimeShell extends LitElement {
         theme = { primaryColor: '#556b2f', secondaryColor: '#8fbc8f', surfaceColor: '#f5f5dc', textColor: '#333333', fontFamily: 'Georgia' };
         break;
       case 'luxury-dark':
-        theme = { primaryColor: '#cfb53b', secondaryColor: '#a89f91', surfaceColor: '#121212', textColor: '#e0e0e0', fontFamily: 'Playfair Display' };
+        theme = { primaryColor: '#cfb53b', secondaryColor: '#a89f91', surfaceColor: '#121212', surfaceAltColor: '#1e1e1e', textColor: '#e0e0e0', fontFamily: 'Playfair Display' };
         break;
     }
     // Deep merge for runtime
@@ -382,10 +390,10 @@ export class AppRuntimeShell extends LitElement {
         
         ${this.showThemeModal ? html`
           <div class="modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;" @click=${this.closeThemeModal}>
-            <div class="modal" style="background:white;padding:24px;border-radius:12px;width:400px;max-width:90%;box-shadow:0 10px 25px rgba(0,0,0,0.2);" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="modal" style="background:var(--color-surface, white);color:var(--color-text, #1e293b);padding:24px;border-radius:12px;width:400px;max-width:90%;box-shadow:0 10px 25px rgba(0,0,0,0.2);border:1px solid var(--color-border, #e2e8f0);" @click=${(e: Event) => e.stopPropagation()}>
                <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
-                 <h3 style="margin:0;font-size:1.1rem;color:#1e293b;">Change Theme</h3>
-                 <button @click=${this.closeThemeModal} style="background:none;border:none;cursor:pointer;font-size:1.2rem;">×</button>
+                 <h3 style="margin:0;font-size:1.1rem;color:var(--color-text, #1e293b);">Change Theme</h3>
+                 <button @click=${this.closeThemeModal} style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:var(--color-text, #1e293b);">×</button>
                </div>
                
                <div style="margin-bottom:16px;">

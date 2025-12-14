@@ -59,7 +59,7 @@ export class StudioTableLive extends LitElement {
       width: 100%;
       border-collapse: separate;
       border-spacing: 0;
-      background: #fff;
+      background: var(--color-surface, #fff);
       /* Remove overflow so sticky headers aren't clipped */
       border-radius: 14px;
       font-size: 15px;
@@ -200,10 +200,10 @@ export class StudioTableLive extends LitElement {
       gap: 1rem;
       flex-wrap: wrap;
       margin: 0 0 1rem 0;
-      background: var(--tbl-pagination-bg, rgba(255,255,255,0.75));
+      background: var(--tbl-pagination-bg, var(--color-surface-alt, rgba(255,255,255,0.75)));
       backdrop-filter: blur(4px);
       padding: 0.5rem 0.75rem;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--color-border, #e2e8f0);
       border-radius: 12px;
       position: sticky;
       top: 0;
@@ -216,24 +216,24 @@ export class StudioTableLive extends LitElement {
     .pagination-bar button {
       padding: 6px 14px;
       border-radius: 6px;
-      border: 1px solid #cbd5e1;
-      background: #ffffff;
-      color: #1e293b;
+      border: 1px solid var(--color-border, #cbd5e1);
+      background: var(--color-surface, #ffffff);
+      color: var(--color-text, #1e293b);
       font-weight: 600;
       cursor: pointer;
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       transition: background 0.15s, box-shadow 0.15s;
     }
     .pagination-bar button:hover:not([disabled]) {
-      background: #f1f5f9;
+      background: var(--color-surface-alt, #f1f5f9);
       box-shadow: 0 2px 6px rgba(0,0,0,0.08);
     }
     .pagination-bar select {
       padding: 4px 6px;
       border-radius: 6px;
-      border: 1px solid #cbd5e1;
-      background: #fff;
-      color: #1e293b;
+      border: 1px solid var(--color-border, #cbd5e1);
+      background: var(--color-surface, #fff);
+      color: var(--color-text, #1e293b);
     }
     @media (max-width: 700px) {
       .table-container {
@@ -260,8 +260,8 @@ export class StudioTableLive extends LitElement {
       animation: fadeIn 120ms ease-out;
     }
     .modal-card {
-      background: #ffffff;
-      color: #0f172a;
+      background: var(--color-surface, #ffffff);
+      color: var(--color-text, #0f172a);
       border-radius: 12px;
       border: 1px solid #e2e8f0;
       box-shadow: 0 20px 60px rgba(0,0,0,0.20);
@@ -316,8 +316,8 @@ export class StudioTableLive extends LitElement {
     .snackbar button:hover { background: #0f172a; }
     /* View Form Modal */
     .view-modal-card {
-      background:#ffffff;
-      color:#0f172a;
+      background: var(--color-surface, #ffffff);
+      color: var(--color-text, #0f172a);
       border-radius:14px;
       border:1px solid #e2e8f0;
       box-shadow:0 24px 70px rgba(0,0,0,0.25);
@@ -330,9 +330,9 @@ export class StudioTableLive extends LitElement {
       max-height:80vh;overflow:auto;
     }
     .view-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:0.75rem 1rem; }
-    .view-field { display:flex; flex-direction:column; gap:4px; background:#f8fafc; border:1px solid #e2e8f0; padding:8px 10px; border-radius:8px; }
-    .view-field label { font-size:0.7rem; font-weight:600; letter-spacing:0.03em; color:#475569; text-transform:uppercase; }
-    .view-value { font-size:0.85rem; color:#1e293b; word-break:break-word; white-space:pre-wrap; }
+    .view-field { display:flex; flex-direction:column; gap:4px; background:var(--color-surface-alt, #f8fafc); border:1px solid var(--color-border, #e2e8f0); padding:8px 10px; border-radius:8px; }
+    .view-field label { font-size:0.7rem; font-weight:600; letter-spacing:0.03em; color:var(--color-text-secondary, #475569); text-transform:uppercase; }
+    .view-value { font-size:0.85rem; color:var(--color-text, #1e293b); word-break:break-word; white-space:pre-wrap; }
   /* Inline Cell Editing */
   .cell { position: relative; cursor: pointer; }
   .cell.editing { background: #fff7ed !important; outline: 2px solid #fdba74; }
@@ -342,8 +342,8 @@ export class StudioTableLive extends LitElement {
   .inline-edit-actions button { padding:2px 6px; font-size:10px; border-radius:4px; border:1px solid #e2e8f0; background:#fff; cursor:pointer; }
   .inline-edit-actions button:hover { background:#f1f5f9; }
     .view-modal-header { display:flex; justify-content:space-between; align-items:center; }
-    .close-btn { background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:0.75rem; }
-    .close-btn:hover { background:#f1f5f9; }
+    .close-btn { background:var(--color-surface, #fff); border:1px solid var(--color-border, #cbd5e1); border-radius:6px; padding:4px 10px; cursor:pointer; font-size:0.75rem; color: var(--color-text, #0f172a); }
+    .close-btn:hover { background:var(--color-surface-alt, #f1f5f9); }
   `;
 
   // Use lifecycle without returning a Promise type per lint rule; wrap async logic
