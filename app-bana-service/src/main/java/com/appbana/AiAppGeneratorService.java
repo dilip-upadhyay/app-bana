@@ -1187,7 +1187,8 @@ public class AiAppGeneratorService {
 
         try (Connection conn = JdbcManager.getConnection()) {
             String insertSql = """
-                    INSERT INTO appbana_wf_definition
+                    MERGE INTO appbana_wf_definition
+                    KEY (id)
                     (id, app_id, name, description, trigger_entity, trigger_event,
                      trigger_condition, version, status, definition_json, created_at, created_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
@@ -1203,20 +1204,6 @@ public class AiAppGeneratorService {
                     // Validate JSON definition exists
                     String defJson = "{}";
                     try {
-                        // If 'definition' field is missing in parsed object (it's part of serialized
-                        // json)
-                        // We might need to handle it. But the parser populates WorkflowDefinition from
-                        // JSON.
-                        // Wait, WorkflowDefinition has 'definitionJson' field.
-                        // The AI returns a nested 'definition' object.
-                        // Jackson mapping might fail if we don't handle this mismatch OR we update
-                        // parsing logic.
-                        // Let's assume parsing logic put the map into a field or we need to serialize
-                        // it.
-                        // WorkflowDefinition has 'definitionJson' string.
-                        // But AI returns a JSON object.
-                        // We will handle this in parseAiResponse to ensure 'definitionJson' is
-                        // populated.
                         if (wf.getDefinitionJson() == null) {
                             // fallback
                             wf.setDefinitionJson("{\"nodes\":{},\"transitions\":[]}");
