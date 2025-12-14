@@ -1,68 +1,73 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>AppBana Studio</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <link rel="stylesheet" href="/src/styles/theme.css" />
-    <style>
-      body { margin:0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    </style>
-    <script>
-      (function(){
-        const saved = localStorage.getItem('appbana_theme');
-        if (saved === 'light') document.documentElement.dataset.theme='light';
-        if (saved === 'dark') document.documentElement.dataset.theme='dark';
-      })();
-    </script>
-  </head>
-  <body>
-    <div class="app-layout">
-      <app-sidebar></app-sidebar>
-      <div class="app-layout-main">
-        <header class="app-shell-header">
-          <strong style="font-size:var(--text-lg);letter-spacing:.5px;">AppBana Studio</strong>
-          <nav>
-            <a href="/">Home</a>
-            <a href="/builder">Schemas</a>
-            <a href="/explorer">Explorer</a>
-            <a href="/app">Runtime</a>
-            <a href="/studio">Studio</a>
-            <a href="/gallery">Gallery</a>
-          </nav>
-          <div class="spacer"></div>
-          <div class="flex gap-2" style="align-items:center;">
-            <input id="topToken" class="input" placeholder="Auth Token" style="width:180px;" />
-            <button id="saveTopToken" class="btn small outline" title="Save auth token">Save</button>
-            <button id="themeToggle" class="btn small ghost" title="Toggle theme">🌓</button>
-          </div>
-        </header>
-        <main class="app-main">
-          <app-root></app-root>
-        </main>
-      </div>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>AppBana Studio</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="/src/styles/theme.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+  </style>
+  <script>
+    (function () {
+      const saved = localStorage.getItem('appbana_theme');
+      if (saved === 'light') document.documentElement.dataset.theme = 'light';
+      if (saved === 'dark') document.documentElement.dataset.theme = 'dark';
+    })();
+  </script>
+</head>
+
+<body>
+  <div class="app-layout">
+    <app-sidebar></app-sidebar>
+    <div class="app-layout-main">
+      <header class="app-shell-header">
+
+        <nav>
+          <a href="/">Home</a>
+          <a href="/builder">Schemas</a>
+          <a href="/explorer">Explorer</a>
+          <a href="/app">Runtime</a>
+          <a href="/studio">Studio</a>
+        </nav>
+        <div class="spacer"></div>
+        <div class="flex gap-2" style="align-items:center;">
+          <input id="topToken" class="input" placeholder="Auth Token" style="width:180px;" />
+          <button id="saveTopToken" class="btn small outline" title="Save auth token">Save</button>
+          <button id="themeToggle" class="btn small ghost" title="Toggle theme">🌓</button>
+        </div>
+      </header>
+      <main class="app-main">
+        <app-root></app-root>
+      </main>
     </div>
-    <script type="module" src="/src/index.ts"></script>
-    <script>
-      window.addEventListener('DOMContentLoaded', () => {
-        const input = document.getElementById('topToken');
-        const saveBtn = document.getElementById('saveTopToken');
-        if (input && saveBtn) {
-          input.value = localStorage.getItem('appbana_token') || '';
-          saveBtn.addEventListener('click', () => {
-            const v = input.value.replace(/[^\x20-\x7E]/g,'').trim();
-            if (v) localStorage.setItem('appbana_token', v); else localStorage.removeItem('appbana_token');
-          });
-        }
-        const toggle = document.getElementById('themeToggle');
-        toggle?.addEventListener('click', () => {
-          const html = document.documentElement;
-          const current = html.dataset.theme;
-          if (!current) { html.dataset.theme = 'dark'; localStorage.setItem('appbana_theme','dark'); return; }
-          if (current === 'dark') { html.dataset.theme = 'light'; localStorage.setItem('appbana_theme','light'); return; }
-          html.dataset.theme=''; localStorage.removeItem('appbana_theme');
+  </div>
+  <script type="module" src="/src/index.ts"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('topToken');
+      const saveBtn = document.getElementById('saveTopToken');
+      if (input && saveBtn) {
+        input.value = localStorage.getItem('appbana_token') || '';
+        saveBtn.addEventListener('click', () => {
+          const v = input.value.replace(/[^\x20-\x7E]/g, '').trim();
+          if (v) localStorage.setItem('appbana_token', v); else localStorage.removeItem('appbana_token');
         });
+      }
+      const toggle = document.getElementById('themeToggle');
+      toggle?.addEventListener('click', () => {
+        const html = document.documentElement;
+        const current = html.dataset.theme;
+        if (!current) { html.dataset.theme = 'dark'; localStorage.setItem('appbana_theme', 'dark'); return; }
+        if (current === 'dark') { html.dataset.theme = 'light'; localStorage.setItem('appbana_theme', 'light'); return; }
+        html.dataset.theme = ''; localStorage.removeItem('appbana_theme');
       });
-    </script>
-  </body>
+    });
+  </script>
+</body>
+
 </html>

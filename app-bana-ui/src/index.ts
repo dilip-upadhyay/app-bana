@@ -5,7 +5,7 @@ import './app-renderer';
 import './components/StudioWelcome';
 import './components/entity-explorer';
 import './components/app-sidebar';
-import './components/component-gallery';
+import './components/app-sidebar';
 import './components/ButtonElement';
 import './components/ContainerElement';
 import './components/TextElement';
@@ -237,8 +237,6 @@ export class AppRoot extends LitElement {
       return html`<studio-builder-shell></studio-builder-shell>`;
     } else if (path.includes('/studio')) {
       return html`<div id="studio-root"></div>`;
-    } else if (path.includes('/gallery')) {
-      return html`<component-gallery></component-gallery>`;
     }
     return html`
       <h1>Welcome to AppBana Studio</h1>
