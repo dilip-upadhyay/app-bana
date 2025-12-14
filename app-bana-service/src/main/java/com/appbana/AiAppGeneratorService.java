@@ -2270,23 +2270,34 @@ public class AiAppGeneratorService {
     }
 
     private static void autoCompleteDashboard(Map<String, Object> page) {
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> metrics = (List<Map<String, Object>>) page.get("metrics");
-        if (metrics == null || metrics.isEmpty())
+        Object metricsObj = page.get("metrics");
+        if (!(metricsObj instanceof List))
             return;
 
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> nodes = (List<Map<String, Object>>) page.get("nodes");
-        if (nodes == null) {
+        List<?> metrics = (List<?>) metricsObj;
+        if (metrics.isEmpty())
+            return;
+
+        Object nodesObj = page.get("nodes");
+        List<Object> nodes;
+        if (nodesObj instanceof List) {
+            nodes = new ArrayList<>((List<?>) nodesObj);
+        } else {
             nodes = new ArrayList<>();
-            page.put("nodes", nodes);
-        } else if (!(nodes instanceof ArrayList)) {
-            nodes = new ArrayList<>(nodes);
-            page.put("nodes", nodes);
         }
+        page.put("nodes", nodes);
 
         // Check if visible components already exist
-        boolean hasContent = nodes.stream().anyMatch(n -> "grid".equals(n.get("type")) || "card".equals(n.get("type")));
+        boolean hasContent = false;
+        for (Object n : nodes) {
+            if (n instanceof Map) {
+                Map<?, ?> m = (Map<?, ?>) n;
+                if ("grid".equals(m.get("type")) || "card".equals(m.get("type"))) {
+                    hasContent = true;
+                    break;
+                }
+            }
+        }
         if (hasContent)
             return;
 
@@ -2306,7 +2317,13 @@ public class AiAppGeneratorService {
 
         // Create Cards for Metrics
         for (int i = 0; i < metrics.size(); i++) {
-            Map<String, Object> m = metrics.get(i);
+            Object mObj = metrics.get(i);
+            if (!(mObj instanceof Map))
+                continue; // Skip non-map metrics
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> m = (Map<String, Object>) mObj;
+
             String metricName = String.valueOf(m.getOrDefault("name", "Metric"));
             String cardId = "stat-card-" + i + "-" + System.currentTimeMillis();
             String labelId = cardId + "-label";
@@ -2341,40 +2358,58 @@ public class AiAppGeneratorService {
         addChildToRoot(nodes, rootId, gridId);
     }
 
-    private static void addChildToRoot(List<Map<String, Object>> nodes, String rootId, String childId) {
-        for (Map<String, Object> node : nodes) {
+    private static void addChildToRoot(List<Object> nodes, String rootId, String childId) {
+        for (Object nodeObj : nodes) {
+            if (!(nodeObj instanceof Map))
+                continue;
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> node = (Map<String, Object>) nodeObj;
+
             if (rootId.equals(node.get("id"))) {
-                @SuppressWarnings("unchecked")
-                List<String> children = (List<String>) node.get("children");
-                if (children == null) {
+                Object childrenObj = node.get("children");
+                List<String> children;
+
+                if (childrenObj instanceof List) {
+                    // Create mutable copy
                     children = new ArrayList<>();
-                    node.put("children", children);
-                } else if (!(children instanceof ArrayList)) {
-                    children = new ArrayList<>(children);
-                    node.put("children", children);
+                    for (Object c : (List<?>) childrenObj) {
+                        children.add(String.valueOf(c));
+                    }
+                } else {
+                    children = new ArrayList<>();
                 }
+
                 if (!children.contains(childId)) {
                     children.add(childId);
                 }
+                node.put("children", children);
                 break;
             }
         }
     }
 
     private static void autoCompleteTable(Map<String, Object> page, List<Object> entities, String entityName) {
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> nodes = (List<Map<String, Object>>) page.get("nodes");
-        if (nodes == null || nodes.isEmpty())
+        Object nodesObj = page.get("nodes");
+        List<Object> nodes;
+
+        if (nodesObj instanceof List) {
+            nodes = new ArrayList<>((List<?>) nodesObj);
+        } else {
             return;
-
-        // Convert to mutable if needed
-        if (!(nodes instanceof ArrayList)) {
-            nodes = new ArrayList<>(nodes);
-            page.put("nodes", nodes);
         }
+        page.put("nodes", nodes);
 
-        boolean hasTable = nodes.stream()
-                .anyMatch(n -> "table".equals(n.get("type")) || "studio-table-live".equals(n.get("type")));
+        boolean hasTable = false;
+        for (Object n : nodes) {
+            if (n instanceof Map) {
+                Map<?, ?> m = (Map<?, ?>) n;
+                if ("table".equals(m.get("type")) || "studio-table-live".equals(m.get("type"))) {
+                    hasTable = true;
+                    break;
+                }
+            }
+        }
         if (hasTable)
             return;
 
