@@ -35,7 +35,7 @@ export class StudioTableLive extends LitElement {
 
   public static readonly styles = css`
     .table-container {
-      background: var(--tbl-container-bg, linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%));
+      background: var(--tbl-container-bg, var(--color-bg, linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%)));
       border-radius: 18px;
       box-shadow: 0 6px 28px rgba(30,41,59,0.10);
       padding: 1.5rem 1.25rem 2rem;
@@ -125,7 +125,7 @@ export class StudioTableLive extends LitElement {
       background-clip: padding-box;
     }
     .filter-row th {
-      background: #f1f5f9;
+      background: var(--tbl-header-bg, var(--color-surface-alt, #f1f5f9));
       border-bottom: 2px solid #e2e8f0;
       padding: 6px 10px;
       position: sticky;
@@ -139,8 +139,8 @@ export class StudioTableLive extends LitElement {
       border-radius: 6px;
       border: 1px solid #cbd5e1;
       font-size: 13px;
-      background: #fff;
-      color: #334155;
+      background: var(--color-surface, #fff);
+      color: var(--color-text, #334155);
     }
     .filter-row input:focus {
       outline: 2px solid #93c5fd;
@@ -149,18 +149,18 @@ export class StudioTableLive extends LitElement {
     .table-live td {
       padding: 14px 18px;
       border-bottom: 1px solid var(--tbl-border-color, #e2e8f0);
-      background: var(--tbl-row-odd-bg, #ffffff);
-      color: var(--tbl-cell-color, #334155);
+      background: var(--tbl-row-odd-bg, var(--color-surface, #ffffff));
+      color: var(--tbl-cell-color, var(--color-text, #334155));
       transition: background 0.2s;
       font-size: 15px;
     }
     .table-live tbody tr:last-child td {
       border-bottom: none;
     }
-    .table-live tbody tr:hover td { background: var(--tbl-row-hover-bg, #f1f5f9); }
+    .table-live tbody tr:hover td { background: var(--tbl-row-hover-bg, var(--color-surface-alt, #f1f5f9)); }
     .table-live thead th:first-child { border-top-left-radius: 14px; }
     .table-live thead th:last-child { border-top-right-radius: 14px; }
-  .table-live tbody tr:nth-child(even) td { background: var(--tbl-row-even-bg, #f8fafc); }
+  .table-live tbody tr:nth-child(even) td { background: var(--tbl-row-even-bg, var(--color-surface-alt, #f8fafc)); }
     .table-actions button {
       margin-right: 8px;
       padding: 7px 16px;
