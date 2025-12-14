@@ -38,6 +38,9 @@ export class WorkflowDesignerPage extends LitElement {
   @state() private availableEntities: string[] = [];
   @state() private isSettingsOpen = false;
 
+  @state() private preloadedWorkflows: any[] = [];
+  @state() private isWorkflowSelectorOpen = false;
+
   private clipboard?: { nodes: NodeMetadata[], connections: ConnectionMetadata[] };
 
   private history = new WorkflowHistory();
@@ -435,11 +438,24 @@ export class WorkflowDesignerPage extends LitElement {
 
     try {
       // 1. Try to load from API
-      const workflow = await apiClient.get<WorkflowMetadata>(`/apps/${this.appId}/workflow`);
+      // Backend returns { workflows: [...] } or just the workflow object
+      const response: any = await apiClient.get<any>(`/apps/${this.appId}/workflow`);
+
+      let workflow: any = response;
+      this.preloadedWorkflows = [];
+
+      // Handle list format (take the first one for now)
+      if (response && response.workflows && Array.isArray(response.workflows)) {
+        this.preloadedWorkflows = response.workflows;
+        if (response.workflows.length > 0) {
+          workflow = response.workflows[0];
+        } else {
+          workflow = null;
+        }
+      }
 
       if (workflow && workflow.id) {
-        this.workflowMetadata = workflow;
-        this.history = new WorkflowHistory();
+        this.loadWorkflowIntoEditor(workflow);
       } else {
         // 2. If no workflow on server, check for local draft (migration path)
         const key = this.getStorageKey();
@@ -463,6 +479,126 @@ export class WorkflowDesignerPage extends LitElement {
       // Fallback to local or empty on error
       this.workflowMetadata = this.createEmptyWorkflow();
     }
+  }
+
+  private loadWorkflowIntoEditor(workflow: any) {
+    console.log('🔄 Loading workflow into editor:', workflow);
+
+    // Adapter: Parse definitionJson if present (Backend stores it as string)
+    if (typeof workflow.definitionJson === 'string') {
+      try {
+        const def = JSON.parse(workflow.definitionJson);
+        console.log('📋 Parsed definitionJson:', def);
+
+        // Adapter: Convert Backend Node Map to Frontend Node Array
+        if (def.nodes && !Array.isArray(def.nodes)) {
+          console.log('🗺️ Converting node Map to Array...');
+          const nodesArray: any[] = [];
+          let index = 0;
+          Object.keys(def.nodes).forEach(key => {
+            const n = def.nodes[key];
+            console.log(`  Processing node '${key}':`, n);
+
+            // Ensure it has an ID
+            if (!n.id) n.id = key;
+            // Ensure position exists
+            if (!n.position) {
+              // AUTO-LAYOUT: Stack horizontally if no position
+              n.position = { x: 100 + (index * 250), y: 150 };
+            }
+            // TYPE NORMALIZATION: Backend generates lowercase types (e.g. "start", "task")
+            // Frontend expects uppercase (e.g. "START", "TASK") for proper rendering
+            const originalType = n.type;
+            if (n.type && typeof n.type === 'string') {
+              n.type = n.type.toUpperCase();
+            }
+            console.log(`    Type normalized: '${originalType}' → '${n.type}'`);
+            console.log(`    Position: (${n.position.x}, ${n.position.y})`);
+
+            // PROPERTIES NORMALIZATION: Backend stores fields directly on node
+            // Frontend expects them nested under 'properties'
+            if (!n.properties) {
+              n.properties = {};
+              // Move known backend fields into properties
+              const backendFields = ['assignmentType', 'assignmentExpression', 'formFields', 'service', 'parameters', 'condition'];
+              backendFields.forEach(field => {
+                if (n[field] !== undefined) {
+                  n.properties[field] = n[field];
+                  delete n[field];
+                }
+              });
+            }
+            console.log(`    Properties:`, n.properties);
+
+            nodesArray.push(n);
+            index++;
+          });
+          workflow.nodes = nodesArray;
+          console.log('✅ Converted nodes:', workflow.nodes);
+        } else if (def.nodes) {
+          console.log('📦 Nodes are already array, normalizing...');
+          // Nodes are already an array, but still need type normalization and position checks
+          workflow.nodes = def.nodes.map((n: any, index: number) => {
+            console.log(`  Processing array node ${index}:`, n);
+
+            // Ensure position exists
+            if (!n.position) {
+              n.position = { x: 100 + (index * 250), y: 150 };
+            }
+            // TYPE NORMALIZATION
+            const originalType = n.type;
+            if (n.type && typeof n.type === 'string') {
+              n.type = n.type.toUpperCase();
+            }
+            console.log(`    Type normalized: '${originalType}' → '${n.type}'`);
+
+            // PROPERTIES NORMALIZATION
+            if (!n.properties) {
+              n.properties = {};
+              const backendFields = ['assignmentType', 'assignmentExpression', 'formFields', 'service', 'parameters', 'condition'];
+              backendFields.forEach(field => {
+                if (n[field] !== undefined) {
+                  n.properties[field] = n[field];
+                  delete n[field];
+                }
+              });
+            }
+
+            return n;
+          });
+          console.log('✅ Normalized nodes:', workflow.nodes);
+        }
+
+        // Adapter: Convert Backend Transitions to Frontend Connections
+        if (def.transitions) {
+          workflow.connections = def.transitions.map((t: any, idx: number) => ({
+            id: t.id || `conn-${Date.now()}-${idx}`,
+            from: t.from,
+            to: t.to,
+            label: t.label,
+            condition: t.condition
+          }));
+        } else if (def.connections) {
+          workflow.connections = def.connections;
+        }
+      } catch (e) {
+        console.warn("Failed to parse definitionJson", e);
+      }
+    }
+
+    // Ensure defaults
+    if (!workflow.nodes) workflow.nodes = [];
+    if (!workflow.connections) workflow.connections = [];
+
+    console.log('🎯 Final workflow metadata:', workflow);
+    console.log(`   - Nodes: ${workflow.nodes.length}`);
+    console.log(`   - Connections: ${workflow.connections.length}`);
+
+    this.workflowMetadata = workflow;
+    this.history = new WorkflowHistory();
+    this.selectedNodeIds = new Set();
+    this.selectedConnectionId = undefined;
+    this.requestUpdate();
   }
 
   private async saveToStorage() {
@@ -675,6 +811,19 @@ export class WorkflowDesignerPage extends LitElement {
             <span class="workflow-status">Draft v${this.workflowMetadata.version}</span>
           </div>
           <div class="toolbar-right">
+            ${this.preloadedWorkflows.length > 1 ? html`
+              <select 
+                class="workflow-selector" 
+                @change=${this.handleWorkflowChange} 
+                .value=${this.workflowMetadata.id}
+                style="padding: 6px; border-radius: 6px; border: 1px solid #e2e8f0; margin-right: 8px; max-width: 200px;"
+              >
+                ${this.preloadedWorkflows.map(wf => html`
+                  <option value=${wf.id}>${wf.name || 'Untitled'}</option>
+                `)}
+              </select>
+            ` : ''}
+
             <button class="btn btn-secondary" @click=${this.undo}>Undo</button>
             <button class="btn btn-secondary" @click=${this.redo}>Redo</button>
             <button class="btn btn-secondary" @click=${() => this.isSettingsOpen = true}>⚙ Settings</button>
@@ -791,6 +940,15 @@ export class WorkflowDesignerPage extends LitElement {
       [field]: value
     };
     this.updateMetadata(newMetadata);
+  }
+
+  private handleWorkflowChange(e: Event) {
+    const select = e.target as HTMLSelectElement;
+    const selectedId = select.value;
+    const wf = this.preloadedWorkflows.find(w => w.id === selectedId);
+    if (wf) {
+      this.loadWorkflowIntoEditor(wf);
+    }
   }
 
   private renderConnectionProperties() {

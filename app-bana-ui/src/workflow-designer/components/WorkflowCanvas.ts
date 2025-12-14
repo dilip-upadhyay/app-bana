@@ -26,6 +26,7 @@ export class WorkflowCanvas extends LitElement {
   @state() private isSelecting = false;
   @state() private selectionBox?: { startX: number; startY: number; currentX: number; currentY: number };
 
+  @query('.panzoom-wrapper') private panzoomWrapper?: HTMLDivElement;
   @query('.canvas-container') private canvasEl?: HTMLDivElement;
   private panzoom?: any;
 
@@ -38,6 +39,13 @@ export class WorkflowCanvas extends LitElement {
       position: relative;
       background: #f8fafc;
       overflow: hidden;
+    }
+
+    .panzoom-wrapper {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      position: relative;
     }
 
     .canvas-container {
@@ -163,19 +171,30 @@ export class WorkflowCanvas extends LitElement {
   }
 
   firstUpdated() {
-    if (this.canvasEl) {
-      // Initialize PanZoom
-      this.panzoom = Panzoom(this.canvasEl, {
-        maxScale: 2,
-        minScale: 0.3,
-        step: 0.1,
-        canvas: true,
-        panOnlyWhenZoomed: true, // Allow interaction with nodes without pressing keys
-        excludeClass: 'node', // Allow dragging nodes
-      });
+    if (this.panzoomWrapper) {
+      // Ensure the element and its parent are properly rendered
+      if (!this.panzoomWrapper.parentElement) {
+        console.warn('Panzoom wrapper has no parent, delaying Panzoom initialization');
+        return;
+      }
+
+      try {
+        // Initialize PanZoom on the wrapper
+        this.panzoom = Panzoom(this.panzoomWrapper, {
+          maxScale: 2,
+          minScale: 0.3,
+          step: 0.1,
+          canvas: true,
+          panOnlyWhenZoomed: true,
+          excludeClass: 'node',
+        });
+      } catch (error) {
+        console.error('Failed to initialize Panzoom:', error);
+        return;
+      }
 
       // Enable zoom with mouse wheel
-      this.canvasEl.addEventListener('wheel', (e) => {
+      this.panzoomWrapper.parentElement?.addEventListener('wheel', (e) => {
         if (!e.ctrlKey && !e.metaKey) {
           // If NOT holding ctrl/meta, we pan? No, usually wheel zooms or scrolls. 
           // Let's standard: Wheel = Zoom (Google Maps style) or Ctrl+Wheel = Zoom
@@ -189,7 +208,7 @@ export class WorkflowCanvas extends LitElement {
       });
 
       // Listen for panzoom changes
-      this.canvasEl.addEventListener('panzoomchange', ((e: CustomEvent) => {
+      this.panzoomWrapper.addEventListener('panzoomchange', ((e: CustomEvent) => {
         const pan = this.panzoom.getPan();
         const scale = this.panzoom.getScale();
 
@@ -243,15 +262,16 @@ export class WorkflowCanvas extends LitElement {
 
   render() {
     return html`
-      <div 
-        class="canvas-container ${this.isDragging ? 'dragging' : ''}"
-        @dragover=${this.handleDragOver}
-        @drop=${this.handleDrop}
-        @dragleave=${this.handleDragLeave}
-        @mousemove=${this.handleMouseMove}
-        @mouseup=${this.handleMouseUp}
-        @mousedown=${this.handleMouseDown}
-      >
+      <div class="panzoom-wrapper">
+        <div 
+          class="canvas-container ${this.isDragging ? 'dragging' : ''}"
+          @dragover=${this.handleDragOver}
+          @drop=${this.handleDrop}
+          @dragleave=${this.handleDragLeave}
+          @mousemove=${this.handleMouseMove}
+          @mouseup=${this.handleMouseUp}
+          @mousedown=${this.handleMouseDown}
+        >
         ${this.metadata.nodes?.length === 0 ? this.renderEmptyState() : ''}
         
         <!-- Connections layer (SVG) - Below nodes -->
@@ -273,9 +293,10 @@ export class WorkflowCanvas extends LitElement {
             ></workflow-node>
           `)}
         </div>
+          </div>
+          
+          ${this.renderSelectionBox()}
         </div>
-        
-        ${this.renderSelectionBox()}
       </div>
 
       <div class="zoom-controls">
