@@ -15,44 +15,44 @@ public class QueryDb {
         String password = "";
 
         try {
-            // Register H2 driver explicitly to be safe
             Class.forName("org.h2.Driver");
-
             try (Connection conn = DriverManager.getConnection(url, user, password);
-                    Statement stmt = conn.createStatement();
-                    ResultSet rs = stmt.executeQuery(sql)) {
+                    Statement stmt = conn.createStatement()) {
 
-                ResultSetMetaData meta = rs.getMetaData();
-                int colCount = meta.getColumnCount();
+                boolean isResultSet = stmt.execute(sql);
 
-                System.out.println("[");
-                boolean first = true;
+                if (isResultSet) {
+                    try (ResultSet rs = stmt.getResultSet()) {
+                        ResultSetMetaData meta = rs.getMetaData();
+                        int colCount = meta.getColumnCount();
 
-                while (rs.next()) {
-                    if (!first)
-                        System.out.println(",");
-                    first = false;
-                    System.out.print("  {");
+                        System.out.println("[");
+                        boolean first = true;
+                        while (rs.next()) {
+                            if (!first)
+                                System.out.println(",");
+                            first = false;
+                            System.out.print("  {");
+                            for (int i = 1; i <= colCount; i++) {
+                                String name = meta.getColumnLabel(i);
+                                String val = rs.getString(i);
+                                if (val == null)
+                                    val = "null";
+                                else
+                                    val = "\"" + val.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "")
+                                            + "\"";
 
-                    for (int i = 1; i <= colCount; i++) {
-                        String name = meta.getColumnLabel(i);
-                        String val = rs.getString(i);
-
-                        // Simple JSON escaping
-                        if (val == null) {
-                            val = "null";
-                        } else {
-                            val = "\"" + val.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "") + "\"";
+                                if (i > 1)
+                                    System.out.print(", ");
+                                System.out.print("\"" + name + "\": " + val);
+                            }
+                            System.out.print("}");
                         }
-
-                        if (i > 1)
-                            System.out.print(", ");
-                        System.out.print("\"" + name + "\": " + val);
+                        System.out.println("\n]");
                     }
-                    System.out.print("}");
+                } else {
+                    System.out.println("Update Count: " + stmt.getUpdateCount());
                 }
-                System.out.println("\n]");
-
             }
         } catch (Exception e) {
             e.printStackTrace();
