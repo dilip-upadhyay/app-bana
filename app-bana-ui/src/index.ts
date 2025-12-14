@@ -239,15 +239,9 @@ export class AppRoot extends LitElement {
       return html`<div id="studio-root"></div>`;
     }
     return html`
-      <h1>Welcome to AppBana Studio</h1>
-      <p>
-        <a href="/builder">Schema Builder</a> |
-        <a href="/explorer">Entity Explorer</a> |
-        <a href="/app">App Renderer</a>
-      </p>
-      <hr />
-      <h2>BaseElement Test Component:</h2>
-      <studio-welcome name="AppBana Team"></studio-welcome>
+      <div style="padding: 2rem;">
+        
+      </div>
     `;
   }
 }
