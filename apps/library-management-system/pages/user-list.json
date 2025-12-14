@@ -1,0 +1,53 @@
+{
+  "id" : "user-list",
+  "name" : "User List",
+  "type" : "data-table",
+  "entity" : "User",
+  "columns" : [ "name", "email" ],
+  "actions" : [ "view", "edit", "delete", "create" ],
+  "rootId" : "root-1765722872208",
+  "metaVersion" : "1.0.0",
+  "nodes" : [ {
+    "children" : [ "heading-root-1765722872208", "table-root-1765722872208" ],
+    "props" : {
+      "layout" : "vertical",
+      "gap" : "lg",
+      "padding" : "xl"
+    },
+    "type" : "container",
+    "id" : "root-1765722872208"
+  }, {
+    "type" : "text",
+    "id" : "heading-root-1765722872208",
+    "props" : {
+      "content" : "User List",
+      "tag" : "h1"
+    }
+  }, {
+    "id" : "table-root-1765722872208",
+    "type" : "table",
+    "props" : {
+      "entity" : "User",
+      "fields" : [ {
+        "name" : "id",
+        "label" : "ID",
+        "type" : "text"
+      }, {
+        "name" : "name",
+        "label" : "Name",
+        "type" : "text"
+      }, {
+        "name" : "email",
+        "label" : "Email",
+        "type" : "text"
+      } ],
+      "pageSize" : 25,
+      "multiSelect" : true,
+      "actions" : [ "view" ],
+      "bulkActions" : [ "delete", "export" ],
+      "confirmDelete" : true,
+      "viewMode" : "dynamic",
+      "theme" : "default"
+    }
+  } ]
+}

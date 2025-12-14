@@ -1,30 +1,30 @@
 {
-  "id" : "book-list",
-  "name" : "Book List",
+  "id" : "book-approval-queue",
+  "name" : "Approval Queue",
   "type" : "data-table",
   "entity" : "Book",
-  "columns" : [ "title", "author", "status" ],
-  "actions" : [ "view", "edit", "delete", "create" ],
-  "rootId" : "root-1765722970494",
+  "columns" : [ "title", "author", "submittedBy", "status" ],
+  "actions" : [ "approve", "reject" ],
+  "rootId" : "root-1765722970497",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
-    "children" : [ "heading-root-1765722970494", "table-root-1765722970494" ],
+    "children" : [ "heading-root-1765722970497", "table-root-1765722970497" ],
     "props" : {
       "layout" : "vertical",
       "gap" : "lg",
       "padding" : "xl"
     },
     "type" : "container",
-    "id" : "root-1765722970494"
+    "id" : "root-1765722970497"
   }, {
     "type" : "text",
-    "id" : "heading-root-1765722970494",
+    "id" : "heading-root-1765722970497",
     "props" : {
-      "content" : "Book List",
+      "content" : "Approval Queue",
       "tag" : "h1"
     }
   }, {
-    "id" : "table-root-1765722970494",
+    "id" : "table-root-1765722970497",
     "type" : "table",
     "props" : {
       "entity" : "Book",

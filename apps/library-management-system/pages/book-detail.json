@@ -3,22 +3,21 @@
   "name" : "Book Detail",
   "type" : "profile",
   "entity" : "Book",
-  "fields" : [ "title", "author", "genre", "status" ],
-  "relatedLists" : [ "borrowingHistory" ],
-  "rootId" : "root-1763666766376",
+  "fields" : [ "title", "author", "description", "status", "submittedBy" ],
+  "rootId" : "root-1765722970498",
   "metaVersion" : "1.0.0",
   "nodes" : [ {
+    "children" : [ "heading-root-1765722970498" ],
     "props" : {
       "layout" : "vertical",
       "gap" : "lg",
       "padding" : "xl"
     },
     "type" : "container",
-    "id" : "root-1763666766376",
-    "children" : [ "heading-root-1763666766376" ]
+    "id" : "root-1765722970498"
   }, {
     "type" : "text",
-    "id" : "heading-root-1763666766376",
+    "id" : "heading-root-1765722970498",
     "props" : {
       "content" : "Book Detail",
       "tag" : "h1"
