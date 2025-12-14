@@ -681,7 +681,7 @@ public class AiAppGeneratorService {
             return pageResult;
         }
         try {
-            Map<String, Object> appWithPages = AppManager.getAppWithPages(appId);
+            Map<String, Object> appWithPages = AppManager.getAppWithPages("default", appId);
             if (appWithPages == null) {
                 pageResult.success = false;
                 pageResult.error = "App not found: " + appId;
@@ -825,8 +825,8 @@ public class AiAppGeneratorService {
 
     private static List<Map<String, Object>> safeListApps() {
         try {
-            return AppManager.listApps();
-        } catch (IOException e) {
+            return AppManager.listApps("default");
+        } catch (Exception e) {
             LOG.error("[AI] Failed to list apps", e);
             return Collections.emptyList();
         }
@@ -865,7 +865,7 @@ public class AiAppGeneratorService {
             return loadResult;
         }
         try {
-            Map<String, Object> appWithPages = AppManager.getAppWithPages(appId);
+            Map<String, Object> appWithPages = AppManager.getAppWithPages("default", appId);
             if (appWithPages == null) {
                 loadResult.success = false;
                 loadResult.error = "App not found: " + appId;
@@ -911,7 +911,7 @@ public class AiAppGeneratorService {
             return result;
         }
         try {
-            boolean deleted = AppManager.deleteApp(resolvedId);
+            boolean deleted = AppManager.deleteApp("default", resolvedId);
             result.success = deleted;
             result.payload = new HashMap<>();
             result.payload.put("deleted", deleted);
@@ -1023,7 +1023,7 @@ public class AiAppGeneratorService {
         }
 
         try {
-            AppMetadata app = AppManager.getApp(appId);
+            AppMetadata app = AppManager.getApp("default", appId);
             if (app == null) {
                 result.success = false;
                 result.error = "App not found: " + appId;
@@ -1252,7 +1252,7 @@ public class AiAppGeneratorService {
         // Check if updating existing app
         com.appbana.model.AppMetadata existing = null;
         try {
-            existing = AppManager.getApp(appId);
+            existing = AppManager.getApp("default", appId);
         } catch (Exception ignored) {
         }
 
@@ -1299,9 +1299,9 @@ public class AiAppGeneratorService {
         meta.setRoutes(routes);
 
         if (existing != null) {
-            AppManager.updateApp(appId, meta);
+            AppManager.updateApp("default", appId, meta);
         } else {
-            AppManager.createApp(meta);
+            AppManager.createApp("default", meta);
         }
 
         // Persist pages
@@ -1310,24 +1310,24 @@ public class AiAppGeneratorService {
                 Map<String, Object> normalized = ensurePageMeta(pg);
                 // Auto-complete missing components for data-table pages
                 autoCompletePageComponents(normalized, entityMaps);
-                AppManager.savePage(appId, String.valueOf(normalized.get("id")), normalized);
+                AppManager.savePage("default", appId, String.valueOf(normalized.get("id")), normalized);
             }
         } else if (result.suggestedPages != null && !result.suggestedPages.isEmpty()) {
             for (String suggested : result.suggestedPages) {
                 Map<String, Object> scaffold = scaffoldPage(suggested);
-                AppManager.savePage(appId, String.valueOf(scaffold.get("id")), scaffold);
+                AppManager.savePage("default", appId, String.valueOf(scaffold.get("id")), scaffold);
             }
         } else {
             // Fallback single Home page
             Map<String, Object> scaffold = scaffoldPage("Home Page");
-            AppManager.savePage(appId, String.valueOf(scaffold.get("id")), scaffold);
+            AppManager.savePage("default", appId, String.valueOf(scaffold.get("id")), scaffold);
         }
 
         // Set defaultPage if any pages exist
-        AppMetadata persisted = AppManager.getApp(appId);
+        AppMetadata persisted = AppManager.getApp("default", appId);
         if (persisted != null && persisted.getPages() != null && !persisted.getPages().isEmpty()) {
             persisted.setDefaultPage(persisted.getPages().get(0));
-            AppManager.updateApp(appId, persisted);
+            AppManager.updateApp("default", appId, persisted);
         }
 
         // Track created app in context
@@ -2206,7 +2206,7 @@ public class AiAppGeneratorService {
         String candidate = base;
         int counter = 1;
         try {
-            while (AppManager.getApp(candidate) != null) {
+            while (AppManager.getApp("default", candidate) != null) {
                 candidate = base + "-" + counter++;
             }
         } catch (IOException ignored) {
@@ -2532,7 +2532,7 @@ public class AiAppGeneratorService {
 
         try {
             // Get app to check entities
-            AppMetadata app = AppManager.getApp(appId);
+            AppMetadata app = AppManager.getApp("default", appId);
             if (app == null) {
                 result.success = false;
                 result.payload.put(PAYLOAD_REPLY, "App not found: " + appId);
@@ -2545,7 +2545,8 @@ public class AiAppGeneratorService {
                 for (Object entityObj : app.getEntities()) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> entity = (Map<String, Object>) entityObj;
-                    entityNames.add(String.valueOf(entity.get("name")));
+                    String entityName = String.valueOf(entity.get("name"));
+                    entityNames.add(entityName);
                 }
 
                 // Generate list pages for each entity
@@ -2556,7 +2557,7 @@ public class AiAppGeneratorService {
 
                     // Check if page already exists
                     try {
-                        Map<String, Object> existing = AppManager.getPage(appId, pageId);
+                        Map<String, Object> existing = AppManager.getPage("default", appId, pageId);
                         if (existing != null) {
                             LOG.info("[AI] Page {} already exists, skipping", pageId);
                             continue;
@@ -2574,7 +2575,7 @@ public class AiAppGeneratorService {
                     autoCompletePageComponents(page, app.getEntities());
 
                     // Save page
-                    AppManager.savePage(appId, pageId, page);
+                    AppManager.savePage("default", appId, pageId, page);
                     createdCount++;
 
                     // Add page to app's pages list
@@ -2588,7 +2589,7 @@ public class AiAppGeneratorService {
 
                 // Update app metadata
                 if (createdCount > 0) {
-                    AppManager.updateApp(appId, app);
+                    AppManager.updateApp("default", appId, app);
                 }
 
                 result.success = true;

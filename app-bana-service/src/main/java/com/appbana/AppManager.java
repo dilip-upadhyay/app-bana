@@ -38,31 +38,33 @@ public class AppManager {
     }
 
     /**
-     * Get app directory path
+     * Get app directory path: apps/{tenantId}/{appId}
      */
-    private static Path getAppDirectory(String appId) {
-        return getAppsDirectory().resolve(appId);
+    private static Path getAppDirectory(String tenantId, String appId) {
+        if (tenantId == null)
+            tenantId = "default";
+        return getAppsDirectory().resolve(tenantId).resolve(appId);
     }
 
     /**
      * Get app metadata file path
      */
-    private static Path getAppMetadataPath(String appId) {
-        return getAppDirectory(appId).resolve(APP_FILE);
+    private static Path getAppMetadataPath(String tenantId, String appId) {
+        return getAppDirectory(tenantId, appId).resolve(APP_FILE);
     }
 
     /**
      * Get pages directory for an app
      */
-    private static Path getPagesDirectory(String appId) {
-        return getAppDirectory(appId).resolve(PAGES_DIR);
+    private static Path getPagesDirectory(String tenantId, String appId) {
+        return getAppDirectory(tenantId, appId).resolve(PAGES_DIR);
     }
 
     /**
      * Get page file path
      */
-    private static Path getPagePath(String appId, String pageId) {
-        return getPagesDirectory(appId).resolve(pageId + ".json");
+    private static Path getPagePath(String tenantId, String appId, String pageId) {
+        return getPagesDirectory(tenantId, appId).resolve(pageId + ".json");
     }
 
     /**
@@ -78,11 +80,14 @@ public class AppManager {
     }
 
     /**
-     * List all apps (returns summary info)
+     * List all apps for a tenant (returns summary info)
      */
-    public static List<Map<String, Object>> listApps() throws IOException {
+    public static List<Map<String, Object>> listApps(String tenantId) throws IOException {
         List<Map<String, Object>> apps = new ArrayList<>();
-        Path appsDir = getAppsDirectory();
+        if (tenantId == null)
+            tenantId = "default";
+
+        Path appsDir = getAppsDirectory().resolve(tenantId);
 
         if (!Files.exists(appsDir)) {
             return apps;
@@ -116,8 +121,8 @@ public class AppManager {
     /**
      * Get app metadata by ID
      */
-    public static AppMetadata getApp(String appId) throws IOException {
-        Path appFile = getAppMetadataPath(appId);
+    public static AppMetadata getApp(String tenantId, String appId) throws IOException {
+        Path appFile = getAppMetadataPath(tenantId, appId);
         if (!Files.exists(appFile)) {
             return null;
         }
@@ -127,8 +132,8 @@ public class AppManager {
     /**
      * Get app with all its pages
      */
-    public static Map<String, Object> getAppWithPages(String appId) throws IOException {
-        AppMetadata app = getApp(appId);
+    public static Map<String, Object> getAppWithPages(String tenantId, String appId) throws IOException {
+        AppMetadata app = getApp(tenantId, appId);
         if (app == null) {
             return null;
         }
@@ -137,7 +142,7 @@ public class AppManager {
 
         // Load all pages
         List<Map<String, Object>> pages = new ArrayList<>();
-        Path pagesDir = getPagesDirectory(appId);
+        Path pagesDir = getPagesDirectory(tenantId, appId);
         if (Files.exists(pagesDir)) {
             Files.list(pagesDir)
                     .filter(p -> p.toString().endsWith(".json"))
@@ -157,12 +162,12 @@ public class AppManager {
     /**
      * Create a new app
      */
-    public static AppMetadata createApp(AppMetadata app) throws IOException {
+    public static AppMetadata createApp(String tenantId, AppMetadata app) throws IOException {
         if (app.getId() == null || app.getId().isEmpty()) {
             throw new IllegalArgumentException("App ID is required");
         }
 
-        Path appDir = getAppDirectory(app.getId());
+        Path appDir = getAppDirectory(tenantId, app.getId());
         if (Files.exists(appDir)) {
             throw new IllegalStateException("App already exists: " + app.getId());
         }
@@ -181,10 +186,10 @@ public class AppManager {
 
         // Create directory structure
         Files.createDirectories(appDir);
-        Files.createDirectories(getPagesDirectory(app.getId()));
+        Files.createDirectories(getPagesDirectory(tenantId, app.getId()));
 
         // Save app metadata
-        saveApp(app);
+        saveApp(tenantId, app);
 
         // Register entities as schemas so API endpoints work
         if (app.getEntities() != null && !app.getEntities().isEmpty()) {
@@ -218,8 +223,8 @@ public class AppManager {
     /**
      * Update app metadata
      */
-    public static AppMetadata updateApp(String appId, AppMetadata updates) throws IOException {
-        AppMetadata existing = getApp(appId);
+    public static AppMetadata updateApp(String tenantId, String appId, AppMetadata updates) throws IOException {
+        AppMetadata existing = getApp(tenantId, appId);
         if (existing == null) {
             throw new IllegalArgumentException("App not found: " + appId);
         }
@@ -252,15 +257,15 @@ public class AppManager {
 
         existing.setUpdated(System.currentTimeMillis());
 
-        saveApp(existing);
+        saveApp(tenantId, existing);
         return existing;
     }
 
     /**
      * Delete an app and all its pages
      */
-    public static boolean deleteApp(String appId) throws IOException {
-        Path appDir = getAppDirectory(appId);
+    public static boolean deleteApp(String tenantId, String appId) throws IOException {
+        Path appDir = getAppDirectory(tenantId, appId);
         if (!Files.exists(appDir)) {
             return false;
         }
@@ -274,16 +279,16 @@ public class AppManager {
     /**
      * Save app metadata to file
      */
-    private static void saveApp(AppMetadata app) throws IOException {
-        Path appFile = getAppMetadataPath(app.getId());
+    private static void saveApp(String tenantId, AppMetadata app) throws IOException {
+        Path appFile = getAppMetadataPath(tenantId, app.getId());
         mapper.writeValue(appFile.toFile(), app);
     }
 
     /**
      * Get page metadata
      */
-    public static Map<String, Object> getPage(String appId, String pageId) throws IOException {
-        Path pageFile = getPagePath(appId, pageId);
+    public static Map<String, Object> getPage(String tenantId, String appId, String pageId) throws IOException {
+        Path pageFile = getPagePath(tenantId, appId, pageId);
         if (!Files.exists(pageFile)) {
             return null;
         }
@@ -296,20 +301,21 @@ public class AppManager {
      * Save page metadata
      * Automatically adds page to app's pages array if not already present
      */
-    public static void savePage(String appId, String pageId, Map<String, Object> page) throws IOException {
-        Path pagesDir = getPagesDirectory(appId);
+    public static void savePage(String tenantId, String appId, String pageId, Map<String, Object> page)
+            throws IOException {
+        Path pagesDir = getPagesDirectory(tenantId, appId);
         Files.createDirectories(pagesDir);
 
-        Path pageFile = getPagePath(appId, pageId);
+        Path pageFile = getPagePath(tenantId, appId, pageId);
         mapper.writeValue(pageFile.toFile(), page);
 
         // Auto-update app's pages array (if page not already in list)
         try {
-            AppMetadata app = getApp(appId);
+            AppMetadata app = getApp(tenantId, appId);
             if (app != null && !app.getPages().contains(pageId)) {
                 app.getPages().add(pageId);
                 app.setUpdated(System.currentTimeMillis());
-                saveApp(app);
+                saveApp(tenantId, app);
                 System.out.println("[AppManager] Added page '" + pageId + "' to app '" + appId + "' pages list");
             }
         } catch (Exception e) {
@@ -324,8 +330,8 @@ public class AppManager {
      * Delete page
      * Automatically removes page from app's pages array
      */
-    public static boolean deletePage(String appId, String pageId) throws IOException {
-        Path pageFile = getPagePath(appId, pageId);
+    public static boolean deletePage(String tenantId, String appId, String pageId) throws IOException {
+        Path pageFile = getPagePath(tenantId, appId, pageId);
         if (!Files.exists(pageFile)) {
             return false;
         }
@@ -333,11 +339,11 @@ public class AppManager {
 
         // Auto-update app's pages array (remove deleted page)
         try {
-            AppMetadata app = getApp(appId);
+            AppMetadata app = getApp(tenantId, appId);
             if (app != null && app.getPages().contains(pageId)) {
                 app.getPages().remove(pageId);
                 app.setUpdated(System.currentTimeMillis());
-                saveApp(app);
+                saveApp(tenantId, app);
                 System.out.println("[AppManager] Removed page '" + pageId + "' from app '" + appId + "' pages list");
             }
         } catch (Exception e) {
@@ -352,15 +358,15 @@ public class AppManager {
     /**
      * Get workflow file path
      */
-    private static Path getWorkflowPath(String appId) {
-        return getAppDirectory(appId).resolve(WORKFLOW_FILE);
+    private static Path getWorkflowPath(String tenantId, String appId) {
+        return getAppDirectory(tenantId, appId).resolve(WORKFLOW_FILE);
     }
 
     /**
      * Get workflow metadata
      */
-    public static Map<String, Object> getWorkflow(String appId) throws IOException {
-        Path workflowFile = getWorkflowPath(appId);
+    public static Map<String, Object> getWorkflow(String tenantId, String appId) throws IOException {
+        Path workflowFile = getWorkflowPath(tenantId, appId);
         if (!Files.exists(workflowFile)) {
             return null;
         }
@@ -372,10 +378,10 @@ public class AppManager {
     /**
      * Save workflow metadata
      */
-    public static void saveWorkflow(String appId, Map<String, Object> workflow) throws IOException {
-        Path workflowFile = getWorkflowPath(appId);
+    public static void saveWorkflow(String tenantId, String appId, Map<String, Object> workflow) throws IOException {
+        Path workflowFile = getWorkflowPath(tenantId, appId);
         // Ensure app directory exists
-        Files.createDirectories(getAppDirectory(appId));
+        Files.createDirectories(getAppDirectory(tenantId, appId));
 
         mapper.writeValue(workflowFile.toFile(), workflow);
         System.out.println("[AppManager] Saved workflow for app: " + appId);

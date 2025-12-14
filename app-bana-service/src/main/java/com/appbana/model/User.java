@@ -11,12 +11,14 @@ import java.time.LocalDateTime;
  * User entity representing an authenticated user in AppBana.
  * Maps to the app_user table in the database.
  * 
- * <p>Uses Lombok to reduce boilerplate code:</p>
+ * <p>
+ * Uses Lombok to reduce boilerplate code:
+ * </p>
  * <ul>
- *   <li>@Data: Generates getters, setters, toString, equals, hashCode</li>
- *   <li>@Builder: Enables fluent builder pattern</li>
- *   <li>@NoArgsConstructor: Default constructor</li>
- *   <li>@AllArgsConstructor: Constructor with all fields</li>
+ * <li>@Data: Generates getters, setters, toString, equals, hashCode</li>
+ * <li>@Builder: Enables fluent builder pattern</li>
+ * <li>@NoArgsConstructor: Default constructor</li>
+ * <li>@AllArgsConstructor: Constructor with all fields</li>
  * </ul>
  */
 @Data
@@ -28,15 +30,16 @@ public class User {
     private String email;
     private String passwordHash;
     private String name;
-    
+    private String tenantId;
+
     @Builder.Default
     private UserStatus status = UserStatus.ACTIVE;
-    
+
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
-    
+
     private LocalDateTime lastLogin;
-    
+
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
 

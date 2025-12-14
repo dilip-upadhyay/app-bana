@@ -32,6 +32,7 @@ public class ApiServer {
     private static final ObjectMapper M = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(ApiServer.class);
     private static PermissionService permissionService;
+    private static final String DEFAULT_TENANT = "default";
 
     // Shared utilities so both handlers can send responses
     public static void send(HttpExchange exchange, int status, String body) throws IOException {
@@ -392,6 +393,11 @@ public class ApiServer {
         // Initialize workflow engine
         com.appbana.workflow.api.WorkflowApi.initialize();
 
+        // Authentication endpoints
+        AuthenticationController authController = new AuthenticationController();
+        router.post("/api/auth/register", authController.register());
+        router.post("/api/auth/login", authController.login());
+
         // Workflow endpoints
         router.post("/api/workflows", com.appbana.workflow.api.WorkflowApi.createOrUpdateWorkflow());
         router.get("/api/workflows", com.appbana.workflow.api.WorkflowApi.listWorkflows());
@@ -413,7 +419,7 @@ public class ApiServer {
                 String desc = body.get("description");
                 String userId = extractUserId(req, ConfigManager.getConfig());
 
-                String versionId = releaseService.createVersion(appId, label, desc, userId);
+                String versionId = releaseService.createVersion(DEFAULT_TENANT, appId, label, desc, userId);
                 res.json(201, Map.of("id", versionId, "status", "created"));
             } catch (Exception e) {
                 LOG.error("Failed to create version", e);
@@ -1019,7 +1025,7 @@ public class ApiServer {
         // List all apps
         router.get("/apps", (req, res) -> {
             try {
-                List<Map<String, Object>> apps = AppManager.listApps();
+                List<Map<String, Object>> apps = AppManager.listApps(DEFAULT_TENANT);
                 res.json(200, Map.of("apps", apps));
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
@@ -1030,7 +1036,7 @@ public class ApiServer {
         router.get("/apps/{id}", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                AppMetadata app = AppManager.getApp(appId);
+                AppMetadata app = AppManager.getApp(DEFAULT_TENANT, appId);
                 if (app == null) {
                     res.json(404, Map.of("error", "App not found: " + appId));
                     return;
@@ -1045,7 +1051,7 @@ public class ApiServer {
         router.get("/apps/{id}/full", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                Map<String, Object> appObject = AppManager.getAppWithPages(appId);
+                Map<String, Object> appObject = AppManager.getAppWithPages(DEFAULT_TENANT, appId);
                 if (appObject == null) {
                     res.json(404, Map.of("error", "App not found: " + appId));
                     return;
@@ -1061,6 +1067,11 @@ public class ApiServer {
             try {
                 AppMetadata app = req.readJson(new TypeReference<AppMetadata>() {
                 });
+                // Check if exists
+                if (AppManager.getApp(DEFAULT_TENANT, app.getId()) != null) {
+                    res.json(409, Map.of("error", "App with ID " + app.getId() + " already exists"));
+                    return;
+                }
                 if (app.getName() == null || app.getName().isEmpty()) {
                     res.json(400, Map.of("error", "App name is required"));
                     return;
@@ -1069,7 +1080,7 @@ public class ApiServer {
                     res.json(400, Map.of("error", "App ID is required"));
                     return;
                 }
-                AppMetadata created = AppManager.createApp(app);
+                AppMetadata created = AppManager.createApp(DEFAULT_TENANT, app);
                 res.json(201, created);
             } catch (IllegalStateException e) {
                 res.json(409, Map.of("error", e.getMessage()));
@@ -1084,7 +1095,7 @@ public class ApiServer {
             try {
                 AppMetadata updates = req.readJson(new TypeReference<AppMetadata>() {
                 });
-                AppMetadata updated = AppManager.updateApp(appId, updates);
+                AppMetadata updated = AppManager.updateApp(DEFAULT_TENANT, appId, updates);
                 res.json(200, updated);
             } catch (IllegalArgumentException e) {
                 res.json(404, Map.of("error", e.getMessage()));
@@ -1097,7 +1108,7 @@ public class ApiServer {
         router.delete("/apps/{id}", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                boolean deleted = AppManager.deleteApp(appId);
+                boolean deleted = AppManager.deleteApp(DEFAULT_TENANT, appId);
                 if (!deleted) {
                     res.json(404, Map.of("error", "App not found: " + appId));
                     return;
@@ -1112,7 +1123,7 @@ public class ApiServer {
         router.get("/apps/{id}/workflow", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                Map<String, Object> workflow = AppManager.getWorkflow(appId);
+                Map<String, Object> workflow = AppManager.getWorkflow(DEFAULT_TENANT, appId);
                 if (workflow == null) {
                     // Return empty object if no workflow exists yet
                     res.json(200, Map.of());
@@ -1130,7 +1141,7 @@ public class ApiServer {
             try {
                 Map<String, Object> workflow = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
-                AppManager.saveWorkflow(appId, workflow);
+                AppManager.saveWorkflow(DEFAULT_TENANT, appId, workflow);
                 res.json(200, Map.of("status", "ok"));
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
@@ -1142,7 +1153,7 @@ public class ApiServer {
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
             try {
-                Map<String, Object> page = AppManager.getPage(appId, pageId);
+                Map<String, Object> page = AppManager.getPage(DEFAULT_TENANT, appId, pageId);
                 if (page == null) {
                     res.json(404, Map.of("error", "Page not found: " + appId + "/" + pageId));
                     return;
@@ -1161,7 +1172,7 @@ public class ApiServer {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> page = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
-                AppManager.savePage(appId, pageId, page);
+                AppManager.savePage(DEFAULT_TENANT, appId, pageId, page);
                 res.json(200, Map.of("status", "saved", "appId", appId, "pageId", pageId));
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
@@ -1173,7 +1184,7 @@ public class ApiServer {
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
             try {
-                boolean deleted = AppManager.deletePage(appId, pageId);
+                boolean deleted = AppManager.deletePage(DEFAULT_TENANT, appId, pageId);
                 if (!deleted) {
                     res.json(404, Map.of("error", "Page not found: " + appId + "/" + pageId));
                     return;

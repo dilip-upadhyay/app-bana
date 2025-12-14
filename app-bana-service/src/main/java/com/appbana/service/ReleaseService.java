@@ -30,12 +30,13 @@ public class ReleaseService {
      * @param userId      User creating the release
      * @return The created Version ID
      */
-    public String createVersion(String appId, String label, String description, String userId) throws Exception {
-        LOG.info("[Release] Creating snapshot for app: {}", appId);
+    public String createVersion(String tenantId, String appId, String label, String description, String userId)
+            throws Exception {
+        LOG.info("[Release] Creating snapshot for app: {} (Tenant: {})", appId, tenantId);
 
         // 1. Gather Application State
         // A. Metadata & Pages & Entities (File-based)
-        Map<String, Object> fullApp = AppManager.getAppWithPages(appId);
+        Map<String, Object> fullApp = AppManager.getAppWithPages(tenantId, appId);
         if (fullApp == null) {
             throw new IllegalArgumentException("App not found: " + appId);
         }
@@ -56,7 +57,7 @@ public class ReleaseService {
         // Ref: AppManager.java
 
         // Let's rely on AppMetadata vs the composite map.
-        AppMetadata meta = AppManager.getApp(appId);
+        AppMetadata meta = AppManager.getApp(tenantId, appId);
         String metaJson = MAPPER.writeValueAsString(meta);
 
         String pagesJson = MAPPER.writeValueAsString(pagesObj != null ? pagesObj : Collections.emptyList());
