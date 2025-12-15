@@ -408,13 +408,22 @@ public class AiSystemPrompts {
         sb.append("- 'assign task', 'send email', 'update status'\n\n");
 
         sb.append("**Node Types**:\n");
-        sb.append("- **START**: Entry point\n");
-        sb.append("- **END**: Termination\n");
-        sb.append("- **USER_TASK**: Human interaction (approval form, data entry)\n");
+        sb.append("- **START**: Entry point (EXACTLY ONE required)\n");
+        sb.append("- **END**: Termination (AT LEAST ONE required)\n");
+        sb.append(
+                "- **USER_TASK**: Human interaction. MUST have 'assignmentType' (USER/ROLE/QUEUE) and corresponding ID.\n");
         sb.append("- **SERVICE_TASK**: Automated action (send email, update entity)\n");
         sb.append("- **DECISION**: Conditional logic (${entity.amount > 1000})\n\n");
 
-        sb.append("**Triggers**: ON_CREATE, ON_UPDATE, ON_DELETE, MANUAL\n");
+        sb.append("**Triggers**: ON_CREATE, ON_UPDATE, ON_DELETE, MANUAL\n\n");
+
+        sb.append("**🚨 CRITICAL VALIDATION RULES (YOU MUST FOLLOW):**\n");
+        sb.append(
+                "1. **Every USER_TASK must have an assignment**: Set `assignmentType`='ROLE' and `assignedRole`='admin' (or 'manager') if unsure.\n");
+        sb.append("2. **Connectivity**: All nodes must be connected. No orphan nodes.\n");
+        sb.append("3. **Structure**: Must have exactly 1 START and at least 1 END node.\n");
+        sb.append(
+                "4. **Transitions**: Ensure logical flow (Start -> Task -> End). Decision nodes must cover all cases (true/false paths).\n");
         return sb.toString();
     }
 

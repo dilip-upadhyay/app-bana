@@ -11,6 +11,7 @@ import '../../components/SelectElement';
 import '../../components/TextareaElement';
 import '../../components/ButtonElement';
 import '../../components/FormContainer';
+import '../components/TaskInbox';
 
 /**
  * AppRuntimeShell - Main container for app preview/production runtime
@@ -39,6 +40,10 @@ export class AppRuntimeShell extends LitElement {
 
   @state()
   private showThemeModal: boolean = false;
+
+  @state()
+  private showInbox: boolean = false;
+
   @state()
   private runtimeTheme: any = null;
 
@@ -352,7 +357,14 @@ export class AppRuntimeShell extends LitElement {
     }
   }
 
+  private handleInboxClick() {
+    this.showInbox = true;
+    this.currentPageId = ''; // Deselect page tabs
+    this.requestUpdate();
+  }
+
   private handlePageTabClick(pageId: string) {
+    this.showInbox = false;
     this.navigateToPage(pageId);
   }
 
@@ -413,7 +425,12 @@ export class AppRuntimeShell extends LitElement {
           <div class="header-left">
             <h1 class="app-title">${app.name}</h1>
           </div>
-          <div class="header-right" style="margin-left:auto;">
+          <div class="header-right" style="margin-left:auto; display:flex; gap:16px; align-items:center;">
+             <button @click=${this.handleInboxClick} 
+               class="page-tab ${this.showInbox ? 'active' : ''}"
+               style="background:none; border:none; cursor:pointer; font-weight:600; color:var(--color-text); display:flex; align-items:center; gap:6px;">
+               <span>📥 Inbox</span>
+             </button>
              <button @click=${this.openThemeModal} style="background:transparent;border:none;cursor:pointer;font-size:1.2rem;" title="Change Theme">🎨</button>
           </div>
         </header>
@@ -423,7 +440,7 @@ export class AppRuntimeShell extends LitElement {
           <nav class="page-tabs">
             ${pages.map(page => html`
               <button
-                class="page-tab ${page.id === this.currentPageId ? 'active' : ''}"
+                class="page-tab ${page.id === this.currentPageId && !this.showInbox ? 'active' : ''}"
                 @click=${() => this.handlePageTabClick(page.id)}
               >
                 ${page.name}
@@ -440,7 +457,8 @@ export class AppRuntimeShell extends LitElement {
               <p>${this.error}</p>
             </div>
           ` : ''}
-    ${this.currentPage ? renderPageTemplate(this.currentPage, context) : html`<div>Loading...</div>`}
+          ${this.showInbox ? html`<task-inbox></task-inbox>` :
+        (this.currentPage ? renderPageTemplate(this.currentPage, context) : html`<div>Loading...</div>`)}
         </main>
         
         ${this.showThemeModal ? html`
