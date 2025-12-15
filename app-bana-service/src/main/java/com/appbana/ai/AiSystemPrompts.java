@@ -420,6 +420,9 @@ public class AiSystemPrompts {
         sb.append("**🚨 CRITICAL VALIDATION RULES (YOU MUST FOLLOW):**\n");
         sb.append(
                 "1. **Every USER_TASK must have an assignment**: Set `assignmentType`='ROLE' and `assignedRole`='admin' (or 'manager') if unsure.\n");
+        sb.append(
+                "   - **Entity Assignment**: To assign to a user field in the entity (e.g. Project Owner), use `assignmentType`='DYNAMIC' and `assignmentExpression`='${entity.ownerId}'.\n");
+        sb.append("   - **Role Assignment**: Use `assignmentType`='ROLE' and `assignedRole`='hr_manager'.\n");
         sb.append("2. **Connectivity**: All nodes must be connected. No orphan nodes.\n");
         sb.append("3. **Structure**: Must have exactly 1 START and at least 1 END node.\n");
         sb.append(
