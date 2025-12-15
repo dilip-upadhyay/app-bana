@@ -407,6 +407,7 @@ public class ApiServer {
         router.post("/api/workflows/{id}/start", com.appbana.workflow.api.WorkflowApi.startWorkflow());
         router.get("/api/my-tasks", com.appbana.workflow.api.WorkflowApi.getMyTasks());
         router.post("/api/my-tasks/{tokenId}/complete", com.appbana.workflow.api.WorkflowApi.completeTask());
+        router.get("/api/my-requests", com.appbana.workflow.api.WorkflowApi.getMyRequests()); // New Endpoint
         router.get("/api/workflow-instances", com.appbana.workflow.api.WorkflowApi.listInstances());
 
         // Release Management endpoints

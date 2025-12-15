@@ -1,10 +1,12 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, state, property } from 'lit/decorators.js';
+import { customElement, state } from 'lit/decorators.js';
 import { apiClient } from '../../core/api-client';
+import { PageMeta, ComponentNode } from '../../models/metadata';
+import { renderPageTemplate } from '../renderer/Renderer';
 
 @customElement('task-inbox')
 export class TaskInbox extends LitElement {
-    static styles = css`
+  static styles = css`
     :host {
       display: block;
       padding: 24px;
@@ -148,10 +150,12 @@ export class TaskInbox extends LitElement {
       background: white;
       padding: 24px;
       border-radius: 12px;
-      width: 500px;
+      width: 600px;
       max-width: 90%;
       max-height: 90vh;
       overflow-y: auto;
+      display: flex;
+      flex-direction: column;
     }
     
     .data-grid {
@@ -159,6 +163,8 @@ export class TaskInbox extends LitElement {
       grid-template-columns: auto 1fr;
       gap: 8px 16px;
       margin: 16px 0;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #eee;
     }
     
     .label {
@@ -167,64 +173,108 @@ export class TaskInbox extends LitElement {
     }
   `;
 
-    @state()
-    private tasks: any[] = [];
+  @state()
+  private tasks: any[] = [];
 
-    @state()
-    private loading = true;
+  @state()
+  private loading = true;
 
-    @state()
-    private selectedTask: any | null = null;
+  @state()
+  private selectedTask: any | null = null;
 
-    @state()
-    private processingId: string | null = null;
+  @state()
+  private processingId: string | null = null;
 
-    async connectedCallback() {
-        super.connectedCallback();
-        this.fetchTasks();
+  async connectedCallback() {
+    super.connectedCallback();
+    this.fetchTasks();
+  }
+
+  async fetchTasks() {
+    this.loading = true;
+    try {
+      // In a real app, userId would be dynamic. 
+      // For this demo, we assume the backend filters correctly or we pass a test user.
+      const userId = 'system';
+      const tasks = await apiClient.get<any[]>(`/workflow/my-tasks?userId=${userId}`);
+      this.tasks = tasks || [];
+    } catch (e) {
+      console.error('Failed to fetch tasks', e);
+    } finally {
+      this.loading = false;
     }
+  }
 
-    async fetchTasks() {
-        this.loading = true;
-        try {
-            // In a real app, userId would be dynamic. 
-            // For this demo, we assume the backend filters correctly or we pass a test user.
-            const userId = 'system';
-            const tasks = await apiClient.get<any[]>(`/workflow/my-tasks?userId=${userId}`);
-            this.tasks = tasks || [];
-        } catch (e) {
-            console.error('Failed to fetch tasks', e);
-        } finally {
-            this.loading = false;
+  async completeTask(task: any, outcome: string) {
+    this.processingId = task.tokenId;
+    try {
+      await apiClient.post(`/workflow/my-tasks/${task.tokenId}/complete`, {
+        outcome,
+        taskData: {} // Could capture form data here if we had a form
+      });
+      // Remove from list locally for instant feedback
+      this.tasks = this.tasks.filter(t => t.tokenId !== task.tokenId);
+      this.selectedTask = null;
+
+      this.dispatchEvent(new CustomEvent('task-completed', {
+        detail: { outcome, task },
+        bubbles: true
+      }));
+
+    } catch (e) {
+      console.error('Failed to complete task', e);
+      alert('Failed to complete task');
+    } finally {
+      this.processingId = null;
+    }
+  }
+
+  generateForm(data: any): PageMeta {
+    const nodes: ComponentNode[] = [];
+    const children: string[] = [];
+
+    // Create inputs for each data field
+    Object.entries(data).forEach(([key, value]) => {
+      // Skip internal fields and complex objects
+      if (key === 'id' || key.startsWith('_') || typeof value === 'object') return;
+
+      const nodeId = `input-${key}`;
+      nodes.push({
+        id: nodeId,
+        type: 'input',
+        props: {
+          label: key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
+          value: String(value), // Ensure string for input
+          name: key,
+          readonly: true, // Read-only for review
+          readOnly: true
         }
-    }
+      });
+      children.push(nodeId);
+    });
 
-    async completeTask(task: any, outcome: string) {
-        this.processingId = task.tokenId;
-        try {
-            await apiClient.post(`/workflow/my-tasks/${task.tokenId}/complete`, {
-                outcome,
-                taskData: {} // Could capture form data here if we had a form
-            });
-            // Remove from list locally for instant feedback
-            this.tasks = this.tasks.filter(t => t.tokenId !== task.tokenId);
-            this.selectedTask = null;
+    // Root container
+    const rootId = 'form-root';
+    nodes.push({
+      id: rootId,
+      type: 'container',
+      props: {
+        style: 'display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;'
+      },
+      children
+    });
 
-            this.dispatchEvent(new CustomEvent('task-completed', {
-                detail: { outcome, task },
-                bubbles: true
-            }));
+    return {
+      id: 'dynamic-task-form',
+      name: 'Task Form',
+      path: '/task',
+      rootId,
+      nodes
+    };
+  }
 
-        } catch (e) {
-            console.error('Failed to complete task', e);
-            alert('Failed to complete task');
-        } finally {
-            this.processingId = null;
-        }
-    }
-
-    render() {
-        return html`
+  render() {
+    return html`
       <div class="inbox-container">
         <div class="header">
           <h2>
@@ -250,23 +300,23 @@ export class TaskInbox extends LitElement {
 
       ${this.renderDetailsModal()}
     `;
-    }
+  }
 
-    renderTaskItem(task: any) {
-        const isProcessing = this.processingId === task.tokenId;
-        const taskName = task.workflowName || 'Workflow Task';
+  renderTaskItem(task: any) {
+    const isProcessing = this.processingId === task.tokenId;
+    const taskName = task.workflowName || 'Workflow Task';
 
-        // Attempt to find a meaningful title from context data
-        let contextTitle = '';
-        try {
-            if (task.contextData) {
-                const ctx = JSON.parse(task.contextData);
-                // Look for common name fields
-                contextTitle = ctx.name || ctx.title || ctx.subject || ctx.email || `Item #${task.entityId}`;
-            }
-        } catch (e) { contextTitle = `Item #${task.entityId}`; }
+    // Attempt to find a meaningful title from context data
+    let contextTitle = `Item #${task.entityId}`;
+    try {
+      if (task.contextData) {
+        const ctx = JSON.parse(task.contextData);
+        // Look for common name fields
+        contextTitle = ctx.name || ctx.title || ctx.subject || ctx.email || contextTitle;
+      }
+    } catch (e) { }
 
-        return html`
+    return html`
       <div class="task-item">
         <div class="task-info">
           <h3>${contextTitle}</h3>
@@ -294,18 +344,24 @@ export class TaskInbox extends LitElement {
         </div>
       </div>
     `;
-    }
+  }
 
-    renderDetailsModal() {
-        if (!this.selectedTask) return '';
-        const task = this.selectedTask;
-        let contextData = {};
-        try { contextData = JSON.parse(task.contextData || '{}'); } catch (e) { }
+  renderDetailsModal() {
+    if (!this.selectedTask) return '';
+    const task = this.selectedTask;
+    let contextData = {};
+    try { contextData = JSON.parse(task.contextData || '{}'); } catch (e) { }
 
-        return html`
+    // Generate dynamic form definition
+    const formMeta = this.generateForm(contextData);
+
+    return html`
       <div class="details-modal" @click=${() => this.selectedTask = null}>
         <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
-          <h2 style="margin-top:0">Review Task</h2>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+            <h2 style="margin:0">Review Application</h2>
+            <button @click=${() => this.selectedTask = null} style="border:none; background:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+          </div>
           
           <div class="data-grid">
             <span class="label">Workflow:</span> <span>${task.workflowName}</span>
@@ -313,20 +369,19 @@ export class TaskInbox extends LitElement {
             <span class="label">Received:</span> <span>${new Date(task.arrivedAt).toLocaleString()}</span>
           </div>
 
-          <h3>Application Data</h3>
-          <div class="data-grid">
-            ${Object.entries(contextData).map(([key, value]) => html`
-              <span class="label" style="text-transform:capitalize">${key.replace(/([A-Z])/g, ' $1').trim()}:</span>
-              <span>${String(value)}</span>
-            `)}
+          <h3 style="margin-bottom:16px;">Applicant Details</h3>
+          
+          <!-- Render form using the standard AppBana Renderer -->
+          <div style="flex:1; overflow-y:auto; padding-right:8px;">
+            ${renderPageTemplate(formMeta)}
           </div>
 
-          <div style="margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end;">
+          <div style="margin-top: 24px; padding-top:16px; border-top:1px solid #eee; display: flex; gap: 12px; justify-content: flex-end;">
             <button class="btn-reject" @click=${() => this.completeTask(task, 'REJECT')}>Reject</button>
             <button class="btn-approve" @click=${() => this.completeTask(task, 'APPROVE')}>Approve</button>
           </div>
         </div>
       </div>
     `;
-    }
+  }
 }
