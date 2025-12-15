@@ -439,9 +439,7 @@ export class WorkflowDesignerPage extends LitElement {
     try {
       // 1. Try to load from API
       // Backend returns { workflows: [...] } or just the workflow object
-      console.log('🔍 loadFromStorage: Fetching workflow for app:', this.appId);
       const response: any = await apiClient.get<any>(`/apps/${this.appId}/workflow`);
-      console.log('🔍 loadFromStorage: API Response:', response);
 
       let workflow: any = response;
       this.preloadedWorkflows = [];
@@ -456,7 +454,6 @@ export class WorkflowDesignerPage extends LitElement {
         }
       } else if (response && response.id) {
         // Handle single workflow response
-        console.log('🔍 loadFromStorage: Received single workflow object');
         this.preloadedWorkflows = [response];
         workflow = response;
       }
