@@ -1,5 +1,5 @@
 {
-  "lastUpdated" : 1765908675839,
+  "lastUpdated" : 1765909706615,
   "entries" : [ {
     "normalizedText" : "create a 'candidate review' workflow. when a new candidate is created, i want to start a review process automatically. a manager should get a task to review the candidate's application. they should be able to see the candidate's details and add their comments. if they approve, the candidate's status should change to 'hiring'. if they reject, the status should change to 'rejected'. finally, please log a notification about the decision",
     "action" : {
@@ -22,8 +22,8 @@
       }
     },
     "createdTime" : 1765907295336,
-    "lastAccessTime" : 1765908675838,
-    "hitCount" : 3
+    "lastAccessTime" : 1765909706615,
+    "hitCount" : 4
   }, {
     "normalizedText" : "did you consider below? when a new candidate is created, i want to start a review process automatically. a manager should get a task to review the candidate's application. they should be able to see the candidate's details and add their comments. if they approve, the candidate's status should change to 'hiring'. if they reject, the status should change to 'rejected'. finally, please log a notification about the decision",
     "action" : {
@@ -82,7 +82,7 @@
       }
     },
     "createdTime" : 1765904302430,
-    "lastAccessTime" : 1765908503099,
-    "hitCount" : 6
+    "lastAccessTime" : 1765909681177,
+    "hitCount" : 7
   } ]
 }

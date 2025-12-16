@@ -1,6 +1,6 @@
 {
   "version" : "1.0",
-  "lastUpdated" : "Tue Dec 16 23:19:28 IST 2025",
+  "lastUpdated" : "Tue Dec 16 23:59:28 IST 2025",
   "entries" : [ {
     "originalText" : "hi, how are you?",
     "normalizedText" : "hi, how are you",
@@ -8,6 +8,13 @@
     "createdTime" : 1765906166165,
     "lastAccessTime" : 1765907178390,
     "hitCount" : 1
+  }, {
+    "originalText" : "what are the fields in Candidate entity?",
+    "normalizedText" : "what are the fields in candidate entity",
+    "response" : "The fields in a Candidate entity typically include:\n\n1. **ID**: Unique identifier for the candidate.\n2. **Name**: Full name of the candidate.\n3. **Email**: Contact email address.\n4. **Phone**: Contact phone number.\n5. **Resume**: Link or file to the candidate's resume.\n6. **Skills**: List of relevant skills or qualifications.\n7. **Experience**: Work experience details.\n8. **Education**: Educational background.\n9. **Status**: Current status in the recruitment process (e.g., applied, interviewed, hired).\n10. **Date Applied**: Date the candidate applied for the position.\n\nIf you're interested in creating an app related to recruitment or candidate management, consider building a tool that streamlines the hiring process by allowing users to manage candidate profiles, track applications, and communicate with candidates effectively.",
+    "createdTime" : 1765909768867,
+    "lastAccessTime" : 1765909768867,
+    "hitCount" : 0
   }, {
     "originalText" : "what are entities?",
     "normalizedText" : "what are entities",
