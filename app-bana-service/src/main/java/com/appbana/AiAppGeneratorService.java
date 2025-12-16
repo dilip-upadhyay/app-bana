@@ -93,8 +93,16 @@ public class AiAppGeneratorService {
         LOG.info("[AI] Incoming GenerationRequest: action={}, description={}, options={}",
                 request != null ? request.action : null,
                 request != null ? request.description : null,
+                request != null ? request.description : null,
                 request != null ? request.options : null);
         try {
+            // FIX: Handle small talk check BEFORE context merging to avoid "Hi" becoming
+            // "Create App..."
+            GenerationResult earlySmallTalk = handleSmallTalkIfNeeded(request, null);
+            if (earlySmallTalk != null) {
+                return earlySmallTalk;
+            }
+
             // FIX #1: Use contextual description if continuation request
             String effectiveDescription = buildContextualDescription(request);
             if (!effectiveDescription.equals(request.description)) {
@@ -107,11 +115,6 @@ public class AiAppGeneratorService {
                 contextualRequest.conversationContext = request.conversationContext;
                 contextualRequest.mode = request.mode;
                 request = contextualRequest;
-            }
-
-            GenerationResult earlySmallTalk = handleSmallTalkIfNeeded(request, null);
-            if (earlySmallTalk != null) {
-                return earlySmallTalk;
             }
 
             // NEW: Use metadata-driven intelligence for intent classification
@@ -209,6 +212,21 @@ public class AiAppGeneratorService {
                         if (e.getFields() != null)
                             plan.append(e.getFields().size()).append(" fields");
                         plan.append(")\n");
+                    }
+                    plan.append("\n");
+                }
+
+                if (gen.workflows != null && !gen.workflows.isEmpty()) {
+                    plan.append("**Workflows:**\n");
+                    for (WorkflowDefinition w : gen.workflows) {
+                        if (w == null)
+                            continue;
+                        plan.append("- **").append(w.getName()).append("**\n");
+                        plan.append("  Trigger: ").append(w.getTriggerEvent() != null ? w.getTriggerEvent() : "Manual")
+                                .append("\n");
+                        if (w.getDescription() != null) {
+                            plan.append("  Description: ").append(w.getDescription()).append("\n");
+                        }
                     }
                     plan.append("\n");
                 }

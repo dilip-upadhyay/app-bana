@@ -597,9 +597,36 @@ public class AiSystemPrompts {
                   "id": "team-directory",
                   "name": "Team Directory",
                   "type": "data-table",
-                  "entity": "TeamMember",
                   "columns": ["name", "email", "role"],
                   "actions": ["view", "edit", "delete", "create"]
+                }
+              ],
+              "workflows": [
+                {
+                  "id": "task-approval-wf",
+                  "name": "Task Approval",
+                  "description": "Manager approval for tasks",
+                  "triggerEntity": "Task",
+                  "triggerEvent": "ON_CREATE",
+                  "triggerCondition": "${entity.priority == 'HIGH'}",
+                  "status": "ACTIVE",
+                  "definition": {
+                    "nodes": {
+                      "start": { "type": "START", "label": "Start" },
+                      "approval": {
+                        "type": "USER_TASK",
+                        "label": "Manager Approval",
+                        "assignmentType": "ROLE",
+                        "assignmentExpression": "manager",
+                        "formFields": [{"name": "comment", "type": "textarea"}]
+                      },
+                      "end": { "type": "END", "label": "End" }
+                    },
+                    "transitions": [
+                      { "from": "start", "to": "approval" },
+                      { "from": "approval", "to": "end" }
+                    ]
+                  }
                 }
               ]
             }
