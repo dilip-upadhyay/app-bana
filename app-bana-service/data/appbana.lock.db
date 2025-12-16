@@ -1,6 +1,6 @@
 #FileLock
-#Tue Dec 16 19:43:51 IST 2025
-hostName=Dilip.mshome.net
-id=19b27829d1864bb829b0e3127e786bf9a4e1cc39a89
+#Tue Dec 16 21:33:32 IST 2025
+hostName=Dilip
+id=19b27e7068df17f9f74b4994b728ba29334444d2277
 method=file
-server=172.17.0.1\:53259
+server=192.168.1.10\:51932

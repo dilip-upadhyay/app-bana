@@ -2009,23 +2009,24 @@ public class ApiServer {
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
             try {
-                long id = insertRecord(schema, data);
+                Object idObj = insertRecord(schema, data);
+                String id = String.valueOf(idObj);
                 // after image
-                Map<String, Object> after = getById(schema, String.valueOf(id));
+                Map<String, Object> after = getById(schema, id);
                 LOG.info("Entity created: {} id={}, after={}", schema.getName(), id,
                         after != null ? "present" : "NULL");
-                AuditLogService.log("INSERT", schema.getName(), String.valueOf(id), actor, null, after);
+                AuditLogService.log("INSERT", schema.getName(), id, actor, null, after);
 
                 // Workflow PostOperationHook: Check and auto-start workflows
                 if (after != null) {
                     LOG.info("Calling checkAndStartWorkflows for {} ON_CREATE id={}", schema.getName(), id);
                     com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
-                            schema.getName(), "ON_CREATE", String.valueOf(id), after);
+                            schema.getName(), "ON_CREATE", id, after);
                 } else {
                     LOG.warn("Skipping workflow trigger - after image is null for {} id={}", schema.getName(), id);
                 }
 
-                res.json(201, Map.of("id", id));
+                res.json(201, Map.of("id", idObj));
             } catch (SQLException e) {
                 LOG.error("Insert failed for entity {}", entity, e);
                 res.json(500, errorDetails(e));
@@ -2677,14 +2678,23 @@ public class ApiServer {
         return JdbcManager.getConnection(schema != null ? schema.getDatasourceName() : null);
     }
 
-    public static long insertRecord(EntitySchema schema, Map<String, Object> data) throws SQLException {
+    public static Object insertRecord(EntitySchema schema, Map<String, Object> data) throws SQLException {
         List<EntitySchema.Field> fields = schema.getFields();
         List<String> cols = new ArrayList<>();
         List<String> placeholders = new ArrayList<>();
         List<Object> values = new ArrayList<>();
         for (EntitySchema.Field f : fields) {
-            if (f.isPrimaryKey() && f.isAutoIncrement()) {
-                continue; // skip if auto
+            if (f.isPrimaryKey()) {
+                if (f.isAutoIncrement()) {
+                    continue; // skip if auto
+                }
+                // Generate UUID if missing and type is compatible
+                if (!data.containsKey(f.getName())) {
+                    String t = f.getType().toLowerCase();
+                    if (t.equals("string") || t.equals("text") || t.equals("uuid") || t.equals("varchar")) {
+                        data.put(f.getName(), java.util.UUID.randomUUID().toString());
+                    }
+                }
             }
             cols.add(quote(f.getName()));
             placeholders.add("?");
@@ -2701,11 +2711,18 @@ public class ApiServer {
             }
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
-                if (rs.next())
-                    return rs.getLong(1);
+                if (rs.next()) {
+                    return rs.getObject(1);
+                }
+            }
+            // If no generated key returned (e.g. client provided UUID), return PK
+            EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
+                    .orElse(null);
+            if (pk != null && data.containsKey(pk.getName())) {
+                return data.get(pk.getName());
             }
         }
-        return -1;
+        return -1L;
     }
 
     public static List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {

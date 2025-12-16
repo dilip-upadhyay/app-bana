@@ -701,7 +701,7 @@ export class StudioTableLive extends LitElement {
                <button class="close-btn" @click=${() => this.createOpen = false}>Close</button>
              </div>
              <div class="view-form-grid" style="margin-top:1rem;">
-               ${(this.node?.props?.fields || []).map((f: any) => html`
+               ${(this.node?.props?.fields || []).filter((f: any) => f.name.toLowerCase() !== 'id').map((f: any) => html`
                  <div class="view-field" style="background:var(--color-surface,#fff);">
                    <label for="create_${f.name}">${f.label || f.name}</label>
                    ${f.type === 'select' || f.options ? html`
