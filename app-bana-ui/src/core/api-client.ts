@@ -349,6 +349,12 @@ export async function bulkExport(entity: string, ids: (string | number)[]) {
   return apiClient.post(`${base}/api/${entity}/bulk-export`, { ids });
 }
 
+/** Create a new row */
+export async function createRow(entity: string, data: Record<string, any>) {
+  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  return apiClient.post(`${base}/api/${entity}`, data);
+}
+
 /** Update single row by id */
 export async function updateRow(entity: string, id: string | number, data: Record<string, any>) {
   const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';

@@ -1,7 +1,7 @@
 // StudioTableLive.ts - Lit component for runtime table rendering with live data
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { fetchTableData, bulkDelete, bulkExport, updateRow, getFieldPermissions, canReadField, canEditField } from '../../core/api-client';
+import { fetchTableData, bulkDelete, bulkExport, updateRow, createRow, getFieldPermissions, canReadField, canEditField } from '../../core/api-client';
 import type { ComponentNode } from '../../models/metadata';
 
 @customElement('studio-table-live')
@@ -28,6 +28,10 @@ export class StudioTableLive extends LitElement {
   @state() private editMode: boolean = false;
   @state() private editValues: Record<string, any> = {};
   @state() private fieldPermissions: { readable: string[], editable: string[] } | null = null;
+
+  // Quick Create State
+  @state() private createOpen: boolean = false;
+  @state() private createData: Record<string, any> = {};
 
   private get entityName(): string | undefined {
     return this.node?.props?.entity?.replace(/=$/, '');
@@ -634,7 +638,20 @@ export class StudioTableLive extends LitElement {
     const customStyle = this.computeCustomStyle(rawTheme);
     const bulkActions: string[] = Array.isArray(this.node?.props?.bulkActions) ? this.node.props.bulkActions : ['delete', 'export'];
     const selectedCount = this.selectedIds.size;
+    const showHeader = Boolean(this.node?.label || this.entityName);
+    const canCreate = true; // TODO: Check permissions or props
+
     return html`<div class="${themeClass}" style="${customStyle}">
+      ${showHeader ? html`
+        <div class="table-header-bar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+           <h2 style="margin:0;font-size:1.5rem;font-weight:700;color:var(--color-text,#1e293b);">${this.node?.label || (this.entityName ? this.entityName + ' List' : 'Data Table')}</h2>
+           ${canCreate ? html`
+             <button @click=${this.handleCreate} style="padding:8px 16px;background:var(--color-brand,#2563eb);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+               <span>+</span> New
+             </button>
+           ` : ''}
+        </div>
+      ` : ''}
       ${this.error ? html`<div class="table-error" style="background:#fef2f2;color:#b91c1c;border:1px solid #fee2e2;">Showing sample data (${this.error})</div>` : ''}
       ${this.buildPagination(startIdx, endIdx, totalPages)}
       ${multiSelect && selectedCount > 0 ? html`
@@ -674,6 +691,35 @@ export class StudioTableLive extends LitElement {
         <div class="snackbar" role="status" aria-live="polite">
           <span>${this.toastMessage}</span>
           <button @click=${() => { this.toastOpen = false; this.toastMessage = ''; }}>Dismiss</button>
+        </div>
+      ` : ''}
+      ${this.createOpen ? html`
+        <div class="modal-overlay" role="presentation" @click=${() => this.createOpen = false}>
+          <div class="view-modal-card" role="dialog" aria-modal="true" aria-labelledby="createTitle" tabindex="0" @click=${(e: Event) => e.stopPropagation()}>
+             <div class="view-modal-header">
+               <h3 id="createTitle" style="margin:0;font-size:1rem;">New ${this.entityName || 'Item'}</h3>
+               <button class="close-btn" @click=${() => this.createOpen = false}>Close</button>
+             </div>
+             <div class="view-form-grid" style="margin-top:1rem;">
+               ${(this.node?.props?.fields || []).map((f: any) => html`
+                 <div class="view-field" style="background:var(--color-surface,#fff);">
+                   <label for="create_${f.name}">${f.label || f.name}</label>
+                   ${f.type === 'select' || f.options ? html`
+                     <select id="create_${f.name}" .value=${this.createData[f.name] || ''} @change=${(e: Event) => this.createData = { ...this.createData, [f.name]: (e.target as HTMLSelectElement).value }} style="padding:8px;border:1px solid #cbd5e1;border-radius:6px;width:100%;">
+                        <option value="">Select...</option>
+                        ${(f.options || []).map((o: any) => html`<option value=${o}>${o}</option>`)}
+                     </select>
+                   ` : html`
+                     <input type="text" id="create_${f.name}" .value=${this.createData[f.name] || ''} @input=${(e: Event) => this.createData = { ...this.createData, [f.name]: (e.target as HTMLInputElement).value }} style="padding:8px;border:1px solid #cbd5e1;border-radius:6px;width:100%;">
+                   `}
+                 </div>
+               `)}
+             </div>
+             <div class="modal-actions" style="margin-top:1.5rem;">
+                <button class="btn-secondary" @click=${() => this.createOpen = false}>Cancel</button>
+                <button class="btn-danger" style="background:var(--color-brand,#2563eb);border-color:var(--color-brand,#2563eb);" @click=${this.submitCreate}>Create</button>
+             </div>
+          </div>
         </div>
       ` : ''}
       ${this.viewOpen ? html`
@@ -799,6 +845,9 @@ export class StudioTableLive extends LitElement {
         }
       };
 
+      const createPage = `create-${(this.entityName || '').toLowerCase()}`;
+      // Basic implementation: if action is 'create', navigate
+
       // Create a function that takes 'row' and 'navigate' as arguments
       // The action.onClick string (e.g., "navigate('/foo')") matches this if 'navigate' is in scope
       // We pass 'navigate' as a parameter to the dynamic function so it's available
@@ -807,6 +856,28 @@ export class StudioTableLive extends LitElement {
     } catch (e) {
       console.error('Failed to execute custom action', e);
       this.showToast('Action failed: ' + (e as Error).message);
+    }
+  }
+
+  private handleCreate() {
+    // Open Quick Create Modal instead of navigating
+    this.createData = {};
+    this.createOpen = true;
+  }
+
+  private async submitCreate() {
+    const entity = this.entityName;
+    if (!entity) return;
+
+    try {
+      await createRow(entity, this.createData);
+      this.showToast('Created successfully');
+      this.createOpen = false;
+      this.createData = {};
+      this.loadPage(1); // Refresh
+    } catch (e) {
+      console.error(e);
+      this.showToast('Create failed: ' + (e as Error).message);
     }
   }
 
