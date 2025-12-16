@@ -1,5 +1,5 @@
 {
-  "lastUpdated" : 1765737576516,
+  "lastUpdated" : 1765904365430,
   "entries" : [ {
     "normalizedText" : "build a comprehensive enterprise hr management system with automated workflows. - **department**: name, code, location, manager. - **employee**: first name, last name, email, job title, department (link), manager (link), status (active/terminated). # 2. recruitment module (ats) - **jobposting**: title, department (link), status (open/closed). - **candidate**: name, email, applied for (link to jobposting), status (new, interviewing, offer, hired, rejected). # 3. time off module - **leaverequest**: employee (link), start date, end date, type (vacation/sick), reason, status (pending, approved, rejected). # 4. performance module - **performancereview**: employee (link), review period, rating (1-5), comments, status (draft, submitted, finalized). # 5. required workflows please generate the \"workflows\" array for: 1. \"leave approval flow\": - trigger: when a leaverequest is created. - step 1: manager approval (user task). - step 2: hr notification (service task - email). 2. \"candidate hiring flow\": - trigger: when candidate status changes to \"offer\". - step 1: generate offer letter (service task). - step 2: vp approval (user task). # 6. pages - \"hr dashboard\": dashboard with counts of active employees and open jobs. - \"recruitment board\": kanban board for candidates grouped by status. - \"leave portal\": list of my leaverequests with a \"create new\" button. - \"org chart\": employee directory list",
     "action" : {
@@ -12,5 +12,29 @@
     "createdTime" : 1765736843965,
     "lastAccessTime" : 1765737576515,
     "hitCount" : 1
+  }, {
+    "normalizedText" : "i also want to have below : when a new candidate is created, i want to start a review process automatically. a manager should get a task to review the candidate's application. they should be able to see the candidate's details and add their comments. if they approve, the candidate's status should change to 'hiring'. if they reject, the status should change to 'rejected'. finally, please log a notification about the decision",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1765904365421,
+    "lastAccessTime" : 1765904365421,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "i need an hr system to track job candidates and employees. we need to store candidate details like name, email, status (default to 'new'), and their resume link. for employees, we need to track their name, email, department, and start date. i want a dashboard to see how many people we have in each category. also, we need a way to list all candidates and forms to add or update them",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1765904302430,
+    "lastAccessTime" : 1765904302430,
+    "hitCount" : 0
   } ]
 }

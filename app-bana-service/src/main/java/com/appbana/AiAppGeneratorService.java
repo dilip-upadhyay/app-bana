@@ -69,6 +69,7 @@ public class AiAppGeneratorService {
         List<String> discussedEntities;
         String lastCreatedAppId;
         String lastOpenedAppId;
+        GenerationResult pendingResult; // Staged app generation waiting for approval
         long timestamp;
 
         ConversationContext() {
@@ -171,6 +172,15 @@ public class AiAppGeneratorService {
                 LOG.info("[AI Context] Stored detailed app description in context");
             }
 
+            // FIX: Check for confirmation of pending plan
+            if (isContinuationRequest(request) && ctx.pendingResult != null) {
+                LOG.info("[AI] User confirmed pending generation plan");
+                GenerationResult pending = ctx.pendingResult;
+                postProcessAndPersistIfNeeded(pending, request);
+                ctx.pendingResult = null; // Clear after processing
+                return pending;
+            }
+
             if (isAppCreationRequest(
                     request != null ? request.description == null ? null : request.description.toLowerCase(Locale.ROOT)
                             : null)) {
@@ -182,7 +192,45 @@ public class AiAppGeneratorService {
                     gen.payload.put("appType", appType);
                 }
                 ensureStructuralMinimum(gen, appType, request);
-                postProcessAndPersistIfNeeded(gen, request);
+
+                // NEW FLOW: Do NOT persist immediately. Stage for review.
+                ctx.pendingResult = gen;
+
+                // Build Review Message
+                StringBuilder plan = new StringBuilder();
+                plan.append("### 📋 Implementation Plan\n\n");
+                plan.append("**App Name:** ").append(gen.appName).append("\n");
+                plan.append("**Description:** ").append(gen.appDescription).append("\n\n");
+
+                if (gen.entities != null && !gen.entities.isEmpty()) {
+                    plan.append("**Entities to Create:**\n");
+                    for (EntitySchema e : gen.entities) {
+                        plan.append("- **").append(e.getName()).append("** (");
+                        if (e.getFields() != null)
+                            plan.append(e.getFields().size()).append(" fields");
+                        plan.append(")\n");
+                    }
+                    plan.append("\n");
+                }
+
+                if (gen.pages != null && !gen.pages.isEmpty()) {
+                    plan.append("**Pages to Create:**\n");
+                    for (Map<String, Object> p : gen.pages) {
+                        plan.append("- ").append(p.get("name")).append("\n");
+                    }
+                } else if (gen.suggestedPages != null) {
+                    plan.append("**Suggested Pages:**\n");
+                    for (String p : gen.suggestedPages)
+                        plan.append("- ").append(p).append("\n");
+                }
+
+                plan.append("\n**Look good?** Say **'Yes'** or **'Create it'** to proceed, or tell me what to change.");
+
+                if (gen.payload == null)
+                    gen.payload = new HashMap<>();
+                gen.payload.put(PAYLOAD_REPLY, plan.toString());
+
+                // postProcessAndPersistIfNeeded(gen, request); // DISABLED for review step
                 return gen;
             }
 
@@ -347,33 +395,6 @@ public class AiAppGeneratorService {
             result.payload.put("currentAppId", result.payload.get("appId"));
             result.payload.put("currentAppName", result.appName);
         }
-    }
-
-    private static boolean isAppCreationRequest(String lowerDescription) {
-        if (lowerDescription == null)
-            return false;
-        // broaden detection: 'create X app', 'build X app', 'generate X app'
-        if (lowerDescription.matches("^(create|build|generate|make) [a-z0-9 -]+ app$"))
-            return true;
-        return lowerDescription.contains("create the app")
-                || lowerDescription.contains("build the app")
-                || lowerDescription.contains("generate the app")
-                || lowerDescription.contains("make the app")
-                || lowerDescription.startsWith("create app")
-                || lowerDescription.startsWith("build app")
-                || lowerDescription.startsWith("generate app")
-                || lowerDescription.startsWith("make app")
-                || lowerDescription.contains("create an app")
-                || lowerDescription.contains("build an app")
-                || lowerDescription.contains("generate an app")
-                || lowerDescription.contains("make an app")
-                || lowerDescription.contains("can you create app")
-                || lowerDescription.contains("could you create app")
-                || lowerDescription.contains("can you build an app")
-                || lowerDescription.contains("please create")
-                || lowerDescription.contains("i need an app")
-                || lowerDescription.contains("i want an app")
-                || (lowerDescription.contains("create ") && lowerDescription.contains(" app"));
     }
 
     private static String resolveAction(GenerationRequest request) {
@@ -2011,6 +2032,7 @@ public class AiAppGeneratorService {
         public String normalizedAction; // Added for metadata engine compatibility
         public Map<String, Object> conversationContext;
         public String mode;
+        public List<Map<String, String>> messages; // Captured from frontend
     }
 
     public static class GenerationResult {
@@ -2800,6 +2822,42 @@ public class AiAppGeneratorService {
     }
 
     /**
+     * Check if the user input implies an app creation request.
+     * Supports strict patterns ("create app") and natural language ("I need a
+     * system...").
+     */
+    private static boolean isAppCreationRequest(String description) {
+        if (description == null || description.isBlank()) {
+            return false;
+        }
+        String lower = description.toLowerCase(Locale.ROOT).trim();
+
+        // Explicit commands
+        if (lower.startsWith("create ") || lower.startsWith("build ") ||
+                lower.startsWith("generate ") || lower.startsWith("make ")) {
+            return true;
+        }
+
+        // Natural language needs
+        if (lower.startsWith("i need ") || lower.startsWith("i want ") ||
+                lower.startsWith("we need ") || lower.startsWith("we want ")) {
+            if (lower.contains("app") || lower.contains("application") ||
+                    lower.contains("system") || lower.contains("platform") ||
+                    lower.contains("software") || lower.contains("tool")) {
+                return true;
+            }
+        }
+
+        // Broad context match (fallback)
+        // If it looks like a detailed requirement spec, treat it as creation/refinement
+        if (lower.length() > 50 && (lower.contains("store") || lower.contains("track") || lower.contains("manage"))) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Update context when app is opened
      */
     private static void updateOpenedApp(String userId, String appId) {
@@ -3004,6 +3062,22 @@ public class AiAppGeneratorService {
         contextBuilder.append(
                 "\nUSE THIS CONTEXT: If user's request is vague or a continuation (e.g., 'create the app', 'add more entities'), ");
         contextBuilder.append("refer to the above context to understand what they're asking for.\n");
+
+        // NEW: Append actual chat transcript if available
+        if (request.messages != null && !request.messages.isEmpty()) {
+            contextBuilder.append("\n📜 RECENT CHAT HISTORY:\n");
+            // Take last 10 messages max to save tokens
+            int start = Math.max(0, request.messages.size() - 10);
+            for (int i = start; i < request.messages.size(); i++) {
+                Map<String, String> msg = request.messages.get(i);
+                String role = msg.getOrDefault("role", "unknown");
+                String content = msg.getOrDefault("content", "").replaceAll("\n", " ");
+                if (!content.isBlank()) {
+                    contextBuilder.append(role.toUpperCase()).append(": ").append(content).append("\n");
+                }
+            }
+            contextBuilder.append("--------------------------------------------------\n");
+        }
 
         return contextBuilder.toString();
     }
