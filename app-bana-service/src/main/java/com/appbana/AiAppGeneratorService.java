@@ -227,6 +227,24 @@ public class AiAppGeneratorService {
                         if (w.getDescription() != null) {
                             plan.append("  Description: ").append(w.getDescription()).append("\n");
                         }
+                        // Parse definitionJson to show steps
+                        if (w.getDefinitionJson() != null && !w.getDefinitionJson().isEmpty()) {
+                            try {
+                                com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(w.getDefinitionJson());
+                                if (root.has("nodes") && root.get("nodes").isArray()) {
+                                    plan.append("  Steps:\n");
+                                    for (com.fasterxml.jackson.databind.JsonNode node : root.get("nodes")) {
+                                        String type = node.has("type") ? node.get("type").asText() : "Unknown";
+                                        String label = node.has("label") ? node.get("label").asText() : type;
+                                        if (!"START".equalsIgnoreCase(type) && !"END".equalsIgnoreCase(type)) {
+                                            plan.append("    - ").append(label).append(" (").append(type).append(")\n");
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                // Ignore parsing errors for preview
+                            }
+                        }
                     }
                     plan.append("\n");
                 }
