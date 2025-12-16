@@ -1397,10 +1397,8 @@ export class AiChatBuilder extends LitElement {
           // Fallback or just reply
           if (result.payload?.reply) {
             this.addAssistantMessage(result.payload.reply);
-          }
-
-          if (result.appName || result.appDescription || result.entities || result.pages) {
-            // Render app summary in chat (APPENDED after reply if any)
+          } else if (result.appName || result.appDescription || result.entities || result.pages) {
+            // ONLY render auto-summary if backend didn't provide a custom reply
             let appSummary = `**App Name:** ${result.appName || ''}\n`;
             appSummary += `**Description:** ${result.appDescription || ''}\n`;
             if (Array.isArray(result.entities) && result.entities.length > 0) {
