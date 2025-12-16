@@ -2868,7 +2868,9 @@ public class AiAppGeneratorService {
 
         // Broad context match (fallback)
         // If it looks like a detailed requirement spec, treat it as creation/refinement
-        if (lower.length() > 50 && (lower.contains("store") || lower.contains("track") || lower.contains("manage"))) {
+        if (lower.length() > 50 && (lower.contains("store") || lower.contains("track") || lower.contains("manage") ||
+                lower.contains("process") || lower.contains("workflow") || lower.contains("review") ||
+                lower.contains("approval") || lower.contains("automate"))) {
             return true;
         }
 
