@@ -1,6 +1,6 @@
 {
   "version" : "1.0",
-  "lastUpdated" : "Thu Dec 18 00:24:04 IST 2025",
+  "lastUpdated" : "Thu Dec 18 00:54:36 IST 2025",
   "entries" : [ {
     "originalText" : "create now",
     "normalizedText" : "create now",
@@ -16,11 +16,32 @@
     "lastAccessTime" : 1765997644527,
     "hitCount" : 0
   }, {
+    "originalText" : "Hi, how are your?",
+    "normalizedText" : "hi, how are your",
+    "response" : "I'm doing well, thank you! How can I assist you today? If you're considering creating an app related to a specific interest or topic, I'd be happy to help with ideas and guidance.",
+    "createdTime" : 1765999238340,
+    "lastAccessTime" : 1765999238340,
+    "hitCount" : 0
+  }, {
     "originalText" : "ok, create the app now",
     "normalizedText" : "ok, create the app now",
     "response" : "To create an app for the Candidate Review Process, follow these steps:\n\n1. **Define Your Purpose**: Identify what specific aspects of the candidate review process you want to improve. Is it tracking applications, scheduling interviews, or providing feedback?\n\n2. **Research and Plan**: Analyze existing apps in the recruitment space. What features do they have? What gaps can your app fill? Create a list of essential features.\n\n3. **Wireframe Your App**: Sketch out the user interface (UI) and user experience (UX) layouts. Tools like Figma or Sketch can help you design the screens.\n\n4. **Choose a Technology Stack**: Decide on the programming languages and frameworks you’ll use. For mobile apps, consider React Native or Flutter for cross-platform development.\n\n5. **Develop Core Features**:\n   - **Applicant Tracking**: Allow users to upload resumes and track their status.\n   - **Feedback System**: Enable interviewers to provide ratings and comments.\n   - **Scheduling Tool**: Integrate a calendar for scheduling interviews.\n   - **Reporting**: Generate reports on candidate progress and outcomes.\n\n6. **Test Your App**: Conduct user testing to gather feedback and make improvements. Ensure it’s user-friendly and bug-free.\n\n7. **Launch and Market**: Publish your app on relevant platforms (App Store, Google Play) and promote it through social media and networking within HR communities.\n\n8. **Iterate Based on Feedback**: After launch, continue to gather user feedback and update the app to meet users' needs.\n\nIf you’d like to explore specific features or need guidance on any of these steps, just let me know!",
     "createdTime" : 1765980450597,
     "lastAccessTime" : 1765980450597,
+    "hitCount" : 0
+  }, {
+    "originalText" : "Who are you?",
+    "normalizedText" : "who are you",
+    "response" : "I'm your AI assistant, here to help you with app creation! If you have an idea or a specific topic in mind, I can provide guidance, suggestions, and practical advice to bring your app to life. What are you interested in exploring?",
+    "createdTime" : 1765999249904,
+    "lastAccessTime" : 1765999249904,
+    "hitCount" : 0
+  }, {
+    "originalText" : "ok, looks good. create the app now",
+    "normalizedText" : "ok, looks good. create the app now",
+    "response" : "To create an app, we need to define its concept and features first. What topic or idea do you have in mind for your app? If you’re looking for inspiration, consider areas like fitness, food, music, or productivity. Let me know your interests, and I can help you outline the app's structure and functionalities!",
+    "createdTime" : 1765999476948,
+    "lastAccessTime" : 1765999476948,
     "hitCount" : 0
   }, {
     "originalText" : "show me also for Employee",

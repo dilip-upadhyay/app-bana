@@ -190,9 +190,10 @@ public class AiAppGeneratorService {
             }
 
             // FIX: Check for confirmation of pending plan
-            // FIX: Check for confirmation of pending plan via AI PARAMETERS
-            boolean isApproval = route.parameters != null
-                    && "true".equalsIgnoreCase(route.parameters.get("isApproval"));
+            // FIX: Check for confirmation of pending plan via AI PARAMETERS OR heuristics
+            boolean isApproval = (route.parameters != null
+                    && "true".equalsIgnoreCase(route.parameters.get("isApproval")))
+                    || (ctx.pendingResult != null && isConfirmationPhrase(request.description));
 
             if (isApproval && ctx.pendingResult != null) {
                 LOG.info("[AI] User confirmed pending generation plan (via AI detection)");
@@ -2857,5 +2858,30 @@ public class AiAppGeneratorService {
         }
 
         return contextBuilder.toString();
+    }
+
+    /**
+     * Helper to detect confirmation phrases when AI doesn't explicitly flag
+     * isApproval
+     */
+    private static boolean isConfirmationPhrase(String input) {
+        if (input == null)
+            return false;
+        String normalized = input.trim().toLowerCase();
+
+        // Short confirmation phrases
+        if (normalized.length() > 30)
+            return false; // Too long to be just a confirmation
+
+        return normalized.equals("yes") ||
+                normalized.equals("create it") ||
+                normalized.equals("create app") ||
+                normalized.equals("build it") ||
+                normalized.equals("approve") ||
+                normalized.equals("proceed") ||
+                normalized.equals("go ahead") ||
+                normalized.equals("looks good") ||
+                normalized.equals("ok") ||
+                normalized.equals("sure");
     }
 }
