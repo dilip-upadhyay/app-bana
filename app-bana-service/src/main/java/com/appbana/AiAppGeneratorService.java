@@ -97,32 +97,13 @@ public class AiAppGeneratorService {
                 request != null ? request.options : null);
         try {
             // FIX: Handle small talk check BEFORE context merging to avoid "Hi" becoming
-            // "Create App..."
-            GenerationResult earlySmallTalk = handleSmallTalkIfNeeded(request, null);
-            if (earlySmallTalk != null) {
-                return earlySmallTalk;
-            }
-
-            // FIX #1: Use contextual description if continuation request
-            String effectiveDescription = buildContextualDescription(request);
-            if (!effectiveDescription.equals(request.description)) {
-                // Update request with context
-                GenerationRequest contextualRequest = new GenerationRequest();
-                contextualRequest.description = effectiveDescription;
-                contextualRequest.userId = request.userId;
-                contextualRequest.action = request.action;
-                contextualRequest.options = request.options;
-                contextualRequest.conversationContext = request.conversationContext;
-                contextualRequest.mode = request.mode;
-                request = contextualRequest;
-            }
-
-            // NEW: Use metadata-driven intelligence for intent classification
+            // 1. Resolve User and Context first
             String userId = resolveUserId(request);
             ConversationContext ctx = getContext(userId);
 
-            // FIX: Check for Contextual Questions (e.g. "What fields?") BEFORE going to LLM
-            // This ensures we answer about the PENDING plan, not generic knowledge
+            // FIX: Check for Contextual Questions (e.g. "What fields?") BEFORE ALL ELSE
+            // This ensures we answer about the PENDING plan, even if SmallTalk has a
+            // generic answer cached.
             String contextAnswer = com.appbana.ai.ContextIntelligenceEngine.resolveContextualQuery(request.description,
                     ctx);
             if (contextAnswer != null) {
@@ -133,6 +114,25 @@ public class AiAppGeneratorService {
                 // Keep mode as generateApp so frontend stays in builder
                 res.payload.put(PAYLOAD_ACTION, ACTION_GENERATE_APP);
                 return res;
+            }
+
+            // 2. Small Talk Check (Only if not a contextual questions)
+            GenerationResult earlySmallTalk = handleSmallTalkIfNeeded(request, null);
+            if (earlySmallTalk != null) {
+                return earlySmallTalk;
+            }
+
+            // 3. Update request with contextual description if valid continuation
+            String effectiveDescription = buildContextualDescription(request);
+            if (!effectiveDescription.equals(request.description)) {
+                GenerationRequest contextualRequest = new GenerationRequest();
+                contextualRequest.description = effectiveDescription;
+                contextualRequest.userId = request.userId;
+                contextualRequest.action = request.action;
+                contextualRequest.options = request.options;
+                contextualRequest.conversationContext = request.conversationContext;
+                contextualRequest.mode = request.mode;
+                request = contextualRequest;
             }
 
             Map<String, Object> contextMap = convertContextToMap(ctx);
