@@ -1,55 +1,7 @@
 {
-  "lastUpdated" : 1765987397446,
+  "lastUpdated" : 1765997641639,
   "entries" : [ {
-    "normalizedText" : "create a 'candidate review' workflow. when a new candidate is created, i want to start a review process automatically. a manager should get a task to review the candidate's application. they should be able to see the candidate's details and add their comments. if they approve, the candidate's status should change to 'hiring'. if they reject, the status should change to 'rejected'. finally, please log a notification about the decision",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1765907683210,
-    "lastAccessTime" : 1765907683210,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "when a new candidate is created, i want to start a review process automatically. a manager should get a task to review the candidate's application. they should be able to see the candidate's details and add their comments. if they approve, the candidate's status should change to 'hiring'. if they reject, the status should change to 'rejected'. finally, please log a notification about the decision",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1765907295336,
-    "lastAccessTime" : 1765980090412,
-    "hitCount" : 9
-  }, {
-    "normalizedText" : "did you consider below? when a new candidate is created, i want to start a review process automatically. a manager should get a task to review the candidate's application. they should be able to see the candidate's details and add their comments. if they approve, the candidate's status should change to 'hiring'. if they reject, the status should change to 'rejected'. finally, please log a notification about the decision",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1765906537422,
-    "lastAccessTime" : 1765906537422,
-    "hitCount" : 0
-  }, {
     "normalizedText" : "i want to create hrms application with following features.. 1. core hr & employee profile focus: establishing the single source of truth for employee data. us.1: as an hr admin, i want to add a new employee profile with personal, professional, and banking details so that their record exists in the system. us.2: as an employee, i want to view and update my personal profile (address, emergency contact) so that the company always has my latest information. us.3: as an admin, i want to assign a reporting manager to an employee so that the approval hierarchy is established. 2. time & attendance focus: tracking presence for payroll processing. us.4: as an employee, i want to clock in and clock out via a web or mobile dashboard so that my working hours are recorded. us.5: as a manager, i want to view my team’s daily attendance logs so that i can monitor punctuality and presence. us.6: as an admin, i want to configure a standard holiday calendar so that the system automatically marks non-working days. 3. leave management focus: handling absences without manual paperwork. us.7: as an employee, i want to view my leave balance and submit a leave request so that my manager can review it. us.8: as a manager, i want to approve or reject leave requests with a comment so that the employee is notified and the balance is updated. 4. payroll (mvp level) focus: automating the most time-consuming financial task. us.9: as an admin, i want to define salary structures (basic, allowances, deductions) for different employee grades. us.10: as an admin, i want to generate a monthly payroll report based on attendance and approved leaves so that salaries can be processed. us.11: as an employee, i want to download my monthly payslip in pdf format for my records. 5. security & access focus: protecting sensitive pii (personally identifiable information). us.12: as a system admin, i want to set role-based access controls (rbac) so that employees cannot see each other's salary or private documents. us.13: as a user, i want to reset my password via email so that i can securely regain access to my account. mvp acceptance criteria example for your ba to be effective, each story needs \"acceptance criteria.\" here is an example for us.7 (leave request): acceptance criteria: the system must show the current balance for \"casual\" and \"sick\" leave. the user cannot apply for more leaves than their available balance (unless \"unpaid\" is selected). an automated email notification must be sent to the reporting manager upon submission. the status of the request must remain \"pending\" until a manager takes action",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default"
-      }
-    },
-    "createdTime" : 1765987397445,
-    "lastAccessTime" : 1765987397445,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "build a comprehensive enterprise hr management system with automated workflows. - **department**: name, code, location, manager. - **employee**: first name, last name, email, job title, department (link), manager (link), status (active/terminated). # 2. recruitment module (ats) - **jobposting**: title, department (link), status (open/closed). - **candidate**: name, email, applied for (link to jobposting), status (new, interviewing, offer, hired, rejected). # 3. time off module - **leaverequest**: employee (link), start date, end date, type (vacation/sick), reason, status (pending, approved, rejected). # 4. performance module - **performancereview**: employee (link), review period, rating (1-5), comments, status (draft, submitted, finalized). # 5. required workflows please generate the \"workflows\" array for: 1. \"leave approval flow\": - trigger: when a leaverequest is created. - step 1: manager approval (user task). - step 2: hr notification (service task - email). 2. \"candidate hiring flow\": - trigger: when candidate status changes to \"offer\". - step 1: generate offer letter (service task). - step 2: vp approval (user task). # 6. pages - \"hr dashboard\": dashboard with counts of active employees and open jobs. - \"recruitment board\": kanban board for candidates grouped by status. - \"leave portal\": list of my leaverequests with a \"create new\" button. - \"org chart\": employee directory list",
     "action" : {
       "action" : "loadApp",
       "target" : { },
@@ -57,11 +9,11 @@
         "userId" : "default"
       }
     },
-    "createdTime" : 1765736843965,
-    "lastAccessTime" : 1765737576515,
+    "createdTime" : 1765996829090,
+    "lastAccessTime" : 1765997071562,
     "hitCount" : 1
   }, {
-    "normalizedText" : "ok, i want to also have below: when a new candidate is created, i want to start a review process automatically. a manager should get a task to review the candidate's application. they should be able to see the candidate's details and add their comments. if they approve, the candidate's status should change to 'hiring'. if they reject, the status should change to 'rejected'. finally, please log a notification about the decision",
+    "normalizedText" : "create now",
     "action" : {
       "action" : "generateApp",
       "target" : { },
@@ -69,23 +21,24 @@
         "userId" : "default"
       }
     },
-    "createdTime" : 1765906462007,
-    "lastAccessTime" : 1765906462007,
+    "createdTime" : 1765997460073,
+    "lastAccessTime" : 1765997460073,
     "hitCount" : 0
   }, {
-    "normalizedText" : "i also want to have below : when a new candidate is created, i want to start a review process automatically. a manager should get a task to review the candidate's application. they should be able to see the candidate's details and add their comments. if they approve, the candidate's status should change to 'hiring'. if they reject, the status should change to 'rejected'. finally, please log a notification about the decision",
+    "normalizedText" : "yes",
     "action" : {
       "action" : "generateApp",
       "target" : { },
       "options" : {
-        "userId" : "default"
+        "userId" : "default",
+        "targetAppId" : null
       }
     },
-    "createdTime" : 1765904365421,
-    "lastAccessTime" : 1765904365421,
+    "createdTime" : 1765997618347,
+    "lastAccessTime" : 1765997618347,
     "hitCount" : 0
   }, {
-    "normalizedText" : "i need an hr system to track job candidates and employees. we need to store candidate details like name, email, status (default to 'new'), and their resume link. for employees, we need to track their name, email, department, and start date. i want a dashboard to see how many people we have in each category. also, we need a way to list all candidates and forms to add or update them",
+    "normalizedText" : "create it",
     "action" : {
       "action" : "generateApp",
       "target" : { },
@@ -93,8 +46,20 @@
         "userId" : "default"
       }
     },
-    "createdTime" : 1765904302430,
-    "lastAccessTime" : 1765987136710,
-    "hitCount" : 14
+    "createdTime" : 1765997641639,
+    "lastAccessTime" : 1765997641639,
+    "hitCount" : 0
+  }, {
+    "normalizedText" : "create app name: comprehensive hr management system",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1765997521728,
+    "lastAccessTime" : 1765997521728,
+    "hitCount" : 0
   } ]
 }

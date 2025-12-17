@@ -41,6 +41,21 @@ public class ContextIntelligenceEngine {
                         ? plan.entities.stream().map(EntitySchema::getName).collect(Collectors.joining(","))
                         : "null");
 
+        // CRITICAL FIX: proper feedback loop
+        // If the user is critiquing ("missing", "gap", "review") or asking for changes,
+        // we MUST return null so the LLM processes it as a modification request.
+        boolean isModification = lowerPrompt.contains("change") || lowerPrompt.contains("update") ||
+                lowerPrompt.contains("add ") || lowerPrompt.contains("remove") ||
+                lowerPrompt.contains("delete") || lowerPrompt.contains("missing") ||
+                lowerPrompt.contains("gap") || lowerPrompt.contains("review") ||
+                lowerPrompt.contains("critique") || lowerPrompt.contains("too few") ||
+                lowerPrompt.contains("issue") || lowerPrompt.contains("wrong");
+
+        if (isModification) {
+            LOG.info("[ContextIntelligence] Detected modification/critique intent. Yielding to AI Generator.");
+            return null;
+        }
+
         // 1. Questions about "Entities" or "Fields"
         // Expanded trigger words: "show me", "what about", "fields for", "entity"
         boolean isEntityQuery = lowerPrompt.contains("field") || lowerPrompt.contains("entity") ||

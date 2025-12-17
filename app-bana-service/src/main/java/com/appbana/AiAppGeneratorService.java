@@ -23,10 +23,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import com.appbana.model.AppMetadata; // added for persistence defaultPage update
 import com.appbana.workflow.model.WorkflowDefinition; // added for workflow generation
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
+
 // added for AI result validation
 
 /**
@@ -101,55 +98,41 @@ public class AiAppGeneratorService {
             String userId = resolveUserId(request);
             ConversationContext ctx = getContext(userId);
 
-            // FIX: Check for Contextual Questions (e.g. "What fields?") BEFORE ALL ELSE
-            // This ensures we answer about the PENDING plan, even if SmallTalk has a
-            // generic answer cached.
-            String contextAnswer = com.appbana.ai.ContextIntelligenceEngine.resolveContextualQuery(request.description,
-                    ctx);
-            if (contextAnswer != null) {
-                GenerationResult res = new GenerationResult();
-                res.success = true;
-                res.payload = new HashMap<>();
-                res.payload.put(PAYLOAD_REPLY, contextAnswer);
-                // Keep mode as generateApp so frontend stays in builder
-                res.payload.put(PAYLOAD_ACTION, ACTION_GENERATE_APP);
-                return res;
+            // ==================================================================================
+            // NEW: BRAIN-FIRST SEMANTIC ROUTING
+            // We use the LLM to classify intent BEFORE running any regex rules.
+            // ==================================================================================
+            com.appbana.ai.SemanticRouter.RouterResult route = com.appbana.ai.SemanticRouter.classify(userId,
+                    request.description, ctx);
+
+            if (route.intent == com.appbana.ai.SemanticRouter.Intent.SMALL_TALK) {
+                return handleSmallTalkIfNeeded(request, null);
+            } else if (route.intent == com.appbana.ai.SemanticRouter.Intent.QUERY_CONTEXT) {
+                // If router says it's a query, force context engine to answer
+                String contextAnswer = com.appbana.ai.ContextIntelligenceEngine
+                        .resolveContextualQuery(request.description, ctx);
+                if (contextAnswer != null) {
+                    GenerationResult res = new GenerationResult();
+                    res.success = true;
+                    res.payload = new HashMap<>();
+                    res.payload.put(PAYLOAD_REPLY, contextAnswer);
+                    res.payload.put(PAYLOAD_ACTION, ACTION_GENERATE_APP);
+                    return res;
+                }
+                // Fallback: If context engine has no answer, let it flow to general chat
+                // behavior
+            } else if (route.intent == com.appbana.ai.SemanticRouter.Intent.MODIFY_PLAN) {
+                // EXPLICITLY set action to update_plan
+                request.action = "update_plan";
+                // Inject AI-extracted target app ID into request options for downstream logic
+                if (route.parameters != null && route.parameters.containsKey("targetAppId")) {
+                    if (request.options == null)
+                        request.options = new HashMap<>();
+                    request.options.put("targetAppId", route.parameters.get("targetAppId"));
+                }
             }
 
-            // 2. Small Talk Check (Only if not a contextual questions)
-            GenerationResult earlySmallTalk = handleSmallTalkIfNeeded(request, null);
-            if (earlySmallTalk != null) {
-                return earlySmallTalk;
-            }
-
-            // 3. Update request with contextual description if valid continuation
-            String effectiveDescription = buildContextualDescription(request);
-            if (!effectiveDescription.equals(request.description)) {
-                GenerationRequest contextualRequest = new GenerationRequest();
-                contextualRequest.description = effectiveDescription;
-                contextualRequest.userId = request.userId;
-                contextualRequest.action = request.action;
-                contextualRequest.options = request.options;
-                contextualRequest.conversationContext = request.conversationContext;
-                contextualRequest.mode = request.mode;
-                request = contextualRequest;
-            }
-
-            Map<String, Object> contextMap = convertContextToMap(ctx);
-
-            MetadataIntelligenceEngine.IntentResult intentResult = MetadataIntelligenceEngine
-                    .classifyIntent(request.description, contextMap);
-
-            LOG.info("[AI] MetaAI classified as: {} (confidence: {:.2f})",
-                    intentResult.intent, intentResult.confidence);
-
-            // Handle metadata-classified intents
-            GenerationResult metaResult = handleMetadataIntent(intentResult, request, ctx);
-            if (metaResult != null) {
-                return metaResult;
-            }
-
-            // Fallback to original flow for backward compatibility
+            // Legacy Fallback (keeping for safety during transition, but Router acts first)
             String normalizedAction = resolveAction(request);
 
             // SPECIAL CASE: Check for "explain/describe" in text if metadata missed it
@@ -161,8 +144,19 @@ public class AiAppGeneratorService {
                     return desc;
             }
 
-            // FIX #3: Handle "create pages" / "regenerate pages" requests
-            if (isRegeneratePageRequest(request.description)) {
+            // FIX #3: Handle "create pages" / "regenerate pages" requests VIA AI PARAMETERS
+            // BUT: Only if NOT already classified as a full creation/modification plan
+            boolean isExplicitGen = (route.intent == com.appbana.ai.SemanticRouter.Intent.CREATE_APP ||
+                    route.intent == com.appbana.ai.SemanticRouter.Intent.MODIFY_PLAN);
+
+            if (!isExplicitGen && route.parameters != null && (route.parameters.containsKey("pageName") ||
+                    (route.reasoning != null && route.reasoning.toLowerCase().contains("page")))) {
+
+                // If AI extracted an App ID, prioritize it
+                if (route.parameters.containsKey("targetAppId")) {
+                    request.options.put("targetAppId", route.parameters.get("targetAppId"));
+                }
+
                 return handleRegeneratePagesRequest(request);
             }
 
@@ -172,15 +166,20 @@ public class AiAppGeneratorService {
             }
 
             // Extract app type from description/context and track it
-            // BUT: Don't overwrite context if this is a continuation request
+            // BUT: Don't overwrite context if this is a continuation request (handled by
+            // router now)
             String appType = extractAppType(request != null ? request.description : null);
-            if (appType != null && request.description != null && !isContinuationRequest(request)) {
+            if (appType != null && request.description != null) {
                 updateDiscussedApp(request.userId, appType, request.description);
             }
 
             // ALSO: If description mentions entities/features, store it even if no app type
-            // extracted
-            if (request.description != null && !isContinuationRequest(request) &&
+            // extracted. USING AI PARAMETERS if available.
+            if (route.parameters != null && route.parameters.containsKey("entityName")) {
+                String descAppType = appType != null ? appType : "application";
+                updateDiscussedApp(request.userId, descAppType, request.description);
+                LOG.info("[AI Context] Stored detailed app description in context (entity detected)");
+            } else if (request.description != null &&
                     (request.description.toLowerCase().contains("entity") ||
                             request.description.toLowerCase().contains("entities") ||
                             request.description.toLowerCase().matches(
@@ -191,17 +190,20 @@ public class AiAppGeneratorService {
             }
 
             // FIX: Check for confirmation of pending plan
-            if (isContinuationRequest(request) && ctx.pendingResult != null) {
-                LOG.info("[AI] User confirmed pending generation plan");
+            // FIX: Check for confirmation of pending plan via AI PARAMETERS
+            boolean isApproval = route.parameters != null
+                    && "true".equalsIgnoreCase(route.parameters.get("isApproval"));
+
+            if (isApproval && ctx.pendingResult != null) {
+                LOG.info("[AI] User confirmed pending generation plan (via AI detection)");
                 GenerationResult pending = ctx.pendingResult;
                 postProcessAndPersistIfNeeded(pending, request);
                 ctx.pendingResult = null; // Clear after processing
                 return pending;
             }
 
-            if (isAppCreationRequest(
-                    request != null ? request.description == null ? null : request.description.toLowerCase(Locale.ROOT)
-                            : null)) {
+            if (route.intent == com.appbana.ai.SemanticRouter.Intent.CREATE_APP ||
+                    route.intent == com.appbana.ai.SemanticRouter.Intent.MODIFY_PLAN) {
                 GenerationResult gen = runGenerationPipelines(request);
                 if (appType != null && !appType.isBlank()) {
                     gen.appType = appType;
@@ -316,101 +318,10 @@ public class AiAppGeneratorService {
     /**
      * Convert ConversationContext to Map for MetadataIntelligenceEngine
      */
-    private static Map<String, Object> convertContextToMap(ConversationContext ctx) {
-        Map<String, Object> map = new HashMap<>();
-        if (ctx == null)
-            return map;
-
-        map.put("lastDiscussedAppType", ctx.lastDiscussedAppType);
-        map.put("lastDiscussedAppDescription", ctx.lastDiscussedAppDescription);
-        map.put("discussed_entities", ctx.discussedEntities);
-        map.put("lastCreatedAppId", ctx.lastCreatedAppId);
-        map.put("lastOpenedAppId", ctx.lastOpenedAppId);
-
-        return map;
-    }
 
     /**
      * Handle intent classified by metadata engine
      */
-    private static GenerationResult handleMetadataIntent(MetadataIntelligenceEngine.IntentResult intentResult,
-            GenerationRequest request,
-            ConversationContext ctx) {
-        if (intentResult == null || intentResult.intent == null) {
-            return null;
-        }
-
-        String intent = intentResult.intent;
-
-        // Handle specific intents from metadata
-        switch (intent) {
-            case "describe_app":
-                return handleStructuredAction(ACTION_DESCRIBE_APP, request);
-            case "list_apps":
-                return handleStructuredAction(ACTION_LIST_APPS, request);
-            case "load_app":
-                return handleStructuredAction(ACTION_LOAD_APP, request);
-            case "delete_app":
-                return handleStructuredAction(ACTION_DELETE_APP, request);
-            case "list_pages":
-                return handleStructuredAction(ACTION_LIST_PAGES, request);
-            case "greeting":
-            case "smalltalk":
-                if (intentResult.shouldUseSmallTalk()) {
-                    String reply = SmallTalkEngine.getSmallTalkResponse(request.description, request.userId);
-                    if (reply != null) {
-                        return buildSmallTalkResult(reply, request.userId, request.description);
-                    }
-                }
-                return null;
-
-            case "approve_continue":
-                // User approved - create app from context
-                if (ctx.lastDiscussedAppDescription != null) {
-                    LOG.info("[AI] Approval detected via metadata, creating app from context");
-                    // Don't return here - let it flow through to app creation
-                    return null;
-                }
-                break;
-
-            case "refine_app":
-                // User wants to refine the app structure
-                // Let it flow through to GPT generation with context
-                LOG.info("[AI] Refinement request detected, will regenerate with context");
-                return null;
-
-            case "request_final_version":
-                // Show final structure or regenerate
-                if (ctx.lastDiscussedAppDescription != null) {
-                    LOG.info("[AI] Final version requested, regenerating structure");
-                    return null; // Flow through to generation
-                }
-                break;
-
-            case "create_app":
-                // Explicit app creation - flow through
-                return null;
-
-            case "gpt_fallback":
-                // Low confidence - let GPT handle it
-                LOG.info("[AI] Low confidence from metadata ({}), using GPT", intentResult.confidence);
-                return null;
-
-            case "refactor_entity":
-                request.action = "refactor_entity";
-                return null; // Fall through to runGenerationPipelines with specific action
-
-            case "add_relationship":
-                request.action = "add_relationship";
-                return null; // Fall through to runGenerationPipelines with specific action
-
-            case "unknown":
-                // Unknown intent - use GPT
-                return null;
-        }
-
-        return null;
-    }
 
     private static GenerationResult buildSmallTalkResult(String reply, String userId, String input) {
         GenerationResult result = new GenerationResult();
@@ -574,31 +485,11 @@ public class AiAppGeneratorService {
     }
 
     private static GenerationResult handleSmallTalkIfNeeded(GenerationRequest request, String normalizedAction) {
-        // FIX: If this is an explicit app creation request ("create the app"), SKIP
-        // small talk
-        if (isAppCreationRequest(request.description)) {
-            // Force return null so logic proceeds to generating app
-            return null;
-        }
-
-        if (!shouldHandleSmallTalk(request, normalizedAction)) {
-            return null;
-        }
-
+        // Direct small talk handling without regex checks, as Router handles intent
+        // routing
         String userId = resolveUserId(request);
-
-        // Check if this is approval of a previously discussed app
-        if (isApprovalResponse(request)) {
-            ConversationContext ctx = getContext(userId);
-            if (ctx.lastDiscussedAppType != null || ctx.lastDiscussedAppDescription != null) {
-                // DO NOT return here - let the approval continue to app creation
-                // by returning null so the main flow can handle it as a continuation request
-                LOG.info("[AI] Approval detected with context, allowing app creation flow");
-                return null;
-            }
-        }
-
         String reply = SmallTalkEngine.getSmallTalkResponse(request.description, userId);
+
         if (reply == null) {
             return null;
         }
@@ -611,66 +502,6 @@ public class AiAppGeneratorService {
         LOG.info("[AI] Small talk detected, responding: {}", reply);
         AgentMemoryService.record(userId, request.description, reply);
         return result;
-    }
-
-    private static boolean shouldHandleSmallTalk(GenerationRequest request, String normalizedAction) {
-        if (request == null || request.description == null) {
-            return false;
-        }
-
-        String lower = request.description.toLowerCase(Locale.ROOT).trim();
-
-        // Skip small talk if this is clearly an app creation request
-        if (isAppCreationRequest(lower)) {
-            return false;
-        }
-
-        // FIX #5: Skip small talk if requesting page operations
-        if (lower.contains("page") && (lower.contains("create") ||
-                lower.contains("generate") ||
-                lower.contains("do not see") ||
-                lower.contains("don't see") ||
-                lower.contains("missing"))) {
-            return false;
-        }
-
-        // FIX: Skip small talk for specific intent patterns (describe, context)
-        if (lower.matches(".*(which|what).*app.*(working|opened|editing|modifying).*") ||
-                lower.matches(".*current.*app.*") ||
-                lower.matches(".*app.*context.*") ||
-                lower.matches(".*describe.*app.*") ||
-                lower.matches(".*explain.*app.*") ||
-                lower.matches(".*explian.*app.*") ||
-                lower.matches(".*app.*summary.*") ||
-                lower.matches(".*app.*overview.*") ||
-                lower.matches(".*app.*stats.*") ||
-                lower.matches(".*show.*details.*") ||
-                lower.contains("selected") ||
-                lower.contains("this app")) {
-            return false;
-        }
-
-        // PRIORITY: Check for explicit small talk patterns FIRST (ignore
-        // normalizedAction)
-        // These should ALWAYS be handled as small talk, even if classifier thinks
-        // otherwise
-        if (lower.matches("^(hi|hello|hey|hiya|howdy|greetings)[!. ]*$")
-                || lower.matches("^(good morning|good afternoon|good evening)[!. ]*$")
-                || lower.matches("^(how are you\\??|how's it going\\??|what's up\\??|sup\\??)$")
-                || lower.matches("^(thanks|thank you|thank you so much|thx|ty)[!. ]*$")
-                || lower.matches("^(bye|goodbye|see you|cya|later)[!. ]*$")
-                || lower.matches("^(ok|okay|sure|alright)[!. ]*$")) {
-            return true;
-        }
-
-        // If classifier detected a specific action (other than listApps), don't treat
-        // as small talk
-        if (normalizedAction != null && !ACTION_LIST_APPS.equals(normalizedAction)) {
-            return false;
-        }
-
-        // If classifier did not confidently detect an action, might be chit-chat
-        return normalizedAction == null;
     }
 
     private static GenerationResult runGenerationPipelines(GenerationRequest request) {
@@ -2746,23 +2577,6 @@ public class AiAppGeneratorService {
     /**
      * Check if request is asking to regenerate/create pages for an app
      */
-    private static boolean isRegeneratePageRequest(String description) {
-        if (description == null)
-            return false;
-
-        String lower = description.toLowerCase();
-
-        // Patterns for page regeneration requests
-        return (lower.contains("page") && (lower.contains("do not see") ||
-                lower.contains("don't see") ||
-                lower.contains("not see") ||
-                lower.contains("no page") ||
-                lower.contains("missing page") ||
-                lower.contains("create page") ||
-                lower.contains("generate page") ||
-                lower.contains("add page") ||
-                lower.contains("if not created")));
-    }
 
     /**
      * Handle request to regenerate pages for an app
@@ -2771,8 +2585,8 @@ public class AiAppGeneratorService {
         GenerationResult result = new GenerationResult();
         result.payload = new HashMap<>();
 
-        // Extract app ID from description
-        String appId = extractAppIdFromDescription(request.description);
+        // Extract app ID from options (populated by SemanticRouter)
+        String appId = request.options != null ? (String) request.options.get("targetAppId") : null;
 
         // If no app ID in description, use last opened app from context
         if (appId == null) {
@@ -2874,25 +2688,6 @@ public class AiAppGeneratorService {
         return result;
     }
 
-    /**
-     * Extract app ID from description text (e.g., "inside
-     * salon-appointment-booking-app")
-     */
-    private static String extractAppIdFromDescription(String description) {
-        if (description == null)
-            return null;
-
-        // Pattern: "inside {app-id}" or "in {app-id}" or "{app-id}"
-        Pattern pattern = Pattern.compile("(?:inside|in)\\s+([a-z0-9][a-z0-9-]+)", Pattern.CASE_INSENSITIVE);
-        Matcher matcher = pattern.matcher(description);
-
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-
-        return null;
-    }
-
     // ========== Conversation Context Management ==========
 
     /**
@@ -2934,145 +2729,12 @@ public class AiAppGeneratorService {
     }
 
     /**
-     * Check if the user input implies an app creation request.
-     * Supports strict patterns ("create app") and natural language ("I need a
-     * system...").
-     */
-    private static boolean isAppCreationRequest(String description) {
-        if (description == null || description.isBlank()) {
-            return false;
-        }
-        String lower = description.toLowerCase(Locale.ROOT).trim();
-
-        // Explicit commands
-        if (lower.startsWith("create ") || lower.startsWith("build ") ||
-                lower.startsWith("generate ") || lower.startsWith("make ")) {
-            return true;
-        }
-
-        // Natural language needs
-        if (lower.startsWith("i need ") || lower.startsWith("i want ") ||
-                lower.startsWith("we need ") || lower.startsWith("we want ")) {
-            if (lower.contains("app") || lower.contains("application") ||
-                    lower.contains("system") || lower.contains("platform") ||
-                    lower.contains("software") || lower.contains("tool")) {
-                return true;
-            }
-        }
-
-        // Broad context match (fallback)
-        // If it looks like a detailed requirement spec, treat it as creation/refinement
-        if (lower.length() > 50 && (lower.contains("store") || lower.contains("track") || lower.contains("manage") ||
-                lower.contains("process") || lower.contains("workflow") || lower.contains("review") ||
-                lower.contains("approval") || lower.contains("automate"))) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
      * Update context when app is opened
      */
     private static void updateOpenedApp(String userId, String appId) {
         ConversationContext ctx = getContext(userId);
         ctx.lastOpenedAppId = appId;
         LOG.info("[AI Context] Tracked opened app: {}", appId);
-    }
-
-    /**
-     * Check if user is expressing approval/confirmation
-     */
-    private static boolean isApprovalResponse(GenerationRequest request) {
-        if (request == null || request.description == null)
-            return false;
-
-        String desc = request.description.toLowerCase().trim();
-
-        // Approval patterns
-        String[] approvalPatterns = {
-                "looks ok", "looks good", "looks great", "sounds good", "sounds great",
-                "sounds ok", "sounds okay",
-                "that's fine", "that's good", "that's great", "that works", "that's perfect",
-                "perfect", "excellent", "awesome", "nice", "cool",
-                "yes", "yep", "yeah", "sure", "ok", "okay",
-                "i like it", "i love it", "i agree"
-        };
-
-        for (String pattern : approvalPatterns) {
-            if (desc.equals(pattern) || desc.equals(pattern + "!")) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if request is a continuation (e.g., "create the app" after discussing
-     * requirements)
-     */
-    private static boolean isContinuationRequest(GenerationRequest request) {
-        if (request == null || request.description == null)
-            return false;
-
-        // Check for approval first
-        if (isApprovalResponse(request)) {
-            return true;
-        }
-
-        String desc = request.description.toLowerCase().trim();
-
-        // Patterns indicating continuation
-        String[] continuationPatterns = {
-                "go ahead",
-                "go ahead and create",
-                "create the app",
-                "create it",
-                "create app",
-                "build the app",
-                "build it",
-                "build app",
-                "make the app",
-                "make it",
-                "yes create",
-                "yes build",
-                "go ahead",
-                "proceed"
-        };
-
-        for (String pattern : continuationPatterns) {
-            if (desc.equals(pattern) || desc.startsWith(pattern + " ") || desc.endsWith(" " + pattern)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Build context-aware description from conversation history
-     */
-    private static String buildContextualDescription(GenerationRequest request) {
-        ConversationContext ctx = getContext(request.userId);
-
-        // If continuation request and we have context, use it
-        if (isContinuationRequest(request) && ctx.lastDiscussedAppDescription != null) {
-            LOG.info("[AI Context] Using previous description from context for continuation request");
-            return ctx.lastDiscussedAppDescription;
-        }
-
-        return request.description;
-    }
-
-    /**
-     * Build a prompt suggesting the user to create the discussed app
-     */
-    private static String buildAppCreationPrompt(String appType) {
-        return String.format(
-                "Great! I'm glad you like the design. Would you like me to create the %s now? " +
-                        "Just say 'yes, create it' or 'build the app' and I'll generate it for you!",
-                appType);
     }
 
     private static String buildAppSchemaContext(com.appbana.model.AppMetadata app) {
@@ -3124,7 +2786,8 @@ public class AiAppGeneratorService {
         // inject the FULL schema
         boolean isModification = "refactor_entity".equals(request.action) ||
                 "add_relationship".equals(request.action) ||
-                "update_entity".equals(request.action);
+                "update_entity".equals(request.action) ||
+                "update_plan".equals(request.action);
 
         String targetAppId = null;
         if (request.options != null && request.options.get("currentAppId") != null) {
