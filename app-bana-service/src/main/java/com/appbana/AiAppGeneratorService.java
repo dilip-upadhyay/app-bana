@@ -574,6 +574,13 @@ public class AiAppGeneratorService {
     }
 
     private static GenerationResult handleSmallTalkIfNeeded(GenerationRequest request, String normalizedAction) {
+        // FIX: If this is an explicit app creation request ("create the app"), SKIP
+        // small talk
+        if (isAppCreationRequest(request.description)) {
+            // Force return null so logic proceeds to generating app
+            return null;
+        }
+
         if (!shouldHandleSmallTalk(request, normalizedAction)) {
             return null;
         }
