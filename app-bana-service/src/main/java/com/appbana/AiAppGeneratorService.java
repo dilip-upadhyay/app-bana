@@ -1938,8 +1938,12 @@ public class AiAppGeneratorService {
                     }
 
                     // Serialize 'definition' object to string for storage
+                    // Serialize 'definition' object to string for storage
                     JsonNode defNode = wfNode.get("definition");
-                    if (defNode != null) {
+                    boolean hasValidDef = defNode != null && defNode.has("nodes") && defNode.get("nodes").isArray()
+                            && defNode.get("nodes").size() > 0;
+
+                    if (hasValidDef) {
                         wf.setDefinitionJson(MAPPER.writeValueAsString(defNode));
                     } else {
                         // FIX: Generate a synthetic definition based on description so the "Explain"
