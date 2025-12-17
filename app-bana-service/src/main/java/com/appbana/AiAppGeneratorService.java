@@ -63,25 +63,25 @@ public class AiAppGeneratorService {
     /**
      * Conversation context to maintain state across multiple requests
      */
-    private static class ConversationContext {
-        String lastDiscussedAppType;
-        String lastDiscussedAppDescription;
-        List<String> discussedEntities;
-        String lastCreatedAppId;
-        String lastOpenedAppId;
-        GenerationResult pendingResult; // Staged app generation waiting for approval
-        long timestamp;
+    public static class ConversationContext {
+        public String lastDiscussedAppType;
+        public String lastDiscussedAppDescription;
+        public List<String> discussedEntities;
+        public String lastCreatedAppId;
+        public String lastOpenedAppId;
+        public GenerationResult pendingResult; // Staged app generation waiting for approval
+        public long timestamp;
 
-        ConversationContext() {
+        public ConversationContext() {
             this.discussedEntities = new ArrayList<>();
             this.timestamp = System.currentTimeMillis();
         }
 
-        boolean isExpired() {
+        public boolean isExpired() {
             return System.currentTimeMillis() - timestamp > CONTEXT_TIMEOUT_MS;
         }
 
-        void refresh() {
+        public void refresh() {
             this.timestamp = System.currentTimeMillis();
         }
     }
@@ -120,6 +120,21 @@ public class AiAppGeneratorService {
             // NEW: Use metadata-driven intelligence for intent classification
             String userId = resolveUserId(request);
             ConversationContext ctx = getContext(userId);
+
+            // FIX: Check for Contextual Questions (e.g. "What fields?") BEFORE going to LLM
+            // This ensures we answer about the PENDING plan, not generic knowledge
+            String contextAnswer = com.appbana.ai.ContextIntelligenceEngine.resolveContextualQuery(request.description,
+                    ctx);
+            if (contextAnswer != null) {
+                GenerationResult res = new GenerationResult();
+                res.success = true;
+                res.payload = new HashMap<>();
+                res.payload.put(PAYLOAD_REPLY, contextAnswer);
+                // Keep mode as generateApp so frontend stays in builder
+                res.payload.put(PAYLOAD_ACTION, ACTION_GENERATE_APP);
+                return res;
+            }
+
             Map<String, Object> contextMap = convertContextToMap(ctx);
 
             MetadataIntelligenceEngine.IntentResult intentResult = MetadataIntelligenceEngine
