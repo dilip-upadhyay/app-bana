@@ -1,5 +1,5 @@
 {
-  "lastUpdated" : 1766000528751,
+  "lastUpdated" : 1766001348727,
   "entries" : [ {
     "normalizedText" : "i want to create hrms application with following features.. 1. core hr & employee profile focus: establishing the single source of truth for employee data. us.1: as an hr admin, i want to add a new employee profile with personal, professional, and banking details so that their record exists in the system. us.2: as an employee, i want to view and update my personal profile (address, emergency contact) so that the company always has my latest information. us.3: as an admin, i want to assign a reporting manager to an employee so that the approval hierarchy is established. 2. time & attendance focus: tracking presence for payroll processing. us.4: as an employee, i want to clock in and clock out via a web or mobile dashboard so that my working hours are recorded. us.5: as a manager, i want to view my team’s daily attendance logs so that i can monitor punctuality and presence. us.6: as an admin, i want to configure a standard holiday calendar so that the system automatically marks non-working days. 3. leave management focus: handling absences without manual paperwork. us.7: as an employee, i want to view my leave balance and submit a leave request so that my manager can review it. us.8: as a manager, i want to approve or reject leave requests with a comment so that the employee is notified and the balance is updated. 4. payroll (mvp level) focus: automating the most time-consuming financial task. us.9: as an admin, i want to define salary structures (basic, allowances, deductions) for different employee grades. us.10: as an admin, i want to generate a monthly payroll report based on attendance and approved leaves so that salaries can be processed. us.11: as an employee, i want to download my monthly payslip in pdf format for my records. 5. security & access focus: protecting sensitive pii (personally identifiable information). us.12: as a system admin, i want to set role-based access controls (rbac) so that employees cannot see each other's salary or private documents. us.13: as a user, i want to reset my password via email so that i can securely regain access to my account. mvp acceptance criteria example for your ba to be effective, each story needs \"acceptance criteria.\" here is an example for us.7 (leave request): acceptance criteria: the system must show the current balance for \"casual\" and \"sick\" leave. the user cannot apply for more leaves than their available balance (unless \"unpaid\" is selected). an automated email notification must be sent to the reporting manager upon submission. the status of the request must remain \"pending\" until a manager takes action",
     "action" : {
@@ -10,8 +10,8 @@
       }
     },
     "createdTime" : 1765996829090,
-    "lastAccessTime" : 1766000528747,
-    "hitCount" : 4
+    "lastAccessTime" : 1766001348727,
+    "hitCount" : 5
   }, {
     "normalizedText" : "create now",
     "action" : {

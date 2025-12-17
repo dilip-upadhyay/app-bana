@@ -1344,6 +1344,19 @@ export class AiChatBuilder extends LitElement {
         this.conversationContext.currentAppId = result.payload.appId;
         this.conversationContext.currentAppName = result.payload.currentAppName;
 
+        // Sync with AppStore to prevent "Context Cleared" message
+        if (result.payload.appId && (!appStore.getApp(result.payload.appId) || appStore.getCurrentApp()?.id !== result.payload.appId)) {
+          console.log('[AiChatBuilder] Syncing AppStore with new app:', result.payload.appId);
+          try {
+             // Reload apps to ensure we have the new one
+             await appStore.loadApps();
+             // Set it as active
+             await appStore.setCurrentApp(result.payload.appId);
+          } catch (e) {
+             console.warn('[AiChatBuilder] Failed to auto-select new app:', e);
+          }
+        }
+
         if (isUpdate) {
           this.addAssistantMessage(`✅ Updated **${result.payload.currentAppName}** based on your request.`);
         } else {
