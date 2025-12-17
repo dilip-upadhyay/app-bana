@@ -98,6 +98,18 @@ public class AiAppGeneratorService {
             String userId = resolveUserId(request);
             ConversationContext ctx = getContext(userId);
 
+            // FIX: Check for confirmation of pending plan BEFORE Router/SmallTalk
+            // This prevents "create it" being intercepted as Small Talk
+            boolean isHeuristicApproval = ctx.pendingResult != null && isConfirmationPhrase(request.description);
+
+            if (isHeuristicApproval) {
+                LOG.info("[AI] User confirmed pending generation plan (via Heuristic detection)");
+                GenerationResult pending = ctx.pendingResult;
+                postProcessAndPersistIfNeeded(pending, request);
+                ctx.pendingResult = null; // Clear after processing
+                return pending;
+            }
+
             // ==================================================================================
             // NEW: BRAIN-FIRST SEMANTIC ROUTING
             // We use the LLM to classify intent BEFORE running any regex rules.
@@ -187,20 +199,6 @@ public class AiAppGeneratorService {
                 String descAppType = appType != null ? appType : "application";
                 updateDiscussedApp(request.userId, descAppType, request.description);
                 LOG.info("[AI Context] Stored detailed app description in context");
-            }
-
-            // FIX: Check for confirmation of pending plan
-            // FIX: Check for confirmation of pending plan via AI PARAMETERS OR heuristics
-            boolean isApproval = (route.parameters != null
-                    && "true".equalsIgnoreCase(route.parameters.get("isApproval")))
-                    || (ctx.pendingResult != null && isConfirmationPhrase(request.description));
-
-            if (isApproval && ctx.pendingResult != null) {
-                LOG.info("[AI] User confirmed pending generation plan (via AI detection)");
-                GenerationResult pending = ctx.pendingResult;
-                postProcessAndPersistIfNeeded(pending, request);
-                ctx.pendingResult = null; // Clear after processing
-                return pending;
             }
 
             if (route.intent == com.appbana.ai.SemanticRouter.Intent.CREATE_APP ||
@@ -2869,19 +2867,23 @@ public class AiAppGeneratorService {
             return false;
         String normalized = input.trim().toLowerCase();
 
-        // Short confirmation phrases
-        if (normalized.length() > 30)
-            return false; // Too long to be just a confirmation
+        // Relaxed length check to allow for "ok, looks good, please create it now"
+        if (normalized.length() > 100)
+            return false;
 
+        // Check for specific confirmation phrases/patterns
         return normalized.equals("yes") ||
-                normalized.equals("create it") ||
-                normalized.equals("create app") ||
-                normalized.equals("build it") ||
-                normalized.equals("approve") ||
-                normalized.equals("proceed") ||
-                normalized.equals("go ahead") ||
-                normalized.equals("looks good") ||
+                normalized.equals("sure") ||
                 normalized.equals("ok") ||
-                normalized.equals("sure");
+                normalized.contains("create it") ||
+                normalized.contains("create the app") ||
+                normalized.contains("build it") ||
+                normalized.contains("build the app") ||
+                normalized.contains("approve") ||
+                normalized.contains("proceed") ||
+                normalized.contains("go ahead") ||
+                normalized.contains("looks good") ||
+                normalized.contains("make it") ||
+                (normalized.contains("create") && normalized.contains("now"));
     }
 }
