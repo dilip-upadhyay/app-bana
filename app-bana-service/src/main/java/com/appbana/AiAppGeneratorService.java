@@ -2759,11 +2759,28 @@ public class AiAppGeneratorService {
                 }
             }
 
-            sb.append("Existing Pages: ");
-            if (app.getPages() != null) {
-                sb.append(String.join(", ", app.getPages()));
+            sb.append("Existing Pages (Definitions):\\n");
+            if (app.getPages() != null && !app.getPages().isEmpty()) {
+                // FIX: Load actual page metadata so AI knows what is on the page
+                int pCount = 0;
+                for (String pId : app.getPages()) {
+                    if (pCount++ > 10) { // Limit to 10 pages to save tokens
+                        sb.append("... (and ").append(app.getPages().size() - 10).append(" more pages)\\n");
+                        break;
+                    }
+                    try {
+                        java.util.Map<String, Object> pageData = AppManager.getPage("default", app.getId(), pId);
+                        if (pageData != null) {
+                            sb.append(MAPPER.writeValueAsString(pageData)).append("\\n");
+                        } else {
+                            sb.append("- ").append(pId).append(" (Metadata missing)\\n");
+                        }
+                    } catch (Exception e) {
+                        sb.append("- ").append(pId).append(" (Error loading)\\n");
+                    }
+                }
             } else {
-                sb.append("None");
+                sb.append("None\\n");
             }
             sb.append("\n\n");
             sb.append("\n\n");
