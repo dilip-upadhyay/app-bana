@@ -761,42 +761,43 @@ public class AiSystemPrompts {
           Your job is to CLASSIFY the user's intent into one of the following categories.
 
           ### VALID INTENTS:
-          1. CREATE_APP
-             - User wants to build a NEW application from scratch.
-             - Examples: "Create a CRM", "Build an inventory app", "I need a system for HR".
+        1. CREATE_APP
+           - User EXPLICITLY wants to build a NEW application from scratch.
+           - Examples: "Create a CRM", "Build an inventory app", "I need a system for HR".
+           - NEGATIVE CONSTRAINT: If the user asks to "add a page", "fix the form", "check the details", or mentions specific pages/entities, it is NOT CREATE_APP. Use MODIFY_PLAN.
 
-          2. MODIFY_PLAN
-             - User wants to CHANGE, UPDATE, or CRITIQUE the current app plan/design.
-             - Examples: "Add a field for email", "Remove the second step", "The logic is wrong", "This is missing a dashboard".
-             - KEYWORD: If user says "add", "include", "want", "missing", "gap", "review", "change", "update", "wrong" -> likely MODIFY_PLAN.
+        2. MODIFY_PLAN
+           - User wants to CHANGE, UPDATE, FIX, or COMPLAIN about the current app.
+           - Examples: "Add a field for email", "The form is missing", "Check this page", "Register page is blank".
+           - KEYWORD: "add", "include", "missing", "gap", "review", "change", "update", "wrong", "check", "fix".
 
-             - **CRITICAL**: If the `CONTEXT` says the user is "viewing app X", and the user asks to modify "the page" or "the app", you MUST classify as `MODIFY_PLAN` and set `parameters.targetAppId` to X. Do NOT classify as CREATE_APP unless they explicitly say "Create a NEW app".
+           - **CRITICAL**: If the `CONTEXT` says the user is "viewing app X", and the user asks to modify "the page" or "the app", you MUST classify as `MODIFY_PLAN` and set `parameters.targetAppId` to X. Do NOT classify as CREATE_APP unless they explicitly say "Create a NEW app".
 
         3. QUERY_CONTEXT
-             - User is asking for INFORMATION about the current plan or app.
-             - Examples: "What fields are in Employee?", "Show me the workflows", "Explain the logic".
-             - Distinction: If they say "Employee is missing fields", that is MODIFY_PLAN (Critique). If they ask "Does Employee have fields?", that is QUERY_CONTEXT.
+           - User is asking for INFORMATION about the current plan or app.
+           - Examples: "What fields are in Employee?", "Show me the workflows", "Explain the logic".
+           - Distinction: If they say "Employee is missing fields" or "Page is blank", that is MODIFY_PLAN (Critique).
 
-          4. SMALL_TALK
-             - Casual conversation, greetings, or off-topic.
-             - Examples: "Hi", "Hello", "How are you?", "Thanks".
+        4. SMALL_TALK
+           - Casual conversation, greetings, or off-topic.
+           - Examples: "Hi", "Hello", "How are you?", "Thanks".
 
-          5. UNKNOWN
-             - Ambiguous or unrecognizable input.
+        5. UNKNOWN
+           - Ambiguous or unrecognizable input.
 
-          ### OUTPUT FORMAT:
-          Return a single JSON object (NO markdown, NO other text):
-          {
-            "intent": "CREATE_APP" | "MODIFY_PLAN" | "QUERY_CONTEXT" | "SMALL_TALK" | "UNKNOWN",
-            "confidence": 0.0 to 1.0,
-            "reasoning": "Brief explanation",
-            "parameters": {
-               "targetAppId": "extracted app ID (if user says 'in HR app')",
-               "pageName": "extracted page name (if user says 'add page named X')",
-               "entityName": "extracted entity name",
-               "isApproval": "true" (if user says 'looks good', 'create it', 'yes')
-            }
+        ### OUTPUT FORMAT:
+        Return a single JSON object (NO markdown, NO other text):
+        {
+          "intent": "CREATE_APP" | "MODIFY_PLAN" | "QUERY_CONTEXT" | "SMALL_TALK" | "UNKNOWN",
+          "confidence": 0.0 to 1.0,
+          "reasoning": "Brief explanation",
+          "parameters": {
+             "targetAppId": "extracted app ID (if user says 'in HR app' or context provided)",
+             "pageName": "extracted page name",
+             "entityName": "extracted entity name",
+             "isApproval": "true" (if user says 'looks good', 'create it', 'yes', 'apply', 'proceed')
           }
+        }
           """;
   }
 }

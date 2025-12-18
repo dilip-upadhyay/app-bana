@@ -1,5 +1,5 @@
 {
-  "lastUpdated" : 1766085078039,
+  "lastUpdated" : 1766088564943,
   "entries" : [ {
     "normalizedText" : "i want to want to create an application for my customers so that they can easily go and book the appointment for my salon",
     "action" : {
@@ -9,22 +9,8 @@
         "userId" : "default"
       }
     },
-    "createdTime" : 1766084984378,
-    "lastAccessTime" : 1766084984378,
-    "hitCount" : 0
-  }, {
-    "normalizedText" : "yes looks good create the app now",
-    "action" : {
-      "action" : "generateApp",
-      "target" : { },
-      "options" : {
-        "userId" : "default",
-        "appId" : "salon-booking-app",
-        "currentAppId" : "salon-booking-app"
-      }
-    },
-    "createdTime" : 1766085078039,
-    "lastAccessTime" : 1766085078039,
+    "createdTime" : 1766088564939,
+    "lastAccessTime" : 1766088564939,
     "hitCount" : 0
   } ]
 }

@@ -1273,6 +1273,13 @@ public class AiAppGeneratorService {
         }
         result.payload.put("currentAppName", result.appName);
 
+        // FIX: Force reload if updating existing app
+        if (existing != null) {
+            result.payload.put(PAYLOAD_ACTION, ACTION_LOAD_APP);
+            result.payload.put("appId", appId); // Ensure appId is present for loadApp
+            LOG.info("[AI] Added ACTION_LOAD_APP to payload to force UI refresh");
+        }
+
         LOG.info("[AI] Persisted generated app '{}'", appId);
     }
 
@@ -1380,15 +1387,6 @@ public class AiAppGeneratorService {
         } else if (Pattern.compile("task|todo|checklist").matcher(input).find()) {
             intent.appType = "task";
             intent.appName = "Task Manager";
-        } else if (Pattern.compile("shop|store|ecommerce|e-commerce|product|cart").matcher(input).find()) {
-            intent.appType = "ecommerce";
-            intent.appName = "E-Commerce Store";
-        } else if (Pattern.compile("crm|customer|contact|lead|client").matcher(input).find()) {
-            intent.appType = "crm";
-            intent.appName = "CRM Application";
-        } else if (Pattern.compile("cms|content").matcher(input).find()) {
-            intent.appType = "blog";
-            intent.appName = "Content Management System";
         } else {
             intent.appType = "generic";
             intent.appName = "Application";
@@ -2280,7 +2278,11 @@ public class AiAppGeneratorService {
         }
 
         // Only process data-table/list pages
-        if (!"data-table".equals(pageType) && !"list".equals(pageType)) {
+        boolean isTable = "data-table".equals(pageType) || "list".equals(pageType);
+        boolean isForm = "form".equals(pageType) || "profile".equals(pageType) || "create-form".equals(pageType)
+                || "registration".equals(pageType);
+
+        if (!isTable && !isForm) {
             return;
         }
 
@@ -2300,7 +2302,95 @@ public class AiAppGeneratorService {
             return;
         }
 
-        autoCompleteTable(page, entities, entityName);
+        if (isTable) {
+            autoCompleteTable(page, entities, entityName);
+        } else if (isForm) {
+            autoCompleteForm(page, entities, entityName);
+        }
+    }
+
+    private static void autoCompleteForm(Map<String, Object> page, List<Object> entities, String entityName) {
+        Object nodesObj = page.get("nodes");
+        List<Object> nodes;
+
+        if (nodesObj instanceof List) {
+            nodes = new ArrayList<>((List<?>) nodesObj);
+        } else {
+            nodes = new ArrayList<>();
+        }
+        page.put("nodes", nodes);
+
+        // Check if form already exists
+        boolean hasForm = false;
+        for (Object n : nodes) {
+            if (n instanceof Map) {
+                Map<?, ?> m = (Map<?, ?>) n;
+                if ("form".equals(m.get("type")) || "studio-form-live".equals(m.get("type"))) {
+                    hasForm = true;
+                    break;
+                }
+            }
+        }
+        if (hasForm)
+            return;
+
+        LOG.info("[AI] Auto-completing missing form component for page '{}' with entity '{}'", page.get("name"),
+                entityName);
+
+        Map<String, Object> entityMap = findEntityByName(entities, entityName);
+        if (entityMap == null) {
+            LOG.warn("[AI] Cannot auto-complete form: entity '{}' not found", entityName);
+            return;
+        }
+
+        List<Map<String, Object>> fields = buildFormFields(entityMap);
+        String formId = "form-" + page.get("rootId");
+
+        Map<String, Object> formNode = new LinkedHashMap<>();
+        formNode.put("id", formId);
+        formNode.put("type", "form");
+
+        Map<String, Object> formProps = new LinkedHashMap<>();
+        formProps.put("entity", entityName);
+        formProps.put("fields", fields);
+        formProps.put("layout", "vertical");
+        formProps.put("submitLabel", "Save");
+        formNode.put("props", formProps);
+
+        nodes.add(formNode);
+        // Assuming flat nodes list or rootId logic from autoCompleteTable.
+        // Usually we just add to nodes list if it's the structure used.
+        // But autoCompleteTable calls addChildToRoot. Let's do the same if needed.
+        if (page.containsKey("rootId")) {
+            addChildToRoot(nodes, String.valueOf(page.get("rootId")), formId);
+        }
+
+        LOG.info("[AI] ✓ Auto-completed form component with {} fields", fields.size());
+    }
+
+    private static List<Map<String, Object>> buildFormFields(Map<String, Object> entity) {
+        List<Map<String, Object>> fields = new ArrayList<>();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> entityFields = (List<Map<String, Object>>) entity.get("fields");
+        if (entityFields != null) {
+            for (Map<String, Object> field : entityFields) {
+                String fieldName = String.valueOf(field.get("name"));
+                String fieldType = String.valueOf(field.get("type"));
+                // Skip IDs and system fields if needed, but usually we want them hidden or
+                // read-only
+                if ("id".equalsIgnoreCase(fieldName))
+                    continue;
+
+                Map<String, Object> formField = new LinkedHashMap<>();
+                formField.put("name", fieldName);
+                formField.put("label", capitalizeWords(fieldName));
+                formField.put("type", mapFieldTypeForTable(fieldType)); // Reuse table mapping or simple mapping
+                formField.put("required", field.get("required"));
+                fields.add(formField);
+            }
+        }
+        return fields;
     }
 
     private static void autoCompleteDashboard(Map<String, Object> page) {
