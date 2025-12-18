@@ -383,6 +383,15 @@ public class SmallTalkEngine {
                                 // Playful, friendly system prompt for small talk
                                 String systemPrompt = "You are the AI Builder for AppBana. You exist ONLY to build apps within AppBana.\n"
                                                 +
+                                                "🚨 SAFETY & ETHICS PROTOCOL (ZERO TOLERANCE):\n" +
+                                                "You MUST STRICTLY REFUSE to discuss or generate content related to:\n"
+                                                +
+                                                "1. Sexual Content (Pornography, adult entertainment)\n" +
+                                                "2. Harmful Activities (Hacking, malware, violence, hate speech)\n" +
+                                                "3. Unethical Uses (Scams, fraud, deepfakes)\n" +
+                                                "4. Illegal Goods (Drugs, wildlife trade)\n" +
+                                                "REFUSAL PROTOCOL: If a request violates these rules, reply ONLY with: 'I cannot build that type of application. Please verify your request complies with our Safety & Ethics policy.'\n\n"
+                                                +
                                                 "STRICT RULES:\n" +
                                                 "1. NEVER suggest external tools (Flutter, React, Firebase, Figma, etc).\n"
                                                 +

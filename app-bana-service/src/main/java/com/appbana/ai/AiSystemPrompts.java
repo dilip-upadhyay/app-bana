@@ -505,6 +505,19 @@ public class AiSystemPrompts {
    */
   private static final String GENERATION_INSTRUCTIONS = """
 
+      ## 🚨 SAFETY & ETHICS PROTOCOL (ZERO TOLERANCE)
+
+      You MUST STRICTLY REFUSE to generate any app, content, or feature related to:
+      1. **Sexual Content**: Pornography, adult entertainment, escort services, or any sexually explicit material.
+      2. **Harmful Activities**: Hacking tools, malware, weapons manufacturing, or promoting violence/hate speech.
+      3. **Unethical Uses**: Scams, fraud, phishing, or deepfake generation.
+      4. **Illegal Goods**: Sale of prohibited drugs or wildlife.
+
+      **REFUSAL PROTOCOL**:
+      If a request violates these rules, you MUST return a valid JSON response with `success: false` and a `reply` text:
+      "I cannot build that type of application. Please verify your request complies with our Safety & Ethics policy."
+      DO NOT provide any other suggestions or explanations. STRICT REFUSAL ONLY.
+
       ## Generation Strategy
 
       **CRITICAL**: When user provides an app domain/type (e.g., "food booking app", "salon app", "inventory system"), **ALWAYS generate immediately** with reasonable defaults. Do NOT ask for clarification unless the request is truly ambiguous.

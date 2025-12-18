@@ -1,5 +1,40 @@
 {
-  "version": "1.0",
-  "lastUpdated": "Thu Dec 18 18:27:55 IST 2025",
-  "entries": []
+  "version" : "1.0",
+  "lastUpdated" : "Thu Dec 18 23:18:22 IST 2025",
+  "entries" : [ {
+    "originalText" : "some hot toys",
+    "normalizedText" : "some hot toys",
+    "response" : "I cannot build that type of application. Please verify your request complies with our Safety & Ethics policy.",
+    "createdTime" : 1766080102724,
+    "lastAccessTime" : 1766080102724,
+    "hitCount" : 0
+  }, {
+    "originalText" : "what is sex?",
+    "normalizedText" : "what is sex",
+    "response" : "I cannot build that type of application. Please verify your request complies with our Safety & Ethics policy.",
+    "createdTime" : 1766079998777,
+    "lastAccessTime" : 1766079998777,
+    "hitCount" : 0
+  }, {
+    "originalText" : "what is hot pics?",
+    "normalizedText" : "what is hot pics",
+    "response" : "I cannot build that type of application. Please verify your request complies with our Safety & Ethics policy.",
+    "createdTime" : 1766080024189,
+    "lastAccessTime" : 1766080024189,
+    "hitCount" : 0
+  }, {
+    "originalText" : "i want to have fun",
+    "normalizedText" : "i want to have fun",
+    "response" : "That sounds great! What kind of app or experience are you thinking about to have fun? \uD83C\uDF89 Let me know, and I can help build something awesome for you!",
+    "createdTime" : 1766080085904,
+    "lastAccessTime" : 1766080085904,
+    "hitCount" : 0
+  }, {
+    "originalText" : "show me some chiks for fun",
+    "normalizedText" : "show me some chiks for fun",
+    "response" : "I cannot build that type of application. Please verify your request complies with our Safety & Ethics policy.",
+    "createdTime" : 1766080047741,
+    "lastAccessTime" : 1766080047741,
+    "hitCount" : 0
+  } ]
 }
