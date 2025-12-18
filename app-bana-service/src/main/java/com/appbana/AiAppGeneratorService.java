@@ -163,6 +163,19 @@ public class AiAppGeneratorService {
                 }
             }
 
+            // SAFETY LATCH: If we have a pending plan, and logic drifted to "Application"
+            // (generic fallback) because input was ambiguous (e.g. "yes", "go ahead"),
+            // FORCE confirmation of the pending plan instead of creating a new empty app.
+            if (ctx.pendingResult != null && "Application".equals(parseIntent(request.description).appName)) {
+                LOG.info(
+                        "[AI] Ambiguous input '{}' resolved to Generic App, but Pending Plan exists. Interpreting as CONFIRMATION.",
+                        request.description);
+                GenerationResult pending = ctx.pendingResult;
+                postProcessAndPersistIfNeeded(pending, request);
+                ctx.pendingResult = null;
+                return pending;
+            }
+
             // Legacy Fallback (keeping for safety during transition, but Router acts first)
             String normalizedAction = resolveAction(request);
 
@@ -2256,6 +2269,22 @@ public class AiAppGeneratorService {
      */
     private static void autoCompletePageComponents(Map<String, Object> page, List<Object> entities) {
         String pageType = String.valueOf(page.get("type"));
+        LOG.info("[AI] Processing page '{}' with type '{}'", page.get("name"), pageType);
+
+        // Heuristic: If page name contains "Registration" or "Sign Up", treat as
+        // form/registration
+        // This fixes the issue where AI generates "Customer Registration" with generic
+        // type (e.g. "content" or "blank")
+        String pageNameLower = String.valueOf(page.get("name")).toLowerCase();
+        if (pageNameLower.contains("registration") || pageNameLower.contains("register")
+                || pageNameLower.contains("sign up")) {
+            if (!"registration".equals(pageType) && !"form".equals(pageType) && !"profile".equals(pageType)) {
+                LOG.info("[AI] Page '{}' detected as Registration form override (original type: {})", page.get("name"),
+                        pageType);
+                pageType = "registration";
+                page.put("type", "registration"); // Update metadata
+            }
+        }
 
         if ("dashboard".equals(pageType)) {
             autoCompleteDashboard(page);
@@ -2283,6 +2312,7 @@ public class AiAppGeneratorService {
                 || "registration".equals(pageType);
 
         if (!isTable && !isForm) {
+            LOG.warn("[AI] Page '{}' skipped: type '{}' is not auto-completable", page.get("name"), pageType);
             return;
         }
 
