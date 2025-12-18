@@ -1,54 +1,12 @@
 {
   "version" : "1.0",
-  "lastUpdated" : "Thu Dec 18 00:54:36 IST 2025",
+  "lastUpdated" : "Thu Dec 18 15:01:03 IST 2025",
   "entries" : [ {
-    "originalText" : "create now",
-    "normalizedText" : "create now",
-    "response" : "Great! Let’s get started on your app. What topic are you interested in? For example, if you’re into fitness, we could create a workout tracker. If you enjoy food, we could develop a recipe sharing app. Let me know your preference, and we can outline the key features!",
-    "createdTime" : 1765997462936,
-    "lastAccessTime" : 1765997462936,
-    "hitCount" : 0
-  }, {
-    "originalText" : "create it",
-    "normalizedText" : "create it",
-    "response" : "Let's create your app! First, we need to choose a topic. Here are a few ideas:\n\n1. **Fitness App**: A workout tracker or meal planner.\n2. **Food App**: A recipe sharing platform or a meal prep organizer.\n3. **Music App**: A playlist creator or a music discovery tool.\n\nPlease let me know which topic you prefer, or suggest another idea if you have one in mind! Once we have a topic, we can outline the key features and functionality.",
-    "createdTime" : 1765997644527,
-    "lastAccessTime" : 1765997644527,
-    "hitCount" : 0
-  }, {
-    "originalText" : "Hi, how are your?",
-    "normalizedText" : "hi, how are your",
-    "response" : "I'm doing well, thank you! How can I assist you today? If you're considering creating an app related to a specific interest or topic, I'd be happy to help with ideas and guidance.",
-    "createdTime" : 1765999238340,
-    "lastAccessTime" : 1765999238340,
-    "hitCount" : 0
-  }, {
-    "originalText" : "ok, create the app now",
-    "normalizedText" : "ok, create the app now",
-    "response" : "To create an app for the Candidate Review Process, follow these steps:\n\n1. **Define Your Purpose**: Identify what specific aspects of the candidate review process you want to improve. Is it tracking applications, scheduling interviews, or providing feedback?\n\n2. **Research and Plan**: Analyze existing apps in the recruitment space. What features do they have? What gaps can your app fill? Create a list of essential features.\n\n3. **Wireframe Your App**: Sketch out the user interface (UI) and user experience (UX) layouts. Tools like Figma or Sketch can help you design the screens.\n\n4. **Choose a Technology Stack**: Decide on the programming languages and frameworks you’ll use. For mobile apps, consider React Native or Flutter for cross-platform development.\n\n5. **Develop Core Features**:\n   - **Applicant Tracking**: Allow users to upload resumes and track their status.\n   - **Feedback System**: Enable interviewers to provide ratings and comments.\n   - **Scheduling Tool**: Integrate a calendar for scheduling interviews.\n   - **Reporting**: Generate reports on candidate progress and outcomes.\n\n6. **Test Your App**: Conduct user testing to gather feedback and make improvements. Ensure it’s user-friendly and bug-free.\n\n7. **Launch and Market**: Publish your app on relevant platforms (App Store, Google Play) and promote it through social media and networking within HR communities.\n\n8. **Iterate Based on Feedback**: After launch, continue to gather user feedback and update the app to meet users' needs.\n\nIf you’d like to explore specific features or need guidance on any of these steps, just let me know!",
-    "createdTime" : 1765980450597,
-    "lastAccessTime" : 1765980450597,
-    "hitCount" : 0
-  }, {
-    "originalText" : "Who are you?",
-    "normalizedText" : "who are you",
-    "response" : "I'm your AI assistant, here to help you with app creation! If you have an idea or a specific topic in mind, I can provide guidance, suggestions, and practical advice to bring your app to life. What are you interested in exploring?",
-    "createdTime" : 1765999249904,
-    "lastAccessTime" : 1765999249904,
-    "hitCount" : 0
-  }, {
-    "originalText" : "ok, looks good. create the app now",
-    "normalizedText" : "ok, looks good. create the app now",
-    "response" : "To create an app, we need to define its concept and features first. What topic or idea do you have in mind for your app? If you’re looking for inspiration, consider areas like fitness, food, music, or productivity. Let me know your interests, and I can help you outline the app's structure and functionalities!",
-    "createdTime" : 1765999476948,
-    "lastAccessTime" : 1765999476948,
-    "hitCount" : 0
-  }, {
-    "originalText" : "show me also for Employee",
-    "normalizedText" : "show me also for employee",
-    "response" : "If you're looking to build an app for employees, consider creating an Employee Engagement app. This can include features like:\n\n1. **Communication Tools**: A platform for messaging and announcements.\n2. **Feedback System**: Allow employees to provide feedback on company policies and work environment.\n3. **Training Modules**: Offer resources for skill development and onboarding.\n4. **Recognition Programs**: Enable peer recognition and rewards for accomplishments.\n5. **Scheduling and Attendance**: Tools for tracking work hours and managing shifts.\n\nTo get started, define your target audience and their specific needs, then outline the key features you want to include. You can use app development platforms like Flutter or React Native for cross-platform functionality. Good luck!",
-    "createdTime" : 1765975838147,
-    "lastAccessTime" : 1765975838147,
+    "originalText" : "i also want to have a flow to confirm the appointment from salon manger pots request for appointpemnt from customer.",
+    "normalizedText" : "i also want to have a flow to confirm the appointment from salon manger pots request for appointpemnt from customer",
+    "response" : "That sounds like a Workflow! I can build it. Say 'Create it' to generate the metadata. \uD83D\uDE80",
+    "createdTime" : 1766050263876,
+    "lastAccessTime" : 1766050263876,
     "hitCount" : 0
   } ]
 }
