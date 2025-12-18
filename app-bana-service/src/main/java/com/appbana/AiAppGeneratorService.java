@@ -222,72 +222,93 @@ public class AiAppGeneratorService {
                 // NEW FLOW: Do NOT persist immediately. Stage for review.
                 ctx.pendingResult = gen;
 
-                // Build Review Message
-                StringBuilder plan = new StringBuilder();
-                plan.append("### 📋 Implementation Plan\n\n");
-                plan.append("**App Name:** ").append(gen.appName).append("\n");
-                plan.append("**Description:** ").append(gen.appDescription).append("\n\n");
-
-                if (gen.entities != null && !gen.entities.isEmpty()) {
-                    plan.append("**Entities to Create:**\n");
-                    for (EntitySchema e : gen.entities) {
-                        plan.append("- **").append(e.getName()).append("** (");
-                        if (e.getFields() != null)
-                            plan.append(e.getFields().size()).append(" fields");
-                        plan.append(")\n");
-                    }
-                    plan.append("\n");
-                }
-
-                if (gen.workflows != null && !gen.workflows.isEmpty()) {
-                    plan.append("**Workflows:**\n");
-                    for (WorkflowDefinition w : gen.workflows) {
-                        if (w == null)
-                            continue;
-                        plan.append("- **").append(w.getName()).append("**\n");
-                        plan.append("  Trigger: ").append(w.getTriggerEvent() != null ? w.getTriggerEvent() : "Manual")
-                                .append("\n");
-                        if (w.getDescription() != null) {
-                            plan.append("  Description: ").append(w.getDescription()).append("\n");
-                        }
-                        // Parse definitionJson to show steps
-                        if (w.getDefinitionJson() != null && !w.getDefinitionJson().isEmpty()) {
-                            try {
-                                com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(w.getDefinitionJson());
-                                if (root.has("nodes") && root.get("nodes").isArray()) {
-                                    plan.append("  Steps:\n");
-                                    for (com.fasterxml.jackson.databind.JsonNode node : root.get("nodes")) {
-                                        String type = node.has("type") ? node.get("type").asText() : "Unknown";
-                                        String label = node.has("label") ? node.get("label").asText() : type;
-                                        if (!"START".equalsIgnoreCase(type) && !"END".equalsIgnoreCase(type)) {
-                                            plan.append("    - ").append(label).append(" (").append(type).append(")\n");
-                                        }
-                                    }
-                                }
-                            } catch (Exception e) {
-                                // Ignore parsing errors for preview
-                            }
-                        }
-                    }
-                    plan.append("\n");
-                }
-
-                if (gen.pages != null && !gen.pages.isEmpty()) {
-                    plan.append("**Pages to Create:**\n");
-                    for (Map<String, Object> p : gen.pages) {
-                        plan.append("- ").append(p.get("name")).append("\n");
-                    }
-                } else if (gen.suggestedPages != null) {
-                    plan.append("**Suggested Pages:**\n");
-                    for (String p : gen.suggestedPages)
-                        plan.append("- ").append(p).append("\n");
-                }
-
-                plan.append("\n**Look good?** Say **'Yes'** or **'Create it'** to proceed, or tell me what to change.");
-
                 if (gen.payload == null)
                     gen.payload = new HashMap<>();
-                gen.payload.put(PAYLOAD_REPLY, plan.toString());
+
+                // FIX: If this is an UPDATE and AI provided a coherent reply, use it!
+                // Don't overwrite it with the generic "Implementation Plan" boilerplate.
+                boolean isUpdate = "update_plan".equals(request.action);
+                boolean hasAiReply = gen.payload.containsKey(PAYLOAD_REPLY) &&
+                        gen.payload.get(PAYLOAD_REPLY) != null &&
+                        !String.valueOf(gen.payload.get(PAYLOAD_REPLY)).isBlank();
+
+                if (isUpdate && hasAiReply) {
+                    // Append a consistent "Call to Action" if usage dictates, or just respect AI's
+                    // voice
+                    String aiReply = String.valueOf(gen.payload.get(PAYLOAD_REPLY));
+                    if (!aiReply.contains("Create it") && !aiReply.contains("Yes")) {
+                        aiReply += "\n\n**Ready?** Say **'Yes'** or **'Create it'** to apply these changes.";
+                    }
+                    gen.payload.put(PAYLOAD_REPLY, aiReply);
+                } else {
+                    // Build Review Message (Legacy/New App logic)
+                    StringBuilder plan = new StringBuilder();
+                    plan.append("### 📋 Implementation Plan\n\n");
+                    plan.append("**App Name:** ").append(gen.appName).append("\n");
+                    plan.append("**Description:** ").append(gen.appDescription).append("\n\n");
+
+                    if (gen.entities != null && !gen.entities.isEmpty()) {
+                        plan.append("**Entities to Create:**\n");
+                        for (EntitySchema e : gen.entities) {
+                            plan.append("- **").append(e.getName()).append("** (");
+                            if (e.getFields() != null)
+                                plan.append(e.getFields().size()).append(" fields");
+                            plan.append(")\n");
+                        }
+                        plan.append("\n");
+                    }
+
+                    if (gen.workflows != null && !gen.workflows.isEmpty()) {
+                        plan.append("**Workflows:**\n");
+                        for (WorkflowDefinition w : gen.workflows) {
+                            if (w == null)
+                                continue;
+                            plan.append("- **").append(w.getName()).append("**\n");
+                            plan.append("  Trigger: ")
+                                    .append(w.getTriggerEvent() != null ? w.getTriggerEvent() : "Manual")
+                                    .append("\n");
+                            if (w.getDescription() != null) {
+                                plan.append("  Description: ").append(w.getDescription()).append("\n");
+                            }
+                            // Parse definitionJson to show steps
+                            if (w.getDefinitionJson() != null && !w.getDefinitionJson().isEmpty()) {
+                                try {
+                                    com.fasterxml.jackson.databind.JsonNode root = MAPPER
+                                            .readTree(w.getDefinitionJson());
+                                    if (root.has("nodes") && root.get("nodes").isArray()) {
+                                        plan.append("  Steps:\n");
+                                        for (com.fasterxml.jackson.databind.JsonNode node : root.get("nodes")) {
+                                            String type = node.has("type") ? node.get("type").asText() : "Unknown";
+                                            String label = node.has("label") ? node.get("label").asText() : type;
+                                            if (!"START".equalsIgnoreCase(type) && !"END".equalsIgnoreCase(type)) {
+                                                plan.append("    - ").append(label).append(" (").append(type)
+                                                        .append(")\n");
+                                            }
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    // Ignore parsing errors for preview
+                                }
+                            }
+                        }
+                        plan.append("\n");
+                    }
+
+                    if (gen.pages != null && !gen.pages.isEmpty()) {
+                        plan.append("**Pages to Create:**\n");
+                        for (Map<String, Object> p : gen.pages) {
+                            plan.append("- ").append(p.get("name")).append("\n");
+                        }
+                    } else if (gen.suggestedPages != null) {
+                        plan.append("**Suggested Pages:**\n");
+                        for (String p : gen.suggestedPages)
+                            plan.append("- ").append(p).append("\n");
+                    }
+
+                    plan.append(
+                            "\n**Look good?** Say **'Yes'** or **'Create it'** to proceed, or tell me what to change.");
+                    gen.payload.put(PAYLOAD_REPLY, plan.toString());
+                }
 
                 // postProcessAndPersistIfNeeded(gen, request); // DISABLED for review step
                 return gen;
