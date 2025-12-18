@@ -1,12 +1,5 @@
 {
-  "version" : "1.0",
-  "lastUpdated" : "Thu Dec 18 15:40:43 IST 2025",
-  "entries" : [ {
-    "originalText" : "i also want to have a flow to confirm the appointment from salon manger pots request for appointpemnt from customer.",
-    "normalizedText" : "i also want to have a flow to confirm the appointment from salon manger pots request for appointpemnt from customer",
-    "response" : "That sounds like a Workflow! I can build it. Say 'Create it' to generate the metadata. \uD83D\uDE80",
-    "createdTime" : 1766050263876,
-    "lastAccessTime" : 1766052643119,
-    "hitCount" : 1
-  } ]
+  "version": "1.0",
+  "lastUpdated": "Thu Dec 18 18:27:55 IST 2025",
+  "entries": []
 }

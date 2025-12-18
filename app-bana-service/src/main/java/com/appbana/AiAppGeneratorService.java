@@ -131,8 +131,12 @@ public class AiAppGeneratorService {
                     res.payload.put(PAYLOAD_ACTION, ACTION_GENERATE_APP);
                     return res;
                 }
-                // Fallback: If context engine has no answer, let it flow to general chat
-                // behavior
+                // Fallback: If context engine has no answer, assume it is a
+                // Refinement/Modification
+                // e.g. "This is for the Salon App" -> updates target context
+                LOG.info("[AI] Context Query unresolved, treating as MODIFY_PLAN (Context Refinement)");
+                route.intent = com.appbana.ai.SemanticRouter.Intent.MODIFY_PLAN;
+                // Continue to MODIFY_PLAN block logic below
             } else if (route.intent == com.appbana.ai.SemanticRouter.Intent.MODIFY_PLAN) {
                 // EXPLICITLY set action to update_plan
                 request.action = "update_plan";
@@ -172,9 +176,12 @@ public class AiAppGeneratorService {
                 return handleRegeneratePagesRequest(request);
             }
 
-            GenerationResult smallTalk = handleSmallTalkIfNeeded(request, normalizedAction);
-            if (smallTalk != null) {
-                return smallTalk;
+            // FIX: Only check small talk if NOT an explicit generation/modification intent
+            if (!isExplicitGen) {
+                GenerationResult smallTalk = handleSmallTalkIfNeeded(request, normalizedAction);
+                if (smallTalk != null) {
+                    return smallTalk;
+                }
             }
 
             // Extract app type from description/context and track it
@@ -303,7 +310,9 @@ public class AiAppGeneratorService {
             postProcessAndPersistIfNeeded(generated, request);
             attachContextHints(generated, ACTION_GENERATE_APP);
             return generated;
-        } catch (Exception ex) {
+        } catch (
+
+        Exception ex) {
             GenerationResult err = new GenerationResult();
             err.success = false;
             err.error = ex.getMessage();
