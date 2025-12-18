@@ -141,10 +141,25 @@ public class AiAppGeneratorService {
                 // EXPLICITLY set action to update_plan
                 request.action = "update_plan";
                 // Inject AI-extracted target app ID into request options for downstream logic
-                if (route.parameters != null && route.parameters.containsKey("targetAppId")) {
-                    if (request.options == null)
-                        request.options = new HashMap<>();
-                    request.options.put("targetAppId", route.parameters.get("targetAppId"));
+                // Inject AI-extracted target app ID into request options for downstream logic
+                if (route.parameters != null) {
+                    if (route.parameters.containsKey("targetAppId")) {
+                        if (request.options == null)
+                            request.options = new HashMap<>();
+                        request.options.put("targetAppId", route.parameters.get("targetAppId"));
+                    }
+
+                    // FIX: Check for explicit "isApproval" from Semantic Router
+                    // If router says this is an approval (e.g. "yes, do it"), treat it as
+                    // confirmation
+                    if (ctx.pendingResult != null &&
+                            "true".equalsIgnoreCase(route.parameters.get("isApproval"))) {
+                        LOG.info("[AI] User confirmed pending plan (via Semantic Router isApproval)");
+                        GenerationResult pending = ctx.pendingResult;
+                        postProcessAndPersistIfNeeded(pending, request);
+                        ctx.pendingResult = null;
+                        return pending;
+                    }
                 }
             }
 
@@ -2920,6 +2935,8 @@ public class AiAppGeneratorService {
 
         // Check for specific confirmation phrases/patterns
         return normalized.equals("yes") ||
+                normalized.startsWith("yes ") ||
+                normalized.startsWith("yes,") ||
                 normalized.equals("sure") ||
                 normalized.equals("ok") ||
                 normalized.contains("create it") ||
@@ -2927,6 +2944,8 @@ public class AiAppGeneratorService {
                 normalized.contains("build it") ||
                 normalized.contains("build the app") ||
                 normalized.contains("approve") ||
+                normalized.contains("apply") ||
+                normalized.contains("confirm") ||
                 normalized.contains("proceed") ||
                 normalized.contains("go ahead") ||
                 normalized.contains("looks good") ||
