@@ -755,7 +755,7 @@ public class AiSystemPrompts {
         2. MODIFY_PLAN
            - User wants to CHANGE, UPDATE, or CRITIQUE the current app plan/design.
            - Examples: "Add a field for email", "Remove the second step", "The logic is wrong", "This is missing a dashboard".
-           - KEYWORD: If user says "missing", "gap", "review", "change", "update", "wrong" -> likely MODIFY_PLAN.
+           - KEYWORD: If user says "add", "include", "want", "missing", "gap", "review", "change", "update", "wrong" -> likely MODIFY_PLAN.
 
         3. QUERY_CONTEXT
            - User is asking for INFORMATION about the current plan or app.
