@@ -98,6 +98,18 @@ public class AiAppGeneratorService {
             String userId = resolveUserId(request);
             ConversationContext ctx = getContext(userId);
 
+            // FIX: Sync context with frontend "currentAppId" if provided
+            // This handles manual UI selection updates so the AI knows which app is active
+            if (request.options != null && request.options.containsKey("currentAppId")) {
+                String explicitAppId = String.valueOf(request.options.get("currentAppId"));
+                if (explicitAppId != null && !explicitAppId.equals("null") && !explicitAppId.isBlank()) {
+                    updateOpenedApp(userId, explicitAppId);
+                    // Re-fetch context to ensure we have the latest state (though it should be
+                    // shared ref)
+                    ctx = getContext(userId);
+                }
+            }
+
             // FIX: Check for confirmation of pending plan BEFORE Router/SmallTalk
             // This prevents "create it" being intercepted as Small Talk
             boolean isHeuristicApproval = ctx.pendingResult != null && isConfirmationPhrase(request.description);
@@ -166,7 +178,11 @@ public class AiAppGeneratorService {
             // SAFETY LATCH: If we have a pending plan, and logic drifted to "Application"
             // (generic fallback) because input was ambiguous (e.g. "yes", "go ahead"),
             // FORCE confirmation of the pending plan instead of creating a new empty app.
-            if (ctx.pendingResult != null && "Application".equals(parseIntent(request.description).appName)) {
+            // FIX: Only trigger this if it's ACTUALLY a confirmation phrase. If it's a
+            // modification ("add login"),
+            // let it fall through to Sticky Context.
+            if (ctx.pendingResult != null && "Application".equals(parseIntent(request.description).appName)
+                    && isConfirmationPhrase(request.description)) {
                 LOG.info(
                         "[AI] Ambiguous input '{}' resolved to Generic App, but Pending Plan exists. Interpreting as CONFIRMATION.",
                         request.description);
@@ -2356,6 +2372,10 @@ public class AiAppGeneratorService {
             return;
         }
 
+        // FIX: Validate rootId/nodes consistency and deduplicate BEFORE processing
+        // Logic: if rootId points to X, but nodes list has root Y, we fix it.
+        validateAndFixRootId(page);
+
         String entityName = String.valueOf(page.get("entity"));
 
         // Try to infer entity from page name if not explicitly set
@@ -2425,7 +2445,32 @@ public class AiAppGeneratorService {
         formProps.put("fields", fields);
         formProps.put("layout", "vertical");
         formProps.put("submitLabel", "Save");
+        // FIX: Ensure button is explicitly part of form structure if needed by
+        // frontend,
+        // though "submitLabel" should trigger it in the Form component.
+        // Also ensure form has a title if missing.
+        if (!hasHeader(nodes)) {
+            formProps.put("title", capitalizeWords(entityName));
+        }
         formNode.put("props", formProps);
+
+        // FIX: Clear garbage nodes (text descriptors) if we are injecting a real form
+        // AI often generates "text" nodes saying "email field", "password field".
+        // We should remove these to avoid double rendering (Text + Form).
+        // Keep "heading" or "title" nodes.
+        nodes.removeIf(n -> {
+            if (n instanceof Map) {
+                Map<?, ?> m = (Map<?, ?>) n;
+                String t = String.valueOf(m.get("type"));
+                String id = String.valueOf(m.get("id"));
+                // Remove generic text nodes or "container" nodes that aren't the root
+                if ("text".equals(t) && !id.contains("header") && !id.contains("title"))
+                    return true;
+                if ("container".equals(t) && !id.contains("root"))
+                    return true;
+            }
+            return false;
+        });
 
         nodes.add(formNode);
         // Assuming flat nodes list or rootId logic from autoCompleteTable.
@@ -2436,6 +2481,94 @@ public class AiAppGeneratorService {
         }
 
         LOG.info("[AI] ✓ Auto-completed form component with {} fields", fields.size());
+    }
+
+    /**
+     * Ensures page.rootId points to a valid node in nodes list.
+     * Fixes "Root node not found" errors caused by ID mismatch or missing root.
+     * Also deduplicates nodes.
+     */
+    private static void validateAndFixRootId(Map<String, Object> page) {
+        Object nodesObj = page.get("nodes");
+        if (!(nodesObj instanceof List)) {
+            page.put("nodes", new ArrayList<>());
+            nodesObj = page.get("nodes");
+        }
+        @SuppressWarnings("unchecked")
+        List<Object> nodes = (List<Object>) nodesObj;
+
+        // 1. Deduplicate by ID
+        Map<String, Map<String, Object>> uniqueNodes = new LinkedHashMap<>();
+        Iterator<Object> it = nodes.iterator();
+        while (it.hasNext()) {
+            Object o = it.next();
+            if (o instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> m = (Map<String, Object>) o;
+                String id = String.valueOf(m.get("id"));
+                if (uniqueNodes.containsKey(id)) {
+                    it.remove(); // Duplicate
+                } else {
+                    uniqueNodes.put(id, m);
+                }
+            } else {
+                it.remove(); // Invalid node
+            }
+        }
+
+        String declaredRoot = String.valueOf(page.get("rootId"));
+        boolean rootExists = uniqueNodes.containsKey(declaredRoot);
+
+        if (!rootExists) {
+            LOG.warn("[AI] Declared rootId '{}' NOT found in nodes. Attempting fix...", declaredRoot);
+
+            // Search for candidate
+            String candidateId = null;
+            for (String id : uniqueNodes.keySet()) {
+                if (id.startsWith("root") || id.equals("root")) {
+                    candidateId = id;
+                    break;
+                }
+            }
+
+            if (candidateId != null) {
+                LOG.info("[AI] Found alternative root node '{}'. Updating metadata.", candidateId);
+                page.put("rootId", candidateId);
+            } else {
+                // No root at all? Create one.
+                LOG.warn("[AI] No root node found. Creating new root.");
+                String newRootId = "root-" + System.currentTimeMillis();
+                Map<String, Object> newRoot = new LinkedHashMap<>();
+                newRoot.put("id", newRootId);
+                newRoot.put("type", "container");
+                // Add all existing top-level components as children?
+                // Too complex for now, just set it as empty root.
+                // Or try to wrap them? For safety, just empty root.
+                // The autoComplete logic might add children later.
+                nodes.add(newRoot);
+                page.put("rootId", newRootId);
+            }
+        }
+    }
+
+    private static boolean hasHeader(List<Object> nodes) {
+        if (nodes == null)
+            return false;
+        for (Object n : nodes) {
+            if (n instanceof Map) {
+                Map<?, ?> m = (Map<?, ?>) n;
+                String type = String.valueOf(m.get("type"));
+                if ("header".equals(type) || "heading".equals(type))
+                    return true;
+                // Also check if text node seems to be a title properties
+                if ("text".equals(type)) {
+                    String id = String.valueOf(m.get("id"));
+                    if (id.contains("header") || id.contains("heading") || id.contains("title"))
+                        return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static List<Map<String, Object>> buildFormFields(Map<String, Object> entity) {

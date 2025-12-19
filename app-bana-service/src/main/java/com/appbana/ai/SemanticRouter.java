@@ -59,9 +59,15 @@ public class SemanticRouter {
             if (context != null && context.pendingResult != null) {
                 augmentedPrompt.append("CONTEXT: User has a pending app plan for '")
                         .append(context.pendingResult.appName).append("'.\n");
-            } else if (context != null && context.lastOpenedAppId != null) {
-                augmentedPrompt.append("CONTEXT: User is viewing app '")
-                        .append(context.lastOpenedAppId).append("'.\n");
+            } else if (context != null) {
+                // Check created app first (most recent action), then opened app (sticky
+                // context)
+                String activeAppId = context.lastCreatedAppId != null ? context.lastCreatedAppId
+                        : context.lastOpenedAppId;
+                if (activeAppId != null) {
+                    augmentedPrompt.append("CONTEXT: User is viewing/modifying app '")
+                            .append(activeAppId).append("'.\n");
+                }
             }
             augmentedPrompt.append("USER PROMPT: ").append(userPrompt);
 

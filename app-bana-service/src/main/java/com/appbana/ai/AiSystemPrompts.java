@@ -681,6 +681,10 @@ public class AiSystemPrompts {
          - Each page MUST have: id, name, type, entity, fields/columns, actions
          - Include 3-7 pages matching the app's purpose
          - Use page types: data-table, form, profile, dashboard, board, calendar, etc.
+         - **IMPORTANT**: Do NOT generate the "nodes" array manually for standard pages (tables, forms).
+           - Provide ONLY metadata (entity, fields, columns).
+           - The system will auto-generate the correct UI components/nodes from your metadata.
+           - If you attempt to generate "nodes" manually, you risk breaking the layout or ID references.
       7. **Ask follow-up questions** when:
          - Request is too vague ("build an app")
          - Complex domain needs clarification (e-commerce, CRM)
