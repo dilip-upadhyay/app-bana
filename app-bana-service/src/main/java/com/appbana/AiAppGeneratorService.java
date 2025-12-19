@@ -373,7 +373,27 @@ public class AiAppGeneratorService {
                 }
             }
             GenerationResult generated = runGenerationPipelines(request);
-            postProcessAndPersistIfNeeded(generated, request);
+
+            // FIX: Do NOT persist immediately in the fallback path. Stage for review!
+            // This mirrors the Semantic Router logic and enables the confirmation loop.
+            ctx.pendingResult = generated;
+
+            // Add "Ready?" prompt if not present
+            if (generated.payload == null)
+                generated.payload = new HashMap<>();
+            String reply = String.valueOf(generated.payload.get(PAYLOAD_REPLY));
+            if (reply == null || "null".equals(reply) || (!reply.contains("Create it") && !reply.contains("Yes"))) {
+                if (reply == null || "null".equals(reply))
+                    reply = "";
+                // Only add prompt if it's a plan/proposal
+                if (generated.appName != null) {
+                    reply += "\n\n**Ready?** Say **'Yes'** or **'Create it'** to proceed, or tell me what to change.";
+                }
+                generated.payload.put(PAYLOAD_REPLY, reply);
+            }
+
+            // postProcessAndPersistIfNeeded(generated, request); // REMOVED: Must wait for
+            // confirmation
             attachContextHints(generated, ACTION_GENERATE_APP);
             return generated;
         } catch (
