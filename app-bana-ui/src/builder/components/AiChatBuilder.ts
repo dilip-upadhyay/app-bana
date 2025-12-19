@@ -1348,12 +1348,12 @@ export class AiChatBuilder extends LitElement {
         if (result.payload.appId && (!appStore.getApp(result.payload.appId) || appStore.getCurrentApp()?.id !== result.payload.appId)) {
           console.log('[AiChatBuilder] Syncing AppStore with new app:', result.payload.appId);
           try {
-             // Reload apps to ensure we have the new one
-             await appStore.loadApps();
-             // Set it as active
-             await appStore.setCurrentApp(result.payload.appId);
+            // Reload apps to ensure we have the new one
+            await appStore.loadApps();
+            // Set it as active
+            await appStore.setCurrentApp(result.payload.appId);
           } catch (e) {
-             console.warn('[AiChatBuilder] Failed to auto-select new app:', e);
+            console.warn('[AiChatBuilder] Failed to auto-select new app:', e);
           }
         }
 
@@ -1408,8 +1408,20 @@ export class AiChatBuilder extends LitElement {
           }
         } else {
           // Fallback or just reply
+          // FIX: If backend says "showConfirmation" OR if we have app structure, pass metadata!
+          const hasAppStructure = result.appName || (result.entities && result.entities.length > 0);
+          const showConf = result.payload?.showConfirmation || hasAppStructure;
+
           if (result.payload?.reply) {
-            this.addAssistantMessage(result.payload.reply);
+            let metadata = undefined;
+            if (showConf) {
+              metadata = {
+                generatedApp: { name: result.appName, description: result.appDescription },
+                generatedEntities: result.entities,
+                generatedPages: result.pages
+              };
+            }
+            this.addAssistantMessage(result.payload.reply, metadata);
           } else if (result.appName || result.appDescription || result.entities || result.pages) {
             // ONLY render auto-summary if backend didn't provide a custom reply
             let appSummary = `**App Name:** ${result.appName || ''}\n`;

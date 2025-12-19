@@ -392,6 +392,9 @@ public class AiAppGeneratorService {
                 generated.payload.put(PAYLOAD_REPLY, reply);
             }
 
+            // Explicit Draft Mode Flag for Frontend UI (triggers "Create App" button)
+            generated.payload.put("showConfirmation", true);
+
             // postProcessAndPersistIfNeeded(generated, request); // REMOVED: Must wait for
             // confirmation
             attachContextHints(generated, ACTION_GENERATE_APP);
@@ -3026,6 +3029,41 @@ public class AiAppGeneratorService {
             } catch (Exception e) {
                 LOG.warn("[AI Context] Failed to inject app schema for modification", e);
             }
+        }
+
+        // FIX: Inject PENDING PLAN (Draft) if available.
+        // This is critical for iterative refinement (e.g. "Add login") BEFORE the app
+        // is persisted.
+        if (ctx.pendingResult != null && ctx.pendingResult.appName != null) {
+            contextBuilder.append("\n🚧 CURRENT DRAFT PLAN (Proposed but not saved):\n");
+            contextBuilder.append("App Name: ").append(ctx.pendingResult.appName).append("\n");
+            if (ctx.pendingResult.appDescription != null)
+                contextBuilder.append("Description: ").append(ctx.pendingResult.appDescription).append("\n");
+
+            if (ctx.pendingResult.entities != null && !ctx.pendingResult.entities.isEmpty()) {
+                contextBuilder.append("Entities:\n");
+                for (EntitySchema e : ctx.pendingResult.entities) {
+                    contextBuilder.append("  - ").append(e.getName()).append(" (");
+                    if (e.getFields() != null) {
+                        for (int i = 0; i < e.getFields().size(); i++) {
+                            contextBuilder.append(e.getFields().get(i).getName());
+                            if (i < e.getFields().size() - 1)
+                                contextBuilder.append(", ");
+                        }
+                    }
+                    contextBuilder.append(")\n");
+                }
+            }
+            if (ctx.pendingResult.pages != null && !ctx.pendingResult.pages.isEmpty()) {
+                contextBuilder.append("Pages: ");
+                for (Map<String, Object> p : ctx.pendingResult.pages) {
+                    contextBuilder.append(p.get("name")).append(", ");
+                }
+                contextBuilder.append("\n");
+            }
+            contextBuilder
+                    .append("\nINSTRUCTION: The user is modifying THIS draft. Apply changes to this structure.\n");
+            LOG.info("[AI Context] Injected PENDING DRAFT PLAN for iterative refinement.");
         }
 
         contextBuilder.append("📝 CONVERSATION CONTEXT (for continuity):\n");
