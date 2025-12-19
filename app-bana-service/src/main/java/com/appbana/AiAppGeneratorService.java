@@ -176,6 +176,23 @@ public class AiAppGeneratorService {
                 return pending;
             }
 
+            // STICKY CONTEXT: If user is "inside" an app (lastOpenedAppId is set),
+            // and the intent is ambiguous (Generic Application) or NULL,
+            // we MUST assume they mean to MODIFY the active app.
+            // This fixes "Context Loss" where "add a form" -> "Created Generic App"
+            if (ctx.lastOpenedAppId != null &&
+                    (route.intent == com.appbana.ai.SemanticRouter.Intent.UNKNOWN
+                            || "Application".equals(parseIntent(request.description).appName))) {
+                LOG.info("[AI] Ambiguous output with Sticky Context '{}'. Defaulting to UPDATE_PLAN.",
+                        ctx.lastOpenedAppId);
+                request.action = "update_plan";
+                if (request.options == null)
+                    request.options = new HashMap<>();
+                request.options.put("targetAppId", ctx.lastOpenedAppId);
+                // We do NOT return here; we let it fall through to processAppGeneration
+                // where it will now see Action=update_plan
+            }
+
             // Legacy Fallback (keeping for safety during transition, but Router acts first)
             String normalizedAction = resolveAction(request);
 
