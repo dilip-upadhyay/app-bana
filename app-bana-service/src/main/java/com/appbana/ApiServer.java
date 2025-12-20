@@ -13,6 +13,7 @@ import com.appbana.model.EntitySchema;
 import com.appbana.model.AppMetadata;
 import org.flywaydb.core.Flyway;
 import com.appbana.api.AuthenticationController;
+import com.appbana.api.GenericAppAuthController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -591,6 +592,9 @@ public class ApiServer {
                 res.json(503, out);
             }
         });
+        // Initialize Runtime Auth Controller
+        router.post("/api/runtime/auth/login", GenericAppAuthController.login());
+
         router.get("/api/endpoints", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {

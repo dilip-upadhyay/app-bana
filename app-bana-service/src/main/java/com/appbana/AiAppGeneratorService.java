@@ -2421,11 +2421,12 @@ public class AiAppGeneratorService {
                 }
             }
         }
-        if (hasForm)
+        if (hasForm) {
+            LOG.info("[AI] Page '{}' already has a form. Skipping auto-completion.", page.get("name"));
             return;
+        }
 
-        LOG.info("[AI] Auto-completing missing form component for page '{}' with entity '{}'", page.get("name"),
-                entityName);
+        LOG.info("[AI] Auto-completing missing form component for page '{}'", page.get("name"));
 
         Map<String, Object> entityMap = findEntityByName(entities, entityName);
         if (entityMap == null) {
@@ -2787,23 +2788,25 @@ public class AiAppGeneratorService {
                 .replace("page", "")
                 .trim();
 
+        // Special mappings for User/Auth pages
+        if (normalized.equals("registration") || normalized.equals("sign up") || normalized.equals("register")
+                || normalized.equals("login") || normalized.equals("sign in") || normalized.equals("profile")) {
+            return "User";
+        }
+
         // Try exact match first
         for (Object entityObj : entities) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> entity = (Map<String, Object>) entityObj;
-            String entityName = String.valueOf(entity.get("name"));
-            if (normalized.equalsIgnoreCase(entityName)) {
+            String entityName = getNameFromEntity(entityObj);
+            if (entityName != null && normalized.equalsIgnoreCase(entityName)) {
                 return entityName;
             }
         }
 
         // Try partial match (e.g., "customer" matches "Customer")
         for (Object entityObj : entities) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> entity = (Map<String, Object>) entityObj;
-            String entityName = String.valueOf(entity.get("name"));
-            if (entityName.toLowerCase().contains(normalized) ||
-                    normalized.contains(entityName.toLowerCase())) {
+            String entityName = getNameFromEntity(entityObj);
+            if (entityName != null && (entityName.toLowerCase().contains(normalized) ||
+                    normalized.contains(entityName.toLowerCase()))) {
                 return entityName;
             }
         }
@@ -2819,11 +2822,24 @@ public class AiAppGeneratorService {
             return null;
 
         for (Object entityObj : entities) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> entity = (Map<String, Object>) entityObj;
-            if (name.equals(entity.get("name"))) {
-                return entity;
+            String entityName = getNameFromEntity(entityObj);
+            if (name.equals(entityName)) {
+                if (entityObj instanceof Map) {
+                    return (Map<String, Object>) entityObj;
+                } else if (entityObj instanceof com.appbana.model.EntitySchema) {
+                    ObjectMapper m = new ObjectMapper();
+                    return m.convertValue(entityObj, Map.class);
+                }
             }
+        }
+        return null;
+    }
+
+    private static String getNameFromEntity(Object entityObj) {
+        if (entityObj instanceof Map) {
+            return String.valueOf(((Map<?, ?>) entityObj).get("name"));
+        } else if (entityObj instanceof com.appbana.model.EntitySchema) {
+            return ((com.appbana.model.EntitySchema) entityObj).getName();
         }
         return null;
     }
