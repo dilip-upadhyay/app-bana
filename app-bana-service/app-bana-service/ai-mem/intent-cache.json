@@ -1,0 +1,16 @@
+{
+  "lastUpdated" : 1766171340306,
+  "entries" : [ {
+    "normalizedText" : "hi i want to createan appsalon bookingin that app user can go and register himselfafter registrationusercan go and log inpost login user shouldthe list of servicesavailable in the salonso user can select the service and thenit will show upthe time slotsto book the serviceuser can go and book the service from the time slot and confirmpost confirmationthe bookwill be confirmed and the detailswill beon email to user and also the salon managersalam manager will have ui where salam manager can seethe list ofslots for specific services",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1766171340304,
+    "lastAccessTime" : 1766171340304,
+    "hitCount" : 0
+  } ]
+}
