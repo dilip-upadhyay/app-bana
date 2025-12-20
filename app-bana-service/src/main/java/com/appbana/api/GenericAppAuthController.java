@@ -29,35 +29,40 @@ public class GenericAppAuthController {
                 Map<String, String> body = req.readJson(new TypeReference<>() {
                 });
 
+                String appId = body.get("appId");
+                String tenantId = body.getOrDefault("tenantId", "default");
                 String entityName = body.getOrDefault("entity", "User");
                 String email = body.get("email");
                 String password = body.get("password");
+
+                if (appId == null || appId.isBlank()) {
+                    res.json(400, Map.of("error", "App ID is required for authentication"));
+                    return;
+                }
 
                 if (email == null || password == null) {
                     res.json(400, Map.of("error", "Email and password are required"));
                     return;
                 }
 
-                // 1. Resolve Entity Schema to find table and valid fields
-                EntitySchema schema = SchemaManager.loadSchema(entityName);
+                // 1. Resolve Entity Schema (Scoped to App & Tenant)
+                EntitySchema schema = SchemaManager.loadSchema(appId, entityName, tenantId);
                 if (schema == null) {
-                    // Try case-insensitive lookup if standard lookup fails
-                    // (Simple heuristic: most apps just have "User" or "Users")
+                    // Try case-insensitive lookup
                     if ("User".equalsIgnoreCase(entityName)) {
-                        schema = SchemaManager.loadSchema("User");
-                        if (schema == null)
-                            schema = SchemaManager.loadSchema("Users");
+                        schema = SchemaManager.loadSchema(appId, "User", tenantId);
                     }
                 }
 
                 if (schema == null) {
-                    res.json(404, Map.of("error", "Entity definition not found for: " + entityName));
+                    res.json(404,
+                            Map.of("error", "Entity definition not found for: " + entityName + " in app: " + appId));
                     return;
                 }
 
                 // 2. Identify connection/table
                 String dsName = schema.getDatasourceName();
-                String tableName = schema.getName(); // In SchemaManager, schema name IS table name usually
+                String tableName = SchemaManager.getPhysicalTableName(schema);
 
                 // 3. Query DB
                 // TODO: Phase 2 - Use password hashing. Phase 1 assumes plain text or simple

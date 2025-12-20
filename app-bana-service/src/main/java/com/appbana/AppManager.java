@@ -503,6 +503,12 @@ public class AppManager {
         for (Object entityObj : app.getEntities()) {
             try {
                 EntitySchema schema = mapper.convertValue(entityObj, EntitySchema.class);
+                if (schema.getAppId() == null) {
+                    schema.setAppId(app.getId());
+                }
+                if (schema.getTenantId() == null) {
+                    schema.setTenantId(app.getTenantId() != null ? app.getTenantId() : "default");
+                }
                 SchemaManager.saveSchema(schema);
                 LOG.info("[AppManager] Registered entity schema: {}", schema.getName());
             } catch (Exception e) {

@@ -105,27 +105,27 @@ public class SchemaManager {
             if ("postgres".equals(d)) {
                 String upsert = "INSERT INTO appbana_schemas(name, json) VALUES (?, ?) ON CONFLICT (name) DO UPDATE SET json = EXCLUDED.json";
                 try (PreparedStatement ps = c.prepareStatement(upsert)) {
-                    ps.setString(1, schema.getName());
+                    ps.setString(1, getUniqueSchemaKey(schema));
                     ps.setString(2, json);
                     ps.executeUpdate();
                 }
             } else {
                 String upsert = "MERGE INTO appbana_schemas (name, json) KEY(name) VALUES (?, ?)";
                 try (PreparedStatement ps = c.prepareStatement(upsert)) {
-                    ps.setString(1, schema.getName());
+                    ps.setString(1, getUniqueSchemaKey(schema));
                     ps.setString(2, json);
                     ps.executeUpdate();
                 } catch (SQLException e) {
                     try (PreparedStatement ins = c
                             .prepareStatement("INSERT INTO appbana_schemas(name, json) VALUES (?, ?)")) {
-                        ins.setString(1, schema.getName());
+                        ins.setString(1, getUniqueSchemaKey(schema));
                         ins.setString(2, json);
                         ins.executeUpdate();
                     } catch (SQLException dup) {
                         try (PreparedStatement upd = c
                                 .prepareStatement("UPDATE appbana_schemas SET json = ? WHERE name = ?")) {
                             upd.setString(1, json);
-                            upd.setString(2, schema.getName());
+                            upd.setString(2, getUniqueSchemaKey(schema));
                             upd.executeUpdate();
                         }
                     }
@@ -135,6 +135,24 @@ public class SchemaManager {
         } catch (SQLException | IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static String getUniqueSchemaKey(EntitySchema schema) {
+        if (schema.getAppId() != null && !schema.getAppId().isBlank()) {
+            String tenantPart = (schema.getTenantId() != null && !schema.getTenantId().isBlank())
+                    ? schema.getTenantId()
+                    : "default";
+            return tenantPart + "_" + schema.getAppId() + "_" + schema.getName();
+        }
+        return schema.getName();
+    }
+
+    public static EntitySchema loadSchema(String appId, String entityName, String tenantId) {
+        String effectiveTenantId = (tenantId != null && !tenantId.isBlank()) ? tenantId : "default";
+        String key = (appId != null && !appId.isBlank())
+                ? (effectiveTenantId + "_" + appId + "_" + entityName)
+                : entityName;
+        return loadSchema(key);
     }
 
     public static EntitySchema loadSchema(String name) {
@@ -163,7 +181,7 @@ public class SchemaManager {
     }
 
     private static void ensureTable(EntitySchema schema, Connection c, DatasourceConfig dsCfg) throws SQLException {
-        String table = schema.getName();
+        String table = getPhysicalTableName(schema);
         DatabaseMetaData md = c.getMetaData();
         String d = dialect(dsCfg);
         try (ResultSet tables = md.getTables(null, null, table.toUpperCase(), null)) {
@@ -278,7 +296,7 @@ public class SchemaManager {
     }
 
     private static void createTable(EntitySchema schema, Connection c, String dialect) throws SQLException {
-        String table = schema.getName();
+        String table = getPhysicalTableName(schema);
         List<String> cols = new ArrayList<>();
         String pk = null;
         for (EntitySchema.Field f : schema.getFields()) {
@@ -297,6 +315,17 @@ public class SchemaManager {
             s.execute(sb.toString());
             recordMigration(c, schema.getName(), sb.toString());
         }
+    }
+
+    public static String getPhysicalTableName(EntitySchema schema) {
+        if (schema.getAppId() != null && !schema.getAppId().isBlank()) {
+            // Sanitize appId to be safe for SQL identifier
+            String safeAppId = schema.getAppId().replaceAll("[^a-zA-Z0-9_]", "_").toLowerCase();
+            String safeTenantId = (schema.getTenantId() != null ? schema.getTenantId() : "default")
+                    .replaceAll("[^a-zA-Z0-9_]", "_").toLowerCase();
+            return "app_" + safeTenantId + "_" + safeAppId + "_" + schema.getName();
+        }
+        return schema.getName();
     }
 
     private static void validateSchema(EntitySchema schema) {
