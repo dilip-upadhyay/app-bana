@@ -12,6 +12,8 @@ import com.sun.net.httpserver.*;
 import com.appbana.model.EntitySchema;
 import com.appbana.model.AppMetadata;
 import org.flywaydb.core.Flyway;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.appbana.api.AuthenticationController;
 import com.appbana.api.GenericAppAuthController;
 import org.slf4j.Logger;
@@ -31,7 +33,10 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 public class ApiServer {
-    private static final ObjectMapper M = new ObjectMapper();
+    private static final ObjectMapper M = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
     private static final Logger LOG = LoggerFactory.getLogger(ApiServer.class);
     private static PermissionService permissionService;
     private static final String DEFAULT_TENANT = "default";

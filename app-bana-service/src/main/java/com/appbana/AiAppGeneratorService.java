@@ -23,6 +23,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import com.appbana.model.AppMetadata; // added for persistence defaultPage update
 import com.appbana.workflow.model.WorkflowDefinition; // added for workflow generation
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule; // added for date handling
+import com.fasterxml.jackson.databind.SerializationFeature; // added for robustness
 
 // added for AI result validation
 
@@ -34,7 +36,10 @@ import com.appbana.workflow.model.WorkflowDefinition; // added for workflow gene
 public class AiAppGeneratorService {
 
     private static final Logger LOG = LoggerFactory.getLogger(AiAppGeneratorService.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<Map<String, Object>>() {
     };
 
@@ -50,7 +55,7 @@ public class AiAppGeneratorService {
     private static final String PAYLOAD_REPLY = "reply";
     private static final String PAYLOAD_SMALL_TALK = "smallTalk";
     private static final String DEFAULT_USER = "default";
-    private static final String DOMAIN_TEMPLATES_PATH = "builder-database/10-domain-templates.json";
+    private static final String DOMAIN_TEMPLATES_PATH = "../builder-database/10-domain-templates.json";
     private static List<Map<String, Object>> cachedDomainTemplates;
 
     // Conversation context tracking for continuity across requests
