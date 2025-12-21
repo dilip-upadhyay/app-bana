@@ -1024,6 +1024,74 @@
         }
       },
       "children": false
+    },
+    {
+      "type": "table",
+      "name": "StudioTableLive",
+      "category": "Data Components",
+      "file": "src/runtime/renderer/StudioTableLive.ts",
+      "description": "Dynamic data table with filtering, pagination, and inline actions",
+      "baseClass": "LitElement",
+      "customElement": "studio-table-live",
+      "props": {
+        "entity": {
+          "type": "string",
+          "description": "Name of the entity to display"
+        },
+        "fields": {
+          "type": "array",
+          "description": "List of fields to display as columns"
+        },
+        "pageSize": {
+          "type": "number",
+          "default": 25,
+          "description": "Number of rows per page"
+        },
+        "actions": {
+          "type": "array",
+          "description": "List of inline actions (view, edit, delete)"
+        },
+        "bulkActions": {
+          "type": "array",
+          "description": "List of bulk actions (delete, export)"
+        },
+        "viewMode": {
+          "type": "string",
+          "values": [
+            "simple",
+            "dynamic"
+          ],
+          "default": "dynamic",
+          "description": "Render mode"
+        }
+      },
+      "children": false,
+      "example": {
+        "id": "table1",
+        "type": "table",
+        "props": {
+          "entity": "Customer",
+          "fields": [
+            {
+              "name": "name",
+              "label": "Full Name"
+            },
+            {
+              "name": "email",
+              "label": "Email Address"
+            }
+          ],
+          "pageSize": 10,
+          "actions": [
+            "view",
+            "edit"
+          ],
+          "bulkActions": [
+            "delete",
+            "export"
+          ]
+        }
+      }
     }
   ],
   "registrationPattern": {

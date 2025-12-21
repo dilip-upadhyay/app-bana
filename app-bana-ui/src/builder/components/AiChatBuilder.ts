@@ -1019,7 +1019,11 @@ export class AiChatBuilder extends LitElement {
       // Build the full transcript from all results
       let fullTranscript = '';
       for (let i = 0; i < event.results.length; ++i) {
-        fullTranscript += event.results[i][0].transcript;
+        const transcript = event.results[i][0].transcript;
+        if (fullTranscript && !fullTranscript.endsWith(' ') && !transcript.startsWith(' ')) {
+          fullTranscript += ' ';
+        }
+        fullTranscript += transcript;
       }
       console.log('[Voice] Full transcript:', fullTranscript);
 
@@ -1203,6 +1207,28 @@ export class AiChatBuilder extends LitElement {
     }
   }
 
+  private smartFormat(text: string): string {
+    let formatted = text.trim();
+    if (!formatted) return '';
+
+    // 1. Capitalize first letter
+    formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+
+    // 2. Capitalize standalone "i"
+    formatted = formatted.replace(/\bi\b/g, 'I');
+
+    // 3. Add vocative comma for greetings (Hi name -> Hi, name)
+    const greetingRegex = /^(Hi|Hello|Hey|Greetings)( )([a-zA-Z])/i;
+    formatted = formatted.replace(greetingRegex, '$1,$2$3');
+
+    // 4. Ensure closing punctuation
+    if (!/[.!?]$/.test(formatted)) {
+      formatted += '.';
+    }
+
+    return formatted;
+  }
+
   private async handleSend() {
     if (!this.inputValue.trim() || this.isProcessing) return;
 
@@ -1213,7 +1239,9 @@ export class AiChatBuilder extends LitElement {
       this.clearVoiceInactivityTimer();
     }
 
-    const userMessage = this.inputValue.trim();
+    // Apply smart formatting
+    const userMessage = this.smartFormat(this.inputValue);
+
     this.addUserMessage(userMessage);
     this.inputValue = '';
 

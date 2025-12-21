@@ -3,6 +3,7 @@
 export interface ComponentNode {
   id: string;
   type: string; // 'container' | 'text' | 'button' | future
+  label?: string; // friendly name in Studio
   props?: Record<string, any>;
   children?: string[]; // child node ids
   style?: { classes?: string[] };
@@ -18,9 +19,9 @@ export interface PageMeta {
   type?: string; // legacy/demo compatibility
 }
 
-export interface ThemeMeta { id: string; name: string; tokens: Record<string,string|number>; }
+export interface ThemeMeta { id: string; name: string; tokens: Record<string, string | number>; }
 export interface NavigationItem { id: string; label: string; path: string; children?: NavigationItem[]; }
 export interface NavigationMeta { items: NavigationItem[]; }
 export interface Binding { kind: string; ref?: string; expr?: string; }
-export interface Action { type: string; config?: Record<string,any>; }
+export interface Action { type: string; config?: Record<string, any>; }
 export interface RenderContext { /* reserved for future runtime services */ }

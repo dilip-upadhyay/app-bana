@@ -308,71 +308,12 @@ public class AiAppGeneratorService {
                     gen.payload.put(PAYLOAD_REPLY, aiReply);
                 } else {
                     // Build Review Message (Legacy/New App logic)
+                    // Build Review Message (Concise - relies on UI Card for details)
                     StringBuilder plan = new StringBuilder();
-                    plan.append("### 📋 Implementation Plan\n\n");
-                    plan.append("**App Name:** ").append(gen.appName).append("\n");
-                    plan.append("**Description:** ").append(gen.appDescription).append("\n\n");
-
-                    if (gen.entities != null && !gen.entities.isEmpty()) {
-                        plan.append("**Entities to Create:**\n");
-                        for (EntitySchema e : gen.entities) {
-                            plan.append("- **").append(e.getName()).append("** (");
-                            if (e.getFields() != null)
-                                plan.append(e.getFields().size()).append(" fields");
-                            plan.append(")\n");
-                        }
-                        plan.append("\n");
-                    }
-
-                    if (gen.workflows != null && !gen.workflows.isEmpty()) {
-                        plan.append("**Workflows:**\n");
-                        for (WorkflowDefinition w : gen.workflows) {
-                            if (w == null)
-                                continue;
-                            plan.append("- **").append(w.getName()).append("**\n");
-                            plan.append("  Trigger: ")
-                                    .append(w.getTriggerEvent() != null ? w.getTriggerEvent() : "Manual")
-                                    .append("\n");
-                            if (w.getDescription() != null) {
-                                plan.append("  Description: ").append(w.getDescription()).append("\n");
-                            }
-                            // Parse definitionJson to show steps
-                            if (w.getDefinitionJson() != null && !w.getDefinitionJson().isEmpty()) {
-                                try {
-                                    com.fasterxml.jackson.databind.JsonNode root = MAPPER
-                                            .readTree(w.getDefinitionJson());
-                                    if (root.has("nodes") && root.get("nodes").isArray()) {
-                                        plan.append("  Steps:\n");
-                                        for (com.fasterxml.jackson.databind.JsonNode node : root.get("nodes")) {
-                                            String type = node.has("type") ? node.get("type").asText() : "Unknown";
-                                            String label = node.has("label") ? node.get("label").asText() : type;
-                                            if (!"START".equalsIgnoreCase(type) && !"END".equalsIgnoreCase(type)) {
-                                                plan.append("    - ").append(label).append(" (").append(type)
-                                                        .append(")\n");
-                                            }
-                                        }
-                                    }
-                                } catch (Exception e) {
-                                    // Ignore parsing errors for preview
-                                }
-                            }
-                        }
-                        plan.append("\n");
-                    }
-
-                    if (gen.pages != null && !gen.pages.isEmpty()) {
-                        plan.append("**Pages to Create:**\n");
-                        for (Map<String, Object> p : gen.pages) {
-                            plan.append("- ").append(p.get("name")).append("\n");
-                        }
-                    } else if (gen.suggestedPages != null) {
-                        plan.append("**Suggested Pages:**\n");
-                        for (String p : gen.suggestedPages)
-                            plan.append("- ").append(p).append("\n");
-                    }
-
+                    plan.append("I've drafted a plan for **").append(gen.appName != null ? gen.appName : "your app")
+                            .append("**.\n\n");
                     plan.append(
-                            "\n**Look good?** Say **'Yes'** or **'Create it'** to proceed, or tell me what to change.");
+                            "Please review the details below. You can say **'Yes'** or **'Create it'** to proceed, or tell me what to change.");
                     gen.payload.put(PAYLOAD_REPLY, plan.toString());
                 }
 
