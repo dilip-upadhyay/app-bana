@@ -59,6 +59,16 @@
           ],
           "default": "stretch",
           "description": "Cross-axis alignment"
+        },
+        "wrap": {
+          "type": "string",
+          "values": [
+            "nowrap",
+            "wrap",
+            "wrap-reverse"
+          ],
+          "default": "nowrap",
+          "description": "Flex wrap behavior"
         }
       },
       "children": true,
@@ -88,7 +98,7 @@
         "entity": {
           "type": "string",
           "required": true,
-          "description": "Entity name to creaet/update (e.g. 'Customer')"
+          "description": "Entity name to create/update (e.g. 'Customer')"
         },
         "record-id": {
           "type": "string",
@@ -97,6 +107,28 @@
         "redirect-on-success": {
           "type": "string",
           "description": "Path to navigate to after successful save (e.g. '/customers')"
+        },
+        "title": {
+          "type": "string",
+          "description": "Form title displayed in header"
+        },
+        "submitLabel": {
+          "type": "string",
+          "default": "Save",
+          "description": "Text label for the submit button"
+        },
+        "layout": {
+          "type": "string",
+          "values": [
+            "vertical",
+            "horizontal"
+          ],
+          "default": "vertical",
+          "description": "Layout direction of form fields"
+        },
+        "apiUrl": {
+          "type": "string",
+          "description": "Optional custom API endpoint override"
         }
       },
       "children": true,
@@ -118,6 +150,44 @@
           "textarea-desc",
           "btn-submit"
         ]
+      }
+    },
+    {
+      "type": "studio-login-form",
+      "name": "LoginForm",
+      "category": "Form Components",
+      "file": "src/components/LoginForm.ts",
+      "description": "Standard login form authenticating against /api/runtime/auth/login",
+      "baseClass": "BaseElement",
+      "customElement": "studio-login-form",
+      "props": {
+        "redirectUrl": {
+          "type": "string",
+          "default": "/",
+          "description": "URL to redirect after successful login"
+        },
+        "logo": {
+          "type": "string",
+          "description": "Optional URL for logo image"
+        },
+        "title": {
+          "type": "string",
+          "default": "Sign In",
+          "description": "Form title"
+        },
+        "registerUrl": {
+          "type": "string",
+          "description": "Optional link to registration page"
+        }
+      },
+      "children": false,
+      "example": {
+        "id": "login1",
+        "type": "studio-login-form",
+        "props": {
+          "redirectUrl": "/dashboard",
+          "title": "Welcome Back"
+        }
       }
     },
     {
@@ -552,9 +622,12 @@
       "baseClass": "LitElement",
       "props": {
         "columns": {
-          "type": "number",
+          "type": [
+            "number",
+            "object"
+          ],
           "default": 2,
-          "description": "Number of grid columns"
+          "description": "Number of grid columns or responsive object { base: 1, md: 2, lg: 4, xl: 5, 2xl: 6 }"
         },
         "gap": {
           "type": "string",

@@ -2405,6 +2405,12 @@ public class AiAppGeneratorService {
     }
 
     private static void autoCompleteForm(Map<String, Object> page, List<Object> entities, String entityName) {
+        String pageName = String.valueOf(page.get("name"));
+        if (isLoginPage(pageName)) {
+            autoCompleteLoginForm(page);
+            return;
+        }
+
         Object nodesObj = page.get("nodes");
         List<Object> nodes;
 
@@ -2420,7 +2426,7 @@ public class AiAppGeneratorService {
         for (Object n : nodes) {
             if (n instanceof Map) {
                 Map<?, ?> m = (Map<?, ?>) n;
-                if ("form".equals(m.get("type")) || "studio-form-live".equals(m.get("type"))) {
+                if ("form".equals(m.get("type"))) {
                     hasForm = true;
                     break;
                 }
@@ -2487,6 +2493,51 @@ public class AiAppGeneratorService {
         }
 
         LOG.info("[AI] ✓ Auto-completed form component with {} fields", fields.size());
+    }
+
+    private static boolean isLoginPage(String pageName) {
+        if (pageName == null)
+            return false;
+        String lower = pageName.toLowerCase();
+        return lower.contains("login") || lower.contains("sign in");
+    }
+
+    private static void autoCompleteLoginForm(Map<String, Object> page) {
+        Object nodesObj = page.get("nodes");
+        List<Object> nodes;
+        if (nodesObj instanceof List) {
+            nodes = new ArrayList<>((List<?>) nodesObj);
+        } else {
+            nodes = new ArrayList<>();
+        }
+        page.put("nodes", nodes);
+
+        // Check if login form already exists
+        for (Object n : nodes) {
+            if (n instanceof Map) {
+                Map<?, ?> m = (Map<?, ?>) n;
+                if ("studio-login-form".equals(m.get("type")))
+                    return;
+            }
+        }
+
+        LOG.info("[AI] Auto-completing login form for page '{}'", page.get("name"));
+
+        String formId = "login-form-" + System.currentTimeMillis();
+        Map<String, Object> loginNode = new LinkedHashMap<>();
+        loginNode.put("id", formId);
+        loginNode.put("type", "studio-login-form"); // Using the new component
+
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("title", "Sign In");
+        props.put("redirectUrl", "/");
+
+        loginNode.put("props", props);
+        nodes.add(loginNode);
+
+        if (page.containsKey("rootId")) {
+            addChildToRoot(nodes, String.valueOf(page.get("rootId")), formId);
+        }
     }
 
     /**
@@ -2625,7 +2676,8 @@ public class AiAppGeneratorService {
         for (Object n : nodes) {
             if (n instanceof Map) {
                 Map<?, ?> m = (Map<?, ?>) n;
-                if ("grid".equals(m.get("type")) || "card".equals(m.get("type"))) {
+                if ("grid".equals(m.get("type")) || "app-grid".equals(m.get("type"))
+                        || "container".equals(m.get("type"))) {
                     hasContent = true;
                     break;
                 }
@@ -2642,8 +2694,18 @@ public class AiAppGeneratorService {
         // Create Grid
         Map<String, Object> gridNode = new LinkedHashMap<>();
         gridNode.put("id", gridId);
-        gridNode.put("type", "grid");
-        gridNode.put("props", Map.of("cols", 4, "gap", "1rem"));
+        gridNode.put("type", "app-grid");
+
+        // Responsive Columns Configuration (Mobile First)
+        Map<String, Integer> responsiveCols = new LinkedHashMap<>();
+        responsiveCols.put("base", 1);
+        responsiveCols.put("sm", 1);
+        responsiveCols.put("md", 2);
+        responsiveCols.put("lg", 4);
+        responsiveCols.put("xl", 5);
+        responsiveCols.put("2xl", 6);
+
+        gridNode.put("props", Map.of("columns", responsiveCols, "gap", "1rem"));
         List<String> gridChildren = new ArrayList<>();
         gridNode.put("children", gridChildren);
         nodes.add(gridNode);
@@ -2737,7 +2799,7 @@ public class AiAppGeneratorService {
         for (Object n : nodes) {
             if (n instanceof Map) {
                 Map<?, ?> m = (Map<?, ?>) n;
-                if ("table".equals(m.get("type")) || "studio-table-live".equals(m.get("type"))) {
+                if ("table".equals(m.get("type"))) {
                     hasTable = true;
                     break;
                 }
