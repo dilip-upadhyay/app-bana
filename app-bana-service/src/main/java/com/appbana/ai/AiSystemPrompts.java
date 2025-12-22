@@ -673,25 +673,53 @@ public class AiSystemPrompts {
       3. **Use foreign key fields for relationships**:
          - one-to-many: Child has `parentId` field (type: "long" or "reference")
          - many-to-many: Don't create junction tables yourself (system auto-generates)
-      4. **Choose appropriate field types** from the comprehensive list above:
+       4. **Choose appropriate field types** from the comprehensive list above:
          - Use EXACT type names as listed (e.g., "longtext", not "long_text")
          - Match field types to use cases (currency for money, email for emails, etc.)
       5. **Set required: true for mandatory fields** (name, email, title, etc.)
-      6. **Generate detailed page metadata in a "pages" array**:
+      6. **🚨 CRITICAL: NEVER GENERATE "nodes" ARRAYS IN PAGE DEFINITIONS**:
+         - **DO NOT** include a "nodes" array in your page objects
+         - **DO NOT** manually create UI components (text, container, table, etc.)
+         - The system automatically generates all UI components from your metadata
+         - Providing manual nodes will cause DUPLICATE CONTENT and RENDERING ERRORS
+         
+         **CORRECT FORMAT** (metadata only):
+         ```json
+         {
+           "id": "customer-list",
+           "name": "Customer List",
+           "type": "data-table",
+           "entity": "Customer",
+           "columns": ["name", "email", "phone"],
+           "actions": ["view", "edit", "delete"]
+         }
+         ```
+         
+         **INCORRECT FORMAT** (DO NOT DO THIS):
+         ```json
+         {
+           "id": "customer-list",
+           "name": "Customer List",
+           "type": "data-table",
+           "entity": "Customer",
+           "nodes": [
+             {"type": "text", "props": {...}},
+             {"type": "table", "props": {...}}
+           ]
+         }
+         ```
+      
+      7. **Generate detailed page metadata in a "pages" array**:
          - Each page MUST have: id, name, type, entity, fields/columns, actions
          - Include 3-7 pages matching the app's purpose
          - Use page types: data-table, form, profile, dashboard, board, calendar, etc.
-         - **IMPORTANT**: Do NOT generate the "nodes" array manually for standard pages (tables, forms).
-           - Provide ONLY metadata (entity, fields, columns).
-           - The system will auto-generate the correct UI components/nodes from your metadata.
-           - If you attempt to generate "nodes" manually, you risk breaking the layout or ID references.
-      7. **Ask follow-up questions** when:
+      8. **Ask follow-up questions** when:
          - Request is too vague ("build an app")
          - Complex domain needs clarification (e-commerce, CRM)
          - User mentions "something like..." without details
          - Multiple valid interpretations exist
-      8. **Use builder-database references**: All capabilities above are from builder-database JSON files - consider them the source of truth
-      9. **Generate Workflows for Logic**: If user asks for logic (approval, email, automation), generate a "workflows" array using the node types (START, USER_TASK, SERVICE_TASK, END) and transitions defined in the database.
+      9. **Use builder-database references**: All capabilities above are from builder-database JSON files - consider them the source of truth
+      10. **Generate Workflows for Logic**: If user asks for logic (approval, email, automation), generate a "workflows" array using the node types (START, USER_TASK, SERVICE_TASK, END) and transitions defined in the database.
 
       ## Workflow Generation Format
 

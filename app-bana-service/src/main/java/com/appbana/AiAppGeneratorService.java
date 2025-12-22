@@ -40,8 +40,7 @@ public class AiAppGeneratorService {
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
             .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<Map<String, Object>>() {
-    };
+    private static final TypeReference<Map<String, Object>> MAP_TYPE=new TypeReference<Map<String,Object>>(){};
 
     private static final String ACTION_LIST_APPS = "listApps";
     private static final String ACTION_LOAD_APP = "loadApp";
@@ -2119,6 +2118,21 @@ public class AiAppGeneratorService {
         if (!out.containsKey("type"))
             out.put("type", guessPageType(String.valueOf(out.get("name"))));
 
+        // CRITICAL FIX: Strip AI-generated nodes for auto-completable page types
+        // This prevents duplicate content (AI's garbage nodes + autoComplete's proper components)
+        String pageType = String.valueOf(out.get("type"));
+        boolean isAutoCompletable = "data-table".equals(pageType) || "list".equals(pageType) ||
+                "form".equals(pageType) || "registration".equals(pageType) ||
+                "profile".equals(pageType) || "create-form".equals(pageType) ||
+                "dashboard".equals(pageType) || "board".equals(pageType);
+
+        if (isAutoCompletable && out.containsKey("nodes")) {
+            LOG.warn("[AI] Stripping AI-generated nodes array from page '{}' (type: {}). " +
+                    "Auto-complete will regenerate clean components from metadata.",
+                    out.get("name"), pageType);
+            out.remove("nodes");
+        }
+
         if (!out.containsKey("nodes")) {
             String rootId = String.valueOf(out.get("rootId"));
             List<Map<String, Object>> nodes = new ArrayList<>();
@@ -2752,7 +2766,10 @@ public class AiAppGeneratorService {
         }
         page.put("nodes", nodes);
 
-        boolean hasTable = false;
+        LOG.info("[AI] Entering autoCompleteTable for page '{}'. Node count: {}", page.get("name"), nodes.size());
+
+        try {
+            boolean hasTable = false;
         for (Object n : nodes) {
             if (n instanceof Map) {
                 Map<?, ?> m = (Map<?, ?>) n;
@@ -2763,8 +2780,8 @@ public class AiAppGeneratorService {
             }
         }
         if (hasTable) {
-            LOG.info("[AI] Table detected via 'hasTable' check. FORCING overwrite for debugging.");
-            // return; // DISABLED FOR DEBUGGING
+            LOG.info("[AI] Table already exists for page '{}', skipping auto-complete", page.get("name"));
+            return;
         }
 
         LOG.info("[AI] Proceeding to add table node for page '{}'", page.get("name"));
@@ -2886,6 +2903,9 @@ public class AiAppGeneratorService {
                     new ObjectMapper().writeValueAsString(nodes));
         } catch (Exception e) {
             LOG.error("Failed to log nodes", e);
+        }
+        } catch (Exception e) {
+            LOG.error("[AI] CRITICAL ERROR in autoCompleteTable for page '{}'", page.get("name"), e);
         }
     }
 
