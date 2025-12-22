@@ -574,6 +574,7 @@ public class AiAppGeneratorService {
                 String validationErrors = AiResultValidator.getValidationErrors(aiResult, request);
                 if (validationErrors == null) {
                     LOG.info("[AI] ✓ AI result validated successfully on first attempt");
+                    postProcessGeneration(aiResult);
                     return aiResult;
                 }
 
@@ -586,6 +587,7 @@ public class AiAppGeneratorService {
 
                 if (retryValidation == null) {
                     LOG.info("[AI] ✓ Self-correction successful! Validation passed on retry.");
+                    postProcessGeneration(correctedResult);
                     return correctedResult;
                 }
 
@@ -599,7 +601,19 @@ public class AiAppGeneratorService {
             LOG.warn("[AI] AI provider not enabled, will use template-based generation");
         }
         LOG.info("[AI] Using template-based generation as fallback");
-        return generateFromTemplates(request);
+        GenerationResult tpl = generateFromTemplates(request);
+        postProcessGeneration(tpl);
+        return tpl;
+    }
+
+    private static void postProcessGeneration(GenerationResult result) {
+        if (result == null || result.pages == null || result.entities == null)
+            return;
+        LOG.info("[AI] Post-processing {} pages for auto-completion...", result.pages.size());
+        List<Object> entityObjects = new ArrayList<>(result.entities);
+        for (Map<String, Object> page : result.pages) {
+            autoCompletePageComponents(page, entityObjects);
+        }
     }
 
     private static GenerationResult generateWithAi(GenerationRequest request, AppConfig config, String previousErrors)
@@ -2335,10 +2349,12 @@ public class AiAppGeneratorService {
 
         // If still no entity, can't auto-complete
         if (entityName == null || "null".equals(entityName) || entityName.isEmpty()) {
+            LOG.warn("[AI] SKIP: Could not determine entity for page '{}' (type: {})", page.get("name"), pageType);
             return;
         }
 
         if (isTable) {
+            LOG.info("[AI] Dispatching autoCompleteTable for page '{}' (Entity: {})", page.get("name"), entityName);
             autoCompleteTable(page, entities, entityName);
         } else if (isForm) {
             autoCompleteForm(page, entities, entityName);
@@ -2746,8 +2762,12 @@ public class AiAppGeneratorService {
                 }
             }
         }
-        if (hasTable)
-            return;
+        if (hasTable) {
+            LOG.info("[AI] Table detected via 'hasTable' check. FORCING overwrite for debugging.");
+            // return; // DISABLED FOR DEBUGGING
+        }
+
+        LOG.info("[AI] Proceeding to add table node for page '{}'", page.get("name"));
 
         LOG.info("[AI] Auto-completing missing table component for page '{}' with entity '{}'", page.get("name"),
                 entityName);
@@ -2777,10 +2797,96 @@ public class AiAppGeneratorService {
         tableProps.put("theme", "default");
         tableNode.put("props", tableProps);
 
+        // FIX: Nuclear Cleanup Option
+        // 1. Identify Header
+        Object headerNode = null;
+        for (Object n : nodes) {
+            if (n instanceof Map) {
+                Map<?, ?> m = (Map<?, ?>) n;
+                String id = String.valueOf(m.get("id"));
+                String type = String.valueOf(m.get("type"));
+                // Keep heading/title or h1
+                if (id.contains("header") || id.contains("heading") || id.contains("title")) {
+                    headerNode = n;
+                    break;
+                }
+                if ("text".equals(type)) {
+                    Object props = m.get("props");
+                    if (props instanceof Map && ("h1".equals(((Map) props).get("tag")))) {
+                        headerNode = n;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 2. Clear EVERYTHING
+        nodes.clear();
+
+        // 3. Re-add Header
+        if (headerNode != null) {
+            nodes.add(headerNode);
+        } else {
+            Map<String, Object> h = new LinkedHashMap<>();
+            h.put("id", "heading-" + page.get("rootId"));
+            h.put("type", "text");
+            h.put("props", Map.of("tag", "h1", "content", String.valueOf(page.get("name"))));
+            nodes.add(h);
+        }
+
+        // 4. Validate Fields & Fallback
+        if (fields == null || fields.isEmpty()) {
+            LOG.warn("[AI] Fields empty for entity '{}', using fallback default fields.", entityName);
+            fields = new ArrayList<>();
+            Map<String, Object> nameField = new LinkedHashMap<>();
+            nameField.put("name", "name");
+            nameField.put("label", "Name");
+            nameField.put("type", "text");
+            fields.add(nameField);
+
+            Map<String, Object> idField = new LinkedHashMap<>();
+            idField.put("name", "id");
+            idField.put("label", "ID");
+            idField.put("type", "text");
+            fields.add(idField);
+
+            // Update props map because we might have passed empty list earlier
+            tableProps.put("fields", fields);
+        }
+
+        // 5. Add Table
         nodes.add(tableNode);
-        addChildToRoot(nodes, String.valueOf(page.get("rootId")), tableId);
+
+        // 6. Reset tree linkage - Recreate Root Container
+        String newRootId = String.valueOf(page.get("rootId"));
+        Map<String, Object> rootContainer = new LinkedHashMap<>();
+        rootContainer.put("id", newRootId);
+        rootContainer.put("type", "container");
+        rootContainer.put("props", Map.of("layout", "vertical", "gap", "lg", "padding", "xl"));
+        List<String> childrenIds = new ArrayList<>();
+        if (headerNode != null) {
+            Object hId = ((Map) headerNode).get("id");
+            if (hId != null)
+                childrenIds.add(String.valueOf(hId));
+        } else {
+            // If we created a new header, its ID is predictable
+            childrenIds.add("heading-" + page.get("rootId"));
+        }
+        childrenIds.add(tableId);
+        rootContainer.put("children", childrenIds);
+
+        // Add root container to nodes list at start
+        nodes.add(0, rootContainer);
+
+        LOG.info("[AI] Nuclear cleanup complete. Page now has {} nodes.", nodes.size());
 
         LOG.info("[AI] ✓ Auto-completed table component with {} fields", fields.size());
+        try {
+            LOG.info("DEBUG_NODES: Page '{}' nodes: {}", page.get("name"),
+                    new ObjectMapper().writeValueAsString(nodes));
+        } catch (Exception e) {
+            LOG.error("Failed to log nodes", e);
+        }
     }
 
     /**
