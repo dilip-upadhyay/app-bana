@@ -1,11 +1,10 @@
-// src/runtime/renderer/Renderer.ts
 import { PageMeta, ComponentNode } from '../../models/metadata';
 import { getComponent, getComponentTagName } from '../../core/registry';
 import { html, TemplateResult } from 'lit';
+import { html as staticHtml, unsafeStatic } from 'lit/static-html.js';
 import { ifDefined } from 'lit/directives/if-defined.js';
 import './StudioTableLive';
 import '../../components/GridElement';
-import '../../components/DynamicRenderer';
 
 // Helper for simple handle-bars style interpolation
 // e.g. interpolate("Hello {{user.name}}", { user: { name: "World" } }) -> "Hello World"
@@ -80,37 +79,9 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
   const tagName = getComponent(node.type) ? getComponentTagName(node.type) : undefined;
 
   if (tagName) {
-    // Determine which Lit helper to use based on import availability.
-    // Since we can't easily import unsafeStatic in this context without ensuring package.json support,
-    // and we saw existing code uses literal tags. 
-    // Wait, Lit 3.1.4 supports `minified` imports.
-    // However, to avoid risky imports if 'lit/static-html.js' isn't available in bundling setup.
-    // We will use a known safe switch for now? NO, that defeats the purpose.
-
-    // We must trust Lit is standard.
-    // But I cannot easily add an import statement to the TOP of the file with this tool unless I replace the whole file or carefully insert it.
-    // I will stick to the plan: Use the registry.
-    // But I need to Import `html` as `staticHtml` and `unsafeStatic`.
-    // I will do that in a separate step or assume I can do it here.
-    // Actually, I'll use a `switch` generated from registry? No.
-
-    // Let's assume I can add the import. 
-    // I will replace the import section first?
-    // Or I can just write the logic assuming the import is there, and then fix the import.
-
-    // Strategy: Use a special helper component?
-    // No.
-
-    // Let's look at `node.type`.
-    // If I use `document.createElement`, I bypass Lit's template safety but it works.
-    // See `renderNode` (DOM version) below. It creates elements.
-    // `renderNodeTemplate` returns `TemplateResult`.
-
-    // Simplest valid Lit dynamic tag:
-    // return html`<${unsafeStatic(tagName)} .node=${nodeWithData}>${children}</${unsafeStatic(tagName)}>`;
-
-    // I will return a placeholder here and then fix the Imports.
-    return html`<studio-dynamic-renderer .tagName=${tagName} .node=${nodeWithData}>${children}</studio-dynamic-renderer>`;
+    // Correctly use static-html to render dynamic tag with children preserved in the template
+    const tag = unsafeStatic(tagName);
+    return staticHtml`<${tag} .node=${nodeWithData}>${children}</${tag}>`;
   }
 
   // Fallback for truly unknown types
