@@ -611,9 +611,12 @@ public class AiSystemPrompts {
           ```
 
        7. **Generate detailed page metadata**:
-          - Each page must have: id, name, type="default", and a **components** list.
-          - For Login Pages, use `{ "type": "default", "components": [{ "type": "login-form" }] }`.
+          - Each page must have: id, name, type (one of: dashboard, list, form, detail, login), and a **components** list.
+          - For Login Pages, use `{ "type": "login", "components": [{ "type": "login-form" }] }`.
+          - For Dashboards, use `{ "type": "dashboard", "components": [...] }`.
+          - For Lists, use `{ "type": "list", "components": [{ "type": "data-table", "entity": "EntityName" }] }`.
           - Include 3-7 pages matching the app's purpose.
+
 
        8. **Ask follow-up questions** when needed.
        9. **Use builder-database references**.

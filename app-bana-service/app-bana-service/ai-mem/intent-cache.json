@@ -1,5 +1,5 @@
 {
-  "lastUpdated" : 1766565637444,
+  "lastUpdated" : 1766604767960,
   "entries" : [ {
     "normalizedText" : "i want following features number one employ management number two recruitment management number three salary",
     "action" : {
@@ -36,6 +36,18 @@
     "createdTime" : 1766552253311,
     "lastAccessTime" : 1766552253311,
     "hitCount" : 0
+  }, {
+    "normalizedText" : "create an hr application",
+    "action" : {
+      "action" : "generateApp",
+      "target" : { },
+      "options" : {
+        "userId" : "default"
+      }
+    },
+    "createdTime" : 1766604245580,
+    "lastAccessTime" : 1766604767960,
+    "hitCount" : 1
   }, {
     "normalizedText" : "create app now",
     "action" : {

@@ -2387,17 +2387,6 @@ public class AiAppGeneratorService {
     }
 
     private static String guessPageType(String name) {
-        if (name == null)
-            return "blank";
-        String lower = name.toLowerCase(Locale.ROOT);
-        if (lower.contains("dashboard"))
-            return "dashboard";
-        if (lower.contains("list") || lower.contains("table"))
-            return "list";
-        if (lower.contains("detail") || lower.contains("profile") || lower.contains("view"))
-            return "detail";
-        if (lower.contains("form") || lower.contains("create") || lower.contains("add") || lower.contains("new"))
-            return "form";
         return "default";
     }
 
@@ -2426,6 +2415,49 @@ public class AiAppGeneratorService {
             for (Object c : (List<?>) compsObj) {
                 if (c instanceof Map)
                     components.add((Map<String, Object>) c);
+            }
+        }
+
+        // FALLBACK: If AI provided no components, infer them from the Page Name
+        if (components.isEmpty()) {
+            String pageName = String.valueOf(page.get("name"));
+            String lower = pageName != null ? pageName.toLowerCase(Locale.ROOT) : "";
+
+            if (lower.contains("dashboard")) {
+                // Dashboards are handled via specific AutoComplete method if detected early,
+                // otherwise add generic structure here or rely on autoCompleteDashboard
+                // redirection?
+                // Actually, line 2414 checks "dashboard" type. Here we only come if type is
+                // "default"
+                // So we should re-route or manual add.
+                // For simplicity, let's treat it as a generic page for now or add empty
+                // dashboard widgets?
+                // Or better: Let's redirect to dashboard logic!
+                autoCompleteDashboard(page);
+                return;
+            } else if (lower.contains("list") || lower.contains("table")) {
+                Map<String, Object> tableComp = new HashMap<>();
+                tableComp.put("type", "data-table");
+                components.add(tableComp);
+                LOG.info("[AI AutoComplete] Inferred 'data-table' component for page '{}'", pageName);
+            } else if (lower.contains("login") || lower.contains("signin") || lower.contains("auth")) {
+                Map<String, Object> loginComp = new HashMap<>();
+                loginComp.put("type", "login-form");
+                components.add(loginComp);
+                LOG.info("[AI AutoComplete] Inferred 'login-form' component for page '{}'", pageName);
+            } else if (lower.contains("form") || lower.contains("create") || lower.contains("add")
+                    || lower.contains("new")) {
+                Map<String, Object> formComp = new HashMap<>();
+                formComp.put("type", "form");
+                components.add(formComp);
+                LOG.info("[AI AutoComplete] Inferred 'form' component for page '{}'", pageName);
+            } else if (lower.contains("detail") || lower.contains("profile") || lower.contains("view")) {
+                Map<String, Object> detailComp = new HashMap<>();
+                // Re-use form for read-only view or specialized detail component?
+                // Using form is safer for now.
+                detailComp.put("type", "form");
+                components.add(detailComp);
+                LOG.info("[AI AutoComplete] Inferred 'form' (detail) component for page '{}'", pageName);
             }
         }
 
