@@ -248,7 +248,7 @@ public class SmallTalkEngine {
                                 Pattern.compile("can you be my robot|robot", Pattern.CASE_INSENSITIVE),
                                 "I am your friendly robot copilot!"));
                 patterns.add(new SmallTalkPattern(
-                                Pattern.compile("can you be my AI|ai|artificial intelligence",
+                                Pattern.compile("can you be my AI|\\bai\\b|artificial intelligence",
                                                 Pattern.CASE_INSENSITIVE),
                                 "I'm your AI copilot, always here for you!"));
                 patterns.add(
@@ -361,64 +361,12 @@ public class SmallTalkEngine {
                         return cachedResponse;
                 }
 
-                // THIRD: If no pattern matched and no cache hit, use OpenAI for complex small
-                // talk
-                com.appbana.config.AppConfig config = com.appbana.config.ConfigManager.getConfig();
-                if (com.appbana.ai.AiProviderFactory.isAiEnabled(config)) {
-                        try {
-                                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class)
-                                                .info("[SmallTalk] No pattern/cache match, using OpenAI for: {}",
-                                                                input);
-                                com.appbana.ai.AiProvider provider = com.appbana.ai.AiProviderFactory
-                                                .createProvider(config);
-                                // Fetch structured conversation history
-                                java.util.List<com.appbana.ai.AgentMemoryService.MemoryEntry> history = com.appbana.ai.AgentMemoryService
-                                                .getHistory(userId);
-                                java.util.List<String> messages = new java.util.ArrayList<>();
-                                for (com.appbana.ai.AgentMemoryService.MemoryEntry entry : history) {
-                                        messages.add("User: " + entry.input);
-                                        messages.add("Assistant: " + entry.response);
-                                }
-                                messages.add("User: " + input);
-                                // Playful, friendly system prompt for small talk
-                                String systemPrompt = "You are the AI Builder for AppBana. You exist ONLY to build apps within AppBana.\n"
-                                                +
-                                                "🚨 SAFETY & ETHICS PROTOCOL (ZERO TOLERANCE):\n" +
-                                                "You MUST STRICTLY REFUSE to discuss or generate content related to:\n"
-                                                +
-                                                "1. Sexual Content (Pornography, adult entertainment)\n" +
-                                                "2. Harmful Activities (Hacking, malware, violence, hate speech)\n" +
-                                                "3. Unethical Uses (Scams, fraud, deepfakes)\n" +
-                                                "4. Illegal Goods (Drugs, wildlife trade)\n" +
-                                                "REFUSAL PROTOCOL: If a request violates these rules, reply ONLY with: 'I cannot build that type of application. Please verify your request complies with our Safety & Ethics policy.'\n\n"
-                                                +
-                                                "STRICT RULES:\n" +
-                                                "1. NEVER suggest external tools (Flutter, React, Firebase, Figma, etc).\n"
-                                                +
-                                                "2. If user asks for a feature, say 'I can add that to your plan! Say 'Update plan' to proceed.'\n"
-                                                +
-                                                "3. Keep responses short, punchy, and enthusiastic (use emojis 🚀).\n" +
-                                                "4. If user asks \"how\", explain using AppBana concepts (Entities, Pages, Workflows), NEVER code.\n"
-                                                +
-                                                "5. If user input implies a feature request (e.g. 'I need a flow...'), explicitly tell them: 'That sounds like a Workflow! I can build it. Say 'Create it' to generate the metadata.'\n\n"
-                                                + String.join("\n", messages);
-                                String reply = provider.generateAppStructure(input, systemPrompt);
-                                // Sanitize output (strip markdown, etc.)
-                                String sanitizedReply = com.appbana.AiAppGeneratorService.sanitizeAiJson(reply);
-
-                                // Cache the response for future use
-                                com.appbana.ai.SmallTalkCache.put(input, sanitizedReply);
-                                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class)
-                                                .info("[SmallTalk] Cached OpenAI response for: {}", input);
-
-                                return sanitizedReply;
-                        } catch (Exception e) {
-                                // Log and return null (not small talk)
-                                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class).warn(
-                                                "OpenAI small talk failed: {}",
-                                                e.getMessage());
-                        }
-                }
+                // THIRD: If no pattern matched and no cache hit, DO NOT use OpenAI for small
+                // talk.
+                // Fallback to the Main AI Builder (return null).
+                // This prevents "Refusal" logic or misclassification of detailed requests.
+                org.slf4j.LoggerFactory.getLogger(SmallTalkEngine.class)
+                                .info("[SmallTalk] No pattern/cache match. Delegating to Main AI Builder.");
 
                 // If no pattern matched and AI not enabled, return null (not small talk)
                 return null;

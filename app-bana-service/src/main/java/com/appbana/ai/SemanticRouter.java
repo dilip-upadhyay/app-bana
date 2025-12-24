@@ -40,6 +40,33 @@ public class SemanticRouter {
 
     public static RouterResult classify(String userId, String userPrompt,
             AiAppGeneratorService.ConversationContext context) {
+        // HEURISTIC BYPASS: Handle explicit confirmation/creation phrases directly
+        // This avoids LLM misclassification (e.g. treating "Create app" as small talk)
+        String lower = userPrompt.toLowerCase().trim();
+        if (lower.equals("create it") || lower.equals("create the app") || lower.equals("create the app now")
+                || lower.equals("build it") || lower.equals("build the app") || lower.equals("yes, create it")) {
+            LOG.info("[SemanticRouter] Heuristic Bypass: '{}' -> MODIFY_PLAN (Approval)", userPrompt);
+            RouterResult result = new RouterResult();
+            result.intent = Intent.MODIFY_PLAN;
+            result.confidence = 1.0;
+            result.reasoning = "Heuristic match for creation command";
+            result.parameters = new java.util.HashMap<>();
+            result.parameters.put("isApproval", "true");
+            return result;
+        }
+
+        // HEURISTIC BYPASS: Detailed feature requests are NOT small talk
+        // If user says "I want a feature to..." or "Track items...", force generation.
+        if (lower.length() > 20 && (lower.contains("feature") || lower.contains("track") || lower.contains("manage")
+                || lower.contains("entity") || lower.contains("field") || lower.contains("column"))) {
+            LOG.info("[SemanticRouter] Heuristic Bypass: Detailed request -> MODIFY_PLAN");
+            RouterResult result = new RouterResult();
+            result.intent = Intent.MODIFY_PLAN; // Treat as modification/creation
+            result.confidence = 0.9;
+            result.reasoning = "Heuristic match for feature request";
+            return result;
+        }
+
         try {
             AppConfig config = ConfigManager.getConfig();
             if (!AiProviderFactory.isAiEnabled(config)) {
