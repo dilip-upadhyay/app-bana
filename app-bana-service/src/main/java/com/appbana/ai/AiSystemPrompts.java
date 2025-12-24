@@ -563,163 +563,61 @@ public class AiSystemPrompts {
         "reply": "I've created the project management app with a workflow for task approval! 🚀",
         "appName": "Project Management App",
         "appDescription": "Project management system with projects, tasks, and team members",
-        "entities": [
-          {
-            "name": "Project",
-            "fields": [
-              {"name": "name", "type": "text", "required": true},
-              {"name": "description", "type": "longtext", "required": false},
-              {"name": "startDate", "type": "date", "required": true},
-              {"name": "endDate", "type": "date", "required": false},
-              {"name": "status", "type": "status", "required": true}
-            ]
-          },
-          {
-            "name": "Task",
-            "fields": [
-              {"name": "title", "type": "text", "required": true},
-              {"name": "description", "type": "longtext", "required": false},
-              {"name": "status", "type": "status", "required": true},
-              {"name": "dueDate", "type": "date", "required": false},
-              {"name": "projectId", "type": "long", "required": true},
-              {"name": "assignedTo", "type": "long", "required": false}
-            ]
-          },
-          {
-            "name": "TeamMember",
-            "fields": [
-              {"name": "name", "type": "text", "required": true},
-              {"name": "email", "type": "email", "required": true},
-              {"name": "role", "type": "text", "required": true}
-            ]
-          }
-        ],
-        "relationships": [
-          "Task.projectId → Project.id (many-to-one, CASCADE DELETE)",
-          "Task.assignedTo → TeamMember.id (many-to-one, SET NULL)"
-        ],
-        "pages": [
-          {
-            "id": "project-list",
-            "name": "Project List",
-            "type": "data-table",
-            "entity": "Project",
-            "columns": ["name", "status", "startDate", "endDate"],
-            "actions": ["view", "edit", "delete", "create"]
-          },
-          {
-            "id": "project-detail",
-            "name": "Project Detail",
-            "type": "profile",
-            "entity": "Project",
-            "fields": ["name", "description", "status", "startDate", "endDate"],
-            "relatedLists": ["tasks"]
-          },
-          {
-            "id": "task-board",
-            "name": "Task Board",
-            "type": "board",
-            "entity": "Task",
-            "groupBy": "status",
-            "fields": ["title", "dueDate", "assignedTo"],
-            "actions": ["view", "edit", "move"]
-          },
-          {
-            "id": "team-directory",
-            "name": "Team Directory",
-            "type": "data-table",
-            "columns": ["name", "email", "role"],
-            "actions": ["view", "edit", "delete", "create"]
-          }
-        ],
-        "workflows": [
-          {
-            "id": "task-approval-wf",
-            "name": "Task Approval",
-            "description": "Manager approval for tasks",
-            "triggerEntity": "Task",
-            "triggerEvent": "ON_CREATE",
-            "triggerCondition": "${entity.priority == 'HIGH'}",
-            "status": "ACTIVE",
-            "definition": {
-              "nodes": {
-                "start": { "type": "START", "label": "Start" },
-                "approval": {
-                  "type": "USER_TASK",
-                  "label": "Manager Approval",
-                  "assignmentType": "ROLE",
-                  "assignmentExpression": "manager",
-                  "formFields": [{"name": "comment", "type": "textarea"}]
-                },
-                "end": { "type": "END", "label": "End" }
-              },
-              "transitions": [
-                { "from": "start", "to": "approval" },
-                { "from": "approval", "to": "end" }
-              ]
-            }
-          }
-        ]
+        "entities": [ ... ],
+        "relationships": [ ... ],
+        "pages": [ ... ],
+        "workflows": [ ... ]
       }
       ```
 
-      ## Critical Rules
+      ## Critical Rules for Page Generation
 
-      1. **Use the EXACT app name and domain from the user's request**:
-         - If user says "project management app", use "Project Management App" as appName
-         - DO NOT substitute with generic names like "Task Manager" or "Blog Application"
-         - Description should match the user's terminology and requirements precisely
-      2. **Every entity automatically gets an "id" field** (don't include it in your fields array)
-      3. **Use foreign key fields for relationships**:
-         - one-to-many: Child has `parentId` field (type: "long" or "reference")
-         - many-to-many: Don't create junction tables yourself (system auto-generates)
-       4. **Choose appropriate field types** from the comprehensive list above:
-         - Use EXACT type names as listed (e.g., "longtext", not "long_text")
-         - Match field types to use cases (currency for money, email for emails, etc.)
-      5. **Set required: true for mandatory fields** (name, email, title, etc.)
-      6. **🚨 CRITICAL: NEVER GENERATE "nodes" ARRAYS IN PAGE DEFINITIONS**:
-         - **DO NOT** include a "nodes" array in your page objects
-         - **DO NOT** manually create UI components (text, container, table, etc.)
-         - The system automatically generates all UI components from your metadata
-         - Providing manual nodes will cause DUPLICATE CONTENT and RENDERING ERRORS
-         
-         **CORRECT FORMAT** (metadata only):
-         ```json
-         {
-           "id": "customer-list",
-           "name": "Customer List",
-           "type": "data-table",
-           "entity": "Customer",
-           "columns": ["name", "email", "phone"],
-           "actions": ["view", "edit", "delete"]
-         }
-         ```
-         
-         **INCORRECT FORMAT** (DO NOT DO THIS):
-         ```json
-         {
-           "id": "customer-list",
-           "name": "Customer List",
-           "type": "data-table",
-           "entity": "Customer",
-           "nodes": [
-             {"type": "text", "props": {...}},
-             {"type": "table", "props": {...}}
-           ]
-         }
-         ```
-      
-      7. **Generate detailed page metadata in a "pages" array**:
-         - Each page MUST have: id, name, type, entity, fields/columns, actions
-         - Include 3-7 pages matching the app's purpose
-         - Use page types: data-table, form, profile, dashboard, board, calendar, etc.
-      8. **Ask follow-up questions** when:
-         - Request is too vague ("build an app")
-         - Complex domain needs clarification (e-commerce, CRM)
-         - User mentions "something like..." without details
-         - Multiple valid interpretations exist
-      9. **Use builder-database references**: All capabilities above are from builder-database JSON files - consider them the source of truth
-      10. **Generate Workflows for Logic**: If user asks for logic (approval, email, automation), generate a "workflows" array using the node types (START, USER_TASK, SERVICE_TASK, END) and transitions defined in the database.
+       1. **Use the EXACT app name and domain from the user's request**.
+       2. **Every entity automatically gets an "id" field**.
+       3. **Use foreign key fields for relationships**.
+       4. **Choose appropriate field types**.
+       5. **Set required: true for mandatory fields**.
+      **🚨 CURRENT LIMITATIONS (MUST RESPECT):**
+      - **NO CHARTS/GRAPHS**: Pie charts, Bar charts, and Analytics widgets are **NOT** supported yet.
+      - **Refusal Protocol**: If user asks for "dashboard with charts" or "pie chart", say:
+        "Charts and analytics widgets are currently in development. I can create the data tables and forms, but I cannot render charts yet."
+
+      **🚨 CRITICAL: Use "components" Array for Page Content**:
+          - **DO NOT** use rigid page types (e.g., "data-table") as the primary definition.
+          - **INSTEAD**, use the **"components"** array to define what is on the page.
+          - **DO NOT** manually create low-level "nodes" (text, container).
+          - **SUPPORTED COMPONENTS ONLY**: "table", "form", "login-form". (Any other type will be IGNORED).
+
+          **CORRECT FORMAT (Component-Based)**:
+          ```json
+          {
+            "id": "customer-list",
+            "name": "Customer List",
+            "type": "default",
+            "components": [
+               { "type": "table", "entity": "Customer", "actions": ["view", "edit"] },
+               { "type": "form", "entity": "FilterDetails" }
+            ]
+          }
+          ```
+
+          **INCORRECT FORMAT** (Legacy - AVOID):
+          ```json
+          {
+            "name": "Customer List",
+            "type": "data-table",
+            "entity": "Customer"
+          }
+          ```
+
+       7. **Generate detailed page metadata**:
+          - Each page must have: id, name, type="default", and a **components** list.
+          - For Login Pages, use `{ "type": "default", "components": [{ "type": "login-form" }] }`.
+          - Include 3-7 pages matching the app's purpose.
+
+       8. **Ask follow-up questions** when needed.
+       9. **Use builder-database references**.
+       10. **Generate Workflows for Logic**.
 
       ## Workflow Generation Format
 
@@ -799,37 +697,13 @@ public class AiSystemPrompts {
            - NEGATIVE CONSTRAINT: If the user asks to "add a page", "fix the form", "check the details", or mentions specific pages/entities, it is NOT CREATE_APP. Use MODIFY_PLAN.
 
         2. MODIFY_PLAN
-           - User wants to CHANGE, UPDATE, FIX, or COMPLAIN about the current app.
-           - Examples: "Add a field for email", "The form is missing", "Check this page", "Register page is blank".
-           - KEYWORD: "add", "include", "missing", "gap", "review", "change", "update", "wrong", "check", "fix".
+           - User wants to change an existing app or fix something.
+           - Examples: "Add a login page", "Make the description longer", "Fix the bug".
 
-           - **CRITICAL**: If the `CONTEXT` says the user is "viewing app X", and the user asks to modify "the page" or "the app", you MUST classify as `MODIFY_PLAN` and set `parameters.targetAppId` to X. Do NOT classify as CREATE_APP unless they explicitly say "Create a NEW app".
+        3. OTHER
+           - General questions or greeting.
 
-        3. QUERY_CONTEXT
-           - User is asking for INFORMATION about the current plan or app.
-           - Examples: "What fields are in Employee?", "Show me the workflows", "Explain the logic".
-           - Distinction: If they say "Employee is missing fields" or "Page is blank", that is MODIFY_PLAN (Critique).
-
-        4. SMALL_TALK
-           - Casual conversation, greetings, or off-topic.
-           - Examples: "Hi", "Hello", "How are you?", "Thanks".
-
-        5. UNKNOWN
-           - Ambiguous or unrecognizable input.
-
-        ### OUTPUT FORMAT:
-        Return a single JSON object (NO markdown, NO other text):
-        {
-          "intent": "CREATE_APP" | "MODIFY_PLAN" | "QUERY_CONTEXT" | "SMALL_TALK" | "UNKNOWN",
-          "confidence": 0.0 to 1.0,
-          "reasoning": "Brief explanation",
-          "parameters": {
-             "targetAppId": "extracted app ID (if user says 'in HR app' or context provided)",
-             "pageName": "extracted page name",
-             "entityName": "extracted entity name",
-             "isApproval": "true" (if user says 'looks good', 'create it', 'yes', 'apply', 'proceed')
-          }
-        }
+          Return ONLY the Intent Name.
           """;
   }
-}
+} // Close Class

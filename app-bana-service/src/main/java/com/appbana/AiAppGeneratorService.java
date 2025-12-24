@@ -40,7 +40,8 @@ public class AiAppGeneratorService {
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
             .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
-    private static final TypeReference<Map<String, Object>> MAP_TYPE=new TypeReference<Map<String,Object>>(){};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<Map<String, Object>>() {
+    };
 
     private static final String ACTION_LIST_APPS = "listApps";
     private static final String ACTION_LOAD_APP = "loadApp";
@@ -2119,7 +2120,8 @@ public class AiAppGeneratorService {
             out.put("type", guessPageType(String.valueOf(out.get("name"))));
 
         // CRITICAL FIX: Strip AI-generated nodes for auto-completable page types
-        // This prevents duplicate content (AI's garbage nodes + autoComplete's proper components)
+        // This prevents duplicate content (AI's garbage nodes + autoComplete's proper
+        // components)
         String pageType = String.valueOf(out.get("type"));
         boolean isAutoCompletable = "data-table".equals(pageType) || "list".equals(pageType) ||
                 "form".equals(pageType) || "registration".equals(pageType) ||
@@ -2178,6 +2180,114 @@ public class AiAppGeneratorService {
             }
         }
         return out;
+    }
+
+    // Factory: Create Table Node
+    private static Map<String, Object> createTableNode(String entityName, String rootId, List<Object> entities) {
+        Map<String, Object> entityMap = findEntityByName(entities, entityName);
+        if (entityMap == null) {
+            LOG.warn("[AI] Cannot create table: entity '{}' not found", entityName);
+            return null;
+        }
+
+        List<Map<String, Object>> fields = buildTableFields(entityMap);
+        // Use random ID to support multiple tables
+        String tableId = "table-" + System.currentTimeMillis() + "-" + (int) (Math.random() * 10000);
+
+        Map<String, Object> tableNode = new LinkedHashMap<>();
+        tableNode.put("id", tableId);
+        tableNode.put("type", "table");
+
+        Map<String, Object> tableProps = new LinkedHashMap<>();
+        tableProps.put("entity", entityName);
+        tableProps.put("fields", fields);
+        tableProps.put("pageSize", 25);
+        tableProps.put("multiSelect", true);
+        tableProps.put("actions", new ArrayList<>(Arrays.asList("view")));
+        tableProps.put("bulkActions", new ArrayList<>(Arrays.asList("delete", "export")));
+        tableProps.put("confirmDelete", true);
+        tableProps.put("viewMode", "dynamic");
+        tableProps.put("theme", "default");
+        tableNode.put("props", tableProps);
+
+        // Validate Fields & Fallback
+        if (fields == null || fields.isEmpty()) {
+            fields = new ArrayList<>();
+            Map<String, Object> nameField = new LinkedHashMap<>();
+            nameField.put("name", "name");
+            nameField.put("label", "Name");
+            nameField.put("type", "text");
+            fields.add(nameField);
+
+            Map<String, Object> idField = new LinkedHashMap<>();
+            idField.put("name", "id");
+            idField.put("label", "ID");
+            idField.put("type", "text");
+            fields.add(idField);
+
+            tableProps.put("fields", fields);
+        }
+        return tableNode;
+    }
+
+    // Factory: Create Form Node
+    private static Map<String, Object> createFormNode(String entityName, String rootId, List<Object> entities) {
+        Map<String, Object> entityMap = findEntityByName(entities, entityName);
+        if (entityMap == null) {
+            LOG.warn("[AI] Cannot create form: entity '{}' not found", entityName);
+            return null;
+        }
+
+        List<Map<String, Object>> fields = buildFormFields(entityMap);
+        String formId = "form-" + System.currentTimeMillis() + "-" + (int) (Math.random() * 10000);
+
+        Map<String, Object> formNode = new LinkedHashMap<>();
+        formNode.put("id", formId);
+        formNode.put("type", "form");
+
+        Map<String, Object> formProps = new LinkedHashMap<>();
+        formProps.put("entity", entityName);
+        formProps.put("fields", fields);
+        formProps.put("layout", "vertical");
+        formProps.put("submitLabel", "Save");
+        formProps.put("title", capitalizeWords(entityName));
+
+        formNode.put("props", formProps);
+        return formNode;
+    }
+
+    // Factory: Create Login Form Node
+    private static Map<String, Object> createLoginFormNode(String rootId) {
+        String formId = "login-form-" + System.currentTimeMillis();
+        Map<String, Object> formNode = new LinkedHashMap<>();
+        formNode.put("id", formId);
+        formNode.put("type", "form");
+
+        // Manual fields for login
+        List<Map<String, Object>> fields = new ArrayList<>();
+
+        Map<String, Object> email = new LinkedHashMap<>();
+        email.put("name", "email");
+        email.put("label", "Email Address");
+        email.put("type", "email");
+        email.put("required", true);
+        fields.add(email);
+
+        Map<String, Object> pass = new LinkedHashMap<>();
+        pass.put("name", "password");
+        pass.put("label", "Password");
+        pass.put("type", "password");
+        pass.put("required", true);
+        fields.add(pass);
+
+        Map<String, Object> formProps = new LinkedHashMap<>();
+        formProps.put("fields", fields);
+        formProps.put("layout", "vertical");
+        formProps.put("submitLabel", "Sign In");
+        formProps.put("title", "Sign In");
+
+        formNode.put("props", formProps);
+        return formNode;
     }
 
     // Scaffold a page from a simple name
@@ -2288,7 +2398,7 @@ public class AiAppGeneratorService {
             return "detail";
         if (lower.contains("form") || lower.contains("create") || lower.contains("add") || lower.contains("new"))
             return "form";
-        return "blank";
+        return "default";
     }
 
     /**
@@ -2301,169 +2411,69 @@ public class AiAppGeneratorService {
         String pageType = String.valueOf(page.get("type"));
         LOG.info("[AI] Processing page '{}' with type '{}'", page.get("name"), pageType);
 
-        // Heuristic: If page name contains "Registration" or "Sign Up", treat as
-        // form/registration
-        // This fixes the issue where AI generates "Customer Registration" with generic
-        // type (e.g. "content" or "blank")
-        String pageNameLower = String.valueOf(page.get("name")).toLowerCase();
-        if (pageNameLower.contains("registration") || pageNameLower.contains("register")
-                || pageNameLower.contains("sign up")) {
-            if (!"registration".equals(pageType) && !"form".equals(pageType) && !"profile".equals(pageType)) {
-                LOG.info("[AI] Page '{}' detected as Registration form override (original type: {})", page.get("name"),
-                        pageType);
-                pageType = "registration";
-                page.put("type", "registration"); // Update metadata
-            }
-        }
-
         if ("dashboard".equals(pageType)) {
             autoCompleteDashboard(page);
             return;
         }
 
-        if ("board".equals(pageType)) {
-            // Fallback for board: treat as table for now until Kanban component exists
-            // We need to fetch the entity name to build the table
-            String entityName = String.valueOf(page.get("entity"));
-            if (entityName == null || "null".equals(entityName) || entityName.isEmpty()) {
-                entityName = inferEntityFromPageName(String.valueOf(page.get("name")), entities);
-                if (entityName != null)
-                    page.put("entity", entityName);
-            }
-            if (entityName != null && !"null".equals(entityName) && !entityName.isEmpty()) {
-                autoCompleteTable(page, entities, entityName);
-            }
-            return;
-        }
-
-        // Only process data-table/list pages
-        boolean isTable = "data-table".equals(pageType) || "list".equals(pageType);
-        boolean isForm = "form".equals(pageType) || "profile".equals(pageType) || "create-form".equals(pageType)
-                || "registration".equals(pageType);
-
-        if (!isTable && !isForm) {
-            LOG.warn("[AI] Page '{}' skipped: type '{}' is not auto-completable", page.get("name"), pageType);
-            return;
-        }
-
-        // FIX: Validate rootId/nodes consistency and deduplicate BEFORE processing
-        // Logic: if rootId points to X, but nodes list has root Y, we fix it.
+        // Validate rootId
         validateAndFixRootId(page);
 
-        String entityName = String.valueOf(page.get("entity"));
-
-        // Try to infer entity from page name if not explicitly set
-        if (entityName == null || "null".equals(entityName) || entityName.isEmpty()) {
-            entityName = inferEntityFromPageName(String.valueOf(page.get("name")), entities);
-            if (entityName != null) {
-                page.put("entity", entityName); // Add entity to metadata
-                LOG.info("[AI] Inferred entity '{}' from page name '{}'", entityName, page.get("name"));
+        // Normalize Component List
+        List<Map<String, Object>> components = new ArrayList<>();
+        Object compsObj = page.get("components");
+        if (compsObj instanceof List) {
+            for (Object c : (List<?>) compsObj) {
+                if (c instanceof Map)
+                    components.add((Map<String, Object>) c);
             }
         }
 
-        // If still no entity, can't auto-complete
-        if (entityName == null || "null".equals(entityName) || entityName.isEmpty()) {
-            LOG.warn("[AI] SKIP: Could not determine entity for page '{}' (type: {})", page.get("name"), pageType);
-            return;
-        }
-
-        if (isTable) {
-            LOG.info("[AI] Dispatching autoCompleteTable for page '{}' (Entity: {})", page.get("name"), entityName);
-            autoCompleteTable(page, entities, entityName);
-        } else if (isForm) {
-            autoCompleteForm(page, entities, entityName);
-        }
-    }
-
-    private static void autoCompleteForm(Map<String, Object> page, List<Object> entities, String entityName) {
-        String pageName = String.valueOf(page.get("name"));
-        if (isLoginPage(pageName)) {
-            autoCompleteLoginForm(page);
-            return;
-        }
-
+        // Process Components
         Object nodesObj = page.get("nodes");
         List<Object> nodes;
-
         if (nodesObj instanceof List) {
             nodes = new ArrayList<>((List<?>) nodesObj);
         } else {
             nodes = new ArrayList<>();
         }
         page.put("nodes", nodes);
+        String rootId = String.valueOf(page.get("rootId"));
 
-        // Check if form already exists
-        boolean hasForm = false;
-        for (Object n : nodes) {
-            if (n instanceof Map) {
-                Map<?, ?> m = (Map<?, ?>) n;
-                if ("form".equals(m.get("type"))) {
-                    hasForm = true;
-                    break;
+        for (Map<String, Object> comp : components) {
+            String type = String.valueOf(comp.get("type"));
+            String entityName = String.valueOf(comp.get("entity"));
+
+            // Entity inference (skip for login-form if no entity)
+            if ((entityName == null || "null".equals(entityName) || entityName.isEmpty())
+                    && !"login-form".equals(type)) {
+                entityName = inferEntityFromPageName(String.valueOf(page.get("name")), entities);
+            }
+
+            // Allow login-form without entity
+            if (entityName == null && !"login-form".equals(type)) {
+                continue;
+            }
+
+            Map<String, Object> node = null;
+            if ("table".equals(type)) {
+                if (entityName != null)
+                    node = createTableNode(entityName, rootId, entities);
+            } else if ("form".equals(type)) {
+                if (entityName != null)
+                    node = createFormNode(entityName, rootId, entities);
+            } else if ("login-form".equals(type)) {
+                node = createLoginFormNode(rootId);
+            }
+
+            if (node != null) {
+                nodes.add(node);
+                if (rootId != null && !"null".equals(rootId)) {
+                    addChildToRoot(nodes, rootId, String.valueOf(node.get("id")));
                 }
+                LOG.info("[AI] Generated component '{}' for entity '{}'", type, entityName);
             }
         }
-        if (hasForm) {
-            LOG.info("[AI] Page '{}' already has a form. Skipping auto-completion.", page.get("name"));
-            return;
-        }
-
-        LOG.info("[AI] Auto-completing missing form component for page '{}'", page.get("name"));
-
-        Map<String, Object> entityMap = findEntityByName(entities, entityName);
-        if (entityMap == null) {
-            LOG.warn("[AI] Cannot auto-complete form: entity '{}' not found", entityName);
-            return;
-        }
-
-        List<Map<String, Object>> fields = buildFormFields(entityMap);
-        String formId = "form-" + page.get("rootId");
-
-        Map<String, Object> formNode = new LinkedHashMap<>();
-        formNode.put("id", formId);
-        formNode.put("type", "form");
-
-        Map<String, Object> formProps = new LinkedHashMap<>();
-        formProps.put("entity", entityName);
-        formProps.put("fields", fields);
-        formProps.put("layout", "vertical");
-        formProps.put("submitLabel", "Save");
-        // FIX: Ensure button is explicitly part of form structure if needed by
-        // frontend,
-        // though "submitLabel" should trigger it in the Form component.
-        // Also ensure form has a title if missing.
-        if (!hasHeader(nodes)) {
-            formProps.put("title", capitalizeWords(entityName));
-        }
-        formNode.put("props", formProps);
-
-        // FIX: Clear garbage nodes (text descriptors) if we are injecting a real form
-        // AI often generates "text" nodes saying "email field", "password field".
-        // We should remove these to avoid double rendering (Text + Form).
-        // Keep "heading" or "title" nodes.
-        nodes.removeIf(n -> {
-            if (n instanceof Map) {
-                Map<?, ?> m = (Map<?, ?>) n;
-                String t = String.valueOf(m.get("type"));
-                String id = String.valueOf(m.get("id"));
-                // Remove generic text nodes or "container" nodes that aren't the root
-                if ("text".equals(t) && !id.contains("header") && !id.contains("title"))
-                    return true;
-                if ("container".equals(t) && !id.contains("root"))
-                    return true;
-            }
-            return false;
-        });
-
-        nodes.add(formNode);
-        // Assuming flat nodes list or rootId logic from autoCompleteTable.
-        // Usually we just add to nodes list if it's the structure used.
-        // But autoCompleteTable calls addChildToRoot. Let's do the same if needed.
-        if (page.containsKey("rootId")) {
-            addChildToRoot(nodes, String.valueOf(page.get("rootId")), formId);
-        }
-
-        LOG.info("[AI] ✓ Auto-completed form component with {} fields", fields.size());
     }
 
     private static boolean isLoginPage(String pageName) {
@@ -2752,160 +2762,6 @@ public class AiAppGeneratorService {
                 node.put("children", children);
                 break;
             }
-        }
-    }
-
-    private static void autoCompleteTable(Map<String, Object> page, List<Object> entities, String entityName) {
-        Object nodesObj = page.get("nodes");
-        List<Object> nodes;
-
-        if (nodesObj instanceof List) {
-            nodes = new ArrayList<>((List<?>) nodesObj);
-        } else {
-            return;
-        }
-        page.put("nodes", nodes);
-
-        LOG.info("[AI] Entering autoCompleteTable for page '{}'. Node count: {}", page.get("name"), nodes.size());
-
-        try {
-            boolean hasTable = false;
-        for (Object n : nodes) {
-            if (n instanceof Map) {
-                Map<?, ?> m = (Map<?, ?>) n;
-                if ("table".equals(m.get("type"))) {
-                    hasTable = true;
-                    break;
-                }
-            }
-        }
-        if (hasTable) {
-            LOG.info("[AI] Table already exists for page '{}', skipping auto-complete", page.get("name"));
-            return;
-        }
-
-        LOG.info("[AI] Proceeding to add table node for page '{}'", page.get("name"));
-
-        LOG.info("[AI] Auto-completing missing table component for page '{}' with entity '{}'", page.get("name"),
-                entityName);
-
-        Map<String, Object> entityMap = findEntityByName(entities, entityName);
-        if (entityMap == null) {
-            LOG.warn("[AI] Cannot auto-complete table: entity '{}' not found", entityName);
-            return;
-        }
-
-        List<Map<String, Object>> fields = buildTableFields(entityMap);
-        String tableId = "table-" + page.get("rootId");
-
-        Map<String, Object> tableNode = new LinkedHashMap<>();
-        tableNode.put("id", tableId);
-        tableNode.put("type", "table");
-
-        Map<String, Object> tableProps = new LinkedHashMap<>();
-        tableProps.put("entity", entityName);
-        tableProps.put("fields", fields);
-        tableProps.put("pageSize", 25);
-        tableProps.put("multiSelect", true);
-        tableProps.put("actions", new ArrayList<>(Arrays.asList("view")));
-        tableProps.put("bulkActions", new ArrayList<>(Arrays.asList("delete", "export")));
-        tableProps.put("confirmDelete", true);
-        tableProps.put("viewMode", "dynamic");
-        tableProps.put("theme", "default");
-        tableNode.put("props", tableProps);
-
-        // FIX: Nuclear Cleanup Option
-        // 1. Identify Header
-        Object headerNode = null;
-        for (Object n : nodes) {
-            if (n instanceof Map) {
-                Map<?, ?> m = (Map<?, ?>) n;
-                String id = String.valueOf(m.get("id"));
-                String type = String.valueOf(m.get("type"));
-                // Keep heading/title or h1
-                if (id.contains("header") || id.contains("heading") || id.contains("title")) {
-                    headerNode = n;
-                    break;
-                }
-                if ("text".equals(type)) {
-                    Object props = m.get("props");
-                    if (props instanceof Map && ("h1".equals(((Map) props).get("tag")))) {
-                        headerNode = n;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // 2. Clear EVERYTHING
-        nodes.clear();
-
-        // 3. Re-add Header
-        if (headerNode != null) {
-            nodes.add(headerNode);
-        } else {
-            Map<String, Object> h = new LinkedHashMap<>();
-            h.put("id", "heading-" + page.get("rootId"));
-            h.put("type", "text");
-            h.put("props", Map.of("tag", "h1", "content", String.valueOf(page.get("name"))));
-            nodes.add(h);
-        }
-
-        // 4. Validate Fields & Fallback
-        if (fields == null || fields.isEmpty()) {
-            LOG.warn("[AI] Fields empty for entity '{}', using fallback default fields.", entityName);
-            fields = new ArrayList<>();
-            Map<String, Object> nameField = new LinkedHashMap<>();
-            nameField.put("name", "name");
-            nameField.put("label", "Name");
-            nameField.put("type", "text");
-            fields.add(nameField);
-
-            Map<String, Object> idField = new LinkedHashMap<>();
-            idField.put("name", "id");
-            idField.put("label", "ID");
-            idField.put("type", "text");
-            fields.add(idField);
-
-            // Update props map because we might have passed empty list earlier
-            tableProps.put("fields", fields);
-        }
-
-        // 5. Add Table
-        nodes.add(tableNode);
-
-        // 6. Reset tree linkage - Recreate Root Container
-        String newRootId = String.valueOf(page.get("rootId"));
-        Map<String, Object> rootContainer = new LinkedHashMap<>();
-        rootContainer.put("id", newRootId);
-        rootContainer.put("type", "container");
-        rootContainer.put("props", Map.of("layout", "vertical", "gap", "lg", "padding", "xl"));
-        List<String> childrenIds = new ArrayList<>();
-        if (headerNode != null) {
-            Object hId = ((Map) headerNode).get("id");
-            if (hId != null)
-                childrenIds.add(String.valueOf(hId));
-        } else {
-            // If we created a new header, its ID is predictable
-            childrenIds.add("heading-" + page.get("rootId"));
-        }
-        childrenIds.add(tableId);
-        rootContainer.put("children", childrenIds);
-
-        // Add root container to nodes list at start
-        nodes.add(0, rootContainer);
-
-        LOG.info("[AI] Nuclear cleanup complete. Page now has {} nodes.", nodes.size());
-
-        LOG.info("[AI] ✓ Auto-completed table component with {} fields", fields.size());
-        try {
-            LOG.info("DEBUG_NODES: Page '{}' nodes: {}", page.get("name"),
-                    new ObjectMapper().writeValueAsString(nodes));
-        } catch (Exception e) {
-            LOG.error("Failed to log nodes", e);
-        }
-        } catch (Exception e) {
-            LOG.error("[AI] CRITICAL ERROR in autoCompleteTable for page '{}'", page.get("name"), e);
         }
     }
 
