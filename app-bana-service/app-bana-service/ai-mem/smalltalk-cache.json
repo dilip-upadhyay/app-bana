@@ -1,1 +1,19 @@
-{}
+{
+  "version" : "1.0",
+  "lastUpdated" : "Wed Dec 24 10:28:16 IST 2025",
+  "entries" : [ {
+    "originalText" : "I want following features number one Employ Management Number two Recruitment management Number three Salary.",
+    "normalizedText" : "i want following features number one employ management number two recruitment management number three salary",
+    "response" : "That sounds fantastic! \uD83D\uDE80 Here’s a quick overview of the features:\n\n1. **Employee Management**: Track employee details, performance, and attendance.\n2. **Recruitment Management**: Streamline the hiring process, manage job postings, and applications.\n3. **Salary Management**: Handle payroll, bonuses, and salary tracking.\n\nI can add these features to your plan! Say \"Update plan\" to proceed.",
+    "createdTime" : 1766552296004,
+    "lastAccessTime" : 1766552296004,
+    "hitCount" : 0
+  }, {
+    "originalText" : "I want to build HR management app.",
+    "normalizedText" : "i want to build hr management app",
+    "response" : "Awesome choice! \uD83D\uDE80 An HR management app can streamline processes and improve efficiency. What features do you have in mind?",
+    "createdTime" : 1766552254719,
+    "lastAccessTime" : 1766552254719,
+    "hitCount" : 0
+  } ]
+}

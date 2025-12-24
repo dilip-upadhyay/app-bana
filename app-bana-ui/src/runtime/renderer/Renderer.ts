@@ -1,10 +1,11 @@
 // src/runtime/renderer/Renderer.ts
 import { PageMeta, ComponentNode } from '../../models/metadata';
-import { getComponent } from '../../core/registry';
+import { getComponent, getComponentTagName } from '../../core/registry';
 import { html, TemplateResult } from 'lit';
 import { ifDefined } from 'lit/directives/if-defined.js';
 import './StudioTableLive';
 import '../../components/GridElement';
+import '../../components/DynamicRenderer';
 
 // Helper for simple handle-bars style interpolation
 // e.g. interpolate("Hello {{user.name}}", { user: { name: "World" } }) -> "Hello World"
@@ -73,36 +74,52 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
          ${children}
        </app-grid>
      `;
-  } else if (node.type === 'container') {
-    return html`<studio-container .node=${nodeWithData} slot=${ifDefined(nodeWithData.props?.slot)}>${children}</studio-container>`;
-  } else if (node.type === 'text') {
-    return html`<studio-text .node=${nodeWithData}></studio-text>`;
-  } else if (node.type === 'button') {
-    return html`<studio-button .node=${nodeWithData}></studio-button>`;
-  } else if (node.type === 'form') {
-    return html`<studio-form .node=${nodeWithData}>${children}</studio-form>`;
-  } else if (node.type === 'header') {
-    return html`<studio-header .node=${nodeWithData}></studio-header>`;
-  } else if (node.type === 'list') {
-    return html`<studio-list .node=${nodeWithData}>${children}</studio-list>`;
-  } else if (node.type === 'card') {
-    return html`<studio-card .node=${nodeWithData}>${children}</studio-card>`;
-  } else if (node.type === 'detail') {
-    return html`<studio-detail .node=${nodeWithData}>${children}</studio-detail>`;
-  } else if (node.type === 'dashboard') {
-    return html`<studio-dashboard .node=${nodeWithData}>${children}</studio-dashboard>`;
-  } else if (node.type === 'unknown') {
-    return html`<studio-unknown .node=${nodeWithData}></studio-unknown>`;
-  } else if (node.type === 'input') {
-    return html`<studio-input .node=${nodeWithData}></studio-input>`;
-  } else if (node.type === 'select') {
-    return html`<studio-select .node=${nodeWithData}></studio-select>`;
-  } else if (node.type === 'textarea') {
-    return html`<studio-textarea .node=${nodeWithData}></studio-textarea>`;
   }
+
+  // Dynamic Registry Lookup
+  const tagName = getComponent(node.type) ? getComponentTagName(node.type) : undefined;
+
+  if (tagName) {
+    // Determine which Lit helper to use based on import availability.
+    // Since we can't easily import unsafeStatic in this context without ensuring package.json support,
+    // and we saw existing code uses literal tags. 
+    // Wait, Lit 3.1.4 supports `minified` imports.
+    // However, to avoid risky imports if 'lit/static-html.js' isn't available in bundling setup.
+    // We will use a known safe switch for now? NO, that defeats the purpose.
+
+    // We must trust Lit is standard.
+    // But I cannot easily add an import statement to the TOP of the file with this tool unless I replace the whole file or carefully insert it.
+    // I will stick to the plan: Use the registry.
+    // But I need to Import `html` as `staticHtml` and `unsafeStatic`.
+    // I will do that in a separate step or assume I can do it here.
+    // Actually, I'll use a `switch` generated from registry? No.
+
+    // Let's assume I can add the import. 
+    // I will replace the import section first?
+    // Or I can just write the logic assuming the import is there, and then fix the import.
+
+    // Strategy: Use a special helper component?
+    // No.
+
+    // Let's look at `node.type`.
+    // If I use `document.createElement`, I bypass Lit's template safety but it works.
+    // See `renderNode` (DOM version) below. It creates elements.
+    // `renderNodeTemplate` returns `TemplateResult`.
+
+    // Simplest valid Lit dynamic tag:
+    // return html`<${unsafeStatic(tagName)} .node=${nodeWithData}>${children}</${unsafeStatic(tagName)}>`;
+
+    // I will return a placeholder here and then fix the Imports.
+    return html`<studio-dynamic-renderer .tagName=${tagName} .node=${nodeWithData}>${children}</studio-dynamic-renderer>`;
+  }
+
   // Fallback for truly unknown types
   return html`<div class="unknown-component" id="${node.id}">Unknown component: ${node.type}</div>`;
 }
+
+// Helper wrapper to avoid needing unsafeStatic in the main file if imports are tricky?
+// No, simpler to just fix imports.
+
 
 /**
  * Renders a PageMeta tree to DOM using the component registry.
