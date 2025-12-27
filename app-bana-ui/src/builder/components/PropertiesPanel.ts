@@ -166,6 +166,7 @@ export class PropertiesPanel extends LitElement {
 
     // Define common editable properties by component type
     const propertyMap: Record<string, string[]> = {
+      'input': ['label', 'name', 'value', 'placeholder', 'type', 'required', 'disabled', 'error', 'helper-text'],
       'text-input': ['label', 'placeholder', 'name', 'value', 'required', 'disabled'],
       'textarea': ['label', 'placeholder', 'name', 'value', 'rows', 'required', 'disabled'],
       'button': ['label', 'variant', 'disabled'],
