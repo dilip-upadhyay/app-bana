@@ -600,6 +600,71 @@ public class ApiServer {
         // Initialize Runtime Auth Controller
         router.post("/api/runtime/auth/login", GenericAppAuthController.login());
 
+        // Template Management API
+        String dataDir = Optional.ofNullable(System.getProperty("appbana.dataDir")).orElse("./data");
+        com.appbana.service.TemplateService templateService = new com.appbana.service.TemplateService(dataDir);
+
+        router.get("/api/templates", (req, res) -> {
+            try {
+                List<Map<String, Object>> templates = templateService.getAllTemplates();
+                res.json(200, templates);
+            } catch (Exception e) {
+                LOG.error("Failed to get templates", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        router.get("/api/templates/{id}", (req, res) -> {
+            try {
+                String templateId = req.pathParam("id");
+                Map<String, Object> template = templateService.getTemplate(templateId);
+                if (template == null) {
+                    res.json(404, Map.of("error", "Template not found"));
+                    return;
+                }
+                res.json(200, template);
+            } catch (Exception e) {
+                LOG.error("Failed to get template", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        router.post("/api/templates", (req, res) -> {
+            try {
+                Map<String, Object> templateData = req.readJson(new TypeReference<>() {
+                });
+                Map<String, Object> created = templateService.createUserTemplate(templateData);
+                res.json(201, created);
+            } catch (Exception e) {
+                LOG.error("Failed to create template", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        router.put("/api/templates/{id}", (req, res) -> {
+            try {
+                String templateId = req.pathParam("id");
+                Map<String, Object> templateData = req.readJson(new TypeReference<>() {
+                });
+                Map<String, Object> updated = templateService.updateUserTemplate(templateId, templateData);
+                res.json(200, updated);
+            } catch (Exception e) {
+                LOG.error("Failed to update template", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        router.delete("/api/templates/{id}", (req, res) -> {
+            try {
+                String templateId = req.pathParam("id");
+                templateService.deleteUserTemplate(templateId);
+                res.json(200, Map.of("status", "deleted"));
+            } catch (Exception e) {
+                LOG.error("Failed to delete template", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
         router.get("/api/endpoints", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (authEnabled(cfg)) {

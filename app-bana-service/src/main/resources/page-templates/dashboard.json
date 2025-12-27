@@ -1,0 +1,234 @@
+{
+    "id": "dashboard",
+    "name": "Dashboard Page",
+    "description": "Dashboard with header, sidebar navigation, and KPI metrics",
+    "category": "dashboard",
+    "isSystem": true,
+    "nodes": [
+        {
+            "id": "root",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; min-height: 100vh;"
+            },
+            "children": [
+                "header-1",
+                "content-wrapper-1"
+            ]
+        },
+        {
+            "id": "header-1",
+            "type": "container",
+            "props": {
+                "tag": "header",
+                "style": "display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: #1f2937; color: white;"
+            },
+            "children": [
+                "logo-1",
+                "user-menu-1"
+            ]
+        },
+        {
+            "id": "logo-1",
+            "type": "text",
+            "props": {
+                "tag": "h1",
+                "text": "📊 Dashboard",
+                "style": "margin: 0; font-size: 20px; font-weight: 700;"
+            }
+        },
+        {
+            "id": "user-menu-1",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "John Doe 👤",
+                "style": "font-size: 14px;"
+            }
+        },
+        {
+            "id": "content-wrapper-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex: 1;"
+            },
+            "children": [
+                "sidebar-1",
+                "main-1"
+            ]
+        },
+        {
+            "id": "sidebar-1",
+            "type": "container",
+            "props": {
+                "tag": "aside",
+                "style": "width: 250px; background: #f3f4f6; padding: 1.5rem 1rem; border-right: 1px solid #e5e7eb;"
+            },
+            "children": [
+                "nav-title-1",
+                "nav-home-1",
+                "nav-analytics-1",
+                "nav-reports-1"
+            ]
+        },
+        {
+            "id": "nav-title-1",
+            "type": "text",
+            "props": {
+                "tag": "h3",
+                "text": "Navigation",
+                "style": "margin: 0 0 1rem 0; font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase;"
+            }
+        },
+        {
+            "id": "nav-home-1",
+            "type": "text",
+            "props": {
+                "tag": "a",
+                "text": "🏠 Home",
+                "href": "#",
+                "style": "display: block; padding: 0.75rem 1rem; margin-bottom: 0.25rem; border-radius: 6px; color: #374151; text-decoration: none; font-size: 14px;"
+            }
+        },
+        {
+            "id": "nav-analytics-1",
+            "type": "text",
+            "props": {
+                "tag": "a",
+                "text": "📈 Analytics",
+                "href": "#",
+                "style": "display: block; padding: 0.75rem 1rem; margin-bottom: 0.25rem; border-radius: 6px; color: #374151; text-decoration: none; font-size: 14px;"
+            }
+        },
+        {
+            "id": "nav-reports-1",
+            "type": "text",
+            "props": {
+                "tag": "a",
+                "text": "📄 Reports",
+                "href": "#",
+                "style": "display: block; padding: 0.75rem 1rem; margin-bottom: 0.25rem; border-radius: 6px; color: #374151; text-decoration: none; font-size: 14px;"
+            }
+        },
+        {
+            "id": "main-1",
+            "type": "container",
+            "props": {
+                "tag": "main",
+                "style": "flex: 1; padding: 2rem;"
+            },
+            "children": [
+                "main-title-1",
+                "kpi-grid-1"
+            ]
+        },
+        {
+            "id": "main-title-1",
+            "type": "text",
+            "props": {
+                "tag": "h2",
+                "text": "Overview",
+                "style": "margin: 0 0 1.5rem 0; font-size: 24px; font-weight: 700; color: #111827;"
+            }
+        },
+        {
+            "id": "kpi-grid-1",
+            "type": "container",
+            "props": {
+                "style": "display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;"
+            },
+            "children": [
+                "kpi-users-1",
+                "kpi-revenue-1",
+                "kpi-orders-1"
+            ]
+        },
+        {
+            "id": "kpi-users-1",
+            "type": "container",
+            "props": {
+                "style": "background: white; padding: 1.5rem; border-radius: 12px; border-left: 4px solid #3b82f6; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"
+            },
+            "children": [
+                "users-header-1",
+                "users-value-1"
+            ]
+        },
+        {
+            "id": "users-header-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "👥 Total Users",
+                "style": "font-size: 14px; color: #6b7280; margin-bottom: 0.5rem;"
+            }
+        },
+        {
+            "id": "users-value-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "12,458",
+                "style": "font-size: 32px; font-weight: 700; color: #111827;"
+            }
+        },
+        {
+            "id": "kpi-revenue-1",
+            "type": "container",
+            "props": {
+                "style": "background: white; padding: 1.5rem; border-radius: 12px; border-left: 4px solid #10b981; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"
+            },
+            "children": [
+                "revenue-header-1",
+                "revenue-value-1"
+            ]
+        },
+        {
+            "id": "revenue-header-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "💰 Revenue",
+                "style": "font-size: 14px; color: #6b7280; margin-bottom: 0.5rem;"
+            }
+        },
+        {
+            "id": "revenue-value-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "$45,231",
+                "style": "font-size: 32px; font-weight: 700; color: #111827;"
+            }
+        },
+        {
+            "id": "kpi-orders-1",
+            "type": "container",
+            "props": {
+                "style": "background: white; padding: 1.5rem; border-radius: 12px; border-left: 4px solid #f59e0b; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"
+            },
+            "children": [
+                "orders-header-1",
+                "orders-value-1"
+            ]
+        },
+        {
+            "id": "orders-header-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "📦 Orders",
+                "style": "font-size: 14px; color: #6b7280; margin-bottom: 0.5rem;"
+            }
+        },
+        {
+            "id": "orders-value-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "3,842",
+                "style": "font-size: 32px; font-weight: 700; color: #111827;"
+            }
+        }
+    ]
+}

@@ -1,0 +1,91 @@
+{
+    "id": "contact",
+    "name": "Contact Form",
+    "description": "Contact form with name, email, and message fields",
+    "category": "form",
+    "isSystem": true,
+    "nodes": [
+        {
+            "id": "root",
+            "type": "container",
+            "props": {
+                "style": "min-height: 100vh; background: #f9fafb; padding: 3rem 1rem;"
+            },
+            "children": [
+                "form-wrapper-1"
+            ]
+        },
+        {
+            "id": "form-wrapper-1",
+            "type": "container",
+            "props": {
+                "style": "max-width: 600px; margin: 0 auto; background: white; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+            },
+            "children": [
+                "form-title-1",
+                "contact-form-1"
+            ]
+        },
+        {
+            "id": "form-title-1",
+            "type": "text",
+            "props": {
+                "tag": "h1",
+                "text": "✉️ Get In Touch",
+                "style": "margin: 0 0 2rem 0; font-size: 32px; font-weight: 700; color: #111827;"
+            }
+        },
+        {
+            "id": "contact-form-1",
+            "type": "container",
+            "props": {
+                "tag": "form",
+                "style": "display: flex; flex-direction: column; gap: 1.5rem;"
+            },
+            "children": [
+                "name-input-1",
+                "email-input-1",
+                "message-input-1",
+                "submit-1"
+            ]
+        },
+        {
+            "id": "name-input-1",
+            "type": "input",
+            "props": {
+                "type": "text",
+                "placeholder": "Your Name",
+                "required": true,
+                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+            }
+        },
+        {
+            "id": "email-input-1",
+            "type": "input",
+            "props": {
+                "type": "email",
+                "placeholder": "Your Email",
+                "required": true,
+                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+            }
+        },
+        {
+            "id": "message-input-1",
+            "type": "textarea",
+            "props": {
+                "placeholder": "Your Message",
+                "required": true,
+                "rows": 6,
+                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; font-family: inherit; resize: vertical;"
+            }
+        },
+        {
+            "id": "submit-1",
+            "type": "button",
+            "props": {
+                "text": "📤 Send Message",
+                "style": "padding: 1rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer;"
+            }
+        }
+    ]
+}

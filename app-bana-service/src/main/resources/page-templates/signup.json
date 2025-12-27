@@ -1,0 +1,314 @@
+{
+    "id": "signup",
+    "name": "Sign Up Page",
+    "description": "Split-screen registration page with form fields",
+    "category": "auth",
+    "isSystem": true,
+    "nodes": [
+        {
+            "id": "root",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-wrap: wrap; min-height: 100vh; width: 100%; margin: 0; padding: 0; box-sizing: border-box;"
+            },
+            "children": [
+                "brand-section-sign-1",
+                "form-section-sign-1"
+            ]
+        },
+        {
+            "id": "brand-section-sign-1",
+            "type": "container",
+            "props": {
+                "style": "flex: 1 1 280px; max-height: 35vh; box-sizing: border-box; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; justify-content: center; padding: 2.5rem; color: white;"
+            },
+            "children": [
+                "brand-title-sign-1",
+                "brand-subtitle-sign-1"
+            ]
+        },
+        {
+            "id": "brand-title-sign-1",
+            "type": "text",
+            "props": {
+                "tag": "h1",
+                "text": "Join Our Community",
+                "style": "font-size: 32px; font-weight: 800; margin-bottom: 0.75rem; line-height: 1.2;"
+            }
+        },
+        {
+            "id": "brand-subtitle-sign-1",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Create your free account today and start building amazing applications.",
+                "style": "font-size: 16px; opacity: 0.9; max-width: 400px; line-height: 1.5;"
+            }
+        },
+        {
+            "id": "form-section-sign-1",
+            "type": "container",
+            "props": {
+                "style": "flex: 1 1 280px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; background: white; padding: 2rem;"
+            },
+            "children": [
+                "form-wrapper-sign-1"
+            ]
+        },
+        {
+            "id": "form-wrapper-sign-1",
+            "type": "container",
+            "props": {
+                "style": "width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 2rem;"
+            },
+            "children": [
+                "signup-header-1",
+                "form-1"
+            ]
+        },
+        {
+            "id": "signup-header-1",
+            "type": "container",
+            "props": {
+                "style": "text-align: center;"
+            },
+            "children": [
+                "title-1",
+                "subtitle-1"
+            ]
+        },
+        {
+            "id": "title-1",
+            "type": "text",
+            "props": {
+                "tag": "h1",
+                "text": "Create Account",
+                "style": "margin: 0 0 0.5rem 0; font-size: 32px; font-weight: 700; color: #1f2937;"
+            }
+        },
+        {
+            "id": "subtitle-1",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Get started with your free account",
+                "style": "margin: 0; font-size: 16px; color: #6b7280;"
+            }
+        },
+        {
+            "id": "form-1",
+            "type": "container",
+            "props": {
+                "tag": "form",
+                "style": "display: flex; flex-direction: column; gap: 1.25rem;"
+            },
+            "children": [
+                "name-group-1",
+                "contact-group-1",
+                "email-group-1",
+                "password-group-1",
+                "confirm-group-1",
+                "terms-1",
+                "submit-1",
+                "signin-1"
+            ]
+        },
+        {
+            "id": "name-group-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "name-label-1",
+                "name-input-1"
+            ]
+        },
+        {
+            "id": "name-label-1",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Full Name",
+                "style": "font-size: 14px; font-weight: 500; color: #374151;"
+            }
+        },
+        {
+            "id": "name-input-1",
+            "type": "input",
+            "props": {
+                "type": "text",
+                "placeholder": "John Doe",
+                "required": true,
+                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+            }
+        },
+        {
+            "id": "contact-group-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "contact-label-1",
+                "contact-input-1"
+            ]
+        },
+        {
+            "id": "contact-label-1",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Contact Number <span style=\"font-weight:400; color:#9ca3af\">(Optional)</span>",
+                "style": "font-size: 14px; font-weight: 500; color: #374151;"
+            }
+        },
+        {
+            "id": "contact-input-1",
+            "type": "input",
+            "props": {
+                "type": "tel",
+                "placeholder": "+1 (555) 000-0000",
+                "required": false,
+                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+            }
+        },
+        {
+            "id": "email-group-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "email-label-1",
+                "email-input-1"
+            ]
+        },
+        {
+            "id": "email-label-1",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Email Address",
+                "style": "font-size: 14px; font-weight: 500; color: #374151;"
+            }
+        },
+        {
+            "id": "email-input-1",
+            "type": "input",
+            "props": {
+                "type": "email",
+                "placeholder": "you@example.com",
+                "required": true,
+                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+            }
+        },
+        {
+            "id": "password-group-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "password-label-1",
+                "password-input-1"
+            ]
+        },
+        {
+            "id": "password-label-1",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Password",
+                "style": "font-size: 14px; font-weight: 500; color: #374151;"
+            }
+        },
+        {
+            "id": "password-input-1",
+            "type": "input",
+            "props": {
+                "type": "password",
+                "placeholder": "••••••••",
+                "required": true,
+                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+            }
+        },
+        {
+            "id": "confirm-group-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "confirm-label-1",
+                "confirm-input-1"
+            ]
+        },
+        {
+            "id": "confirm-label-1",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Confirm Password",
+                "style": "font-size: 14px; font-weight: 500; color: #374151;"
+            }
+        },
+        {
+            "id": "confirm-input-1",
+            "type": "input",
+            "props": {
+                "type": "password",
+                "placeholder": "••••••••",
+                "required": true,
+                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+            }
+        },
+        {
+            "id": "terms-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; align-items: flex-start; gap: 0.5rem; margin-top: 0.5rem;"
+            },
+            "children": [
+                "terms-check-1",
+                "terms-label-1"
+            ]
+        },
+        {
+            "id": "terms-check-1",
+            "type": "input",
+            "props": {
+                "type": "checkbox",
+                "required": true,
+                "style": "width: 16px; height: 16px; margin-top: 3px;"
+            }
+        },
+        {
+            "id": "terms-label-1",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "I agree to the <a href=\"#\" style=\"color:#667eea\">Terms of Service</a> and <a href=\"#\" style=\"color:#667eea\">Privacy Policy</a>",
+                "style": "font-size: 13px; color: #6b7280; line-height: 1.4;"
+            }
+        },
+        {
+            "id": "submit-1",
+            "type": "button",
+            "props": {
+                "text": "Create Account",
+                "className": "btn-primary",
+                "style": "padding: 0.875rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 0.5rem;"
+            }
+        },
+        {
+            "id": "signin-1",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Already have an account? <a href=\"/login\" style=\"color: #667eea; font-weight: 600;\">Sign in</a>",
+                "style": "margin: 0; text-align: center; font-size: 14px; color: #6b7280;"
+            }
+        }
+    ]
+}
