@@ -86,7 +86,7 @@ export class FormContainer extends BaseElement {
         };
 
         // Find all appbana-input, appbana-select, etc.
-        const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea, studio-input, studio-select, studio-textarea');
+        const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea');
         inputs.forEach((el: any) => {
             const name = el.getAttribute('name');
             const val = getValue(name);
@@ -150,7 +150,7 @@ export class FormContainer extends BaseElement {
 
         // Collect data
         const formData: Record<string, any> = {};
-        const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea, studio-input, studio-select, studio-textarea, input, select, textarea');
+        const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea, input, select, textarea');
 
         inputs.forEach((el: any) => {
             const name = el.getAttribute('name') || el.name;

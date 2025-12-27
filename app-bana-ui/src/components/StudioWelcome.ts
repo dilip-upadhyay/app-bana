@@ -35,6 +35,6 @@ export class StudioWelcome extends LitElement {
   }
 }
 
-if (!customElements.get('studio-welcome')) {
-  customElements.define('studio-welcome', StudioWelcome);
+if (!customElements.get('appbana-welcome')) {
+  customElements.define('appbana-welcome', StudioWelcome);
 }

@@ -9,6 +9,6 @@ export class UnknownElement extends FormElement {
   }
 }
 
-if (!customElements.get('studio-unknown')) {
-  customElements.define('studio-unknown', UnknownElement);
+if (!customElements.get('appbana-unknown')) {
+  customElements.define('appbana-unknown', UnknownElement);
 }

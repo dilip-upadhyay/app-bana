@@ -12,13 +12,13 @@ export class ComponentGallery extends LitElement {
       <div class="grid">
         <div class="card">
           <header>Button</header>
-          <studio-button label="Sample Button" variant="primary"></studio-button>
+          <appbana-button label="Sample Button" variant="primary"></appbana-button>
         </div>
         <div class="card">
           <header>Container</header>
-          <studio-container variant="outlined">
-            <studio-text text="Container sample text"></studio-text>
-          </studio-container>
+          <appbana-container variant="outlined">
+            <appbana-text text="Container sample text"></appbana-text>
+          </appbana-container>
         </div>
       </div>
     `;

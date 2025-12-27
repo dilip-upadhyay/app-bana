@@ -154,44 +154,6 @@
       }
     },
     {
-      "type": "login-form",
-      "name": "LoginForm",
-      "category": "Form Components",
-      "file": "src/components/LoginForm.ts",
-      "description": "Standard login form authenticating against /api/runtime/auth/login",
-      "baseClass": "BaseElement",
-      "customElement": "appbana-login-form",
-      "props": {
-        "redirectUrl": {
-          "type": "string",
-          "default": "/",
-          "description": "URL to redirect after successful login"
-        },
-        "logo": {
-          "type": "string",
-          "description": "Optional URL for logo image"
-        },
-        "title": {
-          "type": "string",
-          "default": "Sign In",
-          "description": "Form title"
-        },
-        "registerUrl": {
-          "type": "string",
-          "description": "Optional link to registration page"
-        }
-      },
-      "children": false,
-      "example": {
-        "id": "login1",
-        "type": "login-form",
-        "props": {
-          "redirectUrl": "/dashboard",
-          "title": "Welcome Back"
-        }
-      }
-    },
-    {
       "type": "button",
       "name": "ButtonElement",
       "category": "Form Components",
