@@ -11,7 +11,7 @@ import type { AppMeta } from '../../models/app-metadata';
 import type { EntityMeta, EntityField, EntityRelationship } from '../../models/entity-metadata';
 import { EntitySchemaConverter } from '../../core/EntitySchemaConverter';
 
-@customElement('studio-entity-manager')
+@customElement('appbana-entity-manager')
 export class EntityManager extends LitElement {
   static styles = css`
     :host {

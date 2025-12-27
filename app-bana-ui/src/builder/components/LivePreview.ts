@@ -21,7 +21,7 @@ import '../../components/RadioGroupElement';
 
 
 
-@customElement('studio-live-preview')
+@customElement('appbana-live-preview')
 export class LivePreview extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
@@ -590,7 +590,7 @@ export class LivePreview extends LitElement {
         return html`
           <div style="position: relative; display: block;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <studio-text
+            <appbana-text
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
               content="${node.props?.content || node.props?.text || ''}"
@@ -604,7 +604,7 @@ export class LivePreview extends LitElement {
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            ></studio-text>
+            ></appbana-text>
             <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>
@@ -614,7 +614,7 @@ export class LivePreview extends LitElement {
         return html`
           <div style="position: relative; display: inline-block; width: max-content;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <studio-button
+            <appbana-button
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
               label="${node.props?.label || node.props?.text || 'Button'}"
@@ -627,7 +627,7 @@ export class LivePreview extends LitElement {
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            ></studio-button>
+            ></appbana-button>
             <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>
@@ -637,7 +637,7 @@ export class LivePreview extends LitElement {
         return html`
           <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <studio-input
+            <appbana-input
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
               label="${node.props?.label || ''}"
@@ -653,7 +653,7 @@ export class LivePreview extends LitElement {
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            ></studio-input>
+            ></appbana-input>
             <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>
@@ -663,7 +663,7 @@ export class LivePreview extends LitElement {
         return html`
           <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <studio-select
+            <appbana-select
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
               label="${node.props?.label || ''}"
@@ -678,7 +678,7 @@ export class LivePreview extends LitElement {
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            ></studio-select>
+            ></appbana-select>
             <!-- Overlay to intercept clicks for selection -->
             <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
@@ -689,7 +689,7 @@ export class LivePreview extends LitElement {
         return html`
           <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <studio-textarea
+            <appbana-textarea
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
               label="${node.props?.label || ''}"
@@ -705,7 +705,7 @@ export class LivePreview extends LitElement {
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            ></studio-textarea>
+            ></appbana-textarea>
             <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>
@@ -750,7 +750,7 @@ export class LivePreview extends LitElement {
         return html`
           <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <studio-checkbox
+            <appbana-checkbox
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
               label="${node.props?.label || ''}"
@@ -764,7 +764,7 @@ export class LivePreview extends LitElement {
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            ></studio-checkbox>
+            ></appbana-checkbox>
             <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>
@@ -774,7 +774,7 @@ export class LivePreview extends LitElement {
         return html`
           <div style="position: relative; display: inline-block; width: 100%;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <studio-radio-group
+            <appbana-radio-group
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
               label="${node.props?.label || ''}"
@@ -790,7 +790,7 @@ export class LivePreview extends LitElement {
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            ></studio-radio-group>
+            ></appbana-radio-group>
             <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
                  @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>
@@ -798,7 +798,7 @@ export class LivePreview extends LitElement {
 
       case 'table':
       case 'grid':
-      case 'studio-table-live':
+      case 'appbana-table-live':
         // Map props correctly or pass entire node if component supports it (Renderer passes node)
         // StudioTableLive takes properties directly or via accessors. Renderer.ts passes .node={nodeWithData}
         // But StudioTableLive definition (JSON) shows props: entity, fields...
@@ -810,7 +810,7 @@ export class LivePreview extends LitElement {
         return html`
           <div style="position: relative; display: block; width: 100%; min-height: 200px;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
             ${deleteOverlay}
-            <studio-table-live
+            <appbana-table-live
               class="${classes} ${node.props?.className || ''}"
               style="${style}"
               .node=${node}
@@ -823,7 +823,7 @@ export class LivePreview extends LitElement {
               @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
               @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
               @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
-            ></studio-table-live>
+            ></appbana-table-live>
              <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
                   @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
           </div>

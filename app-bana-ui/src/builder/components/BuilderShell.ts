@@ -12,7 +12,7 @@ import './EntityManager';
 import './AiChatBuilder';
 import '../../workflow-designer/WorkflowDesignerPage';
 
-@customElement('studio-builder-shell')
+@customElement('appbana-builder-shell')
 export class BuilderShell extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
@@ -117,10 +117,10 @@ export class BuilderShell extends LitElement {
 
   private renderLeftPanelContent() {
     if (this.activeLeftTab === 'components') {
-      return html`<studio-component-library></studio-component-library>`;
+      return html`<appbana-component-library></appbana-component-library>`;
     }
     if (this.activeLeftTab === 'entities') {
-      return html`<studio-entity-manager></studio-entity-manager>`;
+      return html`<appbana-entity-manager></appbana-entity-manager>`;
     }
     if (this.activeLeftTab === 'workflow') {
       if (!this.hasActiveApp) {
@@ -146,7 +146,7 @@ export class BuilderShell extends LitElement {
       if (!this.hasActiveApp) {
         return html`
           <div class="app-manager-panel">
-            <studio-app-manager></studio-app-manager>
+            <appbana-app-manager></appbana-app-manager>
           </div>
           <div style="flex: 1; display: flex; align-items: center; justify-content: center; background: #f8fafc; color: #64748b; flex-direction: column; gap: 16px;">
             <div style="font-size: 48px;">⚡</div>
@@ -158,7 +158,7 @@ export class BuilderShell extends LitElement {
 
       return html`
         <div class="app-manager-panel">
-          <studio-app-manager></studio-app-manager>
+          <appbana-app-manager></appbana-app-manager>
         </div>
         <workflow-designer-page .appId=${appStore.getCurrentApp()?.id}></workflow-designer-page>
       `;
@@ -169,12 +169,12 @@ export class BuilderShell extends LitElement {
     return html`
       <!-- Top: App Manager -->
       <div class="app-manager-panel">
-        <studio-app-manager></studio-app-manager>
+        <appbana-app-manager></appbana-app-manager>
       </div>
 
       <!-- Second Row: Page Manager -->
       <div class="page-manager-panel">
-        <studio-page-manager></studio-page-manager>
+        <appbana-page-manager></appbana-page-manager>
       </div>
 
       <!-- Left: Tabbed Panel (Component Library or Entity Manager or AI Builder) -->
@@ -214,12 +214,12 @@ export class BuilderShell extends LitElement {
 
       <!-- Center: Live Preview (WYSIWYG Canvas) -->
       <div class="center-panel">
-        <studio-live-preview></studio-live-preview>
+        <appbana-live-preview></appbana-live-preview>
       </div>
 
       <!-- Right: Properties Panel -->
       <div class="right-panel">
-        <studio-properties-panel></studio-properties-panel>
+        <appbana-properties-panel></appbana-properties-panel>
       </div>
     `;
   }

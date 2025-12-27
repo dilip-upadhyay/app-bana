@@ -95,9 +95,9 @@ AI:   1. Reads 03-entities.json → understands entity capabilities
       5. Calls AppStore.createApp() with generated metadata
 ```
 
-## StudioTableLive Metadata
+## AppBanaTableLive Metadata
 
-- **Component guidance**: Reference `builder-database/02-components.json` for the `studio-table-live` entry that enumerates props (entity, fields, pagination, multi-select, bulk actions, viewMode, inline cell editing) and emitted events for AI-integrated builders.
+- **Component guidance**: Reference `builder-database/02-components.json` for the `appbana-table-live` entry that enumerates props (entity, fields, pagination, multi-select, bulk actions, viewMode, inline cell editing) and emitted events for AI-integrated builders.
 - **Documentation**: Link AI prompts to `docs/TABLE-LIVE-ENHANCEMENTS.md` and `builder-database/99-capabilities-index.json` so that pagination, theming, view/edit modal, toast, and inline edit capabilities are surfaced when generating metadata descriptions.
 
 ## Validation
@@ -110,7 +110,7 @@ All generated metadata must conform to TypeScript interfaces:
 
 ## Version History
 
-- **1.0.1** (Nov 15, 2025) - Added `studio-table-live` component metadata and refreshed references for the table runtime.
+- **1.0.1** (Nov 15, 2025) - Added `appbana-table-live` component metadata and refreshed references for the table runtime.
 - **1.0.0** (Nov 8, 2025) - Initial database creation with 8 capability files
 
 ## Breaking Changes / Important Notes (Nov 10, 2025)

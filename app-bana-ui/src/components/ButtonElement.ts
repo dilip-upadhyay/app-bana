@@ -70,7 +70,7 @@ export class ButtonElement extends FormElement {
   }
 }
 
-if (!customElements.get('studio-button')) {
-  customElements.define('studio-button', ButtonElement);
+if (!customElements.get('appbana-button')) {
+  customElements.define('appbana-button', ButtonElement);
 }
-registerComponent('button', ButtonElement);
+registerComponent('button', ButtonElement, 'appbana-button');

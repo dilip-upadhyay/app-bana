@@ -1,5 +1,5 @@
 import { ContainerElement } from './ContainerElement';
-import { registerComponent } from '../core/registry';
+
 
 /**
  * Basic Elements for layout primitives.
@@ -14,10 +14,10 @@ export class DashboardElement extends ContainerElement { }
 
 // Register as Custom Elements
 const els = {
-    'studio-list': ListElement,
-    'studio-card': CardElement,
-    'studio-detail': DetailElement,
-    'studio-dashboard': DashboardElement
+    'appbana-list': ListElement,
+    'appbana-card': CardElement,
+    'appbana-detail': DetailElement,
+    'appbana-dashboard': DashboardElement
 };
 
 for (const [tag, ctor] of Object.entries(els)) {
@@ -27,5 +27,9 @@ for (const [tag, ctor] of Object.entries(els)) {
 }
 
 // Register in AppBana Registry
-// Note: We will update registerComponent to accept tagName in next step.
-// For now, we import this file in registry.ts to trigger execution.
+// Explicitly pass tagName now
+import { registerComponent } from '../core/registry';
+registerComponent('list', ListElement, 'appbana-list');
+registerComponent('card', CardElement, 'appbana-card');
+registerComponent('detail', DetailElement, 'appbana-detail');
+registerComponent('dashboard', DashboardElement, 'appbana-dashboard');

@@ -5,7 +5,7 @@ import { appStore } from '../store/AppStore';
 import type { PageMeta, ComponentNode } from '../../models/metadata';
 import styles from './PageManager.css?inline';
 
-@customElement('studio-page-manager')
+@customElement('appbana-page-manager')
 export class PageManager extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 

@@ -67,8 +67,8 @@
         "button",
         "input",
         "text",
-        "studio-table-live",
-        "studio-form"
+        "appbana-table-live",
+        "appbana-form"
       ],
       "formComponents": [
         "input",
@@ -77,7 +77,7 @@
         "checkbox",
         "radio-group",
         "button",
-        "studio-form"
+        "appbana-form"
       ],
       "newInV1.1": [
         "input",

@@ -2508,51 +2508,6 @@ public class AiAppGeneratorService {
         }
     }
 
-    private static boolean isLoginPage(String pageName) {
-        if (pageName == null)
-            return false;
-        String lower = pageName.toLowerCase();
-        return lower.contains("login") || lower.contains("sign in");
-    }
-
-    private static void autoCompleteLoginForm(Map<String, Object> page) {
-        Object nodesObj = page.get("nodes");
-        List<Object> nodes;
-        if (nodesObj instanceof List) {
-            nodes = new ArrayList<>((List<?>) nodesObj);
-        } else {
-            nodes = new ArrayList<>();
-        }
-        page.put("nodes", nodes);
-
-        // Check if login form already exists
-        for (Object n : nodes) {
-            if (n instanceof Map) {
-                Map<?, ?> m = (Map<?, ?>) n;
-                if ("studio-login-form".equals(m.get("type")))
-                    return;
-            }
-        }
-
-        LOG.info("[AI] Auto-completing login form for page '{}'", page.get("name"));
-
-        String formId = "login-form-" + System.currentTimeMillis();
-        Map<String, Object> loginNode = new LinkedHashMap<>();
-        loginNode.put("id", formId);
-        loginNode.put("type", "studio-login-form"); // Using the new component
-
-        Map<String, Object> props = new LinkedHashMap<>();
-        props.put("title", "Sign In");
-        props.put("redirectUrl", "/");
-
-        loginNode.put("props", props);
-        nodes.add(loginNode);
-
-        if (page.containsKey("rootId")) {
-            addChildToRoot(nodes, String.valueOf(page.get("rootId")), formId);
-        }
-    }
-
     /**
      * Ensures page.rootId points to a valid node in nodes list.
      * Fixes "Root node not found" errors caused by ID mismatch or missing root.
@@ -2619,26 +2574,6 @@ public class AiAppGeneratorService {
                 page.put("rootId", newRootId);
             }
         }
-    }
-
-    private static boolean hasHeader(List<Object> nodes) {
-        if (nodes == null)
-            return false;
-        for (Object n : nodes) {
-            if (n instanceof Map) {
-                Map<?, ?> m = (Map<?, ?>) n;
-                String type = String.valueOf(m.get("type"));
-                if ("header".equals(type) || "heading".equals(type))
-                    return true;
-                // Also check if text node seems to be a title properties
-                if ("text".equals(type)) {
-                    String id = String.valueOf(m.get("id"));
-                    if (id.contains("header") || id.contains("heading") || id.contains("title"))
-                        return true;
-                }
-            }
-        }
-        return false;
     }
 
     private static List<Map<String, Object>> buildFormFields(Map<String, Object> entity) {

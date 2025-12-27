@@ -6,13 +6,15 @@ import { registerComponent } from '../core/registry';
  * StudioForm - A container that handles data submission for an entity.
  * 
  * Props:
+ * Props:
  * - entity: The name of the entity (e.g., "LoanApplication")
+ * - action: Custom endpoint to post to (e.g. "/auth/login"). If set, entity is ignored/optional.
  * - recordId: Optional ID for editing an existing record. If omitted, creates new.
  * - redirectOnSuccess: generic path (client-side router) to go to after success.
  */
 export class FormContainer extends BaseElement {
     static get observedAttributes() {
-        return ['entity', 'record-id', 'redirect-on-success'];
+        return ['entity', 'action', 'record-id', 'redirect-on-success'];
     }
 
     protected render(): string {
@@ -83,8 +85,8 @@ export class FormContainer extends BaseElement {
             return normalizedData[name.toLowerCase()];
         };
 
-        // Find all studio-input, studio-select, etc.
-        const inputs = this.querySelectorAll('studio-input, studio-select, studio-textarea');
+        // Find all appbana-input, appbana-select, etc.
+        const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea, studio-input, studio-select, studio-textarea');
         inputs.forEach((el: any) => {
             const name = el.getAttribute('name');
             const val = getValue(name);
@@ -108,7 +110,7 @@ export class FormContainer extends BaseElement {
     private async handleClick(e: Event) {
         const target = e.target as HTMLElement;
         // Walk up to find the button if clicked on icon inside
-        const btn = target.closest('studio-button') || target.closest('button');
+        const btn = target.closest('appbana-button') || target.closest('studio-button') || target.closest('button');
         if (!btn) return;
 
         // Check for field updates (e.g. Approve/Reject buttons setting status)
@@ -137,17 +139,18 @@ export class FormContainer extends BaseElement {
 
     private async handleSubmit() {
         const entity = this.getAttribute('entity');
+        const action = this.getAttribute('action');
         const recordId = this.getAttribute('record-id') || this.getAttribute('recordId');
         const redirect = this.getAttribute('redirect-on-success') || this.getAttribute('redirectOnSuccess');
 
-        if (!entity) {
-            this.showError('Configuration Error: No entity specified for form.');
+        if (!entity && !action) {
+            this.showError('Configuration Error: No entity or action specified for form.');
             return;
         }
 
         // Collect data
         const formData: Record<string, any> = {};
-        const inputs = this.querySelectorAll('studio-input, studio-select, studio-textarea, input, select, textarea');
+        const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea, studio-input, studio-select, studio-textarea, input, select, textarea');
 
         inputs.forEach((el: any) => {
             const name = el.getAttribute('name') || el.name;
@@ -162,7 +165,10 @@ export class FormContainer extends BaseElement {
         this.showError(''); // Clear error
 
         try {
-            if (recordId) {
+            if (action) {
+                // Post to custom action endpoint
+                await apiClient.post(action, formData);
+            } else if (recordId) {
                 // Update
                 await apiClient.put(`/api/${entity}/${recordId}`, formData);
             } else {
@@ -214,7 +220,7 @@ export class FormContainer extends BaseElement {
     }
 }
 
-if (!customElements.get('studio-form')) {
-    customElements.define('studio-form', FormContainer);
+if (!customElements.get('appbana-form')) {
+    customElements.define('appbana-form', FormContainer);
 }
-registerComponent('form', FormContainer);
+registerComponent('form', FormContainer, 'appbana-form');

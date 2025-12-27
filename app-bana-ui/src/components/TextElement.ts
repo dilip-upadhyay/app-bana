@@ -34,7 +34,7 @@ export class TextElement extends FormElement {
   }
 }
 
-if (!customElements.get('studio-text')) {
-  customElements.define('studio-text', TextElement);
+if (!customElements.get('appbana-text')) {
+  customElements.define('appbana-text', TextElement);
 }
-registerComponent('text', TextElement);
+registerComponent('text', TextElement, 'appbana-text');

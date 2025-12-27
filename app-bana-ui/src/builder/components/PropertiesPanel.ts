@@ -6,7 +6,7 @@ import type { ComponentNode } from '../../models/metadata';
 
 
 // Property editor panel for selected components
-@customElement('studio-properties-panel')
+@customElement('appbana-properties-panel')
 export class PropertiesPanel extends LitElement {
   static readonly styles = css`
     :host {

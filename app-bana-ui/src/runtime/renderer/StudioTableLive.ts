@@ -4,7 +4,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { fetchTableData, bulkDelete, bulkExport, updateRow, createRow, getFieldPermissions, canReadField, canEditField } from '../../core/api-client';
 import type { ComponentNode } from '../../models/metadata';
 
-@customElement('studio-table-live')
+@customElement('appbana-table-live')
 export class StudioTableLive extends LitElement {
   @property({ type: Object }) node!: ComponentNode;
   @state() private data: any = null;

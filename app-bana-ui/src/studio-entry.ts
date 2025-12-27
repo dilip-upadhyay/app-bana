@@ -10,6 +10,6 @@ registerBuiltInAdapters();
 const root = document.getElementById('studio-root');
 if (root) {
   root.innerHTML = '';
-  const shell = document.createElement('studio-builder-shell');
+  const shell = document.createElement('appbana-builder-shell');
   root.appendChild(shell);
 }

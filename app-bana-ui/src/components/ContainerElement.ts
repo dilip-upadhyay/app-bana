@@ -30,7 +30,7 @@ export class ContainerElement extends FormElement {
   }
 }
 
-if (!customElements.get('studio-container')) {
-  customElements.define('studio-container', ContainerElement);
+if (!customElements.get('appbana-container')) {
+  customElements.define('appbana-container', ContainerElement);
 }
-registerComponent('container', ContainerElement);
+registerComponent('container', ContainerElement, 'appbana-container');

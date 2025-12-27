@@ -6,7 +6,7 @@ import { appStore } from '../store/AppStore';
 import type { AppMeta, AppListItem, CreateAppRequest } from '../../models/app-metadata';
 import styles from './AppManager.css?inline';
 
-@customElement('studio-app-manager')
+@customElement('appbana-app-manager')
 export class AppManager extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 

@@ -60,7 +60,7 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
 
   // Explicit static tag names for each supported type
   if (node.type === 'table' || (node.type === 'grid' && node.props?.entity)) {
-    return html`<studio-table-live .node=${nodeWithData}></studio-table-live>`;
+    return html`<appbana-table-live .node=${nodeWithData}></appbana-table-live>`;
   } else if (node.type === 'app-grid' || node.type === 'grid') {
     return html`
        <app-grid
@@ -122,7 +122,7 @@ function renderNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>, co
     // Runtime rendering: live data if in runtime, else preview
     if (window.location.pathname.includes('preview') || window.location.pathname.includes('runtime')) {
       // Use Lit component for robust async rendering
-      const el = document.createElement('studio-table-live');
+      const el = document.createElement('appbana-table-live');
       (el as any).node = nodeWithData;
       return el;
     } else {

@@ -120,7 +120,7 @@ export class InputElement extends FormElement {
   }
 }
 
-if (!customElements.get('studio-input')) {
-  customElements.define('studio-input', InputElement);
+if (!customElements.get('appbana-input')) {
+  customElements.define('appbana-input', InputElement);
 }
-registerComponent('input', InputElement);
+registerComponent('input', InputElement, 'appbana-input');

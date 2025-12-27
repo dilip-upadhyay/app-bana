@@ -34,43 +34,43 @@ export function ensureCoreRegistered(): Promise<void> {
 
   // Core components
   if (!registry.has('container')) {
-    proms.push(import('../components/ContainerElement.js').then(m => registerComponent('container', m.ContainerElement, 'studio-container')));
+    proms.push(import('../components/ContainerElement.js').then(m => registerComponent('container', m.ContainerElement, 'appbana-container')));
   }
   if (!registry.has('text')) {
-    proms.push(import('../components/TextElement.js').then(m => registerComponent('text', m.TextElement, 'studio-text')));
+    proms.push(import('../components/TextElement.js').then(m => registerComponent('text', m.TextElement, 'appbana-text')));
   }
   if (!registry.has('button')) {
-    proms.push(import('../components/ButtonElement.js').then(m => registerComponent('button', m.ButtonElement, 'studio-button')));
+    proms.push(import('../components/ButtonElement.js').then(m => registerComponent('button', m.ButtonElement, 'appbana-button')));
   }
   if (!registry.has('unknown')) {
-    proms.push(import('../components/UnknownElement.js').then(m => registerComponent('unknown', m.UnknownElement, 'studio-unknown')));
+    proms.push(import('../components/UnknownElement.js').then(m => registerComponent('unknown', m.UnknownElement, 'appbana-unknown')));
   }
 
   // Basic Layout Elements (Ghost Components -> Real)
   if (!registry.has('list')) {
     proms.push(import('../components/BasicElements.js').then(m => {
-      registerComponent('list', m.ListElement, 'studio-list');
-      registerComponent('card', m.CardElement, 'studio-card');
-      registerComponent('detail', m.DetailElement, 'studio-detail');
-      registerComponent('dashboard', m.DashboardElement, 'studio-dashboard');
+      registerComponent('list', m.ListElement, 'appbana-list');
+      registerComponent('card', m.CardElement, 'appbana-card');
+      registerComponent('detail', m.DetailElement, 'appbana-detail');
+      registerComponent('dashboard', m.DashboardElement, 'appbana-dashboard');
     }));
   }
 
   // Form components
   if (!registry.has('input')) {
-    proms.push(import('../components/InputElement.js').then(m => registerComponent('input', m.InputElement, 'studio-input')));
+    proms.push(import('../components/InputElement.js').then(m => registerComponent('input', m.InputElement, 'appbana-input')));
   }
   if (!registry.has('textarea')) {
-    proms.push(import('../components/TextareaElement.js').then(m => registerComponent('textarea', m.TextareaElement, 'studio-textarea')));
+    proms.push(import('../components/TextareaElement.js').then(m => registerComponent('textarea', m.TextareaElement, 'appbana-textarea')));
   }
   if (!registry.has('select')) {
-    proms.push(import('../components/SelectElement.js').then(m => registerComponent('select', m.SelectElement, 'studio-select')));
+    proms.push(import('../components/SelectElement.js').then(m => registerComponent('select', m.SelectElement, 'appbana-select')));
   }
   if (!registry.has('checkbox')) {
-    proms.push(import('../components/CheckboxElement.js').then(m => registerComponent('checkbox', m.CheckboxElement, 'studio-checkbox')));
+    proms.push(import('../components/CheckboxElement.js').then(m => registerComponent('checkbox', m.CheckboxElement, 'appbana-checkbox')));
   }
   if (!registry.has('radio-group')) {
-    proms.push(import('../components/RadioGroupElement.js').then(m => registerComponent('radio-group', m.RadioGroupElement, 'studio-radio-group')));
+    proms.push(import('../components/RadioGroupElement.js').then(m => registerComponent('radio-group', m.RadioGroupElement, 'appbana-radio-group')));
   }
 
   // HTML elements

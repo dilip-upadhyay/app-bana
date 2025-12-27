@@ -5,7 +5,7 @@ import type { PageMeta, ComponentNode } from '../../models/metadata';
 import { initStore, currentStore } from '../store/TreeStore';
 import styles from './BuilderCanvas.css?inline';
 
-@customElement('studio-builder-canvas')
+@customElement('appbana-builder-canvas')
 export class BuilderCanvas extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
@@ -261,7 +261,7 @@ export class BuilderCanvas extends LitElement {
   }
 
   private expandedKey() {
-    return `studio.expanded.${this.page?.id}`;
+    return `appbana.expanded.${this.page?.id}`;
   }
 
   private openPalette() {

@@ -34,16 +34,16 @@ const htmlElements = [
 ];
 
 htmlElements.forEach(tag => {
-  const className = `studio-${tag}`;
+  const className = `appbana-${tag}`;
 
   if (!customElements.get(className)) {
-    class ExtendedElement extends GenericHTMLElement {}
+    class ExtendedElement extends GenericHTMLElement { }
     customElements.define(className, ExtendedElement);
   }
 
-  // Register in Studio registry
-  registerComponent(tag, customElements.get(className) as CustomElementConstructor);
+  // Register in Studio registry with tag name
+  registerComponent(tag, customElements.get(className) as CustomElementConstructor, className);
 });
 
-export {};
+export { };
 

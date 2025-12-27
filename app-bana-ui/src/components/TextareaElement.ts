@@ -87,7 +87,7 @@ export class TextareaElement extends FormElement {
   }
 }
 
-if (!customElements.get('studio-textarea')) {
-  customElements.define('studio-textarea', TextareaElement);
+if (!customElements.get('appbana-textarea')) {
+  customElements.define('appbana-textarea', TextareaElement);
 }
-registerComponent('textarea', TextareaElement);
+registerComponent('textarea', TextareaElement, 'appbana-textarea');

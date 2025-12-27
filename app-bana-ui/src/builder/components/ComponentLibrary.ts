@@ -169,7 +169,7 @@ const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 ];
 
-@customElement('studio-component-library')
+@customElement('appbana-component-library')
 export class ComponentLibrary extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 

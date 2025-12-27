@@ -61,7 +61,7 @@ export class CheckboxElement extends FormElement {
   }
 }
 
-if (!customElements.get('studio-checkbox')) {
-  customElements.define('studio-checkbox', CheckboxElement);
+if (!customElements.get('appbana-checkbox')) {
+  customElements.define('appbana-checkbox', CheckboxElement);
 }
-registerComponent('checkbox', CheckboxElement);
+registerComponent('checkbox', CheckboxElement, 'appbana-checkbox');

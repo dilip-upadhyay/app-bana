@@ -86,7 +86,7 @@ export class RadioGroupElement extends FormElement {
   }
 }
 
-if (!customElements.get('studio-radio-group')) {
-  customElements.define('studio-radio-group', RadioGroupElement);
+if (!customElements.get('appbana-radio-group')) {
+  customElements.define('appbana-radio-group', RadioGroupElement);
 }
-registerComponent('radio-group', RadioGroupElement);
+registerComponent('radio-group', RadioGroupElement, 'appbana-radio-group');

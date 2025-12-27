@@ -163,7 +163,7 @@ export class SelectElement extends FormElement {
   }
 }
 
-if (!customElements.get('studio-select')) {
-  customElements.define('studio-select', SelectElement);
+if (!customElements.get('appbana-select')) {
+  customElements.define('appbana-select', SelectElement);
 }
-registerComponent('select', SelectElement);
+registerComponent('select', SelectElement, 'appbana-select');

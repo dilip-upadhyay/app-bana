@@ -239,7 +239,7 @@ export class AppRoot extends LitElement {
     } else if (path.includes('/app')) {
       return html`<app-renderer></app-renderer>`;
     } else if (path.includes('/studio/builder')) {
-      return html`<studio-builder-shell></studio-builder-shell>`;
+      return html`<appbana-builder-shell></appbana-builder-shell>`;
     } else if (path.includes('/studio')) {
       return html`<div id="studio-root"></div>`;
     }
