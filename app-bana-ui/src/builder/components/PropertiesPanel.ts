@@ -572,74 +572,74 @@ export class PropertiesPanel extends LitElement {
   }
 
 
-}
+
 
   private toggleAction(action: string, e: Event) {
-  if (!this.selectedNode || !currentStore) return;
-  const checked = (e.target as HTMLInputElement).checked;
-  let actions = Array.isArray(this.editingProps.actions) ? [...this.editingProps.actions] : [];
-  if (checked) actions.push(action);
-  else actions = actions.filter((a: string) => a !== action);
-  this.updateProperty('actions', actions);
-}
+    if (!this.selectedNode || !currentStore) return;
+    const checked = (e.target as HTMLInputElement).checked;
+    let actions = Array.isArray(this.editingProps.actions) ? [...this.editingProps.actions] : [];
+    if (checked) actions.push(action);
+    else actions = actions.filter((a: string) => a !== action);
+    this.updateProperty('actions', actions);
+  }
 
   private toggleBulkAction(action: string, e: Event) {
-  if (!this.selectedNode || !currentStore) return;
-  const checked = (e.target as HTMLInputElement).checked;
-  let actions = Array.isArray(this.editingProps.bulkActions) ? [...this.editingProps.bulkActions] : [];
-  if (checked) actions.push(action);
-  else actions = actions.filter((a: string) => a !== action);
-  this.updateProperty('bulkActions', actions);
-}
+    if (!this.selectedNode || !currentStore) return;
+    const checked = (e.target as HTMLInputElement).checked;
+    let actions = Array.isArray(this.editingProps.bulkActions) ? [...this.editingProps.bulkActions] : [];
+    if (checked) actions.push(action);
+    else actions = actions.filter((a: string) => a !== action);
+    this.updateProperty('bulkActions', actions);
+  }
 
   private getPropertyType(propKey: string): 'text' | 'number' | 'boolean' | 'textarea' | 'spacing' {
-  const booleanProps = ['required', 'disabled', 'checked'];
-  const numberProps = ['rows', 'cols', 'level', 'width', 'height'];
-  const textareaProps = ['content', 'options'];
-  const spacingProps = ['gap', 'minCellHeight'];
+    const booleanProps = ['required', 'disabled', 'checked'];
+    const numberProps = ['rows', 'cols', 'level', 'width', 'height'];
+    const textareaProps = ['content', 'options'];
+    const spacingProps = ['gap', 'minCellHeight'];
 
-  if (booleanProps.includes(propKey)) return 'boolean';
-  if (numberProps.includes(propKey)) return 'number';
-  if (textareaProps.includes(propKey)) return 'textarea';
-  if (spacingProps.includes(propKey)) return 'spacing';
-  return 'text';
-}
+    if (booleanProps.includes(propKey)) return 'boolean';
+    if (numberProps.includes(propKey)) return 'number';
+    if (textareaProps.includes(propKey)) return 'textarea';
+    if (spacingProps.includes(propKey)) return 'spacing';
+    return 'text';
+  }
 
   private formatPropertyLabel(propKey: string): string {
-  // Convert camelCase to Title Case with spaces
-  return propKey
-    .replaceAll(/([A-Z])/g, ' $1')
-    .replace(/^./, str => str.toUpperCase())
-    .trim();
-}
+    // Convert camelCase to Title Case with spaces
+    return propKey
+      .replaceAll(/([A-Z])/g, ' $1')
+      .replace(/^./, str => str.toUpperCase())
+      .trim();
+  }
 
   private getPropertyPlaceholder(propKey: string): string {
-  const placeholders: Record<string, string> = {
-    'label': 'Enter label text',
-    'placeholder': 'Enter placeholder text',
-    'name': 'field-name',
-    'value': 'default value',
-    'href': 'https://example.com',
-    'text': 'Link text',
-    'src': 'image-url',
-    'alt': 'Image description',
-    'content': 'Enter content',
-    'options': 'option1,option2,option3',
-    'rows': '3',
-    'level': '1-6',
-  };
+    const placeholders: Record<string, string> = {
+      'label': 'Enter label text',
+      'placeholder': 'Enter placeholder text',
+      'name': 'field-name',
+      'value': 'default value',
+      'href': 'https://example.com',
+      'text': 'Link text',
+      'src': 'image-url',
+      'alt': 'Image description',
+      'content': 'Enter content',
+      'options': 'option1,option2,option3',
+      'rows': '3',
+      'level': '1-6',
+    };
 
-  return placeholders[propKey] || '';
-}
+    return placeholders[propKey] || '';
+  }
 
   private serializeThemeTokens(): string {
-  try { return JSON.stringify(this.editingProps.themeTokens || {}, null, 2); } catch { return '{}'; }
-}
+    try { return JSON.stringify(this.editingProps.themeTokens || {}, null, 2); } catch { return '{}'; }
+  }
   private handleCustomThemeInput(e: Event) {
-  const raw = (e.target as HTMLTextAreaElement).value;
-  let parsed: Record<string, string> = {};
-  try { parsed = JSON.parse(raw); } catch { /* ignore parse errors; keep previous tokens */ }
-  this.updateProperty('themeTokens', parsed);
-}
+    const raw = (e.target as HTMLTextAreaElement).value;
+    let parsed: Record<string, string> = {};
+    try { parsed = JSON.parse(raw); } catch { /* ignore parse errors; keep previous tokens */ }
+    this.updateProperty('themeTokens', parsed);
+  }
 }
 

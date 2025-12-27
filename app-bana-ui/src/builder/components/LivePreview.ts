@@ -69,14 +69,21 @@ export class LivePreview extends LitElement {
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
+    // Check path for inputs to handle Shadow DOM retargeting
+    const path = e.composedPath();
+    const target = path.length > 0 ? (path[0] as HTMLElement) : (e.target as HTMLElement);
+
+    if (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT' ||
+      target.isContentEditable
+    ) {
+      return;
+    }
+
     // Delete or Backspace key to remove selected component
     if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedId) {
-      // Don't delete if user is typing in an input
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        return;
-      }
-
       e.preventDefault();
       this.handleDeleteSelected();
     }
@@ -512,15 +519,14 @@ export class LivePreview extends LitElement {
       return;
     }
 
-    // Check if node has children
+    // Always confirm deletion
     const hasChildren = node.children && node.children.length > 0;
+    const message = hasChildren
+      ? `Delete "${node.type}" (${node.id}) and all its children?`
+      : `Delete "${node.type}" (${node.id})?`;
 
-    if (hasChildren) {
-      // Confirm deletion of node with children
-      const confirmed = confirm(`Delete "${node.id}" and all its children?`);
-      if (!confirmed) {
-        return;
-      }
+    if (!confirm(message)) {
+      return;
     }
 
     console.log('[LivePreview] Deleting node:', this.selectedId);
