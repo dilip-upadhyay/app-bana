@@ -2203,3 +2203,51 @@ START (New Customer)
 - Original Spec: WORKFLOW_FEATURE_SPEC.md v1.0
 - Architectural Feedback: https://gemini.google.com/share/41c089a858b1
 - AppBana Docs: 01-ARCHITECTURE.md, 02-DEVELOPMENT_GUIDE.md
+
+---
+
+# Appendix: Technical Implementation Details (Phase 1)
+
+## Technical Decisions
+
+### 1. Flyway Placeholder Strategy
+**Decision**: Use `$${` escaping in SQL, unescape in Java code
+**Rationale**: Flyway requires placeholder escaping, but runtime needs actual `${` syntax
+**Implementation**:
+```java
+if (condition != null && condition.contains("$${")) {
+    condition = condition.replace("$${", "${");
+}
+```
+
+### 2. H2 Database Limitations
+**Decision**: Remove partial indexes (WHERE clauses)
+**Rationale**: H2 2.2.222 doesn't support filtered indexes
+**Impact**: Slightly less efficient queries, but acceptable for development
+**Production**: PostgreSQL will support full index syntax
+
+### 3. Column Name Case Sensitivity
+**Decision**: Use UPPERCASE column names in expressions
+**Rationale**: H2 returns ResultSet metadata in uppercase
+**Example**: `${PaymentRequest.AMOUNT > 1000}` not `${...amount...}`
+**Alternative Considered**: Use `ResultSet.getObject("amount")` - rejected due to case-insensitive lookup issues
+
+### 4. CLOB Handling
+**Decision**: Convert CLOB to String during ResultSet processing
+**Rationale**: Jackson can't serialize CLOB objects directly
+**Performance**: Acceptable for TEXT fields under 10MB
+**Future**: Consider streaming for large BLOBs
+
+### 5. ObjectMapper Configuration
+**Decision**: Use `findAndRegisterModules()` globally
+**Rationale**: Auto-discovers JSR310 module for LocalDateTime
+**Files**: Router.java (static mapper), WorkflowApi.java (instance mapper)
+
+## Lessons Learned
+
+1. **H2 Limitations**: Always check database compatibility before using advanced SQL features
+2. **Flyway Placeholders**: Document placeholder escaping strategy clearly in migrations
+3. **Jackson Modules**: Auto-register modules to avoid serialization surprises
+4. **CLOB Handling**: Convert to String early in data pipeline
+5. **Case Sensitivity**: H2 metadata is uppercase, PostgreSQL is lowercase - normalize in code
+6. **Comprehensive Logging**: Debug logs saved hours during troubleshooting
