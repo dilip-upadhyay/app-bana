@@ -26,13 +26,50 @@ export class InputElement extends FormElement {
   connectedCallback() {
     super.connectedCallback();
     this.shadowRoot?.addEventListener('input', this.handleInput.bind(this));
+    this.shadowRoot?.addEventListener('focusout', this.handleBlur.bind(this));
   }
 
   private handleInput(e: Event) {
     const input = e.target as HTMLInputElement;
     this.setAttribute('value', input.value);
     this.updateState();
+
+    // Clear error while typing if it exists
+    if (this.hasAttribute('error')) {
+      this.validate();
+    }
   }
+
+  private handleBlur(e: Event) {
+    this.touched = true;
+    this.validate();
+  }
+
+  private validate() {
+    const value = this.value;
+    const required = this.hasAttribute('required');
+    const type = this.getAttribute('type');
+    const label = this.getAttribute('label') || 'This field';
+
+    let error = '';
+
+    if (required && !value.trim()) {
+      error = `${label} is required.`;
+    } else if (value && type === 'email') {
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(value)) {
+        error = `Please enter a valid email address.`;
+      }
+    }
+
+    if (error) {
+      this.setAttribute('error', error);
+    } else {
+      this.removeAttribute('error');
+    }
+  }
+
+  private touched = false;
 
   private updateState() {
     const input = this.shadowRoot?.querySelector('input');
