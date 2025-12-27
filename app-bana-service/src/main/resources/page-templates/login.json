@@ -1,7 +1,7 @@
 {
     "id": "login",
     "name": "Login Page",
-    "description": "Split-screen login page with brand section and form",
+    "description": "Responsive side-by-side login page optimized for desktop and mobile",
     "category": "auth",
     "isSystem": true,
     "nodes": [
@@ -9,7 +9,7 @@
             "id": "root",
             "type": "container",
             "props": {
-                "style": "display: flex; flex-wrap: wrap; min-height: 100vh; width: 100%; margin: 0; padding: 0; box-sizing: border-box;"
+                "style": "display: flex; min-height: 100vh; width: 100%; margin: 0; padding: 0; box-sizing: border-box;"
             },
             "children": [
                 "brand-section-1",
@@ -20,11 +20,22 @@
             "id": "brand-section-1",
             "type": "container",
             "props": {
-                "style": "flex: 1 1 280px; max-height: 35vh; box-sizing: border-box; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; justify-content: center; padding: 2.5rem; color: white;"
+                "style": "flex: 0 0 45%; min-height: 100vh; box-sizing: border-box; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; justify-content: center; padding: 3rem; color: white;"
+            },
+            "children": [
+                "brand-content-1"
+            ]
+        },
+        {
+            "id": "brand-content-1",
+            "type": "container",
+            "props": {
+                "style": "max-width: 500px;"
             },
             "children": [
                 "brand-title-1",
-                "brand-subtitle-1"
+                "brand-subtitle-1",
+                "brand-features-1"
             ]
         },
         {
@@ -33,7 +44,7 @@
             "props": {
                 "tag": "h1",
                 "text": "Welcome to AppBana",
-                "style": "font-size: 32px; font-weight: 800; margin-bottom: 0.75rem; line-height: 1.2;"
+                "style": "font-size: 42px; font-weight: 800; margin: 0 0 1rem 0; line-height: 1.1;"
             }
         },
         {
@@ -42,14 +53,53 @@
             "props": {
                 "tag": "p",
                 "text": "Build beautiful enterprise applications in minutes.",
-                "style": "font-size: 16px; opacity: 0.9; max-width: 400px; line-height: 1.5;"
+                "style": "font-size: 18px; opacity: 0.95; margin: 0 0 2rem 0; line-height: 1.6;"
+            }
+        },
+        {
+            "id": "brand-features-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 1rem; opacity: 0.9;"
+            },
+            "children": [
+                "feature-1",
+                "feature-2",
+                "feature-3"
+            ]
+        },
+        {
+            "id": "feature-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "✓ No-code visual builder",
+                "style": "font-size: 16px; display: flex; align-items: center; gap: 0.5rem;"
+            }
+        },
+        {
+            "id": "feature-2",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "✓ Enterprise-grade security",
+                "style": "font-size: 16px; display: flex; align-items: center; gap: 0.5rem;"
+            }
+        },
+        {
+            "id": "feature-3",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "✓ Deploy in minutes",
+                "style": "font-size: 16px; display: flex; align-items: center; gap: 0.5rem;"
             }
         },
         {
             "id": "form-section-1",
             "type": "container",
             "props": {
-                "style": "flex: 1 1 280px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; background: white; padding: 2rem;"
+                "style": "flex: 1; box-sizing: border-box; display: flex; align-items: center; justify-content: center; background: #fafafa; padding: 2rem;"
             },
             "children": [
                 "form-wrapper-1"
@@ -59,7 +109,7 @@
             "id": "form-wrapper-1",
             "type": "container",
             "props": {
-                "style": "width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 2rem;"
+                "style": "width: 100%; max-width: 480px; background: white; padding: 3rem; border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);"
             },
             "children": [
                 "login-header-1",
@@ -70,7 +120,7 @@
             "id": "login-header-1",
             "type": "container",
             "props": {
-                "style": "text-align: center;"
+                "style": "text-align: center; margin-bottom: 2.5rem;"
             },
             "children": [
                 "title-1",
@@ -83,7 +133,7 @@
             "props": {
                 "tag": "h1",
                 "text": "Welcome Back",
-                "style": "margin: 0 0 0.5rem 0; font-size: 32px; font-weight: 700; color: #1f2937;"
+                "style": "margin: 0 0 0.5rem 0; font-size: 32px; font-weight: 700; color: #111827;"
             }
         },
         {
@@ -92,7 +142,7 @@
             "props": {
                 "tag": "p",
                 "text": "Sign in to continue to your dashboard",
-                "style": "margin: 0; font-size: 16px; color: #6b7280;"
+                "style": "margin: 0; font-size: 15px; color: #6b7280;"
             }
         },
         {
@@ -100,13 +150,14 @@
             "type": "container",
             "props": {
                 "tag": "form",
-                "style": "display: flex; flex-direction: column; gap: 1.5rem;"
+                "style": "display: flex; flex-direction: column; gap: 1.25rem;"
             },
             "children": [
                 "email-group-1",
                 "password-group-1",
-                "remember-1",
+                "form-footer-1",
                 "submit-1",
+                "divider-1",
                 "signup-1"
             ]
         },
@@ -127,7 +178,7 @@
             "props": {
                 "tag": "label",
                 "text": "Email Address",
-                "style": "font-size: 14px; font-weight: 500; color: #374151;"
+                "style": "font-size: 14px; font-weight: 600; color: #374151;"
             }
         },
         {
@@ -137,7 +188,7 @@
                 "type": "email",
                 "placeholder": "you@example.com",
                 "required": true,
-                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+                "style": "padding: 0.875rem 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 15px; transition: all 0.2s; outline: none;"
             }
         },
         {
@@ -157,7 +208,7 @@
             "props": {
                 "tag": "label",
                 "text": "Password",
-                "style": "font-size: 14px; font-weight: 500; color: #374151;"
+                "style": "font-size: 14px; font-weight: 600; color: #374151;"
             }
         },
         {
@@ -165,10 +216,21 @@
             "type": "input",
             "props": {
                 "type": "password",
-                "placeholder": "••••••••",
+                "placeholder": "Enter your password",
                 "required": true,
-                "style": "padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+                "style": "padding: 0.875rem 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 15px; transition: all 0.2s; outline: none;"
             }
+        },
+        {
+            "id": "form-footer-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; justify-content: space-between; align-items: center; margin-top: -0.25rem;"
+            },
+            "children": [
+                "remember-1",
+                "forgot-1"
+            ]
         },
         {
             "id": "remember-1",
@@ -186,7 +248,7 @@
             "type": "input",
             "props": {
                 "type": "checkbox",
-                "style": "width: 16px; height: 16px;"
+                "style": "width: 16px; height: 16px; cursor: pointer;"
             }
         },
         {
@@ -195,24 +257,71 @@
             "props": {
                 "tag": "label",
                 "text": "Remember me",
-                "style": "font-size: 14px; color: #374151;"
+                "style": "font-size: 14px; color: #374151; cursor: pointer;"
+            }
+        },
+        {
+            "id": "forgot-1",
+            "type": "text",
+            "props": {
+                "tag": "a",
+                "text": "Forgot password?",
+                "href": "#",
+                "style": "font-size: 14px; color: #667eea; font-weight: 600; text-decoration: none;"
             }
         },
         {
             "id": "submit-1",
             "type": "button",
             "props": {
-                "text": "Sign In",
+                "text": "Sign In →",
                 "className": "btn-primary",
-                "style": "padding: 0.875rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer;"
+                "style": "margin-top: 0.5rem; padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);"
             }
+        },
+        {
+            "id": "divider-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; align-items: center; gap: 1rem; margin: 0.5rem 0;"
+            },
+            "children": [
+                "divider-line-1",
+                "divider-text-1",
+                "divider-line-2"
+            ]
+        },
+        {
+            "id": "divider-line-1",
+            "type": "container",
+            "props": {
+                "style": "flex: 1; height: 1px; background: #e5e7eb;"
+            },
+            "children": []
+        },
+        {
+            "id": "divider-text-1",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "OR",
+                "style": "font-size: 12px; color: #9ca3af; font-weight: 500;"
+            }
+        },
+        {
+            "id": "divider-line-2",
+            "type": "container",
+            "props": {
+                "style": "flex: 1; height: 1px; background: #e5e7eb;"
+            },
+            "children": []
         },
         {
             "id": "signup-1",
             "type": "text",
             "props": {
                 "tag": "p",
-                "text": "Don't have an account? <a href=\"/signup\" style=\"color: #667eea; font-weight: 600;\">Sign up</a>",
+                "text": "Don't have an account? <a href=\"/signup\" style=\"color: #667eea; font-weight: 600; text-decoration: none;\">Sign up</a>",
                 "style": "margin: 0; text-align: center; font-size: 14px; color: #6b7280;"
             }
         }
