@@ -26,7 +26,7 @@ export class PageManager extends LitElement {
   @state() private includeMain = true; // Always include main by default
 
   // Pre-built template selection
-  @state() private selectedTemplate: 'custom' | 'login' | 'dashboard' | 'contact' | 'landing' | 'profile' | 'data-table' = 'custom';
+  @state() private selectedTemplate: 'custom' | 'login' | 'dashboard' | 'contact' | 'landing' | 'profile' | 'data-table' | 'signup' = 'custom';
 
   // Context menu state
   @state() private contextMenuVisible = false;
@@ -342,6 +342,9 @@ export class PageManager extends LitElement {
       case 'login':
         nodes = this.buildLoginTemplate(nodeCounter);
         break;
+      case 'signup':
+        nodes = this.buildSignupTemplate(nodeCounter);
+        break;
       case 'dashboard':
         nodes = this.buildDashboardTemplate(nodeCounter);
         break;
@@ -378,31 +381,79 @@ export class PageManager extends LitElement {
   }
 
   /**
-   * Build Login Page Template
-   * Includes: centered card with email, password, submit button
+   * Build Login Page Template (Split Screen)
+   * Left: Brand/Welcome
+   * Right: Login Form
    */
   private buildLoginTemplate(_startId: number): ComponentNode[] {
     const nodes: ComponentNode[] = [];
 
-    // Root container
+    // Root container (Split Wrapper)
     nodes.push({
       id: 'root',
       type: 'container',
       props: {
-        style: 'display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);'
+        style: 'display: flex; flex-wrap: wrap; min-height: 100vh; width: 100%; margin: 0; padding: 0; box-sizing: border-box;'
       },
-      children: ['card-1']
+      children: ['brand-section-1', 'form-section-1']
     });
 
-    // Login card
+    // 1. Brand Section (Left)
     nodes.push({
-      id: 'card-1',
+      id: 'brand-section-1',
       type: 'container',
       props: {
-        className: 'login-card',
-        style: 'background: white; padding: 3rem; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 100%; max-width: 420px;'
+        style: 'flex: 1 1 280px; max-height: 35vh; box-sizing: border-box; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; justify-content: center; padding: 2.5rem; color: white;'
       },
-      children: ['title-1', 'subtitle-1', 'form-1']
+      children: ['brand-title-1', 'brand-subtitle-1']
+    });
+
+    nodes.push({
+      id: 'brand-title-1',
+      type: 'text',
+      props: {
+        tag: 'h1',
+        text: 'Welcome to AppBana',
+        style: 'font-size: 32px; font-weight: 800; margin-bottom: 0.75rem; line-height: 1.2;'
+      }
+    });
+
+    nodes.push({
+      id: 'brand-subtitle-1',
+      type: 'text',
+      props: {
+        tag: 'p',
+        text: 'Build beautiful enterprise applications in minutes.',
+        style: 'font-size: 16px; opacity: 0.9; max-width: 400px; line-height: 1.5;'
+      }
+    });
+
+    // 2. Form Section (Right)
+    nodes.push({
+      id: 'form-section-1',
+      type: 'container',
+      props: {
+        style: 'flex: 1 1 280px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; background: white; padding: 2rem;'
+      },
+      children: ['form-wrapper-1']
+    });
+
+    // Form Wrapper (Centered Content)
+    nodes.push({
+      id: 'form-wrapper-1',
+      type: 'container',
+      props: {
+        style: 'width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 2rem;'
+      },
+      children: ['login-header-1', 'form-1']
+    });
+
+    // Login Header
+    nodes.push({
+      id: 'login-header-1',
+      type: 'container',
+      props: { style: 'text-align: center;' },
+      children: ['title-1', 'subtitle-1']
     });
 
     // Title
@@ -412,7 +463,7 @@ export class PageManager extends LitElement {
       props: {
         tag: 'h1',
         text: 'Welcome Back',
-        style: 'margin: 0 0 0.5rem 0; font-size: 28px; font-weight: 700; color: #1f2937;'
+        style: 'margin: 0 0 0.5rem 0; font-size: 32px; font-weight: 700; color: #1f2937;'
       }
     });
 
@@ -422,8 +473,8 @@ export class PageManager extends LitElement {
       type: 'text',
       props: {
         tag: 'p',
-        text: 'Sign in to your account',
-        style: 'margin: 0 0 2rem 0; font-size: 14px; color: #6b7280;'
+        text: 'Sign in to continue to your dashboard',
+        style: 'margin: 0; font-size: 16px; color: #6b7280;'
       }
     });
 
@@ -438,7 +489,7 @@ export class PageManager extends LitElement {
       children: ['email-group-1', 'password-group-1', 'remember-1', 'submit-1', 'signup-1']
     });
 
-    // Email field group
+    // Email field
     nodes.push({
       id: 'email-group-1',
       type: 'container',
@@ -467,7 +518,7 @@ export class PageManager extends LitElement {
       }
     });
 
-    // Password field group
+    // Password field
     nodes.push({
       id: 'password-group-1',
       type: 'container',
@@ -496,7 +547,7 @@ export class PageManager extends LitElement {
       }
     });
 
-    // Remember me checkbox
+    // Remember me
     nodes.push({
       id: 'remember-1',
       type: 'container',
@@ -543,7 +594,7 @@ export class PageManager extends LitElement {
       props: {
         tag: 'p',
         text: 'Don\'t have an account? <a href="/signup" style="color: #667eea; font-weight: 600;">Sign up</a>',
-        style: 'margin: 1rem 0 0 0; text-align: center; font-size: 14px; color: #6b7280;'
+        style: 'margin: 0; text-align: center; font-size: 14px; color: #6b7280;'
       }
     });
 
@@ -551,7 +602,221 @@ export class PageManager extends LitElement {
   }
 
   /**
-   * Build Dashboard Template  
+   * Build Sign Up Page Template (Split Screen)
+   */
+  private buildSignupTemplate(_startId: number): ComponentNode[] {
+    const nodes: ComponentNode[] = [];
+
+    // Root container (Split Wrapper)
+    nodes.push({
+      id: 'root',
+      type: 'container',
+      props: {
+        style: 'display: flex; flex-wrap: wrap; min-height: 100vh; width: 100%; margin: 0; padding: 0; box-sizing: border-box;'
+      },
+      children: ['brand-section-sign-1', 'form-section-sign-1']
+    });
+
+    // 1. Brand Section (Left)
+    nodes.push({
+      id: 'brand-section-sign-1',
+      type: 'container',
+      props: {
+        style: 'flex: 1 1 280px; max-height: 35vh; box-sizing: border-box; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; justify-content: center; padding: 2.5rem; color: white;'
+      },
+      children: ['brand-title-sign-1', 'brand-subtitle-sign-1']
+    });
+
+    nodes.push({
+      id: 'brand-title-sign-1',
+      type: 'text',
+      props: {
+        tag: 'h1',
+        text: 'Join Our Community',
+        style: 'font-size: 32px; font-weight: 800; margin-bottom: 0.75rem; line-height: 1.2;'
+      }
+    });
+
+    nodes.push({
+      id: 'brand-subtitle-sign-1',
+      type: 'text',
+      props: {
+        tag: 'p',
+        text: 'Create your free account today and start building amazing applications.',
+        style: 'font-size: 16px; opacity: 0.9; max-width: 400px; line-height: 1.5;'
+      }
+    });
+
+    // 2. Form Section (Right)
+    nodes.push({
+      id: 'form-section-sign-1',
+      type: 'container',
+      props: {
+        style: 'flex: 1 1 280px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; background: white; padding: 2rem;'
+      },
+      children: ['form-wrapper-sign-1']
+    });
+
+    // Form Wrapper
+    nodes.push({
+      id: 'form-wrapper-sign-1',
+      type: 'container',
+      props: {
+        style: 'width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 2rem;'
+      },
+      children: ['signup-header-1', 'form-1']
+    });
+
+    // Signup Header
+    nodes.push({
+      id: 'signup-header-1',
+      type: 'container',
+      props: { style: 'text-align: center;' },
+      children: ['title-1', 'subtitle-1']
+    });
+
+    nodes.push({
+      id: 'title-1',
+      type: 'text',
+      props: {
+        tag: 'h1',
+        text: 'Create Account',
+        style: 'margin: 0 0 0.5rem 0; font-size: 32px; font-weight: 700; color: #1f2937;'
+      }
+    });
+
+    nodes.push({
+      id: 'subtitle-1',
+      type: 'text',
+      props: {
+        tag: 'p',
+        text: 'Get started with your free account',
+        style: 'margin: 0; font-size: 16px; color: #6b7280;'
+      }
+    });
+
+    // Form content
+    nodes.push({
+      id: 'form-1',
+      type: 'container',
+      props: {
+        tag: 'form',
+        style: 'display: flex; flex-direction: column; gap: 1.25rem;'
+      },
+      children: ['name-group-1', 'contact-group-1', 'email-group-1', 'password-group-1', 'confirm-group-1', 'terms-1', 'submit-1', 'signin-1']
+    });
+
+    // Full Name
+    nodes.push({
+      id: 'name-group-1',
+      type: 'container',
+      props: { style: 'display: flex; flex-direction: column; gap: 0.25rem;' },
+      children: ['name-label-1', 'name-input-1']
+    });
+    nodes.push({
+      id: 'name-label-1', type: 'text', props: { tag: 'label', text: 'Full Name', style: 'font-size: 14px; font-weight: 500; color: #374151;' }
+    });
+    nodes.push({
+      id: 'name-input-1', type: 'input', props: { type: 'text', placeholder: 'John Doe', required: true, style: 'padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;' }
+    });
+
+    // Contact Number (Optional)
+    nodes.push({
+      id: 'contact-group-1',
+      type: 'container',
+      props: { style: 'display: flex; flex-direction: column; gap: 0.25rem;' },
+      children: ['contact-label-1', 'contact-input-1']
+    });
+    nodes.push({
+      id: 'contact-label-1', type: 'text', props: { tag: 'label', text: 'Contact Number <span style=\\"font-weight:400; color:#9ca3af\\">(Optional)</span>', style: 'font-size: 14px; font-weight: 500; color: #374151;' }
+    });
+    nodes.push({
+      id: 'contact-input-1', type: 'input', props: { type: 'tel', placeholder: '+1 (555) 000-0000', required: false, style: 'padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;' }
+    });
+
+    // Email
+    nodes.push({
+      id: 'email-group-1',
+      type: 'container',
+      props: { style: 'display: flex; flex-direction: column; gap: 0.25rem;' },
+      children: ['email-label-1', 'email-input-1']
+    });
+    nodes.push({
+      id: 'email-label-1', type: 'text', props: { tag: 'label', text: 'Email Address', style: 'font-size: 14px; font-weight: 500; color: #374151;' }
+    });
+    nodes.push({
+      id: 'email-input-1', type: 'input', props: { type: 'email', placeholder: 'you@example.com', required: true, style: 'padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;' }
+    });
+
+    // Password
+    nodes.push({
+      id: 'password-group-1',
+      type: 'container',
+      props: { style: 'display: flex; flex-direction: column; gap: 0.25rem;' },
+      children: ['password-label-1', 'password-input-1']
+    });
+    nodes.push({
+      id: 'password-label-1', type: 'text', props: { tag: 'label', text: 'Password', style: 'font-size: 14px; font-weight: 500; color: #374151;' }
+    });
+    nodes.push({
+      id: 'password-input-1', type: 'input', props: { type: 'password', placeholder: '••••••••', required: true, style: 'padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;' }
+    });
+
+    // Confirm Password
+    nodes.push({
+      id: 'confirm-group-1',
+      type: 'container',
+      props: { style: 'display: flex; flex-direction: column; gap: 0.25rem;' },
+      children: ['confirm-label-1', 'confirm-input-1']
+    });
+    nodes.push({
+      id: 'confirm-label-1', type: 'text', props: { tag: 'label', text: 'Confirm Password', style: 'font-size: 14px; font-weight: 500; color: #374151;' }
+    });
+    nodes.push({
+      id: 'confirm-input-1', type: 'input', props: { type: 'password', placeholder: '••••••••', required: true, style: 'padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;' }
+    });
+
+    // Terms
+    nodes.push({
+      id: 'terms-1',
+      type: 'container',
+      props: { style: 'display: flex; align-items: flex-start; gap: 0.5rem; margin-top: 0.5rem;' },
+      children: ['terms-check-1', 'terms-label-1']
+    });
+    nodes.push({
+      id: 'terms-check-1', type: 'input', props: { type: 'checkbox', required: true, style: 'width: 16px; height: 16px; margin-top: 3px;' }
+    });
+    nodes.push({
+      id: 'terms-label-1', type: 'text', props: { tag: 'label', text: 'I agree to the <a href=\\"#\\" style=\\"color:#667eea\\">Terms of Service</a> and <a href=\\"#\\" style=\\"color:#667eea\\">Privacy Policy</a>', style: 'font-size: 13px; color: #6b7280; line-height: 1.4;' }
+    });
+
+    // Submit Button
+    nodes.push({
+      id: 'submit-1',
+      type: 'button',
+      props: {
+        text: 'Create Account',
+        className: 'btn-primary',
+        style: 'padding: 0.875rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 0.5rem;'
+      }
+    });
+
+    // Sign in link
+    nodes.push({
+      id: 'signin-1',
+      type: 'text',
+      props: {
+        tag: 'p',
+        text: 'Already have an account? <a href=\\"/login\\" style=\\"color: #667eea; font-weight: 600;\\">Sign in</a>',
+        style: 'margin: 0; text-align: center; font-size: 14px; color: #6b7280;'
+      }
+    });
+
+    return nodes;
+  }
+
+  /**
+   * Build Dashboard Template
    * Includes: header, sidebar, main content with KPI cards
    */
   private buildDashboardTemplate(_startId: number): ComponentNode[] {
@@ -1416,6 +1681,12 @@ export class PageManager extends LitElement {
         icon: '🔐',
         name: 'Login Page',
         description: 'Email, password, submit button'
+      },
+      {
+        id: 'signup',
+        icon: '📝',
+        name: 'Sign Up Page',
+        description: 'Registration form with contact number'
       },
       {
         id: 'dashboard',
