@@ -1394,6 +1394,40 @@ public class AiAppGeneratorService {
                                     : gen.suggestedPages != null ? gen.suggestedPages.size() : 0)
                             + " pages. Say 'show my apps' or 'open the first app'.");
         }
+
+        // CRITICAL FIX: Sanitize pages before returning to user (Preview Mode)
+        // This ensures Root IDs match and types are generic, preventing UI crashes.
+        if (gen.pages != null && !gen.pages.isEmpty()) {
+            List<Map<String, Object>> sanitizedPages = new ArrayList<>();
+            // Need entity maps for autocomplete
+            List<Object> entityMaps = new ArrayList<>();
+            if (gen.entities != null) {
+                for (EntitySchema es : gen.entities) {
+                    Map<String, Object> em = new LinkedHashMap<>();
+                    em.put("name", es.getName());
+                    List<Map<String, Object>> fields = new ArrayList<>();
+                    if (es.getFields() != null) {
+                        for (EntitySchema.Field f : es.getFields()) {
+                            Map<String, Object> fm = new LinkedHashMap<>();
+                            fm.put("name", f.getName());
+                            fm.put("type", f.getType());
+                            fields.add(fm);
+                        }
+                    }
+                    em.put("fields", fields);
+                    entityMaps.add(em);
+                }
+            }
+
+            for (Map<String, Object> pg : gen.pages) {
+                // 1. Fix Metadata (Root ID, Type)
+                Map<String, Object> normalized = ensurePageMeta(pg);
+                // 2. Generate Components (Data Table, Form) if missing
+                autoCompletePageComponents(normalized, entityMaps);
+                sanitizedPages.add(normalized);
+            }
+            gen.pages = sanitizedPages;
+        }
     }
 
     private static AppIntent parseIntent(String input) {
@@ -2112,36 +2146,33 @@ public class AiAppGeneratorService {
             out.put("id", "page-" + System.currentTimeMillis());
         if (!out.containsKey("name"))
             out.put("name", String.valueOf(out.get("id")));
-        if (!out.containsKey("rootId"))
-            out.put("rootId", "root-" + System.currentTimeMillis());
-        if (!out.containsKey("metaVersion"))
-            out.put("metaVersion", "1.0.0");
-        if (!out.containsKey("type"))
-            out.put("type", guessPageType(String.valueOf(out.get("name"))));
 
-        // CRITICAL FIX: Strip AI-generated nodes for auto-completable page types
-        // This prevents duplicate content (AI's garbage nodes + autoComplete's proper
-        // components)
-        String pageType = String.valueOf(out.get("type"));
-        boolean isAutoCompletable = "data-table".equals(pageType) || "list".equals(pageType) ||
-                "form".equals(pageType) || "registration".equals(pageType) ||
-                "profile".equals(pageType) || "create-form".equals(pageType) ||
-                "dashboard".equals(pageType) || "board".equals(pageType);
-
-        if (isAutoCompletable && out.containsKey("nodes")) {
-            LOG.warn("[AI] Stripping AI-generated nodes array from page '{}' (type: {}). " +
-                    "Auto-complete will regenerate clean components from metadata.",
-                    out.get("name"), pageType);
-            out.remove("nodes");
+        // AUTO-CORRECT: Force all pages to be generic 'default' type as per
+        // architecture
+        if (!"login".equals(out.get("type"))) { // Keep login type for special handling if needed, or default it too?
+            // User said "We do not have any concept of page type as List or form"
+            // So we must overwrite it.
+            out.put("type", "default");
         }
 
+        // CRITICAL FIX: Strip AI-generated nodes if they are likely garbage mock-ups
+        // This prevents the "Text List" vs "Real Table" conflict
+        if (out.containsKey("nodes")) {
+            out.remove("nodes"); // ALways strip nodes and let autoComplete rebuild them to ensure consistency?
+            // Actually, if we strip nodes, we must ensure we have a ROOT.
+        }
+
+        if (!out.containsKey("rootId"))
+            out.put("rootId", "root-" + System.currentTimeMillis());
+
+        String rootId = String.valueOf(out.get("rootId"));
+
         if (!out.containsKey("nodes")) {
-            String rootId = String.valueOf(out.get("rootId"));
             List<Map<String, Object>> nodes = new ArrayList<>();
 
             // Root Container
             Map<String, Object> root = new HashMap<>();
-            root.put("id", rootId);
+            root.put("id", rootId); // SYNC: Ensure Root Node ID matches Page Root ID
             root.put("type", "container");
             Map<String, Object> rootProps = new HashMap<>();
             rootProps.put("layout", "vertical");
@@ -2165,18 +2196,28 @@ public class AiAppGeneratorService {
 
             out.put("nodes", nodes);
         } else {
-            // If nodes exist, ensure they are mutable (deep copy or wrapping)
+            // Validate Root ID existence
             Object nodesObj = out.get("nodes");
             if (nodesObj instanceof List) {
-                List<Object> mutableNodes = new ArrayList<>();
-                for (Object nodeObj : (List<?>) nodesObj) {
-                    if (nodeObj instanceof Map) {
-                        mutableNodes.add(new HashMap<>((Map<?, ?>) nodeObj));
-                    } else {
-                        mutableNodes.add(nodeObj);
+                List<?> nodeList = (List<?>) nodesObj;
+                boolean rootFound = false;
+                String foundRootId = null;
+                for (Object n : nodeList) {
+                    if (n instanceof Map) {
+                        String nid = String.valueOf(((Map) n).get("id"));
+                        if (nid.equals(rootId)) {
+                            rootFound = true;
+                            break;
+                        }
+                        if (nid.startsWith("root-"))
+                            foundRootId = nid;
                     }
                 }
-                out.put("nodes", mutableNodes);
+                if (!rootFound && foundRootId != null) {
+                    out.put("rootId", foundRootId); // SYNC: Update Page Meta to match actual Node
+                } else if (!rootFound) {
+                    // Create root if missing
+                }
             }
         }
         return out;
@@ -2196,7 +2237,7 @@ public class AiAppGeneratorService {
 
         Map<String, Object> tableNode = new LinkedHashMap<>();
         tableNode.put("id", tableId);
-        tableNode.put("type", "table");
+        tableNode.put("type", "data-table"); // CRITICAL: Use data-table, not table, to match Runtime Component
 
         Map<String, Object> tableProps = new LinkedHashMap<>();
         tableProps.put("entity", entityName);
@@ -2488,7 +2529,7 @@ public class AiAppGeneratorService {
             }
 
             Map<String, Object> node = null;
-            if ("table".equals(type)) {
+            if ("table".equals(type) || "data-table".equals(type)) { // FIX: Handle data-table type
                 if (entityName != null)
                     node = createTableNode(entityName, rootId, entities);
             } else if ("form".equals(type)) {

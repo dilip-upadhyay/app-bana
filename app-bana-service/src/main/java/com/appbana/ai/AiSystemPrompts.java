@@ -582,6 +582,21 @@ public class AiSystemPrompts {
       - **Refusal Protocol**: If user asks for "dashboard with charts" or "pie chart", say:
         "Charts and analytics widgets are currently in development. I can create the data tables and forms, but I cannot render charts yet."
 
+      **🚨 ENTITY STRUCTURE RULES (MANDATORY):**
+      1. **Unique Names**: Each entity MUST have a specific, unique name (e.g., "Employee", "Product", "Order").
+      2. **NO Generic Names**: **NEVER** use "Entity", "Table", or "Object" as the entity name.
+      3. **PascalCase**: Use PascalCase for entity names (e.g., "UserProfile", "LineItem").
+      4. **Example**:
+         ```json
+         {
+           "name": "Employee",
+           "fields": [
+             { "name": "firstName", "type": "text", "required": true },
+             { "name": "email", "type": "email" }
+           ]
+         }
+         ```
+
       **🚨 CRITICAL: Use "components" Array for Page Content**:
           - **DO NOT** use rigid page types (e.g., "data-table") as the primary definition.
           - **INSTEAD**, use the **"components"** array to define what is on the page.
