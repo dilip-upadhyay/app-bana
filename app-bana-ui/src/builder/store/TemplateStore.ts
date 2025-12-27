@@ -78,6 +78,42 @@ export class TemplateStore {
         this.loaded = false;
         return this.loadTemplates();
     }
+
+    /**
+     * Create a new template from an existing page
+     */
+    async createTemplate(templateData: Omit<PageTemplate, 'id' | 'isSystem'>): Promise<PageTemplate> {
+        try {
+            // Generate a URL-friendly ID from the name
+            const timestamp = Date.now().toString(36);
+            const slug = templateData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            const id = `${slug}-${timestamp}`;
+
+            const payload = {
+                ...templateData,
+                id,
+                isSystem: false,
+                category: templateData.category || 'user'
+            };
+
+            const response = await fetch('/api/templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to create template: ${response.statusText}`);
+            }
+
+            const newTemplate: PageTemplate = await response.json();
+            this.templates.set(newTemplate.id, newTemplate);
+            return newTemplate;
+        } catch (error) {
+            console.error('[TemplateStore] Error creating template:', error);
+            throw error;
+        }
+    }
 }
 
 export const templateStore = TemplateStore.getInstance();

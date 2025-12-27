@@ -290,6 +290,36 @@ export class PageManager extends LitElement {
     }, 10);
   };
 
+  private handleSaveAsTemplate = async (e: Event) => {
+    e.stopPropagation();
+
+    if (!this.contextMenuPageId) return;
+
+    const page = this.pages.find(p => p.id === this.contextMenuPageId);
+    if (!page) return;
+
+    // Close menu first
+    this.contextMenuVisible = false;
+
+    const name = prompt("Start a new template based on '" + page.name + "'\n\nEnter template name:", page.name + " Template");
+    if (!name) return;
+
+    const description = prompt("Enter a description for this template:", "Custom template created from " + page.name) || "";
+
+    try {
+      await templateStore.createTemplate({
+        name,
+        description,
+        category: 'user',
+        nodes: page.nodes
+      });
+      this.showToast(`✅ Template "${name}" saved!`);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save template: " + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
   private handleDuplicatePage = async (e: Event) => {
     e.stopPropagation();
 
@@ -837,6 +867,10 @@ export class PageManager extends LitElement {
         class="context-menu" 
         style="left: ${this.contextMenuX}px; top: ${this.contextMenuY}px;"
       >
+        <div class="context-menu-item" @click=${this.handleSaveAsTemplate}>
+          <span class="context-menu-icon">💾</span>
+          <span class="context-menu-label">Save as Template</span>
+        </div>
         <div class="context-menu-item" @click=${this.handleDuplicatePage}>
           <span class="context-menu-icon">📋</span>
           <span class="context-menu-label">Duplicate</span>
