@@ -93,25 +93,45 @@ tail -f backend.log
 kill $(cat backend.pid)
 ```
 
+### Frontend Dev Server Script (macOS/Linux) 🎨
+**ALWAYS use this script when:**
+- User asks to "start frontend" or "run UI"
+- Frontend changes need testing
+- Need to restart Vite dev server
+
+```bash
+./run-ui.sh
+```
+
+**What it does:**
+1. Kills any existing server on port 5173 (auto-restart)
+2. Checks Node version (requires 18.17+)
+3. Installs dependencies (npm ci/install)
+4. Starts Vite dev server on http://localhost:5173
+
+**Other modes:**
+```bash
+./run-ui.sh build      # Production build
+./run-ui.sh preview    # Preview production build
+./run-ui.sh clean      # Clean node_modules and dist
+```
+
 ### Starting Application (Windows PowerShell)
 ```powershell
 # Terminal 1: Backend (continuous logs, port 8080) - NEVER RUN COMMANDS HERE!
 .\start-backend.bat
 
-# Terminal 2: Frontend dev server (port 5173)
-cd app-bana-ui; npm run dev
-
-# Terminal 3: Testing/commands (USE THIS FOR ALL COMMANDS!)
+# Terminal 2: Testing/commands (USE THIS FOR ALL COMMANDS!)
 mvn clean compile
 Invoke-WebRequest -Uri "http://localhost:8080/apps"
 ```
 
 **⚠️ CRITICAL**: 
 - **NEVER run commands in Terminal 1 (backend)** - it will stop the server!
-- **ALWAYS use Terminal 3** for testing, API calls, database queries
+- **ALWAYS use Terminal 2** for testing, API calls, database queries
 - Backend runs continuously with live logs - don't interrupt it
 - **AI AGENTS**: When testing APIs, ALWAYS open a new terminal first!
-- **macOS/Linux**: Use `./restart-backend.sh` for backend changes
+- **macOS/Linux**: Use `./restart-backend.sh` for backend, `./run-ui.sh` for frontend
 
 ---
 
