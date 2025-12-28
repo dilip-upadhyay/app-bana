@@ -179,49 +179,52 @@ export class BuilderShell extends LitElement {
         </div>
       ` : ''}
 
-      <!-- Left: Tabbed Panel (Component Library or Entity Manager or AI Builder) -->
-      <div class="library-panel">
-        <div class="left-panel-tabs">
-          <button 
-            class="tab ${this.activeLeftTab === 'components' ? 'active' : ''}"
-            @click=${() => this.activeLeftTab = 'components'}>
-            Components
-          </button>
-          <button 
-            class="tab ${this.activeLeftTab === 'entities' ? 'active' : ''}"
-            @click=${() => this.activeLeftTab = 'entities'}>
-            Entities
-          </button>
-          <button 
-            class="tab ${(this.activeLeftTab as any) === 'workflow' ? 'active' : ''}"
-            @click=${() => this.activeLeftTab = 'workflow'}>
-            ⚡ Workflow
-          </button>
-          <button 
-            class="tab ${this.activeLeftTab === 'ai-builder' ? 'active' : ''}"
-            @click=${() => this.activeLeftTab = 'ai-builder'}>
-            🤖 AI Builder
-          </button>
+      <!-- Main Content Grid -->
+      <div class="content-grid">
+        <!-- Left: Tabbed Panel (Component Library or Entity Manager or AI Builder) -->
+        <div class="library-panel">
+          <div class="left-panel-tabs">
+            <button 
+              class="tab ${this.activeLeftTab === 'components' ? 'active' : ''}"
+              @click=${() => this.activeLeftTab = 'components'}>
+              Components
+            </button>
+            <button 
+              class="tab ${this.activeLeftTab === 'entities' ? 'active' : ''}"
+              @click=${() => this.activeLeftTab = 'entities'}>
+              Entities
+            </button>
+            <button 
+              class="tab ${(this.activeLeftTab as any) === 'workflow' ? 'active' : ''}"
+              @click=${() => this.activeLeftTab = 'workflow'}>
+              ⚡ Workflow
+            </button>
+            <button 
+              class="tab ${this.activeLeftTab === 'ai-builder' ? 'active' : ''}"
+              @click=${() => this.activeLeftTab = 'ai-builder'}>
+              🤖 AI Builder
+            </button>
+          </div>
+          <div class="left-panel-content">
+            ${this.renderLeftPanelContent()}
+          </div>
+          <!-- Resize Handle -->
+          <div 
+            class="resize-handle"
+            @mousedown=${this.handleResizeStart}
+            title="Drag to resize panel"
+          ></div>
         </div>
-        <div class="left-panel-content">
-          ${this.renderLeftPanelContent()}
+
+        <!-- Center: Live Preview (WYSIWYG Canvas) -->
+        <div class="center-panel">
+          <appbana-live-preview></appbana-live-preview>
         </div>
-        <!-- Resize Handle -->
-        <div 
-          class="resize-handle"
-          @mousedown=${this.handleResizeStart}
-          title="Drag to resize panel"
-        ></div>
-      </div>
 
-      <!-- Center: Live Preview (WYSIWYG Canvas) -->
-      <div class="center-panel">
-        <appbana-live-preview></appbana-live-preview>
-      </div>
-
-      <!-- Right: Properties Panel -->
-      <div class="right-panel">
-        <appbana-properties-panel></appbana-properties-panel>
+        <!-- Right: Properties Panel -->
+        <div class="right-panel">
+          <appbana-properties-panel></appbana-properties-panel>
+        </div>
       </div>
     `;
   }

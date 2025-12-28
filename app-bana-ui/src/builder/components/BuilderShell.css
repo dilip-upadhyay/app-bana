@@ -42,11 +42,13 @@
 }
 
 .app-manager-panel {
-  grid-area: apps;
+  flex: 0 0 auto;
 }
 
 .page-manager-panel {
-  grid-area: pages;
+  flex: 0 0 auto;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
 }
 
 .library-panel {
