@@ -64,6 +64,35 @@ For **any new feature**:
 
 ## Development Workflows
 
+### Backend Restart Script (macOS/Linux) 🔄
+**ALWAYS use this script when:**
+- Making backend Java changes (ApiServer, services, models, etc.)
+- User asks to "restart backend" or "rebuild backend"
+- Testing backend changes
+- Backend needs clean restart
+
+```bash
+./restart-backend.sh
+```
+
+**What it does:**
+1. Stops running backend (graceful shutdown)
+2. Builds JAR: `mvn clean package -DskipTests`
+3. Starts backend with logging to `backend.log`
+4. Saves PID to `backend.pid` for easy management
+
+**Usage:**
+```bash
+# Restart after making Java changes
+./restart-backend.sh
+
+# View logs
+tail -f backend.log
+
+# Stop manually (if needed)
+kill $(cat backend.pid)
+```
+
 ### Starting Application (Windows PowerShell)
 ```powershell
 # Terminal 1: Backend (continuous logs, port 8080) - NEVER RUN COMMANDS HERE!
@@ -82,13 +111,7 @@ Invoke-WebRequest -Uri "http://localhost:8080/apps"
 - **ALWAYS use Terminal 3** for testing, API calls, database queries
 - Backend runs continuously with live logs - don't interrupt it
 - **AI AGENTS**: When testing APIs, ALWAYS open a new terminal first!
-
-### Build Process
-```powershell
-cd app-bana-ui; npm run build           # Frontend → src/main/resources/ui/dist/
-cd ..; mvn clean package -DskipTests    # Fat JAR with UI embedded
-```
-**Never manually copy UI files!** Maven auto-includes UI JAR.
+- **macOS/Linux**: Use `./restart-backend.sh` for backend changes
 
 ---
 
