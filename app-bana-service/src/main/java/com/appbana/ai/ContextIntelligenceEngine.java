@@ -1,6 +1,7 @@
 package com.appbana.ai;
 
 import com.appbana.AiAppGeneratorService;
+import com.appbana.generator.ConversationManager.ConversationContext;
 import com.appbana.model.EntitySchema;
 import com.appbana.workflow.model.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,7 +24,7 @@ public class ContextIntelligenceEngine {
      * Attempts to answer a user prompt using only the current session context.
      * Returns null if the prompt is not context-related or no context exists.
      */
-    public static String resolveContextualQuery(String prompt, AiAppGeneratorService.ConversationContext context) {
+    public static String resolveContextualQuery(String prompt, ConversationContext context) {
         if (context == null) {
             LOG.warn("[ContextIntelligence] Context is null");
             return null;

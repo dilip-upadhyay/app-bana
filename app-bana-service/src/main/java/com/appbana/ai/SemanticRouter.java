@@ -1,6 +1,6 @@
 package com.appbana.ai;
 
-import com.appbana.AiAppGeneratorService;
+import com.appbana.generator.ConversationManager.ConversationContext;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -39,7 +39,7 @@ public class SemanticRouter {
     }
 
     public static RouterResult classify(String userId, String userPrompt,
-            AiAppGeneratorService.ConversationContext context) {
+            ConversationContext context) {
         // HEURISTIC BYPASS: Handle explicit confirmation/creation phrases directly
         // This avoids LLM misclassification (e.g. treating "Create app" as small talk)
         String lower = userPrompt.toLowerCase().trim();

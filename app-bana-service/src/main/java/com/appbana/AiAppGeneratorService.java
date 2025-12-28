@@ -9,6 +9,8 @@ import com.appbana.ai.IntentCache;
 import com.appbana.ai.MetadataIntelligenceEngine;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
+import com.appbana.generator.ConversationManager;
+import com.appbana.generator.ConversationManager.ConversationContext;
 import com.appbana.model.EntitySchema;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -58,35 +60,7 @@ public class AiAppGeneratorService {
     private static final String DOMAIN_TEMPLATES_PATH = "../builder-database/10-domain-templates.json";
     private static List<Map<String, Object>> cachedDomainTemplates;
 
-    // Conversation context tracking for continuity across requests
-    private static final Map<String, ConversationContext> sessionContexts = new HashMap<>();
-    private static final long CONTEXT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-
-    /**
-     * Conversation context to maintain state across multiple requests
-     */
-    public static class ConversationContext {
-        public String lastDiscussedAppType;
-        public String lastDiscussedAppDescription;
-        public List<String> discussedEntities;
-        public String lastCreatedAppId;
-        public String lastOpenedAppId;
-        public GenerationResult pendingResult; // Staged app generation waiting for approval
-        public long timestamp;
-
-        public ConversationContext() {
-            this.discussedEntities = new ArrayList<>();
-            this.timestamp = System.currentTimeMillis();
-        }
-
-        public boolean isExpired() {
-            return System.currentTimeMillis() - timestamp > CONTEXT_TIMEOUT_MS;
-        }
-
-        public void refresh() {
-            this.timestamp = System.currentTimeMillis();
-        }
-    }
+    // Conversation context tracking delegated to ConversationManager
 
     public static GenerationResult generateApp(GenerationRequest request) {
         // Initialize metadata intelligence engine
@@ -101,17 +75,17 @@ public class AiAppGeneratorService {
             // FIX: Handle small talk check BEFORE context merging to avoid "Hi" becoming
             // 1. Resolve User and Context first
             String userId = resolveUserId(request);
-            ConversationContext ctx = getContext(userId);
+            ConversationContext ctx = ConversationManager.getContext(userId);
 
             // FIX: Sync context with frontend "currentAppId" if provided
             // This handles manual UI selection updates so the AI knows which app is active
             if (request.options != null && request.options.containsKey("currentAppId")) {
                 String explicitAppId = String.valueOf(request.options.get("currentAppId"));
                 if (explicitAppId != null && !explicitAppId.equals("null") && !explicitAppId.isBlank()) {
-                    updateOpenedApp(userId, explicitAppId);
+                    ConversationManager.updateOpenedApp(userId, explicitAppId);
                     // Re-fetch context to ensure we have the latest state (though it should be
                     // shared ref)
-                    ctx = getContext(userId);
+                    ctx = ConversationManager.getContext(userId);
                 }
             }
 
@@ -255,14 +229,14 @@ public class AiAppGeneratorService {
             // router now)
             String appType = extractAppType(request != null ? request.description : null);
             if (appType != null && request.description != null) {
-                updateDiscussedApp(request.userId, appType, request.description);
+                ConversationManager.updateDiscussedApp(request.userId, appType, request.description);
             }
 
             // ALSO: If description mentions entities/features, store it even if no app type
             // extracted. USING AI PARAMETERS if available.
             if (route.parameters != null && route.parameters.containsKey("entityName")) {
                 String descAppType = appType != null ? appType : "application";
-                updateDiscussedApp(request.userId, descAppType, request.description);
+                ConversationManager.updateDiscussedApp(request.userId, descAppType, request.description);
                 LOG.info("[AI Context] Stored detailed app description in context (entity detected)");
             } else if (request.description != null &&
                     (request.description.toLowerCase().contains("entity") ||
@@ -270,7 +244,7 @@ public class AiAppGeneratorService {
                             request.description.toLowerCase().matches(
                                     ".*\\b(customer|user|product|order|item|service|appointment|project|task)\\b.*"))) {
                 String descAppType = appType != null ? appType : "application";
-                updateDiscussedApp(request.userId, descAppType, request.description);
+                ConversationManager.updateDiscussedApp(request.userId, descAppType, request.description);
                 LOG.info("[AI Context] Stored detailed app description in context");
             }
 
@@ -865,7 +839,7 @@ public class AiAppGeneratorService {
                 loadResult.payload.put(PAYLOAD_ACTION, ACTION_LOAD_APP);
 
                 // Track opened app in context
-                updateOpenedApp(request.userId, appId);
+                ConversationManager.updateOpenedApp(request.userId, appId);
 
                 LOG.info("[AI] Loaded app: {}", appId);
             }
@@ -1294,7 +1268,7 @@ public class AiAppGeneratorService {
         }
 
         // Track created app in context
-        updateCreatedApp(request.userId, appId);
+        ConversationManager.updateCreatedApp(request.userId, appId);
 
         // Return currentAppName in payload for frontend
         if (result.payload == null) {
@@ -2941,7 +2915,7 @@ public class AiAppGeneratorService {
 
         // If no app ID in description, use last opened app from context
         if (appId == null) {
-            ConversationContext ctx = getContext(request.userId);
+            ConversationContext ctx = ConversationManager.getContext(request.userId);
             appId = ctx.lastOpenedAppId;
         }
 
@@ -3041,53 +3015,6 @@ public class AiAppGeneratorService {
 
     // ========== Conversation Context Management ==========
 
-    /**
-     * Get or create conversation context for a user session
-     */
-    private static ConversationContext getContext(String userId) {
-        String key = userId != null ? userId : DEFAULT_USER;
-        ConversationContext ctx = sessionContexts.get(key);
-
-        if (ctx == null || ctx.isExpired()) {
-            ctx = new ConversationContext();
-            sessionContexts.put(key, ctx);
-            LOG.debug("[AI Context] Created new context for user: {}", key);
-        } else {
-            ctx.refresh();
-        }
-
-        return ctx;
-    }
-
-    /**
-     * Update context when app type/description is discussed
-     */
-    private static void updateDiscussedApp(String userId, String appType, String description) {
-        ConversationContext ctx = getContext(userId);
-        ctx.lastDiscussedAppType = appType;
-        ctx.lastDiscussedAppDescription = description;
-        LOG.info("[AI Context] Updated discussed app: type='{}', desc='{}'", appType,
-                description != null && description.length() > 50 ? description.substring(0, 50) + "..." : description);
-    }
-
-    /**
-     * Update context when app is created
-     */
-    private static void updateCreatedApp(String userId, String appId) {
-        ConversationContext ctx = getContext(userId);
-        ctx.lastCreatedAppId = appId;
-        LOG.info("[AI Context] Tracked created app: {}", appId);
-    }
-
-    /**
-     * Update context when app is opened
-     */
-    private static void updateOpenedApp(String userId, String appId) {
-        ConversationContext ctx = getContext(userId);
-        ctx.lastOpenedAppId = appId;
-        LOG.info("[AI Context] Tracked opened app: {}", appId);
-    }
-
     private static String buildAppSchemaContext(com.appbana.model.AppMetadata app) {
         try {
             StringBuilder sb = new StringBuilder();
@@ -3146,7 +3073,7 @@ public class AiAppGeneratorService {
      */
     private static String buildContextPrompt(GenerationRequest request) {
         String userId = resolveUserId(request);
-        ConversationContext ctx = getContext(userId);
+        ConversationContext ctx = ConversationManager.getContext(userId);
 
         StringBuilder contextBuilder = new StringBuilder();
 
