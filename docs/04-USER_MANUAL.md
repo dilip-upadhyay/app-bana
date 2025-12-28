@@ -1,6 +1,6 @@
 # 4. USER MANUAL — Studio Builder
 
-**Last Updated:** October 31, 2025  
+**Last Updated:** December 28, 2025  
 **Status:** Active - User Guide for Studio Builder  
 **Audience:** Business Users, Designers, Non-Technical Users
 
@@ -28,7 +28,7 @@ AppBana Studio Builder is a **visual, no-code tool** for creating web applicatio
 **Major Updates to Speed Up Your Workflow:**
 
 ### 1. **Pre-Built Page Templates** 🎨
-- **7 professional templates** ready to use (Login, Dashboard, Landing, Contact, Profile, Data Table, Blank)
+- **8 professional templates** ready to use (Login, Sign Up, Dashboard, Landing, Contact, Profile, Data Table, Blank)
 - **2-step wizard** for faster page creation
 - **Visual gallery** with template cards and descriptions
 - **93% time savings** - create pages in 2 minutes instead of 30!
@@ -433,12 +433,13 @@ Templates are **pre-built page layouts** to save you time!
 
 ### Available Templates (NEW: October 2025!)
 
-AppBana Studio now includes **7 professional templates** that can save you hours of work!
+AppBana Studio now includes **8 professional templates** that can save you hours of work!
 
 | Template | What's Included | Use For |
-|----------|-----------------|---------|
+|----------|-----------------|---------||
 | **Blank** | Empty canvas | Starting from scratch |
 | **Login Page** | Email field, password field, submit button, "Forgot Password?" link, footer | User authentication, sign-in pages |
+| **Sign Up Page** | 45/55 split layout with brand panel (logo, tagline, feature list), two-column name fields, email, phone, password fields | User registration, account creation |
 | **Dashboard** | Header with app name, sidebar navigation, 3 KPI cards (Users, Revenue, Growth) | Admin panels, analytics, business metrics |
 | **Landing Page** | Hero section with headline/CTA, 3 feature cards, call-to-action section, footer | Marketing pages, product launches |
 | **Contact Form** | Name field, email field, message textarea, submit button | Customer support, feedback forms |
@@ -456,9 +457,9 @@ AppBana Studio now includes **7 professional templates** that can save you hours
 4. Click **"Next"** button
 
 **Step 2: Choose Your Template**
-1. You'll see a **visual gallery** with 7 template cards
+1. You'll see a **visual gallery** with 8 template cards
 2. Each card shows:
-   - Template name (e.g., "Login Page")
+   - Template name (e.g., "Login Page" or "Sign Up Page")
    - Icon representing the template
    - Brief description of what's included
 3. **Click on any template card** to select it (gets blue border)
@@ -888,7 +889,8 @@ Now that you know the basics:
 
 ---
 
-**Document Version:** 1.1  
-**Last Updated:** October 31, 2025  
-**What's New in v1.1:** Pre-built templates (7 templates), enhanced preview with app context, 2-step page creation wizard, 93% time savings!  
+**Document Version:** 1.2  
+**Last Updated:** December 28, 2025  
+**What's New in v1.2:** Updated Sign Up template with modern 45/55 split layout, full-height brand panel, feature list, two-column name fields (8 templates total)  
+**Previous (v1.1):** Pre-built templates (7 templates), enhanced preview with app context, 2-step page creation wizard, 93% time savings!  
 **Feedback:** Share your thoughts with the AppBana team!
