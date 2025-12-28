@@ -271,7 +271,10 @@ export class AppManager extends LitElement {
           <form @submit=${this.handleSubmitCreate}>
             <div class="modal-body">
               <div class="form-group">
-                <label for="app-name">App Name *</label>
+                <label for="app-name">
+                  App Name *
+                  <span class="form-help">Give your app a descriptive, memorable name</span>
+                </label>
                 <input
                   id="app-name"
                   type="text"
@@ -281,22 +284,26 @@ export class AppManager extends LitElement {
                   required
                   autofocus
                 />
-                <div class="form-help">Give your app a descriptive, memorable name</div>
               </div>
 
               <div class="form-group">
-                <label for="app-description">Description (Optional)</label>
+                <label for="app-description">
+                  Description (Optional)
+                  <span class="form-help">Help others understand what this app does</span>
+                </label>
                 <textarea
                   id="app-description"
                   placeholder="A powerful CRM system for managing customer relationships..."
                   .value=${this.formDescription}
                   @input=${(e: Event) => this.formDescription = (e.target as HTMLTextAreaElement).value}
                 ></textarea>
-                <div class="form-help">Help others understand what this app does</div>
               </div>
 
               <div class="form-group">
-                <div class="template-label">Choose a Template</div>
+                <div class="template-label">
+                  Choose a Template
+                  <span class="form-help">Templates provide a starting structure you can customize</span>
+                </div>
                 <div class="template-options">
                   ${templates.map(template => html`
                     <div
@@ -309,7 +316,6 @@ export class AppManager extends LitElement {
                     </div>
                   `)}
                 </div>
-                <div class="form-help">Templates provide a starting structure you can customize</div>
               </div>
             </div>
 

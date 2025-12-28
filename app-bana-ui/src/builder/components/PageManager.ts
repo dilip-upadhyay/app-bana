@@ -767,84 +767,92 @@ export class PageManager extends LitElement {
           <div class="modal-body">
             <p class="template-help">Choose a ready-to-use template or build custom:</p>
 
-            <div class="template-gallery">
-              ${allOptions.map(template => html`
-                <div
-                  class="template-card ${this.selectedTemplate === template.id ? 'selected' : ''}"
-                  @click=${() => this.selectedTemplate = template.id}
-                >
-                  <div class="template-card-icon">${template.icon}</div>
-                  <h4 class="template-card-title">${template.name}</h4>
-                  <p class="template-card-desc">${template.description}</p>
-                  ${this.selectedTemplate === template.id ? html`<div class="template-card-check">✓</div>` : ''}
-                </div>
-              `)}
-            </div>
-
-            ${this.selectedTemplate === 'custom' ? html`
-              <div class="custom-builder-section">
-                <h4 style="margin: 2rem 0 1rem 0; font-size: 18px;">Select sections to include:</h4>
-                <div class="template-options">
-                  <div class="template-option ${this.includeNav ? 'selected' : ''}"
-                       @click=${() => this.includeNav = !this.includeNav}>
-                <div class="option-icon">🧭</div>
-                <div class="option-content">
-                  <h4>Navigation Bar</h4>
-                  <p>Top navigation with logo and menu</p>
-                </div>
-                <div class="option-checkbox">
-                  ${this.includeNav ? '✓' : ''}
+            <div class="template-container">
+              <!-- Left: Template Gallery -->
+              <div class="template-left">
+                <div class="template-gallery">
+                  ${allOptions.map(template => html`
+                    <div
+                      class="template-card ${this.selectedTemplate === template.id ? 'selected' : ''}"
+                      @click=${() => this.selectedTemplate = template.id}
+                    >
+                      <div class="template-card-icon">${template.icon}</div>
+                      <h4 class="template-card-title">${template.name}</h4>
+                      <p class="template-card-desc">${template.description}</p>
+                      ${this.selectedTemplate === template.id ? html`<div class="template-card-check">✓</div>` : ''}
+                    </div>
+                  `)}
                 </div>
               </div>
 
-              <div class="template-option ${this.includeSidenav ? 'selected' : ''}"
-                   @click=${() => this.includeSidenav = !this.includeSidenav}>
-                <div class="option-icon">📁</div>
-                <div class="option-content">
-                  <h4>Side Navigation</h4>
-                  <p>Left sidebar for secondary navigation</p>
-                </div>
-                <div class="option-checkbox">
-                  ${this.includeSidenav ? '✓' : ''}
-                </div>
-              </div>
+              <!-- Right: Custom Builder Options & Preview -->
+              ${this.selectedTemplate === 'custom' ? html`
+                <div class="template-right">
+                  <div class="custom-builder-section">
+                    <h4 style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #374151;">Select sections to include:</h4>
+                    <div class="template-options">
+                      <div class="template-option ${this.includeNav ? 'selected' : ''}"
+                           @click=${() => this.includeNav = !this.includeNav}>
+                        <div class="option-icon">🧭</div>
+                        <div class="option-content">
+                          <h4>Navigation Bar</h4>
+                          <p>Top navigation with logo and menu</p>
+                        </div>
+                        <div class="option-checkbox">
+                          ${this.includeNav ? '✓' : ''}
+                        </div>
+                      </div>
 
-              <div class="template-option selected disabled">
-                <div class="option-icon">📄</div>
-                <div class="option-content">
-                  <h4>Main Content</h4>
-                  <p>Primary content area (always included)</p>
-                </div>
-                <div class="option-checkbox">✓</div>
-              </div>
+                      <div class="template-option ${this.includeSidenav ? 'selected' : ''}"
+                           @click=${() => this.includeSidenav = !this.includeSidenav}>
+                        <div class="option-icon">📁</div>
+                        <div class="option-content">
+                          <h4>Side Navigation</h4>
+                          <p>Left sidebar for secondary navigation</p>
+                        </div>
+                        <div class="option-checkbox">
+                          ${this.includeSidenav ? '✓' : ''}
+                        </div>
+                      </div>
 
-              <div class="template-option ${this.includeFooter ? 'selected' : ''}"
-                   @click=${() => this.includeFooter = !this.includeFooter}>
-                <div class="option-icon">📝</div>
-                <div class="option-content">
-                  <h4>Footer</h4>
-                  <p>Bottom footer section</p>
-                </div>
-                <div class="option-checkbox">
-                  ${this.includeFooter ? '✓' : ''}
-                </div>
-              </div>
-            </div>
+                      <div class="template-option selected disabled">
+                        <div class="option-icon">📄</div>
+                        <div class="option-content">
+                          <h4>Main Content</h4>
+                          <p>Primary content area (always included)</p>
+                        </div>
+                        <div class="option-checkbox">✓</div>
+                      </div>
 
-            <div class="template-preview">
-              <h4>Preview:</h4>
-              <div class="preview-layout">
-                ${this.includeNav ? html`<div class="preview-section nav">Nav</div>` : ''}
-                <div class="preview-content">
-                  ${this.includeSidenav ? html`<div class="preview-section sidenav">Sidenav</div>` : ''}
-                  <div class="preview-section main">Main</div>
+                      <div class="template-option ${this.includeFooter ? 'selected' : ''}"
+                           @click=${() => this.includeFooter = !this.includeFooter}>
+                        <div class="option-icon">📝</div>
+                        <div class="option-content">
+                          <h4>Footer</h4>
+                          <p>Bottom footer section</p>
+                        </div>
+                        <div class="option-checkbox">
+                          ${this.includeFooter ? '✓' : ''}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="template-preview">
+                    <h4>Preview:</h4>
+                    <div class="preview-layout">
+                      ${this.includeNav ? html`<div class="preview-section nav">Nav</div>` : ''}
+                      <div class="preview-content">
+                        ${this.includeSidenav ? html`<div class="preview-section sidenav">Side</div>` : ''}
+                        <div class="preview-section main">Main</div>
+                      </div>
+                      ${this.includeFooter ? html`<div class="preview-section footer">Footer</div>` : ''}
+                    </div>
+                  </div>
                 </div>
-                ${this.includeFooter ? html`<div class="preview-section footer">Footer</div>` : ''}
-              </div>
+              ` : ''}
             </div>
           </div>
-        ` : ''}
-      </div>
 
           <div class="modal-footer">
             <button type="button" class="btn" @click=${this.handleBackToBasicInfo}>
