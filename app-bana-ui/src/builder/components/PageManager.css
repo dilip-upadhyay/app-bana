@@ -360,6 +360,21 @@
   color: #374151;
 }
 
+.template-preview-content {
+  background: white;
+  border: 2px solid #d1d5db;
+  border-radius: 4px;
+  overflow: auto;
+  min-height: 200px;
+  max-height: 300px;
+  padding: 8px;
+  font-size: 10px;
+}
+
+.template-preview-content * {
+  box-sizing: border-box;
+}
+
 .preview-layout {
   display: flex;
   flex-direction: column;

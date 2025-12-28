@@ -732,6 +732,121 @@ export class PageManager extends LitElement {
     return icons[templateId] || '📄';
   }
 
+  private renderTemplatePreview(templateId: string) {
+    // For custom builder, show layout diagram
+    if (templateId === 'custom') {
+      return html`
+        <div class="template-preview">
+          <h4>Preview:</h4>
+          <div class="preview-layout">
+            ${this.includeNav ? html`<div class="preview-section nav">Navigation</div>` : ''}
+            <div class="preview-content">
+              ${this.includeSidenav ? html`<div class="preview-section sidenav">Side</div>` : ''}
+              <div class="preview-section main">Main Content</div>
+            </div>
+            ${this.includeFooter ? html`<div class="preview-section footer">Footer</div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    // For predefined templates, render actual template content
+    const template = templateStore.getTemplate(templateId);
+    if (!template) {
+      return html`
+        <div class="template-preview">
+          <h4>Preview:</h4>
+          <div style="padding: 20px; text-align: center; color: #9ca3af;">
+            Template preview not available
+          </div>
+        </div>
+      `;
+    }
+
+    // Render the actual template nodes in a scaled-down preview
+    return html`
+      <div class="template-preview">
+        <h4>Preview: <span style="font-weight: 400; color: #6b7280; font-size: 10px;">${template.description}</span></h4>
+        <div class="template-preview-content">
+          ${this.renderTemplateNodes(template.nodes)}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderTemplateNodes(nodes: ComponentNode[]): any {
+    if (!nodes || nodes.length === 0) return '';
+
+    // Find root node
+    const root = nodes.find(n => n.id === 'root');
+    if (!root) return '';
+
+    // Create a map for quick node lookup
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+    // Render the root and its children recursively
+    return this.renderPreviewNode(root, nodeMap);
+  }
+
+  private renderPreviewNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): any {
+    const children = node.children?.map(childId => {
+      const child = nodeMap.get(childId);
+      return child ? this.renderPreviewNode(child, nodeMap) : null;
+    }).filter(Boolean);
+
+    // Extract styles and convert to object
+    const styleStr = typeof node.props?.style === 'string' ? node.props.style : '';
+    const styleObj: any = {};
+    
+    // Apply scaling for preview (reduce sizes by 50%)
+    const scaledStyle: any = {};
+    if (styleStr) {
+      styleStr.split(';').forEach(rule => {
+        const [prop, value] = rule.split(':').map(s => s.trim());
+        if (prop && value) {
+          // Scale down dimensions for preview
+          if (value.includes('px')) {
+            const pxValue = parseFloat(value);
+            scaledStyle[prop] = `${pxValue * 0.4}px`; // 40% scale for compact preview
+          } else if (value.includes('rem')) {
+            const remValue = parseFloat(value);
+            scaledStyle[prop] = `${remValue * 0.4}rem`;
+          } else {
+            scaledStyle[prop] = value;
+          }
+        }
+      });
+    }
+
+    // Render based on node type
+    switch (node.type) {
+      case 'container':
+        return html`<div style=${this.styleObjToString(scaledStyle)}>${children}</div>`;
+      
+      case 'text':
+        const fontSize = scaledStyle.fontSize || '0.4rem';
+        return html`<div style="font-size: ${fontSize}; ${this.styleObjToString(scaledStyle)}">${node.props?.text || ''}</div>`;
+      
+      case 'button':
+        return html`<button style="font-size: 0.35rem; padding: 0.2rem 0.4rem; ${this.styleObjToString(scaledStyle)}">${node.props?.text || 'Button'}</button>`;
+      
+      case 'input':
+        return html`<input style="font-size: 0.35rem; padding: 0.2rem; height: 1rem; ${this.styleObjToString(scaledStyle)}" placeholder="${node.props?.placeholder || ''}" />`;
+      
+      case 'form':
+        return html`<form style=${this.styleObjToString(scaledStyle)}>${children}</form>`;
+      
+      default:
+        return html`<div style=${this.styleObjToString(scaledStyle)}>${children}</div>`;
+    }
+  }
+
+  private styleObjToString(styleObj: any): string {
+    return Object.entries(styleObj)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('; ');
+  }
+
   private renderTemplateModal() {
     const templates = templateStore.getAllTemplates();
 
@@ -785,9 +900,9 @@ export class PageManager extends LitElement {
                 </div>
               </div>
 
-              <!-- Right: Custom Builder Options & Preview -->
-              ${this.selectedTemplate === 'custom' ? html`
-                <div class="template-right">
+              <!-- Right: Custom Builder Options (only for 'custom') or Preview (for all templates) -->
+              <div class="template-right">
+                ${this.selectedTemplate === 'custom' ? html`
                   <div class="custom-builder-section">
                     <h4 style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #374151;">Select sections to include:</h4>
                     <div class="template-options">
@@ -841,16 +956,16 @@ export class PageManager extends LitElement {
                   <div class="template-preview">
                     <h4>Preview:</h4>
                     <div class="preview-layout">
-                      ${this.includeNav ? html`<div class="preview-section nav">Nav</div>` : ''}
+                      ${this.includeNav ? html`<div class="preview-section nav">Navigation</div>` : ''}
                       <div class="preview-content">
                         ${this.includeSidenav ? html`<div class="preview-section sidenav">Side</div>` : ''}
-                        <div class="preview-section main">Main</div>
+                        <div class="preview-section main">Main Content</div>
                       </div>
                       ${this.includeFooter ? html`<div class="preview-section footer">Footer</div>` : ''}
                     </div>
                   </div>
-                </div>
-              ` : ''}
+                ` : this.selectedTemplate ? this.renderTemplatePreview(this.selectedTemplate) : ''}
+              </div>
             </div>
           </div>
 
