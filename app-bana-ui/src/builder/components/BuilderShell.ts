@@ -172,10 +172,12 @@ export class BuilderShell extends LitElement {
         <appbana-app-manager></appbana-app-manager>
       </div>
 
-      <!-- Second Row: Page Manager -->
-      <div class="page-manager-panel">
-        <appbana-page-manager></appbana-page-manager>
-      </div>
+      <!-- Second Row: Page Manager (only show when app is active) -->
+      ${this.hasActiveApp ? html`
+        <div class="page-manager-panel">
+          <appbana-page-manager></appbana-page-manager>
+        </div>
+      ` : ''}
 
       <!-- Left: Tabbed Panel (Component Library or Entity Manager or AI Builder) -->
       <div class="library-panel">

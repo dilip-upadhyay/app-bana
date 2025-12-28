@@ -3,10 +3,10 @@
 }
 
 .app-manager {
-  padding: 20px 24px;
+  padding: 16px 24px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-bottom: 3px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
 }
 
 .app-header {
@@ -14,6 +14,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 20px;
+  flex-wrap: wrap;
 }
 
 .app-title {
@@ -21,6 +22,7 @@
   align-items: center;
   gap: 16px;
   flex: 1;
+  min-width: 200px;
 }
 
 .app-title h2 {
@@ -63,25 +65,43 @@
   border-radius: 6px;
 }
 
+.current-app.no-app {
+  background: rgba(251, 146, 60, 0.15);
+  border-color: rgba(251, 146, 60, 0.3);
+}
+
+.current-app.no-app .app-icon {
+  opacity: 0.7;
+}
+
+.current-app.no-app .no-app-text {
+  color: #ea580c;
+  font-weight: 500;
+  font-size: 13px;
+}
+
 .app-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .btn {
-  padding: 10px 18px;
+  padding: 10px 16px;
   border: 2px solid transparent;
   border-radius: 10px;
   background: white;
   color: #374151;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  white-space: nowrap;
 }
 
 .btn:hover {

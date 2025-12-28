@@ -195,8 +195,9 @@ export class AppManager extends LitElement {
                 <span class="page-count">${this.currentApp.pages.length} page${this.currentApp.pages.length !== 1 ? 's' : ''}</span>
               </div>
             ` : html`
-              <div class="current-app" style="color: #9ca3af;">
-                No app selected
+              <div class="current-app no-app">
+                <span class="app-icon">📂</span>
+                <span class="no-app-text">No app selected • Create or open an app to get started</span>
               </div>
             `}
           </div>
