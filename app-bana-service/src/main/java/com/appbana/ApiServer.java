@@ -399,6 +399,7 @@ public class ApiServer {
         return com.appbana.server.RouteRegistry.buildRouter();
     }
 
+    private static void configureServer(HttpServer server) {
         // Build router with all JSON endpoints
         com.appbana.api.Router router = buildRouter();
 
