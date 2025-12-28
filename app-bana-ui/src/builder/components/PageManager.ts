@@ -4,6 +4,7 @@ import { initStore, initNewPageStore, currentStore } from '../store/TreeStore';
 import { appStore } from '../store/AppStore';
 import type { PageMeta, ComponentNode } from '../../models/metadata';
 import { templateStore, PageTemplate } from '../store/TemplateStore';
+import { renderPage } from '../../runtime/renderer/Renderer';
 import styles from './PageManager.css?inline';
 
 @customElement('appbana-page-manager')
@@ -763,88 +764,42 @@ export class PageManager extends LitElement {
       `;
     }
 
-    // Render the actual template nodes in a scaled-down preview
+    // Use runtime renderer for accurate preview (with scaling)
     return html`
       <div class="template-preview">
         <h4>Preview: <span style="font-weight: 400; color: #6b7280; font-size: 10px;">${template.description}</span></h4>
-        <div class="template-preview-content">
-          ${this.renderTemplateNodes(template.nodes)}
+        <div class="template-preview-content" style="transform: scale(0.4); transform-origin: top left; width: 250%; height: 250%;">
+          ${this.renderTemplateWithRuntimeRenderer(template)}
         </div>
       </div>
     `;
   }
 
-  private renderTemplateNodes(nodes: ComponentNode[]): any {
-    if (!nodes || nodes.length === 0) return '';
+  private renderTemplateWithRuntimeRenderer(template: PageTemplate) {
+    // Create a temporary container for runtime renderer
+    const tempPage: PageMeta = {
+      id: template.id,
+      name: template.name,
+      path: `/${template.id}`,
+      rootId: 'root',
+      nodes: template.nodes
+    };
 
-    // Find root node
-    const root = nodes.find(n => n.id === 'root');
-    if (!root) return '';
-
-    // Create a map for quick node lookup
-    const nodeMap = new Map(nodes.map(n => [n.id, n]));
-
-    // Render the root and its children recursively
-    return this.renderPreviewNode(root, nodeMap);
-  }
-
-  private renderPreviewNode(node: ComponentNode, nodeMap: Map<string, ComponentNode>): any {
-    const children = node.children?.map(childId => {
-      const child = nodeMap.get(childId);
-      return child ? this.renderPreviewNode(child, nodeMap) : null;
-    }).filter(Boolean);
-
-    // Extract styles and convert to object
-    const styleStr = typeof node.props?.style === 'string' ? node.props.style : '';
-    const styleObj: any = {};
-    
-    // Apply scaling for preview (reduce sizes by 50%)
-    const scaledStyle: any = {};
-    if (styleStr) {
-      styleStr.split(';').forEach(rule => {
-        const [prop, value] = rule.split(':').map(s => s.trim());
-        if (prop && value) {
-          // Scale down dimensions for preview
-          if (value.includes('px')) {
-            const pxValue = parseFloat(value);
-            scaledStyle[prop] = `${pxValue * 0.4}px`; // 40% scale for compact preview
-          } else if (value.includes('rem')) {
-            const remValue = parseFloat(value);
-            scaledStyle[prop] = `${remValue * 0.4}rem`;
-          } else {
-            scaledStyle[prop] = value;
+    // Return a ref callback that renders using runtime renderer
+    return html`
+      <div ${(el: any) => {
+        if (el && el instanceof HTMLElement) {
+          // Clear and render
+          el.innerHTML = '';
+          try {
+            renderPage(tempPage, el);
+          } catch (err) {
+            console.error('Preview render error:', err);
+            el.innerHTML = '<div style="color: red; padding: 10px;">Preview error</div>';
           }
         }
-      });
-    }
-
-    // Render based on node type
-    switch (node.type) {
-      case 'container':
-        return html`<div style=${this.styleObjToString(scaledStyle)}>${children}</div>`;
-      
-      case 'text':
-        const fontSize = scaledStyle.fontSize || '0.4rem';
-        return html`<div style="font-size: ${fontSize}; ${this.styleObjToString(scaledStyle)}">${node.props?.text || ''}</div>`;
-      
-      case 'button':
-        return html`<button style="font-size: 0.35rem; padding: 0.2rem 0.4rem; ${this.styleObjToString(scaledStyle)}">${node.props?.text || 'Button'}</button>`;
-      
-      case 'input':
-        return html`<input style="font-size: 0.35rem; padding: 0.2rem; height: 1rem; ${this.styleObjToString(scaledStyle)}" placeholder="${node.props?.placeholder || ''}" />`;
-      
-      case 'form':
-        return html`<form style=${this.styleObjToString(scaledStyle)}>${children}</form>`;
-      
-      default:
-        return html`<div style=${this.styleObjToString(scaledStyle)}>${children}</div>`;
-    }
-  }
-
-  private styleObjToString(styleObj: any): string {
-    return Object.entries(styleObj)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('; ');
+      }}></div>
+    `;
   }
 
   private renderTemplateModal() {

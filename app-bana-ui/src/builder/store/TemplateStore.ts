@@ -1,5 +1,5 @@
 
-import { ComponentNode } from '../components/ComponentNode';
+import { ComponentNode } from '../../models/metadata';
 
 export interface PageTemplate {
     id: string;

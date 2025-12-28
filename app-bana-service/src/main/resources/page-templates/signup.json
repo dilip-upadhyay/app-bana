@@ -1,7 +1,7 @@
 {
     "id": "signup",
     "name": "Sign Up Page",
-    "description": "Modern split-screen registration with brand panel and form (45/55 layout)",
+    "description": "Perfect compact - Material Design inputs, zero redundancy, all visible",
     "category": "auth",
     "isSystem": true,
     "nodes": [
@@ -9,376 +9,234 @@
             "id": "root",
             "type": "container",
             "props": {
-                "style": "display: flex; flex-direction: row; min-height: 100vh; width: 100%; margin: 0; padding: 0; box-sizing: border-box;"
+                "style": "display: flex; flex-direction: column; min-height: 100vh; width: 100%; margin: 0; padding: 0; box-sizing: border-box; background: #f7fafc;"
             },
             "children": [
-                "brand-section-sign-1",
-                "form-section-sign-1"
+                "brand-banner-sign",
+                "form-container-sign"
             ]
         },
         {
-            "id": "brand-section-sign-1",
+            "id": "brand-banner-sign",
             "type": "container",
             "props": {
-                "style": "flex: 0 0 45%; min-height: 100vh; box-sizing: border-box; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; justify-content: center; padding: 3rem 2.5rem; color: white;"
+                "style": "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.5rem 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"
             },
             "children": [
-                "brand-content-sign-1"
+                "brand-banner-content"
             ]
         },
         {
-            "id": "brand-content-sign-1",
+            "id": "brand-banner-content",
             "type": "container",
             "props": {
-                "style": "max-width: 500px;"
+                "style": "max-width: 100%; width: 100%; margin: 0 auto; display: flex; justify-content: center; align-items: center; gap: 0.75rem; flex-wrap: nowrap;"
             },
             "children": [
-                "brand-title-sign-1",
-                "brand-subtitle-sign-1",
-                "brand-features-sign-1"
+                "brand-title-compact",
+                "feature-badge-1",
+                "feature-badge-2",
+                "feature-badge-3"
             ]
         },
         {
-            "id": "brand-title-sign-1",
+            "id": "brand-title-compact",
             "type": "text",
             "props": {
                 "tag": "h1",
-                "text": "Join Our Community",
-                "style": "font-size: 2rem; font-weight: 700; margin: 0 0 1rem 0; line-height: 1.2;"
+                "text": "AppBana",
+                "style": "font-size: 1.1rem; font-weight: 700; margin: 0; line-height: 1; white-space: nowrap;"
             }
         },
         {
-            "id": "brand-subtitle-sign-1",
+            "id": "feature-badge-1",
             "type": "text",
             "props": {
-                "tag": "p",
-                "text": "Create your account and start building amazing applications with AppBana's powerful platform.",
-                "style": "font-size: 1rem; line-height: 1.6; opacity: 0.95; margin: 0 0 2.5rem 0;"
+                "tag": "span",
+                "text": "✓ No-code",
+                "style": "font-size: 0.7rem; padding: 0.2rem 0.5rem; background: rgba(255,255,255,0.2); border-radius: 10px; white-space: nowrap;"
             }
         },
         {
-            "id": "brand-features-sign-1",
+            "id": "feature-badge-2",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "✓ Workflows",
+                "style": "font-size: 0.7rem; padding: 0.2rem 0.5rem; background: rgba(255,255,255,0.2); border-radius: 10px; white-space: nowrap;"
+            }
+        },
+        {
+            "id": "feature-badge-3",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "✓ Deploy",
+                "style": "font-size: 0.7rem; padding: 0.2rem 0.5rem; background: rgba(255,255,255,0.2); border-radius: 10px; white-space: nowrap;"
+            }
+        },
+        {
+            "id": "form-container-sign",
             "type": "container",
             "props": {
-                "tag": "ul",
-                "style": "list-style: none; padding: 0; margin: 0;"
+                "style": "flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 0.75rem 1rem;"
             },
             "children": [
-                "feature-1-sign",
-                "feature-2-sign",
-                "feature-3-sign",
-                "feature-4-sign",
-                "feature-5-sign"
+                "form-card-sign"
             ]
         },
         {
-            "id": "feature-1-sign",
-            "type": "text",
-            "props": {
-                "tag": "li",
-                "text": "✓ Build apps 10x faster with no-code builder",
-                "style": "display: flex; align-items: center; margin-bottom: 1rem; font-size: 0.95rem;"
-            }
-        },
-        {
-            "id": "feature-2-sign",
-            "type": "text",
-            "props": {
-                "tag": "li",
-                "text": "✓ Enterprise-grade security & compliance",
-                "style": "display: flex; align-items: center; margin-bottom: 1rem; font-size: 0.95rem;"
-            }
-        },
-        {
-            "id": "feature-3-sign",
-            "type": "text",
-            "props": {
-                "tag": "li",
-                "text": "✓ Connect to any database or API",
-                "style": "display: flex; align-items: center; margin-bottom: 1rem; font-size: 0.95rem;"
-            }
-        },
-        {
-            "id": "feature-4-sign",
-            "type": "text",
-            "props": {
-                "tag": "li",
-                "text": "✓ Workflow automation included",
-                "style": "display: flex; align-items: center; margin-bottom: 1rem; font-size: 0.95rem;"
-            }
-        },
-        {
-            "id": "feature-5-sign",
-            "type": "text",
-            "props": {
-                "tag": "li",
-                "text": "✓ Deploy anywhere in minutes",
-                "style": "display: flex; align-items: center; margin-bottom: 1rem; font-size: 0.95rem;"
-            }
-        },
-        {
-            "id": "form-section-sign-1",
+            "id": "form-card-sign",
             "type": "container",
             "props": {
-                "style": "flex: 0 0 55%; min-height: 100vh; box-sizing: border-box; display: flex; align-items: center; justify-content: center; background: white; padding: 3rem 2.5rem;"
+                "style": "width: 100%; max-width: 900px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); padding: 1rem 1.5rem;"
             },
             "children": [
-                "form-wrapper-sign-1"
+                "signup-header-compact",
+                "form-sign-compact"
             ]
         },
         {
-            "id": "form-wrapper-sign-1",
+            "id": "signup-header-compact",
             "type": "container",
             "props": {
-                "style": "width: 100%; max-width: 480px;"
+                "style": "margin-bottom: 0.5rem; text-align: center;"
             },
             "children": [
-                "signup-header-1",
-                "form-1"
+                "title-compact",
+                "subtitle-compact"
             ]
         },
         {
-            "id": "signup-header-1",
-            "type": "container",
-            "props": {
-                "style": "margin-bottom: 2rem;"
-            },
-            "children": [
-                "title-1",
-                "subtitle-1"
-            ]
-        },
-        {
-            "id": "title-1",
+            "id": "title-compact",
             "type": "text",
             "props": {
                 "tag": "h2",
                 "text": "Create Account",
-                "style": "margin: 0 0 0.5rem 0; font-size: 1.75rem; font-weight: 700; color: #1a202c;"
+                "style": "margin: 0 0 0.2rem 0; font-size: 1.25rem; font-weight: 700; color: #1a202c;"
             }
         },
         {
-            "id": "subtitle-1",
+            "id": "subtitle-compact",
             "type": "text",
             "props": {
                 "tag": "p",
                 "text": "Already have an account? <a href=\"/login\" style=\"color: #667eea; text-decoration: none; font-weight: 600;\">Sign in</a>",
-                "style": "margin: 0; font-size: 0.95rem; color: #718096;"
+                "style": "margin: 0; font-size: 0.75rem; color: #718096;"
             }
         },
         {
-            "id": "form-1",
+            "id": "form-sign-compact",
             "type": "container",
             "props": {
                 "tag": "form",
-                "style": "display: flex; flex-direction: column; gap: 1.5rem; margin-top: 2rem;"
-            },
-            "children": [
-                "name-row-1",
-                "email-group-1",
-                "phone-group-1",
-                "password-group-1",
-                "confirm-group-1",
-                "submit-1"
-            ]
-        },
-        {
-            "id": "name-row-1",
-            "type": "container",
-            "props": {
-                "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;"
-            },
-            "children": [
-                "firstname-group-1",
-                "lastname-group-1"
-            ]
-        },
-        {
-            "id": "firstname-group-1",
-            "type": "container",
-            "props": {
                 "style": "display: flex; flex-direction: column; gap: 0.5rem;"
             },
             "children": [
-                "firstname-label-1",
-                "firstname-input-1"
+                "name-row-compact",
+                "email-row-compact",
+                "password-row-compact",
+                "submit-compact"
             ]
         },
         {
-            "id": "firstname-label-1",
-            "type": "text",
+            "id": "name-row-compact",
+            "type": "container",
             "props": {
-                "tag": "label",
-                "text": "First Name",
-                "style": "font-size: 0.9rem; font-weight: 500; color: #2d3748;"
-            }
+                "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
+            },
+            "children": [
+                "firstname-input-compact",
+                "lastname-input-compact"
+            ]
         },
         {
-            "id": "firstname-input-1",
+            "id": "firstname-input-compact",
             "type": "input",
             "props": {
                 "type": "text",
-                "placeholder": "John",
+                "placeholder": "First Name *",
                 "required": true,
-                "style": "padding: 0.75rem 1rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; font-family: inherit; transition: all 0.2s;"
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
             }
         },
         {
-            "id": "lastname-group-1",
-            "type": "container",
-            "props": {
-                "style": "display: flex; flex-direction: column; gap: 0.5rem;"
-            },
-            "children": [
-                "lastname-label-1",
-                "lastname-input-1"
-            ]
-        },
-        {
-            "id": "lastname-label-1",
-            "type": "text",
-            "props": {
-                "tag": "label",
-                "text": "Last Name",
-                "style": "font-size: 0.9rem; font-weight: 500; color: #2d3748;"
-            }
-        },
-        {
-            "id": "lastname-input-1",
+            "id": "lastname-input-compact",
             "type": "input",
             "props": {
                 "type": "text",
-                "placeholder": "Doe",
+                "placeholder": "Last Name *",
                 "required": true,
-                "style": "padding: 0.75rem 1rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; font-family: inherit; transition: all 0.2s;"
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
             }
         },
         {
-            "id": "email-group-1",
+            "id": "email-row-compact",
             "type": "container",
             "props": {
-                "style": "display: flex; flex-direction: column; gap: 0.5rem;"
+                "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
             },
             "children": [
-                "email-label-1",
-                "email-input-1"
+                "email-input-compact",
+                "phone-input-compact"
             ]
         },
         {
-            "id": "email-label-1",
-            "type": "text",
-            "props": {
-                "tag": "label",
-                "text": "Email Address",
-                "style": "font-size: 0.9rem; font-weight: 500; color: #2d3748;"
-            }
-        },
-        {
-            "id": "email-input-1",
+            "id": "email-input-compact",
             "type": "input",
             "props": {
                 "type": "email",
-                "placeholder": "john.doe@example.com",
+                "placeholder": "Email *",
                 "required": true,
-                "style": "padding: 0.75rem 1rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; font-family: inherit; transition: all 0.2s;"
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
             }
         },
         {
-            "id": "phone-group-1",
-            "type": "container",
-            "props": {
-                "style": "display: flex; flex-direction: column; gap: 0.5rem;"
-            },
-            "children": [
-                "phone-label-1",
-                "phone-input-1"
-            ]
-        },
-        {
-            "id": "phone-label-1",
-            "type": "text",
-            "props": {
-                "tag": "label",
-                "text": "Phone Number <span style=\"color: #a0aec0; font-weight: 400;\">(Optional)</span>",
-                "style": "font-size: 0.9rem; font-weight: 500; color: #2d3748;"
-            }
-        },
-        {
-            "id": "phone-input-1",
+            "id": "phone-input-compact",
             "type": "input",
             "props": {
                 "type": "tel",
-                "placeholder": "+1 (555) 000-0000",
-                "style": "padding: 0.75rem 1rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; font-family: inherit; transition: all 0.2s;"
+                "placeholder": "Phone (optional)",
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
             }
         },
         {
-            "id": "password-group-1",
+            "id": "password-row-compact",
             "type": "container",
             "props": {
-                "style": "display: flex; flex-direction: column; gap: 0.5rem;"
+                "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
             },
             "children": [
-                "password-label-1",
-                "password-input-1"
+                "password-input-compact",
+                "confirm-input-compact"
             ]
         },
         {
-            "id": "password-label-1",
-            "type": "text",
-            "props": {
-                "tag": "label",
-                "text": "Password",
-                "style": "font-size: 0.9rem; font-weight: 500; color: #2d3748;"
-            }
-        },
-        {
-            "id": "password-input-1",
+            "id": "password-input-compact",
             "type": "input",
             "props": {
                 "type": "password",
-                "placeholder": "At least 8 characters",
+                "placeholder": "Password *",
                 "required": true,
-                "style": "padding: 0.75rem 1rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; font-family: inherit; transition: all 0.2s;"
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
             }
         },
         {
-            "id": "confirm-group-1",
-            "type": "container",
-            "props": {
-                "style": "display: flex; flex-direction: column; gap: 0.5rem;"
-            },
-            "children": [
-                "confirm-label-1",
-                "confirm-input-1"
-            ]
-        },
-        {
-            "id": "confirm-label-1",
-            "type": "text",
-            "props": {
-                "tag": "label",
-                "text": "Confirm Password",
-                "style": "font-size: 0.9rem; font-weight: 500; color: #2d3748;"
-            }
-        },
-        {
-            "id": "confirm-input-1",
+            "id": "confirm-input-compact",
             "type": "input",
             "props": {
                 "type": "password",
-                "placeholder": "Re-enter your password",
+                "placeholder": "Confirm Password *",
                 "required": true,
-                "style": "padding: 0.75rem 1rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; font-family: inherit; transition: all 0.2s;"
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
             }
         },
         {
-            "id": "submit-1",
+            "id": "submit-compact",
             "type": "button",
             "props": {
-                "text": "Create Account",
-                "type": "submit",
-                "style": "width: 100%; padding: 0.875rem 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s; margin-top: 1rem;"
+                "text": "Sign Up",
+                "style": "width: 100%; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 0.25rem;"
             }
         }
     ]
