@@ -1,47 +1,5 @@
 {
   "version" : "1.0",
-  "lastUpdated" : "Wed Dec 24 11:03:09 IST 2025",
-  "entries" : [ {
-    "originalText" : "I want following features number one Employ Management Number two Recruitment management Number three Salary.",
-    "normalizedText" : "i want following features number one employ management number two recruitment management number three salary",
-    "response" : "That sounds fantastic! \uD83D\uDE80 Here’s a quick overview of the features:\n\n1. **Employee Management**: Track employee details, performance, and attendance.\n2. **Recruitment Management**: Streamline the hiring process, manage job postings, and applications.\n3. **Salary Management**: Handle payroll, bonuses, and salary tracking.\n\nI can add these features to your plan! Say \"Update plan\" to proceed.",
-    "createdTime" : 1766552296004,
-    "lastAccessTime" : 1766552296004,
-    "hitCount" : 0
-  }, {
-    "originalText" : "Create the app now.",
-    "normalizedText" : "create the app now",
-    "response" : "I cannot build that type of application. Please verify your request complies with our Safety & Ethics policy.",
-    "createdTime" : 1766554389092,
-    "lastAccessTime" : 1766554389092,
-    "hitCount" : 0
-  }, {
-    "originalText" : "I want to build HR management app.",
-    "normalizedText" : "i want to build hr management app",
-    "response" : "Awesome choice! \uD83D\uDE80 An HR management app can streamline processes and improve efficiency. What features do you have in mind?",
-    "createdTime" : 1766552254719,
-    "lastAccessTime" : 1766552254719,
-    "hitCount" : 0
-  }, {
-    "originalText" : "Create it.",
-    "normalizedText" : "create it",
-    "response" : "Great! \uD83D\uDE80 I’m generating the metadata for your app features now:\n\n1. **Equipment Entity**:\n   - Fields: Equipment Name, Status (Free/Used), Description, Location, Date Added.\n\n2. **Add/Modify Equipment Page**:\n   - Functionality to add new equipment and modify existing equipment entries.\n   - List view showing all equipment with columns for Name, Status, Description, and Location.\n\n3. **User Entity**:\n   - Fields: Username, Password, Email, Registration Date.\n   - Functionality for user registration and login.\n\nLet’s make this app a reality! \uD83D\uDE80 If you need any more features or updates, just let me know!",
-    "createdTime" : 1766554334530,
-    "lastAccessTime" : 1766554334530,
-    "hitCount" : 0
-  }, {
-    "originalText" : "Create an inventory management app for the equipments that are used for transportation and ships.",
-    "normalizedText" : "create an inventory management app for the equipments that are used for transportation and ships",
-    "response" : "Awesome idea! \uD83D\uDE80 An inventory management app for transportation and shipping equipment can greatly enhance tracking and organization. What specific features do you want in this app?",
-    "createdTime" : 1766553157676,
-    "lastAccessTime" : 1766553157676,
-    "hitCount" : 0
-  }, {
-    "originalText" : "The first feature I want is to track All the equipments whether they Being used Are So the idea is Uh right now this whole process is manual And it is very difficult to identify if the equipment is free to use So uh that's the first feature now let's talk about the second feature There should be an option to add your equipment To modify new equipment and list down all the equipments available with all the columns Third feature There should be Uh user registration And login feature.",
-    "normalizedText" : "the first feature i want is to track all the equipments whether they being used are so the idea is uh right now this whole process is manual and it is very difficult to identify if the equipment is free to use so uh that's the first feature now let's talk about the second feature there should be an option to add your equipment to modify new equipment and list down all the equipments available with all the columns third feature there should be uh user registration and login feature",
-    "response" : "Awesome features! \uD83D\uDE80 \n\n1. **Track Equipment Usage**: We can create an Entity for Equipment with a status field to track if it's being used or free. This will help automate the process! \n\n2. **Add/Modify Equipment**: I can set up a Page where users can add new equipment, modify existing ones, and list all available equipment with relevant details. \n\n3. **User Registration and Login**: We can implement a User Entity for registration and login functionalities to manage user access! \n\nLet’s get started! Say 'Create it' to generate the metadata for these features! \uD83C\uDF89",
-    "createdTime" : 1766554305800,
-    "lastAccessTime" : 1766554305800,
-    "hitCount" : 0
-  } ]
+  "lastUpdated" : "Sun Dec 28 18:44:11 IST 2025",
+  "entries" : [ ]
 }

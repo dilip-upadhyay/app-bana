@@ -5,6 +5,7 @@ import com.appbana.api.Router;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
+import com.appbana.service.AuthService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,8 +14,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static com.appbana.ApiServer.*;
 
 /**
  * Schema management routes
@@ -26,9 +25,9 @@ public class SchemaRoutes {
         // List API endpoints for all schemas
         router.get("/api/endpoints", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) {
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasRead(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -58,9 +57,9 @@ public class SchemaRoutes {
         // OpenAPI spec generation
         router.get("/openapi.json", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) {
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasRead(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -84,9 +83,9 @@ public class SchemaRoutes {
         // List schemas
         router.get("/schema", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) {
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasRead(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -120,9 +119,9 @@ public class SchemaRoutes {
         // Get schema by name
         router.get("/schema/{name}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(req);
-                if (!hasRead(tok, cfg)) {
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasRead(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -140,9 +139,9 @@ public class SchemaRoutes {
         // Create/Update schema
         router.post("/schema", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(req);
-                if (!hasWrite(tok, cfg)) {
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasWrite(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -167,9 +166,9 @@ public class SchemaRoutes {
         // Delete schema
         router.delete("/schema/{name}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (authEnabled(cfg)) {
-                String tok = extractToken(req);
-                if (!hasWrite(tok, cfg)) {
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasWrite(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -177,7 +176,9 @@ public class SchemaRoutes {
 
             String name = req.pathParam("name");
             try {
-                boolean deleted = SchemaManager.deleteSchema(name);
+                boolean dropTable = "true".equalsIgnoreCase(req.query("dropTable"))
+                        || "1".equals(req.query("dropTable"));
+                boolean deleted = SchemaManager.deleteSchema(name, dropTable);
                 if (!deleted) {
                     res.json(404, Map.of("error", "Schema not found: " + name));
                     return;

@@ -1,6 +1,25 @@
 package com.appbana.server.routes;
 
+import com.appbana.AuditLogService;
+import com.appbana.JdbcManager;
+import com.appbana.SchemaManager;
 import com.appbana.api.Router;
+import com.appbana.config.AppConfig;
+import com.appbana.config.ConfigManager;
+import com.appbana.model.EntitySchema;
+import com.appbana.service.AuthService;
+import com.appbana.service.EntityCrudService;
+import com.appbana.service.ErrorHandler;
+import com.appbana.service.PermissionService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.*;
 
 /**
  * Generic entity CRUD routes (dynamic entities based on schemas)
@@ -54,8 +73,808 @@ import com.appbana.api.Router;
  */
 public class GenericEntityRoutes {
 
+    private static final Logger LOG = LoggerFactory.getLogger(GenericEntityRoutes.class);
+
     public static void register(Router router) {
-        // TODO: Implement after EntityCrudService extraction
-        // See backup file: ApiServer.java.backup lines 2102-2640
+        EntityCrudService crud = new EntityCrudService();
+        PermissionService permissionService = com.appbana.server.ServerBootstrap
+                .initializePermissionService(ConfigManager.getConfig());
+
+        // ==================== AUDIT ====================
+        router.get("/audit", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String entity = req.query("entity");
+            String pk = req.query("pk");
+            int limit = 50;
+            int offset = 0;
+            try {
+                String ls = req.query("limit");
+                if (ls != null)
+                    limit = Integer.parseInt(ls);
+            } catch (Exception ignored) {
+            }
+            try {
+                String os = req.query("offset");
+                if (os != null)
+                    offset = Integer.parseInt(os);
+            } catch (Exception ignored) {
+            }
+            if (limit <= 0)
+                limit = 50;
+            if (limit > 500)
+                limit = 500;
+            if (offset < 0)
+                offset = 0;
+
+            try {
+                Map<String, Object> out = AuditLogService.query(entity, pk, limit, offset);
+                res.json(200, out);
+            } catch (Exception e) {
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // ==================== FIELD-LEVEL SECURITY (FLS) ADMIN ====================
+        router.get("/api/field-permissions", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String roleId = req.query("roleId");
+            String entityName = req.query("entityName");
+
+            try (Connection conn = JdbcManager.getConnection()) {
+                StringBuilder sql = new StringBuilder("SELECT * FROM field_permission WHERE 1=1");
+                List<Object> params = new ArrayList<>();
+
+                if (roleId != null && !roleId.isBlank()) {
+                    sql.append(" AND role_id = ?");
+                    params.add(roleId);
+                }
+                if (entityName != null && !entityName.isBlank()) {
+                    sql.append(" AND entity_name = ?");
+                    params.add(entityName);
+                }
+
+                sql.append(" ORDER BY entity_name, field_name");
+
+                try (PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
+                    for (int i = 0; i < params.size(); i++) {
+                        stmt.setObject(i + 1, params.get(i));
+                    }
+
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        List<Map<String, Object>> permissions = new ArrayList<>();
+                        while (rs.next()) {
+                            Map<String, Object> perm = new LinkedHashMap<>();
+                            perm.put("id", rs.getString("id"));
+                            perm.put("roleId", rs.getString("role_id"));
+                            perm.put("entityName", rs.getString("entity_name"));
+                            perm.put("fieldName", rs.getString("field_name"));
+                            perm.put("canRead", rs.getBoolean("can_read"));
+                            perm.put("canEdit", rs.getBoolean("can_edit"));
+                            perm.put("createdAt", rs.getTimestamp("created_at"));
+                            perm.put("updatedAt", rs.getTimestamp("updated_at"));
+                            permissions.add(perm);
+                        }
+                        res.json(200, Map.of("permissions", permissions, "total", permissions.size()));
+                    }
+                }
+            } catch (SQLException e) {
+                LOG.error("Failed to fetch field permissions", e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.get("/api/field-permissions/readable", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String userId;
+
+            if (AuthService.authEnabled(cfg)) {
+                userId = AuthService.extractUserId(req, cfg);
+                if (userId == null) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            } else {
+                res.json(200, Map.of("fields", List.of("*"), "message",
+                        "Authentication disabled - all fields readable"));
+                return;
+            }
+
+            String entityName = req.query("entity");
+            if (entityName == null || entityName.isBlank()) {
+                res.json(400, Map.of("error", "entity parameter required"));
+                return;
+            }
+
+            if (permissionService == null) {
+                res.json(503, Map.of("error", "Permission service not available"));
+                return;
+            }
+
+            try {
+                List<String> readableFields = permissionService.getReadableFields(userId, entityName);
+                res.json(200, Map.of(
+                        "entity", entityName,
+                        "userId", userId,
+                        "fields", readableFields,
+                        "count", readableFields.size()));
+            } catch (Exception e) {
+                LOG.error("Failed to get readable fields for user {} entity {}", userId, entityName, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.get("/api/field-permissions/editable", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String userId;
+
+            if (AuthService.authEnabled(cfg)) {
+                userId = AuthService.extractUserId(req, cfg);
+                if (userId == null) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            } else {
+                res.json(200, Map.of("fields", List.of("*"), "message",
+                        "Authentication disabled - all fields editable"));
+                return;
+            }
+
+            String entityName = req.query("entity");
+            if (entityName == null || entityName.isBlank()) {
+                res.json(400, Map.of("error", "entity parameter required"));
+                return;
+            }
+
+            if (permissionService == null) {
+                res.json(503, Map.of("error", "Permission service not available"));
+                return;
+            }
+
+            try {
+                List<String> editableFields = permissionService.getEditableFields(userId, entityName);
+                res.json(200, Map.of(
+                        "entity", entityName,
+                        "userId", userId,
+                        "fields", editableFields,
+                        "count", editableFields.size()));
+            } catch (Exception e) {
+                LOG.error("Failed to get editable fields for user {} entity {}", userId, entityName, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.get("/api/field-permissions/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String id = req.pathParam("id");
+            try (Connection conn = JdbcManager.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement("SELECT * FROM field_permission WHERE id = ?")) {
+                stmt.setString(1, id);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        Map<String, Object> perm = new LinkedHashMap<>();
+                        perm.put("id", rs.getString("id"));
+                        perm.put("roleId", rs.getString("role_id"));
+                        perm.put("entityName", rs.getString("entity_name"));
+                        perm.put("fieldName", rs.getString("field_name"));
+                        perm.put("canRead", rs.getBoolean("can_read"));
+                        perm.put("canEdit", rs.getBoolean("can_edit"));
+                        perm.put("createdAt", rs.getTimestamp("created_at"));
+                        perm.put("updatedAt", rs.getTimestamp("updated_at"));
+                        res.json(200, perm);
+                    } else {
+                        res.json(404, Map.of("error", "Field permission not found"));
+                    }
+                }
+            } catch (SQLException e) {
+                LOG.error("Failed to fetch field permission", e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.post("/api/field-permissions", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+
+            String roleId = (String) data.get("roleId");
+            String entityName = (String) data.get("entityName");
+            String fieldName = (String) data.get("fieldName");
+            Boolean canRead = (Boolean) data.getOrDefault("canRead", false);
+            Boolean canEdit = (Boolean) data.getOrDefault("canEdit", false);
+
+            if (roleId == null || entityName == null || fieldName == null) {
+                res.json(400, Map.of("error", "roleId, entityName, and fieldName are required"));
+                return;
+            }
+
+            try (Connection conn = JdbcManager.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(
+                         "INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit, created_at, updated_at) "
+                                 + "VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
+                String id = java.util.UUID.randomUUID().toString();
+                stmt.setString(1, id);
+                stmt.setString(2, roleId);
+                stmt.setString(3, entityName);
+                stmt.setString(4, fieldName);
+                stmt.setBoolean(5, canRead);
+                stmt.setBoolean(6, canEdit);
+                int inserted = stmt.executeUpdate();
+                if (inserted > 0) {
+                    if (permissionService != null) {
+                        permissionService.clearAllCaches();
+                    }
+                    res.json(201, Map.of("id", id, "message", "Field permission created"));
+                } else {
+                    res.json(500, Map.of("error", "Failed to create field permission"));
+                }
+            } catch (SQLException e) {
+                LOG.error("Failed to create field permission", e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.put("/api/field-permissions/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String id = req.pathParam("id");
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+            Boolean canRead = (Boolean) data.get("canRead");
+            Boolean canEdit = (Boolean) data.get("canEdit");
+
+            if (canRead == null && canEdit == null) {
+                res.json(400, Map.of("error", "At least one of canRead or canEdit must be provided"));
+                return;
+            }
+
+            try (Connection conn = JdbcManager.getConnection()) {
+                StringBuilder sql = new StringBuilder("UPDATE field_permission SET updated_at = CURRENT_TIMESTAMP");
+                List<Object> params = new ArrayList<>();
+                if (canRead != null) {
+                    sql.append(", can_read = ?");
+                    params.add(canRead);
+                }
+                if (canEdit != null) {
+                    sql.append(", can_edit = ?");
+                    params.add(canEdit);
+                }
+                sql.append(" WHERE id = ?");
+                params.add(id);
+
+                try (PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
+                    for (int i = 0; i < params.size(); i++) {
+                        stmt.setObject(i + 1, params.get(i));
+                    }
+                    int updated = stmt.executeUpdate();
+                    if (updated > 0) {
+                        if (permissionService != null) {
+                            permissionService.clearAllCaches();
+                        }
+                        res.json(200, Map.of("updated", updated, "message", "Field permission updated"));
+                    } else {
+                        res.json(404, Map.of("error", "Field permission not found"));
+                    }
+                }
+            } catch (SQLException e) {
+                LOG.error("Failed to update field permission", e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.delete("/api/field-permissions/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String id = req.pathParam("id");
+            try (Connection conn = JdbcManager.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement("DELETE FROM field_permission WHERE id = ?")) {
+                stmt.setString(1, id);
+                int deleted = stmt.executeUpdate();
+                if (deleted > 0) {
+                    if (permissionService != null) {
+                        permissionService.clearAllCaches();
+                    }
+                    res.json(200, Map.of("deleted", deleted, "message", "Field permission deleted"));
+                } else {
+                    res.json(404, Map.of("error", "Field permission not found"));
+                }
+            } catch (SQLException e) {
+                LOG.error("Failed to delete field permission", e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // ==================== ENTITY CRUD ====================
+        router.post("/api/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String actor = "anonymous";
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+            try {
+                Object idObj = crud.insertRecord(schema, data);
+                String id = String.valueOf(idObj);
+                Map<String, Object> after = crud.getById(schema, id);
+                AuditLogService.log("INSERT", schema.getName(), id, actor, null, after);
+
+                if (after != null) {
+                    try {
+                        com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
+                                schema.getName(), "ON_CREATE", id, after);
+                    } catch (Exception e) {
+                        LOG.warn("Workflow trigger failed ON_CREATE {} id={}: {}", schema.getName(), id, e.getMessage());
+                    }
+                }
+
+                res.json(201, Map.of("id", idObj));
+            } catch (SQLException e) {
+                LOG.error("Insert failed for entity {}", entity, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.post("/api/{entity}/batch", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String actor = "anonymous";
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+
+            List<Map<String, Object>> payload;
+            try {
+                payload = req.readJson(new TypeReference<>() {
+                });
+            } catch (Exception e) {
+                res.json(400, Map.of("error", "invalid json array"));
+                return;
+            }
+            if (payload == null) {
+                res.json(400, Map.of("error", "array required"));
+                return;
+            }
+            int max = 1000;
+            if (payload.size() > max) {
+                res.json(400, Map.of("error", "batch too large", "max", max));
+                return;
+            }
+
+            try {
+                Map<String, Object> out = crud.insertBatch(schema, payload);
+                Object idsObj = out.get("ids");
+                if (idsObj instanceof List<?> idList) {
+                    for (Object idVal : idList) {
+                        if (idVal == null)
+                            continue;
+                        try {
+                            Map<String, Object> after = crud.getById(schema, String.valueOf(idVal));
+                            AuditLogService.log("INSERT", schema.getName(), String.valueOf(idVal), actor, null, after);
+                        } catch (Exception ignore) {
+                        }
+                    }
+                }
+                res.json(201, out);
+            } catch (Exception e) {
+                LOG.error("Batch insert failed for {}", entity, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.get("/api/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+
+            String limitS = req.query("limit");
+            String offsetS = req.query("offset");
+            String q = req.query("q");
+            String fieldsParam = req.query("fields");
+            String sortParam = req.query("sort");
+            String filterParam = req.query("filter");
+            String countFlag = req.query("count");
+
+            Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+            boolean countOnly = "true".equalsIgnoreCase(countFlag) || (countFlag != null && countFlag.equals("1"));
+
+            Integer limit = null;
+            Integer offset = null;
+            boolean anyAdv = countOnly || q != null || fieldsParam != null || sortParam != null || filterParam != null
+                    || limitS != null || offsetS != null;
+            if (limitS != null || offsetS != null || q != null || fieldsParam != null || sortParam != null
+                    || filterParam != null) {
+                try {
+                    limit = limitS != null ? Integer.parseInt(limitS) : 50;
+                } catch (Exception ignore) {
+                    limit = 50;
+                }
+                try {
+                    offset = offsetS != null ? Integer.parseInt(offsetS) : 0;
+                } catch (Exception ignore) {
+                    offset = 0;
+                }
+                if (limit <= 0)
+                    limit = 50;
+                if (limit > 500)
+                    limit = 500;
+                if (offset < 0)
+                    offset = 0;
+            }
+
+            try {
+                if (!anyAdv) {
+                    List<Map<String, Object>> rows = crud.listAll(schema);
+                    if (permissionService != null && AuthService.authEnabled(cfg)) {
+                        String userId = AuthService.extractUserId(req, cfg);
+                        if (userId != null) {
+                            List<Map<String, Object>> filtered = new ArrayList<>();
+                            for (Map<String, Object> row : rows) {
+                                filtered.add(permissionService.filterReadableFields(userId, entity, row));
+                            }
+                            rows = filtered;
+                        }
+                    }
+                    res.json(200, rows);
+                } else {
+                    if (countOnly) {
+                        long total = crud.countOnly(schema, q, filters);
+                        Map<String, Object> out = new LinkedHashMap<>();
+                        out.put("total", total);
+                        if (q != null && !q.isBlank())
+                            out.put("query", q);
+                        if (!filters.isEmpty())
+                            out.put("filters", filters);
+                        res.json(200, out);
+                    } else {
+                        Map<String, Object> out = crud.listAdvanced(schema,
+                                limit != null ? limit : 50,
+                                offset != null ? offset : 0,
+                                q,
+                                fieldsParam,
+                                sortParam,
+                                filters);
+
+                        if (permissionService != null && AuthService.authEnabled(cfg)) {
+                            String userId = AuthService.extractUserId(req, cfg);
+                            Object rowsObj = out.get("rows");
+                            if (userId != null && rowsObj instanceof List<?> rowsList) {
+                                List<Map<String, Object>> filtered = new ArrayList<>();
+                                for (Object item : rowsList) {
+                                    if (item instanceof Map<?, ?> row) {
+                                        @SuppressWarnings("unchecked")
+                                        Map<String, Object> typedRow = (Map<String, Object>) row;
+                                        filtered.add(permissionService.filterReadableFields(userId, entity, typedRow));
+                                    }
+                                }
+                                out.put("rows", filtered);
+                            }
+                        }
+
+                        res.json(200, out);
+                    }
+                }
+            } catch (SQLException e) {
+                LOG.error("List failed for entity {}", entity, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.get("/api/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+
+            try {
+                Map<String, Object> row = crud.getById(schema, idStr);
+                if (row == null) {
+                    res.json(404, Map.of("error", "not found"));
+                } else {
+                    if (permissionService != null && AuthService.authEnabled(cfg)) {
+                        String userId = AuthService.extractUserId(req, cfg);
+                        if (userId != null) {
+                            row = permissionService.filterReadableFields(userId, entity, row);
+                        }
+                    }
+                    res.json(200, row);
+                }
+            } catch (SQLException e) {
+                LOG.error("Get by id failed for entity {} id {}", entity, idStr, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.put("/api/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String actor = "anonymous";
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+
+            try {
+                if (permissionService != null && AuthService.authEnabled(cfg)) {
+                    String userId = AuthService.extractUserId(req, cfg);
+                    if (userId != null) {
+                        try {
+                            permissionService.validateEditableFields(userId, entity, data);
+                        } catch (SecurityException se) {
+                            res.json(403, Map.of("error", "forbidden", "message", se.getMessage()));
+                            return;
+                        }
+                    }
+                }
+
+                Map<String, Object> before = crud.getById(schema, idStr);
+                int updated = crud.updateById(schema, idStr, data);
+                Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
+                if (updated > 0) {
+                    AuditLogService.log("UPDATE", schema.getName(), idStr, actor, before, after);
+                    try {
+                        com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
+                                schema.getName(), "ON_UPDATE", idStr, after);
+                    } catch (Exception e) {
+                        LOG.warn("Workflow trigger failed ON_UPDATE {} id={}: {}", schema.getName(), idStr, e.getMessage());
+                    }
+                }
+                res.json(200, Map.of("updated", updated));
+            } catch (SQLException e) {
+                LOG.error("Update failed for entity {} id {}", entity, idStr, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.delete("/api/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String actor = "anonymous";
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+
+            try {
+                Map<String, Object> before = crud.getById(schema, idStr);
+                int deleted = crud.deleteById(schema, idStr);
+                if (deleted > 0) {
+                    AuditLogService.log("DELETE", schema.getName(), idStr, actor, before, null);
+                }
+                res.json(200, Map.of("deleted", deleted));
+            } catch (SQLException e) {
+                LOG.error("Delete failed for entity {} id {}", entity, idStr, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        router.post("/api/{entity}/bulk-delete", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            String actor = "anonymous";
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+
+            Map<String, Object> body = req.readJson(new TypeReference<>() {
+            });
+            Object idsObj = body != null ? body.get("ids") : null;
+            if (!(idsObj instanceof List<?> ids)) {
+                res.json(400, Map.of("error", "ids array required"));
+                return;
+            }
+            int max = 1000;
+            if (ids.size() > max) {
+                res.json(400, Map.of("error", "too many ids", "max", max));
+                return;
+            }
+
+            int deletedCount = 0;
+            List<Object> deletedIds = new ArrayList<>();
+            for (Object idVal : ids) {
+                if (idVal == null)
+                    continue;
+                String idStr = String.valueOf(idVal);
+                try {
+                    Map<String, Object> before = crud.getById(schema, idStr);
+                    int d = crud.deleteById(schema, idStr);
+                    if (d > 0) {
+                        deletedCount += d;
+                        deletedIds.add(idVal);
+                        AuditLogService.log("DELETE", schema.getName(), idStr, actor, before, null);
+                    }
+                } catch (SQLException e) {
+                    LOG.warn("Bulk delete failed for {} id {}: {}", entity, idStr, e.getMessage());
+                }
+            }
+            res.json(200, Map.of("deleted", deletedCount, "ids", deletedIds));
+        });
+
+        router.post("/api/{entity}/bulk-export", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                String tok = AuthService.extractToken(req);
+                if (!AuthService.hasRead(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
+
+            String entity = req.pathParam("entity");
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity"));
+                return;
+            }
+
+            Map<String, Object> body = req.readJson(new TypeReference<>() {
+            });
+            Object idsObj = body != null ? body.get("ids") : null;
+            if (!(idsObj instanceof List<?> ids)) {
+                res.json(400, Map.of("error", "ids array required"));
+                return;
+            }
+            int max = 5000;
+            if (ids.size() > max) {
+                res.json(400, Map.of("error", "too many ids", "max", max));
+                return;
+            }
+
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (Object idVal : ids) {
+                if (idVal == null)
+                    continue;
+                String idStr = String.valueOf(idVal);
+                try {
+                    Map<String, Object> row = crud.getById(schema, idStr);
+                    if (row != null)
+                        rows.add(row);
+                } catch (SQLException e) {
+                    LOG.warn("Bulk export failed for {} id {}: {}", entity, idStr, e.getMessage());
+                }
+            }
+
+            if (permissionService != null && AuthService.authEnabled(cfg)) {
+                String userId = AuthService.extractUserId(req, cfg);
+                if (userId != null) {
+                    List<Map<String, Object>> filtered = new ArrayList<>();
+                    for (Map<String, Object> row : rows) {
+                        filtered.add(permissionService.filterReadableFields(userId, entity, row));
+                    }
+                    rows = filtered;
+                }
+            }
+
+            res.json(200, Map.of("count", rows.size(), "rows", rows));
+        });
     }
 }

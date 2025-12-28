@@ -3,9 +3,11 @@ package com.appbana.server.routes;
 import com.appbana.AppManager;
 import com.appbana.api.Router;
 import com.appbana.model.AppMetadata;
+import com.appbana.service.AuthService;
 import com.appbana.service.ReleaseService;
 import com.appbana.service.TemplateService;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,13 +15,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.appbana.ApiServer.*;
-
 /**
  * App CRUD and management routes
  */
 public class AppRoutes {
     private static final Logger LOG = LoggerFactory.getLogger(AppRoutes.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
     private static final String DEFAULT_TENANT = "default";
 
     public static void register(Router router) {
@@ -37,7 +38,7 @@ public class AppRoutes {
                 });
                 String label = body.get("label");
                 String desc = body.get("description");
-                String userId = extractUserId(req, com.appbana.config.ConfigManager.getConfig());
+                String userId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
 
                 String versionId = releaseService.createVersion(DEFAULT_TENANT, appId, label, desc, userId);
                 res.json(201, Map.of("id", versionId, "status", "created"));
@@ -78,7 +79,7 @@ public class AppRoutes {
                     env = req.query("env");
                 }
 
-                String userId = extractUserId(req, com.appbana.config.ConfigManager.getConfig());
+                String userId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
                 releaseService.deployVersion(appId, versionId, userId, env);
                 res.json(200, Map.of("status", "deployed", "versionId", versionId, "env", env));
             } catch (Exception e) {
@@ -138,8 +139,7 @@ public class AppRoutes {
                         try {
                             com.appbana.model.EntitySchema schema = null;
                             if (item instanceof Map) {
-                                schema = com.appbana.ApiServer.M.convertValue(item,
-                                        com.appbana.model.EntitySchema.class);
+                                schema = MAPPER.convertValue(item, com.appbana.model.EntitySchema.class);
                             } else if (item instanceof com.appbana.model.EntitySchema) {
                                 schema = (com.appbana.model.EntitySchema) item;
                             }
@@ -315,7 +315,6 @@ public class AppRoutes {
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
             try {
-                @SuppressWarnings("unchecked")
                 Map<String, Object> page = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
                 AppManager.savePage(DEFAULT_TENANT, appId, pageId, page);
