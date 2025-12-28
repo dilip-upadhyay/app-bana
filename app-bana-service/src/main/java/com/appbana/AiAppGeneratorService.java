@@ -298,10 +298,12 @@ public class AiAppGeneratorService {
             }
 
             if (ACTION_LIST_APPS.equals(normalizedAction)) {
-                GenerationResult list = buildAppsListResult();
+                // Store the apps list in conversation context
+                com.appbana.generator.AppOperations.GenerationResult listResult = com.appbana.generator.AppOperations
+                        .buildAppsListResult();
                 // annotate context hints
-                attachContextHints(list, null);
-                return list;
+                attachContextHints(listResult, null);
+                return listResult;
             }
             if (normalizedAction != null) {
                 GenerationResult actionResult = handleStructuredAction(normalizedAction, request);
