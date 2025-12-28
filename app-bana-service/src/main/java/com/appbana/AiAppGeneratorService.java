@@ -12,6 +12,7 @@ import com.appbana.config.ConfigManager;
 import com.appbana.generator.ConversationManager;
 import com.appbana.generator.ConversationManager.ConversationContext;
 import com.appbana.generator.IntentRouter;
+import com.appbana.generator.AppOperations;
 import com.appbana.model.EntitySchema;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -665,164 +666,14 @@ public class AiAppGeneratorService {
         }
     }
 
-    private static GenerationResult buildAppsListResult() {
-        GenerationResult listResult = new GenerationResult();
-        listResult.success = true;
-        List<Map<String, Object>> apps = safeListApps();
-        listResult.payload = new HashMap<>();
-        listResult.payload.put(PAYLOAD_APPS, apps);
-        listResult.payload.put(PAYLOAD_ACTION, ACTION_LIST_APPS);
-        if (apps.isEmpty()) {
-            listResult.payload.put(PAYLOAD_REPLY,
-                    "You don't have any apps yet. Describe an app you want to build, for example 'Create a project management app with projects and tasks'.");
-        } else {
-            listResult.payload.put(PAYLOAD_REPLY,
-                    "Here are your apps. You can say 'open the second app' or 'delete the project management app'.");
-        }
-        LOG.info("[AI] Returning apps list: {}", apps);
-        return listResult;
-    }
-
-    private static GenerationResult handleLoadApp(GenerationRequest request) {
-        GenerationResult loadResult = new GenerationResult();
-        String appId = resolveLoadAppId(request);
-        if (appId == null || appId.isBlank()) {
-            loadResult.success = false;
-            loadResult.error = "Could not determine which app to load.";
-            Map<String, Object> payload = new HashMap<>();
-            payload.put(PAYLOAD_REPLY,
-                    "I couldn't tell which app you meant. Try 'open the second app' or 'open Restaurant Management App'.");
-            payload.put(PAYLOAD_ACTION, ACTION_LOAD_APP);
-            loadResult.payload = payload;
-            LOG.warn("[AI] loadApp missing resolvable appId");
-            return loadResult;
-        }
-        try {
-            Map<String, Object> appWithPages = AppManager.getAppWithPages("default", appId);
-            if (appWithPages == null) {
-                loadResult.success = false;
-                loadResult.error = "App not found: " + appId;
-                loadResult.payload = new HashMap<>();
-                loadResult.payload.put(PAYLOAD_REPLY, "App not found: " + appId);
-                loadResult.payload.put(PAYLOAD_ACTION, ACTION_LOAD_APP);
-                LOG.warn("[AI] App not found: {}", appId);
-            } else {
-                loadResult.success = true;
-                loadResult.payload = new HashMap<>();
-                loadResult.payload.put("app", appWithPages.get("app"));
-                loadResult.payload.put("pages", appWithPages.get("pages"));
-                loadResult.payload.put(PAYLOAD_REPLY, "Opened app '" + appWithPages.getOrDefault("name", appId) + "'.");
-                loadResult.payload.put(PAYLOAD_ACTION, ACTION_LOAD_APP);
-
-                // Track opened app in context
-                ConversationManager.updateOpenedApp(request.userId, appId);
-
-                LOG.info("[AI] Loaded app: {}", appId);
-            }
-        } catch (Exception e) {
-            loadResult.success = false;
-            loadResult.error = "Failed to load app: " + e.getMessage();
-            loadResult.payload = new HashMap<>();
-            loadResult.payload.put(PAYLOAD_REPLY, "Failed to load app: " + e.getMessage());
-            loadResult.payload.put(PAYLOAD_ACTION, ACTION_LOAD_APP);
-            LOG.error("[AI] Failed to load app", e);
-        }
-        return loadResult;
-    }
-
-    private static GenerationResult handleDeleteApp(GenerationRequest request) {
-        GenerationResult result = new GenerationResult();
-        String resolvedId = resolveDeleteAppId(request);
-        if (resolvedId == null || resolvedId.isBlank()) {
-            result.success = false;
-            result.error = "Could not determine which app to delete.";
-            result.payload = new HashMap<>();
-            result.payload.put("deleted", false);
-            result.payload.put(PAYLOAD_REPLY,
-                    "I couldn't tell which app you want to delete. Try 'delete the second app' after listing or 'delete Restaurant Management App'.");
-            result.payload.put(PAYLOAD_ACTION, ACTION_DELETE_APP);
-            return result;
-        }
-        try {
-            boolean deleted = AppManager.deleteApp("default", resolvedId);
-            result.success = deleted;
-            result.payload = new HashMap<>();
-            result.payload.put("deleted", deleted);
-            result.payload.put(PAYLOAD_ACTION, ACTION_DELETE_APP);
-            if (deleted) {
-                result.payload.put(PAYLOAD_REPLY,
-                        "Deleted app '" + resolvedId + "'. You can say 'show my apps' to confirm.");
-            } else {
-                result.payload.put(PAYLOAD_REPLY, "App not found: " + resolvedId);
-            }
-            LOG.info("[AI] Delete attempt for app '{}': {}", resolvedId, deleted);
-        } catch (Exception e) {
-            result.success = false;
-            result.error = "Failed to delete app: " + e.getMessage();
-            result.payload = new HashMap<>();
-            result.payload.put("deleted", false);
-            result.payload.put(PAYLOAD_REPLY, "Failed to delete app: " + e.getMessage());
-            result.payload.put(PAYLOAD_ACTION, ACTION_DELETE_APP);
-            LOG.error("[AI] Failed to delete app", e);
-        }
-        return result;
-    }
-
-    // Resolve delete app id using conversation context similar to loadApp
-    @SuppressWarnings("unchecked")
-    private static String resolveDeleteAppId(GenerationRequest request) {
-        if (request == null)
-            return null;
-        String desc = request.description != null ? request.description.toLowerCase(Locale.ROOT) : "";
-        // 'this app'
-        if (desc.contains("this app") && request.conversationContext != null
-                && request.conversationContext.get("currentAppId") != null) {
-            return String.valueOf(request.conversationContext.get("currentAppId"));
-        }
-        // ordinal resolution
-        Integer ordinal = extractOrdinalIndex(desc);
-        if (ordinal != null && request.conversationContext != null) {
-            Object lastAppsObj = request.conversationContext.get("lastAppList");
-            if (lastAppsObj instanceof List) {
-                List<Map<String, Object>> lastApps = (List<Map<String, Object>>) lastAppsObj;
-                int idx = ordinal - 1;
-                if (idx >= 0 && idx < lastApps.size()) {
-                    Object id = lastApps.get(idx).get("id");
-                    if (id != null)
-                        return String.valueOf(id);
-                }
-            }
-        }
-        // name resolution against lastAppList
-        if (request.conversationContext != null) {
-            Object lastAppsObj = request.conversationContext.get("lastAppList");
-            if (lastAppsObj instanceof List) {
-                List<Map<String, Object>> lastApps = (List<Map<String, Object>>) lastAppsObj;
-                for (Map<String, Object> app : lastApps) {
-                    Object nameObj = app.get("name");
-                    Object idObj = app.get("id");
-                    if (nameObj != null && idObj != null
-                            && desc.contains(nameObj.toString().toLowerCase(Locale.ROOT))) {
-                        return String.valueOf(idObj);
-                    }
-                }
-            }
-        }
-        // explicit option appId
-        if (request.options != null && request.options.get("appId") != null) {
-            return String.valueOf(request.options.get("appId"));
-        }
-        return null;
-    }
-
     private static GenerationResult handleStructuredAction(String action, GenerationRequest request) {
         switch (action) {
             case ACTION_LIST_APPS:
-                return buildAppsListResult();
+                return AppOperations.buildAppsListResult();
             case ACTION_LOAD_APP:
-                return handleLoadApp(request);
+                return AppOperations.handleLoadApp(request);
             case ACTION_DELETE_APP:
-                return handleDeleteApp(request);
+                return AppOperations.handleDeleteApp(request);
             case ACTION_LIST_PAGES:
                 return handleListPages(request);
             case "describeApp":
