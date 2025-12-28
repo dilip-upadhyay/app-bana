@@ -79,9 +79,29 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
   const tagName = getComponent(node.type) ? getComponentTagName(node.type) : undefined;
 
   if (tagName) {
-    // Correctly use static-html to render dynamic tag with children preserved in the template
+    // Build attributes string from props
+    const attrs: string[] = [`id="${node.id}"`];
+    
+    // Add all props as attributes or properties
+    for (const [key, value] of Object.entries(nodeWithData.props || {})) {
+      if (value == null) continue;
+      
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        // Escape quotes in attribute values
+        const escapedValue = String(value).replace(/"/g, '&quot;');
+        attrs.push(`${key}="${escapedValue}"`);
+      }
+      // Objects/arrays would need property binding, but for now skip them in template mode
+    }
+    
+    const attrsString = attrs.join(' ');
     const tag = unsafeStatic(tagName);
-    return staticHtml`<${tag} .node=${nodeWithData}>${children}</${tag}>`;
+    
+    // Use unsafeStatic for the entire opening tag to include attributes
+    const openTag = unsafeStatic(`<${tagName} ${attrsString}>`);
+    const closeTag = unsafeStatic(`</${tagName}>`);
+    
+    return staticHtml`${openTag}${children}${closeTag}`;
   }
 
   // Fallback for truly unknown types
