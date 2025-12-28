@@ -23,24 +23,40 @@ AppBana Studio Builder is a **visual, no-code tool** for creating web applicatio
 
 ---
 
-## 🆕 What's New in October 2025!
+## 🆕 What's New in December 2025!
 
 **Major Updates to Speed Up Your Workflow:**
 
-### 1. **Pre-Built Page Templates** 🎨
+### 1. **Real Template Previews** 🎨✨ (NEW!)
+- **See actual HTML content** before selecting a template
+- **Login Page:** Preview shows real email/password fields and button
+- **Sign Up Page:** Preview shows split-screen layout with form fields
+- **Dashboard:** Preview shows header, sidebar, and KPI cards
+- **All templates:** Real components rendered at 40% scale in preview window
+- **Custom Builder:** Layout diagram with customizable sections
+- **Instant feedback:** Know exactly what you're getting before clicking "Create"
+
+### 2. **Optimized Modal Layout** 📐 (NEW!)
+- **2×2 Grid for checkboxes:** Saved 100px vertical space
+- **Larger preview area:** Increased from 150px to 200px height (33% bigger)
+- **Side-by-side design:** Templates on left (5-column), preview on right
+- **Fits on one screen:** No scrolling needed on standard laptops
+- **85% viewport height:** Modal uses more screen space efficiently
+
+### 3. **Pre-Built Page Templates** 🎨
 - **8 professional templates** ready to use (Login, Sign Up, Dashboard, Landing, Contact, Profile, Data Table, Blank)
 - **2-step wizard** for faster page creation
 - **Visual gallery** with template cards and descriptions
 - **93% time savings** - create pages in 2 minutes instead of 30!
 
-### 2. **Enhanced Preview** 👁️
+### 4. **Enhanced Preview** 👁️
 - Preview now opens in **new browser tab** (not in-canvas)
 - See your page with **full app context** (header, navigation, app name)
 - **Navigate between pages** right in the preview
 - **PREVIEW badge** shows you're not in live mode
 - Perfect for testing user experience before publishing
 
-### 3. **Faster Workflow** ⚡
+### 5. **Faster Workflow** ⚡
 - Improved page creation experience
 - Better validation and error messages
 - Auto-save every 2 minutes
@@ -446,7 +462,7 @@ AppBana Studio now includes **8 professional templates** that can save you hours
 | **Profile Page** | Avatar placeholder, bio section, stats grid (Posts/Followers/Following) | User profiles, team member pages |
 | **Data Table** | Search bar, filter dropdowns, data table placeholder, pagination | Reports, user lists, inventory
 
-### Using a Template (NEW 2-Step Wizard!)
+### Using a Template (NEW 2-Step Wizard with Real Previews!)
 
 **Creating a Page from Template:**
 
@@ -456,18 +472,25 @@ AppBana Studio now includes **8 professional templates** that can save you hours
 3. Enter **path** (e.g., "/contact") - this will be the URL
 4. Click **"Next"** button
 
-**Step 2: Choose Your Template**
-1. You'll see a **visual gallery** with 8 template cards
+**Step 2: Choose Your Template with Live Preview** ✨
+1. You'll see a **visual gallery** with 8 template cards on the **left side**
 2. Each card shows:
    - Template name (e.g., "Login Page" or "Sign Up Page")
    - Icon representing the template
    - Brief description of what's included
-3. **Click on any template card** to select it (gets blue border)
-4. Click **"Create Page"** button
+3. **Click on any template card** to select it (gets green border)
+4. **Right side shows REAL PREVIEW:** 🎯
+   - **Login:** See actual email field, password field, submit button, remember me checkbox
+   - **Sign Up:** See split-screen layout with brand panel and form fields
+   - **Dashboard:** See header, sidebar navigation, and KPI cards
+   - **All templates:** Actual HTML components rendered at 40% scale
+   - **Custom Builder:** Shows layout diagram with checkboxes (Nav/Side/Main/Footer in 2×2 grid)
+5. **Switch between templates** and watch the preview update instantly
+6. Click **"Create Page"** button when you've found the right template
 
 **That's it!** Your page will be created with all components pre-configured. You can now customize it!
 
-**Pro Tip:** The Blank template is fastest if you want complete creative control, but pre-built templates can save you **20-30 minutes** per page!
+**Pro Tip:** Use the **real preview** to see exactly what you're getting before creating the page. No more surprises!
 
 ### Time Savings with Templates ⏱️
 

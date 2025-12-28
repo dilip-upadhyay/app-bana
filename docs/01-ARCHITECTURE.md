@@ -1,6 +1,6 @@
 # 1. ARCHITECTURE & SYSTEM DESIGN
 
-**Last Updated:** December 28, 2025  
+**Last Updated:** December 28, 2025 (Template Preview Enhancement)  
 **Status:** Active - Primary Reference for System Design  
 **Audience:** Architects, Tech Leads, Developers
 
@@ -186,7 +186,7 @@ localStorage['appbana.current.app'] = 'app1';
 **Features:**
 - 2-step page creation wizard:
   - Step 1: Basic info (name, path)
-  - Step 2: Template selection (8 templates)
+  - Step 2: Template selection with **real HTML preview** (8 templates)
 - Page tabs for quick switching
 - 8 pre-built templates:
   - **Blank:** Empty canvas
@@ -197,8 +197,15 @@ localStorage['appbana.current.app'] = 'app1';
   - **Landing:** Hero + features + CTA + footer
   - **Profile:** Avatar + bio + stats grid
   - **Data Table:** Search + filters + table + pagination
+- **Real-time preview rendering:**
+  - Renders actual HTML components from template metadata
+  - 40% scale factor for compact display
+  - Supports containers, text, buttons, inputs, forms
+  - Custom Builder: 2×2 checkbox grid (Nav/Side, Main/Footer)
+  - Preview updates instantly when switching templates
 
 **Time Savings:** 93% reduction (30 min → 2 min per page)
+**UX Improvement:** See actual content before selecting template
 
 #### 3. BuilderCanvas (`src/builder/components/BuilderCanvas.ts`)
 **Purpose:** Visual page editor with drag-drop
@@ -277,9 +284,18 @@ savePage(appId: string, page: PageMeta): Promise<void>
   - Fetches templates from `/api/templates` on init
   - Caches templates locally for performance
   - Provides `loadTemplates()`, `getTemplate(id)`, `createTemplate()` methods
-- **PageManager.ts** - Template selection UI
-  - Displays visual template gallery in step 2 of page creation wizard
+- **PageManager.ts** - Template selection UI with real HTML preview
+  - Displays visual template gallery in step 2 of page creation wizard (5-column grid)
   - Shows template name, icon, and description
+  - **Real-time HTML preview:** Renders actual template components at 40% scale
+  - Preview types:
+    - **Predefined templates:** Renders actual HTML (forms, buttons, inputs, containers)
+    - **Custom Builder:** Shows layout diagram with 2×2 checkbox grid
+  - Preview features:
+    - Recursive node rendering from template metadata
+    - Automatic style scaling (px/rem values × 0.4)
+    - Scrollable preview window (200-300px height)
+    - Instant updates when switching templates
   - Applies selected template to create page structure
 
 **Template Structure:**
