@@ -11,6 +11,7 @@ import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.generator.ConversationManager;
 import com.appbana.generator.ConversationManager.ConversationContext;
+import com.appbana.generator.IntentRouter;
 import com.appbana.model.EntitySchema;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -189,7 +190,7 @@ public class AiAppGeneratorService {
             }
 
             // Legacy Fallback (keeping for safety during transition, but Router acts first)
-            String normalizedAction = resolveAction(request);
+            String normalizedAction = IntentRouter.resolveAction(request);
 
             // SPECIAL CASE: Check for "explain/describe" in text if metadata missed it
             if (normalizedAction == null && (request.description.toLowerCase().contains("explain") ||
@@ -389,131 +390,6 @@ public class AiAppGeneratorService {
         if (ACTION_GENERATE_APP.equals(action) && result.appName != null && result.payload.get("appId") != null) {
             result.payload.put("currentAppId", result.payload.get("appId"));
             result.payload.put("currentAppName", result.appName);
-        }
-    }
-
-    private static String resolveAction(GenerationRequest request) {
-        if (request == null) {
-            return null;
-        }
-
-        if (request.action != null && !request.action.isBlank()) {
-            request.action = normalizeActionLabel(request.action);
-            return request.action;
-        }
-
-        if (request.description == null || request.description.isBlank()) {
-            return null;
-        }
-
-        // Try rule-based classification first (no GPT needed)
-        Map<String, Object> ruleBasedResult = classifyWithRules(request.description);
-        if (ruleBasedResult != null) {
-            LOG.info("[AI] Rule-based classification succeeded for: {}", request.description);
-            Object classifiedAction = ruleBasedResult.get("action");
-            if (classifiedAction != null) {
-                request.action = normalizeActionLabel(String.valueOf(classifiedAction));
-            }
-            if ((request.options == null || request.options.isEmpty()) && ruleBasedResult.get("options") != null) {
-                request.options = MAPPER.convertValue(ruleBasedResult.get("options"), MAP_TYPE);
-            }
-            return request.action;
-        }
-
-        // Try intent cache
-        IntentCache.ActionDescriptor cached = IntentCache.get(request.description);
-        if (cached != null) {
-            LOG.info("[AI] Intent cache hit for: {}", request.description);
-            request.action = normalizeActionLabel(cached.action);
-            if (request.options == null || request.options.isEmpty()) {
-                request.options = cached.options;
-            }
-            return request.action;
-        }
-
-        // Fall back to GPT classification
-        LOG.info("[AI] Using GPT classification for: {}", request.description);
-        Map<String, Object> classification = classifyActionSafe(request.description);
-        if (classification == null) {
-            return null;
-        }
-
-        Object classifiedAction = classification.get("action");
-        if (classifiedAction != null) {
-            request.action = normalizeActionLabel(String.valueOf(classifiedAction));
-        }
-
-        if ((request.options == null || request.options.isEmpty()) && classification.get("options") != null) {
-            request.options = MAPPER.convertValue(classification.get("options"), MAP_TYPE);
-        }
-
-        // Store in cache for future use
-        if (request.action != null) {
-            IntentCache.ActionDescriptor descriptor = new IntentCache.ActionDescriptor(request.action);
-            descriptor.options = request.options != null ? request.options : new HashMap<>();
-            IntentCache.put(request.description, descriptor);
-            LOG.info("[AI] Stored GPT classification in cache: {} -> {}", request.description, request.action);
-        }
-
-        return request.action;
-    }
-
-    /**
-     * Rule-based classification - handles common commands without GPT
-     * Returns Map with "action" and optional "options" keys, or null if no match
-     */
-    private static Map<String, Object> classifyWithRules(String description) {
-        if (description == null || description.isBlank()) {
-            return null;
-        }
-
-        String lower = description.toLowerCase(Locale.ROOT).trim();
-        Map<String, Object> result = new HashMap<>();
-
-        // List apps commands
-        if (lower.matches("^(show|list|display|get|view|see) (my |all )?apps?$")
-                || lower.equals("apps")
-                || lower.equals("my apps")
-                || lower.equals("what apps do i have")
-                || lower.equals("show me my apps")
-                || lower.contains("list all apps")
-                || lower.contains("show all apps")) {
-            result.put("action", ACTION_LIST_APPS);
-            return result;
-        }
-
-        // Show fields commands
-        if (lower.matches("^(show|list|describe|what are the) fields? (of|for|in) \\w+$")
-                || lower.contains("show fields")
-                || lower.contains("list fields")
-                || lower.contains("what fields does")
-                || lower.contains("fields in")) {
-            result.put("action", "listFields");
-            return result;
-        }
-
-        // Help commands
-        if (lower.matches("^(help|what can you do|capabilities|commands)$")
-                || lower.equals("?")
-                || lower.contains("what can i")
-                || lower.contains("how do i")
-                || lower.contains("show me help")) {
-            result.put("action", "help");
-            return result;
-        }
-
-        return null; // No rule match
-    }
-
-    private static Map<String, Object> classifyActionSafe(String description) {
-        if (description == null || description.isBlank()) {
-            return null;
-        }
-        try {
-            return classifyAction(description);
-        } catch (Exception e) {
-            LOG.warn("[AI] Action classification failed: {}", e.getMessage());
-            return null;
         }
     }
 
@@ -1603,121 +1479,6 @@ public class AiAppGeneratorService {
 
     private static AppConfig getConfig() {
         return ConfigManager.getConfig();
-    }
-
-    // --- Restored utility + classifier methods (re-added) ---
-    private static String normalizeActionLabel(String action) {
-        if (action == null)
-            return null;
-        switch (action.trim().toLowerCase(Locale.ROOT)) {
-            case "list":
-            case "listapps":
-            case "list_apps":
-            case "list-apps":
-            case "showapps":
-            case "show_apps":
-            case "show-apps":
-            case "show my apps":
-            case "list my apps":
-            case "list all apps":
-            case "show all apps":
-                return ACTION_LIST_APPS;
-            case "load":
-            case "open":
-            case "loadapp":
-            case "load_app":
-            case "load-app":
-                return ACTION_LOAD_APP;
-            case "delete":
-            case "deleteapp":
-            case "delete_app":
-            case "delete-app":
-                return ACTION_DELETE_APP;
-            case "pages":
-            case "listpages":
-            case "list_pages":
-            case "list-pages":
-                return ACTION_LIST_PAGES;
-            case "generate":
-            case "generateapp":
-            case "generate_app":
-            case "generate-app":
-                return ACTION_GENERATE_APP;
-            default:
-                return action;
-        }
-    }
-
-    private static Map<String, Object> classifyAction(String userText) throws Exception {
-        // Simple heuristic-only fallback (full AI classification may be added later)
-        return heuristicClassification(userText);
-    }
-
-    private static Map<String, Object> heuristicClassification(String userText) {
-        String lower = userText == null ? "" : userText.toLowerCase(Locale.ROOT);
-        Map<String, Object> out = new HashMap<>();
-        if (lower.matches(".*(list|show).*(apps|app list).*") || lower.contains("my apps")) {
-            out.put("action", ACTION_LIST_APPS);
-            out.put("options", new HashMap<>());
-            return out;
-        }
-
-        if (lower.matches(".*(describe|explain|summary|overview).*(app|application|this).*") ||
-                lower.equals("explain app") || lower.equals("describe app") ||
-                lower.matches(".*(what|tell|talk).*(about).*(app|application|this|selected|current).*") ||
-                lower.contains("app selected") ||
-                lower.contains("current app") ||
-                lower.contains("this app")) {
-            out.put("action", ACTION_DESCRIBE_APP);
-            out.put("options", new HashMap<>());
-            return out;
-        }
-
-        if (lower.matches(".*(open|load).*(app).*")) {
-            out.put("action", ACTION_LOAD_APP);
-            out.put("options", new HashMap<>());
-            return out;
-        }
-        if (lower.matches(".*delete.*app.*")) {
-            out.put("action", ACTION_DELETE_APP);
-            out.put("options", new HashMap<>());
-            return out;
-        }
-        if (lower.matches(".*(list|show|how many|count|number of).*pages.*")) {
-            Map<String, Object> opts = new HashMap<>();
-            Matcher m = Pattern.compile("(in|for|of) ([A-Za-z0-9 _-]+)").matcher(lower);
-            if (m.find())
-                opts.put("appName", m.group(2).trim());
-            out.put("action", ACTION_LIST_PAGES);
-            out.put("options", opts);
-            return out;
-        }
-
-        // Handle "open/show/go to [page name] page"
-        if (lower.matches(".*(open|show|load|view|goto|display).*(page).*")) {
-            Map<String, Object> opts = new HashMap<>();
-            // Extract page name: "open Playlist List page" -> "Playlist List"
-            // Regex strategies:
-            // 1. "open [X] page"
-            Matcher m1 = Pattern.compile("(open|show|load|view|goto|display) (?:the )?([A-Za-z0-9 _-]+?) page")
-                    .matcher(lower);
-            if (m1.find()) {
-                opts.put("pageName", m1.group(2).trim());
-            } else {
-                // 2. Just capture everything between verb and "page"
-                Matcher m2 = Pattern.compile("(?:open|show|load|view|goto|display) (?:the )?(.+?) page").matcher(lower);
-                if (m2.find()) {
-                    opts.put("pageName", m2.group(1).trim());
-                }
-            }
-            out.put("action", ACTION_OPEN_PAGE);
-            out.put("options", opts);
-            return out;
-        }
-
-        out.put("action", ACTION_GENERATE_APP);
-        out.put("options", new HashMap<>());
-        return out;
     }
 
     public static String sanitizeAiJson(String raw) { // kept public for other components referencing it
