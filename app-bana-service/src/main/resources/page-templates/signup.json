@@ -146,27 +146,79 @@
                 "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
             },
             "children": [
-                "firstname-input-compact",
-                "lastname-input-compact"
+                "firstname-group-compact",
+                "lastname-group-compact"
             ]
+        },
+        {
+            "id": "firstname-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "firstname-label-compact",
+                "firstname-input-compact"
+            ]
+        },
+        {
+            "id": "firstname-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "First Name",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
+            }
         },
         {
             "id": "firstname-input-compact",
             "type": "input",
             "props": {
+                "label": "First Name",
+                "name": "firstName",
                 "type": "text",
                 "placeholder": "First Name *",
+                "value": "",
                 "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
                 "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
+            }
+        },
+        {
+            "id": "lastname-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "lastname-label-compact",
+                "lastname-input-compact"
+            ]
+        },
+        {
+            "id": "lastname-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Last Name",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
             }
         },
         {
             "id": "lastname-input-compact",
             "type": "input",
             "props": {
+                "label": "Last Name",
+                "name": "lastName",
                 "type": "text",
                 "placeholder": "Last Name *",
+                "value": "",
                 "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
                 "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
             }
         },
@@ -177,26 +229,79 @@
                 "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
             },
             "children": [
-                "email-input-compact",
-                "phone-input-compact"
+                "email-group-compact",
+                "phone-group-compact"
             ]
+        },
+        {
+            "id": "email-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "email-label-compact",
+                "email-input-compact"
+            ]
+        },
+        {
+            "id": "email-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Email",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
+            }
         },
         {
             "id": "email-input-compact",
             "type": "input",
             "props": {
+                "label": "Email",
+                "name": "email",
                 "type": "email",
                 "placeholder": "Email *",
+                "value": "",
                 "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "We'll never share your email",
                 "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
+            }
+        },
+        {
+            "id": "phone-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "phone-label-compact",
+                "phone-input-compact"
+            ]
+        },
+        {
+            "id": "phone-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Phone (optional)",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
             }
         },
         {
             "id": "phone-input-compact",
             "type": "input",
             "props": {
+                "label": "Phone",
+                "name": "phone",
                 "type": "tel",
                 "placeholder": "Phone (optional)",
+                "value": "",
+                "required": false,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
                 "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
             }
         },
@@ -207,27 +312,79 @@
                 "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
             },
             "children": [
-                "password-input-compact",
-                "confirm-input-compact"
+                "password-group-compact",
+                "confirm-group-compact"
             ]
+        },
+        {
+            "id": "password-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "password-label-compact",
+                "password-input-compact"
+            ]
+        },
+        {
+            "id": "password-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Password",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
+            }
         },
         {
             "id": "password-input-compact",
             "type": "input",
             "props": {
+                "label": "Password",
+                "name": "password",
                 "type": "password",
                 "placeholder": "Password *",
+                "value": "",
                 "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "Min 8 characters",
                 "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
+            }
+        },
+        {
+            "id": "confirm-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "confirm-label-compact",
+                "confirm-input-compact"
+            ]
+        },
+        {
+            "id": "confirm-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Confirm Password",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
             }
         },
         {
             "id": "confirm-input-compact",
             "type": "input",
             "props": {
+                "label": "Confirm Password",
+                "name": "confirmPassword",
                 "type": "password",
                 "placeholder": "Confirm Password *",
+                "value": "",
                 "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
                 "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
             }
         },

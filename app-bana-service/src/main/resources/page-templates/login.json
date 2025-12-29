@@ -185,9 +185,15 @@
             "id": "email-input-1",
             "type": "input",
             "props": {
+                "label": "Email Address",
+                "name": "email",
                 "type": "email",
                 "placeholder": "you@example.com",
+                "value": "",
                 "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
                 "style": "padding: 0.875rem 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 15px; transition: all 0.2s; outline: none;"
             }
         },
@@ -215,9 +221,15 @@
             "id": "password-input-1",
             "type": "input",
             "props": {
+                "label": "Password",
+                "name": "password",
                 "type": "password",
                 "placeholder": "Enter your password",
+                "value": "",
                 "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
                 "style": "padding: 0.875rem 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 15px; transition: all 0.2s; outline: none;"
             }
         },
@@ -247,7 +259,12 @@
             "id": "remember-checkbox-1",
             "type": "input",
             "props": {
+                "label": "Remember me",
+                "name": "remember",
                 "type": "checkbox",
+                "value": "",
+                "required": false,
+                "disabled": false,
                 "style": "width: 16px; height: 16px; cursor: pointer;"
             }
         },
@@ -274,7 +291,8 @@
             "id": "submit-1",
             "type": "button",
             "props": {
-                "text": "Sign In →",
+                "label": "Sign In →",
+                "type": "submit",
                 "className": "btn-primary",
                 "style": "margin-top: 0.5rem; padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);"
             }
