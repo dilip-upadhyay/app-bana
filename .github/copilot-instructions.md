@@ -104,10 +104,16 @@ kill $(cat backend.pid)
 ```
 
 **What it does:**
-1. Kills any existing server on port 5173 (auto-restart)
+1. **Automatically kills any existing server on port 5173** (auto-restart)
 2. Checks Node version (requires 18.17+)
 3. Installs dependencies (npm ci/install)
 4. Starts Vite dev server on http://localhost:5173
+
+**⚠️ CRITICAL - DO NOT manually kill Vite processes:**
+- `./run-ui.sh` has built-in kill logic - just run it again to restart
+- **DO NOT** use `pkill -f vite` or `kill` commands manually
+- Script handles graceful shutdown automatically
+- Multiple runs are safe - it auto-cleans before starting
 
 **Other modes:**
 ```bash

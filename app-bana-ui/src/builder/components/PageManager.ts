@@ -1,10 +1,10 @@
-import { LitElement, html, css, unsafeCSS } from 'lit';
+import { LitElement, html, css, unsafeCSS, render } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { initStore, initNewPageStore, currentStore } from '../store/TreeStore';
 import { appStore } from '../store/AppStore';
 import type { PageMeta, ComponentNode } from '../../models/metadata';
 import { templateStore, PageTemplate } from '../store/TemplateStore';
-import { renderPage } from '../../runtime/renderer/Renderer';
+import { renderPageTemplate } from '../../runtime/renderer/Renderer';
 import styles from './PageManager.css?inline';
 
 @customElement('appbana-page-manager')
@@ -789,10 +789,9 @@ export class PageManager extends LitElement {
     return html`
       <div ${(el: any) => {
         if (el && el instanceof HTMLElement) {
-          // Clear and render
-          el.innerHTML = '';
           try {
-            renderPage(tempPage, el);
+            const rendered = renderPageTemplate(tempPage, {});
+            render(rendered, el);
           } catch (err) {
             console.error('Preview render error:', err);
             el.innerHTML = '<div style="color: red; padding: 10px;">Preview error</div>';

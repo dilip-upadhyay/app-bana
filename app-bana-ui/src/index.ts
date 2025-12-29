@@ -12,7 +12,8 @@ import './components/UnknownElement';
 import './runtime/shell/AppRuntimeShell';
 import demoPage from './demo/demo-page.json';
 import { ensureCoreRegistered } from './core/registry';
-import { renderPage } from './runtime/renderer/Renderer';
+import { renderPageTemplate } from './runtime/renderer/Renderer';
+import { render } from 'lit';
 import { PageMeta } from './models/metadata';
 import { decodeRuntimeState } from './models/runtime-state';
 import type { AppRuntimeState } from './models/runtime-state';
@@ -47,7 +48,8 @@ export class AppRoot extends LitElement {
       if (path.includes('/studio') && !path.includes('/studio/builder')) {
         const host = this.renderRoot.querySelector('#studio-root') as HTMLElement | null;
         if (host) {
-          renderPage(demoPage as PageMeta, host);
+          const rendered = renderPageTemplate(demoPage as PageMeta, {});
+          render(rendered, host);
         }
       }
     }
@@ -180,7 +182,8 @@ export class AppRoot extends LitElement {
 
     if (targetPage) {
       console.log('[AppRoot] Rendering page:', targetPage.name, 'at path:', path);
-      renderPage(targetPage, host);
+      const rendered = renderPageTemplate(targetPage, {});
+      render(rendered, host);
     } else {
       const pagesList = allPages.map(p => `${p.pageName} (${p.pagePath})`).join('<br>');
       host.innerHTML = `
