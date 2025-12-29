@@ -172,6 +172,8 @@ public class Router {
         private final HttpExchange ex;
         private final Map<String,String> pathParams;
         private final Map<String,String> query;
+        private final Map<String,Object> attributes = new HashMap<>();
+        
         public HttpRequest(HttpExchange ex, Map<String,String> pathParams, Map<String,String> query){ this.ex=ex; this.pathParams=pathParams; this.query=query; }
         public String method(){ return ex.getRequestMethod(); }
         public String path(){ return ex.getRequestURI().getPath(); }
@@ -180,6 +182,11 @@ public class Router {
         public Map<String,String> query(){ return query; }
         public String query(String k){ return query.get(k); }
         public String header(String name){ return ex.getRequestHeaders().getFirst(name); }
+        
+        // Attribute support for middleware context passing
+        public void setAttribute(String key, Object value) { attributes.put(key, value); }
+        public Object getAttribute(String key) { return attributes.get(key); }
+        
         public <T> T readJson(TypeReference<T> typ) {
             try (InputStream is = ex.getRequestBody()) {
                 return M.readValue(is, typ);
@@ -219,6 +226,12 @@ public class Router {
         private boolean sent = false;
         public HttpResponse(HttpExchange ex){ this.ex = ex; }
         public boolean isSent() { return sent; }
+        
+        // Header support for middleware
+        public void setHeader(String name, String value) {
+            ex.getResponseHeaders().set(name, value);
+        }
+        
         public void json(int status, Object obj) {
             try {
                 byte[] b = M.writeValueAsBytes(obj);

@@ -2,6 +2,7 @@ package com.appbana.server;
 
 import com.appbana.api.Router;
 import com.appbana.middleware.RateLimitMiddleware;
+import com.appbana.middleware.SessionMiddleware;
 import com.appbana.server.routes.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +26,10 @@ public class RouteRegistry {
         // Rate limiting middleware - protects all endpoints
         router.use(RateLimitMiddleware.create());
         LOG.info("Rate limiting middleware registered");
+        
+        // Session validation middleware - authenticates requests
+        router.use(SessionMiddleware.create());
+        LOG.info("Session middleware registered");
 
         // Register routes by feature area
         AuthRoutes.register(router);
