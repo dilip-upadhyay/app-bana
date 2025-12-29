@@ -1,7 +1,30 @@
 # AppBana Documentation
 
-**Last Updated**: December 7, 2025  
+**Last Updated**: December 30, 2025  
 **Status**: Consolidated and Current
+
+---
+
+## ⚡ Quick Start (New Sessions)
+
+**Starting a new coding or AI agent session?** Always run this first:
+
+### **[SESSION_RESUME_GUIDE.md](./SESSION_RESUME_GUIDE.md)** - Session Resume Checklist ⭐
+**For**: All developers, AI agents starting new sessions  
+**Time Required**: 5 minutes  
+**Contents**:
+- Automated status check script (`check_status.sh`)
+- Decision tree based on current progress
+- Story completion status (1.1 → 3.2)
+- Test status (passing/failing)
+- Dependency verification
+- "What to do next" recommendations
+
+**Why this matters:**
+- ✅ Never recreate existing files
+- ✅ Continue from correct story
+- ✅ Fix failing tests before continuing
+- ✅ Save hours of duplicated work
 
 ---
 

@@ -6,6 +6,84 @@
 
 ---
 
+## ⚠️ CRITICAL: Always Check Current Status First
+
+**BEFORE STARTING ANY WORK** (even in new sessions), run these commands:
+
+```bash
+# Navigate to project root
+cd /Users/dilipupadhyay/github/app-bana
+
+# 1. Check which files already exist
+echo "=== Checking existing implementation files ==="
+find . -type f \( -name "PasswordService.java" -o -name "PasswordServiceTest.java" \
+  -o -name "CsrfService.java" -o -name "RateLimitService.java" \
+  -o -name "ValidationService.java" -o -name "TransactionService.java" \
+  -o -name "FileUploadService.java" -o -name "SecurityMiddleware.java" \) 2>/dev/null
+
+# 2. Check if dependencies are installed
+echo -e "\n=== Checking backend dependencies ==="
+cd app-bana-service
+mvn dependency:tree 2>/dev/null | grep -E "(bcrypt|junit|h2)" || echo "Dependencies not installed"
+
+echo -e "\n=== Checking frontend dependencies ==="
+cd ../app-bana-ui
+npm list 2>/dev/null | grep -E "(@testing-library|playwright|axe)" || echo "Dependencies not installed"
+
+# 3. Check test status
+echo -e "\n=== Checking backend test status ==="
+cd ../app-bana-service
+mvn test 2>&1 | grep -E "(Tests run:|Failures:|Errors:|BUILD SUCCESS|BUILD FAILURE)" | tail -5
+
+echo -e "\n=== Checking frontend test status ==="
+cd ../app-bana-ui
+npm test -- --run 2>&1 | grep -E "(Test Files|Tests|PASS|FAIL)" | tail -5
+
+# 4. Check for TODO/FIXME comments (indicates incomplete work)
+echo -e "\n=== Checking for incomplete work ==="
+cd ..
+grep -r "TODO\|FIXME\|Story 1\." app-bana-service/src/main/java/com/appbana/service/ 2>/dev/null | head -5 || echo "No TODOs found"
+
+# 5. Check git status
+echo -e "\n=== Git status ==="
+git status --short | head -10
+```
+
+**Use this output to determine:**
+
+| What You See | What It Means | What To Do |
+|--------------|---------------|------------|
+| ❌ PasswordService.java not found | Not started yet | Follow Day 1 guide below |
+| ✅ PasswordService.java exists, 6 tests pass | Day 1 complete | Skip to Day 2-3 |
+| ✅ PasswordService.java exists, 0 tests pass | Created but not tested | Debug tests, then continue |
+| ❌ bcrypt not in dependencies | Dependencies not installed | Run Step 1 first |
+| ✅ CsrfService.java exists | Working on Story 1.2 | Continue with CSRF |
+| ✅ RateLimitService.java exists | Working on Story 1.3 | Continue with rate limiting |
+| ⚠️ Tests run: 15, Failures: 3 | Some tests failing | Fix failures before continuing |
+
+**Decision Tree:**
+```
+START
+  ↓
+Are foundation files present? (TestFixtures, ValidationResult, etc.)
+  ├─ NO → Create them first (see "Foundation Files" section)
+  └─ YES → Continue
+      ↓
+Are dependencies installed? (BCrypt, JUnit, @testing-library/lit)
+  ├─ NO → Run Step 1: Add Dependencies
+  └─ YES → Continue
+      ↓
+Does PasswordService.java exist?
+  ├─ NO → Start Day 1 (Step 2)
+  ├─ YES → Do PasswordServiceTest tests pass?
+      ├─ NO → Debug tests before continuing
+      └─ YES → Does CsrfService.java exist?
+          ├─ NO → Start Story 1.2 (Day 4)
+          └─ YES → Continue with next story...
+```
+
+---
+
 ## ✅ What's Been Set Up
 
 ### 1. **Documentation Complete** (3 files, 5,000+ lines)
@@ -424,5 +502,170 @@ mvn test  # Should find 0 tests (none written yet)
 
 **Time estimate:** 2-4 hours for Day 1  
 **Expected result:** 6 passing tests + working password hashing
+
+---
+
+## 🔄 Session Resume Checklist (For New Sessions)
+
+**If you're starting a new coding session or AI agent session, ALWAYS run this checklist:**
+
+### 1. Run Status Check Script (5 minutes)
+
+```bash
+cd /Users/dilipupadhyay/github/app-bana
+
+# Create quick status check script
+cat > check_status.sh << 'EOF'
+#!/bin/bash
+echo "=========================================="
+echo "Entity Form Binding - Implementation Status"
+echo "=========================================="
+
+# Story completion status
+echo -e "\n📋 STORY COMPLETION STATUS:"
+echo "Story 1.1 (Password Security):"
+[[ -f "app-bana-service/src/main/java/com/appbana/service/PasswordService.java" ]] && echo "  ✅ PasswordService.java" || echo "  ❌ PasswordService.java"
+[[ -f "app-bana-service/src/test/java/com/appbana/service/PasswordServiceTest.java" ]] && echo "  ✅ PasswordServiceTest.java" || echo "  ❌ PasswordServiceTest.java"
+
+echo -e "\nStory 1.2 (CSRF Protection):"
+[[ -f "app-bana-service/src/main/java/com/appbana/service/CsrfService.java" ]] && echo "  ✅ CsrfService.java" || echo "  ❌ CsrfService.java"
+[[ -f "app-bana-service/src/main/java/com/appbana/middleware/SecurityMiddleware.java" ]] && echo "  ✅ SecurityMiddleware.java" || echo "  ❌ SecurityMiddleware.java"
+
+echo -e "\nStory 1.3 (Rate Limiting):"
+[[ -f "app-bana-service/src/main/java/com/appbana/service/RateLimitService.java" ]] && echo "  ✅ RateLimitService.java" || echo "  ❌ RateLimitService.java"
+
+echo -e "\nStory 1.4 (Validation Feedback):"
+[[ -f "app-bana-service/src/main/java/com/appbana/service/ValidationService.java" ]] && echo "  ✅ ValidationService.java" || echo "  ❌ ValidationService.java"
+
+# Test status
+echo -e "\n🧪 TEST STATUS:"
+cd app-bana-service
+TEST_OUTPUT=$(mvn test -q 2>&1 | grep -E "Tests run:|BUILD")
+if [[ $? -eq 0 ]]; then
+  echo "$TEST_OUTPUT"
+else
+  echo "  ⚠️ No tests run or build failed"
+fi
+
+# Dependency status
+echo -e "\n📦 DEPENDENCIES:"
+mvn dependency:tree -q 2>&1 | grep -q "bcrypt" && echo "  ✅ BCrypt installed" || echo "  ❌ BCrypt missing"
+mvn dependency:tree -q 2>&1 | grep -q "junit-jupiter" && echo "  ✅ JUnit 5 installed" || echo "  ❌ JUnit 5 missing"
+
+cd ../app-bana-ui
+npm list @testing-library/lit >/dev/null 2>&1 && echo "  ✅ @testing-library/lit installed" || echo "  ❌ @testing-library/lit missing"
+npm list playwright >/dev/null 2>&1 && echo "  ✅ Playwright installed" || echo "  ❌ Playwright missing"
+
+# Git status
+echo -e "\n📂 GIT STATUS:"
+cd ..
+git status --short | head -10
+
+echo -e "\n=========================================="
+echo "Use this information to pick up where you left off!"
+echo "=========================================="
+EOF
+
+chmod +x check_status.sh
+./check_status.sh
+```
+
+### 2. Interpret Status Output
+
+**Scenario A: Fresh Start (Nothing exists)**
+```
+❌ PasswordService.java
+❌ PasswordServiceTest.java
+❌ BCrypt missing
+```
+→ **Action:** Follow Day 1 guide from Step 1 (Add Dependencies)
+
+**Scenario B: Dependencies installed, no code**
+```
+✅ BCrypt installed
+✅ JUnit 5 installed
+❌ PasswordService.java
+```
+→ **Action:** Skip Step 1, start at Step 2 (Create PasswordService.java)
+
+**Scenario C: PasswordService exists, tests fail**
+```
+✅ PasswordService.java
+✅ PasswordServiceTest.java
+Tests run: 6, Failures: 3, Errors: 0
+```
+→ **Action:** Debug failing tests, check:
+  - Is BCrypt imported correctly? (`import at.favre.lib.crypto.bcrypt.BCrypt;`)
+  - Is ValidationResult in correct package? (`com.appbana.model`)
+  - Are test methods public and annotated with `@Test`?
+
+**Scenario D: Story 1.1 complete, ready for 1.2**
+```
+✅ PasswordService.java
+✅ PasswordServiceTest.java
+Tests run: 6, Failures: 0
+❌ CsrfService.java
+```
+→ **Action:** Skip to Day 4 (Story 1.2 - CSRF Protection)
+
+**Scenario E: Multiple stories started**
+```
+✅ PasswordService.java (6 tests pass)
+✅ CsrfService.java (5 tests pass)
+⚠️ RateLimitService.java (2 tests fail)
+```
+→ **Action:** Fix RateLimitService tests, then continue with Story 1.4
+
+### 3. Update This Document
+
+After each major milestone, update the checklist:
+
+```bash
+# Add TODO comments to track progress
+echo "// TODO: Story 1.1 complete - $(date)" >> notes.txt
+echo "// NEXT: Story 1.2 CSRF Protection" >> notes.txt
+```
+
+### 4. Common Resume Issues
+
+**Issue:** "I forgot which story I was working on"
+- **Solution:** Run `check_status.sh` script above
+- **Prevention:** Add TODO comments in code with story numbers
+
+**Issue:** "Tests were passing, now they fail"
+- **Solution:** Check git diff: `git diff HEAD`
+- **Check:** Was ApiServer.java modified? Revert changes and test again
+
+**Issue:** "New session, AI agent doesn't know progress"
+- **Solution:** Share output of `check_status.sh` with agent
+- **Prevention:** This document now includes status check instructions
+
+**Issue:** "Can't remember which dependencies to install"
+- **Solution:** Check `check_status.sh` dependency section
+- **Alternative:** See Step 1 in Day 1 guide above
+
+### 5. Quick Commands Reference
+
+```bash
+# Check test status for specific story
+mvn test -Dtest=PasswordServiceTest  # Story 1.1
+mvn test -Dtest=CsrfServiceTest      # Story 1.2
+mvn test -Dtest=RateLimitServiceTest # Story 1.3
+
+# Run all backend tests
+cd app-bana-service && mvn test
+
+# Run all frontend tests
+cd app-bana-ui && npm test
+
+# Check code coverage
+cd app-bana-service && mvn clean test jacoco:report
+open target/site/jacoco/index.html
+
+# View test plan for specific story
+grep -A 50 "Story 1.1" docs/ENTITY_FORM_BINDING_TEST_PLAN.md
+```
+
+---
 
 🚀 **Let's code!**
