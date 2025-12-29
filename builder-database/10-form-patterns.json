@@ -1,7 +1,7 @@
 {
-  "version": "1.0.0",
-  "lastUpdated": "2025-11-22T00:00:00Z",
-  "description": "Complete guide for building forms with all possible combinations and patterns",
+  "version": "1.1.0",
+  "lastUpdated": "2025-12-30T00:00:00Z",
+  "description": "Complete guide for building secure forms with CSRF protection, session management, and validation",
   
   "formComponents": {
     "input": {
@@ -236,5 +236,105 @@
     "layout": "Use single column for mobile, multi-column for desktop",
     "submission": "Disable submit button during processing",
     "success": "Show clear confirmation after successful submission"
+  },
+
+  "securityIntegration": {
+    "version": "1.0.0",
+    "status": "Production Ready",
+    "description": "All forms automatically include CSRF protection, session validation, and secure submission",
+    "automatic": {
+      "csrfProtection": {
+        "description": "Automatic CSRF token injection for all POST/PUT/DELETE requests",
+        "implementation": "FormContainer.ts fetches token from /api/csrf/token",
+        "headers": {
+          "X-CSRF-Token": "Fetched CSRF token",
+          "X-Session-Token": "Session token from localStorage (appbana_token)",
+          "X-Session-Id": "Session token for CSRF validation"
+        },
+        "when": "On form mount (fetchCsrfToken() in connectedCallback)",
+        "refresh": "New token fetched on each form instance"
+      },
+      "sessionManagement": {
+        "description": "Session token automatically included in all form submissions",
+        "storage": "localStorage.getItem('appbana_token')",
+        "timeout": "30 minutes of inactivity",
+        "renewal": "Automatic sliding window on activity",
+        "expiration": "Redirects to /login with 2-second delay on 401"
+      },
+      "rateLimiting": {
+        "description": "All endpoints protected with 100 requests/minute per IP",
+        "behavior": "Returns 429 on rate limit exceeded",
+        "display": "User-friendly error message in form"
+      }
+    },
+    "passwordHandling": {
+      "validation": {
+        "minLength": 8,
+        "pattern": "Must contain letters and numbers",
+        "confirmMatch": "Password and confirmPassword must match",
+        "realtime": "Validation on blur, error clearing on input"
+      },
+      "transformation": {
+        "frontend": "password field name preserved for auth endpoints",
+        "backend": "password → passwordHash for entity operations",
+        "exclusion": "confirmPassword excluded from submission"
+      },
+      "security": "BCrypt hashing on backend (work factor 12)"
+    },
+    "errorHandling": {
+      "fieldValidation": {
+        "display": "Red border, error text below field, aria-invalid=true",
+        "focus": "Auto-focus on first invalid field",
+        "clear": "Error cleared on input (progressive validation)"
+      },
+      "backendErrors": {
+        "401": "Session expired → Redirect to /login after 2s",
+        "403": "CSRF validation failed → Show error message",
+        "429": "Rate limit exceeded → Show retry message with wait time",
+        "422": "Validation errors → Display field-level errors"
+      }
+    },
+    "loadingStates": {
+      "submission": {
+        "button": "Text changes to 'Submitting...' + disabled",
+        "form": "isSubmitting flag prevents double-submit",
+        "duration": "Throughout request lifecycle"
+      }
+    },
+    "implementation": {
+      "component": "FormContainer.ts (400+ lines)",
+      "demo": "form-security-demo.html",
+      "keyMethods": [
+        "fetchCsrfToken() - GET /api/csrf/token on mount",
+        "validateField() - Email, password strength, confirmPassword, required",
+        "handleSubmit() - Pre-validation, token headers, double-submit prevention",
+        "showFieldError() / clearFieldError() - Progressive validation UI",
+        "setLoadingState() - Button disabled + 'Submitting...' text"
+      ]
+    },
+    "example": {
+      "description": "Complete secure form submission flow",
+      "steps": [
+        "1. Form mounts → fetchCsrfToken() → stores in this.csrfToken",
+        "2. User fills fields → validateField() on blur",
+        "3. User submits → handleSubmit() validates all fields",
+        "4. Prepare request with headers:",
+        "   - X-CSRF-Token: this.csrfToken",
+        "   - X-Session-Token: localStorage.getItem('appbana_token')",
+        "   - X-Session-Id: same as X-Session-Token (for CSRF)",
+        "5. Backend middleware pipeline:",
+        "   - RateLimitMiddleware: Check 100 req/min limit",
+        "   - SessionMiddleware: Validate session token, renew if valid",
+        "   - CsrfMiddleware: Validate CSRF token matches session",
+        "   - Handler: Process form data",
+        "6. Response handling:",
+        "   - 200/201: Success message, clear form",
+        "   - 401: Redirect to /login after 2s",
+        "   - 403: Show CSRF error",
+        "   - 422: Display field errors",
+        "   - 429: Show rate limit message"
+      ],
+      "code": "See form-security-demo.html for complete working example"
+    }
   }
 }
