@@ -5,16 +5,30 @@ import { registerComponent } from '../core/registry';
 /**
  * StudioForm - A container that handles data submission for an entity.
  * 
- * Props:
+ * Enhanced with Story 1.2 (CSRF), Story 2.1 (Session), and UX features:
+ * - CSRF token fetching and auto-inclusion in POST/PUT/DELETE
+ * - Session token inclusion from localStorage
+ * - Client-side validation with real-time feedback
+ * - Loading states during submission
+ * - Field-level error display from backend validation
+ * - Password field mapping to passwordHash
+ * - Rate limit error handling
+ * 
  * Props:
  * - entity: The name of the entity (e.g., "LoanApplication")
  * - action: Custom endpoint to post to (e.g. "/auth/login"). If set, entity is ignored/optional.
  * - recordId: Optional ID for editing an existing record. If omitted, creates new.
  * - redirectOnSuccess: generic path (client-side router) to go to after success.
+ * - validateOnBlur: Enable client-side validation on field blur (default: true)
+ * - showLoadingState: Show loading indicators during submission (default: true)
  */
 export class FormContainer extends BaseElement {
+    private csrfToken: string | null = null;
+    private isSubmitting: boolean = false;
+    private validationErrors: Record<string, string> = {};
+    
     static get observedAttributes() {
-        return ['entity', 'action', 'record-id', 'redirect-on-success'];
+        return ['entity', 'action', 'record-id', 'redirect-on-success', 'validate-on-blur'];
     }
 
     protected render(): string {
@@ -37,6 +51,15 @@ export class FormContainer extends BaseElement {
     async connectedCallback() {
         super.connectedCallback();
         this.addEventListener('click', this.handleClick.bind(this));
+        
+        // Fetch CSRF token for form security (Story 1.2)
+        await this.fetchCsrfToken();
+        
+        // Setup client-side validation listeners (Story 1.4)
+        if (this.getAttribute('validate-on-blur') !== 'false') {
+            this.setupValidationListeners();
+        }
+        
         // Load data if recordId is present
         this.checkAndLoadRecord();
     }
@@ -47,6 +70,137 @@ export class FormContainer extends BaseElement {
         }
     }
 
+    /**
+     * Fetch CSRF token from backend (Story 1.2)
+     */
+    private async fetchCsrfToken(): Promise<void> {
+        try {
+            const response = await apiClient.get<{ token: string }>('/api/csrf/token');
+            this.csrfToken = response.token;
+            console.log('[FormContainer] CSRF token fetched');
+        } catch (e) {
+            console.error('[FormContainer] Failed to fetch CSRF token:', e);
+            // Non-blocking: forms to /api/auth/* don't require CSRF
+        }
+    }
+    
+    /**
+     * Setup client-side validation listeners (Story 1.4, 2.2)
+     */
+    private setupValidationListeners(): void {
+        const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea, input, select, textarea');
+        inputs.forEach((el: any) => {
+            el.addEventListener('blur', () => this.validateField(el));
+            el.addEventListener('input', () => this.clearFieldError(el));
+        });
+    }
+    
+    /**
+     * Validate individual field on blur (Story 2.2)
+     */
+    private validateField(el: any): void {
+        const name = el.getAttribute('name') || el.name;
+        if (!name) return;
+        
+        const required = el.getAttribute('required') !== null || el.required;
+        const value = el.getAttribute('value') || el.value || '';
+        const type = el.getAttribute('type') || el.type || 'text';
+        
+        // Clear previous error
+        delete this.validationErrors[name];
+        
+        // Required validation
+        if (required && !value.trim()) {
+            this.validationErrors[name] = 'This field is required';
+            this.showFieldError(el, this.validationErrors[name]);
+            return;
+        }
+        
+        // Email validation
+        if (type === 'email' && value) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(value)) {
+                this.validationErrors[name] = 'Invalid email format';
+                this.showFieldError(el, this.validationErrors[name]);
+                return;
+            }
+        }
+        
+        // Password strength validation (Story 1.1.4)
+        if (name === 'password' && value) {
+            if (value.length < 8) {
+                this.validationErrors[name] = 'Password must be at least 8 characters';
+                this.showFieldError(el, this.validationErrors[name]);
+                return;
+            }
+            if (!/[a-zA-Z]/.test(value) || !/\d/.test(value)) {
+                this.validationErrors[name] = 'Password must contain letters and numbers';
+                this.showFieldError(el, this.validationErrors[name]);
+                return;
+            }
+        }
+        
+        // Confirm password matching (Story 1.1.5)
+        if (name === 'confirmPassword' && value) {
+            const passwordInput = this.querySelector('[name="password"]') as any;
+            const password = passwordInput?.getAttribute('value') || passwordInput?.value || '';
+            if (value !== password) {
+                this.validationErrors[name] = 'Passwords must match';
+                this.showFieldError(el, this.validationErrors[name]);
+                return;
+            }
+        }
+        
+        // Clear error if validation passed
+        this.clearFieldError(el);
+    }
+    
+    /**
+     * Show field-level error (Story 1.4)
+     */
+    private showFieldError(el: any, message: string): void {
+        // Set aria-invalid for accessibility (Story 1.5)
+        el.setAttribute('aria-invalid', 'true');
+        
+        // Add error class if element supports it
+        if (el.classList) {
+            el.classList.add('error');
+        }
+        
+        // Find or create error message element
+        let errorEl = el.nextElementSibling;
+        if (!errorEl || !errorEl.classList.contains('field-error')) {
+            errorEl = document.createElement('div');
+            errorEl.className = 'field-error';
+            errorEl.setAttribute('role', 'alert'); // Story 1.5.6
+            errorEl.style.color = 'red';
+            errorEl.style.fontSize = '0.875rem';
+            errorEl.style.marginTop = '0.25rem';
+            el.parentNode?.insertBefore(errorEl, el.nextSibling);
+        }
+        errorEl.textContent = message;
+    }
+    
+    /**
+     * Clear field error (Story 1.4.4)
+     */
+    private clearFieldError(el: any): void {
+        const name = el.getAttribute('name') || el.name;
+        if (name) {
+            delete this.validationErrors[name];
+        }
+        
+        el.removeAttribute('aria-invalid');
+        if (el.classList) {
+            el.classList.remove('error');
+        }
+        
+        const errorEl = el.nextElementSibling;
+        if (errorEl && errorEl.classList.contains('field-error')) {
+            errorEl.remove();
+        }
+    }
+    
     private checkAndLoadRecord() {
         const recordId = this.getAttribute('record-id') || this.getAttribute('recordId');
         if (recordId && recordId !== 'undefined' && recordId !== 'null') {
@@ -138,6 +292,12 @@ export class FormContainer extends BaseElement {
     }
 
     private async handleSubmit() {
+        // Prevent double submission (Story 2.1.5)
+        if (this.isSubmitting) {
+            console.warn('[FormContainer] Form already submitting, ignoring duplicate submission');
+            return;
+        }
+        
         const entity = this.getAttribute('entity');
         const action = this.getAttribute('action');
         const recordId = this.getAttribute('record-id') || this.getAttribute('recordId');
@@ -147,33 +307,82 @@ export class FormContainer extends BaseElement {
             this.showError('Configuration Error: No entity or action specified for form.');
             return;
         }
+        
+        // Validate all fields before submission (Story 2.2)
+        const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea, input, select, textarea');
+        inputs.forEach((el: any) => this.validateField(el));
+        
+        if (Object.keys(this.validationErrors).length > 0) {
+            this.showError('Please fix validation errors before submitting');
+            // Focus first error field (Story 1.4.3)
+            const firstErrorField = Array.from(inputs).find((el: any) => {
+                const name = el.getAttribute('name') || el.name;
+                return name && this.validationErrors[name];
+            }) as any;
+            if (firstErrorField && firstErrorField.focus) {
+                firstErrorField.focus();
+            }
+            return;
+        }
+
+        // Set loading state (Story 2.1)
+        this.isSubmitting = true;
+        this.setLoadingState(true);
+        this.showError(''); // Clear previous errors
 
         // Collect data
         const formData: Record<string, any> = {};
-        const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea, input, select, textarea');
 
         inputs.forEach((el: any) => {
             const name = el.getAttribute('name') || el.name;
             const val = el.getAttribute('value') || el.value;
             if (name) {
+                // Exclude confirmPassword from entity (Story 1.1.3)
+                if (name === 'confirmPassword') {
+                    return; // Skip confirmPassword, not sent to backend
+                }
                 formData[name] = val;
             }
         });
-
-        // Sanitize: Convert empty strings to null for numbers? (Simplification: send as is, backend handles or fails)
-
-        this.showError(''); // Clear error
+        
+        // Password field mapping: password → passwordHash (Story 1.1.2)
+        // Backend PasswordService will hash it, but we need to rename the field
+        if (formData.password && entity) {
+            // For entity operations, map to passwordHash
+            // For auth endpoints (/api/auth/login, /api/auth/register), keep as "password"
+            if (!action || !action.includes('/auth/')) {
+                formData.passwordHash = formData.password;
+                delete formData.password;
+            }
+        }
 
         try {
+            // Get session token from localStorage (Story 2.1)
+            const sessionToken = localStorage.getItem('appbana_token');
+            
+            // Prepare headers with CSRF and Session tokens
+            const headers: Record<string, string> = {};
+            
+            // Add CSRF token for non-GET requests (Story 1.2)
+            if (this.csrfToken) {
+                headers['X-CSRF-Token'] = this.csrfToken;
+            }
+            
+            // Add Session token (Story 2.1)
+            if (sessionToken) {
+                headers['X-Session-Token'] = sessionToken;
+            }
+            
+            // Make request with security headers
             if (action) {
                 // Post to custom action endpoint
-                await apiClient.post(action, formData);
+                await apiClient.post(action, formData, { headers });
             } else if (recordId) {
                 // Update
-                await apiClient.put(`/api/${entity}/${recordId}`, formData);
+                await apiClient.put(`/api/${entity}/${recordId}`, formData, { headers });
             } else {
                 // Create
-                await apiClient.post(`/api/${entity}`, formData);
+                await apiClient.post(`/api/${entity}`, formData, { headers });
             }
 
             // Success!
@@ -207,8 +416,74 @@ export class FormContainer extends BaseElement {
             }
         } catch (e: any) {
             console.error('Submit error:', e);
-            this.showError(`Error: ${e.message || 'Unknown error'}`);
+            
+            // Handle validation errors from backend (Story 1.4)
+            if (e.response && e.response.validationErrors) {
+                const errors = e.response.validationErrors;
+                Object.keys(errors).forEach(fieldName => {
+                    const input = this.querySelector(`[name="${fieldName}"]`) as any;
+                    if (input) {
+                        this.validationErrors[fieldName] = errors[fieldName];
+                        this.showFieldError(input, errors[fieldName]);
+                    }
+                });
+                this.showError('Please fix the errors above');
+                
+                // Focus first error field
+                const firstErrorField = this.querySelector(`[name="${Object.keys(errors)[0]}"]`) as any;
+                if (firstErrorField && firstErrorField.focus) {
+                    firstErrorField.focus();
+                }
+            }
+            // Handle rate limit errors (Story 1.3)
+            else if (e.message && e.message.includes('rate limit')) {
+                this.showError('Too many requests. Please wait a moment and try again.');
+            }
+            // Handle session errors (Story 2.1)
+            else if (e.status === 401 || e.message.includes('unauthorized')) {
+                this.showError('Session expired. Please log in again.');
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 2000);
+            }
+            // Generic error
+            else {
+                this.showError(`Error: ${e.message || 'Unknown error'}`);
+            }
+        } finally {
+            // Clear loading state (Story 2.1.3, 2.1.4)
+            this.isSubmitting = false;
+            this.setLoadingState(false);
         }
+    }
+    
+    /**
+     * Set loading state on submit button (Story 2.1)
+     */
+    private setLoadingState(loading: boolean): void {
+        const buttons = this.querySelectorAll('appbana-button[type="submit"], studio-button[type="submit"], button[type="submit"]');
+        buttons.forEach((btn: any) => {
+            if (loading) {
+                btn.setAttribute('disabled', 'true');
+                const originalText = btn.textContent || btn.getAttribute('text') || 'Submit';
+                btn.setAttribute('data-original-text', originalText);
+                if (btn.setAttribute && btn.getAttribute('text') !== undefined) {
+                    btn.setAttribute('text', 'Submitting...');
+                } else {
+                    btn.textContent = 'Submitting...';
+                }
+            } else {
+                btn.removeAttribute('disabled');
+                const originalText = btn.getAttribute('data-original-text');
+                if (originalText) {
+                    if (btn.setAttribute && btn.getAttribute('text') !== undefined) {
+                        btn.setAttribute('text', originalText);
+                    } else {
+                        btn.textContent = originalText;
+                    }
+                }
+            }
+        });
     }
 
     private showError(msg: string) {
