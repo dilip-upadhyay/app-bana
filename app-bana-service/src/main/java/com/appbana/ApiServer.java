@@ -1,28 +1,21 @@
 package com.appbana;
 
 import com.appbana.ai.AiProvider;
-import com.appbana.ai.AiProviderFactory;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
-import com.appbana.config.DatasourceConfig;
 import com.appbana.service.PermissionService;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.*;
 import com.appbana.model.EntitySchema;
-import com.appbana.model.AppMetadata;
 import org.flywaydb.core.Flyway;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.appbana.api.AuthenticationController;
-import com.appbana.api.GenericAppAuthController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.*;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -39,7 +32,6 @@ public class ApiServer {
             .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
     private static final Logger LOG = LoggerFactory.getLogger(ApiServer.class);
     private static PermissionService permissionService;
-    private static final String DEFAULT_TENANT = "default";
 
     // Shared utilities so both handlers can send responses
     public static void send(HttpExchange exchange, int status, String body) throws IOException {

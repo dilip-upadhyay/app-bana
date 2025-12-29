@@ -360,6 +360,7 @@ class PermissionServiceTest {
         long durationBatchNs = System.nanoTime() - startBatch;
         double durationBatchMs = durationBatchNs / 1_000_000.0;
         
+        assertNotNull(fields, "Fields list should not be null");
         assertTrue(durationBatchMs < 100, 
                    String.format("Batch field query should be <100ms (was %.2fms)", durationBatchMs));
     }

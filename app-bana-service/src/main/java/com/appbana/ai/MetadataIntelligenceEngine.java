@@ -9,9 +9,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * Metadata-Driven Intelligence Engine
@@ -34,7 +31,6 @@ public class MetadataIntelligenceEngine {
 
     private static IntentPatternsConfig config;
     private static boolean initialized = false;
-    private static WatchService watchService;
 
     /**
      * Initialize and load intent patterns from metadata

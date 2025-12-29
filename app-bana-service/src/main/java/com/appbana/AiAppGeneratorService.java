@@ -5,7 +5,6 @@ import com.appbana.ai.AiProviderFactory;
 import com.appbana.ai.AiSystemPrompts;
 import com.appbana.ai.AgentMemoryService;
 import com.appbana.ai.SmallTalkEngine;
-import com.appbana.ai.IntentCache;
 import com.appbana.ai.MetadataIntelligenceEngine;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
@@ -51,7 +50,6 @@ public class AiAppGeneratorService {
     private static final String ACTION_LOAD_APP = "loadApp";
     private static final String ACTION_DELETE_APP = "deleteApp";
     private static final String ACTION_LIST_PAGES = "listPages";
-    private static final String ACTION_OPEN_PAGE = "openPage";
     private static final String ACTION_GENERATE_APP = "generateApp";
     private static final String ACTION_DESCRIBE_APP = "describeApp";
     private static final String PAYLOAD_APPS = "apps";
@@ -1653,7 +1651,6 @@ public class AiAppGeneratorService {
         String originalInput;
         String appType;
         String appName;
-        List<String> detectedEntities;
     }
 
     // Extracts app type from user description (e.g., 'running app', 'dance app')

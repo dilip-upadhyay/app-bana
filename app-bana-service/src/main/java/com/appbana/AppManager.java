@@ -2,8 +2,7 @@ package com.appbana;
 
 import com.appbana.model.AppMetadata;
 import com.appbana.model.EntitySchema;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference; // Added import
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.slf4j.Logger;
@@ -99,7 +98,7 @@ public class AppManager {
                 if (rs.next()) {
                     String json = rs.getString("json_metadata");
                     if (json != null) {
-                        return mapper.readValue(json, Map.class);
+                        return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
                     }
                 }
             }
@@ -214,7 +213,7 @@ public class AppManager {
         if (app == null)
             return null;
 
-        Map<String, Object> appMap = mapper.convertValue(app, Map.class);
+        Map<String, Object> appMap = mapper.convertValue(app, new TypeReference<Map<String, Object>>() {});
 
         // Load pages
         List<Map<String, Object>> pages = new ArrayList<>();
@@ -230,7 +229,7 @@ public class AppManager {
                 while (rs.next()) {
                     String json = rs.getString("json_metadata");
                     if (json != null) {
-                        pages.add(mapper.readValue(json, Map.class));
+                        pages.add(mapper.readValue(json, new TypeReference<Map<String, Object>>() {}));
                     }
                 }
             }
@@ -402,7 +401,7 @@ public class AppManager {
                 if (rs.next()) {
                     String json = rs.getString("json_metadata");
                     if (json != null) {
-                        return mapper.readValue(json, Map.class);
+                        return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
                     }
                 }
             }

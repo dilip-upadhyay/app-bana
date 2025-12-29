@@ -1,13 +1,8 @@
 package com.appbana.api;
 
-import com.appbana.ApiServer;
 import com.appbana.ai.AgentMemoryService;
-import com.appbana.api.Router;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 
-import java.io.IOException;
 import java.util.Map;
 
 /**
@@ -21,8 +16,6 @@ import java.util.Map;
  *   POST   /api/agent/feedback?userId=...       - record feedback (input, response, positive, comment)
  */
 public class AgentMemoryApi {
-    private static final ObjectMapper M = new ObjectMapper();
-
     // BiConsumer-based handlers for Router
     public static java.util.function.BiConsumer<Router.HttpRequest, Router.HttpResponse> memoryHandler() {
         return (req, res) -> {

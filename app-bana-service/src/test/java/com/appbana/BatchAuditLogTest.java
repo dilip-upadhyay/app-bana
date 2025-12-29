@@ -3,7 +3,6 @@ package com.appbana;
 import com.appbana.model.EntitySchema;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.*;
 
 import java.net.URI;
 import java.net.http.HttpClient;

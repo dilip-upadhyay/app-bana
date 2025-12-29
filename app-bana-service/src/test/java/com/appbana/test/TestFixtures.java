@@ -92,12 +92,10 @@ public class TestFixtures {
     public static User createTestUser() {
         User user = new User();
         user.setId(123L);
-        user.setFirstName("John");
-        user.setLastName("Doe");
+        user.setName("John Doe");
         user.setEmail("john@example.com");
-        user.setPhone("+1234567890");
         user.setPasswordHash(BCRYPT_HASH_OF_VALID_PASSWORD);
-        user.setCreatedAt(Instant.now());
+        user.setCreatedAt(java.time.LocalDateTime.now());
         return user;
     }
     
