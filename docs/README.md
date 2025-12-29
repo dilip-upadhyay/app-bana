@@ -126,6 +126,21 @@
 - Compliance (HIPAA, PCI-DSS, SOC 2)
 - Troubleshooting and best practices
 
+### **[SECURITY_FEATURES.md](./SECURITY_FEATURES.md)** - Complete Security Suite Guide ⭐
+**For**: Developers, AI Builder, Security Teams  
+**Status**: ✅ Production Ready (156 tests passing)  
+**Contents**:
+- Complete security architecture overview
+- Password Security (BCrypt with work factor 12)
+- CSRF Protection (256-bit tokens, 30-min expiration)
+- Session Management (sliding window, 30-min timeout)
+- Rate Limiting (100 req/min per IP per endpoint)
+- Middleware Pipeline (automatic security checks)
+- Frontend Integration (FormContainer automatic security)
+- API Reference with all endpoints
+- Testing guide (156 tests documented)
+- Best practices and troubleshooting
+
 ---
 
 ## ⚙️ Workflow Automation
@@ -197,7 +212,8 @@ docs/
 ├── Security & Auth
 │   ├── AUTH_RBAC_DESIGN.md         - RBAC architecture
 │   ├── AUTH_PHASE1_IMPLEMENTATION.md - Implementation roadmap
-│   └── FIELD_LEVEL_SECURITY.md     - FLS complete guide
+│   ├── FIELD_LEVEL_SECURITY.md     - FLS complete guide
+│   └── SECURITY_FEATURES.md        - Security suite guide (CSRF/Session/RateLimit)
 │
 ├── Workflow Automation
 │   ├── WORKFLOW_FEATURE_SPEC.md    - Complete workflow architecture
@@ -229,12 +245,14 @@ docs/
 
 ### For Developers
 1. [02-DEVELOPMENT_GUIDE.md](./02-DEVELOPMENT_GUIDE.md) - Setup and build
-2. [JAVA21_QUICK_REFERENCE.md](./JAVA21_QUICK_REFERENCE.md) - Java 21 features
-3. [FIELD_LEVEL_SECURITY.md](./FIELD_LEVEL_SECURITY.md) - FLS implementation
-4. [WORKFLOW_PHASE1_STATUS_DEC7_2025.md](./WORKFLOW_PHASE1_STATUS_DEC7_2025.md) - Current work
+2. [SECURITY_FEATURES.md](./SECURITY_FEATURES.md) - Security suite (CSRF/Session/RateLimit)
+3. [JAVA21_QUICK_REFERENCE.md](./JAVA21_QUICK_REFERENCE.md) - Java 21 features
+4. [FIELD_LEVEL_SECURITY.md](./FIELD_LEVEL_SECURITY.md) - FLS implementation
+5. [WORKFLOW_PHASE1_STATUS_DEC7_2025.md](./WORKFLOW_PHASE1_STATUS_DEC7_2025.md) - Current work
 
 ### For Compliance/Security
-1. [FIELD_LEVEL_SECURITY.md](./FIELD_LEVEL_SECURITY.md) - FLS guide (HIPAA, PCI-DSS)
+1. [SECURITY_FEATURES.md](./SECURITY_FEATURES.md) - Complete security suite guide
+2. [FIELD_LEVEL_SECURITY.md](./FIELD_LEVEL_SECURITY.md) - FLS guide (HIPAA, PCI-DSS)
 2. [AUTH_RBAC_DESIGN.md](./AUTH_RBAC_DESIGN.md) - Access control
 3. [01-ARCHITECTURE.md](./01-ARCHITECTURE.md) - Security architecture
 
@@ -248,6 +266,7 @@ docs/
 | Component | Status | Grade | Documentation |
 |-----------|--------|-------|---------------|
 | **Core Platform** | ✅ Complete | 9/10 | 01-ARCHITECTURE.md |
+| **Security Suite** | ✅ Complete | 9/10 | SECURITY_FEATURES.md |
 | **Field-Level Security** | ✅ 90% | 8/10 | FIELD_LEVEL_SECURITY.md |
 | **Workflow Phase 1** | ✅ 95% | 8/10 | WORKFLOW_PHASE1_STATUS.md |
 | **AI Builder** | 🔄 Active | 7/10 | AI_BUILDER_SPEC.md |
@@ -256,6 +275,14 @@ docs/
 ---
 
 ## 🔄 Recent Changes
+
+### December 30, 2025 - Security Suite Documentation
+- ✅ Added SECURITY_FEATURES.md (400+ lines comprehensive guide)
+- ✅ Updated builder-database/09-authentication.json with security services
+- ✅ Updated builder-database/10-form-patterns.json with security integration
+- ✅ Updated builder-database/99-capabilities-index.json with security summary
+- ✅ All 156 security tests passing (Password, CSRF, Session, RateLimit)
+- ✅ AI builder now aware of complete security architecture
 
 ### December 7, 2025 - Documentation Consolidation
 - ✅ Removed 50+ outdated/duplicate files
@@ -305,5 +332,6 @@ docs/
 ---
 
 **Last Consolidated**: December 7, 2025  
-**Total Essential Docs**: 14 (down from 70+)  
+**Last Security Update**: December 30, 2025  
+**Total Essential Docs**: 15 (Security guide added)  
 **Next Review**: January 2026
