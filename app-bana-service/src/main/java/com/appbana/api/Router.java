@@ -30,6 +30,16 @@ public class Router {
     }
 
     private final List<Route> routes = new ArrayList<>();
+    private final List<BiConsumer<HttpRequest, HttpResponse>> middlewares = new ArrayList<>();
+
+    /**
+     * Add middleware that runs before all route handlers.
+     * Middleware can short-circuit by calling response methods.
+     */
+    public Router use(BiConsumer<HttpRequest, HttpResponse> middleware) {
+        middlewares.add(middleware);
+        return this;
+    }
 
     public Router get(String path, BiConsumer<HttpRequest,HttpResponse> h) { routes.add(new Route("GET", path, h)); return this; }
     public Router post(String path, BiConsumer<HttpRequest,HttpResponse> h) { routes.add(new Route("POST", path, h)); return this; }
@@ -53,12 +63,29 @@ public class Router {
         URI uri = ex.getRequestURI();
         String path = uri.getPath();
         List<String> req = split(path);
+        
+        // Run middlewares first
+        HttpRequest reqW = new HttpRequest(ex, new HashMap<>(), parseQuery(uri.getQuery()));
+        HttpResponse resW = new HttpResponse(ex);
+        for (BiConsumer<HttpRequest, HttpResponse> middleware : middlewares) {
+            try {
+                middleware.accept(reqW, resW);
+                // If response was already sent by middleware (e.g., 429 rate limit), stop here
+                if (resW.isSent()) {
+                    return;
+                }
+            } catch (Exception e) {
+                sendError(ex, 500, e.getMessage());
+                return;
+            }
+        }
+        
+        // Route to handler
         for (Route r : routes) {
             if (!r.method.equals(method)) continue;
             Map<String,String> params = new HashMap<>();
             if (match(r.parts, req, params)) {
-                HttpRequest reqW = new HttpRequest(ex, params, parseQuery(uri.getQuery()));
-                HttpResponse resW = new HttpResponse(ex);
+                reqW = new HttpRequest(ex, params, parseQuery(uri.getQuery()));
                 try {
                     r.handler.accept(reqW, resW);
                 } catch (Exception e) {
@@ -189,13 +216,16 @@ public class Router {
 
     public static class HttpResponse {
         private final HttpExchange ex;
+        private boolean sent = false;
         public HttpResponse(HttpExchange ex){ this.ex = ex; }
+        public boolean isSent() { return sent; }
         public void json(int status, Object obj) {
             try {
                 byte[] b = M.writeValueAsBytes(obj);
                 ex.getResponseHeaders().set("Content-Type", "application/json");
                 ex.sendResponseHeaders(status, b.length);
                 try (OutputStream os = ex.getResponseBody()) { os.write(b); }
+                sent = true;
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }
@@ -206,6 +236,7 @@ public class Router {
                 ex.getResponseHeaders().set("Content-Type", contentType==null?"text/plain; charset=utf-8":contentType);
                 ex.sendResponseHeaders(status, b.length);
                 try (OutputStream os = ex.getResponseBody()) { os.write(b); }
+                sent = true;
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }
@@ -218,6 +249,7 @@ public class Router {
                 try (OutputStream os = ex.getResponseBody()) {
                     os.write(body);
                 }
+                sent = true;
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }
