@@ -1,6 +1,7 @@
 package com.appbana.server.routes;
 
 import com.appbana.api.AuthenticationController;
+import com.appbana.api.CsrfController;
 import com.appbana.api.GenericAppAuthController;
 import com.appbana.api.Router;
 
@@ -17,5 +18,9 @@ public class AuthRoutes {
 
         // Runtime authentication (for generated apps)
         router.post("/api/runtime/auth/login", GenericAppAuthController.login());
+        
+        // CSRF protection endpoints (Story 1.2)
+        router.get("/api/csrf-token", CsrfController.generateToken());
+        router.post("/api/csrf-validate", CsrfController.validateToken());
     }
 }
