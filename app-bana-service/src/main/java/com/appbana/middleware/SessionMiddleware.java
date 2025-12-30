@@ -35,13 +35,14 @@ public class SessionMiddleware {
         "/api/csrf/token",   // CSRF token generation is public
         "/api/templates",    // Templates are public read-only resources
         "/api/apps/",        // Public runtime APIs for end users
+        "/appbana-studio/",  // Studio Builder APIs (development mode - TODO: enable auth in production)
         "/*.html",           // All HTML files are public (studio.html, index.html, etc.)
         "/*.js",             // JavaScript files from Vite build
         "/*.css",            // CSS files from Vite build
         "/assets/"           // Vite build assets
     };
     
-    // Note: /appbana-studio/* routes require authentication (admin Studio operations)
+    // Note: /appbana-studio/* is currently public for development. Enable authentication in production.
     
     /**
      * Create session validation middleware.

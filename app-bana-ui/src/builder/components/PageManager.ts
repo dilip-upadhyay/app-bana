@@ -245,15 +245,18 @@ export class PageManager extends LitElement {
     }
 
     try {
+      // Capture pageId explicitly to avoid scope issues in closures
+      const deletedPageId = pageId;
+      
       // Clear the draft from localStorage before deleting
-      const draftKey = `studio.draft.${pageId}`;
+      const draftKey = `studio.draft.${deletedPageId}`;
       console.log('[PageManager] Clearing draft for deleted page:', draftKey);
       localStorage.removeItem(draftKey);
 
-      await appStore.removePage(this.currentApp.id, pageId);
+      await appStore.removePage(this.currentApp.id, deletedPageId);
 
       // Switch to another page if any exist
-      const remainingPages = this.pages.filter(p => p.id !== pageId);
+      const remainingPages = this.pages.filter(p => p.id !== deletedPageId);
       if (remainingPages.length > 0) {
         this.currentPageId = remainingPages[0].id;
         this.switchToPage(this.currentPageId);

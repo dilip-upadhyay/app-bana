@@ -379,7 +379,7 @@ export class AppStore {
 
     if (!app.pages.includes(page.id)) {
       // Save page to backend
-      await apiClient.put(`/appbana-studio/apps/${appId}/pages/${pageId}`, page);
+      await apiClient.put(`/appbana-studio/apps/${appId}/pages/${page.id}`, page);
 
       // Update app pages list
       app.pages.push(page.id);
