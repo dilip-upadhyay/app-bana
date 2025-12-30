@@ -162,10 +162,10 @@ public class AppRoutes {
             }
         });
 
-        // ==================== APP CRUD ====================
+        // ==================== STUDIO BUILDER APIs (Authenticated) ====================
 
         // List all apps
-        router.get("/apps", (req, res) -> {
+        router.get("/appbana-studio/apps", (req, res) -> {
             try {
                 List<Map<String, Object>> apps = AppManager.listApps(DEFAULT_TENANT);
                 res.json(200, Map.of("apps", apps));
@@ -175,7 +175,7 @@ public class AppRoutes {
         });
 
         // Get app by ID
-        router.get("/apps/{id}", (req, res) -> {
+        router.get("/appbana-studio/apps/{id}", (req, res) -> {
             String appId = req.pathParam("id");
             try {
                 AppMetadata app = AppManager.getApp(DEFAULT_TENANT, appId);
@@ -189,8 +189,10 @@ public class AppRoutes {
             }
         });
 
-        // Get app with all pages
-        router.get("/apps/{id}/full", (req, res) -> {
+        // ==================== PUBLIC RUNTIME APIs (No Auth Required) ====================
+
+        // Get app with all pages (for runtime)
+        router.get("/api/apps/{id}/full", (req, res) -> {
             String appId = req.pathParam("id");
             try {
                 Map<String, Object> appObject = AppManager.getAppWithPages(DEFAULT_TENANT, appId);
@@ -205,7 +207,7 @@ public class AppRoutes {
         });
 
         // Get deployed app snapshot (PUBLIC - for end users running published apps)
-        router.get("/apps/{id}/env/{env}/full", (req, res) -> {
+        router.get("/api/apps/{id}/env/{env}/full", (req, res) -> {
             try {
                 String appId = req.pathParam("id");
                 String env = req.pathParam("env").toUpperCase();
@@ -222,7 +224,7 @@ public class AppRoutes {
         });
 
         // Create new app
-        router.post("/apps", (req, res) -> {
+        router.post("/appbana-studio/apps", (req, res) -> {
             try {
                 AppMetadata app = req.readJson(new TypeReference<AppMetadata>() {
                 });
@@ -250,7 +252,7 @@ public class AppRoutes {
         });
 
         // Update app
-        router.put("/apps/{id}", (req, res) -> {
+        router.put("/appbana-studio/apps/{id}", (req, res) -> {
             String appId = req.pathParam("id");
             try {
                 AppMetadata updates = req.readJson(new TypeReference<AppMetadata>() {
@@ -265,7 +267,7 @@ public class AppRoutes {
         });
 
         // Delete app
-        router.delete("/apps/{id}", (req, res) -> {
+        router.delete("/appbana-studio/apps/{id}", (req, res) -> {
             String appId = req.pathParam("id");
             try {
                 boolean deleted = AppManager.deleteApp(DEFAULT_TENANT, appId);
@@ -279,10 +281,10 @@ public class AppRoutes {
             }
         });
 
-        // ==================== WORKFLOW ====================
+        // ==================== STUDIO WORKFLOW APIs ====================
 
         // Get app workflow
-        router.get("/apps/{id}/workflow", (req, res) -> {
+        router.get("/appbana-studio/apps/{id}/workflow", (req, res) -> {
             String appId = req.pathParam("id");
             try {
                 Map<String, Object> workflow = AppManager.getWorkflow(DEFAULT_TENANT, appId);
@@ -297,7 +299,7 @@ public class AppRoutes {
         });
 
         // Save app workflow
-        router.put("/apps/{id}/workflow", (req, res) -> {
+        router.put("/appbana-studio/apps/{id}/workflow", (req, res) -> {
             String appId = req.pathParam("id");
             try {
                 Map<String, Object> workflow = req.readJson(new TypeReference<Map<String, Object>>() {
@@ -309,10 +311,10 @@ public class AppRoutes {
             }
         });
 
-        // ==================== PAGES ====================
+        // ==================== STUDIO PAGE APIs ====================
 
         // Get page
-        router.get("/apps/{appId}/pages/{pageId}", (req, res) -> {
+        router.get("/appbana-studio/apps/{appId}/pages/{pageId}", (req, res) -> {
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
             try {
@@ -328,7 +330,7 @@ public class AppRoutes {
         });
 
         // Save page
-        router.put("/apps/{appId}/pages/{pageId}", (req, res) -> {
+        router.put("/appbana-studio/apps/{appId}/pages/{pageId}", (req, res) -> {
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
             try {
@@ -342,7 +344,7 @@ public class AppRoutes {
         });
 
         // Delete page
-        router.delete("/apps/{appId}/pages/{pageId}", (req, res) -> {
+        router.delete("/appbana-studio/apps/{appId}/pages/{pageId}", (req, res) -> {
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
             try {

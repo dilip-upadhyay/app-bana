@@ -34,8 +34,14 @@ public class SessionMiddleware {
         "/openapi.json",
         "/api/csrf/token",   // CSRF token generation is public
         "/api/templates",    // Templates are public read-only resources
-        "/apps/"             // Runtime apps are public for end users (GET only)
+        "/api/apps/",        // Public runtime APIs for end users
+        "/*.html",           // All HTML files are public (studio.html, index.html, etc.)
+        "/*.js",             // JavaScript files from Vite build
+        "/*.css",            // CSS files from Vite build
+        "/assets/"           // Vite build assets
     };
+    
+    // Note: /appbana-studio/* routes require authentication (admin Studio operations)
     
     /**
      * Create session validation middleware.
@@ -103,7 +109,13 @@ public class SessionMiddleware {
         }
         
         for (String excluded : EXCLUDED_PATHS) {
-            if (path.startsWith(excluded)) {
+            // Handle wildcard patterns like "/*.html"
+            if (excluded.contains("*")) {
+                String pattern = excluded.replace("*", ".*").replace("/", "\\/");
+                if (path.matches(pattern)) {
+                    return true;
+                }
+            } else if (path.startsWith(excluded)) {
                 return true;
             }
         }

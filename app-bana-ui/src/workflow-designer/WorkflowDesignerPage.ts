@@ -439,7 +439,7 @@ export class WorkflowDesignerPage extends LitElement {
     try {
       // 1. Try to load from API
       // Backend returns { workflows: [...] } or just the workflow object
-      const response: any = await apiClient.get<any>(`/apps/${this.appId}/workflow`);
+      const response: any = await apiClient.get<any>(`/appbana-studio/apps/${this.appId}/workflow`);
 
       let workflow: any = response;
       this.preloadedWorkflows = [];
@@ -611,7 +611,7 @@ export class WorkflowDesignerPage extends LitElement {
 
     try {
       // Save to server
-      await apiClient.put(`/apps/${this.appId}/workflow`, this.workflowMetadata);
+      await apiClient.put(`/appbana-studio/apps/${this.appId}/workflow`, this.workflowMetadata);
 
       // Keep local backup just in case (optional, maybe remove allowed?)
       const key = this.getStorageKey();

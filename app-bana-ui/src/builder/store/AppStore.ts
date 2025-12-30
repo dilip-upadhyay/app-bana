@@ -44,7 +44,7 @@ export class AppStore {
 
     try {
       // Load apps list from backend
-      const response = await apiClient.get<{ apps: AppListItem[] }>('/apps');
+      const response = await apiClient.get<{ apps: AppListItem[] }>('/appbana-studio/apps');
       const appsList = response.apps || [];
       // Populate apps map with summary data
       this.apps.clear();
@@ -86,7 +86,7 @@ export class AppStore {
    */
   private async loadFullApp(appId: string): Promise<void> {
     try {
-      const fullApp = await apiClient.get<AppMeta>(`/apps/${appId}`);
+      const fullApp = await apiClient.get<AppMeta>(`/appbana-studio/apps/${appId}`);
       this.apps.set(appId, fullApp);
     } catch (error) {
       console.error(`[AppStore] Failed to load full app ${appId}:`, error);
@@ -202,7 +202,7 @@ export class AppStore {
       };
 
       // Save to backend
-      const created = await apiClient.post<AppMeta>('/apps', app);
+      const created = await apiClient.post<AppMeta>('/appbana-studio/apps', app);
 
       // Update local cache
       this.apps.set(created.id, created);
@@ -236,7 +236,7 @@ export class AppStore {
     };
 
     // Save to backend
-    const saved = await apiClient.put<AppMeta>(`/apps/${appId}`, updatedApp);
+    const saved = await apiClient.put<AppMeta>(`/appbana-studio/apps/${appId}`, updatedApp);
 
     // Update local cache
     this.apps.set(appId, saved);
@@ -254,9 +254,7 @@ export class AppStore {
     }
 
     // Backend will recursively delete app directory and all pages
-    await apiClient.delete(`/apps/${appId}`);
-
-    // Update local cache
+      await apiClient.delete(`/appbana-studio/apps/${appId}`);    // Update local cache
     this.apps.delete(appId);
 
     // If this was the current app, select another
@@ -360,7 +358,7 @@ export class AppStore {
       app.updated = Date.now();
 
       // Save entire app object since entities are embedded
-      await apiClient.put<AppMeta>(`/apps/${appId}`, app);
+      await apiClient.put<AppMeta>(`/appbana-studio/apps/${appId}`, app);
 
       // Update local cache
       this.apps.set(appId, app);
@@ -381,12 +379,12 @@ export class AppStore {
 
     if (!app.pages.includes(page.id)) {
       // Save page to backend
-      await apiClient.put(`/apps/${appId}/pages/${page.id}`, page);
+      await apiClient.put(`/appbana-studio/apps/${appId}/pages/${pageId}`, page);
 
       // Update app pages list
       app.pages.push(page.id);
       app.updated = Date.now();
-      await apiClient.put(`/apps/${appId}`, app);
+      await apiClient.put(`/appbana-studio/apps/${appId}`, app);
 
       // Update local cache
       this.apps.set(appId, app);
@@ -409,12 +407,10 @@ export class AppStore {
     }
 
     // Delete page from backend
-    await apiClient.delete(`/apps/${appId}/pages/${pageId}`);
-
-    // Update app pages list
+      await apiClient.delete(`/appbana-studio/apps/${appId}/pages/${pageId}`);    // Update app pages list
     app.pages = app.pages.filter((id: string) => id !== pageId);
     app.updated = Date.now();
-    await apiClient.put(`/apps/${appId}`, app);
+    await apiClient.put(`/studio/apps/${appId}`, app);
 
     // Update local cache
     this.apps.set(appId, app);
@@ -426,7 +422,7 @@ export class AppStore {
    */
   async loadPage(appId: string, pageId: string): Promise<PageMeta | undefined> {
     try {
-      const page = await apiClient.get<PageMeta>(`/apps/${appId}/pages/${pageId}`);
+      const page = await apiClient.get<PageMeta>(`/appbana-studio/apps/${appId}/pages/${pageId}`);
       return page;
     } catch (error) {
       console.error(`[AppStore] Failed to load page ${pageId}:`, error);
@@ -438,7 +434,7 @@ export class AppStore {
    * Save a page to backend
    */
   async savePage(appId: string, page: PageMeta): Promise<void> {
-    await apiClient.put(`/apps/${appId}/pages/${page.id}`, page);
+    await apiClient.put(`/appbana-studio/apps/${appId}/pages/${page.id}`, page);
   }
 
   /**

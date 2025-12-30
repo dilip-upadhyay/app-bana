@@ -15,6 +15,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false
       },
+      '/appbana-studio': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false
+      },
       '/apps': {
         target: 'http://localhost:8080',
         changeOrigin: true,

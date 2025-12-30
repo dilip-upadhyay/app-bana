@@ -102,6 +102,38 @@ class SessionMiddlewareTest {
         verify(res, never()).json(anyInt(), any());
     }
     
+    @Test
+    @DisplayName("Should allow /api/templates without session")
+    void testTemplatesPathExcluded() {
+        when(req.path()).thenReturn("/api/templates");
+        
+        SessionMiddleware.create().accept(req, res);
+        
+        verify(res, never()).json(anyInt(), any());
+    }
+    
+    @Test
+    @DisplayName("Should allow /api/apps/* paths without session (public runtime)")
+    void testPublicRuntimeAppsPathExcluded() {
+        when(req.path()).thenReturn("/api/apps/hr-management-app/full");
+        
+        SessionMiddleware.create().accept(req, res);
+        
+        verify(res, never()).json(anyInt(), any());
+        assertNull(attributes.get("userId"));
+    }
+    
+    @Test
+    @DisplayName("Should allow /api/apps/{id}/env/{env}/full without session (deployed apps)")
+    void testPublicDeployedAppsPathExcluded() {
+        when(req.path()).thenReturn("/api/apps/hr-management-app/env/DEV/full");
+        
+        SessionMiddleware.create().accept(req, res);
+        
+        verify(res, never()).json(anyInt(), any());
+        assertNull(attributes.get("userId"));
+    }
+    
     // ========================================
     // Test Group 2: Protected Paths (Auth Required)
     // ========================================
@@ -119,7 +151,45 @@ class SessionMiddlewareTest {
     }
     
     // ========================================
-    // Test Group 3: Session Token Extraction
+    // Test Group 3: Studio Builder Paths (Require Auth)
+    // ========================================
+    
+    @Test
+    @DisplayName("Should require session for /appbana-studio/apps paths")
+    void testStudioAppsPathRequiresSession() {
+        when(req.path()).thenReturn("/appbana-studio/apps");
+        when(req.header("X-Session-Token")).thenReturn(null);
+        
+        SessionMiddleware.create().accept(req, res);
+        
+        verify(res).json(eq(401), any(Map.class));
+        verify(res).setHeader("WWW-Authenticate", "Session realm=\"AppBana\"");
+    }
+    
+    @Test
+    @DisplayName("Should require session for /appbana-studio/apps/{id} paths")
+    void testStudioAppByIdRequiresSession() {
+        when(req.path()).thenReturn("/appbana-studio/apps/my-app-id");
+        when(req.header("X-Session-Token")).thenReturn(null);
+        
+        SessionMiddleware.create().accept(req, res);
+        
+        verify(res).json(eq(401), any(Map.class));
+    }
+    
+    @Test
+    @DisplayName("Should require session for /appbana-studio/apps/{id}/pages/{pageId}")
+    void testStudioPagesRequireSession() {
+        when(req.path()).thenReturn("/appbana-studio/apps/my-app/pages/home");
+        when(req.header("X-Session-Token")).thenReturn(null);
+        
+        SessionMiddleware.create().accept(req, res);
+        
+        verify(res).json(eq(401), any(Map.class));
+    }
+    
+    // ========================================
+    // Test Group 4: Session Token Extraction
     // ========================================
     
     @Test
