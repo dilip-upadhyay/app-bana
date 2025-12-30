@@ -85,9 +85,11 @@ export class AppRoot extends LitElement {
       console.log('[AppRoot] Loading app runtime with compact state:', compactState);
 
       // Load app WITH FULL PAGES from backend API
+      // Use PUBLIC endpoints (/apps/) - no authentication required for end users
       let url = `http://localhost:8080/apps/${compactState.appId}/full`;
       if (compactState.env) {
-        url = `http://localhost:8080/api/apps/${compactState.appId}/env/${compactState.env}/full`;
+        // Load deployed version (also public for end users)
+        url = `http://localhost:8080/apps/${compactState.appId}/env/${compactState.env}/full`;
       }
 
       const response = await fetch(url);

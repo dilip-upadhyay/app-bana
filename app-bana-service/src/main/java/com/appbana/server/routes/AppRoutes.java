@@ -204,6 +204,23 @@ public class AppRoutes {
             }
         });
 
+        // Get deployed app snapshot (PUBLIC - for end users running published apps)
+        router.get("/apps/{id}/env/{env}/full", (req, res) -> {
+            try {
+                String appId = req.pathParam("id");
+                String env = req.pathParam("env").toUpperCase();
+                Map<String, Object> snapshot = releaseService.getAppSnapshot(appId, env);
+                if (snapshot == null) {
+                    res.json(404, Map.of("error", "App not deployed to " + env));
+                } else {
+                    res.json(200, snapshot);
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to get app snapshot", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
         // Create new app
         router.post("/apps", (req, res) -> {
             try {
