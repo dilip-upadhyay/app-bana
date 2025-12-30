@@ -15,11 +15,14 @@ export function authInterceptor(tokenProvider: () => string | null): Interceptor
     onRequest: (config: RequestConfig) => {
       const token = tokenProvider();
       if (token) {
+        console.log('[Auth Interceptor] Adding session token to request:', config.url);
         config.headers = {
           ...config.headers,
           'X-Session-Token': token,
           'X-Session-Id': token,
         };
+      } else {
+        console.warn('[Auth Interceptor] No token found in localStorage for request:', config.url);
       }
       return config;
     },

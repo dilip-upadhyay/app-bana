@@ -32,7 +32,8 @@ public class SessionMiddleware {
         "/ready",
         "/ui/",
         "/openapi.json",
-        "/api/csrf/token" // CSRF token generation is public
+        "/api/csrf/token", // CSRF token generation is public
+        "/api/templates"   // Templates are public read-only resources
     };
     
     /**

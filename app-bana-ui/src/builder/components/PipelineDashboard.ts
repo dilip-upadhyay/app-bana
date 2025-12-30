@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { encodeRuntimeState } from '../../models/runtime-state';
+import { apiClient } from '../../core/api-client';
 
 interface PipelineStatus {
   [env: string]: {
@@ -184,10 +185,7 @@ export class PipelineDashboard extends LitElement {
     if (!this.appId) return;
     this.isLoading = true;
     try {
-      const res = await fetch(`/api/apps/${this.appId}/pipeline`);
-      if (res.ok) {
-        this.status = await res.json();
-      }
+      this.status = await apiClient.get(`/api/apps/${this.appId}/pipeline`);
     } catch (e) {
       console.error(e);
     } finally {
@@ -199,17 +197,10 @@ export class PipelineDashboard extends LitElement {
     if (!confirm(`Are you sure you want to promote version to ${targetEnv}?`)) return;
 
     try {
-      const res = await fetch(`/api/apps/${this.appId}/deploy/${versionId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ environment: targetEnv })
+      await apiClient.post(`/api/apps/${this.appId}/deploy/${versionId}`, {
+        environment: targetEnv
       });
-
-      if (res.ok) {
-        await this.fetchStatus();
-      } else {
-        alert('Promotion failed');
-      }
+      await this.fetchStatus();
     } catch (e) {
       alert('Error promoting version');
     }

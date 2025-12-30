@@ -3,6 +3,7 @@ import './PipelineDashboard';
 import './ThemeEditor';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
+import { apiClient } from '../../core/api-client';
 import type { AppMeta, AppListItem, CreateAppRequest } from '../../models/app-metadata';
 import styles from './AppManager.css?inline';
 
@@ -415,27 +416,19 @@ export class AppManager extends LitElement {
     if (!this.currentApp) return;
 
     try {
-      const response = await fetch(`/api/apps/${this.currentApp.id}/versions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          label: this.publishLabel,
-          description: this.publishDescription
-        })
+      const versionData = await apiClient.post(`/api/apps/${this.currentApp.id}/versions`, {
+        label: this.publishLabel,
+        description: this.publishDescription
       });
-
-      if (!response.ok) throw new Error('Failed to create version');
-
-      const versionData = await response.json();
 
       // Auto-deploy to DEV
-      const deployRes = await fetch(`/api/apps/${this.currentApp.id}/deploy/${versionData.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ environment: 'DEV' })
-      });
-
-      if (!deployRes.ok) console.warn('Auto-deploy to DEV failed');
+      try {
+        await apiClient.post(`/api/apps/${this.currentApp.id}/deploy/${versionData.id}`, {
+          environment: 'DEV'
+        });
+      } catch (deployError) {
+        console.warn('Auto-deploy to DEV failed:', deployError);
+      }
 
       this.showPublishModal = false;
       this.showToast('✅ App published & deployed to DEV!');
