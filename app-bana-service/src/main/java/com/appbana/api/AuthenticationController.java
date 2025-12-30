@@ -3,6 +3,8 @@ package com.appbana.api;
 import com.appbana.UserManager;
 import com.appbana.model.User;
 import com.appbana.model.dto.UserDTO;
+import com.appbana.service.SessionService;
+import com.appbana.service.SessionService.SessionData;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -43,17 +45,18 @@ public class AuthenticationController {
                 // Create user
                 User user = UserManager.register(name, email, password, null);
 
-                // Return DTO (safe user) and token
+                // Return DTO (safe user) and session
                 UserDTO safeUser = UserDTO.fromUser(user);
 
-                // For now, use a simple token (e.g., user ID or a random string mapped to user)
-                // In Phase 2, this will be a real JWT
-                String token = UUID.randomUUID().toString();
-                // TODO: Store token in a SessionManager or TokenService
+                // Create session using SessionService (Story 2.1)
+                SessionData session = SessionService.createSession(String.valueOf(user.getId()));
+                
+                LOG.info("User registered successfully: {}", email);
 
                 res.json(201, Map.of(
                         "user", safeUser,
-                        "token", token,
+                        "token", session.sessionId(),
+                        "sessionId", session.sessionId(),
                         "message", "Registration successful"));
 
             } catch (Exception e) {
@@ -84,17 +87,56 @@ public class AuthenticationController {
 
                 UserDTO safeUser = UserDTO.fromUser(user);
 
-                // Generate token (placeholder)
-                String token = UUID.randomUUID().toString();
-                // TODO: Store token
+                // Create session using SessionService (Story 2.1)
+                SessionData session = SessionService.createSession(String.valueOf(user.getId()));
+                
+                LOG.info("User logged in successfully: {}", email);
 
                 res.json(200, Map.of(
                         "user", safeUser,
-                        "token", token,
+                        "token", session.sessionId(),
+                        "sessionId", session.sessionId(),
                         "message", "Login successful"));
 
             } catch (Exception e) {
                 LOG.error("Login failed", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        };
+    }
+    
+    public BiConsumer<Router.HttpRequest, Router.HttpResponse> profile() {
+        return (req, res) -> {
+            try {
+                // Get session from request attribute (set by SessionMiddleware)
+                String sessionId = (String) req.getAttribute("session");
+                
+                if (sessionId == null) {
+                    res.json(401, Map.of("error", "Not authenticated"));
+                    return;
+                }
+                
+                // Validate session
+                SessionData session = SessionService.validateSession(sessionId);
+                if (session == null) {
+                    res.json(401, Map.of("error", "Invalid or expired session"));
+                    return;
+                }
+                
+                // Get user from session
+                String userId = session.userId();
+                User user = UserManager.getUser(Long.parseLong(userId));
+                
+                if (user == null) {
+                    res.json(404, Map.of("error", "User not found"));
+                    return;
+                }
+                
+                UserDTO safeUser = UserDTO.fromUser(user);
+                res.json(200, Map.of("user", safeUser));
+                
+            } catch (Exception e) {
+                LOG.error("Profile fetch failed", e);
                 res.json(500, Map.of("error", e.getMessage()));
             }
         };

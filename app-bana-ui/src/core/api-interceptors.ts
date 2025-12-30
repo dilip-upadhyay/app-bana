@@ -17,7 +17,8 @@ export function authInterceptor(tokenProvider: () => string | null): Interceptor
       if (token) {
         config.headers = {
           ...config.headers,
-          'X-AppBana-Token': token,
+          'X-Session-Token': token,
+          'X-Session-Id': token,
         };
       }
       return config;

@@ -1,38 +1,23 @@
-[
-  {
-    "id": 1,
-    "email": "dilip_upadhyay@AppBana.com",
-    "passwordHash": "Test123#",
-    "name": "Dilip Upadhyay",
-    "tenantId": "t-a31af580",
-    "status": "ACTIVE",
-    "createdAt": [
-      2025,
-      12,
-      14,
-      21,
-      16,
-      56,
-      935736100
-    ],
-    "lastLogin": [
-      2025,
-      12,
-      14,
-      21,
-      34,
-      31,
-      310981500
-    ],
-    "updatedAt": [
-      2025,
-      12,
-      14,
-      21,
-      34,
-      31,
-      310981500
-    ],
-    "active": true
-  }
-]
+[ {
+  "id" : 1,
+  "email" : "dilip_upadhyay@AppBana.com",
+  "passwordHash" : "Test123#",
+  "name" : "Dilip Upadhyay",
+  "tenantId" : "t-a31af580",
+  "status" : "ACTIVE",
+  "createdAt" : [ 2025, 12, 14, 21, 16, 56, 935736100 ],
+  "lastLogin" : [ 2025, 12, 14, 21, 34, 31, 310981500 ],
+  "updatedAt" : [ 2025, 12, 14, 21, 34, 31, 310981500 ],
+  "active" : true
+}, {
+  "id" : 2,
+  "email" : "dilip_upadhyay@outlook.com",
+  "passwordHash" : "test123#",
+  "name" : "Dilip Upadhyay",
+  "tenantId" : "t-0a50380c",
+  "status" : "ACTIVE",
+  "createdAt" : [ 2025, 12, 30, 3, 45, 38, 680726000 ],
+  "lastLogin" : [ 2025, 12, 30, 22, 56, 18, 967053000 ],
+  "updatedAt" : [ 2025, 12, 30, 22, 56, 18, 967077000 ],
+  "active" : true
+} ]

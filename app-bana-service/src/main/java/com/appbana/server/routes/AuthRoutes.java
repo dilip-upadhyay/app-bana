@@ -15,6 +15,7 @@ public class AuthRoutes {
         AuthenticationController authController = new AuthenticationController();
         router.post("/api/auth/register", authController.register());
         router.post("/api/auth/login", authController.login());
+        router.get("/api/auth/profile", authController.profile());
 
         // Runtime authentication (for generated apps)
         router.post("/api/runtime/auth/login", GenericAppAuthController.login());
