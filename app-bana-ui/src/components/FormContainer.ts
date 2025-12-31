@@ -1,6 +1,7 @@
 import { BaseElement } from '../core/BaseElement';
 import { apiClient } from '../core/api-client';
 import { registerComponent } from '../core/registry';
+import { RuntimeContext } from '../runtime/RuntimeContext';
 
 /**
  * StudioForm - A container that handles data submission for an entity.
@@ -208,12 +209,29 @@ export class FormContainer extends BaseElement {
         }
     }
 
+    /**
+     * Get runtime context (tenant, app, env) for API calls
+     * Uses safe fallback for development/testing
+     */
+    private getRuntimeContext() {
+        try {
+            return RuntimeContext.getInstance().getContext();
+        } catch (e) {
+            // Fallback for development/testing when runtime context not available
+            console.warn('[FormContainer] Runtime context not available, using fallback values');
+            return { tenantId: 'default', appId: 'test-app', env: 'dev' };
+        }
+    }
+
     private async loadRecord(id: string) {
         const entity = this.getAttribute('entity');
         if (!entity) return;
 
         try {
-            const data = await apiClient.get<any>(`/api/${entity}/${id}`);
+            const { tenantId, appId } = this.getRuntimeContext();
+            const data = await apiClient.get<any>(
+                `/appbana-studio/${tenantId}/apps/${appId}/${entity}/${id}`
+            );
             this.populateForm(data);
         } catch (e) {
             console.error('Failed to load record', e);
@@ -375,14 +393,25 @@ export class FormContainer extends BaseElement {
             
             // Make request with security headers
             if (action) {
-                // Post to custom action endpoint
+                // Post to custom action endpoint (e.g., /api/auth/login)
+                // Custom actions don't need tenant/app context
                 await apiClient.post(action, formData, { headers });
             } else if (recordId) {
-                // Update
-                await apiClient.put(`/api/${entity}/${recordId}`, formData, { headers });
+                // Update - app-scoped entity route
+                const { tenantId, appId } = this.getRuntimeContext();
+                await apiClient.put(
+                    `/appbana-studio/${tenantId}/apps/${appId}/${entity}/${recordId}`, 
+                    formData, 
+                    { headers }
+                );
             } else {
-                // Create
-                await apiClient.post(`/api/${entity}`, formData, { headers });
+                // Create - app-scoped entity route
+                const { tenantId, appId } = this.getRuntimeContext();
+                await apiClient.post(
+                    `/appbana-studio/${tenantId}/apps/${appId}/${entity}`, 
+                    formData, 
+                    { headers }
+                );
             }
 
             // Success!
