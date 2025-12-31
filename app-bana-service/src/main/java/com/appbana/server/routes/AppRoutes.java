@@ -3,6 +3,7 @@ package com.appbana.server.routes;
 import com.appbana.AppManager;
 import com.appbana.api.Router;
 import com.appbana.model.AppMetadata;
+import com.appbana.model.TenantContext;
 import com.appbana.service.AuthService;
 import com.appbana.service.ReleaseService;
 import com.appbana.service.TemplateService;
@@ -22,6 +23,16 @@ public class AppRoutes {
     private static final Logger LOG = LoggerFactory.getLogger(AppRoutes.class);
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
     private static final String DEFAULT_TENANT = "default";
+
+    /**
+     * Get tenant ID from TenantContext or use default.
+     * For now, we use default tenant for all app operations.
+     * In future, this can be extracted from authentication token.
+     */
+    private static String getTenantId() {
+        TenantContext ctx = TenantContext.get();
+        return ctx != null ? ctx.getTenantId() : DEFAULT_TENANT;
+    }
 
     public static void register(Router router) {
         ReleaseService releaseService = new ReleaseService();
@@ -167,7 +178,8 @@ public class AppRoutes {
         // List all apps
         router.get("/appbana-studio/apps", (req, res) -> {
             try {
-                List<Map<String, Object>> apps = AppManager.listApps(DEFAULT_TENANT);
+                String tenantId = getTenantId();
+                List<Map<String, Object>> apps = AppManager.listApps(tenantId);
                 res.json(200, Map.of("apps", apps));
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
@@ -178,7 +190,8 @@ public class AppRoutes {
         router.get("/appbana-studio/apps/{id}", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                AppMetadata app = AppManager.getApp(DEFAULT_TENANT, appId);
+                String tenantId = getTenantId();
+                AppMetadata app = AppManager.getApp(tenantId, appId);
                 if (app == null) {
                     res.json(404, Map.of("error", "App not found: " + appId));
                     return;
@@ -195,7 +208,8 @@ public class AppRoutes {
         router.get("/api/apps/{id}/full", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                Map<String, Object> appObject = AppManager.getAppWithPages(DEFAULT_TENANT, appId);
+                String tenantId = getTenantId();
+                Map<String, Object> appObject = AppManager.getAppWithPages(tenantId, appId);
                 if (appObject == null) {
                     res.json(404, Map.of("error", "App not found: " + appId));
                     return;
@@ -226,10 +240,11 @@ public class AppRoutes {
         // Create new app
         router.post("/appbana-studio/apps", (req, res) -> {
             try {
+                String tenantId = getTenantId();
                 AppMetadata app = req.readJson(new TypeReference<AppMetadata>() {
                 });
 
-                if (AppManager.getApp(DEFAULT_TENANT, app.getId()) != null) {
+                if (AppManager.getApp(tenantId, app.getId()) != null) {
                     res.json(409, Map.of("error", "App with ID " + app.getId() + " already exists"));
                     return;
                 }
@@ -242,7 +257,7 @@ public class AppRoutes {
                     return;
                 }
 
-                AppMetadata created = AppManager.createApp(DEFAULT_TENANT, app);
+                AppMetadata created = AppManager.createApp(tenantId, app);
                 res.json(201, created);
             } catch (IllegalStateException e) {
                 res.json(409, Map.of("error", e.getMessage()));
@@ -255,9 +270,10 @@ public class AppRoutes {
         router.put("/appbana-studio/apps/{id}", (req, res) -> {
             String appId = req.pathParam("id");
             try {
+                String tenantId = getTenantId();
                 AppMetadata updates = req.readJson(new TypeReference<AppMetadata>() {
                 });
-                AppMetadata updated = AppManager.updateApp(DEFAULT_TENANT, appId, updates);
+                AppMetadata updated = AppManager.updateApp(tenantId, appId, updates);
                 res.json(200, updated);
             } catch (IllegalArgumentException e) {
                 res.json(404, Map.of("error", e.getMessage()));
@@ -270,7 +286,8 @@ public class AppRoutes {
         router.delete("/appbana-studio/apps/{id}", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                boolean deleted = AppManager.deleteApp(DEFAULT_TENANT, appId);
+                String tenantId = getTenantId();
+                boolean deleted = AppManager.deleteApp(tenantId, appId);
                 if (!deleted) {
                     res.json(404, Map.of("error", "App not found: " + appId));
                     return;
@@ -287,7 +304,8 @@ public class AppRoutes {
         router.get("/appbana-studio/apps/{id}/workflow", (req, res) -> {
             String appId = req.pathParam("id");
             try {
-                Map<String, Object> workflow = AppManager.getWorkflow(DEFAULT_TENANT, appId);
+                String tenantId = getTenantId();
+                Map<String, Object> workflow = AppManager.getWorkflow(tenantId, appId);
                 if (workflow == null) {
                     res.json(200, Map.of());
                     return;
@@ -302,9 +320,10 @@ public class AppRoutes {
         router.put("/appbana-studio/apps/{id}/workflow", (req, res) -> {
             String appId = req.pathParam("id");
             try {
+                String tenantId = getTenantId();
                 Map<String, Object> workflow = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
-                AppManager.saveWorkflow(DEFAULT_TENANT, appId, workflow);
+                AppManager.saveWorkflow(tenantId, appId, workflow);
                 res.json(200, Map.of("status", "ok"));
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
@@ -318,7 +337,8 @@ public class AppRoutes {
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
             try {
-                Map<String, Object> page = AppManager.getPage(DEFAULT_TENANT, appId, pageId);
+                String tenantId = getTenantId();
+                Map<String, Object> page = AppManager.getPage(tenantId, appId, pageId);
                 if (page == null) {
                     res.json(404, Map.of("error", "Page not found: " + appId + "/" + pageId));
                     return;
@@ -334,9 +354,10 @@ public class AppRoutes {
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
             try {
+                String tenantId = getTenantId();
                 Map<String, Object> page = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
-                AppManager.savePage(DEFAULT_TENANT, appId, pageId, page);
+                AppManager.savePage(tenantId, appId, pageId, page);
                 res.json(200, Map.of("status", "saved", "appId", appId, "pageId", pageId));
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
@@ -348,7 +369,8 @@ public class AppRoutes {
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
             try {
-                boolean deleted = AppManager.deletePage(DEFAULT_TENANT, appId, pageId);
+                String tenantId = getTenantId();
+                boolean deleted = AppManager.deletePage(tenantId, appId, pageId);
                 if (!deleted) {
                     res.json(404, Map.of("error", "Page not found: " + appId + "/" + pageId));
                     return;
