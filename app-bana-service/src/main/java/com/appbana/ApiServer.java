@@ -273,6 +273,8 @@ public class ApiServer {
                     .dataSource(cfg.getJdbcUrl(), cfg.getUsername(), cfg.getPassword())
                     .locations("classpath:db/migration")
                     .cleanDisabled(cfg.getFlywayCleanOnStart() == null || !cfg.getFlywayCleanOnStart())
+                    .baselineOnMigrate(true)  // Allow migrations on non-empty schemas (AppManager creates tables first)
+                    .baselineVersion("0")     // Start from V0 so all migrations run (including V1)
                     .load();
 
             // Clean database only if explicitly enabled

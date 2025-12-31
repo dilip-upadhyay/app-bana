@@ -166,34 +166,49 @@ public class V10MigrationTest {
     }
 
     @Test
-    public void testDefaultValuesAreApplied() throws SQLException {
+    public void testTenantAndAppColumnsAreRequired() throws SQLException {
         try (Connection conn = JdbcManager.getConnection()) {
-            // Insert a test row into appbana_schemas without specifying tenant_id/app_id
+            // Try to insert a row into appbana_schemas without tenant_id/app_id
+            // This should FAIL because columns are NOT NULL with no defaults
             String insertSql = "INSERT INTO appbana_schemas (name, json) VALUES (?, ?)";
-            try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
-                ps.setString(1, "test_migration_schema");
+            
+            assertThrows(SQLException.class, () -> {
+                try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+                    ps.setString(1, "test_migration_schema_fail");
+                    ps.setString(2, "{\"name\":\"test\"}");
+                    ps.executeUpdate();
+                }
+            }, "Insert without tenant_id/app_id should fail (NOT NULL constraint)");
+            
+            // Now insert with tenant_id and app_id - should succeed
+            String insertWithTenantSql = "INSERT INTO appbana_schemas (name, json, tenant_id, app_id) VALUES (?, ?, ?, ?)";
+            try (PreparedStatement ps = conn.prepareStatement(insertWithTenantSql)) {
+                ps.setString(1, "test_migration_schema_success");
                 ps.setString(2, "{\"name\":\"test\"}");
-                ps.executeUpdate();
+                ps.setString(3, "tenant-123");
+                ps.setString(4, "app-456");
+                int rows = ps.executeUpdate();
+                assertEquals(1, rows, "Insert with tenant_id/app_id should succeed");
             }
             
-            // Verify default values were applied
+            // Verify inserted values
             String selectSql = "SELECT tenant_id, app_id FROM appbana_schemas WHERE name = ?";
             try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
-                ps.setString(1, "test_migration_schema");
+                ps.setString(1, "test_migration_schema_success");
                 try (ResultSet rs = ps.executeQuery()) {
                     assertTrue(rs.next(), "Should find the inserted row");
                     String tenantId = rs.getString("tenant_id");
                     String appId = rs.getString("app_id");
                     
-                    assertEquals("default", tenantId, "Default tenant_id should be 'default'");
-                    assertEquals("legacy", appId, "Default app_id should be 'legacy'");
+                    assertEquals("tenant-123", tenantId, "tenant_id should be 'tenant-123'");
+                    assertEquals("app-456", appId, "app_id should be 'app-456'");
                 }
             }
             
             // Cleanup
             String deleteSql = "DELETE FROM appbana_schemas WHERE name = ?";
             try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
-                ps.setString(1, "test_migration_schema");
+                ps.setString(1, "test_migration_schema_success");
                 ps.executeUpdate();
             }
         }

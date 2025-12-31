@@ -199,45 +199,7 @@ public class SchemaManager {
                     }
                 }
                 
-                // Ensure tenant_id and app_id columns exist (for existing tables created before V10 migration)
-                if (!existing.containsKey("tenant_id")) {
-                    String alterTenant = "ALTER TABLE " + quote(table) + " ADD COLUMN " + quote("tenant_id") 
-                        + " VARCHAR(50) DEFAULT 'default' NOT NULL";
-                    try (Statement s = c.createStatement()) {
-                        s.execute(alterTenant);
-                        recordMigration(c, schema.getName(), alterTenant);
-                    }
-                }
-                if (!existing.containsKey("app_id")) {
-                    String alterApp = "ALTER TABLE " + quote(table) + " ADD COLUMN " + quote("app_id") 
-                        + " VARCHAR(50) DEFAULT 'legacy' NOT NULL";
-                    try (Statement s = c.createStatement()) {
-                        s.execute(alterApp);
-                        recordMigration(c, schema.getName(), alterApp);
-                    }
-                }
-                
-                // Ensure composite index exists
-                String indexName = "idx_" + table + "_tenant_app";
-                boolean indexExists = false;
-                try (ResultSet indexes = md.getIndexInfo(null, null, table.toUpperCase(), false, false)) {
-                    while (indexes.next()) {
-                        String idxName = indexes.getString("INDEX_NAME");
-                        if (idxName != null && idxName.equalsIgnoreCase(indexName)) {
-                            indexExists = true;
-                            break;
-                        }
-                    }
-                }
-                if (!indexExists) {
-                    String indexSql = "CREATE INDEX IF NOT EXISTS " + indexName + " ON " 
-                        + quote(table) + "(" + quote("tenant_id") + ", " + quote("app_id") + ")";
-                    try (Statement s = c.createStatement()) {
-                        s.execute(indexSql);
-                        recordMigration(c, schema.getName(), indexSql);
-                    }
-                }
-                
+                // Handle schema evolution for user-defined fields
                 for (EntitySchema.Field f : schema.getFields()) {
                     String target = f.getName();
                     String targetLower = target.toLowerCase();
@@ -340,9 +302,9 @@ public class SchemaManager {
         List<String> cols = new ArrayList<>();
         String pk = null;
         
-        // Always add tenant_id and app_id columns first for multi-tenant isolation
-        cols.add(quote("tenant_id") + " VARCHAR(50) NOT NULL DEFAULT 'default'");
-        cols.add(quote("app_id") + " VARCHAR(50) NOT NULL DEFAULT 'legacy'");
+        // Always add tenant_id and app_id columns first for multi-tenant isolation (required, no defaults)
+        cols.add(quote("tenant_id") + " VARCHAR(50) NOT NULL");
+        cols.add(quote("app_id") + " VARCHAR(50) NOT NULL");
         
         for (EntitySchema.Field f : schema.getFields()) {
             String col = quote(f.getName()) + " " + sqlType(f, dialect);
