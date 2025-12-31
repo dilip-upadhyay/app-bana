@@ -20,6 +20,7 @@ export class PageManager extends LitElement {
   // Form state
   @state() private formName = '';
   @state() private formPath = '';
+  @state() private pathManuallyEdited = false; // Track if user manually edited the path
 
   // Template selection state - for custom builder
   @state() private includeNav = false;
@@ -166,6 +167,43 @@ export class PageManager extends LitElement {
     this.showCreateModal = true;
     this.formName = '';
     this.formPath = '/new-page';
+    this.pathManuallyEdited = false; // Reset manual edit flag
+  }
+
+  /**
+   * Convert page name to URL-friendly slug
+   * Example: "Employee Dashboard" -> "/employee-dashboard"
+   */
+  private generateUrlSlug(name: string): string {
+    return '/' + name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single
+      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+  }
+
+  /**
+   * Handle page name input - auto-generate URL path
+   */
+  private handlePageNameInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    this.formName = input.value;
+
+    // Only auto-generate if user hasn't manually edited the path
+    if (!this.pathManuallyEdited && this.formName.trim()) {
+      this.formPath = this.generateUrlSlug(this.formName);
+    }
+  }
+
+  /**
+   * Handle path input - mark as manually edited
+   */
+  private handlePathInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    this.formPath = input.value;
+    this.pathManuallyEdited = true; // User is manually editing
   }
 
   private handleCloseModal() {
@@ -686,13 +724,13 @@ export class PageManager extends LitElement {
                 <input
                   id="page-name"
                   type="text"
-                  placeholder="Dashboard"
+                  placeholder="Employee Dashboard"
                   .value=${this.formName}
-                  @input=${(e: Event) => this.formName = (e.target as HTMLInputElement).value}
+                  @input=${this.handlePageNameInput}
                   required
                   autofocus
                 />
-                <div class="form-help">A descriptive name for this page</div>
+                <div class="form-help">💡 A descriptive name for this page</div>
               </div>
 
               <div class="form-group">
@@ -700,12 +738,12 @@ export class PageManager extends LitElement {
                 <input
                   id="page-path"
                   type="text"
-                  placeholder="/dashboard"
+                  placeholder="/employee-dashboard"
                   .value=${this.formPath}
-                  @input=${(e: Event) => this.formPath = (e.target as HTMLInputElement).value}
+                  @input=${this.handlePathInput}
                   required
                 />
-                <div class="form-help">The URL path for this page (e.g., /dashboard, /about)</div>
+                <div class="form-help">🔗 Auto-generated from page name (editable)</div>
               </div>
             </div>
 
