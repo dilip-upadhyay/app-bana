@@ -20,6 +20,7 @@ import type { AppRuntimeState } from './models/runtime-state';
 import './styles/theme.css';
 import './pages/auth/LoginPage';
 import './pages/auth/RegisterPage';
+import { getApiUrl } from './core/api-config';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
@@ -85,11 +86,12 @@ export class AppRoot extends LitElement {
       console.log('[AppRoot] Loading app runtime with compact state:', compactState);
 
       // Load app WITH FULL PAGES from backend API
-      // Use PUBLIC endpoints (/api/apps/) - no authentication required for end users
-      let url = `http://localhost:8080/api/apps/${compactState.appId}/full`;
+      // Use multi-tenant endpoints with tenantId in path
+      const tenantId = compactState.tenantId || 'default';
+      let url = getApiUrl(`/api/${tenantId}/apps/${compactState.appId}/full`);
       if (compactState.env) {
-        // Load deployed version (also public for end users)
-        url = `http://localhost:8080/api/apps/${compactState.appId}/env/${compactState.env}/full`;
+        // Load deployed version (also includes tenantId)
+        url = getApiUrl(`/api/${tenantId}/apps/${compactState.appId}/env/${compactState.env}/full`);
       }
 
       const response = await fetch(url);

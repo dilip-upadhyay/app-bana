@@ -43,6 +43,7 @@ export interface AppRuntimeState {
  * More compact for transmission
  */
 export interface AppRuntimeStateCompact {
+  tenantId?: string;             // Tenant ID (defaults to 'default' if not provided)
   appId: string;                 // App ID to load
   pageId?: string;               // Optional specific page (otherwise use default)
   env?: string;                  // Optional environment (e.g. DEV, PROD) to load snapshot from

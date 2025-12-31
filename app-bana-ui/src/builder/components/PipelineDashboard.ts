@@ -2,6 +2,8 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { encodeRuntimeState } from '../../models/runtime-state';
 import { apiClient } from '../../core/api-client';
+import { getApiUrl } from '../../core/api-config';
+import { AuthService } from '../../pages/auth/auth-service';
 
 interface PipelineStatus {
   [env: string]: {
@@ -185,7 +187,7 @@ export class PipelineDashboard extends LitElement {
     if (!this.appId) return;
     this.isLoading = true;
     try {
-      this.status = await apiClient.get(`/api/apps/${this.appId}/pipeline`);
+      this.status = await apiClient.get(getApiUrl(`/api/apps/${this.appId}/pipeline`));
     } catch (e) {
       console.error(e);
     } finally {
@@ -197,7 +199,7 @@ export class PipelineDashboard extends LitElement {
     if (!confirm(`Are you sure you want to promote version to ${targetEnv}?`)) return;
 
     try {
-      await apiClient.post(`/api/apps/${this.appId}/deploy/${versionId}`, {
+      await apiClient.post(getApiUrl(`/api/apps/${this.appId}/deploy/${versionId}`), {
         environment: targetEnv
       });
       await this.fetchStatus();
@@ -207,7 +209,10 @@ export class PipelineDashboard extends LitElement {
   }
 
   private launch(env: string) {
+    // Get tenant ID from logged-in user
+    const user = AuthService.getUser();
     const state = {
+      tenantId: user?.tenantId || 'default',
       appId: this.appId,
       env: env,
       mode: 'production' as const

@@ -4,6 +4,7 @@ import { unsafeStatic, html as staticHtml } from 'lit/static-html.js';
 import { currentStore } from '../store/TreeStore';
 import type { ComponentNode, PageMeta } from '../../models/metadata';
 import styles from './LivePreview.css?inline';
+import { AuthService } from '../../pages/auth/auth-service';
 
 // Import custom components to ensure they are registered in the registry and customElements
 import '../../components/ContainerElement';
@@ -1055,7 +1056,10 @@ export class LivePreview extends LitElement {
       }
 
       // Create runtime state with full app context
+      // Get tenant ID from logged-in user
+      const user = AuthService.getUser();
       const runtimeState = {
+        tenantId: user?.tenantId || 'default',
         appId: currentApp.id,
         pageId: this.page!.id,
         mode: 'preview' as const

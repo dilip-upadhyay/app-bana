@@ -1,3 +1,5 @@
+import { getApiUrl } from '../../core/api-config';
+
 export interface User {
     id: number;
     email: string;
@@ -12,7 +14,7 @@ export interface AuthResponse {
     message: string;
 }
 
-const API_BASE = 'http://localhost:8080/api/auth';
+const API_BASE = getApiUrl('/api/auth');
 
 export const AuthService = {
     async register(name: string, email: string, password: string): Promise<AuthResponse> {

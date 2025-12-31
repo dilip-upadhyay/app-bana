@@ -5,6 +5,7 @@
 
 import { InterceptorManager, ApiError } from './api-interceptor';
 import { RuntimeContext } from '../runtime/RuntimeContext';
+import { getApiBaseUrl } from './api-config';
 
 export interface ApiClientConfig {
   baseUrl?: string;
@@ -334,35 +335,35 @@ export async function fetchTableData(entity: string, fields: string[], options: 
     }
     if (filterPairs.length > 0) params.filter = filterPairs.join(',');
   }
-  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  const base = getApiBaseUrl();
   const { tenantId, appId } = RuntimeContext.getInstance().getContextSafe();
   return apiClient.get(`${base}/appbana-studio/${tenantId}/apps/${appId}/${entity}`, params);
 }
 
 /** Bulk delete records by ids */
 export async function bulkDelete(entity: string, ids: (string | number)[]) {
-  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  const base = getApiBaseUrl();
   const { tenantId, appId } = RuntimeContext.getInstance().getContextSafe();
   return apiClient.post(`${base}/appbana-studio/${tenantId}/apps/${appId}/${entity}/bulk-delete`, { ids });
 }
 
 /** Bulk export records by ids; returns { count, rows } */
 export async function bulkExport(entity: string, ids: (string | number)[]) {
-  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  const base = getApiBaseUrl();
   const { tenantId, appId } = RuntimeContext.getInstance().getContextSafe();
   return apiClient.post(`${base}/appbana-studio/${tenantId}/apps/${appId}/${entity}/bulk-export`, { ids });
 }
 
 /** Create a new row */
 export async function createRow(entity: string, data: Record<string, any>) {
-  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  const base = getApiBaseUrl();
   const { tenantId, appId } = RuntimeContext.getInstance().getContextSafe();
   return apiClient.post(`${base}/appbana-studio/${tenantId}/apps/${appId}/${entity}`, data);
 }
 
 /** Update single row by id */
 export async function updateRow(entity: string, id: string | number, data: Record<string, any>) {
-  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  const base = getApiBaseUrl();
   const { tenantId, appId } = RuntimeContext.getInstance().getContextSafe();
   return apiClient.put(`${base}/appbana-studio/${tenantId}/apps/${appId}/${entity}/${id}`, data);
 }
@@ -373,7 +374,7 @@ export async function updateRow(entity: string, id: string | number, data: Recor
 
 /** Get field permissions for current user and entity */
 export async function getFieldPermissions(entityName: string): Promise<{ readable: string[], editable: string[] }> {
-  const base = (globalThis.location?.port === '5173') ? 'http://localhost:8080' : '';
+  const base = getApiBaseUrl();
   try {
     // Call the FLS endpoints we just created
     const [readableResp, editableResp] = await Promise.all([
