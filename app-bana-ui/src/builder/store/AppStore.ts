@@ -88,6 +88,7 @@ export class AppStore {
     try {
       const fullApp = await apiClient.get<AppMeta>(`/appbana-studio/apps/${appId}`);
       this.apps.set(appId, fullApp);
+      this.notify(); // FIX: Notify listeners that full app data is loaded (pages + entities)
     } catch (error) {
       console.error(`[AppStore] Failed to load full app ${appId}:`, error);
     }
