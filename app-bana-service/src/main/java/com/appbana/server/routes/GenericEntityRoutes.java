@@ -888,8 +888,8 @@ public class GenericEntityRoutes {
         // - Call EntityCrudService which auto-filters by tenant_id/app_id
         // - Return only entities scoped to that app
 
-        // POST /studio/{tenantId}/apps/{appId}/{entity} - Create entity scoped to tenant and app
-        router.post("/studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
+        // POST /appbana-studio/{tenantId}/apps/{appId}/{entity} - Create entity scoped to tenant and app
+        router.post("/appbana-studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
@@ -936,8 +936,8 @@ public class GenericEntityRoutes {
             }
         });
 
-        // GET /studio/{tenantId}/apps/{appId}/{entity} - List entities scoped to tenant and app
-        router.get("/studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
+        // GET /appbana-studio/{tenantId}/apps/{appId}/{entity} - List entities scoped to tenant and app
+        router.get("/appbana-studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
@@ -975,8 +975,8 @@ public class GenericEntityRoutes {
             }
         });
 
-        // GET /studio/{tenantId}/apps/{appId}/{entity}/{id} - Get entity by ID scoped to tenant and app
-        router.get("/studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
+        // GET /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Get entity by ID scoped to tenant and app
+        router.get("/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
@@ -1017,8 +1017,8 @@ public class GenericEntityRoutes {
             }
         });
 
-        // PUT /studio/{tenantId}/apps/{appId}/{entity}/{id} - Update entity scoped to tenant and app
-        router.put("/studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
+        // PUT /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Update entity scoped to tenant and app
+        router.put("/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
@@ -1064,8 +1064,8 @@ public class GenericEntityRoutes {
             }
         });
 
-        // DELETE /studio/{tenantId}/apps/{appId}/{entity}/{id} - Delete entity scoped to tenant and app
-        router.delete("/studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
+        // DELETE /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Delete entity scoped to tenant and app
+        router.delete("/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");

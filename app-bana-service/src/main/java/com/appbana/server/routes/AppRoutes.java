@@ -42,9 +42,14 @@ public class AppRoutes {
         // ==================== RELEASE MANAGEMENT ====================
 
         // Create app version
-        router.post("/api/apps/{id}/versions", (req, res) -> {
+        router.post("/api/{tenantId}/apps/{id}/versions", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String appId = req.pathParam("id");
                 Map<String, String> body = req.readJson(new TypeReference<>() {
                 });
                 String label = body.get("label");
@@ -60,9 +65,14 @@ public class AppRoutes {
         });
 
         // List app versions
-        router.get("/api/apps/{id}/versions", (req, res) -> {
+        router.get("/api/{tenantId}/apps/{id}/versions", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String appId = req.pathParam("id");
                 res.json(200, releaseService.listVersions(appId));
             } catch (Exception e) {
                 LOG.error("Failed to list versions", e);
@@ -71,10 +81,15 @@ public class AppRoutes {
         });
 
         // Deploy version
-        router.post("/api/apps/{id}/deploy/{versionId}", (req, res) -> {
+        router.post("/api/{tenantId}/apps/{id}/deploy/{versionId}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+            String versionId = req.pathParam("versionId");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String appId = req.pathParam("id");
-                String versionId = req.pathParam("versionId");
                 String env = "PROD";
 
                 try {
@@ -100,9 +115,14 @@ public class AppRoutes {
         });
 
         // Get pipeline status
-        router.get("/api/apps/{id}/pipeline", (req, res) -> {
+        router.get("/api/{tenantId}/apps/{id}/pipeline", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String appId = req.pathParam("id");
                 res.json(200, releaseService.getPipelineStatus(appId));
             } catch (Exception e) {
                 LOG.error("Failed to get pipeline status", e);
@@ -111,10 +131,15 @@ public class AppRoutes {
         });
 
         // Get app snapshot
-        router.get("/api/apps/{id}/env/{env}/full", (req, res) -> {
+        router.get("/api/{tenantId}/apps/{id}/env/{env}/full", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+            String env = req.pathParam("env").toUpperCase();
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String appId = req.pathParam("id");
-                String env = req.pathParam("env").toUpperCase();
                 Map<String, Object> snapshot = releaseService.getAppSnapshot(appId, env);
                 if (snapshot == null) {
                     res.json(404, Map.of("error", "App not deployed to " + env));
@@ -128,8 +153,13 @@ public class AppRoutes {
         });
 
         // Restore schemas from snapshot
-        router.post("/api/apps/{id}/restore-schemas", (req, res) -> {
+        router.post("/api/{tenantId}/apps/{id}/restore-schemas", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             String env = req.query("env");
             if (env == null)
                 env = "DEV";
@@ -176,7 +206,7 @@ public class AppRoutes {
         // ==================== STUDIO BUILDER APIs (Authenticated) ====================
 
         // List all apps for tenant
-        router.get("/studio/{tenantId}/apps", (req, res) -> {
+        router.get("/appbana-studio/{tenantId}/apps", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
@@ -191,7 +221,7 @@ public class AppRoutes {
         });
 
         // Get app by ID
-        router.get("/studio/{tenantId}/apps/{id}", (req, res) -> {
+        router.get("/appbana-studio/{tenantId}/apps/{id}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
             if (tenantId == null || tenantId.isBlank()) {
@@ -213,10 +243,14 @@ public class AppRoutes {
         // ==================== PUBLIC RUNTIME APIs (No Auth Required) ====================
 
         // Get app with all pages (for runtime)
-        router.get("/api/apps/{id}/full", (req, res) -> {
+        router.get("/api/{tenantId}/apps/{id}/full", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 Map<String, Object> appObject = AppManager.getAppWithPages(tenantId, appId);
                 if (appObject == null) {
                     res.json(404, Map.of("error", "App not found: " + appId));
@@ -229,10 +263,15 @@ public class AppRoutes {
         });
 
         // Get deployed app snapshot (PUBLIC - for end users running published apps)
-        router.get("/api/apps/{id}/env/{env}/full", (req, res) -> {
+        router.get("/api/{tenantId}/apps/{id}/env/{env}/full", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+            String env = req.pathParam("env").toUpperCase();
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String appId = req.pathParam("id");
-                String env = req.pathParam("env").toUpperCase();
                 Map<String, Object> snapshot = releaseService.getAppSnapshot(appId, env);
                 if (snapshot == null) {
                     res.json(404, Map.of("error", "App not deployed to " + env));
@@ -246,9 +285,13 @@ public class AppRoutes {
         });
 
         // Create new app
-        router.post("/appbana-studio/apps", (req, res) -> {
+        router.post("/appbana-studio/{tenantId}/apps", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 AppMetadata app = req.readJson(new TypeReference<AppMetadata>() {
                 });
 
@@ -275,10 +318,14 @@ public class AppRoutes {
         });
 
         // Update app
-        router.put("/appbana-studio/apps/{id}", (req, res) -> {
+        router.put("/appbana-studio/{tenantId}/apps/{id}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 AppMetadata updates = req.readJson(new TypeReference<AppMetadata>() {
                 });
                 AppMetadata updated = AppManager.updateApp(tenantId, appId, updates);
@@ -291,7 +338,7 @@ public class AppRoutes {
         });
 
         // Delete app
-        router.delete("/studio/{tenantId}/apps/{id}", (req, res) -> {
+        router.delete("/appbana-studio/{tenantId}/apps/{id}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
             if (tenantId == null || tenantId.isBlank()) {
@@ -313,10 +360,14 @@ public class AppRoutes {
         // ==================== STUDIO WORKFLOW APIs ====================
 
         // Get app workflow
-        router.get("/appbana-studio/apps/{id}/workflow", (req, res) -> {
+        router.get("/appbana-studio/{tenantId}/apps/{id}/workflow", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 Map<String, Object> workflow = AppManager.getWorkflow(tenantId, appId);
                 if (workflow == null) {
                     res.json(200, Map.of());
@@ -329,10 +380,14 @@ public class AppRoutes {
         });
 
         // Save app workflow
-        router.put("/appbana-studio/apps/{id}/workflow", (req, res) -> {
+        router.put("/appbana-studio/{tenantId}/apps/{id}/workflow", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 Map<String, Object> workflow = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
                 AppManager.saveWorkflow(tenantId, appId, workflow);
@@ -345,11 +400,15 @@ public class AppRoutes {
         // ==================== STUDIO PAGE APIs ====================
 
         // Get page
-        router.get("/appbana-studio/apps/{appId}/pages/{pageId}", (req, res) -> {
+        router.get("/appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 Map<String, Object> page = AppManager.getPage(tenantId, appId, pageId);
                 if (page == null) {
                     res.json(404, Map.of("error", "Page not found: " + appId + "/" + pageId));
@@ -362,11 +421,15 @@ public class AppRoutes {
         });
 
         // Save page
-        router.put("/appbana-studio/apps/{appId}/pages/{pageId}", (req, res) -> {
+        router.put("/appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 Map<String, Object> page = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
                 AppManager.savePage(tenantId, appId, pageId, page);
@@ -377,11 +440,15 @@ public class AppRoutes {
         });
 
         // Delete page
-        router.delete("/appbana-studio/apps/{appId}/pages/{pageId}", (req, res) -> {
+        router.delete("/appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String pageId = req.pathParam("pageId");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 boolean deleted = AppManager.deletePage(tenantId, appId, pageId);
                 if (!deleted) {
                     res.json(404, Map.of("error", "Page not found: " + appId + "/" + pageId));
