@@ -10,6 +10,7 @@ import type { AppMeta, AppWithPages, CreateAppRequest, UpdateAppRequest, AppList
 import type { PageMeta } from '../../models/metadata';
 import type { EntityMeta } from '../../models/entity-metadata';
 import { apiClient } from '../../core/api-client';
+import { AuthService } from '../../pages/auth/auth-service';
 
 export type ConversationTelemetryType = 'greeting' | 'idea' | 'decision' | 'smallTalk';
 
@@ -44,7 +45,7 @@ export class AppStore {
 
     try {
       // Load apps list from backend
-      const tenantId = 'default'; // TODO: Get from auth context
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
       const response = await apiClient.get<{ apps: AppListItem[] }>(`/appbana-studio/${tenantId}/apps`);
       const appsList = response.apps || [];
       // Populate apps map with summary data
@@ -87,7 +88,7 @@ export class AppStore {
    */
   private async loadFullApp(appId: string): Promise<void> {
     try {
-      const tenantId = 'default'; // TODO: Get from auth context
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
       const fullApp = await apiClient.get<AppMeta>(`/appbana-studio/${tenantId}/apps/${appId}`);
       this.apps.set(appId, fullApp);
       this.notify(); // FIX: Notify listeners that full app data is loaded (pages + entities)
@@ -205,7 +206,7 @@ export class AppStore {
       };
 
       // Save to backend
-      const tenantId = 'default'; // TODO: Get from auth context
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
       const created = await apiClient.post<AppMeta>(`/appbana-studio/${tenantId}/apps`, app);
 
       // Update local cache
@@ -240,7 +241,7 @@ export class AppStore {
     };
 
     // Save to backend
-    const tenantId = 'default'; // TODO: Get from auth context
+    const tenantId = AuthService.getUser()?.tenantId || 'default';
     const saved = await apiClient.put<AppMeta>(`/appbana-studio/${tenantId}/apps/${appId}`, updatedApp);
 
     // Update local cache
@@ -259,8 +260,8 @@ export class AppStore {
     }
 
     // Backend will recursively delete app directory and all pages
-      const tenantId = 'default'; // TODO: Get from auth context
-      await apiClient.delete(`/appbana-studio/${tenantId}/apps/${appId}`);
+    const tenantId = AuthService.getUser()?.tenantId || 'default';
+    await apiClient.delete(`/appbana-studio/${tenantId}/apps/${appId}`);
     // Update local cache
     this.apps.delete(appId);
 
@@ -365,7 +366,7 @@ export class AppStore {
       app.updated = Date.now();
 
       // Save entire app object since entities are embedded
-      const tenantId = 'default'; // TODO: Get from auth context
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
       await apiClient.put<AppMeta>(`/appbana-studio/${tenantId}/apps/${appId}`, app);
 
       // Update local cache
@@ -387,7 +388,7 @@ export class AppStore {
 
     if (!app.pages.includes(page.id)) {
       // Save page to backend
-      const tenantId = 'default'; // TODO: Get from auth context
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
       await apiClient.put(`/appbana-studio/${tenantId}/apps/${appId}/pages/${page.id}`, page);
 
       // Update app pages list
@@ -416,8 +417,8 @@ export class AppStore {
     }
 
     // Delete page from backend
-      const tenantId = 'default'; // TODO: Get from auth context
-      await apiClient.delete(`/appbana-studio/${tenantId}/apps/${appId}/pages/${pageId}`);
+    const tenantId = AuthService.getUser()?.tenantId || 'default';
+    await apiClient.delete(`/appbana-studio/${tenantId}/apps/${appId}/pages/${pageId}`);
     // Update app pages list
     app.pages = app.pages.filter((id: string) => id !== pageId);
     app.updated = Date.now();
@@ -433,7 +434,7 @@ export class AppStore {
    */
   async loadPage(appId: string, pageId: string): Promise<PageMeta | undefined> {
     try {
-      const tenantId = 'default'; // TODO: Get from auth context
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
       const page = await apiClient.get<PageMeta>(`/appbana-studio/${tenantId}/apps/${appId}/pages/${pageId}`);
       return page;
     } catch (error) {
@@ -446,7 +447,7 @@ export class AppStore {
    * Save a page to backend
    */
   async savePage(appId: string, page: PageMeta): Promise<void> {
-    const tenantId = 'default'; // TODO: Get from auth context
+    const tenantId = AuthService.getUser()?.tenantId || 'default';
     await apiClient.put(`/appbana-studio/${tenantId}/apps/${appId}/pages/${page.id}`, page);
   }
 

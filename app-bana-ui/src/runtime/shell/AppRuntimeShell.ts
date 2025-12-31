@@ -6,6 +6,7 @@ import { renderPageTemplate } from '../renderer/Renderer.js';
 import shellStyles from './AppRuntimeShell.css?inline';
 import { ensureCoreRegistered } from '../../core/registry.js';
 import { RuntimeContext } from '../RuntimeContext.js';
+import { AuthService } from '../../pages/auth/auth-service.js';
 // Explicitly import form components to ensure they are registered in the bundle
 import '../../components/InputElement';
 import '../../components/SelectElement';
@@ -124,10 +125,14 @@ export class AppRuntimeShell extends LitElement {
 
     // Initialize RuntimeContext for all runtime components
     try {
-      const tenantId = 'default'; // TODO: Get from auth context or runtime state
+      // Get tenant from runtime state (if set) OR logged-in user OR default
+      const stateTenant = (this.runtimeState as any).tenantId;
+      const authTenant = AuthService.getUser()?.tenantId;
+      const tenantId = stateTenant || authTenant || 'default';
+
       const appId = this.runtimeState.app.id;
       const env = this.runtimeState.mode === 'production' ? 'prod' : 'dev';
-      
+
       RuntimeContext.getInstance().setContext(tenantId, appId, env);
       console.log(`[AppRuntimeShell] RuntimeContext initialized: tenant=${tenantId}, app=${appId}, env=${env}`);
     } catch (error) {

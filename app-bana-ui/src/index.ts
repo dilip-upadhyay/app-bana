@@ -94,7 +94,12 @@ export class AppRoot extends LitElement {
         url = getApiUrl(`/api/${tenantId}/apps/${compactState.appId}/env/${compactState.env}/full`);
       }
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('appbana_token') || ''}`,
+          'Content-Type': 'application/json'
+        }
+      });
       if (!response.ok) {
         throw new Error(`Failed to load app: ${response.statusText}`);
       }

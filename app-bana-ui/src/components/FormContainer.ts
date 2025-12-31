@@ -2,6 +2,7 @@ import { BaseElement } from '../core/BaseElement';
 import { apiClient } from '../core/api-client';
 import { registerComponent } from '../core/registry';
 import { RuntimeContext } from '../runtime/RuntimeContext';
+import { AuthService } from '../pages/auth/auth-service';
 
 /**
  * StudioForm - A container that handles data submission for an entity.
@@ -27,7 +28,7 @@ export class FormContainer extends BaseElement {
     private csrfToken: string | null = null;
     private isSubmitting: boolean = false;
     private validationErrors: Record<string, string> = {};
-    
+
     static get observedAttributes() {
         return ['entity', 'action', 'record-id', 'redirect-on-success', 'validate-on-blur'];
     }
@@ -52,15 +53,15 @@ export class FormContainer extends BaseElement {
     async connectedCallback() {
         super.connectedCallback();
         this.addEventListener('click', this.handleClick.bind(this));
-        
+
         // Fetch CSRF token for form security (Story 1.2)
         await this.fetchCsrfToken();
-        
+
         // Setup client-side validation listeners (Story 1.4)
         if (this.getAttribute('validate-on-blur') !== 'false') {
             this.setupValidationListeners();
         }
-        
+
         // Load data if recordId is present
         this.checkAndLoadRecord();
     }
@@ -84,7 +85,7 @@ export class FormContainer extends BaseElement {
             // Non-blocking: forms to /api/auth/* don't require CSRF
         }
     }
-    
+
     /**
      * Setup client-side validation listeners (Story 1.4, 2.2)
      */
@@ -95,28 +96,28 @@ export class FormContainer extends BaseElement {
             el.addEventListener('input', () => this.clearFieldError(el));
         });
     }
-    
+
     /**
      * Validate individual field on blur (Story 2.2)
      */
     private validateField(el: any): void {
         const name = el.getAttribute('name') || el.name;
         if (!name) return;
-        
+
         const required = el.getAttribute('required') !== null || el.required;
         const value = el.getAttribute('value') || el.value || '';
         const type = el.getAttribute('type') || el.type || 'text';
-        
+
         // Clear previous error
         delete this.validationErrors[name];
-        
+
         // Required validation
         if (required && !value.trim()) {
             this.validationErrors[name] = 'This field is required';
             this.showFieldError(el, this.validationErrors[name]);
             return;
         }
-        
+
         // Email validation
         if (type === 'email' && value) {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -126,7 +127,7 @@ export class FormContainer extends BaseElement {
                 return;
             }
         }
-        
+
         // Password strength validation (Story 1.1.4)
         if (name === 'password' && value) {
             if (value.length < 8) {
@@ -140,7 +141,7 @@ export class FormContainer extends BaseElement {
                 return;
             }
         }
-        
+
         // Confirm password matching (Story 1.1.5)
         if (name === 'confirmPassword' && value) {
             const passwordInput = this.querySelector('[name="password"]') as any;
@@ -151,23 +152,23 @@ export class FormContainer extends BaseElement {
                 return;
             }
         }
-        
+
         // Clear error if validation passed
         this.clearFieldError(el);
     }
-    
+
     /**
      * Show field-level error (Story 1.4)
      */
     private showFieldError(el: any, message: string): void {
         // Set aria-invalid for accessibility (Story 1.5)
         el.setAttribute('aria-invalid', 'true');
-        
+
         // Add error class if element supports it
         if (el.classList) {
             el.classList.add('error');
         }
-        
+
         // Find or create error message element
         let errorEl = el.nextElementSibling;
         if (!errorEl || !errorEl.classList.contains('field-error')) {
@@ -181,7 +182,7 @@ export class FormContainer extends BaseElement {
         }
         errorEl.textContent = message;
     }
-    
+
     /**
      * Clear field error (Story 1.4.4)
      */
@@ -190,18 +191,18 @@ export class FormContainer extends BaseElement {
         if (name) {
             delete this.validationErrors[name];
         }
-        
+
         el.removeAttribute('aria-invalid');
         if (el.classList) {
             el.classList.remove('error');
         }
-        
+
         const errorEl = el.nextElementSibling;
         if (errorEl && errorEl.classList.contains('field-error')) {
             errorEl.remove();
         }
     }
-    
+
     private checkAndLoadRecord() {
         const recordId = this.getAttribute('record-id') || this.getAttribute('recordId');
         if (recordId && recordId !== 'undefined' && recordId !== 'null') {
@@ -219,7 +220,7 @@ export class FormContainer extends BaseElement {
         } catch (e) {
             // Fallback for development/testing when runtime context not available
             console.warn('[FormContainer] Runtime context not available, using fallback values');
-            return { tenantId: 'default', appId: 'test-app', env: 'dev' };
+            return { tenantId: AuthService.getUser()?.tenantId || 'default', appId: 'test-app', env: 'dev' };
         }
     }
 
@@ -315,7 +316,7 @@ export class FormContainer extends BaseElement {
             console.warn('[FormContainer] Form already submitting, ignoring duplicate submission');
             return;
         }
-        
+
         const entity = this.getAttribute('entity');
         const action = this.getAttribute('action');
         const recordId = this.getAttribute('record-id') || this.getAttribute('recordId');
@@ -325,11 +326,11 @@ export class FormContainer extends BaseElement {
             this.showError('Configuration Error: No entity or action specified for form.');
             return;
         }
-        
+
         // Validate all fields before submission (Story 2.2)
         const inputs = this.querySelectorAll('appbana-input, appbana-select, appbana-textarea, input, select, textarea');
         inputs.forEach((el: any) => this.validateField(el));
-        
+
         if (Object.keys(this.validationErrors).length > 0) {
             this.showError('Please fix validation errors before submitting');
             // Focus first error field (Story 1.4.3)
@@ -362,7 +363,7 @@ export class FormContainer extends BaseElement {
                 formData[name] = val;
             }
         });
-        
+
         // Password field mapping: password → passwordHash (Story 1.1.2)
         // Backend PasswordService will hash it, but we need to rename the field
         if (formData.password && entity) {
@@ -377,20 +378,20 @@ export class FormContainer extends BaseElement {
         try {
             // Get session token from localStorage (Story 2.1)
             const sessionToken = localStorage.getItem('appbana_token');
-            
+
             // Prepare headers with CSRF and Session tokens
             const headers: Record<string, string> = {};
-            
+
             // Add CSRF token for non-GET requests (Story 1.2)
             if (this.csrfToken) {
                 headers['X-CSRF-Token'] = this.csrfToken;
             }
-            
+
             // Add Session token (Story 2.1)
             if (sessionToken) {
                 headers['X-Session-Token'] = sessionToken;
             }
-            
+
             // Make request with security headers
             if (action) {
                 // Post to custom action endpoint (e.g., /api/auth/login)
@@ -400,16 +401,16 @@ export class FormContainer extends BaseElement {
                 // Update - app-scoped entity route
                 const { tenantId, appId } = this.getRuntimeContext();
                 await apiClient.put(
-                    `/appbana-studio/${tenantId}/apps/${appId}/${entity}/${recordId}`, 
-                    formData, 
+                    `/appbana-studio/${tenantId}/apps/${appId}/${entity}/${recordId}`,
+                    formData,
                     { headers }
                 );
             } else {
                 // Create - app-scoped entity route
                 const { tenantId, appId } = this.getRuntimeContext();
                 await apiClient.post(
-                    `/appbana-studio/${tenantId}/apps/${appId}/${entity}`, 
-                    formData, 
+                    `/appbana-studio/${tenantId}/apps/${appId}/${entity}`,
+                    formData,
                     { headers }
                 );
             }
@@ -445,7 +446,7 @@ export class FormContainer extends BaseElement {
             }
         } catch (e: any) {
             console.error('Submit error:', e);
-            
+
             // Handle validation errors from backend (Story 1.4)
             if (e.response && e.response.validationErrors) {
                 const errors = e.response.validationErrors;
@@ -457,7 +458,7 @@ export class FormContainer extends BaseElement {
                     }
                 });
                 this.showError('Please fix the errors above');
-                
+
                 // Focus first error field
                 const firstErrorField = this.querySelector(`[name="${Object.keys(errors)[0]}"]`) as any;
                 if (firstErrorField && firstErrorField.focus) {
@@ -485,7 +486,7 @@ export class FormContainer extends BaseElement {
             this.setLoadingState(false);
         }
     }
-    
+
     /**
      * Set loading state on submit button (Story 2.1)
      */

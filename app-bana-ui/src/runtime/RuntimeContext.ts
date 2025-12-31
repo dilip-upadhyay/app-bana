@@ -1,6 +1,6 @@
 /**
  * RuntimeContext - Provides tenant, app, and environment context to runtime components
- * 
+ *
  * This singleton service maintains the current runtime execution context
  * and provides it to all components that need to make API calls.
  * 
@@ -17,9 +17,11 @@
  * @see AppRuntimeShell for initialization
  * @see FormContainer for usage example
  */
+import { AuthService } from '../pages/auth/auth-service';
+
 export class RuntimeContext {
   private static instance: RuntimeContext;
-  
+
   private tenantId: string = 'default';
   private appId: string | null = null;
   private env: string = 'dev';
@@ -28,7 +30,7 @@ export class RuntimeContext {
   /**
    * Private constructor for singleton pattern
    */
-  private constructor() {}
+  private constructor() { }
 
   /**
    * Get singleton instance
@@ -96,7 +98,7 @@ export class RuntimeContext {
         'This is OK for development/testing but should not happen in production.'
       );
       return {
-        tenantId: 'default',
+        tenantId: AuthService.getUser()?.tenantId || 'default',
         appId: 'test-app',
         env: 'dev'
       };
