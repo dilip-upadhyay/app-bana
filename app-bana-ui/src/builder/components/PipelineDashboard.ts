@@ -187,7 +187,8 @@ export class PipelineDashboard extends LitElement {
     if (!this.appId) return;
     this.isLoading = true;
     try {
-      this.status = await apiClient.get(getApiUrl(`/api/apps/${this.appId}/pipeline`));
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+      this.status = await apiClient.get(getApiUrl(`/api/${tenantId}/apps/${this.appId}/pipeline`));
     } catch (e) {
       console.error(e);
     } finally {
@@ -199,7 +200,8 @@ export class PipelineDashboard extends LitElement {
     if (!confirm(`Are you sure you want to promote version to ${targetEnv}?`)) return;
 
     try {
-      await apiClient.post(getApiUrl(`/api/apps/${this.appId}/deploy/${versionId}`), {
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+      await apiClient.post(getApiUrl(`/api/${tenantId}/apps/${this.appId}/deploy/${versionId}`), {
         environment: targetEnv
       });
       await this.fetchStatus();

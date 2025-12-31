@@ -4,6 +4,7 @@ import './ThemeEditor';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
 import { apiClient } from '../../core/api-client';
+import { AuthService } from '../../pages/auth/auth-service';
 import type { AppMeta, AppListItem, CreateAppRequest } from '../../models/app-metadata';
 import styles from './AppManager.css?inline';
 
@@ -416,14 +417,15 @@ export class AppManager extends LitElement {
     if (!this.currentApp) return;
 
     try {
-      const versionData = await apiClient.post(`/api/apps/${this.currentApp.id}/versions`, {
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+      const versionData = await apiClient.post(`/api/${tenantId}/apps/${this.currentApp.id}/versions`, {
         label: this.publishLabel,
         description: this.publishDescription
       });
 
       // Auto-deploy to DEV
       try {
-        await apiClient.post(`/api/apps/${this.currentApp.id}/deploy/${versionData.id}`, {
+        await apiClient.post(`/api/${tenantId}/apps/${this.currentApp.id}/deploy/${versionData.id}`, {
           environment: 'DEV'
         });
       } catch (deployError) {
