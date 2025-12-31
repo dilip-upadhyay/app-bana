@@ -100,32 +100,47 @@ public class SchemaManager {
         try (Connection c = JdbcManager.getConnection(dsName)) {
             String json = M.writeValueAsString(schema);
             String d = dialect(ds);
-            // upsert by name; NOTE: name must be unique across ALL datasources (we do not
-            // enforce globally yet)
+            
+            // Extract tenant_id and app_id (required by V10 migration NOT NULL constraint)
+            String tenantId = (schema.getTenantId() != null && !schema.getTenantId().isBlank()) 
+                ? schema.getTenantId() : "default";
+            String appId = (schema.getAppId() != null && !schema.getAppId().isBlank()) 
+                ? schema.getAppId() : "default";
+            
+            // upsert by name, tenant_id, app_id; NOTE: name must be unique per tenant/app
             if ("postgres".equals(d)) {
-                String upsert = "INSERT INTO appbana_schemas(name, json) VALUES (?, ?) ON CONFLICT (name) DO UPDATE SET json = EXCLUDED.json";
+                String upsert = "INSERT INTO appbana_schemas(name, json, tenant_id, app_id) VALUES (?, ?, ?, ?) " +
+                    "ON CONFLICT (name) DO UPDATE SET json = EXCLUDED.json, tenant_id = EXCLUDED.tenant_id, app_id = EXCLUDED.app_id";
                 try (PreparedStatement ps = c.prepareStatement(upsert)) {
                     ps.setString(1, getUniqueSchemaKey(schema));
                     ps.setString(2, json);
+                    ps.setString(3, tenantId);
+                    ps.setString(4, appId);
                     ps.executeUpdate();
                 }
             } else {
-                String upsert = "MERGE INTO appbana_schemas (name, json) KEY(name) VALUES (?, ?)";
+                String upsert = "MERGE INTO appbana_schemas (name, json, tenant_id, app_id) KEY(name) VALUES (?, ?, ?, ?)";
                 try (PreparedStatement ps = c.prepareStatement(upsert)) {
                     ps.setString(1, getUniqueSchemaKey(schema));
                     ps.setString(2, json);
+                    ps.setString(3, tenantId);
+                    ps.setString(4, appId);
                     ps.executeUpdate();
                 } catch (SQLException e) {
                     try (PreparedStatement ins = c
-                            .prepareStatement("INSERT INTO appbana_schemas(name, json) VALUES (?, ?)")) {
+                            .prepareStatement("INSERT INTO appbana_schemas(name, json, tenant_id, app_id) VALUES (?, ?, ?, ?)")) {
                         ins.setString(1, getUniqueSchemaKey(schema));
                         ins.setString(2, json);
+                        ins.setString(3, tenantId);
+                        ins.setString(4, appId);
                         ins.executeUpdate();
                     } catch (SQLException dup) {
                         try (PreparedStatement upd = c
-                                .prepareStatement("UPDATE appbana_schemas SET json = ? WHERE name = ?")) {
+                                .prepareStatement("UPDATE appbana_schemas SET json = ?, tenant_id = ?, app_id = ? WHERE name = ?")) {
                             upd.setString(1, json);
-                            upd.setString(2, getUniqueSchemaKey(schema));
+                            upd.setString(2, tenantId);
+                            upd.setString(3, appId);
+                            upd.setString(4, getUniqueSchemaKey(schema));
                             upd.executeUpdate();
                         }
                     }
@@ -161,7 +176,8 @@ public class SchemaManager {
             String dsName = ds.getName();
             JdbcManager.ensureMetaTableFor(dsName);
             try (Connection c = JdbcManager.getConnection(dsName)) {
-                try (PreparedStatement ps = c.prepareStatement("SELECT json FROM appbana_schemas WHERE name = ?")) {
+                // Query by name only (for backward compatibility with non-tenant schemas)
+                try (PreparedStatement ps = c.prepareStatement("SELECT json, tenant_id, app_id FROM appbana_schemas WHERE name = ?")) {
                     ps.setString(1, name);
                     try (ResultSet rs = ps.executeQuery()) {
                         if (rs.next()) {
@@ -169,6 +185,13 @@ public class SchemaManager {
                             EntitySchema schema = M.readValue(json, EntitySchema.class);
                             if (schema.getDatasourceName() == null || schema.getDatasourceName().isBlank())
                                 schema.setDatasourceName(dsName); // backfill
+                            // Backfill tenant_id and app_id from database columns if not in JSON
+                            if (schema.getTenantId() == null || schema.getTenantId().isBlank()) {
+                                schema.setTenantId(rs.getString(2));
+                            }
+                            if (schema.getAppId() == null || schema.getAppId().isBlank()) {
+                                schema.setAppId(rs.getString(3));
+                            }
                             return schema;
                         }
                     }
