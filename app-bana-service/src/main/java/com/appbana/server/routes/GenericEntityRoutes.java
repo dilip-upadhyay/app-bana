@@ -7,6 +7,7 @@ import com.appbana.api.Router;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
+import com.appbana.model.TenantContext;
 import com.appbana.service.AuthService;
 import com.appbana.service.EntityCrudService;
 import com.appbana.service.ErrorHandler;
@@ -875,6 +876,211 @@ public class GenericEntityRoutes {
             }
 
             res.json(200, Map.of("count", rows.size(), "rows", rows));
+        });
+
+        // ==================== APP-SCOPED ENTITY ROUTES (Story 1.5) ====================
+        // These routes fix the "Magic Seed Data" bug by ensuring entities are properly
+        // scoped to apps using TenantContext.
+        //
+        // Pattern: /studio/apps/{appId}/{entity}
+        // - Extract appId from URL path
+        // - Set TenantContext (tenant="default", app=appId)
+        // - Call EntityCrudService which auto-filters by tenant_id/app_id
+        // - Return only entities scoped to that app
+
+        // POST /studio/apps/{appId}/{entity} - Create entity scoped to app
+        router.post("/studio/apps/{appId}/{entity}", (req, res) -> {
+            String appId = req.pathParam("appId");
+            String entity = req.pathParam("entity");
+            
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            Map<String, Object> data = req.readJson(new TypeReference<>() {});
+            
+            try {
+                // Set TenantContext for this request (tenant="default", app=appId)
+                TenantContext ctx = TenantContext.forApp(appId);
+                TenantContext.set(ctx);
+                
+                try {
+                    // EntityCrudService will auto-inject tenant_id and app_id
+                    Object idObj = crud.insertRecord(schema, data);
+                    String id = String.valueOf(idObj);
+                    Map<String, Object> after = crud.getById(schema, id);
+                    
+                    // Audit logging
+                    AuditLogService.log("INSERT", schema.getName(), id, "studio", null, after);
+                    
+                    res.json(201, Map.of("id", idObj, "appId", appId));
+                } finally {
+                    // Always clear context
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("App-scoped insert failed for app={} entity={}", appId, entity, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // GET /studio/apps/{appId}/{entity} - List entities scoped to app
+        router.get("/studio/apps/{appId}/{entity}", (req, res) -> {
+            String appId = req.pathParam("appId");
+            String entity = req.pathParam("entity");
+            
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            try {
+                // Set TenantContext for this request
+                TenantContext ctx = TenantContext.forApp(appId);
+                TenantContext.set(ctx);
+                
+                try {
+                    // EntityCrudService will auto-filter by tenant_id and app_id
+                    List<Map<String, Object>> rows = crud.listAll(schema);
+                    res.json(200, Map.of("appId", appId, "entity", entity, "count", rows.size(), "rows", rows));
+                } finally {
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("App-scoped list failed for app={} entity={}", appId, entity, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // GET /studio/apps/{appId}/{entity}/{id} - Get entity by ID scoped to app
+        router.get("/studio/apps/{appId}/{entity}/{id}", (req, res) -> {
+            String appId = req.pathParam("appId");
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+            
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            try {
+                TenantContext ctx = TenantContext.forApp(appId);
+                TenantContext.set(ctx);
+                
+                try {
+                    Map<String, Object> row = crud.getById(schema, idStr);
+                    if (row == null) {
+                        res.json(404, Map.of("error", "not found", "appId", appId, "entity", entity, "id", idStr));
+                    } else {
+                        res.json(200, row);
+                    }
+                } finally {
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("App-scoped get failed for app={} entity={} id={}", appId, entity, idStr, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // PUT /studio/apps/{appId}/{entity}/{id} - Update entity scoped to app
+        router.put("/studio/apps/{appId}/{entity}/{id}", (req, res) -> {
+            String appId = req.pathParam("appId");
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+            
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            Map<String, Object> data = req.readJson(new TypeReference<>() {});
+            
+            try {
+                TenantContext ctx = TenantContext.forApp(appId);
+                TenantContext.set(ctx);
+                
+                try {
+                    Map<String, Object> before = crud.getById(schema, idStr);
+                    int updated = crud.updateById(schema, idStr, data);
+                    Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
+                    
+                    if (updated > 0) {
+                        AuditLogService.log("UPDATE", schema.getName(), idStr, "studio", before, after);
+                    }
+                    
+                    res.json(200, Map.of("updated", updated, "appId", appId));
+                } finally {
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("App-scoped update failed for app={} entity={} id={}", appId, entity, idStr, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // DELETE /studio/apps/{appId}/{entity}/{id} - Delete entity scoped to app
+        router.delete("/studio/apps/{appId}/{entity}/{id}", (req, res) -> {
+            String appId = req.pathParam("appId");
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+            
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            try {
+                TenantContext ctx = TenantContext.forApp(appId);
+                TenantContext.set(ctx);
+                
+                try {
+                    Map<String, Object> before = crud.getById(schema, idStr);
+                    int deleted = crud.deleteById(schema, idStr);
+                    
+                    if (deleted > 0) {
+                        AuditLogService.log("DELETE", schema.getName(), idStr, "studio", before, null);
+                    }
+                    
+                    res.json(200, Map.of("deleted", deleted, "appId", appId));
+                } finally {
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("App-scoped delete failed for app={} entity={} id={}", appId, entity, idStr, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
         });
     }
 }
