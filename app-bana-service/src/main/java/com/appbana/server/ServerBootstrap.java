@@ -33,12 +33,16 @@ public class ServerBootstrap {
             Flyway flyway = Flyway.configure()
                     .dataSource(cfg.getJdbcUrl(), cfg.getUsername(), cfg.getPassword())
                     .locations("classpath:db/migration")
-                    .cleanDisabled(false) // Allow clean for development
+                    .cleanDisabled(cfg.getFlywayCleanOnStart() == null || !cfg.getFlywayCleanOnStart())
                     .load();
 
-            // Clean and recreate schema (DEVELOPMENT ONLY)
-            LOG.warn("Cleaning database - all data will be lost (development mode)");
-            flyway.clean();
+            // Clean database only if explicitly enabled
+            if (Boolean.TRUE.equals(cfg.getFlywayCleanOnStart())) {
+                LOG.warn("⚠️  CLEANING DATABASE - ALL DATA WILL BE LOST (flywayCleanOnStart=true)");
+                flyway.clean();
+            } else {
+                LOG.info("✅ Database persistence enabled (flywayCleanOnStart=false)");
+            }
 
             int migrationsApplied = flyway.migrate().migrationsExecuted;
             LOG.info("Flyway migrations complete: {} migrations applied", migrationsApplied);

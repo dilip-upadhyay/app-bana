@@ -21,5 +21,6 @@
   "anthropicApiKey": null,
   "anthropicModel": "claude-3-5-sonnet-20241022",
   "ollamaUrl": "http://localhost:11434",
-  "ollamaModel": "llama3.1"
+  "ollamaModel": "llama3.1",
+  "flywayCleanOnStart": false
 }
