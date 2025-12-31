@@ -175,10 +175,14 @@ public class AppRoutes {
 
         // ==================== STUDIO BUILDER APIs (Authenticated) ====================
 
-        // List all apps
-        router.get("/appbana-studio/apps", (req, res) -> {
+        // List all apps for tenant
+        router.get("/studio/{tenantId}/apps", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 List<Map<String, Object>> apps = AppManager.listApps(tenantId);
                 res.json(200, Map.of("apps", apps));
             } catch (Exception e) {
@@ -187,10 +191,14 @@ public class AppRoutes {
         });
 
         // Get app by ID
-        router.get("/appbana-studio/apps/{id}", (req, res) -> {
+        router.get("/studio/{tenantId}/apps/{id}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 AppMetadata app = AppManager.getApp(tenantId, appId);
                 if (app == null) {
                     res.json(404, Map.of("error", "App not found: " + appId));
@@ -283,10 +291,14 @@ public class AppRoutes {
         });
 
         // Delete app
-        router.delete("/appbana-studio/apps/{id}", (req, res) -> {
+        router.delete("/studio/{tenantId}/apps/{id}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             try {
-                String tenantId = getTenantId();
                 boolean deleted = AppManager.deleteApp(tenantId, appId);
                 if (!deleted) {
                     res.json(404, Map.of("error", "App not found: " + appId));

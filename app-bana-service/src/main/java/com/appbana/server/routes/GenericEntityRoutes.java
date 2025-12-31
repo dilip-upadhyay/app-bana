@@ -888,11 +888,16 @@ public class GenericEntityRoutes {
         // - Call EntityCrudService which auto-filters by tenant_id/app_id
         // - Return only entities scoped to that app
 
-        // POST /studio/apps/{appId}/{entity} - Create entity scoped to app
-        router.post("/studio/apps/{appId}/{entity}", (req, res) -> {
+        // POST /studio/{tenantId}/apps/{appId}/{entity} - Create entity scoped to tenant and app
+        router.post("/studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             if (appId == null || appId.isBlank()) {
                 res.json(400, Map.of("error", "appId required"));
                 return;
@@ -907,8 +912,8 @@ public class GenericEntityRoutes {
             Map<String, Object> data = req.readJson(new TypeReference<>() {});
             
             try {
-                // Set TenantContext for this request (tenant="default", app=appId)
-                TenantContext ctx = TenantContext.forApp(appId);
+                // Set TenantContext for this request from URL path parameters
+                TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
                 
                 try {
@@ -931,11 +936,16 @@ public class GenericEntityRoutes {
             }
         });
 
-        // GET /studio/apps/{appId}/{entity} - List entities scoped to app
-        router.get("/studio/apps/{appId}/{entity}", (req, res) -> {
+        // GET /studio/{tenantId}/apps/{appId}/{entity} - List entities scoped to tenant and app
+        router.get("/studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             if (appId == null || appId.isBlank()) {
                 res.json(400, Map.of("error", "appId required"));
                 return;
@@ -948,8 +958,8 @@ public class GenericEntityRoutes {
             }
 
             try {
-                // Set TenantContext for this request
-                TenantContext ctx = TenantContext.forApp(appId);
+                // Set TenantContext for this request from URL path parameters
+                TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
                 
                 try {
@@ -965,12 +975,17 @@ public class GenericEntityRoutes {
             }
         });
 
-        // GET /studio/apps/{appId}/{entity}/{id} - Get entity by ID scoped to app
-        router.get("/studio/apps/{appId}/{entity}/{id}", (req, res) -> {
+        // GET /studio/{tenantId}/apps/{appId}/{entity}/{id} - Get entity by ID scoped to tenant and app
+        router.get("/studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
             
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             if (appId == null || appId.isBlank()) {
                 res.json(400, Map.of("error", "appId required"));
                 return;
@@ -983,7 +998,7 @@ public class GenericEntityRoutes {
             }
 
             try {
-                TenantContext ctx = TenantContext.forApp(appId);
+                TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
                 
                 try {
@@ -1002,12 +1017,17 @@ public class GenericEntityRoutes {
             }
         });
 
-        // PUT /studio/apps/{appId}/{entity}/{id} - Update entity scoped to app
-        router.put("/studio/apps/{appId}/{entity}/{id}", (req, res) -> {
+        // PUT /studio/{tenantId}/apps/{appId}/{entity}/{id} - Update entity scoped to tenant and app
+        router.put("/studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
             
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             if (appId == null || appId.isBlank()) {
                 res.json(400, Map.of("error", "appId required"));
                 return;
@@ -1022,7 +1042,7 @@ public class GenericEntityRoutes {
             Map<String, Object> data = req.readJson(new TypeReference<>() {});
             
             try {
-                TenantContext ctx = TenantContext.forApp(appId);
+                TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
                 
                 try {
@@ -1044,12 +1064,17 @@ public class GenericEntityRoutes {
             }
         });
 
-        // DELETE /studio/apps/{appId}/{entity}/{id} - Delete entity scoped to app
-        router.delete("/studio/apps/{appId}/{entity}/{id}", (req, res) -> {
+        // DELETE /studio/{tenantId}/apps/{appId}/{entity}/{id} - Delete entity scoped to tenant and app
+        router.delete("/studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
             
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
             if (appId == null || appId.isBlank()) {
                 res.json(400, Map.of("error", "appId required"));
                 return;
@@ -1062,7 +1087,7 @@ public class GenericEntityRoutes {
             }
 
             try {
-                TenantContext ctx = TenantContext.forApp(appId);
+                TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
                 
                 try {
