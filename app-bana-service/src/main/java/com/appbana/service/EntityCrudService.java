@@ -2,6 +2,7 @@ package com.appbana.service;
 
 import com.appbana.JdbcManager;
 import com.appbana.model.EntitySchema;
+import com.appbana.model.TenantContext;
 
 import java.sql.*;
 import java.time.Instant;
@@ -11,11 +12,164 @@ import java.util.regex.Pattern;
 /**
  * Entity CRUD and query operations for schema-driven dynamic entities.
  *
+ * Supports multi-tenant isolation through TenantContext. All context-aware methods
+ * automatically inject tenant_id and app_id into operations.
+ *
  * Extracted from {@code ApiServer} to enable modular, testable route handlers.
  */
 public class EntityCrudService {
 
+    // ==================== Context-Aware Methods (Multi-Tenant) ====================
+
+    /**
+     * Insert record with tenant/app isolation
+     * 
+     * @param context TenantContext for isolation
+     * @param schema Entity schema
+     * @param data Record data
+     * @return Generated primary key
+     */
+    public Object insertRecord(TenantContext context, EntitySchema schema, Map<String, Object> data) throws SQLException {
+        if (context == null) {
+            throw new IllegalArgumentException("TenantContext is required");
+        }
+        // Auto-inject tenant_id and app_id
+        Map<String, Object> enrichedData = new LinkedHashMap<>(data);
+        enrichedData.put("tenant_id", context.getTenantId());
+        enrichedData.put("app_id", context.getAppId());
+        return insertRecordLegacy(schema, enrichedData);
+    }
+
+    /**
+     * List all records for given tenant/app
+     */
+    public List<Map<String, Object>> listAll(TenantContext context, EntitySchema schema) throws SQLException {
+        if (context == null) {
+            throw new IllegalArgumentException("TenantContext is required");
+        }
+        String sql = "SELECT * FROM " + quote(schema.getName()) + 
+                     " WHERE " + quote("tenant_id") + " = ? AND " + quote("app_id") + " = ?";
+        try (Connection c = schemaConnection(schema);
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, context.getTenantId());
+            ps.setString(2, context.getAppId());
+            try (ResultSet rs = ps.executeQuery()) {
+                return toList(rs);
+            }
+        }
+    }
+
+    /**
+     * Get record by ID within tenant/app scope
+     */
+    public Map<String, Object> getById(TenantContext context, EntitySchema schema, String id) throws SQLException {
+        if (context == null) {
+            throw new IllegalArgumentException("TenantContext is required");
+        }
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
+        if (pk == null) {
+            return null;
+        }
+        String sql = "SELECT * FROM " + quote(schema.getName()) + 
+                     " WHERE " + quote(pk.getName()) + " = ?" +
+                     " AND " + quote("tenant_id") + " = ?" +
+                     " AND " + quote("app_id") + " = ?";
+        try (Connection c = schemaConnection(schema);
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, parseId(id, pk));
+            ps.setString(2, context.getTenantId());
+            ps.setString(3, context.getAppId());
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Map<String, Object>> list = toList(rs);
+                return list.isEmpty() ? null : list.getFirst();
+            }
+        }
+    }
+
+    /**
+     * Update record by ID within tenant/app scope
+     */
+    public int updateById(TenantContext context, EntitySchema schema, String id, Map<String, Object> data) throws SQLException {
+        if (context == null) {
+            throw new IllegalArgumentException("TenantContext is required");
+        }
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
+        if (pk == null) {
+            return 0;
+        }
+        // Don't allow updating tenant_id or app_id
+        Map<String, Object> safeData = new LinkedHashMap<>(data);
+        safeData.remove("tenant_id");
+        safeData.remove("app_id");
+        
+        List<String> set = new ArrayList<>();
+        List<Object> vals = new ArrayList<>();
+        for (EntitySchema.Field f : schema.getFields()) {
+            if (f.isPrimaryKey() || "tenant_id".equals(f.getName()) || "app_id".equals(f.getName())) {
+                continue;
+            }
+            if (safeData.containsKey(f.getName())) {
+                Object raw = safeData.get(f.getName());
+                Object val = coerceAndValidate(f, raw);
+                set.add(quote(f.getName()) + " = ?");
+                vals.add(val);
+            }
+        }
+        if (set.isEmpty()) {
+            return 0;
+        }
+        String sql = "UPDATE " + quote(schema.getName()) + " SET " + String.join(",", set) + 
+                     " WHERE " + quote(pk.getName()) + " = ?" +
+                     " AND " + quote("tenant_id") + " = ?" +
+                     " AND " + quote("app_id") + " = ?";
+        try (Connection c = schemaConnection(schema);
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            int i = 1;
+            for (Object v : vals) {
+                ps.setObject(i++, v);
+            }
+            ps.setObject(i++, parseId(id, pk));
+            ps.setString(i++, context.getTenantId());
+            ps.setString(i, context.getAppId());
+            return ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Delete record by ID within tenant/app scope
+     */
+    public int deleteById(TenantContext context, EntitySchema schema, String id) throws SQLException {
+        if (context == null) {
+            throw new IllegalArgumentException("TenantContext is required");
+        }
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
+        if (pk == null) {
+            return 0;
+        }
+        String sql = "DELETE FROM " + quote(schema.getName()) + 
+                     " WHERE " + quote(pk.getName()) + " = ?" +
+                     " AND " + quote("tenant_id") + " = ?" +
+                     " AND " + quote("app_id") + " = ?";
+        try (Connection c = schemaConnection(schema);
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, parseId(id, pk));
+            ps.setString(2, context.getTenantId());
+            ps.setString(3, context.getAppId());
+            return ps.executeUpdate();
+        }
+    }
+
+    // ==================== Legacy Methods (Backward Compatible) ====================
+
+    /**
+     * @deprecated Use insertRecord(TenantContext, schema, data) for tenant isolation
+     */
+    @Deprecated
     public Object insertRecord(EntitySchema schema, Map<String, Object> data) throws SQLException {
+        return insertRecordLegacy(schema, data);
+    }
+
+    private Object insertRecordLegacy(EntitySchema schema, Map<String, Object> data) throws SQLException {
         List<EntitySchema.Field> fields = schema.getFields();
         List<String> cols = new ArrayList<>();
         List<String> placeholders = new ArrayList<>();
