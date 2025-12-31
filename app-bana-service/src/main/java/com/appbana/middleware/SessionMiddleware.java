@@ -35,6 +35,7 @@ public class SessionMiddleware {
         "/api/csrf/token",   // CSRF token generation is public
         "/api/templates",    // Templates are public read-only resources
         "/api/apps/",        // Public runtime APIs for end users
+        "/api/ai/",          // AI endpoints (development mode - for Magic Data Seed, AI generation)
         "/appbana-studio/",  // Studio Builder APIs (development mode - TODO: enable auth in production)
         "/*.html",           // All HTML files are public (studio.html, index.html, etc.)
         "/*.js",             // JavaScript files from Vite build

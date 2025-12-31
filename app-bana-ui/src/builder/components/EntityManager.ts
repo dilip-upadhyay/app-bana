@@ -1009,10 +1009,16 @@ export class EntityManager extends LitElement {
     try {
       this.showToast('Generating magic data... ✨', 'success');
 
+      // Get session token for authentication
+      const sessionToken = localStorage.getItem('appbana_token') || '';
+
       // 1. Generate Data via AI
       const response = await fetch('/api/ai/seed-data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Token': sessionToken
+        },
         body: JSON.stringify({
           entityName: entity.displayName,
           schema: entity.fields,
@@ -1029,7 +1035,10 @@ export class EntityManager extends LitElement {
         try {
           const saveRes = await fetch(`/api/${entity.name}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Session-Token': sessionToken
+            },
             body: JSON.stringify(item)
           });
           if (saveRes.ok) successCount++;
