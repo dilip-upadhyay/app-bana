@@ -16,7 +16,7 @@
   "redirectHttpToHttps": null,
   "serverType": null,
   "aiProvider": "openai",
-  "openaiApiKey": null,
+  "openaiApiKey": "YOUR_OPENAI_API_KEY_HERE",
   "openaiModel": "gpt-4o-mini",
   "anthropicApiKey": null,
   "anthropicModel": "claude-3-5-sonnet-20241022",
