@@ -98,7 +98,8 @@ public class AppManager {
                 if (rs.next()) {
                     String json = rs.getString("json_metadata");
                     if (json != null) {
-                        return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+                        return mapper.readValue(json, new TypeReference<Map<String, Object>>() {
+                        });
                     }
                 }
             }
@@ -213,7 +214,8 @@ public class AppManager {
         if (app == null)
             return null;
 
-        Map<String, Object> appMap = mapper.convertValue(app, new TypeReference<Map<String, Object>>() {});
+        Map<String, Object> appMap = mapper.convertValue(app, new TypeReference<Map<String, Object>>() {
+        });
 
         // Load pages
         List<Map<String, Object>> pages = new ArrayList<>();
@@ -229,7 +231,8 @@ public class AppManager {
                 while (rs.next()) {
                     String json = rs.getString("json_metadata");
                     if (json != null) {
-                        pages.add(mapper.readValue(json, new TypeReference<Map<String, Object>>() {}));
+                        pages.add(mapper.readValue(json, new TypeReference<Map<String, Object>>() {
+                        }));
                     }
                 }
             }
@@ -401,7 +404,8 @@ public class AppManager {
                 if (rs.next()) {
                     String json = rs.getString("json_metadata");
                     if (json != null) {
-                        return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+                        return mapper.readValue(json, new TypeReference<Map<String, Object>>() {
+                        });
                     }
                 }
             }
@@ -437,22 +441,35 @@ public class AppManager {
 
         String sql = "MERGE INTO appbana_pages KEY(id, app_id, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
-        try (Connection conn = JdbcManager.getConnection();
-                PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection conn = JdbcManager.getConnection()) {
+            // Disable auto-commit to control transaction explicitly
+            conn.setAutoCommit(false);
 
-            String name = (String) page.get("name");
-            String type = (String) page.get("type");
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                String name = (String) page.get("name");
+                String type = (String) page.get("type");
 
-            ps.setString(1, pageId);
-            ps.setString(2, appId);
-            ps.setString(3, tenantId);
-            ps.setString(4, name);
-            ps.setString(5, type);
-            ps.setString(6, mapper.writeValueAsString(page));
-            ps.setLong(7, System.currentTimeMillis());
+                ps.setString(1, pageId);
+                ps.setString(2, appId);
+                ps.setString(3, tenantId);
+                ps.setString(4, name);
+                ps.setString(5, type);
+                ps.setString(6, mapper.writeValueAsString(page));
+                ps.setLong(7, System.currentTimeMillis());
 
-            ps.executeUpdate();
-            LOG.info("[AppManager] Saved page: {}/{}", appId, pageId);
+                ps.executeUpdate();
+
+                // CRITICAL: Explicitly commit the transaction to ensure data is persisted
+                // before this method returns. This prevents race conditions where
+                // createVersion() might read stale data.
+                conn.commit();
+
+                LOG.info("[AppManager] Saved and committed page: {}/{}", appId, pageId);
+            } catch (SQLException e) {
+                // Rollback on error
+                conn.rollback();
+                throw e;
+            }
         } catch (SQLException e) {
             throw new IOException("Failed to save page: " + pageId, e);
         }

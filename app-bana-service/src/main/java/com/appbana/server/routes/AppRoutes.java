@@ -56,7 +56,7 @@ public class AppRoutes {
                 String desc = body.get("description");
                 String userId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
 
-                String versionId = releaseService.createVersion(DEFAULT_TENANT, appId, label, desc, userId);
+                String versionId = releaseService.createVersion(tenantId, appId, label, desc, userId);
                 res.json(201, Map.of("id", versionId, "status", "created"));
             } catch (Exception e) {
                 LOG.error("Failed to create version", e);
@@ -240,7 +240,8 @@ public class AppRoutes {
             }
         });
 
-        // ==================== PUBLIC RUNTIME APIs (No Auth Required) ====================
+        // ==================== PUBLIC RUNTIME APIs (No Auth Required)
+        // ====================
 
         // Get app with all pages (for runtime)
         router.get("/api/{tenantId}/apps/{id}/full", (req, res) -> {

@@ -38,8 +38,16 @@ export class TreeStore {
   }
 
   onChange(fn: () => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
+
+  private emitChange() {
+    window.dispatchEvent(new CustomEvent('app-bana-run-change', {
+      detail: { pageId: this.page.id }
+    }));
+  }
+
   private notify() {
     for (const fn of this.listeners) fn();
+    this.emitChange();
   }
 
   getPage(): PageMeta { return { ...this.page, nodes: Array.from(this.nodes.values()) }; }

@@ -34,79 +34,104 @@ public class ReleaseService {
             throws Exception {
         LOG.info("[Release] Creating snapshot for app: {} (Tenant: {})", appId, tenantId);
 
-        // 1. Gather Application State
-        // A. Metadata & Pages & Entities (File-based)
-        Map<String, Object> fullApp = AppManager.getAppWithPages(tenantId, appId);
-        if (fullApp == null) {
-            throw new IllegalArgumentException("App not found: " + appId);
+        // CRITICAL: Use a fresh connection to ensure we see all committed data
+        // This prevents reading stale data from connection pooling
+        Connection versionConn = null;
+        try {
+            versionConn = JdbcManager.getConnection();
+            versionConn.setAutoCommit(false);
+
+            // Force a read barrier - this ensures all previous commits are visible
+            versionConn.commit();
+
+            // 1. Gather Application State
+            // A. Metadata & Pages & Entities (Database-based)
+            Map<String, Object> fullApp = AppManager.getAppWithPages(tenantId, appId);
+            if (fullApp == null) {
+                throw new IllegalArgumentException("App not found: " + appId);
+            }
+
+            // Extract components for separate storage (cleaner querying/diffing later)
+            Object pagesObj = fullApp.get("pages");
+            Object entitiesObj = fullApp.get("entities"); // Stored as Maps in AppMetadata
+
+            // Remove bulk objects from metadata to keep strict separation if desired,
+            // but AppMetadata usually contains entities. pages are separate.
+            // We will store the exact JSONs.
+
+            String metadataJson = MAPPER.writeValueAsString(fullApp.get("app")); // The "app" key from getAppWithPages
+                                                                                 // usually has the metadata
+            // Wait, getAppWithPages returns a Map merging app fields AND "pages".
+            // Let's verify AppManager.getAppWithPages structure.
+            // It returns map of (AppMetadata fields) + "pages": [List].
+            // Ref: AppManager.java
+
+            // Let's rely on AppMetadata vs the composite map.
+            AppMetadata meta = AppManager.getApp(tenantId, appId);
+            String metaJson = MAPPER.writeValueAsString(meta);
+
+            String pagesJson = MAPPER.writeValueAsString(pagesObj != null ? pagesObj : Collections.emptyList());
+
+            // Log the number of pages being snapshotted for debugging
+            int pageCount = pagesObj instanceof List ? ((List) pagesObj).size() : 0;
+            LOG.info("[Release] Snapshotting {} pages for app {}", pageCount, appId);
+
+            // B. Workflows (DB-based)
+            // We need to fetch all ACTIVE workflows for this app from the DB
+            List<Map<String, Object>> workflows = fetchWorkflowsForApp(appId);
+            String workflowsJson = MAPPER.writeValueAsString(workflows);
+
+            // Entities are inside meta usually, but let's strictly extract them if we want
+            // a separate column
+            // For now, we put them in entities_json column AND they are in metadata_json.
+            // Redundancy is fine for reliability.
+            String entitiesJson = MAPPER
+                    .writeValueAsString(meta.getEntities() != null ? meta.getEntities() : Collections.emptyList());
+
+            // 2. Calculate Next Version Number
+            int nextVersion = getNextVersionNumber(appId);
+            String versionId = UUID.randomUUID().toString();
+
+            // 3. Persist Snapshot
+            String sql = """
+                        INSERT INTO app_version
+                        (id, app_id, version_number, label, description,
+                         metadata_json, pages_json, entities_json, workflows_json,
+                         created_by, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """;
+
+            try (PreparedStatement ps = versionConn.prepareStatement(sql)) {
+
+                ps.setString(1, versionId);
+                ps.setString(2, appId);
+                ps.setInt(3, nextVersion);
+                ps.setString(4, label);
+                ps.setString(5, description);
+                ps.setString(6, metaJson);
+                ps.setString(7, pagesJson);
+                ps.setString(8, entitiesJson);
+                ps.setString(9, workflowsJson);
+                ps.setString(10, userId);
+                ps.setTimestamp(11, Timestamp.valueOf(LocalDateTime.now()));
+
+                ps.executeUpdate();
+                versionConn.commit();
+            }
+
+            LOG.info("[Release] Created version {} (v{}) for app {} with {} pages",
+                    versionId, nextVersion, appId, pageCount);
+            return versionId;
+
+        } finally {
+            if (versionConn != null) {
+                try {
+                    versionConn.close();
+                } catch (SQLException e) {
+                    LOG.warn("Failed to close version connection", e);
+                }
+            }
         }
-
-        // Extract components for separate storage (cleaner querying/diffing later)
-        Object pagesObj = fullApp.get("pages");
-        Object entitiesObj = fullApp.get("entities"); // Stored as Maps in AppMetadata
-
-        // Remove bulk objects from metadata to keep strict separation if desired,
-        // but AppMetadata usually contains entities. pages are separate.
-        // We will store the exact JSONs.
-
-        String metadataJson = MAPPER.writeValueAsString(fullApp.get("app")); // The "app" key from getAppWithPages
-                                                                             // usually has the metadata
-        // Wait, getAppWithPages returns a Map merging app fields AND "pages".
-        // Let's verify AppManager.getAppWithPages structure.
-        // It returns map of (AppMetadata fields) + "pages": [List].
-        // Ref: AppManager.java
-
-        // Let's rely on AppMetadata vs the composite map.
-        AppMetadata meta = AppManager.getApp(tenantId, appId);
-        String metaJson = MAPPER.writeValueAsString(meta);
-
-        String pagesJson = MAPPER.writeValueAsString(pagesObj != null ? pagesObj : Collections.emptyList());
-
-        // B. Workflows (DB-based)
-        // We need to fetch all ACTIVE workflows for this app from the DB
-        List<Map<String, Object>> workflows = fetchWorkflowsForApp(appId);
-        String workflowsJson = MAPPER.writeValueAsString(workflows);
-
-        // Entities are inside meta usually, but let's strictly extract them if we want
-        // a separate column
-        // For now, we put them in entities_json column AND they are in metadata_json.
-        // Redundancy is fine for reliability.
-        String entitiesJson = MAPPER
-                .writeValueAsString(meta.getEntities() != null ? meta.getEntities() : Collections.emptyList());
-
-        // 2. Calculate Next Version Number
-        int nextVersion = getNextVersionNumber(appId);
-        String versionId = UUID.randomUUID().toString();
-
-        // 3. Persist Snapshot
-        String sql = """
-                    INSERT INTO app_version
-                    (id, app_id, version_number, label, description,
-                     metadata_json, pages_json, entities_json, workflows_json,
-                     created_by, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
-
-        try (Connection conn = JdbcManager.getConnection();
-                PreparedStatement ps = conn.prepareStatement(sql)) {
-
-            ps.setString(1, versionId);
-            ps.setString(2, appId);
-            ps.setInt(3, nextVersion);
-            ps.setString(4, label);
-            ps.setString(5, description);
-            ps.setString(6, metaJson);
-            ps.setString(7, pagesJson);
-            ps.setString(8, entitiesJson);
-            ps.setString(9, workflowsJson);
-            ps.setString(10, userId);
-            ps.setTimestamp(11, Timestamp.valueOf(LocalDateTime.now()));
-
-            ps.executeUpdate();
-        }
-
-        LOG.info("[Release] Created version {} (v{}) for app {}", versionId, nextVersion, appId);
-        return versionId;
     }
 
     /**

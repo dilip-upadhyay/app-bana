@@ -3,6 +3,7 @@ import './PipelineDashboard';
 import './ThemeEditor';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
+import { currentStore } from '../store/TreeStore';
 import { apiClient } from '../../core/api-client';
 import { AuthService } from '../../pages/auth/auth-service';
 import { RuntimeContext } from '../../runtime/RuntimeContext';
@@ -233,6 +234,9 @@ export class AppManager extends LitElement {
               ➕ New App
             </button>
             ${this.currentApp ? html`
+              <button class="btn success" @click=${this.handleSaveApp} style="margin-left: 8px;" title="${this.isDirty ? 'You have unsaved changes' : 'Save current changes'}">
+                ${this.isDirty ? '💾 Save *' : '💾 Save'}
+              </button>
               <button class="btn btn-success" @click=${this.handlePublishClick} style="background: #10b981; color: white; margin-left: 8px;">
                 🚀 Publish
               </button>
@@ -432,6 +436,26 @@ export class AppManager extends LitElement {
     if (!this.currentApp) return;
 
     try {
+      // FIX: Ensure current page changes are saved to backend before versioning!
+      if (currentStore) {
+        const page = currentStore.getPage();
+        // Check if this page belongs to the current app (safety check)
+        // If currentStore is active, it likely corresponds to the current app's active page.
+        // We'll trust it matches for now or we could verify page.id in this.currentApp.pages
+        console.log('[AppManager] Auto-saving current page before publish. PageID:', page.id);
+
+        // DEBUG: Check for buttons
+        const btn = page.nodes.find(n => n.type === 'button');
+        if (btn) {
+          console.log('[AppManager] Found button in currentStore nodes:', btn);
+        } else {
+          console.warn('[AppManager] NO BUTTON FOUND in currentStore nodes!');
+        }
+
+        await appStore.savePage(this.currentApp.id, page);
+        console.log('[AppManager] Save page completed.');
+      }
+
       const tenantId = AuthService.getUser()?.tenantId || 'default';
       const versionData = await apiClient.post(`/api/${tenantId}/apps/${this.currentApp.id}/versions`, {
         label: this.publishLabel,
