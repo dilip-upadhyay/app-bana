@@ -169,7 +169,7 @@ export class PropertiesPanel extends LitElement {
       'input': ['label', 'name', 'value', 'placeholder', 'type', 'required', 'disabled', 'error', 'helper-text'],
       'text-input': ['label', 'placeholder', 'name', 'value', 'required', 'disabled'],
       'textarea': ['label', 'placeholder', 'name', 'value', 'rows', 'required', 'disabled'],
-      'button': ['label', 'variant', 'disabled'],
+      'button': ['label', 'variant', 'disabled', 'actionType', 'entity', 'navigateUrl', 'apiEndpoint', 'apiMethod', 'onSuccess'],
       'text': ['content'],
       'heading': ['level', 'content'],
       'link': ['href', 'text', 'target'],
@@ -265,90 +265,95 @@ export class PropertiesPanel extends LitElement {
         
         ${this.selectedNode?.type === 'input' ? this.renderFieldBinding() : ''}
 
-        ${commonProps.map(propKey => {
-      const currentValue = this.editingProps[propKey] ?? '';
-      const propType = this.getPropertyType(propKey);
+        ${this.selectedNode?.type === 'input' ? this.renderFieldBinding() : ''}
+        ${this.selectedNode?.type === 'button' ? this.renderActionProperties() : ''}
 
-      if (propType === 'boolean') {
-        return html`
+        ${commonProps
+        .filter(p => !['actionType', 'entity', 'navigateUrl', 'apiEndpoint', 'apiMethod', 'onSuccess'].includes(p))
+        .map(propKey => {
+          const currentValue = this.editingProps[propKey] ?? '';
+          const propType = this.getPropertyType(propKey);
+
+          if (propType === 'boolean') {
+            return html`
               <div class="form-group">
                 <label class="checkbox-label">
                   <input
                     type="checkbox"
                     .checked=${currentValue === true || currentValue === 'true'}
                     @change=${(e: Event) => {
-            const checked = (e.target as HTMLInputElement).checked;
-            this.updateProperty(propKey, checked);
-          }}
+                const checked = (e.target as HTMLInputElement).checked;
+                this.updateProperty(propKey, checked);
+              }}
                   />
                   <span>${this.formatPropertyLabel(propKey)}</span>
                 </label>
               </div>
             `;
-      }
+          }
 
-      if (propType === 'number') {
-        return html`
+          if (propType === 'number') {
+            return html`
               <div class="form-group">
                 <label>${this.formatPropertyLabel(propKey)}</label>
                 <input
                   type="number"
                   .value=${String(currentValue)}
                   @input=${(e: Event) => {
-            const value = (e.target as HTMLInputElement).value;
-            this.updateProperty(propKey, value ? Number(value) : '');
-          }}
+                const value = (e.target as HTMLInputElement).value;
+                this.updateProperty(propKey, value ? Number(value) : '');
+              }}
                   placeholder=${this.getPropertyPlaceholder(propKey)}
                 />
               </div>
             `;
-      }
+          }
 
-      if (propType === 'textarea') {
-        return html`
+          if (propType === 'textarea') {
+            return html`
               <div class="form-group">
                 <label>${this.formatPropertyLabel(propKey)}</label>
                 <textarea
                   .value=${String(currentValue)}
                   @input=${(e: Event) => {
-            const value = (e.target as HTMLTextAreaElement).value;
-            this.updateProperty(propKey, value);
-          }}
+                const value = (e.target as HTMLTextAreaElement).value;
+                this.updateProperty(propKey, value);
+              }}
                   placeholder=${this.getPropertyPlaceholder(propKey)}
                   rows="3"
                 ></textarea>
               </div>
             `;
-      }
+          }
 
-      if (propType === 'spacing') {
-        const isHeight = propKey === 'minCellHeight';
+          if (propType === 'spacing') {
+            const isHeight = propKey === 'minCellHeight';
 
-        // Define steps for stepping up/down
-        const options = isHeight ? [
-          { label: 'Auto', value: 'auto' },
-          { label: 'Compact (60px)', value: '60px' },
-          { label: 'Normal (100px)', value: '100px' },
-          { label: 'Medium (150px)', value: '150px' },
-          { label: 'Large (200px)', value: '200px' },
-          { label: 'Extra Large (300px)', value: '300px' }
-        ] : [
-          { label: 'None (0)', value: '0' },
-          { label: 'Tx (2px)', value: '2px' },
-          { label: 'Tiny (4px)', value: '0.25rem' },
-          { label: 'Small (8px)', value: '0.5rem' },
-          { label: 'Normal (16px)', value: '1rem' },
-          { label: 'Large (32px)', value: '2rem' },
-          { label: 'Huge (64px)', value: '4rem' }
-        ];
+            // Define steps for stepping up/down
+            const options = isHeight ? [
+              { label: 'Auto', value: 'auto' },
+              { label: 'Compact (60px)', value: '60px' },
+              { label: 'Normal (100px)', value: '100px' },
+              { label: 'Medium (150px)', value: '150px' },
+              { label: 'Large (200px)', value: '200px' },
+              { label: 'Extra Large (300px)', value: '300px' }
+            ] : [
+              { label: 'None (0)', value: '0' },
+              { label: 'Tx (2px)', value: '2px' },
+              { label: 'Tiny (4px)', value: '0.25rem' },
+              { label: 'Small (8px)', value: '0.5rem' },
+              { label: 'Normal (16px)', value: '1rem' },
+              { label: 'Large (32px)', value: '2rem' },
+              { label: 'Huge (64px)', value: '4rem' }
+            ];
 
-        // Find current index to enable/disable buttons
-        const normalize = (v: any) => String(v || (isHeight ? 'auto' : '1rem')).toLowerCase();
-        const currentVal = normalize(currentValue);
-        const currentIndex = options.findIndex(o => normalize(o.value) === currentVal);
-        const effectiveIndex = currentIndex === -1 ? 0 : currentIndex; // Default to 0 if custom/unknown
+            // Find current index to enable/disable buttons
+            const normalize = (v: any) => String(v || (isHeight ? 'auto' : '1rem')).toLowerCase();
+            const currentVal = normalize(currentValue);
+            const currentIndex = options.findIndex(o => normalize(o.value) === currentVal);
+            const effectiveIndex = currentIndex === -1 ? 0 : currentIndex; // Default to 0 if custom/unknown
 
-        return html`
+            return html`
           <div class="form-group">
             <label>${this.formatPropertyLabel(propKey)}</label>
             <div style="display: flex; gap: 8px; align-items: center;">
@@ -358,8 +363,8 @@ export class PropertiesPanel extends LitElement {
                 style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid #d1d5db; background: ${effectiveIndex <= 0 ? '#f3f4f6' : '#fff'}; cursor: pointer; border-radius: 4px;"
                 ?disabled=${effectiveIndex <= 0}
                 @click=${() => {
-            if (effectiveIndex > 0) this.updateProperty(propKey, options[effectiveIndex - 1].value);
-          }}
+                if (effectiveIndex > 0) this.updateProperty(propKey, options[effectiveIndex - 1].value);
+              }}
               >
                 ➖
               </button>
@@ -383,30 +388,30 @@ export class PropertiesPanel extends LitElement {
                 style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid #d1d5db; background: ${effectiveIndex >= options.length - 1 ? '#f3f4f6' : '#fff'}; cursor: pointer; border-radius: 4px;"
                 ?disabled=${effectiveIndex >= options.length - 1}
                 @click=${() => {
-            if (effectiveIndex < options.length - 1) this.updateProperty(propKey, options[effectiveIndex + 1].value);
-          }}
+                if (effectiveIndex < options.length - 1) this.updateProperty(propKey, options[effectiveIndex + 1].value);
+              }}
               >
                 ➕
               </button>
             </div>
           </div>
         `;
-      }
-      return html`
+          }
+          return html`
             <div class="form-group">
               <label>${this.formatPropertyLabel(propKey)}</label>
               <input
                 type="text"
                 .value=${String(currentValue)}
                 @input=${(e: Event) => {
-          const value = (e.target as HTMLInputElement).value;
-          this.updateProperty(propKey, value);
-        }}
+              const value = (e.target as HTMLInputElement).value;
+              this.updateProperty(propKey, value);
+            }}
                 placeholder=${this.getPropertyPlaceholder(propKey)}
               />
             </div>
           `;
-    })}
+        })}
       </div>
     `;
   }
@@ -496,6 +501,111 @@ export class PropertiesPanel extends LitElement {
       })()}
         </div>
       `;
+  }
+
+
+
+  private renderActionProperties() {
+    const actionType = this.editingProps.actionType || 'none';
+    const currentApp = appStore.getCurrentApp();
+    const entities = currentApp?.entities || [];
+
+    return html`
+      <div class="section" style="margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+        <h4 style="margin-bottom: 12px;">⚡ Actions</h4>
+        
+        <div class="form-group">
+          <label>Action Type</label>
+          <select 
+            .value=${actionType}
+            @change=${(e: Event) => this.updateProperty('actionType', (e.target as HTMLSelectElement).value)}
+          >
+            <option value="none">None</option>
+            <option value="save-entity">Save Entity</option>
+            <option value="navigate">Navigate</option>
+            <option value="api">Custom API</option>
+          </select>
+        </div>
+
+        ${actionType === 'save-entity' ? html`
+          <div class="form-group">
+            <label>Entity to Save</label>
+            <select 
+              .value=${this.editingProps.entity || ''}
+              @change=${(e: Event) => this.updateProperty('entity', (e.target as HTMLSelectElement).value)}
+            >
+              <option value="">-- Select Entity --</option>
+              ${entities.map((e: any) => html`
+                <option value="${e.name}">${e.displayName || e.name}</option>
+              `)}
+            </select>
+            <p style="font-size: 11px; color: #6b7280; margin-top: 4px;">
+              Auto-collects values from Inputs with matching "Name" in the same form/container.
+            </p>
+          </div>
+          
+          <div class="form-group">
+            <label>On Success</label>
+            <select 
+              .value=${this.editingProps.onSuccess || 'toast'}
+              @change=${(e: Event) => this.updateProperty('onSuccess', (e.target as HTMLSelectElement).value)}
+            >
+              <option value="toast">Show Toast</option>
+              <option value="navigate">Navigate</option>
+              <option value="refresh">Refresh Data</option>
+            </select>
+          </div>
+
+          ${this.editingProps.onSuccess === 'navigate' ? html`
+             <div class="form-group">
+              <label>Navigate To (URL)</label>
+              <input 
+                type="text" 
+                .value=${this.editingProps.navigateUrl || ''} 
+                @input=${(e: Event) => this.updateProperty('navigateUrl', (e.target as HTMLInputElement).value)}
+                placeholder="/dashboard"
+              />
+            </div>
+          `: ''}
+        ` : ''}
+
+        ${actionType === 'navigate' ? html`
+          <div class="form-group">
+            <label>Destination URL</label>
+            <input 
+              type="text" 
+              .value=${this.editingProps.navigateUrl || ''} 
+              @input=${(e: Event) => this.updateProperty('navigateUrl', (e.target as HTMLInputElement).value)}
+              placeholder="/page-name"
+            />
+          </div>
+        ` : ''}
+
+        ${actionType === 'api' ? html`
+          <div class="form-group">
+            <label>API Endpoint</label>
+            <input 
+              type="text" 
+              .value=${this.editingProps.apiEndpoint || ''} 
+              @input=${(e: Event) => this.updateProperty('apiEndpoint', (e.target as HTMLInputElement).value)}
+              placeholder="/api/custom-action"
+            />
+          </div>
+          <div class="form-group">
+            <label>Method</label>
+            <select 
+              .value=${this.editingProps.apiMethod || 'POST'}
+              @change=${(e: Event) => this.updateProperty('apiMethod', (e.target as HTMLSelectElement).value)}
+            >
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+          </div>
+        ` : ''}
+      </div>
+    `;
   }
 
   // --- New Methods for Field Binding ---

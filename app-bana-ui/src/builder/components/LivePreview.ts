@@ -2,6 +2,7 @@ import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { unsafeStatic, html as staticHtml } from 'lit/static-html.js';
 import { currentStore } from '../store/TreeStore';
+import { createRow, apiClient } from '../../core/api-client';
 import type { ComponentNode, PageMeta } from '../../models/metadata';
 import styles from './LivePreview.css?inline';
 import { AuthService } from '../../pages/auth/auth-service';
@@ -504,6 +505,83 @@ export class LivePreview extends LitElement {
     this.hoveredId = null;
   }
 
+
+  private async handleAction(node: ComponentNode) {
+    const props = node.props || {};
+    const actionType = props.actionType;
+
+    if (!actionType || actionType === 'none') {
+      this.showToast('ℹ️ No action configured');
+      return;
+    }
+
+    console.log('[LivePreview] Executing action:', actionType, props);
+
+    try {
+      if (actionType === 'save-entity') {
+        const entity = props.entity;
+        if (!entity) {
+          this.showToast('⚠️ No entity selected for Save action');
+          return;
+        }
+
+        // Collect data from inputs
+        const data: Record<string, any> = {};
+
+        // Helper to gather inputs from the rendered DOM
+        // We look for any input/select/textarea with a "name" attribute
+        const gatherInputs = (root: any) => {
+          const inputs = root.querySelectorAll('appbana-input, appbana-select, appbana-textarea, appbana-checkbox, appbana-radio-group, input, select, textarea');
+          inputs.forEach((el: any) => {
+            const name = el.name || el.getAttribute('name');
+            if (name) {
+              // Handle different element types
+              if (el.tagName.toLowerCase().includes('checkbox')) {
+                data[name] = el.checked;
+              } else {
+                data[name] = el.value;
+              }
+            }
+          });
+        };
+
+        gatherInputs(this.renderRoot);
+
+        console.log('[LivePreview] Saving data for entity', entity, data);
+
+        // Call API
+        await createRow(entity, data);
+
+        this.showToast(`✅ Saved ${entity} successfully!`);
+
+        if (props.onSuccess === 'navigate' && props.navigateUrl) {
+          // Simulate navigation or real nav
+          this.showToast(`➡️ Navigating to ${props.navigateUrl}...`);
+          window.history.pushState({}, '', props.navigateUrl);
+        } else if (props.onSuccess === 'refresh') {
+          // Reload page from store to "refresh" (or just re-fetch if we had data binding)
+          this.updateFromStore();
+        }
+
+      } else if (actionType === 'navigate') {
+        if (props.navigateUrl) {
+          window.history.pushState({}, '', props.navigateUrl);
+          this.showToast(`➡️ Navigated to ${props.navigateUrl}`);
+        }
+      } else if (actionType === 'api') {
+        if (props.apiEndpoint) {
+          const method = props.apiMethod || 'POST';
+          await apiClient.request(props.apiEndpoint, { method });
+          this.showToast(`✅ API ${method} Success`);
+        }
+      }
+
+    } catch (err: any) {
+      console.error('[LivePreview] Action failed:', err);
+      this.showToast(`❌ Action failed: ${err.message || 'Unknown error'}`);
+    }
+  }
+
   private handleDeleteSelected() {
     if (!this.selectedId || !currentStore || !this.page) {
       return;
@@ -619,7 +697,16 @@ export class LivePreview extends LitElement {
 
       case 'button':
         return html`
-          <div style="position: relative; display: inline-block; width: max-content;" @click=${(e: Event) => this.handleNodeClick(e, node.id)}>
+          <div style="position: relative; display: inline-block; width: max-content;" 
+               @click=${(e: MouseEvent) => {
+            // If Alt key is pressed, run action instead of selecting
+            if (e.altKey || (node.props?.actionType && node.props?.actionType !== 'none' && !this.selectedId)) {
+              e.stopPropagation();
+              this.handleAction(node);
+            } else {
+              this.handleNodeClick(e, node.id);
+            }
+          }}>
             ${deleteOverlay}
             <appbana-button
               class="${classes} ${node.props?.className || ''}"
@@ -629,14 +716,10 @@ export class LivePreview extends LitElement {
               variant="${node.props?.variant || 'primary'}"
               ?disabled=${node.props?.disabled}
               data-node-id="${node.id}"
-              @mouseenter=${() => this.handleNodeMouseEnter(node.id)}
-              @mouseleave=${() => this.handleNodeMouseLeave()}
-              @dragover=${(e: DragEvent) => this.handleDragOver(e, node.id)}
-              @dragleave=${(e: DragEvent) => this.handleDragLeave(e)}
-              @drop=${(e: DragEvent) => this.handleDrop(e, node.id)}
             ></appbana-button>
             <div style="position: absolute; inset: 0; cursor: pointer; z-index: 10;" 
-                 @click=${(e: Event) => this.handleNodeClick(e, node.id)}></div>
+                 title="Click to select. Alt+Click to run action."
+                 ></div>
           </div>
         `;
 
