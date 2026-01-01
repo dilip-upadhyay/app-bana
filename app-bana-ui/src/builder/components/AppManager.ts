@@ -5,6 +5,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
 import { apiClient } from '../../core/api-client';
 import { AuthService } from '../../pages/auth/auth-service';
+import { RuntimeContext } from '../../runtime/RuntimeContext';
 import type { AppMeta, AppListItem, CreateAppRequest } from '../../models/app-metadata';
 import styles from './AppManager.css?inline';
 
@@ -112,6 +113,13 @@ export class AppManager extends LitElement {
       await appStore.createApp(request);
       this.showCreateModal = false;
       this.showToast(`✅ Created app: ${request.name}`);
+
+      // Update Runtime Context (new app is automatically selected by store usually, but let's be safe)
+      const current = appStore.getCurrentApp();
+      if (current) {
+        const tenantId = AuthService.getUser()?.tenantId || 'default';
+        RuntimeContext.getInstance().setContext(tenantId, current.id, 'dev');
+      }
     } catch (error) {
       console.error('Failed to create app:', error);
       alert('Failed to create app. Please try again.');
@@ -124,6 +132,13 @@ export class AppManager extends LitElement {
       this.showSelectModal = false;
       const app = appStore.getApp(appId);
       this.showToast(`✅ Switched to: ${app?.name}`);
+
+      // Update Runtime Context
+      if (app) {
+        const tenantId = AuthService.getUser()?.tenantId || 'default';
+        RuntimeContext.getInstance().setContext(tenantId, app.id, 'dev');
+      }
+
     } catch (error) {
       console.error('Failed to select app:', error);
       alert('Failed to select app. Please try again.');

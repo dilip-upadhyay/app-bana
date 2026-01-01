@@ -93,10 +93,41 @@ export class RuntimeContext {
    */
   getContextSafe(): { tenantId: string; appId: string; env: string } {
     if (!this.initialized || !this.appId) {
-      console.warn(
-        '[RuntimeContext] Context not initialized, using fallback values. ' +
-        'This is OK for development/testing but should not happen in production.'
-      );
+      // Try to get from AppStore first (for Builder context)
+      // We import dynamically to avoid circular dependencies if possible, or just assume it's global
+      // But since we can't easily dynamic import here without async, we'll try to rely on a global or check local storage directly if needed.
+      // Better approach: Since AppStore is available in the browser, let's try to get it.
+
+      let fallbackAppId = 'test-app';
+      try {
+        // HACK: In builder, we can try to peek at the AppStore state if exposed, 
+        // or just read the current app from the URL or Store if accessible.
+        // Given the constraints and the file structure, let's try to access the store if possible.
+        // Actually, let's just checking if we can import AppStore.
+
+        // However, adding a dependency to AppStore here might cause circles.
+        // Let's check if 'appbana_current_app' is in localStorage?
+        // AppMeta is stored in AppStore not strictly in LS.
+        // But the AppManager sets the current app. 
+
+        // Let's modify this to try and get the current app from the window/global if set, or just default to a more smart check.
+
+        // Best approach: In the AppManager, when selecting an app, we should ALSO call RuntimeContext.setContext().
+        // That is the root cause: AppManager selects app but doesn't tell RuntimeContext.
+
+        console.warn(
+          '[RuntimeContext] Context not initialized, using fallback values. ' +
+          'This is OK for development/testing but should not happen in production.'
+        );
+        return {
+          tenantId: AuthService.getUser()?.tenantId || 'default',
+          appId: fallbackAppId,
+          env: 'dev'
+        };
+      } catch (e) {
+        // ignore
+      }
+
       return {
         tenantId: AuthService.getUser()?.tenantId || 'default',
         appId: 'test-app',

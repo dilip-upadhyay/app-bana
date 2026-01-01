@@ -149,14 +149,119 @@ export class PropertiesPanel extends LitElement {
     this.updateDimensions();
   }
 
+
   private updateProperty(key: string, value: any) {
     if (!this.selectedNode || !currentStore) return;
+    console.log('[PropertiesPanel] Updating property:', key, value);
 
     // Update local state
     this.editingProps = { ...this.editingProps, [key]: value };
 
     // Update the node in the store
     currentStore.updateProps(this.selectedNode.id, { [key]: value });
+  }
+
+  private renderActionProperties() {
+    const actionType = this.editingProps.actionType || 'none';
+    const currentApp = appStore.getCurrentApp();
+    const entities = currentApp?.entities || [];
+
+    return html`
+      <div class="section" style="margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+        <h4 style="margin-bottom: 12px;">⚡ Actions</h4>
+        
+        <div class="form-group">
+          <label>Action Type</label>
+          <select 
+            .value=${actionType}
+            @change=${(e: Event) => this.updateProperty('actionType', (e.target as HTMLSelectElement).value)}
+          >
+            <option value="none" ?selected=${actionType === 'none'}>None</option>
+            <option value="save-entity" ?selected=${actionType === 'save-entity'}>Save Entity</option>
+            <option value="navigate" ?selected=${actionType === 'navigate'}>Navigate</option>
+            <option value="api" ?selected=${actionType === 'api'}>Custom API</option>
+          </select>
+        </div>
+
+        ${actionType === 'save-entity' ? html`
+          <div class="form-group">
+            <label>Entity to Save</label>
+            <select 
+              .value=${this.editingProps.entity || ''}
+              @change=${(e: Event) => this.updateProperty('entity', (e.target as HTMLSelectElement).value)}
+            >
+              <option value="">-- Select Entity --</option>
+              ${entities.map((e: any) => html`
+                <option value="${e.name}" ?selected=${this.editingProps.entity === e.name}>${e.displayName || e.name}</option>
+              `)}
+            </select>
+            <p style="font-size: 11px; color: #6b7280; margin-top: 4px;">
+              Auto-collects values from Inputs with matching "Name" in the same form/container.
+            </p>
+          </div>
+          
+          <div class="form-group">
+            <label>On Success</label>
+            <select 
+              .value=${this.editingProps.onSuccess || 'toast'}
+              @change=${(e: Event) => this.updateProperty('onSuccess', (e.target as HTMLSelectElement).value)}
+            >
+              <option value="toast" ?selected=${this.editingProps.onSuccess === 'toast'}>Show Toast</option>
+              <option value="navigate" ?selected=${this.editingProps.onSuccess === 'navigate'}>Navigate</option>
+              <option value="refresh" ?selected=${this.editingProps.onSuccess === 'refresh'}>Refresh Data</option>
+            </select>
+          </div>
+
+          ${this.editingProps.onSuccess === 'navigate' ? html`
+             <div class="form-group">
+              <label>Navigate To (URL)</label>
+              <input 
+                type="text" 
+                .value=${this.editingProps.navigateUrl || ''} 
+                @input=${(e: Event) => this.updateProperty('navigateUrl', (e.target as HTMLInputElement).value)}
+                placeholder="/dashboard"
+              />
+            </div>
+          `: ''}
+        ` : ''}
+
+        ${actionType === 'navigate' ? html`
+          <div class="form-group">
+            <label>Destination URL</label>
+            <input 
+              type="text" 
+              .value=${this.editingProps.navigateUrl || ''} 
+              @input=${(e: Event) => this.updateProperty('navigateUrl', (e.target as HTMLInputElement).value)}
+              placeholder="/page-name"
+            />
+          </div>
+        ` : ''}
+
+        ${actionType === 'api' ? html`
+          <div class="form-group">
+            <label>API Endpoint</label>
+            <input 
+              type="text" 
+              .value=${this.editingProps.apiEndpoint || ''} 
+              @input=${(e: Event) => this.updateProperty('apiEndpoint', (e.target as HTMLInputElement).value)}
+              placeholder="/api/custom-action"
+            />
+          </div>
+          <div class="form-group">
+            <label>Method</label>
+            <select 
+              .value=${this.editingProps.apiMethod || 'POST'}
+              @change=${(e: Event) => this.updateProperty('apiMethod', (e.target as HTMLSelectElement).value)}
+            >
+              <option value="GET" ?selected=${this.editingProps.apiMethod === 'GET'}>GET</option>
+              <option value="POST" ?selected=${this.editingProps.apiMethod === 'POST'}>POST</option>
+              <option value="PUT" ?selected=${this.editingProps.apiMethod === 'PUT'}>PUT</option>
+              <option value="DELETE" ?selected=${this.editingProps.apiMethod === 'DELETE'}>DELETE</option>
+            </select>
+          </div>
+        ` : ''}
+      </div>
+    `;
   }
 
   private getCommonProperties(): string[] {
@@ -505,108 +610,7 @@ export class PropertiesPanel extends LitElement {
 
 
 
-  private renderActionProperties() {
-    const actionType = this.editingProps.actionType || 'none';
-    const currentApp = appStore.getCurrentApp();
-    const entities = currentApp?.entities || [];
 
-    return html`
-      <div class="section" style="margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
-        <h4 style="margin-bottom: 12px;">⚡ Actions</h4>
-        
-        <div class="form-group">
-          <label>Action Type</label>
-          <select 
-            .value=${actionType}
-            @change=${(e: Event) => this.updateProperty('actionType', (e.target as HTMLSelectElement).value)}
-          >
-            <option value="none">None</option>
-            <option value="save-entity">Save Entity</option>
-            <option value="navigate">Navigate</option>
-            <option value="api">Custom API</option>
-          </select>
-        </div>
-
-        ${actionType === 'save-entity' ? html`
-          <div class="form-group">
-            <label>Entity to Save</label>
-            <select 
-              .value=${this.editingProps.entity || ''}
-              @change=${(e: Event) => this.updateProperty('entity', (e.target as HTMLSelectElement).value)}
-            >
-              <option value="">-- Select Entity --</option>
-              ${entities.map((e: any) => html`
-                <option value="${e.name}">${e.displayName || e.name}</option>
-              `)}
-            </select>
-            <p style="font-size: 11px; color: #6b7280; margin-top: 4px;">
-              Auto-collects values from Inputs with matching "Name" in the same form/container.
-            </p>
-          </div>
-          
-          <div class="form-group">
-            <label>On Success</label>
-            <select 
-              .value=${this.editingProps.onSuccess || 'toast'}
-              @change=${(e: Event) => this.updateProperty('onSuccess', (e.target as HTMLSelectElement).value)}
-            >
-              <option value="toast">Show Toast</option>
-              <option value="navigate">Navigate</option>
-              <option value="refresh">Refresh Data</option>
-            </select>
-          </div>
-
-          ${this.editingProps.onSuccess === 'navigate' ? html`
-             <div class="form-group">
-              <label>Navigate To (URL)</label>
-              <input 
-                type="text" 
-                .value=${this.editingProps.navigateUrl || ''} 
-                @input=${(e: Event) => this.updateProperty('navigateUrl', (e.target as HTMLInputElement).value)}
-                placeholder="/dashboard"
-              />
-            </div>
-          `: ''}
-        ` : ''}
-
-        ${actionType === 'navigate' ? html`
-          <div class="form-group">
-            <label>Destination URL</label>
-            <input 
-              type="text" 
-              .value=${this.editingProps.navigateUrl || ''} 
-              @input=${(e: Event) => this.updateProperty('navigateUrl', (e.target as HTMLInputElement).value)}
-              placeholder="/page-name"
-            />
-          </div>
-        ` : ''}
-
-        ${actionType === 'api' ? html`
-          <div class="form-group">
-            <label>API Endpoint</label>
-            <input 
-              type="text" 
-              .value=${this.editingProps.apiEndpoint || ''} 
-              @input=${(e: Event) => this.updateProperty('apiEndpoint', (e.target as HTMLInputElement).value)}
-              placeholder="/api/custom-action"
-            />
-          </div>
-          <div class="form-group">
-            <label>Method</label>
-            <select 
-              .value=${this.editingProps.apiMethod || 'POST'}
-              @change=${(e: Event) => this.updateProperty('apiMethod', (e.target as HTMLSelectElement).value)}
-            >
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-              <option value="PUT">PUT</option>
-              <option value="DELETE">DELETE</option>
-            </select>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }
 
   // --- New Methods for Field Binding ---
   private findAncestor(nodeId: string, type: string): ComponentNode | null {
