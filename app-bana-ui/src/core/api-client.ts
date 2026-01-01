@@ -358,6 +358,7 @@ export async function bulkExport(entity: string, ids: (string | number)[]) {
 export async function createRow(entity: string, data: Record<string, any>) {
   const base = getApiBaseUrl();
   const { tenantId, appId } = RuntimeContext.getInstance().getContextSafe();
+  // Use app-scoped endpoint to ensure data is properly segregated by tenant and app
   return apiClient.post(`${base}/api/${tenantId}/apps/${appId}/${entity}`, data);
 }
 

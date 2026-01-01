@@ -272,7 +272,7 @@ public class GenericEntityRoutes {
 
             String id = req.pathParam("id");
             try (Connection conn = JdbcManager.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement("SELECT * FROM field_permission WHERE id = ?")) {
+                    PreparedStatement stmt = conn.prepareStatement("SELECT * FROM field_permission WHERE id = ?")) {
                 stmt.setString(1, id);
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
@@ -321,9 +321,9 @@ public class GenericEntityRoutes {
             }
 
             try (Connection conn = JdbcManager.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(
-                         "INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit, created_at, updated_at) "
-                                 + "VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
+                    PreparedStatement stmt = conn.prepareStatement(
+                            "INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit, created_at, updated_at) "
+                                    + "VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
                 String id = java.util.UUID.randomUUID().toString();
                 stmt.setString(1, id);
                 stmt.setString(2, roleId);
@@ -413,7 +413,7 @@ public class GenericEntityRoutes {
 
             String id = req.pathParam("id");
             try (Connection conn = JdbcManager.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement("DELETE FROM field_permission WHERE id = ?")) {
+                    PreparedStatement stmt = conn.prepareStatement("DELETE FROM field_permission WHERE id = ?")) {
                 stmt.setString(1, id);
                 int deleted = stmt.executeUpdate();
                 if (deleted > 0) {
@@ -463,7 +463,8 @@ public class GenericEntityRoutes {
                         com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
                                 schema.getName(), "ON_CREATE", id, after);
                     } catch (Exception e) {
-                        LOG.warn("Workflow trigger failed ON_CREATE {} id={}: {}", schema.getName(), id, e.getMessage());
+                        LOG.warn("Workflow trigger failed ON_CREATE {} id={}: {}", schema.getName(), id,
+                                e.getMessage());
                     }
                 }
 
@@ -724,7 +725,8 @@ public class GenericEntityRoutes {
                         com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
                                 schema.getName(), "ON_UPDATE", idStr, after);
                     } catch (Exception e) {
-                        LOG.warn("Workflow trigger failed ON_UPDATE {} id={}: {}", schema.getName(), idStr, e.getMessage());
+                        LOG.warn("Workflow trigger failed ON_UPDATE {} id={}: {}", schema.getName(), idStr,
+                                e.getMessage());
                     }
                 }
                 res.json(200, Map.of("updated", updated));
@@ -878,7 +880,8 @@ public class GenericEntityRoutes {
             res.json(200, Map.of("count", rows.size(), "rows", rows));
         });
 
-        // ==================== APP-SCOPED ENTITY ROUTES (Story 1.5) ====================
+        // ==================== APP-SCOPED ENTITY ROUTES (Story 1.5)
+        // ====================
         // These routes fix the "Magic Seed Data" bug by ensuring entities are properly
         // scoped to apps using TenantContext.
         //
@@ -888,12 +891,13 @@ public class GenericEntityRoutes {
         // - Call EntityCrudService which auto-filters by tenant_id/app_id
         // - Return only entities scoped to that app
 
-        // POST /appbana-studio/{tenantId}/apps/{appId}/{entity} - Create entity scoped to tenant and app
+        // POST /appbana-studio/{tenantId}/apps/{appId}/{entity} - Create entity scoped
+        // to tenant and app
         router.post("/appbana-studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
-            
+
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -909,22 +913,23 @@ public class GenericEntityRoutes {
                 return;
             }
 
-            Map<String, Object> data = req.readJson(new TypeReference<>() {});
-            
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+
             try {
                 // Set TenantContext for this request from URL path parameters
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
-                
+
                 try {
                     // EntityCrudService will auto-inject tenant_id and app_id
                     Object idObj = crud.insertRecord(schema, data);
                     String id = String.valueOf(idObj);
                     Map<String, Object> after = crud.getById(schema, id);
-                    
+
                     // Audit logging
                     AuditLogService.log("INSERT", schema.getName(), id, "studio", null, after);
-                    
+
                     res.json(201, Map.of("id", idObj, "appId", appId));
                 } finally {
                     // Always clear context
@@ -936,12 +941,13 @@ public class GenericEntityRoutes {
             }
         });
 
-        // GET /appbana-studio/{tenantId}/apps/{appId}/{entity} - List entities scoped to tenant and app
+        // GET /appbana-studio/{tenantId}/apps/{appId}/{entity} - List entities scoped
+        // to tenant and app
         router.get("/appbana-studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
-            
+
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -961,7 +967,7 @@ public class GenericEntityRoutes {
                 // Set TenantContext for this request from URL path parameters
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
-                
+
                 try {
                     // EntityCrudService will auto-filter by tenant_id and app_id
                     List<Map<String, Object>> rows = crud.listAll(schema);
@@ -975,13 +981,14 @@ public class GenericEntityRoutes {
             }
         });
 
-        // GET /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Get entity by ID scoped to tenant and app
+        // GET /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Get entity by ID
+        // scoped to tenant and app
         router.get("/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
-            
+
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1000,7 +1007,7 @@ public class GenericEntityRoutes {
             try {
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
-                
+
                 try {
                     Map<String, Object> row = crud.getById(schema, idStr);
                     if (row == null) {
@@ -1017,13 +1024,14 @@ public class GenericEntityRoutes {
             }
         });
 
-        // PUT /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Update entity scoped to tenant and app
+        // PUT /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Update entity
+        // scoped to tenant and app
         router.put("/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
-            
+
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1039,21 +1047,22 @@ public class GenericEntityRoutes {
                 return;
             }
 
-            Map<String, Object> data = req.readJson(new TypeReference<>() {});
-            
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+
             try {
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
-                
+
                 try {
                     Map<String, Object> before = crud.getById(schema, idStr);
                     int updated = crud.updateById(schema, idStr, data);
                     Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
-                    
+
                     if (updated > 0) {
                         AuditLogService.log("UPDATE", schema.getName(), idStr, "studio", before, after);
                     }
-                    
+
                     res.json(200, Map.of("updated", updated, "appId", appId));
                 } finally {
                     TenantContext.clear();
@@ -1064,13 +1073,14 @@ public class GenericEntityRoutes {
             }
         });
 
-        // DELETE /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Delete entity scoped to tenant and app
+        // DELETE /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Delete entity
+        // scoped to tenant and app
         router.delete("/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
-            
+
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1089,21 +1099,74 @@ public class GenericEntityRoutes {
             try {
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
-                
+
                 try {
                     Map<String, Object> before = crud.getById(schema, idStr);
                     int deleted = crud.deleteById(schema, idStr);
-                    
+
                     if (deleted > 0) {
                         AuditLogService.log("DELETE", schema.getName(), idStr, "studio", before, null);
                     }
-                    
+
                     res.json(200, Map.of("deleted", deleted, "appId", appId));
                 } finally {
                     TenantContext.clear();
                 }
             } catch (SQLException e) {
                 LOG.error("App-scoped delete failed for app={} entity={} id={}", appId, entity, idStr, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // ==================== RUNTIME APP-SCOPED ENTITY ROUTES ====================
+        // Similar to studio routes above, but exposed at /api for runtime apps
+        // No authentication required - handled by SessionMiddleware exclusion
+
+        // POST /api/{tenantId}/apps/{appId}/{entity} - Runtime entity creation
+        router.post("/api/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("appId");
+            String entity = req.pathParam("entity");
+
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+
+            EntitySchema schema = SchemaManager.loadSchema(entity);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+
+            try {
+                // Set TenantContext for this request from URL path parameters
+                TenantContext ctx = new TenantContext(tenantId, appId);
+                TenantContext.set(ctx);
+
+                try {
+                    // EntityCrudService will auto-inject tenant_id and app_id
+                    Object idObj = crud.insertRecord(schema, data);
+                    String id = String.valueOf(idObj);
+                    Map<String, Object> after = crud.getById(schema, id);
+
+                    // Audit logging
+                    AuditLogService.log("INSERT", schema.getName(), id, "runtime", null, after);
+
+                    res.json(201, Map.of("id", idObj, "appId", appId));
+                } finally {
+                    // Always clear context
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("Runtime app-scoped insert failed for app={} entity={}", appId, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
             }
         });
