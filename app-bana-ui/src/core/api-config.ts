@@ -9,13 +9,9 @@
  * - In production/deployment, uses the current origin
  */
 export function getApiBaseUrl(): string {
-    // Check if we're running in Vite dev server (port 5173)
-    if (globalThis.location?.port === '5173') {
-        return 'http://localhost:8080';
-    }
-
-    // In production, use the current origin (same server)
-    return globalThis.location?.origin || '';
+    // In development and production, use relative paths to allow correct proxying
+    // (Vite proxy handles localhost:5173 -> localhost:8080)
+    return '';
 }
 
 /**
