@@ -110,6 +110,7 @@ export class AppRoot extends LitElement {
       // Build full runtime state
       const currentPageId = compactState.pageId || app.defaultPage || app.pages?.[0]?.id || '';
       const fullRuntimeState: AppRuntimeState = {
+        tenantId: tenantId,  // Add tenantId to runtime state
         app,
         pages: app.pages || [],
         currentPageId,

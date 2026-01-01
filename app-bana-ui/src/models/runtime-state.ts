@@ -11,6 +11,9 @@ import type { PageMeta } from './metadata';
  * This is what gets passed to the preview/runtime renderer
  */
 export interface AppRuntimeState {
+  // Tenant ID (optional, defaults to 'default' in runtime)
+  tenantId?: string;
+
   // App metadata
   app: AppMeta;
 
