@@ -357,8 +357,8 @@ export async function bulkExport(entity: string, ids: (string | number)[]) {
 /** Create a new row */
 export async function createRow(entity: string, data: Record<string, any>) {
   const base = getApiBaseUrl();
-  const { tenantId, appId } = RuntimeContext.getInstance().getContextSafe();
-  return apiClient.post(`${base}/appbana-studio/${tenantId}/apps/${appId}/${entity}`, data);
+  const { tenantId } = RuntimeContext.getInstance().getContextSafe();
+  return apiClient.post(`${base}/api/${tenantId}/${entity}`, data);
 }
 
 /** Update single row by id */

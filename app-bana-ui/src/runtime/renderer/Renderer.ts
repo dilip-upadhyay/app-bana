@@ -5,6 +5,8 @@ import { html as staticHtml, unsafeStatic } from 'lit/static-html.js';
 import { ifDefined } from 'lit/directives/if-defined.js';
 import './StudioTableLive';
 import '../../components/GridElement';
+import { renderTablePreview } from './TablePreview';
+import { createRow, apiClient } from '../../core/api-client';
 
 // Helper for simple handle-bars style interpolation
 // e.g. interpolate("Hello {{user.name}}", { user: { name: "World" } }) -> "Hello World"
@@ -74,6 +76,7 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           type="${props?.type || 'button'}"
           variant="${props?.variant || 'primary'}"
           ?disabled=${props?.disabled}
+          @click=${(e: Event) => handleAction(node, e)}
         ></appbana-button>
       `;
 
@@ -230,7 +233,92 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
 // No, simpler to just fix imports.
 
 // ES module import workaround for browser
-import { renderTablePreview } from './TablePreview';
 function requireTablePreview(node: ComponentNode): HTMLElement {
   return renderTablePreview(node);
+}
+
+// Action Handler implementation for Runtime
+async function handleAction(node: ComponentNode, event: Event) {
+  const actionType = node.props?.actionType;
+  console.log('[Renderer] Handling action:', actionType, node.props);
+
+  if (!actionType) return;
+
+  const button = event.target as HTMLElement;
+
+  if (actionType === 'save-entity') {
+    const entityName = node.props?.entity;
+    if (!entityName) {
+      alert('Error: No entity configured for this button.');
+      return;
+    }
+
+    // Gather data from inputs in the same form/container
+    const container = button.closest('studio-form, form, .form-container, app-grid') || document.body;
+    const inputs = container.querySelectorAll('appbana-input, appbana-select, appbana-textarea, appbana-checkbox, appbana-radio-group, input, select, textarea');
+
+    const data: Record<string, any> = {};
+    inputs.forEach((input: any) => {
+      const name = input.getAttribute('name') || input.name;
+      if (name) {
+        if (input.tagName.toLowerCase().includes('checkbox')) {
+          data[name] = input.checked;
+        } else {
+          data[name] = input.value;
+        }
+      }
+    });
+
+    console.log('[Renderer] Saving entity:', entityName, data);
+
+    try {
+      // Show loading state
+      const originalLabel = button.getAttribute('label');
+      button.setAttribute('label', 'Saving...');
+
+      await createRow(entityName, data);
+
+      // Handle success
+      button.setAttribute('label', originalLabel || 'Saved');
+
+      // Simple toast
+      const toast = document.createElement('div');
+      toast.textContent = '✅ Saved successfully!';
+      toast.style.cssText = `
+        position: fixed; bottom: 20px; right: 20px; 
+        background: #10b981; color: white; padding: 12px 24px; 
+        border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+        z-index: 9999; animation: slideIn 0.3s ease;
+      `;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+
+      // If success action is redirect
+      if (node.props?.onSuccess === 'navigate' && node.props?.navigateUrl) {
+        window.location.href = node.props.navigateUrl;
+      }
+
+    } catch (err) {
+      console.error('[Renderer] Save failed:', err);
+      alert('Failed to save data. Please try again.');
+      button.setAttribute('label', 'Error');
+    }
+
+  } else if (actionType === 'navigate') {
+    if (node.props?.navigateUrl) {
+      window.location.href = node.props.navigateUrl;
+    }
+  } else if (actionType === 'api') {
+    // Generic API call implementation
+    try {
+      const endpoint = node.props?.apiEndpoint;
+      const method = node.props?.apiMethod || 'POST';
+      if (!endpoint) return;
+
+      await apiClient.request(endpoint, { method, body: {} }); // Simplify for now
+      alert('API call successful');
+    } catch (e) {
+      alert('API call failed');
+    }
+  }
 }
