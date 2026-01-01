@@ -22,29 +22,39 @@ import java.util.function.BiConsumer;
  */
 public class SessionMiddleware {
     private static final Logger LOG = LoggerFactory.getLogger(SessionMiddleware.class);
-    
+
     // Paths that don't require authentication
     private static final String[] EXCLUDED_PATHS = {
-        "/api/auth/login",
-        "/api/auth/register",
-        "/api/auth/refresh",
-        "/health",
-        "/ready",
-        "/ui/",
-        "/openapi.json",
-        "/api/csrf/token",   // CSRF token generation is public
-        "/api/templates",    // Templates are public read-only resources
-        "/api/apps/",        // Public runtime APIs for end users
-        "/api/ai/",          // AI endpoints (development mode - for Magic Data Seed, AI generation)
-        "/appbana-studio/",  // Studio Builder APIs (development mode - TODO: enable auth in production)
-        "/*.html",           // All HTML files are public (studio.html, index.html, etc.)
-        "/*.js",             // JavaScript files from Vite build
-        "/*.css",            // CSS files from Vite build
-        "/assets/"           // Vite build assets
+            "/api/auth/login",
+            "/api/auth/register",
+            "/api/auth/refresh",
+            "/health",
+            "/ready",
+            "/ui/",
+            "/openapi.json",
+            "/api/csrf/token", // CSRF token generation is public
+            "/api/templates", // Templates are public read-only resources
+            "/api/apps/", // Public runtime APIs for end users
+            "/api/ai/", // AI endpoints (development mode - for Magic Data Seed, AI generation)
+            "/appbana-studio/", // Studio Builder APIs (development mode - TODO: enable auth in production)
+            "/*.html", // All HTML files are public (studio.html, index.html, etc.)
+            "/*.js", // JavaScript files from Vite build
+            "/*.css", // CSS files from Vite build
+            "/assets/" // Vite build assets
     };
-    
-    // Note: /appbana-studio/* is currently public for development. Enable authentication in production.
-    
+
+    // Special pattern: Entity APIs follow /api/{tenantId}/{entityName} format
+    // These should be public for runtime apps (authentication is app-specific, not
+    // platform-wide)
+    private static final String ENTITY_API_PATTERN = "^/api/[^/]+/[^/]+/?$";
+
+    // Special pattern: App runtime APIs for loading apps/pages in published runtime
+    // Example: /api/{tenantId}/apps/{appId}/env/{env}/full
+    private static final String APP_RUNTIME_API_PATTERN = "^/api/[^/]+/apps/.*";
+
+    // Note: /appbana-studio/* is currently public for development. Enable
+    // authentication in production.
+
     /**
      * Create session validation middleware.
      * 
@@ -67,41 +77,41 @@ public class SessionMiddleware {
     public static BiConsumer<HttpRequest, HttpResponse> create() {
         return (req, res) -> {
             String path = req.path();
-            
+
             // Skip authentication for excluded paths
             if (isExcludedPath(path)) {
                 LOG.debug("Session middleware: skipping excluded path {}", path);
                 return; // Continue to next middleware/handler
             }
-            
+
             // Extract session token
             String sessionToken = extractSessionToken(req);
-            
+
             if (sessionToken == null || sessionToken.trim().isEmpty()) {
                 LOG.warn("Session middleware: missing session token for {}", path);
                 sendUnauthorized(res, "Missing session token");
                 return; // Don't call next handler
             }
-            
+
             // Validate and renew session
             SessionData session = SessionService.renewSession(sessionToken);
-            
+
             if (session == null) {
                 LOG.warn("Session middleware: invalid/expired session {} for {}", sessionToken, path);
                 sendUnauthorized(res, "Invalid or expired session");
                 return; // Don't call next handler
             }
-            
+
             // Session valid - attach user context to request
             req.setAttribute("userId", session.userId());
             req.setAttribute("sessionId", session.sessionId());
-            
+
             LOG.debug("Session middleware: validated user {} for {}", session.userId(), path);
-            
+
             // Continue to next middleware/handler
         };
     }
-    
+
     /**
      * Check if path is excluded from session validation.
      */
@@ -109,7 +119,20 @@ public class SessionMiddleware {
         if (path == null) {
             return false;
         }
-        
+
+        // Check if it matches the entity API pattern (/api/{tenantId}/{entityName})
+        if (path.matches(ENTITY_API_PATTERN)) {
+            LOG.info("[SessionMiddleware] Matched entity API pattern for: {}", path);
+            return true;
+        }
+
+        // Check if it matches the app runtime API pattern (/api/{tenantId}/apps/...)
+        // Simplified: just check if path contains "/apps/" after "/api/"
+        if (path.startsWith("/api/") && path.contains("/apps/")) {
+            LOG.info("[SessionMiddleware] Matched app runtime API pattern for: {}", path);
+            return true;
+        }
+
         for (String excluded : EXCLUDED_PATHS) {
             // Handle wildcard patterns like "/*.html"
             if (excluded.contains("*")) {
@@ -121,10 +144,10 @@ public class SessionMiddleware {
                 return true;
             }
         }
-        
+
         return false;
     }
-    
+
     /**
      * Extract session token from request.
      * 
@@ -139,7 +162,7 @@ public class SessionMiddleware {
         if (token != null && !token.trim().isEmpty()) {
             return token.trim();
         }
-        
+
         // Try Cookie header
         String cookie = req.header("Cookie");
         if (cookie != null) {
@@ -151,29 +174,28 @@ public class SessionMiddleware {
                 }
             }
         }
-        
+
         // Try Authorization: Bearer header (least preferred for sessions)
         String auth = req.header("Authorization");
         if (auth != null && auth.startsWith("Bearer ")) {
             return auth.substring(7).trim();
         }
-        
+
         return null;
     }
-    
+
     /**
      * Send 401 Unauthorized response with JSON error.
      */
     private static void sendUnauthorized(HttpResponse res, String message) {
         res.setHeader("WWW-Authenticate", "Session realm=\"AppBana\"");
         res.setHeader("Content-Type", "application/json");
-        
+
         Map<String, Object> error = Map.of(
-            "error", "Unauthorized",
-            "message", message,
-            "status", 401
-        );
-        
+                "error", "Unauthorized",
+                "message", message,
+                "status", 401);
+
         res.json(401, error);
     }
 }
