@@ -8,6 +8,11 @@ import '../../components/GridElement';
 import { renderTablePreview } from './TablePreview';
 import { createRow, apiClient } from '../../core/api-client';
 
+// FIX MINOR #11: Constants for timeouts and delays
+const SAVE_TIMEOUT_MS = 30000; // 30 seconds
+const TOAST_DURATION_MS = 3000; // 3 seconds
+const NAVIGATION_DELAY_MS = 500; // 0.5 seconds
+
 // Helper for simple handle-bars style interpolation
 // e.g. interpolate("Hello {{user.name}}", { user: { name: "World" } }) -> "Hello World"
 function interpolate(text: string, context: any): string {
@@ -30,7 +35,7 @@ function interpolate(text: string, context: any): string {
 export function renderPageTemplate(page: PageMeta, context: any = {}): TemplateResult {
   const nodeMap = new Map(page.nodes.map(n => [n.id, n]));
   const root = nodeMap.get(page.rootId);
-  if (!root) return html`<div class="error">Root node not found: ${page.rootId}</div>`;
+  if (!root) return html`< div class="error" > Root node not found: ${page.rootId} </div>`;
   return renderNodeTemplate(root, nodeMap, context);
 }
 
@@ -272,6 +277,7 @@ async function handleAction(node: ComponentNode, event: Event) {
 
     // Group data by entity
     const entityData = new Map<string, Record<string, any>>();
+    const validationErrors: string[] = [];
 
     allInputs.forEach((input: any) => {
       const entity = input.getAttribute('entity');
@@ -282,10 +288,36 @@ async function handleAction(node: ComponentNode, event: Event) {
         return;
       }
 
-      // ✅ KEY FILTER: Only collect data for entities specified in button
-      if (!buttonEntities.includes(entity)) {
+      // FIX IMPORTANT #8: Case-insensitive entity name matching
+      if (!buttonEntities.map(e => e.toLowerCase()).includes(entity.toLowerCase())) {
         console.log(`[Renderer] Skipping ${entity}.${field} (not in button entities: ${buttonEntities.join(', ')})`);
         return;
+      }
+
+      // Collect value based on input type
+      let value;
+      const tagName = input.tagName.toLowerCase();
+      const isRequired = input.hasAttribute('required') || input.required;
+      const label = input.getAttribute('label') || field;
+
+      if (tagName.includes('checkbox')) {
+        value = input.checked;
+      } else {
+        value = input.value;
+
+        // FIX CRITICAL #2: Skip empty/whitespace-only values for optional fields
+        if (typeof value === 'string' && value.trim() === '') {
+          if (isRequired) {
+            // FIX CRITICAL #3: Validate required fields
+            validationErrors.push(`${entity}.${label} is required`);
+          }
+          return; // Don't include empty optional fields
+        }
+      }
+
+      // FIX CRITICAL #3: Validate required checkboxes
+      if (isRequired && tagName.includes('checkbox') && !value) {
+        validationErrors.push(`${entity}.${label} must be checked`);
       }
 
       // Initialize entity data if not exists
@@ -293,18 +325,16 @@ async function handleAction(node: ComponentNode, event: Event) {
         entityData.set(entity, {});
       }
 
-      // Collect value based on input type
-      let value;
-      const tagName = input.tagName.toLowerCase();
-      if (tagName.includes('checkbox')) {
-        value = input.checked;
-      } else {
-        value = input.value;
-      }
-
       entityData.get(entity)![field] = value;
       console.log(`[Renderer] Collected ${entity}.${field} = ${value}`);
     });
+
+    // FIX CRITICAL #3: Check for validation errors
+    if (validationErrors.length > 0) {
+      alert(`Please fill in required fields:\n\n• ${validationErrors.join('\n• ')}`);
+      console.error('[Renderer] Validation errors:', validationErrors);
+      return;
+    }
 
     // Validate we have data
     if (entityData.size === 0) {
@@ -319,6 +349,18 @@ async function handleAction(node: ComponentNode, event: Event) {
     // Show loading state
     const originalLabel = button.getAttribute('label');
 
+    // FIX IMPORTANT #6: Timeout protection - failsafe reset after 30s
+    const resetButton = () => {
+      button.setAttribute('label', originalLabel || 'Save');
+      button.removeAttribute('disabled');
+    };
+
+    const timeoutId = setTimeout(() => {
+      resetButton();
+      console.warn('[Renderer] Save operation timed out');
+      alert('⚠️ Save operation timed out. Please check your connection and try again.');
+    }, SAVE_TIMEOUT_MS);
+
     try {
       button.setAttribute('label', 'Saving...');
       button.setAttribute('disabled', 'true');
@@ -332,6 +374,9 @@ async function handleAction(node: ComponentNode, event: Event) {
         console.log(`[Renderer] ✓ Saved ${entity}:`, result);
       }
 
+      // Clear timeout on success
+      clearTimeout(timeoutId);
+
       // Success
       button.setAttribute('label', originalLabel || 'Save');
       button.removeAttribute('disabled');
@@ -340,27 +385,28 @@ async function handleAction(node: ComponentNode, event: Event) {
       const toast = document.createElement('div');
       toast.textContent = `✅ Saved ${results.length} ${results.length === 1 ? 'entity' : 'entities'} successfully!`;
       toast.style.cssText = `
-        position: fixed; bottom: 20px; right: 20px; 
-        background: #10b981; color: white; padding: 12px 24px; 
-        border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+        position: fixed; bottom: 20px; right: 20px;
+        background: #10b981; color: white; padding: 12px 24px;
+        border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         z-index: 9999; animation: slideIn 0.3s ease;
       `;
       document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
+      setTimeout(() => toast.remove(), TOAST_DURATION_MS);
 
       // Handle onSuccess action
       const onSuccess = node.props?.onSuccess;
       if (onSuccess === 'navigate' && node.props?.navigateUrl) {
         setTimeout(() => {
           window.location.href = node.props!.navigateUrl;
-        }, 500);
+        }, NAVIGATION_DELAY_MS);
       } else if (onSuccess === 'refresh') {
         setTimeout(() => {
           window.location.reload();
-        }, 500);
+        }, NAVIGATION_DELAY_MS);
       }
 
     } catch (error: any) {
+      clearTimeout(timeoutId);
       button.setAttribute('label', originalLabel || 'Save');
       button.removeAttribute('disabled');
       console.error('[Renderer] Save failed:', error);

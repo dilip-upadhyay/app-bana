@@ -166,8 +166,12 @@ export class PropertiesPanel extends LitElement {
     let updated: string[];
 
     if (checked) {
-      // Add entity if not already in list
-      updated = [...current, entityName];
+      // Add entity if not already in list (prevent duplicates)
+      if (!current.includes(entityName)) {
+        updated = [...current, entityName];
+      } else {
+        updated = current; // Already selected, no change
+      }
     } else {
       // Remove entity from list
       updated = current.filter((e: string) => e !== entityName);
