@@ -4,6 +4,7 @@ import './builder/components/BuilderCanvas';
 import './builder/components/BuilderInspector';
 import { registerBuiltInAdapters } from './core/adapter-bootstrap';
 import { setupApiClient } from './core/api-setup';
+import './builder/styles/binding-indicators.css'; // UX Enhancement #1
 
 // Setup API client with authentication interceptors
 setupApiClient({
@@ -18,14 +19,14 @@ registerBuiltInAdapters();
 const root = document.getElementById('studio-root');
 if (root) {
   root.innerHTML = '';
-  
+
   // Create auth guard wrapper
   const authGuard = document.createElement('auth-guard');
-  
+
   // Create shell inside auth guard
   const shell = document.createElement('appbana-builder-shell');
   authGuard.appendChild(shell);
-  
+
   // Listen for auth changes
   authGuard.addEventListener('auth-change', (e: Event) => {
     const customEvent = e as CustomEvent;
@@ -33,6 +34,6 @@ if (root) {
       console.log('User authenticated, Studio ready');
     }
   });
-  
+
   root.appendChild(authGuard);
 }

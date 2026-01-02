@@ -245,6 +245,77 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
 // Helper wrapper to avoid needing unsafeStatic in the main file if imports are tricky?
 // No, simpler to just fix imports.
 
+// UX Enhancement #2: Progress toast helpers for multi-entity saves
+function createProgressToast(totalEntities: number): HTMLElement {
+  const toast = document.createElement('div');
+  toast.className = 'save-progress-toast';
+  toast.innerHTML = `
+    <div class="toast-content">
+      <div class="toast-icon">📤</div>
+      <div class="toast-text">
+        <div class="toast-title">Saving entities...</div>
+        <div class="toast-progress">
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: 0%"></div>
+          </div>
+          <div class="progress-text">0/${totalEntities} saved</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  toast.style.cssText = `
+    position: fixed; bottom: 20px; right: 20px;
+    background: white; color: #374151;
+    padding: 16px 20px; border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-left: 4px solid #3b82f6;
+    z-index: 9999;
+    min-width: 280px;
+    animation: slideIn 0.3s ease;
+  `;
+
+  return toast;
+}
+
+function updateProgressToast(toast: HTMLElement, saved: number, total: number): void {
+  const progressFill = toast.querySelector('.progress-fill') as HTMLElement;
+  const progressText = toast.querySelector('.progress-text') as HTMLElement;
+
+  if (progressFill && progressText) {
+    const percentage = (saved / total) * 100;
+    progressFill.style.width = `${percentage}%`;
+    progressFill.style.transition = 'width 0.3s ease';
+    progressText.textContent = `${saved}/${total} saved`;
+  }
+}
+
+function showSuccessToast(toast: HTMLElement, count: number): void {
+  const icon = toast.querySelector('.toast-icon') as HTMLElement;
+  const title = toast.querySelector('.toast-title') as HTMLElement;
+  const progress = toast.querySelector('.toast-progress') as HTMLElement;
+
+  if (icon) icon.textContent = '✅';
+  if (title) title.textContent = `All ${count} ${count === 1 ? 'entity' : 'entities'} saved!`;
+  if (progress) progress.style.display = 'none';
+
+  toast.style.borderLeftColor = '#10b981';
+}
+
+function showErrorToast(toast: HTMLElement, saved: number, total: number, message: string): void {
+  const icon = toast.querySelector('.toast-icon') as HTMLElement;
+  const title = toast.querySelector('.toast-title') as HTMLElement;
+  const progressDiv = toast.querySelector('.toast-progress') as HTMLElement;
+
+  if (icon) icon.textContent = '❌';
+  if (title) title.textContent = `Error saving entity ${saved + 1}/${total}`;
+  if (progressDiv) {
+    progressDiv.innerHTML = `<div style="font-size: 12px; color: #ef4444; margin-top: 4px;">${message}</div>`;
+  }
+
+  toast.style.borderLeftColor = '#ef4444';
+}
+
 // ES module import workaround for browser
 function requireTablePreview(node: ComponentNode): HTMLElement {
   return renderTablePreview(node);
@@ -365,12 +436,23 @@ async function handleAction(node: ComponentNode, event: Event) {
       button.setAttribute('label', 'Saving...');
       button.setAttribute('disabled', 'true');
 
-      // Save each entity sequentially
+      // UX Enhancement #2: Create progress toast immediately
+      const progressToast = createProgressToast(entityData.size);
+      document.body.appendChild(progressToast);
+
+      // Save each entity sequentially with progress updates
       const results = [];
+      let savedCount = 0;
+
       for (const [entity, data] of entityData) {
         console.log(`[Renderer] → Saving ${entity}:`, data);
         const result = await createRow(entity, data);
         results.push({ entity, result });
+        savedCount++;
+
+        // Update progress after each save
+        updateProgressToast(progressToast, savedCount, entityData.size);
+
         console.log(`[Renderer] ✓ Saved ${entity}:`, result);
       }
 
@@ -381,17 +463,11 @@ async function handleAction(node: ComponentNode, event: Event) {
       button.setAttribute('label', originalLabel || 'Save');
       button.removeAttribute('disabled');
 
-      // Show success toast
-      const toast = document.createElement('div');
-      toast.textContent = `✅ Saved ${results.length} ${results.length === 1 ? 'entity' : 'entities'} successfully!`;
-      toast.style.cssText = `
-        position: fixed; bottom: 20px; right: 20px;
-        background: #10b981; color: white; padding: 12px 24px;
-        border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        z-index: 9999; animation: slideIn 0.3s ease;
-      `;
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), TOAST_DURATION_MS);
+      // Transform toast to success state
+      setTimeout(() => {
+        showSuccessToast(progressToast, results.length);
+        setTimeout(() => progressToast.remove(), TOAST_DURATION_MS);
+      }, 500); // Brief pause to show 100%
 
       // Handle onSuccess action
       const onSuccess = node.props?.onSuccess;
@@ -409,8 +485,17 @@ async function handleAction(node: ComponentNode, event: Event) {
       clearTimeout(timeoutId);
       button.setAttribute('label', originalLabel || 'Save');
       button.removeAttribute('disabled');
-      console.error('[Renderer] Save failed:', error);
-      alert(`❌ Error: ${error.message || 'Failed to save data'}`);
+
+      // Update progress toast to show error
+      const progressToast = document.querySelector('.save-progress-toast') as HTMLElement;
+      if (progressToast) {
+        const savedCount = (error as any).savedCount || 0;
+        showErrorToast(progressToast, savedCount, entityData.size, error.message || 'Failed to save data');
+        setTimeout(() => progressToast.remove(), 5000);
+      } else {
+        console.error('[Renderer] Save failed:', error);
+        alert(`❌ Error: ${error.message || 'Failed to save data'}`);
+      }
     }
 
 

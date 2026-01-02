@@ -1,0 +1,53 @@
+/* UX Enhancement #2: Progress Toast Styles */
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 8px 0 4px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 11px;
+  color: #6b7280;
+  text-align: right;
+}
+
+.toast-content {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.toast-icon {
+  font-size: 20px;
+}
+
+.toast-text {
+  flex: 1;
+}
+
+.toast-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

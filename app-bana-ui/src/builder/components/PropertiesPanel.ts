@@ -149,6 +149,16 @@ export class PropertiesPanel extends LitElement {
     this.updateDimensions();
   }
 
+  // UX Enhancement #1: Helper to get entity initial for badge
+  private getEntityInitial(entityName: string): string {
+    if (!entityName) return '';
+    // For multi-word entities like "LineItem", take first letters: "LI"
+    const words = entityName.match(/[A-Z][a-z]*/g) || [entityName];
+    if (words.length > 1) {
+      return words.map(w => w.charAt(0)).join('').toUpperCase();
+    }
+    return entityName.charAt(0).toUpperCase();
+  }
 
   private updateProperty(key: string, value: any) {
     if (!this.selectedNode || !currentStore) return;
