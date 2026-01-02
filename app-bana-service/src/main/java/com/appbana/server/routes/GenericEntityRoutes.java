@@ -1137,7 +1137,7 @@ public class GenericEntityRoutes {
                 return;
             }
 
-            EntitySchema schema = SchemaManager.loadSchema(entity);
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity: " + entity));
                 return;
