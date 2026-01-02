@@ -161,6 +161,21 @@ export class PropertiesPanel extends LitElement {
     currentStore.updateProps(this.selectedNode.id, { [key]: value });
   }
 
+  private toggleEntity(entityName: string, checked: boolean) {
+    const current = this.editingProps.entities || [];
+    let updated: string[];
+
+    if (checked) {
+      // Add entity if not already in list
+      updated = [...current, entityName];
+    } else {
+      // Remove entity from list
+      updated = current.filter((e: string) => e !== entityName);
+    }
+
+    this.updateProperty('entities', updated);
+  }
+
   private renderActionProperties() {
     const actionType = this.editingProps.actionType || 'none';
     const currentApp = appStore.getCurrentApp();
@@ -185,19 +200,39 @@ export class PropertiesPanel extends LitElement {
 
         ${actionType === 'save-entity' ? html`
           <div class="form-group">
-            <label>Entity to Save</label>
-            <select 
-              .value=${this.editingProps.entity || ''}
-              @change=${(e: Event) => this.updateProperty('entity', (e.target as HTMLSelectElement).value)}
-            >
-              <option value="">-- Select Entity --</option>
-              ${entities.map((e: any) => html`
-                <option value="${e.name}" ?selected=${this.editingProps.entity === e.name}>${e.displayName || e.name}</option>
-              `)}
-            </select>
-            <p style="font-size: 11px; color: #6b7280; margin-top: 4px;">
-              Auto-collects values from Inputs with matching "Name" in the same form/container.
-            </p>
+            <label>Entities to Save <span style="color: #dc2626;">*</span></label>
+            <div style="border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; max-height: 200px; overflow-y: auto; background: white;">
+              ${entities.length === 0 ? html`
+                <p style="color: #6b7280; font-size: 12px; margin: 0;">No entities defined in this app</p>
+              ` : entities.map((entity: any) => {
+      const selectedEntities = this.editingProps.entities || [];
+      const isSelected = selectedEntities.includes(entity.name);
+      return html`
+                  <label style="display: flex; align-items: center; padding: 6px; cursor: pointer; border-radius: 4px;" 
+                         @mouseover=${(e: MouseEvent) => (e.currentTarget as HTMLElement).style.background = '#f3f4f6'}
+                         @mouseout=${(e: MouseEvent) => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                    <input 
+                      type="checkbox" 
+                      .checked=${isSelected}
+                      @change=${(e: Event) => this.toggleEntity(entity.name, (e.target as HTMLInputElement).checked)}
+                      style="margin-right: 8px;"
+                    />
+                    <span style="flex: 1;">${entity.displayName || entity.name}</span>
+                    <span style="font-size: 11px; color: #6b7280;">${entity.fields?.length || 0} fields</span>
+                  </label>
+                `;
+    })}
+            </div>
+            
+            ${(this.editingProps.entities || []).length > 0 ? html`
+              <p style="font-size: 11px; color: #059669; margin-top: 8px;">
+                ✓ Will save: <strong>${(this.editingProps.entities || []).join(', ')}</strong>
+              </p>
+            ` : html`
+              <p style="font-size: 11px; color: #dc2626; margin-top: 8px;">
+                ⚠ Select at least one entity
+              </p>
+            `}
           </div>
           
           <div class="form-group">
@@ -368,13 +403,11 @@ export class PropertiesPanel extends LitElement {
       <div class="section">
         <h4>🔧 Component Properties</h4>
         
-        ${this.selectedNode?.type === 'input' ? this.renderFieldBinding() : ''}
-
-        ${this.selectedNode?.type === 'input' ? this.renderFieldBinding() : ''}
+        ${['input', 'select', 'textarea', 'checkbox', 'radio'].includes(this.selectedNode?.type || '') ? this.renderFieldBinding() : ''}
         ${this.selectedNode?.type === 'button' ? this.renderActionProperties() : ''}
 
         ${commonProps
-        .filter(p => !['actionType', 'entity', 'navigateUrl', 'apiEndpoint', 'apiMethod', 'onSuccess'].includes(p))
+        .filter(p => !['actionType', 'entity', 'field', 'entities', 'navigateUrl', 'apiEndpoint', 'apiMethod', 'onSuccess'].includes(p))
         .map(propKey => {
           const currentValue = this.editingProps[propKey] ?? '';
           const propType = this.getPropertyType(propKey);
@@ -628,46 +661,83 @@ export class PropertiesPanel extends LitElement {
 
   private renderFieldBinding() {
     if (!this.selectedNode) return '';
-    const form = this.findAncestor(this.selectedNode.id, 'form');
-    if (!form || !form.props?.entity) return '';
 
-    const entityName = form.props.entity;
+    const entity = this.editingProps.entity || '';
+    const field = this.editingProps.field || '';
     const currentApp = appStore.getCurrentApp();
-    const entity = currentApp?.entities?.find((e: any) => e.name === entityName);
+    const entities = currentApp?.entities || [];
 
-    if (!entity || !entity.fields) return '';
+    // Get fields from selected entity
+    const selectedEntity = entities.find((e: any) => e.name === entity);
+    const fields = selectedEntity?.fields || [];
 
     return html`
-       <div class="form-group" style="background: #eff6ff; padding: 10px; border-radius: 6px; border: 1px dashed #bfdbfe; margin-bottom: 16px;">
-         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <label style="color: #1e40af; font-weight: 600; font-size: 0.85rem; margin:0;">🔗 Bind to ${entityName}</label>
-            <span style="font-size:10px; color: #60a5fa; background: #fff; padding:2px 6px; border-radius:10px; border:1px solid #bfdbfe;">Auto-Fill</span>
-         </div>
-         <select 
-           style="width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.9rem;"
-           @change=${(e: any) => this.handleFieldBindingChange(e, entity.fields)}
-         >
-            <option value="">-- Select Field --</option>
-            ${entity.fields.map((f: any) => html`<option value="${f.name}" ?selected=${f.name === this.editingProps.name}>${f.name} (${f.type})</option>`)}
-         </select>
-       </div>
+      <div class="section" style="background: #f0f9ff; padding: 12px; border-radius: 8px; border: 1px solid #bae6fd; margin-bottom: 16px;">
+        <h4 style="margin: 0 0 12px 0; color: #0c4a6e; font-size: 0.9rem;">📊 Entity Binding</h4>
+        
+        <div class="form-group">
+          <label>Entity <span style="color: #dc2626;">*</span></label>
+          <select 
+            .value=${entity}
+            @change=${(e: Event) => this.updateProperty('entity', (e.target as HTMLSelectElement).value)}
+            style="width: 100%;"
+          >
+            <option value="">-- Select Entity --</option>
+            ${entities.map((e: any) => html`
+              <option value="${e.name}" ?selected=${this.editingProps.entity === e.name}>
+                ${e.displayName || e.name}
+              </option>
+            `)}
+          </select>
+        </div>
+        
+        ${entity ? html`
+          <div class="form-group">
+            <label>Field <span style="color: #dc2626;">*</span></label>
+            <select 
+              .value=${field}
+              @change=${(e: Event) => this.handleFieldChange((e.target as HTMLSelectElement).value, fields)}
+              style="width: 100%;"
+            >
+              <option value="">-- Select Field --</option>
+              ${fields.map((f: any) => html`
+                <option value="${f.name}" ?selected=${this.editingProps.field === f.name}>
+                  ${f.display?.label || f.name} (${f.type})
+                </option>
+              `)}
+            </select>
+          </div>
+          
+          <p style="font-size: 11px; color: #059669; margin: 8px 0 0 0;">
+            ✓ Binds to: <strong>${entity}.${field || '?'}</strong>
+          </p>
+        ` : html`
+          <p style="font-size: 11px; color: #dc2626; margin: 8px 0 0 0;">
+            ⚠ Must select entity and field
+          </p>
+        `}
+      </div>
     `;
   }
 
-  private handleFieldBindingChange(e: any, fields: any[]) {
-    const fieldName = e.target.value;
+  private handleFieldChange(fieldName: string, fields: any[]) {
     if (!fieldName) return;
-    this.updateProperty('name', fieldName);
+    this.updateProperty('field', fieldName);
 
-    const field = fields.find(f => f.name === fieldName);
+    const field = fields.find((f: any) => f.name === fieldName);
     if (field) {
-      // Auto-populate label if it looks default or empty
-      const currentLabel = this.editingProps.label;
-      if (!currentLabel || currentLabel === 'Label' || currentLabel === 'Input') {
-        this.updateProperty('label', field.displayName || this.formatPropertyLabel(field.name));
+      // Auto-populate name if empty or default
+      if (!this.editingProps.name || this.editingProps.name === 'name') {
+        this.updateProperty('name', fieldName);
       }
 
-      // Update Input type based on field type
+      // Auto-populate label if empty or default
+      const currentLabel = this.editingProps.label;
+      if (!currentLabel || currentLabel === 'Label' || currentLabel === 'Input') {
+        this.updateProperty('label', field.display?.label || this.formatPropertyLabel(field.name));
+      }
+
+      // Auto-set input type based on field type
       if (field.type === 'number' || field.type === 'integer' || field.type === 'decimal') {
         this.updateProperty('type', 'number');
       } else if (field.name.toLowerCase().includes('email')) {

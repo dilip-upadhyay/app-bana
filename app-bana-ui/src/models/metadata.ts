@@ -2,9 +2,15 @@
 
 export interface ComponentNode {
   id: string;
-  type: string; // 'container' | 'text' | 'button' | future
+  type: string; // 'container' | 'text' | 'button' | 'input' | 'select' | etc.
   label?: string; // friendly name in Studio
   props?: Record<string, any>;
+  // For INPUT/SELECT/TEXTAREA components:
+  //   props.entity?: string    // Entity name to bind to (e.g., "User")
+  //   props.field?: string     // Field name in that entity (e.g., "email")
+  // For BUTTON components with save action:
+  //   props.entities?: string[] // Array of entity names to save (e.g., ["User", "Address"])
+  //   props.actionType?: string // 'save' | 'navigate' | 'api'
   children?: string[]; // child node ids
   style?: { classes?: string[] };
 }

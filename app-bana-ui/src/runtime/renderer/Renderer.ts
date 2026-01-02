@@ -90,6 +90,8 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           placeholder="${props?.placeholder || ''}"
           value="${props?.value || ''}"
           name="${props?.name || ''}"
+          entity="${props?.entity || ''}"
+          field="${props?.field || ''}"
           ?required=${props?.required}
         ></appbana-input>
       `;
@@ -102,6 +104,8 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           label="${props?.label || ''}"
           name="${props?.name || ''}"
           value="${props?.value || ''}"
+          entity="${props?.entity || ''}"
+          field="${props?.field || ''}"
           options="${typeof props?.options === 'string' ? props.options : JSON.stringify(props?.options || [])}"
           placeholder="${props?.placeholder || ''}"
           ?required=${props?.required}
@@ -117,6 +121,8 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           placeholder="${props?.placeholder || ''}"
           value="${props?.value || ''}"
           name="${props?.name || ''}"
+          entity="${props?.entity || ''}"
+          field="${props?.field || ''}"
           rows="${props?.rows || 4}"
           ?required=${props?.required}
         ></appbana-textarea>
@@ -130,6 +136,8 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           label="${props?.label || ''}"
           name="${props?.name || ''}"
           value="${props?.value || 'on'}"
+          entity="${props?.entity || ''}"
+          field="${props?.field || ''}"
           ?checked=${props?.checked}
           ?disabled=${props?.disabled}
         ></appbana-checkbox>
@@ -247,43 +255,90 @@ async function handleAction(node: ComponentNode, event: Event) {
   const button = event.target as HTMLElement;
 
   if (actionType === 'save-entity') {
-    const entityName = node.props?.entity;
-    if (!entityName) {
-      alert('Error: No entity configured for this button.');
+    const buttonEntities: string[] = node.props?.entities || [];
+
+    // Validate button configuration
+    if (buttonEntities.length === 0) {
+      alert('Error: This button has no entities configured.');
+      console.error('[Renderer] Button missing entities configuration:', node);
       return;
     }
 
-    // Gather data from inputs in the same form/container
+    // Collect all inputs with entity bindings
     const container = button.closest('studio-form, form, .form-container, app-grid') || document.body;
-    const inputs = container.querySelectorAll('appbana-input, appbana-select, appbana-textarea, appbana-checkbox, appbana-radio-group, input, select, textarea');
+    const allInputs = container.querySelectorAll('[entity][field]');
 
-    const data: Record<string, any> = {};
-    inputs.forEach((input: any) => {
-      const name = input.getAttribute('name') || input.name;
-      if (name) {
-        if (input.tagName.toLowerCase().includes('checkbox')) {
-          data[name] = input.checked;
-        } else {
-          data[name] = input.value;
-        }
+    console.log(`[Renderer] Found ${allInputs.length} inputs with entity/field bindings`);
+
+    // Group data by entity
+    const entityData = new Map<string, Record<string, any>>();
+
+    allInputs.forEach((input: any) => {
+      const entity = input.getAttribute('entity');
+      const field = input.getAttribute('field');
+
+      if (!entity || !field) {
+        console.warn('[Renderer] Input missing entity or field:', input);
+        return;
       }
+
+      // ✅ KEY FILTER: Only collect data for entities specified in button
+      if (!buttonEntities.includes(entity)) {
+        console.log(`[Renderer] Skipping ${entity}.${field} (not in button entities: ${buttonEntities.join(', ')})`);
+        return;
+      }
+
+      // Initialize entity data if not exists
+      if (!entityData.has(entity)) {
+        entityData.set(entity, {});
+      }
+
+      // Collect value based on input type
+      let value;
+      const tagName = input.tagName.toLowerCase();
+      if (tagName.includes('checkbox')) {
+        value = input.checked;
+      } else {
+        value = input.value;
+      }
+
+      entityData.get(entity)![field] = value;
+      console.log(`[Renderer] Collected ${entity}.${field} = ${value}`);
     });
 
-    console.log('[Renderer] Saving entity:', entityName, data);
+    // Validate we have data
+    if (entityData.size === 0) {
+      alert(`Error: No inputs found for entities: ${buttonEntities.join(', ')}\n\nMake sure your inputs have entity and field properties set.`);
+      console.error('[Renderer] No data collected. Button entities:', buttonEntities);
+      return;
+    }
+
+    console.log('[Renderer] Data grouped by entity:', Object.fromEntries(entityData));
+
+
+    // Show loading state
+    const originalLabel = button.getAttribute('label');
 
     try {
-      // Show loading state
-      const originalLabel = button.getAttribute('label');
       button.setAttribute('label', 'Saving...');
+      button.setAttribute('disabled', 'true');
 
-      await createRow(entityName, data);
+      // Save each entity sequentially
+      const results = [];
+      for (const [entity, data] of entityData) {
+        console.log(`[Renderer] → Saving ${entity}:`, data);
+        const result = await createRow(entity, data);
+        results.push({ entity, result });
+        console.log(`[Renderer] ✓ Saved ${entity}:`, result);
+      }
 
-      // Handle success
-      button.setAttribute('label', originalLabel || 'Saved');
+      // Success
+      button.setAttribute('label', originalLabel || 'Save');
+      button.removeAttribute('disabled');
 
-      // Simple toast
+      // Show success toast
       const toast = document.createElement('div');
-      toast.textContent = '✅ Saved successfully!';
+      toast.textContent = `✅ Saved ${results.length} ${results.length === 1 ? 'entity' : 'entities'} successfully!`;
       toast.style.cssText = `
         position: fixed; bottom: 20px; right: 20px; 
         background: #10b981; color: white; padding: 12px 24px; 
@@ -293,16 +348,25 @@ async function handleAction(node: ComponentNode, event: Event) {
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
 
-      // If success action is redirect
-      if (node.props?.onSuccess === 'navigate' && node.props?.navigateUrl) {
-        window.location.href = node.props.navigateUrl;
+      // Handle onSuccess action
+      const onSuccess = node.props?.onSuccess;
+      if (onSuccess === 'navigate' && node.props?.navigateUrl) {
+        setTimeout(() => {
+          window.location.href = node.props!.navigateUrl;
+        }, 500);
+      } else if (onSuccess === 'refresh') {
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
       }
 
-    } catch (err) {
-      console.error('[Renderer] Save failed:', err);
-      alert('Failed to save data. Please try again.');
-      button.setAttribute('label', 'Error');
+    } catch (error: any) {
+      button.setAttribute('label', originalLabel || 'Save');
+      button.removeAttribute('disabled');
+      console.error('[Renderer] Save failed:', error);
+      alert(`❌ Error: ${error.message || 'Failed to save data'}`);
     }
+
 
   } else if (actionType === 'navigate') {
     if (node.props?.navigateUrl) {
