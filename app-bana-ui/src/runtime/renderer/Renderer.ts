@@ -12,6 +12,7 @@ import { createRow, apiClient } from '../../core/api-client';
 const SAVE_TIMEOUT_MS = 30000; // 30 seconds
 const TOAST_DURATION_MS = 3000; // 3 seconds
 const NAVIGATION_DELAY_MS = 500; // 0.5 seconds
+const ERROR_TOAST_DURATION_MS = 5000; // 5 seconds (longer for errors)
 
 // Helper for simple handle-bars style interpolation
 // e.g. interpolate("Hello {{user.name}}", { user: { name: "World" } }) -> "Hello World"
@@ -310,11 +311,103 @@ function showErrorToast(toast: HTMLElement, saved: number, total: number, messag
   if (icon) icon.textContent = '❌';
   if (title) title.textContent = `Error saving entity ${saved + 1}/${total}`;
   if (progressDiv) {
-    progressDiv.innerHTML = `<div style="font-size: 12px; color: #ef4444; margin-top: 4px;">${message}</div>`;
+    // CRITICAL FIX #1: Use textContent to prevent XSS (not innerHTML)
+    const errorDiv = document.createElement('div');
+    errorDiv.textContent = message; // Auto-escapes HTML entities
+    errorDiv.style.cssText = 'font-size: 12px; color: #ef4444; margin-top: 4px;';
+    progressDiv.innerHTML = ''; // Clear existing content
+    progressDiv.appendChild(errorDiv);
   }
 
   toast.style.borderLeftColor = '#ef4444';
 }
+
+// CRITICAL FIX #2: Inject progress toast CSS styles (including slideIn animation)
+(function injectProgressToastStyles() {
+  if (document.getElementById('progress-toast-styles')) return; // Already injected
+
+  const style = document.createElement('style');
+  style.id = 'progress-toast-styles';
+  style.textContent = `
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #e5e7eb;
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 8px 0 4px 0;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #2563eb);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+    
+    .progress-text {
+      font-size: 11px;
+      color: #6b7280;
+      text-align: right;
+    }
+    
+    .toast-content {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    
+    .toast-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+    
+    .toast-text {
+      flex: 1;
+    }
+    
+    .toast-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+      color: #374151;
+    }
+    
+    /* NICE-TO-HAVE: Dark mode support */
+    @media (prefers-color-scheme: dark) {
+      .save-progress-toast {
+        background: #1f2937 !important;
+        color: #f3f4f6 !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+      }
+      
+      .toast-title {
+        color: #f3f4f6;
+      }
+      
+      .progress-text {
+        color: #9ca3af;
+      }
+      
+      .progress-bar {
+        background: #374151;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
 
 // ES module import workaround for browser
 function requireTablePreview(node: ComponentNode): HTMLElement {
@@ -442,7 +535,7 @@ async function handleAction(node: ComponentNode, event: Event) {
 
       // Save each entity sequentially with progress updates
       const results = [];
-      let savedCount = 0;
+      let savedCount = 0; // CRITICAL FIX #4: Track count for error handling
 
       for (const [entity, data] of entityData) {
         console.log(`[Renderer] → Saving ${entity}:`, data);
@@ -489,9 +582,9 @@ async function handleAction(node: ComponentNode, event: Event) {
       // Update progress toast to show error
       const progressToast = document.querySelector('.save-progress-toast') as HTMLElement;
       if (progressToast) {
-        const savedCount = (error as any).savedCount || 0;
+        // CRITICAL FIX #4: Use savedCount from outer scope, not error object
         showErrorToast(progressToast, savedCount, entityData.size, error.message || 'Failed to save data');
-        setTimeout(() => progressToast.remove(), 5000);
+        setTimeout(() => progressToast.remove(), ERROR_TOAST_DURATION_MS);
       } else {
         console.error('[Renderer] Save failed:', error);
         alert(`❌ Error: ${error.message || 'Failed to save data'}`);

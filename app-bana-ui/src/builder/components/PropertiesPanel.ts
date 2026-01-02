@@ -160,6 +160,31 @@ export class PropertiesPanel extends LitElement {
     return entityName.charAt(0).toUpperCase();
   }
 
+  // CRITICAL FIX #3: Apply binding indicators to canvas elements
+  private updateBindingIndicators() {
+    if (!this.selectedNode) return;
+    const entity = this.editingProps.entity;
+    const field = this.editingProps.field;
+
+    // Only for form components
+    const formComponents = ['input', 'select', 'textarea', 'checkbox', 'radio'];
+    if (!formComponents.includes(this.selectedNode.type)) return;
+
+    const canvas = document.querySelector('appbana-builder-canvas');
+    const element = canvas?.querySelector(`[data-node-id="${this.selectedNode.id}"]`) as HTMLElement;
+    if (!element) return;
+
+    if (entity && field) {
+      element.setAttribute('data-binding-status', `bound:${entity}`);
+      element.setAttribute('data-entity-initial', this.getEntityInitial(entity));
+      element.removeAttribute('data-requires-binding');
+    } else {
+      element.setAttribute('data-binding-status', 'unbound');
+      element.setAttribute('data-requires-binding', 'true');
+      element.removeAttribute('data-entity-initial');
+    }
+  }
+
   private updateProperty(key: string, value: any) {
     if (!this.selectedNode || !currentStore) return;
     console.log('[PropertiesPanel] Updating property:', key, value);
