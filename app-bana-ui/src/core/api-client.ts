@@ -359,11 +359,15 @@ export async function createRow(entity: string, data: Record<string, any>) {
   const base = getApiBaseUrl();
   const { tenantId, appId, env } = RuntimeContext.getInstance().getContextSafe();
 
-  // Include environment in URL for deployed versions (SIT, PROD)
-  // DEV uses default path without /env/
-  const envPath = env && env !== 'dev' ? `/env/${env}` : '';
+  // Include environment in URL ONLY for SIT/PROD (not DEV/dev/preview)
+  // DEV and preview use the same default path
+  const normalizedEnv = env?.toUpperCase();
+  const envPath = (normalizedEnv && normalizedEnv !== 'DEV' && normalizedEnv !== 'PREVIEW')
+    ? `/env/${env}`
+    : '';
   const url = `${base}/api/${tenantId}/apps/${appId}${envPath}/${entity}`;
 
+  console.log(`[createRow] URL: ${url}, env: ${env}`);
   return apiClient.post(url, data);
 }
 
@@ -372,8 +376,11 @@ export async function updateRow(entity: string, id: string | number, data: Recor
   const base = getApiBaseUrl();
   const { tenantId, appId, env } = RuntimeContext.getInstance().getContextSafe();
 
-  // Include environment in URL for deployed versions (SIT, PROD)
-  const envPath = env && env !== 'dev' ? `/env/${env}` : '';
+  // Include environment in URL ONLY for SIT/PROD (not DEV/dev/preview)
+  const normalizedEnv = env?.toUpperCase();
+  const envPath = (normalizedEnv && normalizedEnv !== 'DEV' && normalizedEnv !== 'PREVIEW')
+    ? `/env/${env}`
+    : '';
   const url = `${base}/api/${tenantId}/apps/${appId}${envPath}/${entity}/${id}`;
 
   return apiClient.put(url, data);
