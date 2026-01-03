@@ -32,6 +32,7 @@ export class AppManager extends LitElement {
   @state() private publishLabel = '';
   @state() private publishDescription = '';
   @state() private user: any = null;
+  @state() private isDirty = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -44,7 +45,17 @@ export class AppManager extends LitElement {
     } catch (e) { console.error(e); }
 
     this.updateState();
+    window.addEventListener('app-bana-run-change', this.handleAppChange);
   }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('app-bana-run-change', this.handleAppChange);
+  }
+
+  private handleAppChange = () => {
+    this.isDirty = true;
+  };
 
   private handleLogout = () => {
     localStorage.removeItem('appbana_token');
@@ -159,6 +170,30 @@ export class AppManager extends LitElement {
     } catch (error) {
       console.error('Failed to delete app:', error);
       alert(error instanceof Error ? error.message : 'Failed to delete app');
+    }
+  }
+
+  private handleSaveApp = async (e: Event) => {
+    e.stopPropagation();
+    if (!this.currentApp) return;
+
+    try {
+      // Save current page from store if active
+      if (currentStore) {
+        const page = currentStore.getPage();
+        console.log('[AppManager] Saving current page:', page.id);
+        await appStore.savePage(this.currentApp.id, page);
+      }
+
+      // Also update app metadata just in case (though entities/pages save separately usually)
+      // If we need to save specific app-level things, do it here.
+      // For now, we assume saving the page is the primary action needed for "Save" in builder.
+
+      this.isDirty = false;
+      this.showToast('✅ App saved successfully');
+    } catch (error) {
+      console.error('Failed to save app:', error);
+      this.showToast('❌ Failed to save app');
     }
   }
 

@@ -751,12 +751,13 @@ export class PropertiesPanel extends LitElement {
               <option value="">-- Select Field --</option>
             ${fields.map((f: any) => {
       // Better display name logic: Use display.label, or format the name nicely
-      let displayName = f.display?.label || f.name;
+      // Fix: Use field name instead of label for display (as requested by user)
+      let displayName = f.name;
 
       // If displayName looks like a technical name (camelCase/snake_case), format it
-      if (displayName === f.name) {
+      if (displayName) {
         // Convert camelCase to Title Case: "firstName" -> "First Name"
-        displayName = f.name
+        displayName = displayName
           .replace(/([A-Z])/g, ' $1') // Add space before capitals
           .replace(/^./, (str: string) => str.toUpperCase()) // Capitalize first letter
           .trim();
