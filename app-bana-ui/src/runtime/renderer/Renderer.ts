@@ -231,11 +231,14 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
     case 'div':
     default:
       // For containers and unknown types, just render a div with children
+      // CRITICAL: Include slot attribute for app-grid cell assignment
+      const slot = props?.slot || '';
       return html`
         <div
           id="${node.id}"
           class="${className}"
           style="${style}"
+          slot="${slot}"
         >
           ${children}
         </div>
