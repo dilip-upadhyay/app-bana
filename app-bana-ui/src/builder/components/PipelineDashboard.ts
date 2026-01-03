@@ -213,14 +213,15 @@ export class PipelineDashboard extends LitElement {
   private launch(env: string) {
     // Get tenant ID from logged-in user
     const user = AuthService.getUser();
-    const state = {
-      tenantId: user?.tenantId || 'default',
-      appId: this.appId,
-      env: env,
-      mode: 'production' as const
-    };
-    const encoded = encodeRuntimeState(state);
-    window.open(`/?state=${encoded}`, '_blank');
+    const tenantId = user?.tenantId || (user as any)?.tenant_id || 'default';
+
+    // New Path-Based Routing: /run/:tenantId/:appId
+    // The env parameter can be added as a query param if needed for deployed versions
+    const url = env === 'DEV'
+      ? `/run/${tenantId}/${this.appId}`
+      : `/run/${tenantId}/${this.appId}?env=${env}`;
+
+    window.open(url, '_blank');
   }
 
   render() {

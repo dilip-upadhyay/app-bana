@@ -46,11 +46,16 @@ export class AppRoot extends LitElement {
       if (parts.length >= 4) {
         const tenantId = parts[2];
         const appId = parts[3];
-        console.log(`[AppRoot] Detected Path Routing: tenant=${tenantId}, app=${appId}`);
+
+        // Check for optional ?env=SIT or ?env=PROD query parameter
+        const envParam = searchParams.get('env');
+
+        console.log(`[AppRoot] Detected Path Routing: tenant=${tenantId}, app=${appId}, env=${envParam || 'preview'}`);
         await this.loadAppRuntimeFromState({
           tenantId,
           appId,
-          mode: 'preview'
+          env: envParam || undefined, // Pass env if present (for deployed versions)
+          mode: envParam ? 'production' : 'preview'
         });
         return;
       }
