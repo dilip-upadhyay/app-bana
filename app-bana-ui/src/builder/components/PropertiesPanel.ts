@@ -710,6 +710,13 @@ export class PropertiesPanel extends LitElement {
     const selectedEntity = entities.find((e: any) => e.name === entity);
     const fields = selectedEntity?.fields || [];
 
+    // DEBUG: Log to see actual field structure
+    if (fields.length > 0) {
+      console.log('[PropertiesPanel] Entity fields:', entity, fields);
+      console.log('[PropertiesPanel] First field structure:', fields[0]);
+    }
+
+
     return html`
       <div class="section" style="background: #f0f9ff; padding: 12px; border-radius: 8px; border: 1px solid #bae6fd; margin-bottom: 16px;">
         <h4 style="margin: 0 0 12px 0; color: #0c4a6e; font-size: 0.9rem;">📊 Entity Binding</h4>
@@ -739,12 +746,26 @@ export class PropertiesPanel extends LitElement {
               style="width: 100%;"
             >
               <option value="">-- Select Field --</option>
-              ${fields.map((f: any) => html`
+            ${fields.map((f: any) => {
+      // Better display name logic: Use display.label, or format the name nicely
+      let displayName = f.display?.label || f.name;
+
+      // If displayName looks like a technical name (camelCase/snake_case), format it
+      if (displayName === f.name) {
+        // Convert camelCase to Title Case: "firstName" -> "First Name"
+        displayName = f.name
+          .replace(/([A-Z])/g, ' $1') // Add space before capitals
+          .replace(/^./, (str: string) => str.toUpperCase()) // Capitalize first letter
+          .trim();
+      }
+
+      return html`
                 <option value="${f.name}" ?selected=${this.editingProps.field === f.name}>
-                  ${f.display?.label || f.name} (${f.type})
+                  ${displayName} (${f.type})
                 </option>
-              `)}
-            </select>
+              `;
+    })}
+          </select>
           </div>
           
           <p style="font-size: 11px; color: #059669; margin: 8px 0 0 0;">

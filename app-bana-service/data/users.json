@@ -9,4 +9,26 @@
   "lastLogin" : [ 2026, 1, 2, 8, 6, 45, 933822000 ],
   "updatedAt" : [ 2026, 1, 2, 8, 6, 45, 936531000 ],
   "active" : true
+}, {
+  "id" : 2,
+  "email" : "test@example.com",
+  "passwordHash" : "Password123",
+  "name" : "Test User",
+  "tenantId" : "t-a05ffa69",
+  "status" : "ACTIVE",
+  "createdAt" : [ 2026, 1, 3, 3, 4, 32, 345575000 ],
+  "lastLogin" : [ 2026, 1, 3, 14, 14, 8, 326559000 ],
+  "updatedAt" : [ 2026, 1, 3, 14, 14, 8, 326589000 ],
+  "active" : true
+}, {
+  "id" : 3,
+  "email" : "test2@example.com",
+  "passwordHash" : "Password123",
+  "name" : "Test User 2",
+  "tenantId" : "t-322bc6a0",
+  "status" : "ACTIVE",
+  "createdAt" : [ 2026, 1, 3, 3, 10, 16, 20083000 ],
+  "lastLogin" : null,
+  "updatedAt" : [ 2026, 1, 3, 3, 10, 16, 20129000 ],
+  "active" : true
 } ]
