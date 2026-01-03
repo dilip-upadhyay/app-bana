@@ -276,6 +276,15 @@ Field 5:
 - Fields added in separate dialog
 - Display labels configured per field
 
+- **Testing Tips**:
+  - Use `Cmd/Ctrl + S` to save progress.
+  - Hover over the "Saved to disk" indicator to see last save time.
+
+## User Verification (Manual)
+The following screenshot confirms successful binding of a `Text Input` component to `UserInformation.Name`.
+
+![User Verification Screenshot](./user_verification_binding.png)
+*Figure 6: Manual verification showing successful entity binding configuration.*
 **Actual UI**:
 - Single "Edit Entity" modal for both create and edit
 - Entity Name locked after creation

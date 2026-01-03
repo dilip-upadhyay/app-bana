@@ -34,6 +34,7 @@ Read the following documentation in the `automation-test/` folder to establish c
 ## 3. Execution Standard
 
 *   Always refer to the specific steps in `qa_test_plan.md`.
+*   **Handle Autofill**: Always CLEAR input fields (select all + delete) before typing to prevent double-entry (e.g. `user@example.comuser@example.com`).
 *   Verify critical checkpoints (e.g., proper field names, visual indicators).
 *   Report bugs using the format defined in the test plan.
 

@@ -194,6 +194,9 @@ export class PropertiesPanel extends LitElement {
 
     // Update the node in the store
     currentStore.updateProps(this.selectedNode.id, { [key]: value });
+
+    // Trigger binding indicator update when binding properties change
+    if (key === 'entity' || key === 'field') setTimeout(() => this.updateBindingIndicators(), 100);
   }
 
   private toggleEntity(entityName: string, checked: boolean) {
@@ -442,7 +445,7 @@ export class PropertiesPanel extends LitElement {
       <div class="section">
         <h4>🔧 Component Properties</h4>
         
-        ${['input', 'select', 'textarea', 'checkbox', 'radio'].includes(this.selectedNode?.type || '') ? this.renderFieldBinding() : ''}
+        ${['input', 'text-input', 'select', 'textarea', 'checkbox', 'radio'].includes(this.selectedNode?.type || '') ? this.renderFieldBinding() : ''}
         ${this.selectedNode?.type === 'button' ? this.renderActionProperties() : ''}
 
         ${commonProps

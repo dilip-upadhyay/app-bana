@@ -61,9 +61,12 @@ Note: If first time, autofill won't work (expected)
 **1.3 Perform Login**
 ```
 Action: 
-  1. Enter email: test@example.com
-  2. Enter password: Password123
-  3. Click "Sign In" button
+  1. Click email field
+  2. **CRITICAL**: Clear the field manually (CMD+A -> Backspace) to remove any browser autofill
+  3. Enter email: test@example.com
+  4. Click password field and clear it
+  5. Enter password: Password123
+  6. Click "Sign In" button
 Expected: Successfully logged in and redirected
 Validation:
   - Redirected to app dashboard/home page
