@@ -434,7 +434,9 @@ async function handleAction(node: ComponentNode, event: Event) {
     }
 
     // Collect all inputs with entity bindings
-    const container = button.closest('studio-form, form, .form-container, app-grid') || document.body;
+    // FIX: Support Shadow DOM by searching within the component's root
+    const root = button.getRootNode() as ParentNode;
+    const container = button.closest('studio-form, form, .form-container, app-grid') || root;
     const allInputs = container.querySelectorAll('[entity][field]');
 
     console.log(`[Renderer] Found ${allInputs.length} inputs with entity/field bindings`);
