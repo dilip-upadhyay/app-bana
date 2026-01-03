@@ -9,8 +9,11 @@ import com.appbana.model.EntitySchema;
 import java.io.IOException;
 import java.sql.*;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SchemaManager {
+    private static final Logger LOG = LoggerFactory.getLogger(SchemaManager.class);
     private static final ObjectMapper M = new ObjectMapper();
 
     public static void init() {
@@ -94,6 +97,9 @@ public class SchemaManager {
 
     public static void saveSchema(EntitySchema schema) {
         validateSchema(schema);
+        LOG.info("[SAVE-SCHEMA] Saving schema: name={}, appId={}, tenantId={}", 
+                 schema.getName(), schema.getAppId(), schema.getTenantId());
+        LOG.debug("[SAVE-SCHEMA] Schema fields: {}", schema.getFields().size());
         DatasourceConfig ds = resolveTarget(schema);
         String dsName = ds.getName();
         JdbcManager.ensureMetaTableFor(dsName);
@@ -146,6 +152,7 @@ public class SchemaManager {
                             upd.setString(3, appId);
                             upd.setString(4, getUniqueSchemaKey(schema));
                             upd.executeUpdate();
+            LOG.info("[SAVE-SCHEMA] Calling ensureTable for schema: {}", schema.getName());
                         }
                     }
                 }
@@ -211,8 +218,10 @@ public class SchemaManager {
     private static void ensureTable(EntitySchema schema, Connection c, DatasourceConfig dsCfg) throws SQLException {
         String table = getPhysicalTableName(schema);
         DatabaseMetaData md = c.getMetaData();
+                LOG.info("[ENSURE-TABLE] Table does not exist, creating: {}", table);
         String d = dialect(dsCfg);
         try (ResultSet tables = md.getTables(null, null, table.toUpperCase(), null)) {
+                LOG.info("[ENSURE-TABLE] Table exists, checking for schema updates: {}", table);
             boolean exists = tables.next();
             if (!exists) {
                 createTable(schema, c, d);
@@ -344,6 +353,8 @@ public class SchemaManager {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE TABLE IF NOT EXISTS ").append(quote(table)).append(" (");
         sb.append(String.join(", ", cols));
+            LOG.info("[CREATE-TABLE] Successfully created table: {}", table);
+            LOG.debug("[CREATE-TABLE] Migration recorded for table creation");
         if (pk != null)
             sb.append(", PRIMARY KEY(").append(pk).append(")");
         sb.append(")");
@@ -355,6 +366,8 @@ public class SchemaManager {
             String indexSql = "CREATE INDEX IF NOT EXISTS idx_" + table + "_tenant_app ON "
                     + quote(table) + "(" + quote("tenant_id") + ", " + quote("app_id") + ")";
             s.execute(indexSql);
+        LOG.debug("[TABLE-NAME] Generating physical table name for entity: {}, appId: {}, tenantId: {}", 
+                  schema.getName(), schema.getAppId(), schema.getTenantId());
             recordMigration(c, schema.getName(), indexSql);
         }
     }
@@ -374,6 +387,10 @@ public class SchemaManager {
                 if (ctx != null && ctx.getEnvironment() != null) {
                     String env = ctx.getEnvironment().toUpperCase();
                     // Only prefix for non-DEV environments to keep backward compatibility
+            LOG.info("[TABLE-NAME] Using environment prefix: '{}' for table (env from TenantContext: {})", 
+                     envPrefix.isEmpty() ? "NONE" : envPrefix.substring(0, envPrefix.length()-1), 
+                     ctx != null ? ctx.getEnvironment() : "NOT_SET");
+            LOG.debug("[TABLE-NAME] Final table name: app_{}{}_{}", envPrefix, safeTenantId + "_" + safeAppId, schema.getName());
                     if (!"DEV".equals(env)) {
                         envPrefix = env + "_";
                     }

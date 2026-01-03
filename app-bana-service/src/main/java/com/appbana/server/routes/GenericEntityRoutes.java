@@ -1181,6 +1181,7 @@ public class GenericEntityRoutes {
             String env = req.pathParam("env");
             String entity = req.pathParam("entity");
 
+            LOG.info("[ENV-CREATE] Request: tenant={}, app={}, env={}, entity={}", tenantId, appId, env, entity);
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1196,9 +1197,11 @@ public class GenericEntityRoutes {
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
+                LOG.warn("[ENV-CREATE] Schema not found: tenant={}, app={}, entity={}", tenantId, appId, entity);
                 res.json(404, Map.of("error", "unknown entity: " + entity));
                 return;
             }
+            LOG.debug("[ENV-CREATE] Schema loaded successfully for entity: {}", entity);
 
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
@@ -1206,6 +1209,8 @@ public class GenericEntityRoutes {
             try {
                 // Set TenantContext with environment for data isolation
                 // Table naming: env_tenant_app_entity (e.g., SIT_t-123_app-456_User)
+                LOG.info("[ENV-CREATE] Setting TenantContext: tenant={}, app={}, env={}", tenantId, appId, env);
+                LOG.debug("[ENV-CREATE] TenantContext will create table with env prefix if env != DEV");
                 TenantContext ctx = new TenantContext(tenantId, appId, env);
                 TenantContext.set(ctx);
 
@@ -1213,14 +1218,18 @@ public class GenericEntityRoutes {
                     Object idObj = crud.insertRecord(schema, data);
                     String id = String.valueOf(idObj);
                     Map<String, Object> after = crud.getById(schema, id);
+                    LOG.info("[ENV-CREATE] Successfully created entity: id={}, entity={}, env={}", idObj, entity, env);
+                    LOG.debug("[ENV-CREATE] Audit logged for entity: {} id={}", entity, id);
 
                     AuditLogService.log("INSERT", schema.getName(), id, "runtime-" + env, null, after);
 
+                    LOG.debug("[ENV-CREATE] Clearing TenantContext for env={}", env);
                     res.json(201, Map.of("id", idObj, "appId", appId, "env", env));
                 } finally {
                     TenantContext.clear();
                 }
             } catch (SQLException e) {
+                LOG.error("[ENV-CREATE] Failed to create entity: tenant={}, app={}, env={}, entity={}", tenantId, appId, env, entity, e);
                 LOG.error("Env-scoped insert failed for app={} env={} entity={}", appId, env, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
             }
