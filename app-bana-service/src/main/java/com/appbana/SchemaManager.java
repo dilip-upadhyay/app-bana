@@ -100,17 +100,19 @@ public class SchemaManager {
         try (Connection c = JdbcManager.getConnection(dsName)) {
             String json = M.writeValueAsString(schema);
             String d = dialect(ds);
-            
+
             // Extract tenant_id and app_id (required by V10 migration NOT NULL constraint)
-            String tenantId = (schema.getTenantId() != null && !schema.getTenantId().isBlank()) 
-                ? schema.getTenantId() : "default";
-            String appId = (schema.getAppId() != null && !schema.getAppId().isBlank()) 
-                ? schema.getAppId() : "default";
-            
+            String tenantId = (schema.getTenantId() != null && !schema.getTenantId().isBlank())
+                    ? schema.getTenantId()
+                    : "default";
+            String appId = (schema.getAppId() != null && !schema.getAppId().isBlank())
+                    ? schema.getAppId()
+                    : "default";
+
             // upsert by name, tenant_id, app_id; NOTE: name must be unique per tenant/app
             if ("postgres".equals(d)) {
                 String upsert = "INSERT INTO appbana_schemas(name, json, tenant_id, app_id) VALUES (?, ?, ?, ?) " +
-                    "ON CONFLICT (name) DO UPDATE SET json = EXCLUDED.json, tenant_id = EXCLUDED.tenant_id, app_id = EXCLUDED.app_id";
+                        "ON CONFLICT (name) DO UPDATE SET json = EXCLUDED.json, tenant_id = EXCLUDED.tenant_id, app_id = EXCLUDED.app_id";
                 try (PreparedStatement ps = c.prepareStatement(upsert)) {
                     ps.setString(1, getUniqueSchemaKey(schema));
                     ps.setString(2, json);
@@ -128,7 +130,8 @@ public class SchemaManager {
                     ps.executeUpdate();
                 } catch (SQLException e) {
                     try (PreparedStatement ins = c
-                            .prepareStatement("INSERT INTO appbana_schemas(name, json, tenant_id, app_id) VALUES (?, ?, ?, ?)")) {
+                            .prepareStatement(
+                                    "INSERT INTO appbana_schemas(name, json, tenant_id, app_id) VALUES (?, ?, ?, ?)")) {
                         ins.setString(1, getUniqueSchemaKey(schema));
                         ins.setString(2, json);
                         ins.setString(3, tenantId);
@@ -136,7 +139,8 @@ public class SchemaManager {
                         ins.executeUpdate();
                     } catch (SQLException dup) {
                         try (PreparedStatement upd = c
-                                .prepareStatement("UPDATE appbana_schemas SET json = ?, tenant_id = ?, app_id = ? WHERE name = ?")) {
+                                .prepareStatement(
+                                        "UPDATE appbana_schemas SET json = ?, tenant_id = ?, app_id = ? WHERE name = ?")) {
                             upd.setString(1, json);
                             upd.setString(2, tenantId);
                             upd.setString(3, appId);
@@ -177,7 +181,8 @@ public class SchemaManager {
             JdbcManager.ensureMetaTableFor(dsName);
             try (Connection c = JdbcManager.getConnection(dsName)) {
                 // Query by name only (for backward compatibility with non-tenant schemas)
-                try (PreparedStatement ps = c.prepareStatement("SELECT json, tenant_id, app_id FROM appbana_schemas WHERE name = ?")) {
+                try (PreparedStatement ps = c
+                        .prepareStatement("SELECT json, tenant_id, app_id FROM appbana_schemas WHERE name = ?")) {
                     ps.setString(1, name);
                     try (ResultSet rs = ps.executeQuery()) {
                         if (rs.next()) {
@@ -221,7 +226,7 @@ public class SchemaManager {
                         existing.put(colName.toLowerCase(), new ColumnInfo(colName, typeName, size));
                     }
                 }
-                
+
                 // Handle schema evolution for user-defined fields
                 for (EntitySchema.Field f : schema.getFields()) {
                     String target = f.getName();
@@ -324,11 +329,12 @@ public class SchemaManager {
         String table = getPhysicalTableName(schema);
         List<String> cols = new ArrayList<>();
         String pk = null;
-        
-        // Always add tenant_id and app_id columns first for multi-tenant isolation (required, no defaults)
+
+        // Always add tenant_id and app_id columns first for multi-tenant isolation
+        // (required, no defaults)
         cols.add(quote("tenant_id") + " VARCHAR(50) NOT NULL");
         cols.add(quote("app_id") + " VARCHAR(50) NOT NULL");
-        
+
         for (EntitySchema.Field f : schema.getFields()) {
             String col = quote(f.getName()) + " " + sqlType(f, dialect);
             if (f.isPrimaryKey())
@@ -344,10 +350,10 @@ public class SchemaManager {
         try (Statement s = c.createStatement()) {
             s.execute(sb.toString());
             recordMigration(c, schema.getName(), sb.toString());
-            
+
             // Create composite index for efficient tenant/app filtering
-            String indexSql = "CREATE INDEX IF NOT EXISTS idx_" + table + "_tenant_app ON " 
-                + quote(table) + "(" + quote("tenant_id") + ", " + quote("app_id") + ")";
+            String indexSql = "CREATE INDEX IF NOT EXISTS idx_" + table + "_tenant_app ON "
+                    + quote(table) + "(" + quote("tenant_id") + ", " + quote("app_id") + ")";
             s.execute(indexSql);
             recordMigration(c, schema.getName(), indexSql);
         }
@@ -359,7 +365,24 @@ public class SchemaManager {
             String safeAppId = schema.getAppId().replaceAll("[^a-zA-Z0-9_]", "_").toLowerCase();
             String safeTenantId = (schema.getTenantId() != null ? schema.getTenantId() : "default")
                     .replaceAll("[^a-zA-Z0-9_]", "_").toLowerCase();
-            return "app_" + safeTenantId + "_" + safeAppId + "_" + schema.getName();
+
+            // Include environment prefix from TenantContext if available (for SIT/PROD
+            // isolation)
+            String envPrefix = "";
+            try {
+                com.appbana.model.TenantContext ctx = com.appbana.model.TenantContext.getOrNull();
+                if (ctx != null && ctx.getEnvironment() != null) {
+                    String env = ctx.getEnvironment().toUpperCase();
+                    // Only prefix for non-DEV environments to keep backward compatibility
+                    if (!"DEV".equals(env)) {
+                        envPrefix = env + "_";
+                    }
+                }
+            } catch (Exception ignored) {
+                // If TenantContext not set, use default table naming
+            }
+
+            return "app_" + envPrefix + safeTenantId + "_" + safeAppId + "_" + schema.getName();
         }
         return schema.getName();
     }
