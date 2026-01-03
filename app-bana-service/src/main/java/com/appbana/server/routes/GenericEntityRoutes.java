@@ -907,7 +907,7 @@ public class GenericEntityRoutes {
                 return;
             }
 
-            EntitySchema schema = SchemaManager.loadSchema(entity);
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity: " + entity));
                 return;
@@ -957,7 +957,7 @@ public class GenericEntityRoutes {
                 return;
             }
 
-            EntitySchema schema = SchemaManager.loadSchema(entity);
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity: " + entity));
                 return;
@@ -998,7 +998,7 @@ public class GenericEntityRoutes {
                 return;
             }
 
-            EntitySchema schema = SchemaManager.loadSchema(entity);
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity: " + entity));
                 return;
@@ -1041,7 +1041,7 @@ public class GenericEntityRoutes {
                 return;
             }
 
-            EntitySchema schema = SchemaManager.loadSchema(entity);
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity: " + entity));
                 return;
@@ -1090,7 +1090,7 @@ public class GenericEntityRoutes {
                 return;
             }
 
-            EntitySchema schema = SchemaManager.loadSchema(entity);
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity: " + entity));
                 return;
@@ -1167,6 +1167,200 @@ public class GenericEntityRoutes {
                 }
             } catch (SQLException e) {
                 LOG.error("Runtime app-scoped insert failed for app={} entity={}", appId, entity, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+// ==================== ENVIRONMENT-SPECIFIC ENTITY CRUD ====================
+        // These routes handle SIT/PROD environments with separate data isolation
+        // URL pattern: /api/{tenantId}/apps/{appId}/env/{env}/{entity}
+        
+        // POST /api/{tenantId}/apps/{appId}/env/{env}/{entity} - Create entity in specific environment
+        router.post("/api/{tenantId}/apps/{appId}/env/{env}/{entity}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("appId");
+            String env = req.pathParam("env");
+            String entity = req.pathParam("entity");
+
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+            if (env == null || env.isBlank()) {
+                res.json(400, Map.of("error", "env required"));
+                return;
+            }
+
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+
+            try {
+                // Set TenantContext with environment for data isolation
+                // Table naming: env_tenant_app_entity (e.g., SIT_t-123_app-456_User)
+                TenantContext ctx = new TenantContext(tenantId, appId, env);
+                TenantContext.set(ctx);
+
+                try {
+                    Object idObj = crud.insertRecord(schema, data);
+                    String id = String.valueOf(idObj);
+                    Map<String, Object> after = crud.getById(schema, id);
+
+                    AuditLogService.log("INSERT", schema.getName(), id, "runtime-" + env, null, after);
+
+                    res.json(201, Map.of("id", idObj, "appId", appId, "env", env));
+                } finally {
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("Env-scoped insert failed for app={} env={} entity={}", appId, env, entity, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // GET /api/{tenantId}/apps/{appId}/env/{env}/{entity} - List entities in specific environment
+        router.get("/api/{tenantId}/apps/{appId}/env/{env}/{entity}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("appId");
+            String env = req.pathParam("env");
+            String entity = req.pathParam("entity");
+
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            try {
+                TenantContext ctx = new TenantContext(tenantId, appId, env);
+                TenantContext.set(ctx);
+
+                try {
+                    List<Map<String, Object>> rows = crud.listAll(schema);
+                    res.json(200, rows);
+                } finally {
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("Env-scoped list failed for app={} env={} entity={}", appId, env, entity, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // GET /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id} - Get by ID in specific environment
+        router.get("/api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("appId");
+            String env = req.pathParam("env");
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            try {
+                TenantContext ctx = new TenantContext(tenantId, appId, env);
+                TenantContext.set(ctx);
+
+                try {
+                    Map<String, Object> row = crud.getById(schema, idStr);
+                    if (row == null) {
+                        res.json(404, Map.of("error", "not found"));
+                    } else {
+                        res.json(200, row);
+                    }
+                } finally {
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("Env-scoped get failed for app={} env={} entity={} id={}", appId, env, entity, idStr, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // PUT /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id} - Update in specific environment
+        router.put("/api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("appId");
+            String env = req.pathParam("env");
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            Map<String, Object> data = req.readJson(new TypeReference<>() {
+            });
+
+            try {
+                TenantContext ctx = new TenantContext(tenantId, appId, env);
+                TenantContext.set(ctx);
+
+                try {
+                    Map<String, Object> before = crud.getById(schema, idStr);
+                    int updated = crud.updateById(schema, idStr, data);
+                    Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
+                    
+                    if (updated > 0) {
+                        AuditLogService.log("UPDATE", schema.getName(), idStr, "runtime-" + env, before, after);
+                    }
+                    
+                    res.json(200, Map.of("updated", updated));
+                } finally {
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("Env-scoped update failed for app={} env={} entity={} id={}", appId, env, entity, idStr, e);
+                res.json(500, ErrorHandler.errorDetails(e));
+            }
+        });
+
+        // DELETE /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id} - Delete in specific environment
+        router.delete("/api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("appId");
+            String env = req.pathParam("env");
+            String entity = req.pathParam("entity");
+            String idStr = req.pathParam("id");
+
+            EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
+            if (schema == null) {
+                res.json(404, Map.of("error", "unknown entity: " + entity));
+                return;
+            }
+
+            try {
+                TenantContext ctx = new TenantContext(tenantId, appId, env);
+                TenantContext.set(ctx);
+
+                try {
+                    Map<String, Object> before = crud.getById(schema, idStr);
+                    int deleted = crud.deleteById(schema, idStr);
+                    
+                    if (deleted > 0) {
+                        AuditLogService.log("DELETE", schema.getName(), idStr, "runtime-" + env, before, null);
+                    }
+                    
+                    res.json(200, Map.of("deleted", deleted));
+                } finally {
+                    TenantContext.clear();
+                }
+            } catch (SQLException e) {
+                LOG.error("Env-scoped delete failed for app={} env={} entity={} id={}", appId, env, entity, idStr, e);
                 res.json(500, ErrorHandler.errorDetails(e));
             }
         });

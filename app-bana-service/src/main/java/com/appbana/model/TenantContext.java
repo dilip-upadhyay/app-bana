@@ -13,6 +13,7 @@ import java.util.function.Supplier;
  * the call stack without passing parameters everywhere.
  * 
  * Usage:
+ * 
  * <pre>
  * // Explicit context passing
  * TenantContext context = new TenantContext("tenant-123", "app-hr");
@@ -36,36 +37,54 @@ import java.util.function.Supplier;
  */
 public class TenantContext {
     private static final ThreadLocal<TenantContext> CONTEXT = new ThreadLocal<>();
-    
+
     private final String tenantId;
     private final String appId;
-    private final String userId;      // Optional: user making the request
-    private final String requestId;   // Optional: for request tracing
-    
+    private final String environment; // Optional: deployment environment (DEV, SIT, PROD)
+    private final String userId; // Optional: user making the request
+    private final String requestId; // Optional: for request tracing
+
     /**
      * Default tenant for single-tenant deployments
      */
     public static final String DEFAULT_TENANT = "default";
-    
+
     /**
-     * Create a tenant context with minimal fields
+     * Default environment for non-env-specific operations
+     */
+    public static final String DEFAULT_ENV = "DEV";
+
+    /**
+     * Create a tenant context with minimal fields (no environment)
      * 
      * @param tenantId Tenant identifier (company/organization)
-     * @param appId Application identifier within the tenant
+     * @param appId    Application identifier within the tenant
      */
     public TenantContext(String tenantId, String appId) {
-        this(tenantId, appId, null, null);
+        this(tenantId, appId, null, null, null);
     }
-    
+
+    /**
+     * Create a tenant context with environment
+     * 
+     * @param tenantId    Tenant identifier (company/organization)
+     * @param appId       Application identifier within the tenant
+     * @param environment Deployment environment (DEV, SIT, PROD)
+     */
+    public TenantContext(String tenantId, String appId, String environment) {
+        this(tenantId, appId, environment, null, null);
+    }
+
     /**
      * Create a tenant context with all fields
      * 
-     * @param tenantId Tenant identifier (company/organization)
-     * @param appId Application identifier within the tenant
-     * @param userId User identifier (optional)
-     * @param requestId Request trace ID (optional)
+     * @param tenantId    Tenant identifier (company/organization)
+     * @param appId       Application identifier within the tenant
+     * @param environment Deployment environment (optional, defaults to DEV)
+     * @param userId      User identifier (optional)
+     * @param requestId   Request trace ID (optional)
      */
-    public TenantContext(String tenantId, String appId, String userId, String requestId) {
+    public TenantContext(String tenantId, String appId, String environment, String userId, String requestId) {
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId cannot be null or empty");
         }
@@ -74,10 +93,11 @@ public class TenantContext {
         }
         this.tenantId = tenantId;
         this.appId = appId;
+        this.environment = (environment != null && !environment.isBlank()) ? environment : DEFAULT_ENV;
         this.userId = userId;
         this.requestId = requestId;
     }
-    
+
     /**
      * Create default tenant context (for single-tenant mode)
      * 
@@ -87,24 +107,27 @@ public class TenantContext {
     public static TenantContext forApp(String appId) {
         return new TenantContext(DEFAULT_TENANT, appId);
     }
-    
+
     // Getters
     public String getTenantId() {
         return tenantId;
     }
-    
+
     public String getAppId() {
         return appId;
     }
-    
+
+    public String getEnvironment() {
+        return environment;
+    }
     public String getUserId() {
         return userId;
     }
-    
+
     public String getRequestId() {
         return requestId;
     }
-    
+
     /**
      * Create a copy with updated userId
      * 
@@ -112,9 +135,9 @@ public class TenantContext {
      * @return New TenantContext instance
      */
     public TenantContext withUserId(String userId) {
-        return new TenantContext(this.tenantId, this.appId, userId, this.requestId);
+        return new TenantContext(this.tenantId, this.appId, this.environment, userId, this.requestId);
     }
-    
+
     /**
      * Create a copy with updated requestId
      * 
@@ -122,11 +145,11 @@ public class TenantContext {
      * @return New TenantContext instance
      */
     public TenantContext withRequestId(String requestId) {
-        return new TenantContext(this.tenantId, this.appId, this.userId, requestId);
+        return new TenantContext(this.tenantId, this.appId, this.environment, this.userId, requestId);
     }
-    
+
     // ThreadLocal operations
-    
+
     /**
      * Set context in ThreadLocal for current thread
      * 
@@ -135,7 +158,7 @@ public class TenantContext {
     public static void set(TenantContext context) {
         CONTEXT.set(context);
     }
-    
+
     /**
      * Get context from ThreadLocal
      * 
@@ -149,7 +172,7 @@ public class TenantContext {
         }
         return context;
     }
-    
+
     /**
      * Get context from ThreadLocal (null-safe)
      * 
@@ -158,7 +181,7 @@ public class TenantContext {
     public static TenantContext getOrNull() {
         return CONTEXT.get();
     }
-    
+
     /**
      * Check if context is set in current thread
      * 
@@ -167,7 +190,7 @@ public class TenantContext {
     public static boolean isSet() {
         return CONTEXT.get() != null;
     }
-    
+
     /**
      * Clear context from ThreadLocal
      * 
@@ -176,13 +199,13 @@ public class TenantContext {
     public static void clear() {
         CONTEXT.remove();
     }
-    
+
     /**
      * Execute code with context and auto-cleanup
      * 
-     * @param context TenantContext to use
+     * @param context  TenantContext to use
      * @param supplier Code to execute
-     * @param <T> Return type
+     * @param <T>      Return type
      * @return Result from supplier
      */
     public static <T> T runWithContext(TenantContext context, Supplier<T> supplier) {
@@ -198,28 +221,30 @@ public class TenantContext {
             }
         }
     }
-    
+
     @Override
     public String toString() {
         return "TenantContext{" +
-               "tenantId='" + tenantId + '\'' +
-               ", appId='" + appId + '\'' +
-               (userId != null ? ", userId='" + userId + '\'' : "") +
-               (requestId != null ? ", requestId='" + requestId + '\'' : "") +
-               '}';
+                "tenantId='" + tenantId + '\'' +
+                ", appId='" + appId + '\'' +
+                (userId != null ? ", userId='" + userId + '\'' : "") +
+                (requestId != null ? ", requestId='" + requestId + '\'' : "") +
+                '}';
     }
-    
+
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
         TenantContext that = (TenantContext) o;
-        return tenantId.equals(that.tenantId) && 
-               appId.equals(that.appId) &&
-               (userId == null ? that.userId == null : userId.equals(that.userId)) &&
-               (requestId == null ? that.requestId == null : requestId.equals(that.requestId));
+        return tenantId.equals(that.tenantId) &&
+                appId.equals(that.appId) &&
+                (userId == null ? that.userId == null : userId.equals(that.userId)) &&
+                (requestId == null ? that.requestId == null : requestId.equals(that.requestId));
     }
-    
+
     @Override
     public int hashCode() {
         int result = 31 * tenantId.hashCode() + appId.hashCode();
