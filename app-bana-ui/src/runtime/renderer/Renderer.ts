@@ -527,17 +527,18 @@ async function handleAction(node: ComponentNode, event: Event) {
       alert('⚠️ Save operation timed out. Please check your connection and try again.');
     }, SAVE_TIMEOUT_MS);
 
+    // UX Enhancement #2: Create progress toast immediately
+    const progressToast = createProgressToast(entityData.size);
+    document.body.appendChild(progressToast);
+
+    let savedCount = 0; // Track count for error handling (and progress)
+
     try {
       button.setAttribute('label', 'Saving...');
       button.setAttribute('disabled', 'true');
 
-      // UX Enhancement #2: Create progress toast immediately
-      const progressToast = createProgressToast(entityData.size);
-      document.body.appendChild(progressToast);
-
       // Save each entity sequentially with progress updates
       const results = [];
-      let savedCount = 0; // CRITICAL FIX #4: Track count for error handling
 
       for (const [entity, data] of entityData) {
         console.log(`[Renderer] → Saving ${entity}:`, data);

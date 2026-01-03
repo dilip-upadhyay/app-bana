@@ -126,8 +126,9 @@ export class AppRuntimeShell extends LitElement {
     // Initialize RuntimeContext for all runtime components
     try {
       // Get tenant from runtime state (if set) OR logged-in user OR default
-      const stateTenant = (this.runtimeState as any).tenantId;
-      const authTenant = AuthService.getUser()?.tenantId;
+      const stateTenant = this.runtimeState?.tenantId;
+      const authUser = AuthService.getUser();
+      const authTenant = authUser?.tenantId || (authUser as any)?.tenant_id;
       const tenantId = stateTenant || authTenant || 'default';
 
       const appId = this.runtimeState.app.id;

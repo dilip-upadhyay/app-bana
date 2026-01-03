@@ -1142,7 +1142,7 @@ export class LivePreview extends LitElement {
       // Get tenant ID from logged-in user
       const user = AuthService.getUser();
       const runtimeState = {
-        tenantId: user?.tenantId || 'default',
+        tenantId: user?.tenantId || (user as any)?.tenant_id || 'default',
         appId: currentApp.id,
         pageId: this.page!.id,
         mode: 'preview' as const
