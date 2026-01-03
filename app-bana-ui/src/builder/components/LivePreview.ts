@@ -1141,18 +1141,14 @@ export class LivePreview extends LitElement {
       // Create runtime state with full app context
       // Get tenant ID from logged-in user
       const user = AuthService.getUser();
-      const runtimeState = {
-        tenantId: user?.tenantId || (user as any)?.tenant_id || 'default',
-        appId: currentApp.id,
-        pageId: this.page!.id,
-        mode: 'preview' as const
-      };
+      const tenantId = user?.tenantId || (user as any)?.tenant_id || 'default';
+      const appId = currentApp.id;
 
-      // Encode state for URL (base64 encoded JSON)
-      const stateParam = btoa(JSON.stringify(runtimeState));
-      const previewUrl = `/index.html?state=${stateParam}`;
+      // New Path-Based Routing: /run/:tenantId/:appId
+      // We can also append ?pageId=... if we want to deep link (requires index.ts support, but safe to add)
+      const previewUrl = `/run/${tenantId}/${appId}`;
 
-      console.log('[LivePreview] Opening preview with state:', runtimeState);
+      console.log('[LivePreview] Opening preview URL:', previewUrl);
       window.open(previewUrl, '_blank');
     }).catch((error) => {
       console.error('[LivePreview] Error loading AppStore:', error);

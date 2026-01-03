@@ -17,7 +17,6 @@
  * @see AppRuntimeShell for initialization
  * @see FormContainer for usage example
  */
-import { AuthService } from '../pages/auth/auth-service';
 
 export class RuntimeContext {
   private static instance: RuntimeContext;
@@ -92,50 +91,66 @@ export class RuntimeContext {
    * @returns Context object, or default values if not initialized
    */
   getContextSafe(): { tenantId: string; appId: string; env: string } {
-    if (!this.initialized || !this.appId) {
-      // Try to get from AppStore first (for Builder context)
-      // We import dynamically to avoid circular dependencies if possible, or just assume it's global
-      // But since we can't easily dynamic import here without async, we'll try to rely on a global or check local storage directly if needed.
-      // Better approach: Since AppStore is available in the browser, let's try to get it.
+    if (this.context) return this.context;
 
-      let fallbackAppId = 'test-app';
-      try {
-        // HACK: In builder, we can try to peek at the AppStore state if exposed, 
-        // or just read the current app from the URL or Store if accessible.
-        // Given the constraints and the file structure, let's try to access the store if possible.
-        // Actually, let's just checking if we can import AppStore.
-
-        // However, adding a dependency to AppStore here might cause circles.
-        // Let's check if 'appbana_current_app' is in localStorage?
-        // AppMeta is stored in AppStore not strictly in LS.
-        // But the AppManager sets the current app. 
-
-        // Let's modify this to try and get the current app from the window/global if set, or just default to a more smart check.
-
-        // Best approach: In the AppManager, when selecting an app, we should ALSO call RuntimeContext.setContext().
-        // That is the root cause: AppManager selects app but doesn't tell RuntimeContext.
-
-        console.warn(
-          '[RuntimeContext] Context not initialized, using fallback values. ' +
-          'This is OK for development/testing but should not happen in production.'
-        );
+    // Try to parse from URL if not initialized (e.g. /run/:tenant/:app)
+    const path = window.location.pathname;
+    if (path.startsWith('/run/')) {
+      const parts = path.split('/');
+      if (parts.length >= 4) {
         return {
-          tenantId: AuthService.getUser()?.tenantId || 'default',
-          appId: fallbackAppId,
+          tenantId: parts[2],
+          appId: parts[3],
           env: 'dev'
         };
-      } catch (e) {
-        // ignore
       }
+    }
 
+    // Try to parse from query param 'state' (Legacy)
+    const params = new URLSearchParams(window.location.search);
+    const stateParam = params.get('state');
+    if (stateParam) {
+      try {
+        const state = JSON.parse(atob(stateParam));
+        return {
+          tenantId: state.tenantId || 'default',
+          appId: state.appId || '',
+          env: state.env || 'dev'
+        };
+      } catch (e) {
+        // invalid state
+      }
+    }
+
+    // Fallback: Check if we have global runtime state injected
+    const shell = document.querySelector('app-runtime-shell');
+    if (shell && (shell as any).runtimeState) {
+      const rs = (shell as any).runtimeState;
       return {
-        tenantId: AuthService.getUser()?.tenantId || 'default',
-        appId: 'test-app',
+        tenantId: rs.tenantId || 'default',
+        appId: rs.app?.id || rs.appId || '',
         env: 'dev'
       };
     }
 
-    return this.getContext();
+    // NO AUTH SERVICE FALLBACK.
+    // Return default values for safety but log warning.
+    console.warn('[RuntimeContext] Context not initialized and URL parsing failed. Using strict defaults.');
+    return { tenantId: 'default', appId: '', env: 'dev' };
+  }
+
+  /**
+   * Getter for internal context logic helper
+   */
+  private get context(): { tenantId: string; appId: string; env: string } | null {
+    if (this.initialized && this.appId) {
+      return {
+        tenantId: this.tenantId,
+        appId: this.appId,
+        env: this.env
+      };
+    }
+    return null;
   }
 
   /**

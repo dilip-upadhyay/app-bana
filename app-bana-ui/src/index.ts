@@ -29,13 +29,31 @@ export class AppRoot extends LitElement {
     const hash = window.location.hash;
     const searchParams = new URLSearchParams(window.location.search);
 
-    // Check for runtime state parameter (new preview mode)
+    // Check for runtime state parameter (Legacy preview mode)
     const stateParam = searchParams.get('state');
     if (stateParam) {
       // Hide AppBana Studio chrome for preview mode
       this.hideStudioChrome();
-      await this.loadAppRuntime(stateParam);
+      await this.loadAppRuntimeLegacy(stateParam);
       return;
+    }
+
+    // New Path-based Runtime: /run/:tenantId/:appId
+    if (path.startsWith('/run/')) {
+      this.hideStudioChrome();
+      const parts = path.split('/');
+      // Expected: ["", "run", "tenantId", "appId", ...]
+      if (parts.length >= 4) {
+        const tenantId = parts[2];
+        const appId = parts[3];
+        console.log(`[AppRoot] Detected Path Routing: tenant=${tenantId}, app=${appId}`);
+        await this.loadAppRuntimeFromState({
+          tenantId,
+          appId,
+          mode: 'preview'
+        });
+        return;
+      }
     }
 
     // Legacy: If hash-based routing is present, load page from app store
@@ -72,18 +90,28 @@ export class AppRoot extends LitElement {
   }
 
   /**
-   * Load and render app runtime with full context
-   * This is the NEW proper way to preview/run apps
+   * Legacy wrapper for state param
    */
-  private async loadAppRuntime(stateParam: string) {
+  private async loadAppRuntimeLegacy(stateParam: string) {
+    try {
+      const compactState = decodeRuntimeState(stateParam);
+      await this.loadAppRuntimeFromState(compactState);
+    } catch (e) {
+      console.error('Invalid runtime state param', e);
+    }
+  }
+
+  /**
+   * Load and render app runtime with full context
+   * Unified loader for both Path-based and Param-based routing
+   */
+  private async loadAppRuntimeFromState(compactState: any) {
     await ensureCoreRegistered();
     const host = this.renderRoot.querySelector('#app-runtime');
     if (!host) return;
 
     try {
-      // Decode compact runtime state from URL parameter
-      const compactState = decodeRuntimeState(stateParam);
-      console.log('[AppRoot] Loading app runtime with compact state:', compactState);
+      console.log('[AppRoot] Loading app runtime with state:', compactState);
 
       // Load app WITH FULL PAGES from backend API
       // Use multi-tenant endpoints with tenantId in path
@@ -94,12 +122,19 @@ export class AppRoot extends LitElement {
         url = getApiUrl(`/api/${tenantId}/apps/${compactState.appId}/env/${compactState.env}/full`);
       }
 
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('appbana_token') || ''}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // NO DEFAULT AUTH: We blindly try to fetch. If it 401s, it errors.
+      // We pass the token if we have it, but the backend architecture 
+      // allows anonymous access for configured public apps (verified via curl).
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      const token = localStorage.getItem('appbana_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(url, { headers });
       if (!response.ok) {
         throw new Error(`Failed to load app: ${response.statusText}`);
       }
@@ -232,7 +267,7 @@ export class AppRoot extends LitElement {
     const stateParam = searchParams.get('state');
 
     // New runtime mode - full app context with navigation
-    if (stateParam) {
+    if (stateParam || path.startsWith('/run/')) {
       return html`<div id="app-runtime" style="width: 100%; height: 100vh; display: flex; flex-direction: column;"></div>`;
     }
 
