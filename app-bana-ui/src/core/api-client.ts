@@ -357,16 +357,26 @@ export async function bulkExport(entity: string, ids: (string | number)[]) {
 /** Create a new row */
 export async function createRow(entity: string, data: Record<string, any>) {
   const base = getApiBaseUrl();
-  const { tenantId, appId } = RuntimeContext.getInstance().getContextSafe();
-  // Runtime uses /api/ prefix (not /appbana-studio/ which is for builder operations)
-  return apiClient.post(`${base}/api/${tenantId}/apps/${appId}/${entity}`, data);
+  const { tenantId, appId, env } = RuntimeContext.getInstance().getContextSafe();
+
+  // Include environment in URL for deployed versions (SIT, PROD)
+  // DEV uses default path without /env/
+  const envPath = env && env !== 'dev' ? `/env/${env}` : '';
+  const url = `${base}/api/${tenantId}/apps/${appId}${envPath}/${entity}`;
+
+  return apiClient.post(url, data);
 }
 
 /** Update single row by id */
 export async function updateRow(entity: string, id: string | number, data: Record<string, any>) {
   const base = getApiBaseUrl();
-  const { tenantId, appId } = RuntimeContext.getInstance().getContextSafe();
-  return apiClient.put(`${base}/appbana-studio/${tenantId}/apps/${appId}/${entity}/${id}`, data);
+  const { tenantId, appId, env } = RuntimeContext.getInstance().getContextSafe();
+
+  // Include environment in URL for deployed versions (SIT, PROD)
+  const envPath = env && env !== 'dev' ? `/env/${env}` : '';
+  const url = `${base}/api/${tenantId}/apps/${appId}${envPath}/${entity}/${id}`;
+
+  return apiClient.put(url, data);
 }
 
 /**

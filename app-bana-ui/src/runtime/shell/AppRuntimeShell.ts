@@ -132,7 +132,8 @@ export class AppRuntimeShell extends LitElement {
       const tenantId = stateTenant || authTenant || 'default';
 
       const appId = this.runtimeState.app.id;
-      const env = this.runtimeState.mode === 'production' ? 'prod' : 'dev';
+      // Use the actual environment from runtimeState (DEV/SIT/PROD), not derived from mode
+      const env = this.runtimeState.env || 'dev';
 
       RuntimeContext.getInstance().setContext(tenantId, appId, env);
       console.log(`[AppRuntimeShell] RuntimeContext initialized: tenant=${tenantId}, app=${appId}, env=${env}`);

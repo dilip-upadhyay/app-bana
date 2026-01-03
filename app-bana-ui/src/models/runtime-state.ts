@@ -33,6 +33,9 @@ export interface AppRuntimeState {
   // Runtime mode
   mode: 'preview' | 'production' | 'development';
 
+  // Optional environment (DEV, SIT, PROD) for deployed versions
+  env?: string;
+
   // Additional context
   context?: {
     studioUrl?: string;          // Link back to studio for preview mode

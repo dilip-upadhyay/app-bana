@@ -160,6 +160,7 @@ export class AppRoot extends LitElement {
           canGoForward: false
         },
         mode: compactState.mode || 'preview',
+        env: compactState.env, // Pass environment (DEV/SIT/PROD) for API routing
         context: {
           timestamp: Date.now(),
           studioUrl: '/studio.html'
