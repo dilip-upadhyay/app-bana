@@ -36,7 +36,9 @@ public class AppManager {
      */
     public static void initialize() {
         LOG.info("[AppManager] Initializing database persistence layer...");
-        ensureTables();
+        // Tables are now created by Flyway migrations (V1-V11)
+        // ensureTables(); // Removed - Flyway handles table creation
+        LOG.info("[AppManager] Database tables managed by Flyway");
     }
 
     private static void ensureTables() {

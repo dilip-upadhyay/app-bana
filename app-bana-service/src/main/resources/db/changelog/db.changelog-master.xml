@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.29.xsd">
+
+    <changeSet id="V1" author="appbana">
+        <sqlFile path="db/migration/V1__auth_schema.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V2" author="appbana">
+        <sqlFile path="db/migration/V2__field_level_security.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V3" author="appbana">
+        <sqlFile path="db/migration/V3__profile_layer.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V6" author="appbana">
+        <sqlFile path="db/migration/V6__workflow_tables.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V11" author="appbana">
+        <sqlFile path="db/migration/V11__app_versioning.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+</databaseChangeLog>

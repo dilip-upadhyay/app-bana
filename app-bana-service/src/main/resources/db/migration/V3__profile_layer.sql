@@ -13,7 +13,7 @@
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS profile (
     id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -70,27 +70,27 @@ CREATE INDEX IF NOT EXISTS idx_role_profile_profile ON role_profile(profile_id);
 
 -- Profile 1: System Administrator Profile (Full Access)
 INSERT INTO profile (id, name, description, is_active, created_by) VALUES 
-(RANDOM_UUID(), 'System Administrator', 'Full system access - all permissions', TRUE, 'system');
+(gen_random_uuid(), 'System Administrator', 'Full system access - all permissions', TRUE, 'system');
 
 -- Profile 2: Manager Profile (Management Operations)
 INSERT INTO profile (id, name, description, is_active, created_by) VALUES 
-(RANDOM_UUID(), 'Manager', 'Team and user management capabilities', TRUE, 'system');
+(gen_random_uuid(), 'Manager', 'Team and user management capabilities', TRUE, 'system');
 
 -- Profile 3: User Management Profile
 INSERT INTO profile (id, name, description, is_active, created_by) VALUES 
-(RANDOM_UUID(), 'User Management', 'Create, read, update users', TRUE, 'system');
+(gen_random_uuid(), 'User Management', 'Create, read, update users', TRUE, 'system');
 
 -- Profile 4: Role Management Profile
 INSERT INTO profile (id, name, description, is_active, created_by) VALUES 
-(RANDOM_UUID(), 'Role Management', 'Create, read, update roles', TRUE, 'system');
+(gen_random_uuid(), 'Role Management', 'Create, read, update roles', TRUE, 'system');
 
 -- Profile 5: Basic User Profile (Read-only)
 INSERT INTO profile (id, name, description, is_active, created_by) VALUES 
-(RANDOM_UUID(), 'Basic User', 'Basic read-only access', TRUE, 'system');
+(gen_random_uuid(), 'Basic User', 'Basic read-only access', TRUE, 'system');
 
 -- Profile 6: Application Builder Profile
 INSERT INTO profile (id, name, description, is_active, created_by) VALUES 
-(RANDOM_UUID(), 'Application Builder', 'Create and manage applications', TRUE, 'system');
+(gen_random_uuid(), 'Application Builder', 'Create and manage applications', TRUE, 'system');
 
 -- ============================================================================
 -- Assign Permissions to Profiles
@@ -98,14 +98,14 @@ INSERT INTO profile (id, name, description, is_active, created_by) VALUES
 
 -- System Administrator: All permissions
 INSERT INTO profile_permission (id, profile_id, permission_id, created_by)
-SELECT RANDOM_UUID(), p.id, perm.id, 'system'
+SELECT gen_random_uuid(), p.id, perm.id, 'system'
 FROM profile p
 CROSS JOIN permission perm
 WHERE p.name = 'System Administrator';
 
 -- Manager Profile: User and role management
 INSERT INTO profile_permission (id, profile_id, permission_id, created_by)
-SELECT RANDOM_UUID(), p.id, perm.id, 'system'
+SELECT gen_random_uuid(), p.id, perm.id, 'system'
 FROM profile p
 CROSS JOIN permission perm
 WHERE p.name = 'Manager'
@@ -113,7 +113,7 @@ WHERE p.name = 'Manager'
 
 -- User Management Profile
 INSERT INTO profile_permission (id, profile_id, permission_id, created_by)
-SELECT RANDOM_UUID(), p.id, perm.id, 'system'
+SELECT gen_random_uuid(), p.id, perm.id, 'system'
 FROM profile p
 CROSS JOIN permission perm
 WHERE p.name = 'User Management'
@@ -121,7 +121,7 @@ WHERE p.name = 'User Management'
 
 -- Role Management Profile
 INSERT INTO profile_permission (id, profile_id, permission_id, created_by)
-SELECT RANDOM_UUID(), p.id, perm.id, 'system'
+SELECT gen_random_uuid(), p.id, perm.id, 'system'
 FROM profile p
 CROSS JOIN permission perm
 WHERE p.name = 'Role Management'
@@ -129,7 +129,7 @@ WHERE p.name = 'Role Management'
 
 -- Basic User Profile
 INSERT INTO profile_permission (id, profile_id, permission_id, created_by)
-SELECT RANDOM_UUID(), p.id, perm.id, 'system'
+SELECT gen_random_uuid(), p.id, perm.id, 'system'
 FROM profile p
 CROSS JOIN permission perm
 WHERE p.name = 'Basic User'
@@ -137,7 +137,7 @@ WHERE p.name = 'Basic User'
 
 -- Application Builder Profile
 INSERT INTO profile_permission (id, profile_id, permission_id, created_by)
-SELECT RANDOM_UUID(), p.id, perm.id, 'system'
+SELECT gen_random_uuid(), p.id, perm.id, 'system'
 FROM profile p
 CROSS JOIN permission perm
 WHERE p.name = 'Application Builder'
@@ -149,21 +149,21 @@ WHERE p.name = 'Application Builder'
 
 -- Admin role: System Administrator Profile
 INSERT INTO role_profile (id, role_id, profile_id, created_by)
-SELECT RANDOM_UUID(), r.id, p.id, 'system'
+SELECT gen_random_uuid(), r.id, p.id, 'system'
 FROM role r
 CROSS JOIN profile p
 WHERE r.name = 'admin' AND p.name = 'System Administrator';
 
 -- Manager role: Manager + User Management + Application Builder Profiles
 INSERT INTO role_profile (id, role_id, profile_id, created_by)
-SELECT RANDOM_UUID(), r.id, p.id, 'system'
+SELECT gen_random_uuid(), r.id, p.id, 'system'
 FROM role r
 CROSS JOIN profile p
 WHERE r.name = 'manager' AND p.name IN ('Manager', 'User Management', 'Application Builder');
 
 -- User role: Basic User Profile
 INSERT INTO role_profile (id, role_id, profile_id, created_by)
-SELECT RANDOM_UUID(), r.id, p.id, 'system'
+SELECT gen_random_uuid(), r.id, p.id, 'system'
 FROM role r
 CROSS JOIN profile p
 WHERE r.name = 'user' AND p.name = 'Basic User';
@@ -172,7 +172,7 @@ WHERE r.name = 'user' AND p.name = 'Basic User';
 -- View: v_user_profiles
 -- Description: Get all profiles for a user (through their roles)
 -- ============================================================================
-CREATE VIEW IF NOT EXISTS v_user_profiles AS
+CREATE OR REPLACE VIEW v_user_profiles AS
 SELECT DISTINCT
     ur.user_id,
     p.id AS profile_id,
@@ -187,7 +187,7 @@ WHERE p.is_active = TRUE;
 -- View: v_user_permissions_from_profiles
 -- Description: Get all permissions for a user from their profiles
 -- ============================================================================
-CREATE VIEW IF NOT EXISTS v_user_permissions_from_profiles AS
+CREATE OR REPLACE VIEW v_user_permissions_from_profiles AS
 SELECT DISTINCT
     ur.user_id,
     perm.id AS permission_id,
@@ -206,7 +206,7 @@ WHERE p.is_active = TRUE;
 -- View: v_effective_user_permissions
 -- Description: Combine permissions from both direct role assignment AND profiles
 -- ============================================================================
-CREATE VIEW IF NOT EXISTS v_effective_user_permissions AS
+CREATE OR REPLACE VIEW v_effective_user_permissions AS
 -- Permissions from direct role assignments
 SELECT 
     ur.user_id,

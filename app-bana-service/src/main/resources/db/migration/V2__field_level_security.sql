@@ -33,7 +33,7 @@ CREATE INDEX IF NOT EXISTS idx_field_perm_lookup ON field_permission(role_id, en
 -- Admin role: Full access to ALL fields
 INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit)
 SELECT 
-    RANDOM_UUID() as id,
+    gen_random_uuid() as id,
     r.id as role_id,
     'User' as entity_name,
     '*' as field_name,  -- Wildcard for all fields
@@ -44,7 +44,7 @@ FROM role r WHERE r.name = 'admin';
 -- Manager role: Can read all User fields, edit most (not salary/performance_review)
 INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit)
 SELECT 
-    RANDOM_UUID() as id,
+    gen_random_uuid() as id,
     r.id as role_id,
     'User' as entity_name,
     'name' as field_name,
@@ -53,25 +53,25 @@ SELECT
 FROM role r WHERE r.name = 'manager'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'email', TRUE, TRUE
+    gen_random_uuid(), r.id, 'User', 'email', TRUE, TRUE
 FROM role r WHERE r.name = 'manager'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'status', TRUE, TRUE
+    gen_random_uuid(), r.id, 'User', 'status', TRUE, TRUE
 FROM role r WHERE r.name = 'manager'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'salary', TRUE, FALSE  -- Can read but not edit
+    gen_random_uuid(), r.id, 'User', 'salary', TRUE, FALSE  -- Can read but not edit
 FROM role r WHERE r.name = 'manager'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'department', TRUE, TRUE
+    gen_random_uuid(), r.id, 'User', 'department', TRUE, TRUE
 FROM role r WHERE r.name = 'manager';
 
 -- Standard User role: Can only read/edit own basic fields
 INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit)
 SELECT 
-    RANDOM_UUID() as id,
+    gen_random_uuid() as id,
     r.id as role_id,
     'User' as entity_name,
     'name' as field_name,
@@ -80,11 +80,11 @@ SELECT
 FROM role r WHERE r.name = 'user'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'email', TRUE, FALSE  -- Read-only
+    gen_random_uuid(), r.id, 'User', 'email', TRUE, FALSE  -- Read-only
 FROM role r WHERE r.name = 'user'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'phone', TRUE, TRUE
+    gen_random_uuid(), r.id, 'User', 'phone', TRUE, TRUE
 FROM role r WHERE r.name = 'user';
 
 -- ============================================================================
@@ -94,7 +94,7 @@ FROM role r WHERE r.name = 'user';
 -- Create HR role if not exists
 INSERT INTO role (id, name, description, created_at)
 SELECT 
-    RANDOM_UUID() as id,
+    gen_random_uuid() as id,
     'hr' as name,
     'Human Resources - salary and benefits management' as description,
     CURRENT_TIMESTAMP as created_at
@@ -103,7 +103,7 @@ WHERE NOT EXISTS (SELECT 1 FROM role WHERE name = 'hr');
 -- HR permissions: Full access to salary, benefits, but not performance reviews
 INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit)
 SELECT 
-    RANDOM_UUID() as id,
+    gen_random_uuid() as id,
     r.id as role_id,
     'User' as entity_name,
     'name' as field_name,
@@ -112,19 +112,19 @@ SELECT
 FROM role r WHERE r.name = 'hr'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'email', TRUE, TRUE
+    gen_random_uuid(), r.id, 'User', 'email', TRUE, TRUE
 FROM role r WHERE r.name = 'hr'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'salary', TRUE, TRUE  -- Full salary access
+    gen_random_uuid(), r.id, 'User', 'salary', TRUE, TRUE  -- Full salary access
 FROM role r WHERE r.name = 'hr'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'benefits', TRUE, TRUE
+    gen_random_uuid(), r.id, 'User', 'benefits', TRUE, TRUE
 FROM role r WHERE r.name = 'hr'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'hire_date', TRUE, TRUE
+    gen_random_uuid(), r.id, 'User', 'hire_date', TRUE, TRUE
 FROM role r WHERE r.name = 'hr';
 
 -- ============================================================================
@@ -134,7 +134,7 @@ FROM role r WHERE r.name = 'hr';
 -- Create Finance role if not exists
 INSERT INTO role (id, name, description, created_at)
 SELECT 
-    RANDOM_UUID() as id,
+    gen_random_uuid() as id,
     'finance' as name,
     'Finance Team - budget and cost analysis' as description,
     CURRENT_TIMESTAMP as created_at
@@ -143,7 +143,7 @@ WHERE NOT EXISTS (SELECT 1 FROM role WHERE name = 'finance');
 -- Finance permissions: Read-only access to salary for budget planning
 INSERT INTO field_permission (id, role_id, entity_name, field_name, can_read, can_edit)
 SELECT 
-    RANDOM_UUID() as id,
+    gen_random_uuid() as id,
     r.id as role_id,
     'User' as entity_name,
     'name' as field_name,
@@ -152,11 +152,11 @@ SELECT
 FROM role r WHERE r.name = 'finance'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'salary', TRUE, FALSE  -- Read-only for budget
+    gen_random_uuid(), r.id, 'User', 'salary', TRUE, FALSE  -- Read-only for budget
 FROM role r WHERE r.name = 'finance'
 UNION ALL
 SELECT 
-    RANDOM_UUID(), r.id, 'User', 'department', TRUE, FALSE
+    gen_random_uuid(), r.id, 'User', 'department', TRUE, FALSE
 FROM role r WHERE r.name = 'finance';
 
 -- ============================================================================

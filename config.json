@@ -1,8 +1,8 @@
 {
-  "jdbcUrl": "jdbc:h2:./data/appbana;AUTO_SERVER=TRUE",
-  "username": "sa",
-  "password": "",
-  "driver": "org.h2.Driver",
+  "jdbcUrl": "jdbc:postgresql://localhost:5432/appbana",
+  "username": "appbana",
+  "password": "appbana_dev_2026",
+  "driver": "org.postgresql.Driver",
   "name": "default",
   "datasources": [],
   "activeDatasource": null,

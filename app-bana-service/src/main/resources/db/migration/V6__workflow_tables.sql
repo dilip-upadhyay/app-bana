@@ -190,7 +190,7 @@ INSERT INTO appbana_wf_definition (
 -- =====================================================
 
 -- View: Active user tasks with workflow context
-CREATE VIEW IF NOT EXISTS v_my_active_tasks AS
+CREATE OR REPLACE VIEW v_my_active_tasks AS
 SELECT 
     t.id AS token_id,
     t.node_id,
@@ -215,7 +215,7 @@ WHERE t.status = 'ACTIVE'
   AND i.status = 'RUNNING';
 
 -- View: Workflow instance history with metadata
-CREATE VIEW IF NOT EXISTS v_workflow_history AS
+CREATE OR REPLACE VIEW v_workflow_history AS
 SELECT 
     i.id AS instance_id,
     i.entity_id,
@@ -223,7 +223,7 @@ SELECT
     i.status AS instance_status,
     i.started_at,
     i.completed_at,
-    TIMESTAMPDIFF(MINUTE, i.started_at, COALESCE(i.completed_at, CURRENT_TIMESTAMP)) AS duration_minutes,
+    EXTRACT(EPOCH FROM (COALESCE(i.completed_at, CURRENT_TIMESTAMP) - i.started_at))/60 AS duration_minutes,
     d.name AS workflow_name,
     d.version AS workflow_version,
     d.app_id,

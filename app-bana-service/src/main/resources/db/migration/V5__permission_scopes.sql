@@ -14,7 +14,7 @@
 CREATE TABLE IF NOT EXISTS organization (
     id VARCHAR(36) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    slug VARCHAR(100) UNIQUE NOT NULL,  -- URL-friendly identifier
+    slug VARCHAR(100) NOT NULL UNIQUE,  -- URL-friendly identifier
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -142,14 +142,14 @@ CREATE INDEX IF NOT EXISTS idx_user_team_team ON user_team(team_id);
 
 -- Organizations
 INSERT INTO organization (id, name, slug, is_active) VALUES
-(RANDOM_UUID(), 'Acme Corporation', 'acme-corp', TRUE),
-(RANDOM_UUID(), 'Tech Startup Inc', 'tech-startup', TRUE),
-(RANDOM_UUID(), 'Global Enterprises', 'global-enterprises', TRUE);
+(gen_random_uuid(), 'Acme Corporation', 'acme-corp', TRUE),
+(gen_random_uuid(), 'Tech Startup Inc', 'tech-startup', TRUE),
+(gen_random_uuid(), 'Global Enterprises', 'global-enterprises', TRUE);
 
 -- Departments for Acme Corporation
 INSERT INTO department (id, organization_id, name, is_active)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     org.id,
     dept_name,
     TRUE
@@ -166,7 +166,7 @@ WHERE org.slug = 'acme-corp';
 -- Teams for Engineering Department
 INSERT INTO team (id, department_id, name, is_active)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     dept.id,
     team_name,
     TRUE
@@ -182,7 +182,7 @@ WHERE dept.name = 'Engineering';
 -- Teams for Sales Department
 INSERT INTO team (id, department_id, name, is_active)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     dept.id,
     team_name,
     TRUE
@@ -206,7 +206,7 @@ WHERE dept.name = 'Sales';
 -- Uncomment and replace with actual user_id when needed:
 -- INSERT INTO permission_scope (id, user_id, permission_id, scope_type, scope_entity_id, created_by)
 -- SELECT 
---     RANDOM_UUID(),
+--     gen_random_uuid(),
 --     (SELECT id FROM "user" WHERE email = 'admin@appbana.com'),
 --     perm.id,
 --     'global',
@@ -218,7 +218,7 @@ WHERE dept.name = 'Sales';
 -- Example: Manager user with organization-scoped permissions
 -- INSERT INTO permission_scope (id, user_id, permission_id, scope_type, scope_entity_id, created_by)
 -- SELECT 
---     RANDOM_UUID(),
+--     gen_random_uuid(),
 --     (SELECT id FROM "user" WHERE email = 'manager@appbana.com'),
 --     perm.id,
 --     'organization',
@@ -232,7 +232,7 @@ WHERE dept.name = 'Sales';
 -- Example: Regular user with department-scoped permissions
 -- INSERT INTO permission_scope (id, user_id, permission_id, scope_type, scope_entity_id, created_by)
 -- SELECT 
---     RANDOM_UUID(),
+--     gen_random_uuid(),
 --     (SELECT id FROM "user" WHERE email = 'user@appbana.com'),
 --     perm.id,
 --     'department',
@@ -249,7 +249,7 @@ WHERE dept.name = 'Sales';
 
 -- View: v_user_scoped_permissions
 -- Description: Get user's permissions with their scopes
-CREATE VIEW IF NOT EXISTS v_user_scoped_permissions AS
+CREATE OR REPLACE VIEW v_user_scoped_permissions AS
 SELECT 
     ps.user_id,
     ps.permission_id,
@@ -273,7 +273,7 @@ WHERE ps.is_active = TRUE;
 
 -- View: v_user_accessible_organizations
 -- Description: Organizations a user can access based on permission scopes
-CREATE VIEW IF NOT EXISTS v_user_accessible_organizations AS
+CREATE OR REPLACE VIEW v_user_accessible_organizations AS
 SELECT DISTINCT
     ps.user_id,
     org.id AS organization_id,

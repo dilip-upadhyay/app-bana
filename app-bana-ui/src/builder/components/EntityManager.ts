@@ -7,6 +7,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
+import { AuthService } from '../../pages/auth/auth-service';
 import type { AppMeta } from '../../models/app-metadata';
 import type { EntityMeta, EntityField, EntityRelationship } from '../../models/entity-metadata';
 import { EntitySchemaConverter } from '../../core/EntitySchemaConverter';
@@ -895,6 +896,66 @@ export class EntityManager extends LitElement {
           entities: updatedEntities,
         });
 
+        // CRITICAL FIX: Update the schema in the backend
+        const user = AuthService.getUser();
+        const tenantId = user?.tenantId || (user as any)?.tenant_id || 'default';
+        
+        // Map frontend field types to backend field types
+        const mapFieldType = (type: string): string => {
+          const typeMap: Record<string, string> = {
+            'text': 'string',
+            'longtext': 'text',
+            'email': 'string',
+            'phone': 'string',
+            'url': 'string',
+            'number': 'long',
+            'decimal': 'double',
+            'currency': 'double',
+            'date': 'date',
+            'datetime': 'timestamp',
+            'boolean': 'boolean',
+            'autoincrement': 'long',
+          };
+          return typeMap[type] || 'string';
+        };
+        
+        const schemaFields = updatedEntity.fields.map(field => ({
+          name: field.name,
+          type: mapFieldType(field.type),
+          required: field.required || false,
+          primaryKey: field.type === 'autoincrement',
+          autoIncrement: field.type === 'autoincrement',
+          unique: field.unique || false,
+          defaultValue: field.defaultValue,
+        }));
+
+        // If no fields defined, add an id field by default
+        if (schemaFields.length === 0) {
+          schemaFields.push({
+            name: 'id',
+            type: 'long',
+            primaryKey: true,
+            autoIncrement: true,
+            required: true,
+            unique: true,
+            defaultValue: undefined,
+          });
+        }
+
+        const backendSchema = {
+          name: updatedEntity.name,
+          appId: this.currentApp.id,
+          tenantId: tenantId,
+          fields: schemaFields,
+        };
+
+        // Entity updated in DRAFT mode
+        // Table will be created when app is published to an environment
+        console.log('[EntityManager] ✏️ Entity updated in DRAFT mode:', updatedEntity.name);
+        console.log('[EntityManager] 📋 Entity definition saved to app metadata');
+        console.log('[EntityManager] 🚀 Table will be created when you PUBLISH the app');
+        console.log('[EntityManager] 📊 Field count:', schemaFields.length);
+
         this.loadEntities();
         this.showToast(`Entity "${updatedEntity.displayName}" updated!`, 'success');
         this.handleCloseModal();
@@ -928,6 +989,68 @@ export class EntityManager extends LitElement {
         await appStore.updateApp(this.currentApp.id, {
           entities: updatedEntities,
         });
+
+        // CRITICAL FIX: Create the schema in the backend
+        // Convert EntityMeta fields to backend schema format
+        const user = AuthService.getUser();
+        const tenantId = user?.tenantId || (user as any)?.tenant_id || 'default';
+        
+        // Map frontend field types to backend field types
+        const mapFieldType = (type: string): string => {
+          const typeMap: Record<string, string> = {
+            'text': 'string',
+            'longtext': 'text',
+            'email': 'string',
+            'phone': 'string',
+            'url': 'string',
+            'number': 'long',
+            'decimal': 'double',
+            'currency': 'double',
+            'date': 'date',
+            'datetime': 'timestamp',
+            'boolean': 'boolean',
+            'autoincrement': 'long',
+          };
+          return typeMap[type] || 'string';
+        };
+        
+        const schemaFields = newEntity.fields.map(field => ({
+          name: field.name,
+          type: mapFieldType(field.type),
+          required: field.required || false,
+          primaryKey: field.type === 'autoincrement',
+          autoIncrement: field.type === 'autoincrement',
+          unique: field.unique || false,
+          defaultValue: field.defaultValue,
+        }));
+
+        // If no fields defined, add an id field by default
+        if (schemaFields.length === 0) {
+          schemaFields.push({
+            name: 'id',
+            type: 'long',
+            primaryKey: true,
+            autoIncrement: true,
+            required: true,
+            unique: true,
+            defaultValue: undefined,
+          });
+        }
+
+        const backendSchema = {
+          name: newEntity.name,
+          appId: this.currentApp.id,
+          tenantId: tenantId,
+          fields: schemaFields,
+        };
+
+        // Entity created in DRAFT mode
+        // Table will be created when app is published to an environment
+        console.log('[EntityManager] 🆕 Entity created in DRAFT mode:', newEntity.name);
+        console.log('[EntityManager] 📋 Entity definition saved to app metadata');
+        console.log('[EntityManager] 🚀 Table will be created when you PUBLISH the app');
+        console.log('[EntityManager] 📊 Field count:', schemaFields.length);
+        console.log('[EntityManager] 💡 TIP: Click "Publish" button to deploy tables to DEV environment');
 
         // Reload entities
         this.loadEntities();

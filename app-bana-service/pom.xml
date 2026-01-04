@@ -124,11 +124,11 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Flyway for database migrations -->
+        <!-- Liquibase for database migrations (supports PostgreSQL 16) -->
         <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-            <version>10.4.1</version>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <version>4.29.2</version>
         </dependency>
 
         <!-- MVEL for workflow expression evaluation -->

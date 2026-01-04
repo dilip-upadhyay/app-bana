@@ -1,9 +1,14 @@
 package com.appbana.server.routes;
 
 import com.appbana.AppManager;
+import com.appbana.JdbcManager;
+import com.appbana.SchemaManager;
 import com.appbana.api.Router;
 import com.appbana.model.AppMetadata;
+import com.appbana.model.AppVersion;
+import com.appbana.model.DeploymentResult;
 import com.appbana.model.TenantContext;
+import com.appbana.service.AppPublishService;
 import com.appbana.service.AuthService;
 import com.appbana.service.ReleaseService;
 import com.appbana.service.TemplateService;
@@ -12,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,6 +46,81 @@ public class AppRoutes {
         TemplateService templateService = new TemplateService(dataDir);
 
         // ==================== RELEASE MANAGEMENT ====================
+
+        // Publish app to environment (NEW - Phase 3)
+        router.post("/api/{tenantId}/apps/{id}/publish", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+            String envParam = req.query("env");
+            
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            
+            if (envParam == null || envParam.isBlank()) {
+                res.json(400, Map.of("error", "env query parameter required (DEV, SIT, or PROD)"));
+                return;
+            }
+            
+            // Parse environment
+            AppVersion.Environment environment;
+            try {
+                environment = AppVersion.Environment.valueOf(envParam.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                res.json(400, Map.of("error", "Invalid environment: " + envParam + " (must be DEV, SIT, or PROD)"));
+                return;
+            }
+            
+            try {
+                // Read full AppMeta from request body as raw Map, then convert to JSON
+                Map<String, Object> appMetaMap = req.readJson(new TypeReference<Map<String, Object>>() {});
+                if (appMetaMap == null || appMetaMap.isEmpty()) {
+                    res.json(400, Map.of("error", "Request body must contain full AppMeta JSON"));
+                    return;
+                }
+                String appMetaJson = MAPPER.writeValueAsString(appMetaMap);
+                
+                // Get user ID from auth
+                String userId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
+                if (userId == null) {
+                    userId = "system";
+                }
+                
+                // Get database connection and initialize publish service
+                try (Connection conn = JdbcManager.getConnection()) {
+                    AppPublishService publishService = new AppPublishService(conn, new SchemaManager());
+                    
+                    // Publish app
+                    LOG.info("[PUBLISH-ENDPOINT] Publishing app {} to {} for tenant {}", appId, environment, tenantId);
+                    DeploymentResult result = publishService.publishApp(appMetaJson, appId, tenantId, environment, userId);
+                    
+                    if (result.isSuccess()) {
+                        LOG.info("[PUBLISH-ENDPOINT] ✅ Publish successful: {}", result.getSummary());
+                        res.json(200, Map.of(
+                            "success", true,
+                            "versionId", result.getVersionId(),
+                            "version", result.getVersion(),
+                            "environment", result.getEnvironment().name(),
+                            "tablesCreated", result.getTablesCreated(),
+                            "durationMs", result.getDurationMs(),
+                            "summary", result.getSummary()
+                        ));
+                    } else {
+                        LOG.error("[PUBLISH-ENDPOINT] ❌ Publish failed: {}", result.getSummary());
+                        res.json(500, Map.of(
+                            "success", false,
+                            "error", result.getErrorMessage(),
+                            "details", result.getErrorDetails(),
+                            "summary", result.getSummary()
+                        ));
+                    }
+                }
+            } catch (Exception e) {
+                LOG.error("[PUBLISH-ENDPOINT] Exception during publish", e);
+                res.json(500, Map.of("error", "Publish failed: " + e.getMessage()));
+            }
+        });
 
         // Create app version
         router.post("/api/{tenantId}/apps/{id}/versions", (req, res) -> {

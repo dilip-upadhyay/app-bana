@@ -1,15 +1,72 @@
 #!/bin/bash
 
 # AppBana Backend Restart Script
-# This script stops the running backend, rebuilds, and restarts it
+# This script manages PostgreSQL Docker, stops the running backend, rebuilds, and restarts it
 
 set -e  # Exit on error
 
 echo "🔄 Restarting AppBana Backend..."
 echo ""
 
-# Step 1: Stop running backend
-echo "1️⃣ Stopping running backend service..."
+# Step 1: Check/Start PostgreSQL Docker
+echo "1️⃣ Checking PostgreSQL Docker container..."
+
+POSTGRES_CONTAINER_NAME="appbana-postgres"
+POSTGRES_VERSION="16-alpine"
+POSTGRES_PORT="5432"
+POSTGRES_DB="appbana"
+POSTGRES_USER="appbana"
+POSTGRES_PASSWORD="appbana_dev_2026"
+
+# Check if container exists
+if docker ps -a --format '{{.Names}}' | grep -q "^${POSTGRES_CONTAINER_NAME}$"; then
+    # Container exists, check if it's running
+    if docker ps --format '{{.Names}}' | grep -q "^${POSTGRES_CONTAINER_NAME}$"; then
+        echo "   ✅ PostgreSQL container already running"
+    else
+        echo "   🔄 Starting existing PostgreSQL container..."
+        docker start ${POSTGRES_CONTAINER_NAME}
+        sleep 3
+        echo "   ✅ PostgreSQL container started"
+    fi
+else
+    # Container doesn't exist, create and start it
+    echo "   📦 Creating new PostgreSQL container..."
+    docker run -d \
+        --name ${POSTGRES_CONTAINER_NAME} \
+        -e POSTGRES_DB=${POSTGRES_DB} \
+        -e POSTGRES_USER=${POSTGRES_USER} \
+        -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
+        -p ${POSTGRES_PORT}:5432 \
+        -v appbana-postgres-data:/var/lib/postgresql/data \
+        postgres:${POSTGRES_VERSION}
+    
+    echo "   ⏳ Waiting for PostgreSQL to be ready..."
+    sleep 5
+    
+    # Wait for PostgreSQL to accept connections
+    for i in {1..30}; do
+        if docker exec ${POSTGRES_CONTAINER_NAME} pg_isready -U ${POSTGRES_USER} > /dev/null 2>&1; then
+            echo "   ✅ PostgreSQL is ready!"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            echo "   ❌ PostgreSQL failed to start within 30 seconds"
+            exit 1
+        fi
+        sleep 1
+    done
+fi
+
+# Display connection info
+echo "   📊 PostgreSQL Connection Info:"
+echo "      Host: localhost:${POSTGRES_PORT}"
+echo "      Database: ${POSTGRES_DB}"
+echo "      User: ${POSTGRES_USER}"
+echo ""
+
+# Step 2: Stop running backend
+echo "2️⃣ Stopping running backend service..."
 if [ -f "backend.pid" ]; then
     PID=$(cat backend.pid)
     if ps -p $PID > /dev/null 2>&1; then
@@ -37,10 +94,10 @@ fi
 
 echo ""
 
-# Step 2: Build JAR
-echo "2️⃣ Building backend JAR..."
+# Step 3: Build JAR
+echo "3️⃣ Building backend JAR..."
 cd app-bana-service
-./mvnw clean package -DskipTests
+./mvnw clean package -Dmaven.test.skip=true
 cd ..
 
 if [ ! -f "app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar" ]; then
@@ -51,8 +108,8 @@ fi
 echo "   ✅ Build successful"
 echo ""
 
-# Step 3: Start backend
-echo "3️⃣ Starting backend service..."
+# Step 4: Start backend
+echo "4️⃣ Starting backend service..."
 cd app-bana-service
 nohup java -jar target/app-bana-1.0-SNAPSHOT-fat.jar > ../backend.log 2>&1 &
 echo $! > ../backend.pid

@@ -2,9 +2,16 @@ package com.appbana.server;
 
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
+import com.appbana.JdbcManager;
 import com.appbana.service.PermissionService;
 import com.sun.net.httpserver.*;
-import org.flywaydb.core.Flyway;
+import liquibase.Contexts;
+import liquibase.LabelExpression;
+import liquibase.Liquibase;
+import liquibase.database.Database;
+import liquibase.database.DatabaseFactory;
+import liquibase.database.jvm.JdbcConnection;
+import liquibase.resource.ClassLoaderResourceAccessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,29 +32,38 @@ public class ServerBootstrap {
     private static final Logger LOG = LoggerFactory.getLogger(ServerBootstrap.class);
 
     /**
-     * Run Flyway database migrations
+     * Run Liquibase database migrations
      */
     public static void runMigrations(AppConfig cfg) {
         try {
-            LOG.info("Running Flyway database migrations...");
-            Flyway flyway = Flyway.configure()
-                    .dataSource(cfg.getJdbcUrl(), cfg.getUsername(), cfg.getPassword())
-                    .locations("classpath:db/migration")
-                    .cleanDisabled(cfg.getFlywayCleanOnStart() == null || !cfg.getFlywayCleanOnStart())
-                    .load();
-
+            LOG.info("Running Liquibase database migrations...");
+            
+            // Use existing HikariCP datasource
+            javax.sql.DataSource dataSource = JdbcManager.getDataSource();
+            
+            liquibase.database.Database database = liquibase.database.DatabaseFactory.getInstance()
+                    .findCorrectDatabaseImplementation(new liquibase.database.jvm.JdbcConnection(
+                            dataSource.getConnection()));
+            
+            liquibase.Liquibase liquibase = new liquibase.Liquibase(
+                    "db/changelog/db.changelog-master.xml",
+                    new liquibase.resource.ClassLoaderResourceAccessor(),
+                    database);
+            
             // Clean database only if explicitly enabled
             if (Boolean.TRUE.equals(cfg.getFlywayCleanOnStart())) {
                 LOG.warn("⚠️  CLEANING DATABASE - ALL DATA WILL BE LOST (flywayCleanOnStart=true)");
-                flyway.clean();
+                liquibase.dropAll();
             } else {
                 LOG.info("✅ Database persistence enabled (flywayCleanOnStart=false)");
             }
-
-            int migrationsApplied = flyway.migrate().migrationsExecuted;
-            LOG.info("Flyway migrations complete: {} migrations applied", migrationsApplied);
+            
+            // Run migrations
+            liquibase.update(new liquibase.Contexts(), new liquibase.LabelExpression());
+            
+            LOG.info("Liquibase migrations complete");
         } catch (Exception e) {
-            LOG.error("Flyway migration failed: {}", e.getMessage(), e);
+            LOG.error("Liquibase migration failed: {}", e.getMessage(), e);
             throw new RuntimeException("Database migration failed", e);
         }
     }

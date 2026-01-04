@@ -471,46 +471,57 @@ export class AppManager extends LitElement {
     if (!this.currentApp) return;
 
     try {
-      // FIX: Ensure current page changes are saved to backend before versioning!
+      console.log('[PUBLISH] 🚀 Starting backend-driven publish for app:', this.currentApp.name);
+      console.log('[PUBLISH] 📦 App has', this.currentApp.entities?.length || 0, 'entities');
+      
+      // Log entities
+      if (this.currentApp.entities && this.currentApp.entities.length > 0) {
+        console.log('[PUBLISH] 📊 Entities to deploy:');
+        this.currentApp.entities.forEach(entity => {
+          console.log(`  - ${entity.name} (${entity.fields?.length || 0} fields)`);
+        });
+      }
+      
+      // Save current page before publish
       if (currentStore) {
         const page = currentStore.getPage();
-        // Check if this page belongs to the current app (safety check)
-        // If currentStore is active, it likely corresponds to the current app's active page.
-        // We'll trust it matches for now or we could verify page.id in this.currentApp.pages
-        console.log('[AppManager] Auto-saving current page before publish. PageID:', page.id);
-
-        // DEBUG: Check for buttons
-        const btn = page.nodes.find(n => n.type === 'button');
-        if (btn) {
-          console.log('[AppManager] Found button in currentStore nodes:', btn);
-        } else {
-          console.warn('[AppManager] NO BUTTON FOUND in currentStore nodes!');
-        }
-
+        console.log('[PUBLISH] Auto-saving current page before publish. PageID:', page.id);
         await appStore.savePage(this.currentApp.id, page);
-        console.log('[AppManager] Save page completed.');
+        console.log('[PUBLISH] Current page saved');
       }
 
       const tenantId = AuthService.getUser()?.tenantId || 'default';
-      const versionData = await apiClient.post(`/api/${tenantId}/apps/${this.currentApp.id}/versions`, {
-        label: this.publishLabel,
-        description: this.publishDescription
-      });
+      const env = 'DEV'; // Default to DEV environment
 
-      // Auto-deploy to DEV
-      try {
-        await apiClient.post(`/api/${tenantId}/apps/${this.currentApp.id}/deploy/${versionData.id}`, {
-          environment: 'DEV'
-        });
-      } catch (deployError) {
-        console.warn('Auto-deploy to DEV failed:', deployError);
+      // NEW BACKEND-DRIVEN PUBLISH
+      // Call the new transactional publish endpoint
+      console.log('[PUBLISH] 📡 Calling backend publish endpoint...');
+      console.log('[PUBLISH] Endpoint: POST /api/${tenantId}/apps/${appId}/publish?env=${env}');
+      console.log('[PUBLISH] Sending full AppMeta with entities, pages, navigation...');
+      
+      const publishResponse = await apiClient.post(
+        `/api/${tenantId}/apps/${this.currentApp.id}/publish?env=${env}`,
+        this.currentApp  // Send complete AppMeta
+      );
+
+      console.log('[PUBLISH] ✅ Backend publish response:', publishResponse);
+
+      if (publishResponse.success) {
+        console.log(`[PUBLISH] 🎉 SUCCESS - Version ${publishResponse.version} deployed to ${publishResponse.environment}`);
+        console.log(`[PUBLISH] 🗄️  Tables created: ${publishResponse.tablesCreated.join(', ')}`);
+        console.log(`[PUBLISH] ⏱️  Duration: ${publishResponse.durationMs}ms`);
+        console.log(`[PUBLISH] 📝 Summary: ${publishResponse.summary}`);
+        
+        this.showPublishModal = false;
+        this.showToast(`✅ App published! Version ${publishResponse.version} deployed to ${publishResponse.environment}. ${publishResponse.tablesCreated.length} tables created.`);
+      } else {
+        console.error('[PUBLISH] ❌ Publish failed:', publishResponse.error);
+        console.error('[PUBLISH] Details:', publishResponse.details);
+        alert(`Publish failed: ${publishResponse.error}`);
       }
-
-      this.showPublishModal = false;
-      this.showToast('✅ App published & deployed to DEV!');
     } catch (error) {
-      console.error('Publish failed:', error);
-      alert('Failed to publish app');
+      console.error('[PUBLISH] ❌ Exception during publish:', error);
+      alert(`Failed to publish app: ${error.message || error}`);
     }
   }
 
