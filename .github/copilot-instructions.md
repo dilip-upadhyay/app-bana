@@ -750,24 +750,18 @@ class MyComponent extends LitElement {
 - **[docs/AUTH_RBAC_DESIGN.md](../docs/AUTH_RBAC_DESIGN.md)** - RBAC architecture (User/Role/Permission model)
 - **[docs/AUTH_PHASE1_IMPLEMENTATION.md](../docs/AUTH_PHASE1_IMPLEMENTATION.md)** - 6-week auth implementation roadmap
 - **[docs/SECURITY_FEATURES.md](../docs/SECURITY_FEATURES.md)** - ✅ Complete Security Suite Guide (Production Ready)
-  - Password Security, CSRF Protection, Session Management, Rate Limiting
+  - Password Security, CSRF Protection, Session Management, Rate Limiting, Field-Level Security
   - Middleware Pipeline, Frontend Integration, API Reference
   - 156/156 tests passing (100% coverage)
-  - **Reference this for ANY security feature implementation**
-- **[docs/FIELD_LEVEL_SECURITY.md](../docs/FIELD_LEVEL_SECURITY.md)** - ✅ FLS complete guide (HIPAA/PCI-DSS compliance)
-  - Admin guide, API reference, testing scenarios
-  - **Reference this for ANY FLS-related work**
+  - **Reference this for ANY security feature implementation including FLS**
 
 ### Workflow Automation
-- **[docs/WORKFLOW_FEATURE_SPEC.md](../docs/WORKFLOW_FEATURE_SPEC.md)** - Complete workflow architecture (2200+ lines)
+- **[docs/specs/WORKFLOW.md](../docs/specs/WORKFLOW.md)** - Complete workflow architecture (2200+ lines)
   - Task types, versioning, maker-checker patterns
   - **Reference this for ANY workflow-related work**
-- **[docs/WORKFLOW_PHASE1_STATUS_DEC7_2025.md](../docs/WORKFLOW_PHASE1_STATUS_DEC7_2025.md)** - Current status (95% complete)
-  - Achievement summary, bug fixes, next steps
-  - **Check this before continuing workflow work**
 
 ### AI & Technical Reference
-- **[docs/AI_BUILDER_SPEC.md](../docs/AI_BUILDER_SPEC.md)** - AI builder architecture, intent classification
+- **[docs/specs/AI_BUILDER.md](../docs/specs/AI_BUILDER.md)** - AI builder architecture, intent classification
 - **[docs/JAVA21_QUICK_REFERENCE.md](../docs/JAVA21_QUICK_REFERENCE.md)** - Java 21 features (virtual threads, records, etc.)
 
 ### Complete Documentation Index
@@ -889,6 +883,7 @@ curl "http://localhost:8080/api/person?limit=10"
 
 ---
 
-**Last Updated**: January 4, 2026  
+**Last Updated**: January 5, 2026  
+**Documentation Status**: Major cleanup completed - removed 35+ duplicate/outdated files  
 **Current Sprint**: Multi-Tenant Architecture (runtime-publish branch)  
 **Next Sprint**: Workflow Phase 2 (SLA, timeouts, parallel execution) + Tenant URL isolation

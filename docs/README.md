@@ -115,19 +115,8 @@
 - Phase 3: Multi-tenancy, Advanced RBAC
 - Task breakdown and timeline
 
-### **[FIELD_LEVEL_SECURITY.md](./FIELD_LEVEL_SECURITY.md)** - Field-Level Security Guide
-**For**: Admins, Developers, Compliance Teams  
-**Status**: ✅ 90% Complete (Production Ready)  
-**Contents**:
-- Overview and architecture
-- Admin guide for permission management
-- Developer reference (PermissionService API)
-- Testing guide with scenarios
-- Compliance (HIPAA, PCI-DSS, SOC 2)
-- Troubleshooting and best practices
-
 ### **[SECURITY_FEATURES.md](./SECURITY_FEATURES.md)** - Complete Security Suite Guide ⭐
-**For**: Developers, AI Builder, Security Teams  
+**For**: Developers, AI Builder, Security Teams, Compliance  
 **Status**: ✅ Production Ready (156 tests passing)  
 **Contents**:
 - Complete security architecture overview
@@ -135,6 +124,7 @@
 - CSRF Protection (256-bit tokens, 30-min expiration)
 - Session Management (sliding window, 30-min timeout)
 - Rate Limiting (100 req/min per IP per endpoint)
+- Field-Level Security (FLS) for HIPAA/PCI-DSS compliance
 - Middleware Pipeline (automatic security checks)
 - Frontend Integration (FormContainer automatic security)
 - API Reference with all endpoints
@@ -267,21 +257,19 @@ docs/
 |-----------|--------|-------|---------------|
 | **Core Platform** | ✅ Complete | 9/10 | 01-ARCHITECTURE.md |
 | **Security Suite** | ✅ Complete | 9/10 | SECURITY_FEATURES.md |
-| **Field-Level Security** | ✅ 90% | 8/10 | FIELD_LEVEL_SECURITY.md |
-| **Workflow Phase 1** | ✅ 95% | 8/10 | WORKFLOW_PHASE1_STATUS.md |
-| **AI Builder** | 🔄 Active | 7/10 | AI_BUILDER_SPEC.md |
-| **Auth RBAC** | 📋 Planned | - | AUTH_PHASE1_IMPLEMENTATION.md |
+| **Workflow Phase 1** | ✅ 95% | 8/10 | specs/WORKFLOW.md |
+| **AI Builder** | 🔄 Active | 7/10 | specs/AI_BUILDER.md |
+| **Auth RBAC** | 📋 Planned | - | specs/AUTH.md |
 
 ---
 
 ## 🔄 Recent Changes
 
 ### December 30, 2025 - Security Suite Documentation
-- ✅ Added SECURITY_FEATURES.md (400+ lines comprehensive guide)
-- ✅ Updated builder-database/09-authentication.json with security services
-- ✅ Updated builder-database/10-form-patterns.json with security integration
-- ✅ Updated builder-database/99-capabilities-index.json with security summary
-- ✅ All 156 security tests passing (Password, CSRF, Session, RateLimit)
+- ✅ Added SECURITY_FEATURES.md (680+ lines comprehensive guide)
+- ✅ Consolidated FLS documentation into SECURITY_FEATURES.md
+- ✅ Updated builder-database with security services
+- ✅ All 156 security tests passing (Password, CSRF, Session, RateLimit, FLS)
 - ✅ AI builder now aware of complete security architecture
 
 ### December 7, 2025 - Documentation Consolidation
