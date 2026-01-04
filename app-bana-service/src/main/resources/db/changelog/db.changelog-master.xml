@@ -17,8 +17,24 @@
         <sqlFile path="db/migration/V3__profile_layer.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
+    <changeSet id="V4" author="appbana">
+        <sqlFile path="db/migration/V4__permission_hierarchy.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V5" author="appbana">
+        <sqlFile path="db/migration/V5__permission_scopes.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
     <changeSet id="V6" author="appbana">
         <sqlFile path="db/migration/V6__workflow_tables.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V7" author="appbana">
+        <sqlFile path="db/migration/V7__release_management.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V8" author="appbana">
+        <sqlFile path="db/migration/V8__multi_env_pipeline.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
     <changeSet id="V9" author="appbana">
