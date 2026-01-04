@@ -21,6 +21,14 @@
         <sqlFile path="db/migration/V6__workflow_tables.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
+    <changeSet id="V9" author="appbana">
+        <sqlFile path="db/migration/V9__app_metadata.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V10" author="appbana">
+        <sqlFile path="db/migration/V10__tenant_app_isolation.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
     <changeSet id="V11" author="appbana">
         <sqlFile path="db/migration/V11__app_versioning.sql" splitStatements="true" stripComments="false"/>
     </changeSet>

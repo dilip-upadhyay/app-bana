@@ -125,7 +125,13 @@ public class SchemaManager {
                     ps.executeUpdate();
                 }
             } else {
-                String upsert = "MERGE INTO appbana_schemas (name, json, tenant_id, app_id) KEY(name) VALUES (?, ?, ?, ?)";
+                // Use PostgreSQL's INSERT ... ON CONFLICT syntax (upsert)
+                String upsert = "INSERT INTO appbana_schemas (name, json, tenant_id, app_id) " +
+                               "VALUES (?, ?, ?, ?) " +
+                               "ON CONFLICT (name) DO UPDATE SET " +
+                               "json = EXCLUDED.json, " +
+                               "tenant_id = EXCLUDED.tenant_id, " +
+                               "app_id = EXCLUDED.app_id";
                 try (PreparedStatement ps = c.prepareStatement(upsert)) {
                     ps.setString(1, getUniqueSchemaKey(schema));
                     ps.setString(2, json);

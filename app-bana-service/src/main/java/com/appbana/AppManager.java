@@ -123,7 +123,12 @@ public class AppManager {
             throw new IllegalStateException("App does not exist: " + appId);
         }
 
-        String sql = "MERGE INTO appbana_app_workflows KEY(app_id, tenant_id) VALUES (?, ?, ?, ?)";
+        // Use PostgreSQL's INSERT ... ON CONFLICT syntax (upsert)
+        String sql = "INSERT INTO appbana_app_workflows (app_id, tenant_id, json_metadata, updated_at) " +
+                     "VALUES (?, ?, ?, ?) " +
+                     "ON CONFLICT (app_id, tenant_id) DO UPDATE SET " +
+                     "json_metadata = EXCLUDED.json_metadata, " +
+                     "updated_at = EXCLUDED.updated_at";
 
         try (Connection conn = JdbcManager.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -365,7 +370,16 @@ public class AppManager {
         if (tenantId == null)
             tenantId = "default";
 
-        String sql = "MERGE INTO appbana_apps KEY(id, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        // Use PostgreSQL's INSERT ... ON CONFLICT syntax (upsert)
+        String sql = "INSERT INTO appbana_apps (id, tenant_id, name, description, version, author, created_at, updated_at, json_metadata) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                     "ON CONFLICT (id, tenant_id) DO UPDATE SET " +
+                     "name = EXCLUDED.name, " +
+                     "description = EXCLUDED.description, " +
+                     "version = EXCLUDED.version, " +
+                     "author = EXCLUDED.author, " +
+                     "updated_at = EXCLUDED.updated_at, " +
+                     "json_metadata = EXCLUDED.json_metadata";
 
         try (Connection conn = JdbcManager.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -441,7 +455,14 @@ public class AppManager {
             LOG.warn("Failed to check app page registry for {}", pageId, e);
         }
 
-        String sql = "MERGE INTO appbana_pages KEY(id, app_id, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        // Use PostgreSQL's INSERT ... ON CONFLICT syntax (upsert)
+        String sql = "INSERT INTO appbana_pages (id, app_id, tenant_id, name, type, json_metadata, updated_at) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?) " +
+                     "ON CONFLICT (id, app_id, tenant_id) DO UPDATE SET " +
+                     "name = EXCLUDED.name, " +
+                     "type = EXCLUDED.type, " +
+                     "json_metadata = EXCLUDED.json_metadata, " +
+                     "updated_at = EXCLUDED.updated_at";
 
         try (Connection conn = JdbcManager.getConnection()) {
             // Disable auto-commit to control transaction explicitly

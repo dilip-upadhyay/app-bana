@@ -6,13 +6,25 @@
 -- PART 1: Update appbana_schemas table to store tenant/app context
 -- ============================================================================
 
--- Add tenant_id and app_id to schema metadata table (required, no defaults)
--- This allows schemas to be scoped to specific apps
+-- Add tenant_id and app_id to schema metadata table if they don't exist
+-- Note: If columns already exist from manual ALTER, this will skip them
+-- Then we'll handle NOT NULL constraint separately
 ALTER TABLE appbana_schemas 
-    ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(50) NOT NULL;
+    ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(50);
 
 ALTER TABLE appbana_schemas 
-    ADD COLUMN IF NOT EXISTS app_id VARCHAR(50) NOT NULL;
+    ADD COLUMN IF NOT EXISTS app_id VARCHAR(50);
+
+-- Update any NULL values to 'default' before making columns NOT NULL
+UPDATE appbana_schemas SET tenant_id = 'default' WHERE tenant_id IS NULL;
+UPDATE appbana_schemas SET app_id = 'default' WHERE app_id IS NULL;
+
+-- Now make columns NOT NULL
+ALTER TABLE appbana_schemas 
+    ALTER COLUMN tenant_id SET NOT NULL;
+
+ALTER TABLE appbana_schemas 
+    ALTER COLUMN app_id SET NOT NULL;
 
 -- Create composite index for efficient tenant/app filtering
 CREATE INDEX IF NOT EXISTS idx_schema_tenant_app ON appbana_schemas(tenant_id, app_id, name);

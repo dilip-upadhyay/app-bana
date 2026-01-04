@@ -6,12 +6,12 @@ CREATE TABLE IF NOT EXISTS appbana_apps (
     id VARCHAR(100) NOT NULL,
     tenant_id VARCHAR(50) DEFAULT 'default',
     name VARCHAR(255),
-    description CLOB,
+    description TEXT,
     version VARCHAR(50),
     author VARCHAR(100),
     created_at BIGINT,
     updated_at BIGINT,
-    json_metadata CLOB, -- Stores full JSON serialization of AppMetadata
+    json_metadata TEXT, -- Stores full JSON serialization of AppMetadata
     PRIMARY KEY (id, tenant_id)
 );
 
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS appbana_pages (
     tenant_id VARCHAR(50) DEFAULT 'default',
     name VARCHAR(255),
     type VARCHAR(50),
-    json_metadata CLOB, -- Stores full JSON serialization of Page
+    json_metadata TEXT, -- Stores full JSON serialization of Page
     updated_at BIGINT,
     PRIMARY KEY (id, app_id, tenant_id)
 );
@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_page_app ON appbana_pages(app_id, tenant_id);
 CREATE TABLE IF NOT EXISTS appbana_app_workflows (
     app_id VARCHAR(100) NOT NULL,
     tenant_id VARCHAR(50) DEFAULT 'default',
-    json_metadata CLOB, -- Stores full JSON serialization of workflows list
+    json_metadata TEXT, -- Stores full JSON serialization of workflows list
     updated_at BIGINT,
     PRIMARY KEY (app_id, tenant_id)
 );
