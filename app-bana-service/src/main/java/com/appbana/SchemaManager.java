@@ -78,8 +78,6 @@ public class SchemaManager {
             return type.toLowerCase();
         if (url == null)
             return "h2";
-        if (url.startsWith("jdbc:h2:"))
-            return "h2";
         if (url.startsWith("jdbc:postgresql:"))
             return "postgres";
         if (url.startsWith("jdbc:mysql:"))

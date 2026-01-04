@@ -7,9 +7,9 @@ import lombok.Data;
 
 @Data
 public class AppConfig {
-    private String jdbcUrl = "jdbc:h2:./data/appbana;AUTO_SERVER=TRUE";
-    private String username = "sa";
-    private String password = "";
+    private String jdbcUrl = "jdbc:postgresql://localhost:5432/appbana";
+    private String username = "appbana";
+    private String password = "appbana_dev_2026";
     private String driver = "org.h2.Driver"; // optional override
     private String name = "default"; // datasource name
 

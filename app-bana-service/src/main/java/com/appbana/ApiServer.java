@@ -116,17 +116,6 @@ public class ApiServer {
 
         // Java 21 switch expression - no fall-through, no break, cleaner code
         String baseUrl = switch (type) {
-            case "h2" -> {
-                String mode = Optional.ofNullable(data.get("h2Mode")).orElse("file");
-                if ("mem".equalsIgnoreCase(mode)) {
-                    String name = Optional.ofNullable(data.get("h2MemName")).filter(s -> !s.isBlank()).orElse("test");
-                    yield "jdbc:h2:mem:" + name + ";DB_CLOSE_DELAY=-1";
-                } else {
-                    String file = Optional.ofNullable(data.get("h2File")).filter(s -> !s.isBlank())
-                            .orElse("./data/appbana");
-                    yield "jdbc:h2:" + file + ";AUTO_SERVER=TRUE";
-                }
-            }
             case "sqlite" -> {
                 String file = Optional.ofNullable(data.get("sqliteFile")).filter(s -> !s.isBlank())
                         .orElse("/path/to/file.db");
