@@ -153,8 +153,16 @@ public class Router {
     }
 
     private static void sendError(HttpExchange exchange, int status, String msg) throws IOException {
+        String method = exchange.getRequestMethod();
         byte[] b = ("{\"error\":\"" + (msg==null?"":msg.replace('"','\'')) + "\"}").getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
+        
+        // HEAD requests should not have a response body
+        if ("HEAD".equalsIgnoreCase(method)) {
+            exchange.sendResponseHeaders(status, -1);
+            return;
+        }
+        
         exchange.sendResponseHeaders(status, b.length);
         try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
     }
