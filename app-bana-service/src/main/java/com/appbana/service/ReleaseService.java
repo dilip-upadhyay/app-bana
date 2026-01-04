@@ -241,29 +241,42 @@ public class ReleaseService {
     /**
      * Returns a summary of the pipeline: which version is live in which env.
      */
-    public Map<String, Object> getPipelineStatus(String appId) throws SQLException {
+    public Map<String, Object> getPipelineStatus(String appId, String tenantId) throws SQLException {
         String sql = """
-                    SELECT d.environment, d.deployed_at, d.deployed_by,
-                           v.id as version_id, v.version_number, v.label
-                    FROM app_deployment d
-                    JOIN app_version v ON d.live_version_id = v.id
-                    WHERE d.app_id = ?
+                    SELECT environment, version, status, deployed_at, deployed_by,
+                           id as version_id, duration_ms, tables_created
+                    FROM app_versions
+                    WHERE app_id = ? AND tenant_id = ?
+                    ORDER BY environment, version DESC
                 """;
 
         Map<String, Object> pipeline = new HashMap<>();
         try (Connection conn = JdbcManager.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, appId);
+            ps.setString(2, tenantId);
             try (ResultSet rs = ps.executeQuery()) {
+                // Group by environment, taking only the latest version per environment
                 while (rs.next()) {
-                    Map<String, Object> status = new HashMap<>();
-                    status.put("versionId", rs.getString("version_id"));
-                    status.put("versionNumber", rs.getInt("version_number"));
-                    status.put("label", rs.getString("label"));
-                    status.put("deployedAt", rs.getTimestamp("deployed_at"));
-                    status.put("deployedBy", rs.getString("deployed_by"));
-
-                    pipeline.put(rs.getString("environment"), status);
+                    String env = rs.getString("environment");
+                    // Only add if this environment hasn't been added yet (we ORDER BY version DESC)
+                    if (!pipeline.containsKey(env)) {
+                        Map<String, Object> status = new HashMap<>();
+                        status.put("versionId", rs.getLong("version_id"));
+                        status.put("versionNumber", rs.getInt("version"));
+                        status.put("status", rs.getString("status"));
+                        status.put("deployedAt", rs.getTimestamp("deployed_at"));
+                        status.put("deployedBy", rs.getString("deployed_by"));
+                        status.put("durationMs", rs.getLong("duration_ms"));
+                        
+                        // Get tables_created as array
+                        Array tablesArray = rs.getArray("tables_created");
+                        if (tablesArray != null) {
+                            status.put("tablesCreated", Arrays.asList((Object[]) tablesArray.getArray()));
+                        }
+                        
+                        pipeline.put(env, status);
+                    }
                 }
             }
         }

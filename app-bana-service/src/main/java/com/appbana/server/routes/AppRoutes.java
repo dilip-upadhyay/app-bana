@@ -204,7 +204,7 @@ public class AppRoutes {
                 return;
             }
             try {
-                res.json(200, releaseService.getPipelineStatus(appId));
+                res.json(200, releaseService.getPipelineStatus(appId, tenantId));
             } catch (Exception e) {
                 LOG.error("Failed to get pipeline status", e);
                 res.json(500, Map.of("error", e.getMessage()));
