@@ -365,14 +365,8 @@ public class SchemaManager {
             LOG.info("[CREATE-TABLE] Successfully created table: {}", table);
             recordMigration(c, schema.getName(), createTableSql);
             LOG.debug("[CREATE-TABLE] Migration recorded for table creation");
-
-            // Create composite index for efficient tenant/app filtering
-            String indexSql = "CREATE INDEX IF NOT EXISTS idx_" + table + "_tenant_app ON "
-                    + quote(table) + "(" + quote("tenant_id") + ", " + quote("app_id") + ")";
-            s.execute(indexSql);
-        LOG.debug("[TABLE-NAME] Generating physical table name for entity: {}, appId: {}, tenantId: {}", 
-                  schema.getName(), schema.getAppId(), schema.getTenantId());
-            recordMigration(c, schema.getName(), indexSql);
+            
+            // Physical table name provides isolation - no tenant_id/app_id columns, no index needed
         }
     }
 
