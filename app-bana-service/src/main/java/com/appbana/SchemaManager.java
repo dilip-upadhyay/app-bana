@@ -272,9 +272,9 @@ public class SchemaManager {
                         if (!typesEquivalent(currentType, desiredType)) {
                             String alterType = "postgres".equals(d)
                                     ? ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " TYPE "
-                                            + sqlType(f, d))
+                                            + sqlType(f, d, true))
                                     : ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name)
-                                            + " SET DATA TYPE " + sqlType(f, d));
+                                            + " SET DATA TYPE " + sqlType(f, d, true));
                             try (Statement s = c.createStatement()) {
                                 s.execute(alterType);
                                 recordMigration(c, schema.getName(), alterType);
@@ -357,14 +357,18 @@ public class SchemaManager {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE TABLE IF NOT EXISTS ").append(quote(table)).append(" (");
         sb.append(String.join(", ", cols));
-            LOG.info("[CREATE-TABLE] Successfully created table: {}", table);
-            LOG.debug("[CREATE-TABLE] Migration recorded for table creation");
         if (pk != null)
             sb.append(", PRIMARY KEY(").append(pk).append(")");
         sb.append(")");
+        
+        String createTableSql = sb.toString();
+        LOG.info("[CREATE-TABLE] Executing SQL: {}", createTableSql);
+        
         try (Statement s = c.createStatement()) {
-            s.execute(sb.toString());
-            recordMigration(c, schema.getName(), sb.toString());
+            s.execute(createTableSql);
+            LOG.info("[CREATE-TABLE] Successfully created table: {}", table);
+            recordMigration(c, schema.getName(), createTableSql);
+            LOG.debug("[CREATE-TABLE] Migration recorded for table creation");
 
             // Create composite index for efficient tenant/app filtering
             String indexSql = "CREATE INDEX IF NOT EXISTS idx_" + table + "_tenant_app ON "
@@ -444,8 +448,16 @@ public class SchemaManager {
     }
 
     private static String sqlType(EntitySchema.Field f, String dialect) {
+        return sqlType(f, dialect, false);
+    }
+
+    private static String sqlType(EntitySchema.Field f, String dialect, boolean forAlter) {
         String t = f.getType().toLowerCase();
         boolean aiPk = f.isPrimaryKey() && f.isAutoIncrement();
+        
+        // For ALTER statements, we can't use SERIAL/BIGSERIAL, must use INTEGER/BIGINT
+        boolean useSerial = aiPk && !forAlter;
+        
         if ("postgres".equals(dialect)) {
             switch (t) {
                 case "string":
@@ -454,9 +466,9 @@ public class SchemaManager {
                     return "VARCHAR(" + len + ")";
                 case "int":
                 case "integer":
-                    return aiPk ? "SERIAL" : "INTEGER";
+                    return useSerial ? "SERIAL" : "INTEGER";
                 case "long":
-                    return aiPk ? "BIGSERIAL" : "BIGINT";
+                    return useSerial ? "BIGSERIAL" : "BIGINT";
                 case "boolean":
                     return "BOOLEAN";
                 case "date":

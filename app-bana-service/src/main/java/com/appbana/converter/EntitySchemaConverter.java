@@ -85,14 +85,19 @@ public class EntitySchemaConverter {
             field.setPrimaryKey(fieldNode.get("primaryKey").asBoolean());
         }
         
-        // Auto increment
+        // Auto increment - can be set via "autoIncrement" property OR via type="autoincrement"
         if (fieldNode.has("autoIncrement")) {
             field.setAutoIncrement(fieldNode.get("autoIncrement").asBoolean());
+        } else if ("autoincrement".equalsIgnoreCase(frontendType)) {
+            field.setAutoIncrement(true);
+            field.setPrimaryKey(true);  // Auto-increment fields are always primary keys
         }
         
-        // Required
+        // Required - auto-increment fields should NOT be required (database generates value)
         if (fieldNode.has("required")) {
-            field.setRequired(fieldNode.get("required").asBoolean());
+            if (!field.isAutoIncrement()) {  // Only apply if not auto-increment
+                field.setRequired(fieldNode.get("required").asBoolean());
+            }
         }
         
         // Length (for string types)
@@ -125,6 +130,7 @@ public class EntitySchemaConverter {
     private static String mapFieldType(String frontendType, JsonNode fieldNode) {
         return switch (frontendType.toLowerCase()) {
             case "text", "email", "phone", "select", "dropdown" -> "string";
+            case "autoincrement" -> "long";  // Auto-increment fields are always long
             case "number" -> {
                 // Check if autoIncrement to use long for ID fields
                 boolean isAutoIncrement = fieldNode.has("autoIncrement") && 

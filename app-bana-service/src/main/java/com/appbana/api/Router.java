@@ -51,7 +51,7 @@ public class Router {
         Headers headers = ex.getResponseHeaders();
         headers.add("Access-Control-Allow-Origin", "*");
         headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-Token, X-Session-Id, X-CSRF-Token");
         
         // Handle preflight OPTIONS requests
         if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
