@@ -9,6 +9,7 @@ import com.appbana.model.AppVersion.Environment;
 import com.appbana.model.AppVersion.DeploymentStatus;
 import com.appbana.model.DeploymentResult;
 import com.appbana.model.EntitySchema;
+import com.appbana.model.TenantContext;
 import com.appbana.repository.AppVersionRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -176,17 +177,30 @@ public class AppPublishService {
             
             // Create each table
             for (EntitySchema schema : schemas) {
-                String physicalTableName = getPhysicalTableName(appId, tenantId, environment, schema.getName());
-                LOG.info("[PUBLISH] Creating table: {}", physicalTableName);
+                String logicalEntityName = schema.getName(); // e.g., "User"
                 
-                // Update schema name to physical table name
-                schema.setName(physicalTableName);
+                // Set tenant/app context but KEEP the logical entity name
+                // SchemaManager will handle physical naming via getPhysicalTableName()
+                schema.setTenantId(tenantId);
+                schema.setAppId(appId);
                 
-                // Create table via SchemaManager
-                schemaManager.saveSchema(schema);
+                // Set TenantContext with environment for physical table naming
+                TenantContext.set(new TenantContext(tenantId, appId, environment.name()));
                 
-                tablesCreated.add(physicalTableName);
-                LOG.debug("[PUBLISH] Table created successfully: {}", physicalTableName);
+                try {
+                    // Get physical table name AFTER setting context (SchemaManager uses TenantContext)
+                    String physicalTableName = SchemaManager.getPhysicalTableName(schema);
+                    LOG.info("[PUBLISH] Creating table: {} for entity: {}", physicalTableName, logicalEntityName);
+                    
+                    // Create table via SchemaManager (it will use getPhysicalTableName internally)
+                    SchemaManager.saveSchema(schema);
+                    
+                    tablesCreated.add(physicalTableName);
+                    LOG.debug("[PUBLISH] Table created successfully: {}", physicalTableName);
+                } finally {
+                    // Clear context after each schema
+                    TenantContext.clear();
+                }
             }
             
             // Commit transaction
@@ -248,13 +262,6 @@ public class AppPublishService {
      * Format: app_{ENV}_{tenantId}_{entityName}
      * Example: app_DEV_tenant1_customer
      */
-    private String getPhysicalTableName(String appId, String tenantId, Environment environment, String entityName) {
-        // Sanitize names (lowercase, replace spaces with underscores)
-        String sanitizedTenant = tenantId.toLowerCase().replaceAll("[^a-z0-9_]", "_");
-        String sanitizedEntity = entityName.toLowerCase().replaceAll("[^a-z0-9_]", "_");
-        
-        return String.format("app_%s_%s_%s", environment.name(), sanitizedTenant, sanitizedEntity);
-    }
     
     /**
      * Get stack trace as string
