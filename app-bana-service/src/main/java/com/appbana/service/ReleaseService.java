@@ -2,8 +2,10 @@ package com.appbana.service;
 
 import com.appbana.AppManager;
 import com.appbana.JdbcManager;
+import com.appbana.SchemaManager;
 import com.appbana.model.AppMetadata;
-import com.appbana.workflow.model.WorkflowDefinition;
+import com.appbana.model.AppVersion;
+import com.appbana.model.DeploymentResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,220 +23,137 @@ public class ReleaseService {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /**
-     * Creates a new immutable version of the application.
+     * Creates a new immutable version of the application in DEV environment.
+     * This method delegates to AppPublishService for V11 schema compatibility.
      * Snapshots: Metadata, Pages, Entities, Workflows.
      *
      * @param appId       The application ID
-     * @param label       Optional label (e.g. "v1.0")
-     * @param description Release notes
+     * @param label       Optional label (e.g. "v1.0") - NOTE: Not currently used in V11 schema
+     * @param description Release notes - NOTE: Not currently used in V11 schema
      * @param userId      User creating the release
      * @return The created Version ID
      */
     public String createVersion(String tenantId, String appId, String label, String description, String userId)
             throws Exception {
-        LOG.info("[Release] Creating snapshot for app: {} (Tenant: {})", appId, tenantId);
+        LOG.info("[Release] Creating version for app: {} (Tenant: {}) - Delegating to AppPublishService", appId, tenantId);
 
-        // CRITICAL: Use a fresh connection to ensure we see all committed data
-        // This prevents reading stale data from connection pooling
-        Connection versionConn = null;
-        try {
-            versionConn = JdbcManager.getConnection();
-            versionConn.setAutoCommit(false);
-
-            // Force a read barrier - this ensures all previous commits are visible
-            versionConn.commit();
-
-            // 1. Gather Application State
-            // A. Metadata & Pages & Entities (Database-based)
-            Map<String, Object> fullApp = AppManager.getAppWithPages(tenantId, appId);
-            if (fullApp == null) {
-                throw new IllegalArgumentException("App not found: " + appId);
-            }
-
-            // Extract components for separate storage (cleaner querying/diffing later)
-            Object pagesObj = fullApp.get("pages");
-            Object entitiesObj = fullApp.get("entities"); // Stored as Maps in AppMetadata
-
-            // Remove bulk objects from metadata to keep strict separation if desired,
-            // but AppMetadata usually contains entities. pages are separate.
-            // We will store the exact JSONs.
-
-            String metadataJson = MAPPER.writeValueAsString(fullApp.get("app")); // The "app" key from getAppWithPages
-                                                                                 // usually has the metadata
-            // Wait, getAppWithPages returns a Map merging app fields AND "pages".
-            // Let's verify AppManager.getAppWithPages structure.
-            // It returns map of (AppMetadata fields) + "pages": [List].
-            // Ref: AppManager.java
-
-            // Let's rely on AppMetadata vs the composite map.
-            AppMetadata meta = AppManager.getApp(tenantId, appId);
-            String metaJson = MAPPER.writeValueAsString(meta);
-
-            String pagesJson = MAPPER.writeValueAsString(pagesObj != null ? pagesObj : Collections.emptyList());
-
-            // Log the number of pages being snapshotted for debugging
-            int pageCount = pagesObj instanceof List ? ((List) pagesObj).size() : 0;
-            LOG.info("[Release] Snapshotting {} pages for app {}", pageCount, appId);
-
-            // B. Workflows (DB-based)
-            // We need to fetch all ACTIVE workflows for this app from the DB
-            List<Map<String, Object>> workflows = fetchWorkflowsForApp(appId);
-            String workflowsJson = MAPPER.writeValueAsString(workflows);
-
-            // Entities are inside meta usually, but let's strictly extract them if we want
-            // a separate column
-            // For now, we put them in entities_json column AND they are in metadata_json.
-            // Redundancy is fine for reliability.
-            String entitiesJson = MAPPER
-                    .writeValueAsString(meta.getEntities() != null ? meta.getEntities() : Collections.emptyList());
-
-            // 2. Calculate Next Version Number
-            int nextVersion = getNextVersionNumber(appId);
-            String versionId = UUID.randomUUID().toString();
-
-            // 3. Persist Snapshot
-            String sql = """
-                        INSERT INTO app_version
-                        (id, app_id, version_number, label, description,
-                         metadata_json, pages_json, entities_json, workflows_json,
-                         created_by, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """;
-
-            try (PreparedStatement ps = versionConn.prepareStatement(sql)) {
-
-                ps.setString(1, versionId);
-                ps.setString(2, appId);
-                ps.setInt(3, nextVersion);
-                ps.setString(4, label);
-                ps.setString(5, description);
-                ps.setString(6, metaJson);
-                ps.setString(7, pagesJson);
-                ps.setString(8, entitiesJson);
-                ps.setString(9, workflowsJson);
-                ps.setString(10, userId);
-                ps.setTimestamp(11, Timestamp.valueOf(LocalDateTime.now()));
-
-                ps.executeUpdate();
-                versionConn.commit();
-            }
-
-            LOG.info("[Release] Created version {} (v{}) for app {} with {} pages",
-                    versionId, nextVersion, appId, pageCount);
-            return versionId;
-
-        } finally {
-            if (versionConn != null) {
-                try {
-                    versionConn.close();
-                } catch (SQLException e) {
-                    LOG.warn("Failed to close version connection", e);
-                }
-            }
+        // Get app metadata
+        AppMetadata meta = AppManager.getApp(tenantId, appId);
+        if (meta == null) {
+            throw new IllegalStateException("App not found: " + appId);
         }
+
+        // Serialize app metadata to JSON (AppPublishService expects JSON string)
+        String appMetaJson = MAPPER.writeValueAsString(meta);
+
+        // Delegate to AppPublishService which handles V11 schema (app_versions table)
+        // Default to DEV environment for version creation
+        Connection conn = JdbcManager.getConnection();
+        AppPublishService publishService = new AppPublishService(conn, new SchemaManager());
+        DeploymentResult result = publishService.publishApp(
+            appMetaJson, 
+            appId, 
+            tenantId, 
+            AppVersion.Environment.DEV, 
+            userId
+        );
+
+        if (!result.isSuccess()) {
+            throw new Exception("Failed to create version: " + result.getErrorMessage());
+        }
+
+        // Convert Long versionId to String for API compatibility
+        String versionId = String.valueOf(result.getVersionId());
+        LOG.info("[Release] Created version {} for app {} in DEV environment", versionId, appId);
+        return versionId;
     }
 
+
     /**
-     * deploys a specific version to the specified environment.
-     * This updates the pointer in app_deployment.
+     * Mark a specific version as deployed to the specified environment.
+     * Note: New deployments are created via AppPublishService.
+     * This method is kept for API compatibility but now updates the status
+     * of an existing version record in app_versions.
      */
     public void deployVersion(String appId, String versionId, String userId, String targetEnv) throws SQLException {
         String env = targetEnv != null && !targetEnv.isBlank() ? targetEnv.toUpperCase() : "PROD";
-        LOG.info("[Release] Deploying version {} for app {} to env {}", versionId, appId, env);
+        LOG.info("[Release] Marking version {} as deployed for app {} in env {}", versionId, appId, env);
 
-        // Upsert logic (H2 supports MERGE, but standard SQL uses manual check or ON
-        // DUPLICATE)
-        String checkSql = "SELECT app_id FROM app_deployment WHERE app_id = ? AND environment = ?";
-        String updateSql = "UPDATE app_deployment SET live_version_id = ?, deployed_at = ?, deployed_by = ? WHERE app_id = ? AND environment = ?";
-        String insertSql = "INSERT INTO app_deployment (app_id, live_version_id, deployed_at, deployed_by, environment) VALUES (?, ?, ?, ?, ?)";
-
-        try (Connection conn = JdbcManager.getConnection()) {
-            boolean exists = false;
-            try (PreparedStatement ps = conn.prepareStatement(checkSql)) {
-                ps.setString(1, appId);
-                ps.setString(2, env);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next())
-                        exists = true;
-                }
-            }
-
-            Timestamp now = Timestamp.valueOf(LocalDateTime.now());
-            if (exists) {
-                try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
-                    ps.setString(1, versionId);
-                    ps.setTimestamp(2, now);
-                    ps.setString(3, userId);
-                    ps.setString(4, appId);
-                    ps.setString(5, env);
-                    ps.executeUpdate();
-                }
-            } else {
-                try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
-                    ps.setString(1, appId);
-                    ps.setString(2, versionId);
-                    ps.setTimestamp(3, now);
-                    ps.setString(4, userId);
-                    ps.setString(5, env);
-                    ps.executeUpdate();
-                }
+        // Update the status of the version record
+        String sql = "UPDATE app_versions SET status = ?::text, deployed_by = ?, deployed_at = ? WHERE id = ? AND environment = ?::text";
+        
+        try (Connection conn = JdbcManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, "SUCCESS");
+            ps.setString(2, userId);
+            ps.setTimestamp(3, Timestamp.valueOf(LocalDateTime.now()));
+            ps.setLong(4, Long.parseLong(versionId));
+            ps.setString(5, env);
+            
+            int updated = ps.executeUpdate();
+            if (updated == 0) {
+                LOG.warn("No version found to deploy: id={}, env={}", versionId, env);
             }
         }
     }
 
     /**
-     * Lists all versions.
-     * Note: "isLive" logic is tricky with multiple envs.
-     * We will remove simple "isLive" bool and replace with "deployments" list or
-     * "envTags".
+     * Lists all versions across all environments.
+     * Returns versions grouped by version number with their environment deployments.
      */
     public List<Map<String, Object>> listVersions(String appId) throws SQLException {
-        // First get all versions
         String sql = """
-                    SELECT v.id, v.version_number, v.label, v.description, v.created_at, v.created_by
-                    FROM app_version v
-                    WHERE v.app_id = ?
-                    ORDER BY v.version_number DESC
+                    SELECT id, version, environment, status, deployed_at, deployed_by
+                    FROM app_versions
+                    WHERE app_id = ?
+                    ORDER BY version DESC, environment
                 """;
 
-        // Then get all active deployments
-        String depSql = "SELECT live_version_id, environment FROM app_deployment WHERE app_id = ?";
-        Map<String, List<String>> activeEnvs = new HashMap<>(); // versionId -> [DEV, PROD]
+        // Group versions: version number -> list of environment deployments
+        Map<Integer, Map<String, Object>> versionMap = new java.util.LinkedHashMap<>();
 
-        try (Connection conn = JdbcManager.getConnection()) {
-            try (PreparedStatement ps = conn.prepareStatement(depSql)) {
-                ps.setString(1, appId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        String vid = rs.getString("live_version_id");
-                        String env = rs.getString("environment");
-                        activeEnvs.computeIfAbsent(vid, k -> new ArrayList<>()).add(env);
-                    }
-                }
-            }
-
-            List<Map<String, Object>> versions = new ArrayList<>();
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, appId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
+        try (Connection conn = JdbcManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, appId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int versionNum = rs.getInt("version");
+                    String env = rs.getString("environment");
+                    
+                    // Get or create version entry
+                    Map<String, Object> versionEntry = versionMap.computeIfAbsent(versionNum, k -> {
                         Map<String, Object> v = new HashMap<>();
-                        String vid = rs.getString("id");
-                        v.put("id", vid);
-                        v.put("versionNumber", rs.getInt("version_number"));
-                        v.put("label", rs.getString("label"));
-                        v.put("description", rs.getString("description"));
-                        v.put("createdAt", rs.getTimestamp("created_at"));
-                        v.put("createdBy", rs.getString("created_by"));
-
-                        // Active environments for this version
-                        v.put("activeEnvs", activeEnvs.getOrDefault(vid, Collections.emptyList()));
-
-                        versions.add(v);
+                        v.put("versionNumber", versionNum);
+                        v.put("activeEnvs", new ArrayList<String>());
+                        v.put("deployments", new ArrayList<Map<String, Object>>());
+                        return v;
+                    });
+                    
+                    // Add environment to activeEnvs list
+                    @SuppressWarnings("unchecked")
+                    List<String> activeEnvs = (List<String>) versionEntry.get("activeEnvs");
+                    activeEnvs.add(env);
+                    
+                    // Add deployment details
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> deployments = (List<Map<String, Object>>) versionEntry.get("deployments");
+                    Map<String, Object> deployment = new HashMap<>();
+                    deployment.put("id", rs.getLong("id"));
+                    deployment.put("environment", env);
+                    deployment.put("status", rs.getString("status"));
+                    deployment.put("deployedAt", rs.getTimestamp("deployed_at"));
+                    deployment.put("deployedBy", rs.getString("deployed_by"));
+                    deployments.add(deployment);
+                    
+                    // Set the first deployment's metadata as version-level metadata
+                    if (!versionEntry.containsKey("id")) {
+                        versionEntry.put("id", rs.getLong("id"));
+                        versionEntry.put("createdAt", rs.getTimestamp("deployed_at"));
+                        versionEntry.put("createdBy", rs.getString("deployed_by"));
                     }
                 }
             }
-            return versions;
+            return new ArrayList<>(versionMap.values());
         }
     }
 
@@ -284,41 +203,38 @@ public class ReleaseService {
     }
 
     /**
-     * Retrieves the full application snapshot (versioned) for the given
-     * environment.
-     * Reconstructs the app object from stored JSON blobs.
+     * Retrieves the full application snapshot (versioned) for the given environment.
+     * Returns the app_snapshot JSONB field from the latest version in that environment.
      */
     public Map<String, Object> getAppSnapshot(String appId, String env)
             throws SQLException, com.fasterxml.jackson.core.JsonProcessingException {
-        // Find which version is live in this environment
+        // Get the latest version for this app in the specified environment
         String sql = """
-                    SELECT v.metadata_json, v.pages_json, v.entities_json, v.workflows_json, v.version_number
-                    FROM app_deployment d
-                    JOIN app_version v ON d.live_version_id = v.id
-                    WHERE d.app_id = ? AND d.environment = ?
+                    SELECT app_snapshot, version, deployed_at, deployed_by, status
+                    FROM app_versions
+                    WHERE app_id = ? AND environment = ?::text
+                    ORDER BY version DESC
+                    LIMIT 1
                 """;
 
         try (Connection conn = JdbcManager.getConnection();
-                PreparedStatement ps = conn.prepareStatement(sql)) {
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, appId);
             ps.setString(2, env);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    String metaJson = rs.getString("metadata_json");
-                    String pagesJson = rs.getString("pages_json");
-
-                    // Reconstruct the full app object expected by the frontend
-                    // structure: { ...AppMetadata, pages: [...] }
-                    Map<String, Object> app = MAPPER.readValue(metaJson,
-                            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
-                            });
-                    List<Object> pages = MAPPER.readValue(pagesJson,
-                            new com.fasterxml.jackson.core.type.TypeReference<List<Object>>() {
-                            });
-
-                    app.put("pages", pages);
-                    app.put("version", rs.getInt("version_number"));
+                    String snapshotJson = rs.getString("app_snapshot");
+                    
+                    // Parse the JSONB snapshot
+                    Map<String, Object> app = MAPPER.readValue(snapshotJson,
+                            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                    
+                    // Add version metadata
+                    app.put("version", rs.getInt("version"));
                     app.put("environment", env);
+                    app.put("deployedAt", rs.getTimestamp("deployed_at"));
+                    app.put("deployedBy", rs.getString("deployed_by"));
+                    app.put("status", rs.getString("status"));
 
                     return app;
                 }
@@ -329,38 +245,4 @@ public class ReleaseService {
 
     // --- Helpers ---
 
-    private int getNextVersionNumber(String appId) throws SQLException {
-        String sql = "SELECT MAX(version_number) FROM app_version WHERE app_id = ?";
-        try (Connection conn = JdbcManager.getConnection();
-                PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, appId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt(1) + 1;
-                }
-            }
-        }
-        return 1;
-    }
-
-    private List<Map<String, Object>> fetchWorkflowsForApp(String appId) throws SQLException {
-        String sql = "SELECT * FROM appbana_wf_definition WHERE app_id = ?";
-        List<Map<String, Object>> list = new ArrayList<>();
-        try (Connection conn = JdbcManager.getConnection();
-                PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, appId);
-            try (ResultSet rs = ps.executeQuery()) {
-                ResultSetMetaData meta = rs.getMetaData();
-                int colCount = meta.getColumnCount();
-                while (rs.next()) {
-                    Map<String, Object> row = new HashMap<>();
-                    for (int i = 1; i <= colCount; i++) {
-                        row.put(meta.getColumnLabel(i), rs.getObject(i));
-                    }
-                    list.add(row);
-                }
-            }
-        }
-        return list;
-    }
 }
