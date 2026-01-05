@@ -343,11 +343,7 @@ public class SchemaManager {
         List<String> cols = new ArrayList<>();
         String pk = null;
 
-        // Always add tenant_id and app_id columns first for multi-tenant isolation
-        // (required, no defaults)
-        cols.add(quote("tenant_id") + " VARCHAR(50) NOT NULL");
-        cols.add(quote("app_id") + " VARCHAR(50) NOT NULL");
-
+        // Physical table name provides tenant/app isolation - no need for columns
         for (EntitySchema.Field f : schema.getFields()) {
             String col = quote(f.getName()) + " " + sqlType(f, dialect);
             if (f.isPrimaryKey())

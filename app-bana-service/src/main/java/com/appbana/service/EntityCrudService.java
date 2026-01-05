@@ -13,8 +13,9 @@ import java.util.regex.Pattern;
 /**
  * Entity CRUD and query operations for schema-driven dynamic entities.
  *
- * Supports multi-tenant isolation through TenantContext. All context-aware methods
- * automatically inject tenant_id and app_id into operations.
+ * Supports multi-tenant isolation through TenantContext and physical table names.
+ * Each tenant+app combination gets a separate physical table, eliminating the need
+ * for tenant_id/app_id columns in runtime entity tables.
  *
  * Extracted from {@code ApiServer} to enable modular, testable route handlers.
  */
@@ -34,11 +35,8 @@ public class EntityCrudService {
         if (context == null) {
             throw new IllegalArgumentException("TenantContext is required");
         }
-        // Auto-inject tenant_id and app_id
-        Map<String, Object> enrichedData = new LinkedHashMap<>(data);
-        enrichedData.put("tenant_id", context.getTenantId());
-        enrichedData.put("app_id", context.getAppId());
-        return insertRecordLegacy(schema, enrichedData);
+        // Physical table name already provides tenant/app isolation - no need for columns
+        return insertRecordLegacy(schema, data);
     }
 
     /**
@@ -49,15 +47,11 @@ public class EntityCrudService {
             throw new IllegalArgumentException("TenantContext is required");
         }
         String tableName = SchemaManager.getPhysicalTableName(schema);
-        String sql = "SELECT * FROM " + quote(tableName) + 
-                     " WHERE " + quote("tenant_id") + " = ? AND " + quote("app_id") + " = ?";
+        String sql = "SELECT * FROM " + quote(tableName);
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, context.getTenantId());
-            ps.setString(2, context.getAppId());
-            try (ResultSet rs = ps.executeQuery()) {
-                return toList(rs);
-            }
+             PreparedStatement ps = c.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            return toList(rs);
         }
     }
 
@@ -73,14 +67,10 @@ public class EntityCrudService {
             return null;
         }
         String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + 
-                     " WHERE " + quote(pk.getName()) + " = ?" +
-                     " AND " + quote("tenant_id") + " = ?" +
-                     " AND " + quote("app_id") + " = ?";
+                     " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
-            ps.setString(2, context.getTenantId());
-            ps.setString(3, context.getAppId());
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
                 return list.isEmpty() ? null : list.getFirst();
@@ -99,19 +89,14 @@ public class EntityCrudService {
         if (pk == null) {
             return 0;
         }
-        // Don't allow updating tenant_id or app_id
-        Map<String, Object> safeData = new LinkedHashMap<>(data);
-        safeData.remove("tenant_id");
-        safeData.remove("app_id");
-        
         List<String> set = new ArrayList<>();
         List<Object> vals = new ArrayList<>();
         for (EntitySchema.Field f : schema.getFields()) {
-            if (f.isPrimaryKey() || "tenant_id".equals(f.getName()) || "app_id".equals(f.getName())) {
+            if (f.isPrimaryKey()) {
                 continue;
             }
-            if (safeData.containsKey(f.getName())) {
-                Object raw = safeData.get(f.getName());
+            if (data.containsKey(f.getName())) {
+                Object raw = data.get(f.getName());
                 Object val = coerceAndValidate(f, raw);
                 set.add(quote(f.getName()) + " = ?");
                 vals.add(val);
@@ -121,18 +106,14 @@ public class EntityCrudService {
             return 0;
         }
         String sql = "UPDATE " + quote(SchemaManager.getPhysicalTableName(schema)) + " SET " + String.join(",", set) + 
-                     " WHERE " + quote(pk.getName()) + " = ?" +
-                     " AND " + quote("tenant_id") + " = ?" +
-                     " AND " + quote("app_id") + " = ?";
+                     " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
              PreparedStatement ps = c.prepareStatement(sql)) {
             int i = 1;
             for (Object v : vals) {
                 ps.setObject(i++, v);
             }
-            ps.setObject(i++, parseId(id, pk));
-            ps.setString(i++, context.getTenantId());
-            ps.setString(i, context.getAppId());
+            ps.setObject(i, parseId(id, pk));
             return ps.executeUpdate();
         }
     }
@@ -149,14 +130,10 @@ public class EntityCrudService {
             return 0;
         }
         String sql = "DELETE FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + 
-                     " WHERE " + quote(pk.getName()) + " = ?" +
-                     " AND " + quote("tenant_id") + " = ?" +
-                     " AND " + quote("app_id") + " = ?";
+                     " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
-            ps.setString(2, context.getTenantId());
-            ps.setString(3, context.getAppId());
             return ps.executeUpdate();
         }
     }
