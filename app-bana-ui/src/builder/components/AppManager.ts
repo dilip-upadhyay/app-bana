@@ -521,7 +521,8 @@ export class AppManager extends LitElement {
       }
     } catch (error) {
       console.error('[PUBLISH] ❌ Exception during publish:', error);
-      alert(`Failed to publish app: ${error.message || error}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Failed to publish app: ${errorMessage}`);
     }
   }
 

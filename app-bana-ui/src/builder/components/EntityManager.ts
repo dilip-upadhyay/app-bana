@@ -727,7 +727,18 @@ export class EntityManager extends LitElement {
   private handleFormInput(e: Event) {
     const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
     const { name, value } = target;
-    this.formData = { ...this.formData, [name]: value };
+    
+    // Auto-fill displayName from name if displayName is empty
+    if (name === 'name' && (!this.formData.displayName || this.formData.displayName === '')) {
+      // Convert name to Title Case (e.g., "customer" -> "Customer", "order_item" -> "Order Item")
+      const displayName = value
+        .split(/[_-]/)  // Split by underscore or dash
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+      this.formData = { ...this.formData, [name]: value, displayName };
+    } else {
+      this.formData = { ...this.formData, [name]: value };
+    }
   }
 
   private toggleSQLPreview() {
@@ -766,7 +777,31 @@ export class EntityManager extends LitElement {
 
   private handleFieldChange(index: number, field: string, value: any) {
     const fields = [...(this.formData.fields || [])];
-    fields[index] = { ...fields[index], [field]: value };
+    const currentField = fields[index];
+    
+    // Auto-fill display.label from name if name is being changed
+    if (field === 'name' && value) {
+      // Convert name to Title Case (e.g., "firstName" -> "First Name", "order_date" -> "Order Date")
+      const label = value
+        .replace(/([A-Z])/g, ' $1')  // Add space before capital letters (camelCase)
+        .split(/[_-\s]+/)  // Split by underscore, dash, or space
+        .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ')
+        .trim();
+      
+      fields[index] = {
+        ...currentField,
+        [field]: value,
+        display: {
+          ...currentField.display,
+          label,
+          placeholder: `Enter ${label.toLowerCase()}...`
+        }
+      };
+    } else {
+      fields[index] = { ...currentField, [field]: value };
+    }
+    
     this.formData = { ...this.formData, fields };
   }
 
