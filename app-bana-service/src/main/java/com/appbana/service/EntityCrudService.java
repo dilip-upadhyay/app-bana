@@ -1,6 +1,7 @@
 package com.appbana.service;
 
 import com.appbana.JdbcManager;
+import com.appbana.SchemaManager;
 import com.appbana.model.EntitySchema;
 import com.appbana.model.TenantContext;
 
@@ -47,7 +48,8 @@ public class EntityCrudService {
         if (context == null) {
             throw new IllegalArgumentException("TenantContext is required");
         }
-        String sql = "SELECT * FROM " + quote(schema.getName()) + 
+        String tableName = SchemaManager.getPhysicalTableName(schema);
+        String sql = "SELECT * FROM " + quote(tableName) + 
                      " WHERE " + quote("tenant_id") + " = ? AND " + quote("app_id") + " = ?";
         try (Connection c = schemaConnection(schema);
              PreparedStatement ps = c.prepareStatement(sql)) {
@@ -70,7 +72,7 @@ public class EntityCrudService {
         if (pk == null) {
             return null;
         }
-        String sql = "SELECT * FROM " + quote(schema.getName()) + 
+        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + 
                      " WHERE " + quote(pk.getName()) + " = ?" +
                      " AND " + quote("tenant_id") + " = ?" +
                      " AND " + quote("app_id") + " = ?";
@@ -118,7 +120,7 @@ public class EntityCrudService {
         if (set.isEmpty()) {
             return 0;
         }
-        String sql = "UPDATE " + quote(schema.getName()) + " SET " + String.join(",", set) + 
+        String sql = "UPDATE " + quote(SchemaManager.getPhysicalTableName(schema)) + " SET " + String.join(",", set) + 
                      " WHERE " + quote(pk.getName()) + " = ?" +
                      " AND " + quote("tenant_id") + " = ?" +
                      " AND " + quote("app_id") + " = ?";
@@ -146,7 +148,7 @@ public class EntityCrudService {
         if (pk == null) {
             return 0;
         }
-        String sql = "DELETE FROM " + quote(schema.getName()) + 
+        String sql = "DELETE FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + 
                      " WHERE " + quote(pk.getName()) + " = ?" +
                      " AND " + quote("tenant_id") + " = ?" +
                      " AND " + quote("app_id") + " = ?";
@@ -195,7 +197,8 @@ public class EntityCrudService {
             values.add(val);
         }
 
-        String sql = "INSERT INTO " + quote(schema.getName()) + " (" + String.join(",", cols) + ") VALUES ("
+        String tableName = SchemaManager.getPhysicalTableName(schema);
+        String sql = "INSERT INTO " + quote(tableName) + " (" + String.join(",", cols) + ") VALUES ("
                 + String.join(",", placeholders) + ")";
 
         try (Connection c = schemaConnection(schema);
@@ -221,7 +224,7 @@ public class EntityCrudService {
     }
 
     public List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {
-        String sql = "SELECT * FROM " + quote(schema.getName());
+        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema));
         try (Connection c = schemaConnection(schema);
              PreparedStatement ps = c.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -235,7 +238,7 @@ public class EntityCrudService {
         if (pk == null) {
             return null;
         }
-        String sql = "SELECT * FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
+        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
@@ -269,7 +272,7 @@ public class EntityCrudService {
             return 0;
         }
 
-        String sql = "UPDATE " + quote(schema.getName()) + " SET " + String.join(",", set) + " WHERE "
+        String sql = "UPDATE " + quote(SchemaManager.getPhysicalTableName(schema)) + " SET " + String.join(",", set) + " WHERE "
                 + quote(pk.getName()) + " = ?";
 
         try (Connection c = schemaConnection(schema);
@@ -289,7 +292,7 @@ public class EntityCrudService {
         if (pk == null) {
             return 0;
         }
-        String sql = "DELETE FROM " + quote(schema.getName()) + " WHERE " + quote(pk.getName()) + " = ?";
+        String sql = "DELETE FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
@@ -331,7 +334,7 @@ public class EntityCrudService {
         StringBuilder where = new StringBuilder();
         List<Object> params = new ArrayList<>();
         buildWhere(schema, q, filters, where, params);
-        String sql = "SELECT COUNT(*) FROM " + quote(schema.getName()) + where;
+        String sql = "SELECT COUNT(*) FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + where;
         try (Connection c = schemaConnection(schema);
              PreparedStatement ps = c.prepareStatement(sql)) {
             for (int i = 0; i < params.size(); i++) {
@@ -390,7 +393,7 @@ public class EntityCrudService {
         buildWhere(schema, q, filters, where, params);
 
         // Count
-        String countSql = "SELECT COUNT(*) FROM " + quote(schema.getName()) + where;
+        String countSql = "SELECT COUNT(*) FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + where;
         long total;
 
         // Sorting
@@ -422,7 +425,7 @@ public class EntityCrudService {
             selectCols.add(quote(col) + " AS \"" + col + "\"");
         }
 
-        String dataSql = "SELECT " + String.join(",", selectCols) + " FROM " + quote(schema.getName()) + where
+        String dataSql = "SELECT " + String.join(",", selectCols) + " FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + where
                 + orderClause + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
 
         try (Connection c = schemaConnection(schema)) {
@@ -482,7 +485,7 @@ public class EntityCrudService {
 
         String cols = String.join(",", insertable.stream().map(f -> quote(f.getName())).toList());
         String placeholders = String.join(",", Collections.nCopies(insertable.size(), "?"));
-        String sql = "INSERT INTO " + quote(schema.getName())
+        String sql = "INSERT INTO " + quote(SchemaManager.getPhysicalTableName(schema))
                 + (insertable.isEmpty() ? " DEFAULT VALUES" : (" (" + cols + ") VALUES (" + placeholders + ")"));
 
         List<Long> ids = new ArrayList<>();
