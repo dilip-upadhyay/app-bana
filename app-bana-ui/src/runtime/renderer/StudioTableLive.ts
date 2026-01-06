@@ -629,9 +629,12 @@ export class StudioTableLive extends LitElement {
     const fields = Array.isArray(this.node?.props?.fields) ? this.node.props.fields : [];
     const actions: (string | { label: string; onClick: string })[] = this.node?.props?.actions || [];
     const multiSelect: boolean = Boolean(this.node?.props?.multiSelect);
-    const rows = (this.data?.rows && this.data.rows.length > 0)
-      ? this.data.rows
-      : [1, 2, 3].map(i => Object.fromEntries(fields.map((f: any) => [f.name, `Sample ${i}`])));
+    // Only show sample data if there was an error fetching (design-time preview)
+    // At runtime with successful API calls, show actual data or empty state
+    const rows = this.error
+      ? [1, 2, 3].map(i => Object.fromEntries(fields.map((f: any) => [f.name, `Sample ${i}`])))
+      : (this.data?.rows || []);
+    const hasNoData = !this.error && rows.length === 0;
     const activeFilters = Object.entries(this.filters).filter(([_, v]) => v && v.trim() !== '');
     const totalPages = Math.max(1, Math.ceil(this.total / this.pageSize));
     const startIdx = (this.page - 1) * this.pageSize + 1;
@@ -673,7 +676,13 @@ export class StudioTableLive extends LitElement {
             ${this.buildFilterRow(fields, actions, multiSelect)}
           </thead>
           <tbody>
-            ${this.buildBody(rows, fields, actions, multiSelect)}
+            ${hasNoData ? html`
+              <tr>
+                <td colspan="${(multiSelect ? 1 : 0) + fields.length + (actions.length > 0 ? 1 : 0)}" style="text-align:center;padding:2rem;color:#64748b;font-style:italic;">
+                  ${activeFilters.length > 0 ? 'No matching records found. Try adjusting your filters.' : 'No data available.'}
+                </td>
+              </tr>
+            ` : this.buildBody(rows, fields, actions, multiSelect)}
           </tbody>
         </table>
       </div>
