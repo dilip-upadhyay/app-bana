@@ -33,6 +33,10 @@ export class StudioTableLive extends LitElement {
   @state() private createOpen: boolean = false;
   @state() private createData: Record<string, any> = {};
 
+  // Filter focus tracking
+  private focusedFilterField: string | null = null;
+  private filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   private get entityName(): string | undefined {
     return this.node?.props?.entity?.replace(/=$/, '');
   }
@@ -444,6 +448,7 @@ export class StudioTableLive extends LitElement {
   }
 
   private async loadPage(page: number) {
+    const fieldToFocus = this.focusedFilterField; // Save before async operation
     this.loading = true;
     this.error = '';
     try {
@@ -468,7 +473,24 @@ export class StudioTableLive extends LitElement {
       this.error = err?.message || 'Failed to fetch table data.';
     } finally {
       this.loading = false;
+      // Restore focus after render completes
+      if (fieldToFocus) {
+        await this.updateComplete;
+        this.restoreFocusToFilter(fieldToFocus);
+      }
     }
+  }
+
+  private restoreFocusToFilter(fieldName: string) {
+    requestAnimationFrame(() => {
+      const filterInput = this.shadowRoot?.getElementById(`filter-${fieldName}`) as HTMLInputElement | null;
+      if (filterInput) {
+        filterInput.focus();
+        // Move cursor to end of input
+        const len = filterInput.value.length;
+        filterInput.setSelectionRange(len, len);
+      }
+    });
   }
 
   private changePage(delta: number) {
@@ -489,8 +511,15 @@ export class StudioTableLive extends LitElement {
   private onFilterInput(fieldName: string, e: Event) {
     const value = (e.target as HTMLInputElement).value;
     this.filters = { ...this.filters, [fieldName]: value };
-    // Reset to first page and re-fetch server-side filtered data
-    this.loadPage(1);
+    this.focusedFilterField = fieldName;
+    
+    // Debounce the API call to avoid fetching on every keystroke
+    if (this.filterDebounceTimer) {
+      clearTimeout(this.filterDebounceTimer);
+    }
+    this.filterDebounceTimer = setTimeout(() => {
+      this.loadPage(1);
+    }, 700); // Wait 700ms after last keystroke before fetching
   }
 
   // --- Rendering helpers to reduce cognitive complexity ---
@@ -532,7 +561,13 @@ export class StudioTableLive extends LitElement {
     return html`<tr class="filter-row">
       ${multiSelect ? html`<th></th>` : ''}
       ${fields.map((f: any) => html`<th>
-        <input type="text" aria-label="Filter ${f.label || f.name}" placeholder="Filter..." @input=${(e: Event) => this.onFilterInput(f.name, e)} .value=${this.filters[f.name] || ''}>
+        <input type="text" 
+               id="filter-${f.name}" 
+               aria-label="Filter ${f.label || f.name}" 
+               placeholder="Filter..." 
+               @input=${(e: Event) => this.onFilterInput(f.name, e)} 
+               @blur=${() => { this.focusedFilterField = null; }}
+               .value=${this.filters[f.name] || ''}>
       </th>`)}
       ${actions.length > 0 ? html`<th></th>` : ''}
     </tr>`;
