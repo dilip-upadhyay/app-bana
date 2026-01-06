@@ -942,7 +942,7 @@ public class GenericEntityRoutes {
         });
 
         // GET /appbana-studio/{tenantId}/apps/{appId}/{entity} - List entities scoped
-        // to tenant and app
+        // to tenant and app (supports filtering, sorting, pagination)
         router.get("/appbana-studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
@@ -963,15 +963,62 @@ public class GenericEntityRoutes {
                 return;
             }
 
+            // Parse query parameters for filtering, sorting, and pagination
+            String limitS = req.query("limit");
+            String offsetS = req.query("offset");
+            String q = req.query("q");
+            String fieldsParam = req.query("fields");
+            String sortParam = req.query("sort");
+            String filterParam = req.query("filter");
+
+            LOG.info("[STUDIO-LIST] entity={}, filter={}, sort={}, limit={}, offset={}", 
+                     entity, filterParam, sortParam, limitS, offsetS);
+
+            Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+
+            Integer limit = null;
+            Integer offset = null;
+            boolean anyAdv = q != null || fieldsParam != null || sortParam != null || filterParam != null
+                    || limitS != null || offsetS != null;
+            if (anyAdv) {
+                try {
+                    limit = limitS != null ? Integer.parseInt(limitS) : 50;
+                } catch (Exception ignore) {
+                    limit = 50;
+                }
+                try {
+                    offset = offsetS != null ? Integer.parseInt(offsetS) : 0;
+                } catch (Exception ignore) {
+                    offset = 0;
+                }
+                if (limit <= 0) limit = 50;
+                if (limit > 500) limit = 500;
+                if (offset < 0) offset = 0;
+            }
+
             try {
                 // Set TenantContext for this request from URL path parameters
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
 
                 try {
-                    // EntityCrudService will auto-filter by tenant_id and app_id
-                    List<Map<String, Object>> rows = crud.listAll(schema);
-                    res.json(200, Map.of("appId", appId, "entity", entity, "count", rows.size(), "rows", rows));
+                    if (!anyAdv) {
+                        // Simple list without filtering/pagination
+                        List<Map<String, Object>> rows = crud.listAll(schema);
+                        res.json(200, Map.of("appId", appId, "entity", entity, "count", rows.size(), "rows", rows));
+                    } else {
+                        // Advanced list with filtering, sorting, pagination
+                        Map<String, Object> out = crud.listAdvanced(schema,
+                                limit != null ? limit : 50,
+                                offset != null ? offset : 0,
+                                q,
+                                fieldsParam,
+                                sortParam,
+                                filters);
+                        out.put("appId", appId);
+                        out.put("entity", entity);
+                        res.json(200, out);
+                    }
                 } finally {
                     TenantContext.clear();
                 }

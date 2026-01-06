@@ -4,6 +4,8 @@ import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
 import com.appbana.model.EntitySchema;
 import com.appbana.model.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.time.Instant;
@@ -20,6 +22,8 @@ import java.util.regex.Pattern;
  * Extracted from {@code ApiServer} to enable modular, testable route handlers.
  */
 public class EntityCrudService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EntityCrudService.class);
 
     // ==================== Context-Aware Methods (Multi-Tenant) ====================
 
@@ -280,30 +284,39 @@ public class EntityCrudService {
     public Map<String, Object> parseFilters(String raw, EntitySchema schema) {
         Map<String, Object> map = new LinkedHashMap<>();
         if (raw == null || raw.isBlank()) {
+            LOG.info("[FILTER] No filter string provided");
             return map;
         }
+        LOG.info("[FILTER] Parsing filter string: {}", raw);
         String[] pairs = raw.split(",");
         Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
         for (EntitySchema.Field f : schema.getFields()) {
             fieldMap.put(f.getName().toLowerCase(Locale.ROOT), f);
+            LOG.info("[FILTER] Schema field: {} (lowercased: {})", f.getName(), f.getName().toLowerCase(Locale.ROOT));
         }
         for (String p : pairs) {
             int idx = p.indexOf(":");
             if (idx <= 0) {
+                LOG.info("[FILTER] Skipping invalid pair (no colon or at start): {}", p);
                 continue;
             }
             String name = p.substring(0, idx).trim();
             String val = p.substring(idx + 1).trim();
             if (name.isEmpty()) {
+                LOG.info("[FILTER] Skipping pair with empty name");
                 continue;
             }
+            LOG.info("[FILTER] Looking up field '{}' (lowercased: '{}') in schema", name, name.toLowerCase(Locale.ROOT));
             EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
             if (f == null) {
+                LOG.info("[FILTER] Field '{}' not found in schema, skipping", name);
                 continue; // ignore unknown
             }
             Object parsed = parseFilterValue(f, val);
+            LOG.info("[FILTER] Parsed filter: {}={} (type: {}, parsed value: {})", f.getName(), val, f.getType(), parsed);
             map.put(f.getName(), parsed); // canonical
         }
+        LOG.info("[FILTER] Final filter map: {}", map);
         return map;
     }
 
@@ -667,6 +680,7 @@ public class EntityCrudService {
                                    StringBuilder where,
                                    List<Object> params) {
         List<String> parts = new ArrayList<>();
+        LOG.info("[BUILD_WHERE] Building WHERE clause. q={}, filters={}", q, filters);
 
         if (q != null && !q.isBlank()) {
             String uq = q.trim().toUpperCase(Locale.ROOT);
@@ -690,8 +704,10 @@ public class EntityCrudService {
             }
 
             for (Map.Entry<String, Object> e : filters.entrySet()) {
+                LOG.info("[BUILD_WHERE] Processing filter entry: key={}, value={}", e.getKey(), e.getValue());
                 EntitySchema.Field f = fieldMap.get(e.getKey().toLowerCase(Locale.ROOT));
                 if (f == null) {
+                    LOG.info("[BUILD_WHERE] Field '{}' not found in schema, skipping", e.getKey());
                     continue; // unknown
                 }
 
@@ -704,17 +720,22 @@ public class EntityCrudService {
                     } catch (Exception ignored) {
                     }
                     if (!valid) {
+                        LOG.info("[BUILD_WHERE] Skipping invalid date/timestamp filter: {}", sVal);
                         continue; // skip predicate, prevents DB parse error
                     }
                 }
 
-                parts.add(quote(e.getKey()) + " = ?");
+                String quotedKey = quote(e.getKey());
+                LOG.info("[BUILD_WHERE] Adding filter condition: {} = ? (param: {})", quotedKey, e.getValue());
+                parts.add(quotedKey + " = ?");
                 params.add(e.getValue());
             }
         }
 
         if (!parts.isEmpty()) {
             where.append(" WHERE ").append(String.join(" AND ", parts));
+            LOG.info("[BUILD_WHERE] Final WHERE clause: {}", where);
+            LOG.info("[BUILD_WHERE] Final params: {}", params);
         }
     }
 }
