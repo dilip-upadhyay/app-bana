@@ -13,6 +13,8 @@ export class GridElement extends LitElement {
   @property({ type: String }) minCellWidth = 'auto';
   @property({ type: String }) minCellHeight = 'auto';
 
+  @property({ type: Boolean, attribute: 'design-mode' }) designMode = false;
+
   static styles = css`
     :host {
       display: block;
@@ -39,7 +41,8 @@ export class GridElement extends LitElement {
       position: relative;
     }
 
-    .grid-cell.empty {
+    /* Only show empty cell styling in design mode */
+    :host([design-mode]) .grid-cell.empty {
        /* Style only empty cells to look like drop targets available via CSS var */
        min-height: 60px; /* Minimum height for drop target visibility */
        border: 2px dashed var(--grid-outline-color, transparent);
@@ -52,7 +55,7 @@ export class GridElement extends LitElement {
       border-color: transparent; 
     }
     
-    .grid-cell.empty:hover {
+    :host([design-mode]) .grid-cell.empty:hover {
        border-color: var(--grid-outline-hover-color, transparent);
        background: #eef2ff;
     }
@@ -69,7 +72,7 @@ export class GridElement extends LitElement {
       background: transparent;
     }
 
-    .grid-cell.has-content:hover {
+    :host([design-mode]) .grid-cell.has-content:hover {
       /* Show subtle outline on hover for selection feedback if needed, else transparent */
       outline: 1px dashed var(--grid-outline-hover-color, transparent);
       outline-offset: -1px;
@@ -156,10 +159,10 @@ export class GridElement extends LitElement {
             data-row="${row}"
             data-col="${col}"
           >
-            <span class="cell-label">R${row + 1}C${col + 1}</span>
+            ${this.designMode ? html`<span class="cell-label">R${row + 1}C${col + 1}</span>` : ''}
             <div class="cell-content">
               <slot name="cell-${cellIndex}" @slotchange=${() => this.requestUpdate()}>
-                <div class="empty-hint">Drop here</div>
+                ${this.designMode ? html`<div class="empty-hint">Drop here</div>` : ''}
               </slot>
             </div>
           </div>
