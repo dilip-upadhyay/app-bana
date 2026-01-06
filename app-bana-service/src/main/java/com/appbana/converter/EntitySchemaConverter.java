@@ -16,7 +16,7 @@ import java.util.List;
 public class EntitySchemaConverter {
     private static final Logger LOG = LoggerFactory.getLogger(EntitySchemaConverter.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
-    
+
     /**
      * Convert EntityMeta JSON to EntitySchema
      * 
@@ -25,10 +25,10 @@ public class EntitySchemaConverter {
      */
     public static EntitySchema convert(String entityName, JsonNode entityMetaJson) {
         LOG.debug("[CONVERTER] Converting entity: {}", entityName);
-        
+
         EntitySchema schema = new EntitySchema();
         schema.setName(entityName);
-        
+
         // Extract fields array
         JsonNode fieldsNode = entityMetaJson.get("fields");
         if (fieldsNode == null || !fieldsNode.isArray()) {
@@ -36,20 +36,20 @@ public class EntitySchemaConverter {
             schema.setFields(new ArrayList<>());
             return schema;
         }
-        
+
         List<EntitySchema.Field> fields = new ArrayList<>();
         boolean hasIdField = false;
-        
+
         // Convert each field
         for (JsonNode fieldNode : fieldsNode) {
             EntitySchema.Field field = convertField(fieldNode);
             fields.add(field);
-            
+
             if ("id".equalsIgnoreCase(field.getName())) {
                 hasIdField = true;
             }
         }
-        
+
         // Add default id field if not present
         if (!hasIdField) {
             LOG.debug("[CONVERTER] Adding default id field for entity: {}", entityName);
@@ -58,58 +58,78 @@ public class EntitySchemaConverter {
             idField.setType("long");
             idField.setPrimaryKey(true);
             idField.setAutoIncrement(true);
-            fields.add(0, idField);  // Add at beginning
+            fields.add(0, idField); // Add at beginning
         }
-        
+
         schema.setFields(fields);
         LOG.info("[CONVERTER] Converted entity {} with {} fields", entityName, fields.size());
-        
+
         return schema;
     }
-    
+
     /**
      * Convert a single field from frontend format to backend format
      */
     private static EntitySchema.Field convertField(JsonNode fieldNode) {
         EntitySchema.Field field = new EntitySchema.Field();
-        
+
         // Name (required)
         field.setName(fieldNode.get("name").asText());
-        
+
+        // Label (optional, default to name if missing/empty)
+        if (fieldNode.has("label") && !fieldNode.get("label").asText().isEmpty()) {
+            field.setLabel(fieldNode.get("label").asText());
+        } else {
+            // If no label, default to the Name (which might be the original unsanitized one
+            // if we are lucky,
+            // but here we get the node's current name.
+            // Ideally caller sets label BEFORE calling this if name is being changed.)
+            // The AppPublishService will handle setting the label in the JSON before
+            // calling this.
+            if (fieldNode.has("displayName")) {
+                // Support legacy/alt property if exists
+                field.setLabel(fieldNode.get("displayName").asText());
+            } else {
+                field.setLabel(field.getName());
+            }
+        }
+
         // Type mapping (frontend → backend)
         String frontendType = fieldNode.has("type") ? fieldNode.get("type").asText() : "text";
         field.setType(mapFieldType(frontendType, fieldNode));
-        
+
         // Primary key
         if (fieldNode.has("primaryKey")) {
             field.setPrimaryKey(fieldNode.get("primaryKey").asBoolean());
         }
-        
-        // Auto increment - can be set via "autoIncrement" property OR via type="autoincrement"
+
+        // Auto increment - can be set via "autoIncrement" property OR via
+        // type="autoincrement"
         if (fieldNode.has("autoIncrement")) {
             field.setAutoIncrement(fieldNode.get("autoIncrement").asBoolean());
         } else if ("autoincrement".equalsIgnoreCase(frontendType)) {
             field.setAutoIncrement(true);
-            field.setPrimaryKey(true);  // Auto-increment fields are always primary keys
+            field.setPrimaryKey(true); // Auto-increment fields are always primary keys
         }
-        
-        // Required - auto-increment fields should NOT be required (database generates value)
+
+        // Required - auto-increment fields should NOT be required (database generates
+        // value)
         if (fieldNode.has("required")) {
-            if (!field.isAutoIncrement()) {  // Only apply if not auto-increment
+            if (!field.isAutoIncrement()) { // Only apply if not auto-increment
                 field.setRequired(fieldNode.get("required").asBoolean());
             }
         }
-        
+
         // Length (for string types)
         if (fieldNode.has("length")) {
             field.setLength(fieldNode.get("length").asInt());
         }
-        
+
         // Pattern (regex validation)
         if (fieldNode.has("pattern")) {
             field.setPattern(fieldNode.get("pattern").asText());
         }
-        
+
         // Min/Max (for numeric types)
         if (fieldNode.has("min")) {
             field.setMin((long) fieldNode.get("min").asDouble());
@@ -117,10 +137,10 @@ public class EntitySchemaConverter {
         if (fieldNode.has("max")) {
             field.setMax((long) fieldNode.get("max").asDouble());
         }
-        
+
         return field;
     }
-    
+
     /**
      * Map frontend field types to backend EntitySchema types
      * 
@@ -130,11 +150,11 @@ public class EntitySchemaConverter {
     private static String mapFieldType(String frontendType, JsonNode fieldNode) {
         return switch (frontendType.toLowerCase()) {
             case "text", "email", "phone", "select", "dropdown" -> "string";
-            case "autoincrement" -> "long";  // Auto-increment fields are always long
+            case "autoincrement" -> "long"; // Auto-increment fields are always long
             case "number" -> {
                 // Check if autoIncrement to use long for ID fields
-                boolean isAutoIncrement = fieldNode.has("autoIncrement") && 
-                                         fieldNode.get("autoIncrement").asBoolean();
+                boolean isAutoIncrement = fieldNode.has("autoIncrement") &&
+                        fieldNode.get("autoIncrement").asBoolean();
                 yield isAutoIncrement ? "long" : "int";
             }
             case "textarea" -> "text";
@@ -149,7 +169,7 @@ public class EntitySchemaConverter {
             }
         };
     }
-    
+
     /**
      * Validate entity name (alphanumeric + underscore only)
      */
@@ -159,7 +179,7 @@ public class EntitySchemaConverter {
         }
         return name.matches("^[a-zA-Z][a-zA-Z0-9_]*$");
     }
-    
+
     /**
      * Validate field name (alphanumeric + underscore only)
      */
