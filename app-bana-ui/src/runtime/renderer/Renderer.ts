@@ -49,7 +49,11 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
     }
   }
 
-  const style = props?.style || '';
+  // Handle styles including new marginBottom property
+  let style = props?.style || '';
+  if (props?.marginBottom) {
+    style += `; margin-bottom: ${props.marginBottom}`;
+  }
   const className = props?.className || '';
 
   // Compose children recursively
@@ -185,8 +189,8 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           style="${style}"
           cols="${props?.cols || 2}"
           rows="${props?.rows || 2}"
-          gap="${props?.gap || '16px'}"
-          .minCellHeight="${props?.minCellHeight || 'auto'}"
+          gap="${props?.gap ?? '16px'}"
+          .minCellHeight="${props?.minCellHeight ?? 'auto'}"
         >
           ${children}
         </app-grid>

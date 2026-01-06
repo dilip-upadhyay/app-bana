@@ -348,19 +348,19 @@ export class PropertiesPanel extends LitElement {
 
     // Define common editable properties by component type
     const propertyMap: Record<string, string[]> = {
-      'input': ['label', 'name', 'value', 'placeholder', 'type', 'required', 'disabled', 'error', 'helper-text'],
-      'text-input': ['label', 'placeholder', 'name', 'value', 'required', 'disabled'],
-      'textarea': ['label', 'placeholder', 'name', 'value', 'rows', 'required', 'disabled'],
-      'button': ['label', 'variant', 'disabled', 'actionType', 'entity', 'navigateUrl', 'apiEndpoint', 'apiMethod', 'onSuccess'],
-      'text': ['content'],
-      'heading': ['level', 'content'],
-      'link': ['href', 'text', 'target'],
-      'image': ['src', 'alt', 'width', 'height'],
-      'checkbox': ['label', 'name', 'checked', 'disabled'],
-      'radio': ['label', 'name', 'value', 'checked', 'disabled'],
-      'select': ['label', 'name', 'options', 'value', 'disabled'],
-      'app-grid': ['rows', 'cols', 'gap', 'minCellHeight'],
-      'grid': ['rows', 'cols', 'gap', 'minCellHeight'],
+      'input': ['label', 'name', 'value', 'placeholder', 'type', 'required', 'disabled', 'error', 'helper-text', 'marginBottom'],
+      'text-input': ['label', 'placeholder', 'name', 'value', 'required', 'disabled', 'marginBottom'],
+      'textarea': ['label', 'placeholder', 'name', 'value', 'rows', 'required', 'disabled', 'marginBottom'],
+      'button': ['label', 'variant', 'disabled', 'actionType', 'entity', 'navigateUrl', 'apiEndpoint', 'apiMethod', 'onSuccess', 'marginBottom'],
+      'text': ['content', 'marginBottom'],
+      'heading': ['level', 'content', 'marginBottom'],
+      'link': ['href', 'text', 'target', 'marginBottom'],
+      'image': ['src', 'alt', 'width', 'height', 'marginBottom'],
+      'checkbox': ['label', 'name', 'checked', 'disabled', 'marginBottom'],
+      'radio': ['label', 'name', 'value', 'checked', 'disabled', 'marginBottom'],
+      'select': ['label', 'name', 'options', 'value', 'disabled', 'marginBottom'],
+      'app-grid': ['rows', 'cols', 'gap', 'minCellHeight', 'marginBottom'],
+      'grid': ['rows', 'cols', 'gap', 'minCellHeight', 'marginBottom'],
     };
 
     return propertyMap[type] || [];
@@ -517,6 +517,12 @@ export class PropertiesPanel extends LitElement {
               { label: 'Medium (150px)', value: '150px' },
               { label: 'Large (200px)', value: '200px' },
               { label: 'Extra Large (300px)', value: '300px' }
+            ] : propKey === 'marginBottom' ? [
+              { label: 'None (0)', value: '0' },
+              { label: 'Small (8px)', value: '0.5rem' },
+              { label: 'Normal (16px)', value: '1rem' },
+              { label: 'Large (24px)', value: '1.5rem' },
+              { label: 'Extra Large (32px)', value: '2rem' }
             ] : [
               { label: 'None (0)', value: '0' },
               { label: 'Tx (2px)', value: '2px' },
@@ -528,7 +534,7 @@ export class PropertiesPanel extends LitElement {
             ];
 
             // Find current index to enable/disable buttons
-            const normalize = (v: any) => String(v || (isHeight ? 'auto' : '1rem')).toLowerCase();
+            const normalize = (v: any) => String(v || (isHeight ? 'auto' : (propKey === 'marginBottom' ? '1rem' : '1rem'))).toLowerCase();
             const currentVal = normalize(currentValue);
             const currentIndex = options.findIndex(o => normalize(o.value) === currentVal);
             const effectiveIndex = currentIndex === -1 ? 0 : currentIndex; // Default to 0 if custom/unknown
@@ -844,7 +850,7 @@ export class PropertiesPanel extends LitElement {
     const booleanProps = ['required', 'disabled', 'checked'];
     const numberProps = ['rows', 'cols', 'level', 'width', 'height'];
     const textareaProps = ['content', 'options'];
-    const spacingProps = ['gap', 'minCellHeight'];
+    const spacingProps = ['gap', 'minCellHeight', 'marginBottom'];
 
     if (booleanProps.includes(propKey)) return 'boolean';
     if (numberProps.includes(propKey)) return 'number';
@@ -854,6 +860,7 @@ export class PropertiesPanel extends LitElement {
   }
 
   private formatPropertyLabel(propKey: string): string {
+    if (propKey === 'marginBottom') return 'Space Below';
     // Convert camelCase to Title Case with spaces
     return propKey
       .replaceAll(/([A-Z])/g, ' $1')
@@ -875,6 +882,7 @@ export class PropertiesPanel extends LitElement {
       'options': 'option1,option2,option3',
       'rows': '3',
       'level': '1-6',
+      'marginBottom': '1rem',
     };
 
     return placeholders[propKey] || '';

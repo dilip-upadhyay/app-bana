@@ -46,7 +46,11 @@ export class CheckboxElement extends FormElement {
 
   protected styles(): string {
     return `
-      :host { display: block; font-family: var(--font-sans, system-ui); }
+      :host { 
+        display: block; 
+        font-family: var(--font-sans, system-ui); 
+        margin-bottom: var(--margin-bottom, 1rem);
+      }
       .checkbox-container { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
       .label-text { font-size: 0.875rem; color: #374151; font-weight: 500; }
       .required { color: #ef4444; margin-left: 0.25rem; }

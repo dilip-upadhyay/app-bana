@@ -73,7 +73,11 @@ export class RadioGroupElement extends FormElement {
 
   protected styles(): string {
     return `
-      :host { display: block; font-family: var(--font-sans, system-ui); }
+      :host { 
+        display: block; 
+        font-family: var(--font-sans, system-ui); 
+        margin-bottom: var(--margin-bottom, 1rem);
+      }
       .group-label { font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.5rem; }
       .required { color: #ef4444; margin-left: 0.25rem; }
       .options { display: flex; gap: 0.75rem; }

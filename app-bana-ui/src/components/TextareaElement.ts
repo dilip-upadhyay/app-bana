@@ -68,7 +68,11 @@ export class TextareaElement extends FormElement {
 
   protected styles(): string {
     return `
-      :host { display: block; font-family: var(--font-sans, system-ui); }
+      :host { 
+        display: block; 
+        font-family: var(--font-sans, system-ui); 
+        margin-bottom: var(--margin-bottom, 1rem);
+      }
       label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; color: #374151; }
       .required { color: #ef4444; margin-left: 0.25rem; }
       textarea {

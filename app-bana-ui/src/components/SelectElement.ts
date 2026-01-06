@@ -116,6 +116,7 @@ export class SelectElement extends FormElement {
       :host {
         display: block;
         font-family: var(--font-sans, system-ui);
+        margin-bottom: var(--margin-bottom, 1rem);
       }
       label {
         display: block;

@@ -156,7 +156,7 @@ export class InputElement extends FormElement {
       :host {
         display: block;
         font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
-        margin-bottom: 1rem;
+        margin-bottom: var(--margin-bottom, 1rem);
         width: 100%;
         max-width: 32rem;
         --color-brand: #6366f1;

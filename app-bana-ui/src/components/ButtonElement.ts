@@ -30,7 +30,10 @@ export class ButtonElement extends FormElement {
 
   protected styles(): string {
     return `
-      :host { display: inline-block; }
+      :host { 
+        display: inline-block; 
+        margin-bottom: var(--margin-bottom, 0);
+      }
       .btn {
         font-family: inherit;
         font-size: 0.875rem;
