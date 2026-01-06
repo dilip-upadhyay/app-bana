@@ -54,6 +54,21 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
   if (props?.marginBottom) {
     style += `; margin-bottom: ${props.marginBottom}`;
   }
+  if (props?.padding) {
+    style += `; padding: ${props.padding}`;
+  }
+  if (props?.gap) {
+    style += `; gap: ${props.gap}`;
+  }
+  if (props?.minHeight) {
+    style += `; min-height: ${props.minHeight}`;
+  }
+  if (props?.layout) {
+    style += `; flex-direction: ${props.layout}`;
+  }
+  if (props?.backgroundColor) {
+    style += `; background-color: ${props.backgroundColor}`;
+  }
   const className = props?.className || '';
 
   // Compose children recursively

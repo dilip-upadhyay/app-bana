@@ -359,6 +359,9 @@ export class PropertiesPanel extends LitElement {
       'checkbox': ['label', 'name', 'checked', 'disabled', 'marginBottom'],
       'radio': ['label', 'name', 'value', 'checked', 'disabled', 'marginBottom'],
       'select': ['label', 'name', 'options', 'value', 'disabled', 'marginBottom'],
+      'div': ['padding', 'gap', 'layout', 'minHeight', 'marginBottom', 'backgroundColor'],
+      'section': ['padding', 'gap', 'layout', 'minHeight', 'marginBottom', 'backgroundColor'],
+      'container': ['padding', 'gap', 'layout', 'minHeight', 'marginBottom', 'backgroundColor'],
       'app-grid': ['rows', 'cols', 'gap', 'minCellHeight', 'marginBottom'],
       'grid': ['rows', 'cols', 'gap', 'minCellHeight', 'marginBottom'],
     };
@@ -506,6 +509,21 @@ export class PropertiesPanel extends LitElement {
             `;
           }
 
+          if (propType === 'select' && propKey === 'layout') {
+            return html`
+              <div class="form-group">
+                <label>${this.formatPropertyLabel(propKey)}</label>
+                <select
+                  .value=${String(currentValue || 'column')}
+                  @change=${(e: Event) => this.updateProperty(propKey, (e.target as HTMLSelectElement).value)}
+                >
+                  <option value="column" ?selected=${currentValue === 'column'}>Vertical (Column)</option>
+                  <option value="row" ?selected=${currentValue === 'row'}>Horizontal (Row)</option>
+                </select>
+              </div>
+            `;
+          }
+
           if (propType === 'spacing') {
             const isHeight = propKey === 'minCellHeight';
 
@@ -517,8 +535,9 @@ export class PropertiesPanel extends LitElement {
               { label: 'Medium (150px)', value: '150px' },
               { label: 'Large (200px)', value: '200px' },
               { label: 'Extra Large (300px)', value: '300px' }
-            ] : propKey === 'marginBottom' ? [
+            ] : (propKey === 'marginBottom' || propKey === 'padding' || propKey === 'gap') ? [
               { label: 'None (0)', value: '0' },
+              { label: 'Tiny (4px)', value: '0.25rem' },
               { label: 'Small (8px)', value: '0.5rem' },
               { label: 'Normal (16px)', value: '1rem' },
               { label: 'Large (24px)', value: '1.5rem' },
@@ -534,7 +553,7 @@ export class PropertiesPanel extends LitElement {
             ];
 
             // Find current index to enable/disable buttons
-            const normalize = (v: any) => String(v || (isHeight ? 'auto' : (propKey === 'marginBottom' ? '1rem' : '1rem'))).toLowerCase();
+            const normalize = (v: any) => String(v || (isHeight ? 'auto' : (propKey === 'padding' ? '0.5rem' : '1rem'))).toLowerCase();
             const currentVal = normalize(currentValue);
             const currentIndex = options.findIndex(o => normalize(o.value) === currentVal);
             const effectiveIndex = currentIndex === -1 ? 0 : currentIndex; // Default to 0 if custom/unknown
@@ -850,12 +869,13 @@ export class PropertiesPanel extends LitElement {
     const booleanProps = ['required', 'disabled', 'checked'];
     const numberProps = ['rows', 'cols', 'level', 'width', 'height'];
     const textareaProps = ['content', 'options'];
-    const spacingProps = ['gap', 'minCellHeight', 'marginBottom'];
+    const spacingProps = ['gap', 'minCellHeight', 'marginBottom', 'padding'];
 
     if (booleanProps.includes(propKey)) return 'boolean';
     if (numberProps.includes(propKey)) return 'number';
     if (textareaProps.includes(propKey)) return 'textarea';
     if (spacingProps.includes(propKey)) return 'spacing';
+    if (propKey === 'layout') return 'select';
     return 'text';
   }
 
