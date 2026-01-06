@@ -544,7 +544,10 @@ export class StudioTableLive extends LitElement {
       const checked = this.selectedIds.has(id);
       return html`<tr>
         ${multiSelect ? html`<td><input type="checkbox" aria-label="Select row" .checked=${checked} @change=${(e: Event) => this.onRowSelectChange(id, e)}></td>` : ''}
-        ${fields.map((f: any) => html`<td class="cell" @dblclick=${() => this.startInlineCellEdit(id, f.name, row[f.name])}>${this.renderCellContent(id, f.name, row[f.name])}</td>`)}
+        ${fields.map((f: any) => {
+          const cellValue = this.getFieldValue(row, f.name);
+          return html`<td class="cell" @dblclick=${() => this.startInlineCellEdit(id, f.name, cellValue)}>${this.renderCellContent(id, f.name, cellValue)}</td>`;
+        })}
         ${actions.length > 0 ? html`<td class="table-actions">
           ${actions.map((action) => {
         const isString = typeof action === 'string';
@@ -740,9 +743,29 @@ export class StudioTableLive extends LitElement {
     </div>`;
   }
 
+  /**
+   * Case-insensitive field value accessor.
+   * Database may return uppercase column names (ID, NAME, EMAIL) while
+   * field configuration uses lowercase (id, name, email).
+   */
+  private getFieldValue(row: any, fieldName: string): any {
+    if (!row || !fieldName) return undefined;
+    // Try exact match first
+    if (fieldName in row) return row[fieldName];
+    // Try case-insensitive match
+    const lowerKey = fieldName.toLowerCase();
+    const upperKey = fieldName.toUpperCase();
+    if (upperKey in row) return row[upperKey];
+    if (lowerKey in row) return row[lowerKey];
+    // Try finding any matching key case-insensitively
+    const keys = Object.keys(row);
+    const matchingKey = keys.find(k => k.toLowerCase() === lowerKey);
+    return matchingKey ? row[matchingKey] : undefined;
+  }
+
   private getRowId(row: any): string | number {
     const key = (this.node?.props?.idField || 'id');
-    return row[key];
+    return this.getFieldValue(row, key);
   }
 
   private readonly onRowSelectChange = (id: string, e: Event) => {
@@ -1002,7 +1025,7 @@ export class StudioTableLive extends LitElement {
     if (!fieldDefs.length) return html`<div style="font-size:0.85rem;color:#64748b;">No fields defined for view.</div>`;
     return fieldDefs.map(fd => {
       const label = fd.label || fd.name;
-      const rawValue = this.viewRow[fd.name];
+      const rawValue = this.getFieldValue(this.viewRow, fd.name);
       const type = fd.type || this.inferValueType(rawValue);
 
       // Apply FLS: Hide non-readable fields
