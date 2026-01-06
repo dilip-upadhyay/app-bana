@@ -145,6 +145,11 @@ kill_existing_server() {
     PID=$(netstat -anp tcp 2>/dev/null | grep "LISTEN.*:$PORT" | awk '{print $9}' | cut -d'/' -f1 || true)
   fi
   
+  # If still not found, try a best-effort grep for vite on this port (helps when lsof is missing or permissions block lookup)
+  if [[ -z "$PID" ]]; then
+    PID=$(ps -ef | grep "vite" | grep -v grep | grep ":$PORT" | awk '{print $2}' || true)
+  fi
+
   if [[ -n "$PID" ]]; then
     warn "Found existing server (PID: $PID) on port $PORT. Stopping..."
     kill "$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
