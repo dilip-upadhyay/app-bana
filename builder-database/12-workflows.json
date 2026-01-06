@@ -1,15 +1,18 @@
 {
-  "version": "1.0",
-  "lastUpdated": "2025-12-10T00:00:00Z",
+  "version": "1.1",
+  "lastUpdated": "2026-01-06T00:00:00Z",
   "capability": "workflows",
-  "description": "Business process automation with state-machine workflows, user tasks, and automated actions.",
+  "status": "95% Complete - Runtime verification pending",
+  "description": "Business process automation with state-machine workflows, user tasks, and automated actions. Fully integrated with physical table isolation architecture.",
+  "multiTenancy": "Workflows inherit tenant/app context from TenantContext, operate on physical tables without tenant_id filtering",
   
   "concepts": {
     "workflow": "A directed graph of nodes and transitions that coordinates human and system actions.",
     "trigger": "Event that starts a workflow instance (e.g., entity creation, update, or manual).",
     "node": "A step in the workflow (User Task, Service Task, Start, End).",
     "transition": "A directed connection between nodes, optionally guarded by a condition.",
-    "token": "Represents the current execution position in the workflow instance."
+    "token": "Represents the current execution position in the workflow instance.",
+    "physicalTable": "Workflows access entity data via physical table names (app_{env}{tenant}_{app}_{entity})"
   },
 
   "triggerEvents": [

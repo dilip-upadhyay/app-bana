@@ -1,10 +1,16 @@
 {
-  "version": "1.1.0",
-  "lastUpdated": "2025-12-10T00:00:00Z",
-  "description": "Complete REST API reference for AppBana backend",
+  "version": "1.2.0",
+  "lastUpdated": "2026-01-06T00:00:00Z",
+  "description": "Complete REST API reference for AppBana backend - Multi-Tenant Physical Isolation",
   "baseURL": "http://localhost:8080",
-  "server": "JDK HttpServer",
+  "server": "JDK HttpServer (Virtual Threads)",
   "file": "app-bana-service/src/main/java/com/appbana/ApiServer.java",
+  "multiTenancy": {
+    "architecture": "Physical table isolation - no tenant_id/app_id in entity table queries",
+    "tableNaming": "app_{env}{tenant}_{app}_{entity}",
+    "entityCRUD": "Direct table access via TenantContext, no WHERE filtering",
+    "implementation": "EntityCrudService uses SchemaManager.getPhysicalTableName()"
+  },
   "endpoints": {
     "apps": [
       {
@@ -46,6 +52,17 @@
         "response": "{success: true}",
         "status": 200,
         "notes": "Recursively deletes apps/{appId}/ directory"
+      },
+      {
+        "method": "POST",
+        "path": "/apps/publish",
+        "description": "Publish app to environment (DEV/SIT/PROD)",
+        "body": "{appMetaJson: string, appId: string, tenantId: string, environment: 'DEV'|'SIT'|'PROD', userId: string}",
+        "response": "{success: true, version: {version, deployedAt, tablesCreated: [], environment, userId}}",
+        "status": 200,
+        "notes": "Creates physical tables (app_{env}{tenant}_{app}_{entity}), no tenant_id/app_id columns. Transactional deployment.",
+        "implementation": "AppPublishService.publishApp()",
+        "tables": "Creates isolated physical tables per tenant/app/entity without redundant columns"
       }
     ],
     "pages": [

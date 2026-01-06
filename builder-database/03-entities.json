@@ -1,7 +1,14 @@
 {
-  "version": "1.0.0",
-  "lastUpdated": "2025-11-08T00:00:00Z",
-  "description": "Entity field types, relationships, and entity capabilities",
+  "version": "1.1.0",
+  "lastUpdated": "2026-01-06T00:00:00Z",
+  "description": "Entity field types, relationships, and entity capabilities - Physical Table Isolation",
+  "multiTenancy": {
+    "architecture": "Physical table names provide complete tenant/app isolation",
+    "systemFields": "NO tenant_id or app_id columns in entity tables",
+    "tableName": "app_{env}{tenant}_{app}_{entity}",
+    "isolation": "Database-level security through physical table separation",
+    "implementation": "SchemaManager.createTable() creates tables without tenant_id/app_id columns"
+  },
   "fieldTypes": [
     {
       "category": "Text Types",
