@@ -329,8 +329,8 @@ export async function fetchTableData(entity: string, fields: string[], options: 
     const filterPairs: string[] = [];
     for (const [k, v] of Object.entries(options.filters)) {
       if (v && v.trim() !== '') {
-        // backend expects raw value; encode to be safe
-        filterPairs.push(`${encodeURIComponent(k)}:${encodeURIComponent(v.trim())}`);
+        // Don't encode here - URLSearchParams will handle encoding
+        filterPairs.push(`${k}:${v.trim()}`);
       }
     }
     if (filterPairs.length > 0) params.filter = filterPairs.join(',');

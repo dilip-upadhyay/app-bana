@@ -287,6 +287,12 @@ public class EntityCrudService {
             LOG.info("[FILTER] No filter string provided");
             return map;
         }
+        // URL-decode the filter string to handle spaces encoded as + or %20
+        try {
+            raw = java.net.URLDecoder.decode(raw, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            LOG.warn("[FILTER] Failed to URL-decode filter string, using as-is: {}", raw);
+        }
         LOG.info("[FILTER] Parsing filter string: {}", raw);
         String[] pairs = raw.split(",");
         Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
