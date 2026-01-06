@@ -222,6 +222,9 @@ public class AppPublishService {
                     // Create table via SchemaManager (it will use getPhysicalTableName internally)
                     SchemaManager.saveSchema(schema);
 
+                    // SYNC PERMISSIONS: Ensure new fields have permissions for existing roles
+                    syncFieldPermissions(schema, connection);
+
                     tablesCreated.add(physicalTableName);
                     LOG.debug("[PUBLISH] Table created successfully: {}", physicalTableName);
                 } finally {
@@ -300,5 +303,80 @@ public class AppPublishService {
             sb.append("\tat ").append(element.toString()).append("\n");
         }
         return sb.toString();
+    }
+
+    /**
+     * Synchronize field permissions for the deployed schema.
+     * Finds roles that have access to the entity and grants read/edit access to new
+     * fields.
+     */
+    private void syncFieldPermissions(EntitySchema schema, Connection conn) {
+        String entityName = schema.getName();
+        // Use a heuristic to find roles: look for roles that have permission on *any*
+        // field of this entity
+        String findRolesSql = "SELECT DISTINCT role_id FROM field_permission WHERE entity_name = ?";
+
+        // We will insert permission if it doesn't exist.
+        // Safe, generic way: Check existence then insert. Since we are inside a
+        // transaction, it's safe.
+
+        String checkSql = "SELECT 1 FROM field_permission WHERE role_id = ? AND entity_name = ? AND field_name = ?";
+        String insertSql = "INSERT INTO field_permission (role_id, entity_name, field_name, can_read, can_edit) VALUES (?, ?, ?, ?, ?)";
+
+        try (java.sql.PreparedStatement findRolesStmt = conn.prepareStatement(findRolesSql);
+                java.sql.PreparedStatement checkStmt = conn.prepareStatement(checkSql);
+                java.sql.PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
+
+            // 1. Find relevant roles
+            findRolesStmt.setString(1, entityName);
+            List<String> roleIds = new ArrayList<>();
+            try (java.sql.ResultSet rs = findRolesStmt.executeQuery()) {
+                while (rs.next()) {
+                    roleIds.add(rs.getString("role_id"));
+                }
+            }
+
+            // If no roles found (new entity?), maybe we should grant to 'admin' at least?
+            // For now, let's assume if it's a new entity, permissions are handled
+            // separately or admin has '*'
+            if (roleIds.isEmpty()) {
+                LOG.info("[PUBLISH] No existing roles found for entity '{}', skipping permission sync.", entityName);
+                return;
+            }
+
+            LOG.info("[PUBLISH] Syncing permissions for entity '{}' to {} roles: {}", entityName, roleIds.size(),
+                    roleIds);
+
+            // 2. For each role and each field, ensure permission exists
+            for (String roleId : roleIds) {
+                for (EntitySchema.Field field : schema.getFields()) {
+                    String fieldName = field.getName();
+
+                    checkStmt.setString(1, roleId);
+                    checkStmt.setString(2, entityName);
+                    checkStmt.setString(3, fieldName);
+
+                    boolean exists = false;
+                    try (java.sql.ResultSet rs = checkStmt.executeQuery()) {
+                        if (rs.next()) {
+                            exists = true;
+                        }
+                    }
+
+                    if (!exists) {
+                        insertStmt.setString(1, roleId);
+                        insertStmt.setString(2, entityName);
+                        insertStmt.setString(3, fieldName);
+                        insertStmt.setBoolean(4, true); // Default Read
+                        insertStmt.setBoolean(5, true); // Default Edit
+                        insertStmt.executeUpdate();
+                        LOG.debug("[PUBLISH] Granted access to field '{}' for role '{}'", fieldName, roleId);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Log but don't fail deployment permissions are secondary to schema
+            LOG.error("[PUBLISH] Failed to sync permissions for entity '{}': {}", entityName, e.getMessage());
+        }
     }
 }

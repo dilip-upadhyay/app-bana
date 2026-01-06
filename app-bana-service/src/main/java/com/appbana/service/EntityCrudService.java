@@ -15,8 +15,10 @@ import java.util.regex.Pattern;
 /**
  * Entity CRUD and query operations for schema-driven dynamic entities.
  *
- * Supports multi-tenant isolation through TenantContext and physical table names.
- * Each tenant+app combination gets a separate physical table, eliminating the need
+ * Supports multi-tenant isolation through TenantContext and physical table
+ * names.
+ * Each tenant+app combination gets a separate physical table, eliminating the
+ * need
  * for tenant_id/app_id columns in runtime entity tables.
  *
  * Extracted from {@code ApiServer} to enable modular, testable route handlers.
@@ -25,21 +27,24 @@ public class EntityCrudService {
 
     private static final Logger LOG = LoggerFactory.getLogger(EntityCrudService.class);
 
-    // ==================== Context-Aware Methods (Multi-Tenant) ====================
+    // ==================== Context-Aware Methods (Multi-Tenant)
+    // ====================
 
     /**
      * Insert record with tenant/app isolation
      * 
      * @param context TenantContext for isolation
-     * @param schema Entity schema
-     * @param data Record data
+     * @param schema  Entity schema
+     * @param data    Record data
      * @return Generated primary key
      */
-    public Object insertRecord(TenantContext context, EntitySchema schema, Map<String, Object> data) throws SQLException {
+    public Object insertRecord(TenantContext context, EntitySchema schema, Map<String, Object> data)
+            throws SQLException {
         if (context == null) {
             throw new IllegalArgumentException("TenantContext is required");
         }
-        // Physical table name already provides tenant/app isolation - no need for columns
+        // Physical table name already provides tenant/app isolation - no need for
+        // columns
         return insertRecordLegacy(schema, data);
     }
 
@@ -53,8 +58,8 @@ public class EntityCrudService {
         String tableName = SchemaManager.getPhysicalTableName(schema);
         String sql = "SELECT * FROM " + quote(tableName);
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+                PreparedStatement ps = c.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
             return toList(rs);
         }
     }
@@ -66,14 +71,15 @@ public class EntityCrudService {
         if (context == null) {
             throw new IllegalArgumentException("TenantContext is required");
         }
-        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
+                .orElse(null);
         if (pk == null) {
             return null;
         }
-        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + 
-                     " WHERE " + quote(pk.getName()) + " = ?";
+        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema)) +
+                " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
@@ -85,11 +91,13 @@ public class EntityCrudService {
     /**
      * Update record by ID within tenant/app scope
      */
-    public int updateById(TenantContext context, EntitySchema schema, String id, Map<String, Object> data) throws SQLException {
+    public int updateById(TenantContext context, EntitySchema schema, String id, Map<String, Object> data)
+            throws SQLException {
         if (context == null) {
             throw new IllegalArgumentException("TenantContext is required");
         }
-        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
+                .orElse(null);
         if (pk == null) {
             return 0;
         }
@@ -109,10 +117,10 @@ public class EntityCrudService {
         if (set.isEmpty()) {
             return 0;
         }
-        String sql = "UPDATE " + quote(SchemaManager.getPhysicalTableName(schema)) + " SET " + String.join(",", set) + 
-                     " WHERE " + quote(pk.getName()) + " = ?";
+        String sql = "UPDATE " + quote(SchemaManager.getPhysicalTableName(schema)) + " SET " + String.join(",", set) +
+                " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             int i = 1;
             for (Object v : vals) {
                 ps.setObject(i++, v);
@@ -129,23 +137,26 @@ public class EntityCrudService {
         if (context == null) {
             throw new IllegalArgumentException("TenantContext is required");
         }
-        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst().orElse(null);
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
+                .orElse(null);
         if (pk == null) {
             return 0;
         }
-        String sql = "DELETE FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + 
-                     " WHERE " + quote(pk.getName()) + " = ?";
+        String sql = "DELETE FROM " + quote(SchemaManager.getPhysicalTableName(schema)) +
+                " WHERE " + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
             return ps.executeUpdate();
         }
     }
 
-    // ==================== Legacy Methods (Backward Compatible) ====================
+    // ==================== Legacy Methods (Backward Compatible)
+    // ====================
 
     /**
-     * @deprecated Use insertRecord(TenantContext, schema, data) for tenant isolation
+     * @deprecated Use insertRecord(TenantContext, schema, data) for tenant
+     *             isolation
      */
     @Deprecated
     public Object insertRecord(EntitySchema schema, Map<String, Object> data) throws SQLException {
@@ -183,7 +194,7 @@ public class EntityCrudService {
                 + String.join(",", placeholders) + ")";
 
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             for (int i = 0; i < values.size(); i++) {
                 ps.setObject(i + 1, values.get(i));
             }
@@ -207,8 +218,8 @@ public class EntityCrudService {
     public List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {
         String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema));
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+                PreparedStatement ps = c.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
             return toList(rs);
         }
     }
@@ -219,9 +230,10 @@ public class EntityCrudService {
         if (pk == null) {
             return null;
         }
-        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + " WHERE " + quote(pk.getName()) + " = ?";
+        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + " WHERE "
+                + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
@@ -253,11 +265,12 @@ public class EntityCrudService {
             return 0;
         }
 
-        String sql = "UPDATE " + quote(SchemaManager.getPhysicalTableName(schema)) + " SET " + String.join(",", set) + " WHERE "
+        String sql = "UPDATE " + quote(SchemaManager.getPhysicalTableName(schema)) + " SET " + String.join(",", set)
+                + " WHERE "
                 + quote(pk.getName()) + " = ?";
 
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             int i = 1;
             for (Object v : vals) {
                 ps.setObject(i++, v);
@@ -273,9 +286,10 @@ public class EntityCrudService {
         if (pk == null) {
             return 0;
         }
-        String sql = "DELETE FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + " WHERE " + quote(pk.getName()) + " = ?";
+        String sql = "DELETE FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + " WHERE "
+                + quote(pk.getName()) + " = ?";
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, parseId(id, pk));
             return ps.executeUpdate();
         }
@@ -312,14 +326,16 @@ public class EntityCrudService {
                 LOG.info("[FILTER] Skipping pair with empty name");
                 continue;
             }
-            LOG.info("[FILTER] Looking up field '{}' (lowercased: '{}') in schema", name, name.toLowerCase(Locale.ROOT));
+            LOG.info("[FILTER] Looking up field '{}' (lowercased: '{}') in schema", name,
+                    name.toLowerCase(Locale.ROOT));
             EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
             if (f == null) {
                 LOG.info("[FILTER] Field '{}' not found in schema, skipping", name);
                 continue; // ignore unknown
             }
             Object parsed = parseFilterValue(f, val);
-            LOG.info("[FILTER] Parsed filter: {}={} (type: {}, parsed value: {})", f.getName(), val, f.getType(), parsed);
+            LOG.info("[FILTER] Parsed filter: {}={} (type: {}, parsed value: {})", f.getName(), val, f.getType(),
+                    parsed);
             map.put(f.getName(), parsed); // canonical
         }
         LOG.info("[FILTER] Final filter map: {}", map);
@@ -332,7 +348,7 @@ public class EntityCrudService {
         buildWhere(schema, q, filters, where, params);
         String sql = "SELECT COUNT(*) FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + where;
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             for (int i = 0; i < params.size(); i++) {
                 ps.setObject(i + 1, params.get(i));
             }
@@ -344,12 +360,12 @@ public class EntityCrudService {
     }
 
     public Map<String, Object> listAdvanced(EntitySchema schema,
-                                           int limit,
-                                           int offset,
-                                           String q,
-                                           String fieldsParam,
-                                           String sortParam,
-                                           Map<String, Object> filters) throws SQLException {
+            int limit,
+            int offset,
+            String q,
+            String fieldsParam,
+            String sortParam,
+            Map<String, Object> filters) throws SQLException {
         // Projection (preserve order, remove duplicates while keeping first occurrence)
         List<String> projection = new ArrayList<>();
         Set<String> seenProj = new HashSet<>();
@@ -421,7 +437,8 @@ public class EntityCrudService {
             selectCols.add(quote(col) + " AS \"" + col + "\"");
         }
 
-        String dataSql = "SELECT " + String.join(",", selectCols) + " FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + where
+        String dataSql = "SELECT " + String.join(",", selectCols) + " FROM "
+                + quote(SchemaManager.getPhysicalTableName(schema)) + where
                 + orderClause + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
 
         try (Connection c = schemaConnection(schema)) {
@@ -486,7 +503,7 @@ public class EntityCrudService {
 
         List<Long> ids = new ArrayList<>();
         try (Connection c = schemaConnection(schema);
-             PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             c.setAutoCommit(false);
             for (Map<String, Object> row : batch) {
                 int idx = 1;
@@ -575,14 +592,30 @@ public class EntityCrudService {
                             throw new IllegalArgumentException("field '" + f.getName() + "' below min");
                         if (f.getMax() != null && lv > f.getMax())
                             throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        // Check for overflow if strict int
+                        if (lv > Integer.MAX_VALUE || lv < Integer.MIN_VALUE) {
+                            throw new IllegalArgumentException("field '" + f.getName() + "' value " + lv
+                                    + " exceeds integer range. Use 'Long' or 'String' for phone numbers.");
+                        }
                         yield (int) lv;
                     }
-                    int iv = Integer.parseInt(raw.toString());
-                    if (f.getMin() != null && iv < f.getMin())
-                        throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                    if (f.getMax() != null && iv > f.getMax())
-                        throw new IllegalArgumentException("field '" + f.getName() + "' above max");
-                    yield iv;
+                    try {
+                        int iv = Integer.parseInt(raw.toString());
+                        if (f.getMin() != null && iv < f.getMin())
+                            throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                        if (f.getMax() != null && iv > f.getMax())
+                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        yield iv;
+                    } catch (NumberFormatException e) {
+                        // Try parsing as Long to give better error message
+                        try {
+                            long lv = Long.parseLong(raw.toString());
+                            throw new IllegalArgumentException("field '" + f.getName() + "' value " + lv
+                                    + " exceeds integer range. Use 'Long' or 'String' for phone numbers.");
+                        } catch (NumberFormatException ignored) {
+                        }
+                        throw new IllegalArgumentException("field '" + f.getName() + "' invalid integer format");
+                    }
                 }
                 case "long" -> {
                     if (raw instanceof Number) {
@@ -676,15 +709,19 @@ public class EntityCrudService {
                 default -> v;
             };
         } catch (Exception e) {
-            return v;
+            // If parsing fails for a typed field (e.g. integer), return null to indicate
+            // invalid filter
+            // Do NOT return valid String 'v' because it will cause DB Type Mismatch (int
+            // column = varchar param)
+            return null;
         }
     }
 
     private static void buildWhere(EntitySchema schema,
-                                   String q,
-                                   Map<String, Object> filters,
-                                   StringBuilder where,
-                                   List<Object> params) {
+            String q,
+            Map<String, Object> filters,
+            StringBuilder where,
+            List<Object> params) {
         List<String> parts = new ArrayList<>();
         LOG.info("[BUILD_WHERE] Building WHERE clause. q={}, filters={}", q, filters);
 
@@ -718,7 +755,8 @@ public class EntityCrudService {
                 }
 
                 String t = f.getType().toLowerCase(Locale.ROOT);
-                if ((t.equalsIgnoreCase("date") || t.equalsIgnoreCase("timestamp")) && e.getValue() instanceof String sVal) {
+                if ((t.equalsIgnoreCase("date") || t.equalsIgnoreCase("timestamp"))
+                        && e.getValue() instanceof String sVal) {
                     boolean valid = false;
                     try {
                         Instant.parse(sVal);
@@ -732,15 +770,24 @@ public class EntityCrudService {
                 }
 
                 String quotedKey = quote(e.getKey());
-                
+
+                // If filter value is NULL (parsing failed), we skip it to avoid DB errors
+                if (e.getValue() == null) {
+                    LOG.warn("[BUILD_WHERE] Filter value for '{}' is null (parsing failed?), skipping predicate.",
+                            e.getKey());
+                    continue;
+                }
+
                 // Use LIKE with wildcards for string/text fields, exact match for others
                 if (t.equals("string") || t.equals("text") || t.equals("varchar")) {
                     // Case-insensitive LIKE match for string fields
-                    LOG.info("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey, e.getValue());
+                    LOG.info("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey,
+                            e.getValue());
                     parts.add("UPPER(" + quotedKey + ") LIKE ?");
                     params.add("%" + String.valueOf(e.getValue()).toUpperCase(Locale.ROOT) + "%");
                 } else {
-                    LOG.info("[BUILD_WHERE] Adding exact filter condition: {} = ? (param: {})", quotedKey, e.getValue());
+                    LOG.info("[BUILD_WHERE] Adding exact filter condition: {} = ? (param: {})", quotedKey,
+                            e.getValue());
                     parts.add(quotedKey + " = ?");
                     params.add(e.getValue());
                 }
