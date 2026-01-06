@@ -664,12 +664,10 @@ export class StudioTableLive extends LitElement {
     const fields = Array.isArray(this.node?.props?.fields) ? this.node.props.fields : [];
     const actions: (string | { label: string; onClick: string })[] = this.node?.props?.actions || [];
     const multiSelect: boolean = Boolean(this.node?.props?.multiSelect);
-    // Only show sample data if there was an error fetching (design-time preview)
-    // At runtime with successful API calls, show actual data or empty state
-    const rows = this.error
-      ? [1, 2, 3].map(i => Object.fromEntries(fields.map((f: any) => [f.name, `Sample ${i}`])))
-      : (this.data?.rows || []);
-    const hasNoData = !this.error && rows.length === 0;
+    
+    // NEVER show sample/fake data at runtime - only show real data or error state
+    const rows = this.data?.rows || [];
+    const hasNoData = rows.length === 0;
     const activeFilters = Object.entries(this.filters).filter(([_, v]) => v && v.trim() !== '');
     const totalPages = Math.max(1, Math.ceil(this.total / this.pageSize));
     const startIdx = (this.page - 1) * this.pageSize + 1;
@@ -693,7 +691,9 @@ export class StudioTableLive extends LitElement {
            ` : ''}
         </div>
       ` : ''}
-      ${this.error ? html`<div class="table-error" style="background:#fef2f2;color:#b91c1c;border:1px solid #fee2e2;">Showing sample data (${this.error})</div>` : ''}
+      ${this.error ? html`<div class="table-error" style="background:#fef2f2;color:#b91c1c;border:1px solid #fee2e2;padding:12px;border-radius:8px;margin-bottom:1rem;">
+        <strong>Error:</strong> ${this.error}
+      </div>` : ''}
       ${this.buildPagination(startIdx, endIdx, totalPages)}
       ${multiSelect && selectedCount > 0 ? html`
         <div class="bulk-bar" role="region" aria-label="Bulk actions">
