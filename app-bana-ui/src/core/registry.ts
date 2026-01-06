@@ -85,9 +85,9 @@ export function ensureCoreRegistered(): Promise<void> {
   }
 
   // Builder components
-  if (!registry.has('ai-chat-builder')) {
-    proms.push(import('../builder/components/AiChatBuilder.js').then(m => registerComponent('ai-chat-builder', m.AiChatBuilder, 'ai-chat-builder')));
-  }
+  // if (!registry.has('ai-chat-builder')) {
+  //   proms.push(import('../builder/components/AiChatBuilder.js').then(m => registerComponent('ai-chat-builder', m.AiChatBuilder, 'ai-chat-builder')));
+  // }
 
   // Runtime components
   if (!registry.has('app-runtime-shell')) {

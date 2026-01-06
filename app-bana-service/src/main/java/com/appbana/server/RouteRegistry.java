@@ -35,7 +35,7 @@ public class RouteRegistry {
         AuthRoutes.register(router);
         WorkflowRoutes.register(router);
         AppRoutes.register(router);
-        AiRoutes.register(router);
+        //AiRoutes.register(router);
         SchemaRoutes.register(router);
         GenericEntityRoutes.register(router);
 
