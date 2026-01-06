@@ -726,9 +726,18 @@ public class EntityCrudService {
                 }
 
                 String quotedKey = quote(e.getKey());
-                LOG.info("[BUILD_WHERE] Adding filter condition: {} = ? (param: {})", quotedKey, e.getValue());
-                parts.add(quotedKey + " = ?");
-                params.add(e.getValue());
+                
+                // Use LIKE with wildcards for string/text fields, exact match for others
+                if (t.equals("string") || t.equals("text") || t.equals("varchar")) {
+                    // Case-insensitive LIKE match for string fields
+                    LOG.info("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey, e.getValue());
+                    parts.add("UPPER(" + quotedKey + ") LIKE ?");
+                    params.add("%" + String.valueOf(e.getValue()).toUpperCase(Locale.ROOT) + "%");
+                } else {
+                    LOG.info("[BUILD_WHERE] Adding exact filter condition: {} = ? (param: {})", quotedKey, e.getValue());
+                    parts.add(quotedKey + " = ?");
+                    params.add(e.getValue());
+                }
             }
         }
 
