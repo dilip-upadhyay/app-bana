@@ -9,14 +9,14 @@ import './PageManager';
 import './PropertiesPanel';
 import './AppManager';
 import './EntityManager';
-import './AiChatBuilder';
+// AI Builder removed - moved to AI-old
 import '../../workflow-designer/WorkflowDesignerPage';
 
 @customElement('appbana-builder-shell')
 export class BuilderShell extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
-  @state() private activeLeftTab = 'components' as 'components' | 'entities' | 'ai-builder' | 'workflow';
+  @state() private activeLeftTab = 'components' as 'components' | 'entities' | 'workflow';
   @state() private leftPanelWidth = 300; // Default width in pixels
   private isResizing = false;
   private startX = 0;
@@ -132,7 +132,8 @@ export class BuilderShell extends LitElement {
       }
       return html`<workflow-canvas .metadata=${{ nodes: [], connections: [] }}></workflow-canvas>`;
     }
-    return html`<ai-chat-builder></ai-chat-builder>`;
+    // Default: Components tab
+    return html`<appbana-component-library></appbana-component-library>`;
   }
 
   render() {
@@ -198,11 +199,6 @@ export class BuilderShell extends LitElement {
               class="tab ${(this.activeLeftTab as any) === 'workflow' ? 'active' : ''}"
               @click=${() => this.activeLeftTab = 'workflow'}>
               ⚡ Workflow
-            </button>
-            <button 
-              class="tab ${this.activeLeftTab === 'ai-builder' ? 'active' : ''}"
-              @click=${() => this.activeLeftTab = 'ai-builder'}>
-              🤖 AI Builder
             </button>
           </div>
           <div class="left-panel-content">
