@@ -1300,8 +1300,48 @@ public class GenericEntityRoutes {
                 TenantContext.set(ctx);
 
                 try {
-                    List<Map<String, Object>> rows = crud.listAll(schema);
-                    res.json(200, rows);
+                    // Parse query parameters for pagination, filtering, sorting
+                    String limitS = req.query("limit");
+                    String offsetS = req.query("offset");
+                    String fieldsParam = req.query("fields");
+                    String sortParam = req.query("sort");
+                    String filterParam = req.query("filter");
+                    String q = req.query("q");
+
+                    Integer limit = null;
+                    Integer offset = null;
+                    try {
+                        limit = limitS != null ? Integer.parseInt(limitS) : 50;
+                    } catch (Exception ignore) {
+                        limit = 50;
+                    }
+                    try {
+                        offset = offsetS != null ? Integer.parseInt(offsetS) : 0;
+                    } catch (Exception ignore) {
+                        offset = 0;
+                    }
+
+                    Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+                    
+                    // Get total count for pagination
+                    long total = crud.countOnly(schema, q, filters);
+                    
+                    // Get paginated rows - listAdvanced returns Map with rows
+                    Map<String, Object> advResult = crud.listAdvanced(
+                            schema, limit, offset, q, fieldsParam, sortParam, filters);
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> rows = (List<Map<String, Object>>) advResult.get("rows");
+
+                    // Return proper response with rows and total
+                    Map<String, Object> response = new LinkedHashMap<>();
+                    response.put("rows", rows);
+                    response.put("total", total);
+                    response.put("limit", limit);
+                    response.put("offset", offset);
+                    if (!filters.isEmpty()) {
+                        response.put("filters", filters);
+                    }
+                    res.json(200, response);
                 } finally {
                     TenantContext.clear();
                 }
