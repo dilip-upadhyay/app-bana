@@ -1,101 +1,383 @@
 {
-  "version": "1.0.0",
-  "lastUpdated": "2025-11-08T00:00:00Z",
-  "description": "Entity field types, relationships, and entity capabilities",
-  
+  "version": "1.1.0",
+  "lastUpdated": "2026-01-06T00:00:00Z",
+  "description": "Entity field types, relationships, and entity capabilities - Physical Table Isolation",
+  "multiTenancy": {
+    "architecture": "Physical table names provide complete tenant/app isolation",
+    "systemFields": "NO tenant_id or app_id columns in entity tables",
+    "tableName": "app_{env}{tenant}_{app}_{entity}",
+    "isolation": "Database-level security through physical table separation",
+    "implementation": "SchemaManager.createTable() creates tables without tenant_id/app_id columns"
+  },
   "fieldTypes": [
     {
       "category": "Text Types",
       "fields": [
-        {"type": "text", "sqlType": "VARCHAR(255)", "description": "Short text - names, titles", "validation": ["minLength", "maxLength", "pattern"]},
-        {"type": "longtext", "sqlType": "TEXT", "description": "Long text - descriptions, notes", "validation": ["minLength", "maxLength"]},
-        {"type": "email", "sqlType": "VARCHAR(255)", "description": "Email with validation", "validation": ["email format"]},
-        {"type": "phone", "sqlType": "VARCHAR(20)", "description": "Phone number with formatting", "validation": ["phone format"]},
-        {"type": "url", "sqlType": "VARCHAR(500)", "description": "URL with validation", "validation": ["url format"]},
-        {"type": "color", "sqlType": "VARCHAR(7)", "description": "Color picker (#RRGGBB)", "validation": ["hex color format"]}
+        {
+          "type": "text",
+          "sqlType": "VARCHAR(255)",
+          "description": "Short text - names, titles",
+          "validation": [
+            "minLength",
+            "maxLength",
+            "pattern"
+          ]
+        },
+        {
+          "type": "longtext",
+          "sqlType": "TEXT",
+          "description": "Long text - descriptions, notes",
+          "validation": [
+            "minLength",
+            "maxLength"
+          ]
+        },
+        {
+          "type": "email",
+          "sqlType": "VARCHAR(255)",
+          "description": "Email with validation",
+          "validation": [
+            "email format"
+          ]
+        },
+        {
+          "type": "phone",
+          "sqlType": "VARCHAR(20)",
+          "description": "Phone number with formatting",
+          "validation": [
+            "phone format"
+          ]
+        },
+        {
+          "type": "url",
+          "sqlType": "VARCHAR(500)",
+          "description": "URL with validation",
+          "validation": [
+            "url format"
+          ]
+        },
+        {
+          "type": "color",
+          "sqlType": "VARCHAR(7)",
+          "description": "Color picker (#RRGGBB)",
+          "validation": [
+            "hex color format"
+          ]
+        }
       ]
     },
     {
       "category": "Numeric Types",
       "fields": [
-        {"type": "number", "sqlType": "BIGINT", "description": "Integer", "validation": ["min", "max", "step"]},
-        {"type": "decimal", "sqlType": "DECIMAL(19,4)", "description": "Decimal/float", "validation": ["min", "max", "step"]},
-        {"type": "currency", "sqlType": "DECIMAL(19,4)", "description": "Money amount", "validation": ["min", "max"], "display": "currency symbol"},
-        {"type": "percentage", "sqlType": "DECIMAL(5,2)", "description": "Percentage (0-100)", "validation": ["min: 0", "max: 100"]}
+        {
+          "type": "number",
+          "sqlType": "BIGINT",
+          "description": "Integer",
+          "validation": [
+            "min",
+            "max",
+            "step"
+          ]
+        },
+        {
+          "type": "decimal",
+          "sqlType": "DECIMAL(19,4)",
+          "description": "Decimal/float",
+          "validation": [
+            "min",
+            "max",
+            "step"
+          ]
+        },
+        {
+          "type": "currency",
+          "sqlType": "DECIMAL(19,4)",
+          "description": "Money amount",
+          "validation": [
+            "min",
+            "max"
+          ],
+          "display": "currency symbol"
+        },
+        {
+          "type": "percentage",
+          "sqlType": "DECIMAL(5,2)",
+          "description": "Percentage (0-100)",
+          "validation": [
+            "min: 0",
+            "max: 100"
+          ]
+        }
       ]
     },
     {
       "category": "Date/Time Types",
       "fields": [
-        {"type": "date", "sqlType": "DATE", "description": "Date only", "validation": ["minDate", "maxDate"]},
-        {"type": "datetime", "sqlType": "TIMESTAMP", "description": "Date and time", "validation": ["minDate", "maxDate"]},
-        {"type": "time", "sqlType": "TIME", "description": "Time only", "validation": []},
-        {"type": "duration", "sqlType": "INT", "description": "Duration in minutes", "validation": ["min", "max"]}
+        {
+          "type": "date",
+          "sqlType": "DATE",
+          "description": "Date only",
+          "validation": [
+            "minDate",
+            "maxDate"
+          ]
+        },
+        {
+          "type": "datetime",
+          "sqlType": "TIMESTAMP",
+          "description": "Date and time",
+          "validation": [
+            "minDate",
+            "maxDate"
+          ]
+        },
+        {
+          "type": "time",
+          "sqlType": "TIME",
+          "description": "Time only",
+          "validation": []
+        },
+        {
+          "type": "duration",
+          "sqlType": "INT",
+          "description": "Duration in minutes",
+          "validation": [
+            "min",
+            "max"
+          ]
+        }
       ]
     },
     {
       "category": "Selection Types",
       "fields": [
-        {"type": "boolean", "sqlType": "BOOLEAN", "description": "Yes/No checkbox", "validation": []},
-        {"type": "status", "sqlType": "VARCHAR(50) + CHECK", "description": "Dropdown with predefined options", "validation": ["allowedValues"]},
-        {"type": "radio", "sqlType": "VARCHAR(50) + CHECK", "description": "Radio buttons", "validation": ["allowedValues"]},
-        {"type": "multiselect", "sqlType": "JSON", "description": "Multiple selections", "validation": ["allowedValues"]}
+        {
+          "type": "boolean",
+          "sqlType": "BOOLEAN",
+          "description": "Yes/No checkbox",
+          "validation": []
+        },
+        {
+          "type": "status",
+          "sqlType": "VARCHAR(50) + CHECK",
+          "description": "Dropdown with predefined options",
+          "validation": [
+            "allowedValues"
+          ]
+        },
+        {
+          "type": "radio",
+          "sqlType": "VARCHAR(50) + CHECK",
+          "description": "Radio buttons",
+          "validation": [
+            "allowedValues"
+          ]
+        },
+        {
+          "type": "multiselect",
+          "sqlType": "JSON",
+          "description": "Multiple selections",
+          "validation": [
+            "allowedValues"
+          ]
+        }
       ]
     },
     {
       "category": "Rich Types",
       "fields": [
-        {"type": "file", "sqlType": "VARCHAR(500)", "description": "File upload (stores URL/path)", "validation": ["fileType", "maxSize"]},
-        {"type": "image", "sqlType": "VARCHAR(500)", "description": "Image upload with preview", "validation": ["imageType", "maxSize"]},
-        {"type": "json", "sqlType": "JSON", "description": "JSON data", "validation": []},
-        {"type": "markdown", "sqlType": "TEXT", "description": "Markdown editor", "validation": []},
-        {"type": "richtext", "sqlType": "TEXT", "description": "WYSIWYG editor", "validation": []}
+        {
+          "type": "file",
+          "sqlType": "VARCHAR(500)",
+          "description": "File upload (stores URL/path)",
+          "validation": [
+            "fileType",
+            "maxSize"
+          ]
+        },
+        {
+          "type": "image",
+          "sqlType": "VARCHAR(500)",
+          "description": "Image upload with preview",
+          "validation": [
+            "imageType",
+            "maxSize"
+          ]
+        },
+        {
+          "type": "json",
+          "sqlType": "JSON",
+          "description": "JSON data",
+          "validation": []
+        },
+        {
+          "type": "markdown",
+          "sqlType": "TEXT",
+          "description": "Markdown editor",
+          "validation": []
+        },
+        {
+          "type": "richtext",
+          "sqlType": "TEXT",
+          "description": "WYSIWYG editor",
+          "validation": []
+        }
       ]
     },
     {
       "category": "Relationship Types",
       "fields": [
-        {"type": "reference", "sqlType": "BIGINT + FOREIGN KEY", "description": "Links to another entity", "validation": ["targetEntity"]},
-        {"type": "lookup", "sqlType": "BIGINT + FOREIGN KEY", "description": "Same as reference but shows related data", "validation": ["targetEntity", "displayField"]}
+        {
+          "type": "reference",
+          "sqlType": "BIGINT + FOREIGN KEY",
+          "description": "Links to another entity",
+          "validation": [
+            "targetEntity"
+          ]
+        },
+        {
+          "type": "lookup",
+          "sqlType": "BIGINT + FOREIGN KEY",
+          "description": "Same as reference but shows related data",
+          "validation": [
+            "targetEntity",
+            "displayField"
+          ]
+        }
       ]
     },
     {
       "category": "System/Calculated Types",
       "fields": [
-        {"type": "formula", "sqlType": "Computed", "description": "Calculated field", "validation": ["formula expression"]},
-        {"type": "autoincrement", "sqlType": "BIGINT AUTO_INCREMENT", "description": "Auto-incrementing ID", "validation": []},
-        {"type": "uuid", "sqlType": "VARCHAR(36)", "description": "UUID/GUID", "validation": []},
-        {"type": "createdAt", "sqlType": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "description": "Auto-set creation timestamp", "validation": []},
-        {"type": "updatedAt", "sqlType": "TIMESTAMP ON UPDATE CURRENT_TIMESTAMP", "description": "Auto-update modified timestamp", "validation": []},
-        {"type": "createdBy", "sqlType": "BIGINT", "description": "Creator user ID", "validation": []},
-        {"type": "updatedBy", "sqlType": "BIGINT", "description": "Modifier user ID", "validation": []}
+        {
+          "type": "formula",
+          "sqlType": "Computed",
+          "description": "Calculated field",
+          "validation": [
+            "formula expression"
+          ]
+        },
+        {
+          "type": "autoincrement",
+          "sqlType": "BIGINT AUTO_INCREMENT",
+          "description": "Auto-incrementing ID",
+          "validation": []
+        },
+        {
+          "type": "uuid",
+          "sqlType": "VARCHAR(36)",
+          "description": "UUID/GUID",
+          "validation": []
+        },
+        {
+          "type": "createdAt",
+          "sqlType": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+          "description": "Auto-set creation timestamp",
+          "validation": []
+        },
+        {
+          "type": "updatedAt",
+          "sqlType": "TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+          "description": "Auto-update modified timestamp",
+          "validation": []
+        },
+        {
+          "type": "createdBy",
+          "sqlType": "BIGINT",
+          "description": "Creator user ID",
+          "validation": []
+        },
+        {
+          "type": "updatedBy",
+          "sqlType": "BIGINT",
+          "description": "Modifier user ID",
+          "validation": []
+        }
       ]
     }
   ],
-
   "fieldValidation": {
-    "text": ["required", "minLength", "maxLength", "pattern", "format"],
-    "numeric": ["required", "min", "max", "step"],
-    "date": ["required", "minDate", "maxDate"],
-    "selection": ["required", "allowedValues"],
-    "file": ["required", "fileType", "maxSize"],
-    "custom": ["customMessage", "customRule"]
-  },
-
-  "fieldDisplay": {
-    "properties": [
-      {"name": "label", "type": "string", "description": "Display label"},
-      {"name": "placeholder", "type": "string", "description": "Placeholder text"},
-      {"name": "helpText", "type": "string", "description": "Tooltip/help text"},
-      {"name": "icon", "type": "string", "description": "Icon (emoji or name)"},
-      {"name": "hidden", "type": "boolean", "description": "Hide from forms"},
-      {"name": "readOnly", "type": "boolean", "description": "Display only"},
-      {"name": "showInTable", "type": "boolean", "description": "Show in list views"},
-      {"name": "showInForm", "type": "boolean", "description": "Show in forms"},
-      {"name": "showInDetail", "type": "boolean", "description": "Show in detail views"}
+    "text": [
+      "required",
+      "minLength",
+      "maxLength",
+      "pattern",
+      "format"
+    ],
+    "numeric": [
+      "required",
+      "min",
+      "max",
+      "step"
+    ],
+    "date": [
+      "required",
+      "minDate",
+      "maxDate"
+    ],
+    "selection": [
+      "required",
+      "allowedValues"
+    ],
+    "file": [
+      "required",
+      "fileType",
+      "maxSize"
+    ],
+    "custom": [
+      "customMessage",
+      "customRule"
     ]
   },
-
+  "fieldDisplay": {
+    "properties": [
+      {
+        "name": "label",
+        "type": "string",
+        "description": "Display label"
+      },
+      {
+        "name": "placeholder",
+        "type": "string",
+        "description": "Placeholder text"
+      },
+      {
+        "name": "helpText",
+        "type": "string",
+        "description": "Tooltip/help text"
+      },
+      {
+        "name": "icon",
+        "type": "string",
+        "description": "Icon (emoji or name)"
+      },
+      {
+        "name": "hidden",
+        "type": "boolean",
+        "description": "Hide from forms"
+      },
+      {
+        "name": "readOnly",
+        "type": "boolean",
+        "description": "Display only"
+      },
+      {
+        "name": "showInTable",
+        "type": "boolean",
+        "description": "Show in list views"
+      },
+      {
+        "name": "showInForm",
+        "type": "boolean",
+        "description": "Show in forms"
+      },
+      {
+        "name": "showInDetail",
+        "type": "boolean",
+        "description": "Show in detail views"
+      }
+    ]
+  },
   "relationshipTypes": [
     {
       "type": "one-to-one",
@@ -134,7 +416,6 @@
       ]
     }
   ],
-
   "relationshipProperties": {
     "fromEntity": "Source entity name",
     "toEntity": "Target entity name",
@@ -144,7 +425,6 @@
     "onDelete": "CASCADE | SET NULL | RESTRICT (default: CASCADE)",
     "name": "Relationship name (optional, for clarity)"
   },
-
   "autoIncludedFields": [
     {
       "name": "id",
@@ -156,7 +436,6 @@
       "cannotDelete": true
     }
   ],
-
   "optionalSystemFields": [
     {
       "name": "deleted",
@@ -171,12 +450,22 @@
       "enabledBy": "versioning: true in entity config"
     }
   ],
-
   "entityMetaStructure": {
     "file": "src/models/entity-metadata.ts",
     "interface": "EntityMeta",
-    "required": ["name", "fields"],
-    "optional": ["description", "tableName", "relationships", "softDelete", "versioning", "datasourceType", "datasourceConfig"],
+    "required": [
+      "name",
+      "fields"
+    ],
+    "optional": [
+      "description",
+      "tableName",
+      "relationships",
+      "softDelete",
+      "versioning",
+      "datasourceType",
+      "datasourceConfig"
+    ],
     "example": {
       "name": "User",
       "description": "User accounts",
@@ -218,7 +507,6 @@
       ]
     }
   },
-
   "ddlGeneration": {
     "file": "src/core/EntitySchemaConverter.ts",
     "method": "generateDDL(entityMeta: EntityMeta): string[]",
@@ -246,7 +534,6 @@
       ");"
     ]
   },
-
   "backendSync": {
     "file": "src/core/backend-sync.ts",
     "methods": [
@@ -254,6 +541,10 @@
       "previewBackendSchema(entity: EntityMeta): Promise<string[]>"
     ],
     "endpoint": "POST /api/schema",
+    "rules": [
+      "MUST explicitly include 'id' field as Primary Key in the schema payload. Backend does NOT auto-inject it during creation via API.",
+      "Field 'options' (for status/enum types) MUST NOT be sent in the schema payload. It is metadata only and causes JSON parsing errors in the backend."
+    ],
     "flow": [
       "EntityMeta → EntitySchemaConverter → RelationalSchema",
       "RelationalSchema → Backend /api/schema endpoint",

@@ -1,6 +1,7 @@
 package com.appbana;
 
 import com.appbana.model.EntitySchema;
+import com.appbana.service.EntityCrudService;
 import org.junit.jupiter.api.*;
 
 import java.io.IOException;
@@ -24,8 +25,13 @@ public class AdvancedQueryTest {
 
     @BeforeAll
     static void setup() throws Exception {
-        // Initialize meta tables
+        // Start server first (this runs Flyway migrations which clean the DB)
+        ApiServer.startJdk(PORT);
+        Thread.sleep(300);
+        
+        // Initialize meta tables and create service
         SchemaManager.init();
+        EntityCrudService crud = new EntityCrudService();
 
         // Define schemas
         EntitySchema customer = new EntitySchema();
@@ -61,26 +67,21 @@ public class AdvancedQueryTest {
             r.put("firstName", "Name"+i);
             r.put("lastName", "Last"+i);
             r.put("age", 20 + i);
-            ApiServer.insertRecord(customer, r);
+            crud.insertRecord(customer, r);
         }
         // Insert logs rows
         for (int i=0;i<3;i++) {
             Map<String,Object> r = new LinkedHashMap<>();
             r.put("level", i%2==0?"INFO":"WARN");
             r.put("createdAt", Timestamp.from(Instant.now()).getTime()); // epoch millis accepted
-            ApiServer.insertRecord(logs, r);
+            crud.insertRecord(logs, r);
         }
         // Insert numeric rows
         for (int i=0;i<4;i++) {
             Map<String,Object> r = new LinkedHashMap<>();
             r.put("age", 30+i);
-            ApiServer.insertRecord(numeric, r);
+            crud.insertRecord(numeric, r);
         }
-
-        // Start server (once)
-        ApiServer.startJdk(PORT);
-        // small wait to ensure server binds
-        Thread.sleep(300);
     }
 
     private static EntitySchema.Field field(String name, String type, boolean pk, boolean auto) {

@@ -22,14 +22,16 @@ public class AuditLogTest {
 
     @BeforeAll
     static void init() throws Exception {
+        // Start server first (this runs Flyway migrations which clean the DB)
+        ApiServer.startJdk(PORT);
+        Thread.sleep(300);
+        
+        // Now initialize SchemaManager and create the test schema
         SchemaManager.init();
-        // define schema
         EntitySchema s = new EntitySchema();
         s.setName("audit_demo");
         s.setFields(List.of(field("id","long", true, true), field("name","string", false, false)));
         SchemaManager.saveSchema(s);
-        ApiServer.startJdk(PORT);
-        Thread.sleep(300);
     }
 
     private static EntitySchema.Field field(String name, String type, boolean pk, boolean auto) {

@@ -1,0 +1,319 @@
+{
+    "id": "login",
+    "name": "Login Page",
+    "description": "Modern compact login page with efficient space utilization - all content visible on screen",
+    "category": "auth",
+    "isSystem": true,
+    "nodes": [
+        {
+            "id": "root",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; min-height: 100vh; width: 100%; margin: 0; padding: 0; box-sizing: border-box; background: #f7fafc;"
+            },
+            "children": [
+                "brand-banner-1",
+                "form-container-1"
+            ]
+        },
+        {
+            "id": "brand-banner-1",
+            "type": "container",
+            "props": {
+                "style": "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.625rem 1.25rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
+            },
+            "children": [
+                "brand-banner-content-1"
+            ]
+        },
+        {
+            "id": "brand-banner-content-1",
+            "type": "container",
+            "props": {
+                "style": "max-width: 1200px; width: 100%; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;"
+            },
+            "children": [
+                "brand-left-1",
+                "brand-features-compact-1"
+            ]
+        },
+        {
+            "id": "brand-left-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; align-items: baseline; gap: 0.75rem;"
+            },
+            "children": [
+                "brand-title-1",
+                "brand-subtitle-1"
+            ]
+        },
+        {
+            "id": "brand-title-1",
+            "type": "text",
+            "props": {
+                "tag": "h1",
+                "text": "AppBana",
+                "style": "font-size: 1.375rem; font-weight: 700; margin: 0; line-height: 1; white-space: nowrap;"
+            }
+        },
+        {
+            "id": "brand-subtitle-1",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "Build beautiful enterprise apps in minutes",
+                "style": "font-size: 0.813rem; opacity: 0.9; white-space: nowrap; display: none;"
+            }
+        },
+        {
+            "id": "brand-features-compact-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; gap: 0.5rem; flex-wrap: wrap;"
+            },
+            "children": [
+                "feature-badge-1",
+                "feature-badge-2",
+                "feature-badge-3"
+            ]
+        },
+        {
+            "id": "feature-badge-1",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "✓ No-code builder",
+                "style": "font-size: 0.75rem; padding: 0.25rem 0.625rem; background: rgba(255,255,255,0.2); border-radius: 12px; white-space: nowrap; font-weight: 500;"
+            }
+        },
+        {
+            "id": "feature-badge-2",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "✓ Enterprise security",
+                "style": "font-size: 0.75rem; padding: 0.25rem 0.625rem; background: rgba(255,255,255,0.2); border-radius: 12px; white-space: nowrap; font-weight: 500;"
+            }
+        },
+        {
+            "id": "feature-badge-3",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "✓ Deploy instantly",
+                "style": "font-size: 0.75rem; padding: 0.25rem 0.625rem; background: rgba(255,255,255,0.2); border-radius: 12px; white-space: nowrap; font-weight: 500;"
+            }
+        },
+        {
+            "id": "form-container-1",
+            "type": "container",
+            "props": {
+                "style": "flex: 1; display: flex; align-items: center; justify-content: center; padding: 1.5rem 1rem;"
+            },
+            "children": [
+                "form-wrapper-1"
+            ]
+        },
+        {
+            "id": "form-wrapper-1",
+            "type": "container",
+            "props": {
+                "style": "width: 100%; max-width: 440px; background: white; padding: 2rem 2.5rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);"
+            },
+            "children": [
+                "login-header-1",
+                "form-1"
+            ]
+        },
+        {
+            "id": "login-header-1",
+            "type": "container",
+            "props": {
+                "style": "text-align: center; margin-bottom: 1.75rem;"
+            },
+            "children": [
+                "title-1",
+                "subtitle-1"
+            ]
+        },
+        {
+            "id": "title-1",
+            "type": "text",
+            "props": {
+                "tag": "h2",
+                "text": "Welcome Back",
+                "style": "margin: 0 0 0.375rem 0; font-size: 1.75rem; font-weight: 700; color: #1a202c;"
+            }
+        },
+        {
+            "id": "subtitle-1",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Sign in to continue to your dashboard",
+                "style": "margin: 0; font-size: 0.875rem; color: #718096;"
+            }
+        },
+        {
+            "id": "form-1",
+            "type": "container",
+            "props": {
+                "tag": "form",
+                "style": "display: flex; flex-direction: column; gap: 1rem;"
+            },
+            "children": [
+                "email-group-1",
+                "password-group-1",
+                "form-footer-1",
+                "submit-1",
+                "signup-link-1"
+            ]
+        },
+        {
+            "id": "email-group-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.375rem;"
+            },
+            "children": [
+                "email-label-1",
+                "email-input-1"
+            ]
+        },
+        {
+            "id": "email-label-1",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Email Address",
+                "style": "font-size: 0.875rem; font-weight: 600; color: #374151;"
+            }
+        },
+        {
+            "id": "email-input-1",
+            "type": "input",
+            "props": {
+                "label": "Email Address",
+                "name": "email",
+                "type": "email",
+                "placeholder": "you@example.com",
+                "value": "",
+                "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
+                "style": "padding: 0.75rem 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.938rem; transition: all 0.2s; outline: none;"
+            }
+        },
+        {
+            "id": "password-group-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.375rem;"
+            },
+            "children": [
+                "password-label-1",
+                "password-input-1"
+            ]
+        },
+        {
+            "id": "password-label-1",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Password",
+                "style": "font-size: 0.875rem; font-weight: 600; color: #374151;"
+            }
+        },
+        {
+            "id": "password-input-1",
+            "type": "input",
+            "props": {
+                "label": "Password",
+                "name": "password",
+                "type": "password",
+                "placeholder": "Enter your password",
+                "value": "",
+                "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
+                "style": "padding: 0.75rem 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.938rem; transition: all 0.2s; outline: none;"
+            }
+        },
+        {
+            "id": "form-footer-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; justify-content: space-between; align-items: center; margin-top: -0.125rem;"
+            },
+            "children": [
+                "remember-1",
+                "forgot-1"
+            ]
+        },
+        {
+            "id": "remember-1",
+            "type": "container",
+            "props": {
+                "style": "display: flex; align-items: center; gap: 0.5rem;"
+            },
+            "children": [
+                "remember-checkbox-1",
+                "remember-label-1"
+            ]
+        },
+        {
+            "id": "remember-checkbox-1",
+            "type": "input",
+            "props": {
+                "label": "Remember me",
+                "name": "remember",
+                "type": "checkbox",
+                "value": "",
+                "required": false,
+                "disabled": false,
+                "style": "width: 16px; height: 16px; cursor: pointer;"
+            }
+        },
+        {
+            "id": "remember-label-1",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Remember me",
+                "style": "font-size: 0.875rem; color: #4b5563; cursor: pointer; user-select: none;"
+            }
+        },
+        {
+            "id": "forgot-1",
+            "type": "text",
+            "props": {
+                "tag": "a",
+                "text": "Forgot password?",
+                "href": "#",
+                "style": "font-size: 0.875rem; color: #667eea; font-weight: 600; text-decoration: none; transition: color 0.2s;"
+            }
+        },
+        {
+            "id": "submit-1",
+            "type": "button",
+            "props": {
+                "label": "Sign In →",
+                "type": "submit",
+                "className": "btn-primary",
+                "style": "margin-top: 0.375rem; padding: 0.875rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);"
+            }
+        },
+        {
+            "id": "signup-link-1",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Don't have an account? <a href=\"/signup\" style=\"color: #667eea; font-weight: 600; text-decoration: none;\">Sign up</a>",
+                "style": "margin: 0.5rem 0 0 0; text-align: center; font-size: 0.875rem; color: #6b7280;"
+            }
+        }
+    ]
+}

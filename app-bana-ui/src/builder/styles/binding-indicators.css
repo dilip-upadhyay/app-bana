@@ -1,0 +1,85 @@
+/* UX Enhancement #1: Visual Binding Indicators for Builder */
+
+/* Badge for bound inputs (green checkmark with entity initial) */
+[data-binding-status^="bound"]::after {
+    content: "✓ " attr(data-entity-initial);
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: #10b981;
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+    z-index: 10;
+    pointer-events: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Warning badge for unbound inputs that should have bindings */
+[data-binding-status="unbound"][data-requires-binding="true"]::after {
+    content: "⚠";
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: #fbbf24;
+    color: #78350f;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+    z-index: 10;
+    pointer-events: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Ensure parent has position relative for absolute positioning */
+[data-binding-status] {
+    position: relative;
+    /* SHOULD FIX: Removed !important */
+}
+
+/* Hover effect to show tooltip (optional enhancement) */
+[data-binding-status^="bound"]:hover::after {
+    opacity: 0.9;
+}
+
+[data-binding-status="unbound"][data-requires-binding="true"]:hover::after {
+    opacity: 0.9;
+}
+
+/* Animation for badge appearance */
+@keyframes badgeFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+[data-binding-status]::after {
+    animation: badgeFadeIn 0.2s ease;
+}
+
+/* NICE-TO-HAVE: Dark mode support */
+@media (prefers-color-scheme: dark) {
+
+    /* Darker green for bound badges in dark mode */
+    [data-binding-status^="bound"]::after {
+        background: #059669;
+        color: white;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Darker yellow with better contrast for unbound badges */
+    [data-binding-status="unbound"][data-requires-binding="true"]::after {
+        background: #d97706;
+        color: #fef3c7;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+}

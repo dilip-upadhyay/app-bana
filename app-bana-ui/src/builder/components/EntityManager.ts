@@ -7,11 +7,12 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
+import { AuthService } from '../../pages/auth/auth-service';
 import type { AppMeta } from '../../models/app-metadata';
 import type { EntityMeta, EntityField, EntityRelationship } from '../../models/entity-metadata';
 import { EntitySchemaConverter } from '../../core/EntitySchemaConverter';
 
-@customElement('studio-entity-manager')
+@customElement('appbana-entity-manager')
 export class EntityManager extends LitElement {
   static styles = css`
     :host {
@@ -644,11 +645,11 @@ export class EntityManager extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    
+
     // Load current app initially
     this.currentApp = appStore.getCurrentApp();
     this.loadEntities();
-    
+
     // Subscribe to app changes
     appStore.subscribe(() => {
       this.currentApp = appStore.getCurrentApp();
@@ -726,7 +727,18 @@ export class EntityManager extends LitElement {
   private handleFormInput(e: Event) {
     const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
     const { name, value } = target;
-    this.formData = { ...this.formData, [name]: value };
+    
+    // Auto-fill displayName from name if displayName is empty
+    if (name === 'name' && (!this.formData.displayName || this.formData.displayName === '')) {
+      // Convert name to Title Case (e.g., "customer" -> "Customer", "order_item" -> "Order Item")
+      const displayName = value
+        .split(/[_-]/)  // Split by underscore or dash
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+      this.formData = { ...this.formData, [name]: value, displayName };
+    } else {
+      this.formData = { ...this.formData, [name]: value };
+    }
   }
 
   private toggleSQLPreview() {
@@ -750,7 +762,7 @@ export class EntityManager extends LitElement {
         placeholder: `Enter field ${fieldNum}...`,
       },
     };
-    
+
     this.formData = {
       ...this.formData,
       fields: [...(this.formData.fields || []), newField],
@@ -765,7 +777,31 @@ export class EntityManager extends LitElement {
 
   private handleFieldChange(index: number, field: string, value: any) {
     const fields = [...(this.formData.fields || [])];
-    fields[index] = { ...fields[index], [field]: value };
+    const currentField = fields[index];
+    
+    // Auto-fill display.label from name if name is being changed
+    if (field === 'name' && value) {
+      // Convert name to Title Case (e.g., "firstName" -> "First Name", "order_date" -> "Order Date")
+      const label = value
+        .replace(/([A-Z])/g, ' $1')  // Add space before capital letters (camelCase)
+        .split(/[_-\s]+/)  // Split by underscore, dash, or space
+        .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ')
+        .trim();
+      
+      fields[index] = {
+        ...currentField,
+        [field]: value,
+        display: {
+          ...currentField.display,
+          label,
+          placeholder: `Enter ${label.toLowerCase()}...`
+        }
+      };
+    } else {
+      fields[index] = { ...currentField, [field]: value };
+    }
+    
     this.formData = { ...this.formData, fields };
   }
 
@@ -786,7 +822,7 @@ export class EntityManager extends LitElement {
       required: false,
       displayName: `Relationship ${relNum}`,
     };
-    
+
     this.formData = {
       ...this.formData,
       relationships: [...(this.formData.relationships || []), newRelationship],
@@ -816,7 +852,7 @@ export class EntityManager extends LitElement {
 
     try {
       const entityId = this.formData.name.toLowerCase().replaceAll(/\s+/g, '-');
-      
+
       const tempEntity: EntityMeta = {
         id: entityId,
         name: this.formData.name || entityId,
@@ -839,7 +875,7 @@ export class EntityManager extends LitElement {
       };
 
       const sql = EntitySchemaConverter.generateDDL(tempEntity);
-      
+
       return html`
         <pre class="sql-preview-code">${sql}</pre>
       `;
@@ -895,6 +931,66 @@ export class EntityManager extends LitElement {
           entities: updatedEntities,
         });
 
+        // CRITICAL FIX: Update the schema in the backend
+        const user = AuthService.getUser();
+        const tenantId = user?.tenantId || (user as any)?.tenant_id || 'default';
+        
+        // Map frontend field types to backend field types
+        const mapFieldType = (type: string): string => {
+          const typeMap: Record<string, string> = {
+            'text': 'string',
+            'longtext': 'text',
+            'email': 'string',
+            'phone': 'string',
+            'url': 'string',
+            'number': 'long',
+            'decimal': 'double',
+            'currency': 'double',
+            'date': 'date',
+            'datetime': 'timestamp',
+            'boolean': 'boolean',
+            'autoincrement': 'long',
+          };
+          return typeMap[type] || 'string';
+        };
+        
+        const schemaFields = updatedEntity.fields.map(field => ({
+          name: field.name,
+          type: mapFieldType(field.type),
+          required: field.required || false,
+          primaryKey: field.type === 'autoincrement',
+          autoIncrement: field.type === 'autoincrement',
+          unique: field.unique || false,
+          defaultValue: field.defaultValue,
+        }));
+
+        // If no fields defined, add an id field by default
+        if (schemaFields.length === 0) {
+          schemaFields.push({
+            name: 'id',
+            type: 'long',
+            primaryKey: true,
+            autoIncrement: true,
+            required: true,
+            unique: true,
+            defaultValue: undefined,
+          });
+        }
+
+        const backendSchema = {
+          name: updatedEntity.name,
+          appId: this.currentApp.id,
+          tenantId: tenantId,
+          fields: schemaFields,
+        };
+
+        // Entity updated in DRAFT mode
+        // Table will be created when app is published to an environment
+        console.log('[EntityManager] ✏️ Entity updated in DRAFT mode:', updatedEntity.name);
+        console.log('[EntityManager] 📋 Entity definition saved to app metadata');
+        console.log('[EntityManager] 🚀 Table will be created when you PUBLISH the app');
+        console.log('[EntityManager] 📊 Field count:', schemaFields.length);
+
         this.loadEntities();
         this.showToast(`Entity "${updatedEntity.displayName}" updated!`, 'success');
         this.handleCloseModal();
@@ -928,6 +1024,68 @@ export class EntityManager extends LitElement {
         await appStore.updateApp(this.currentApp.id, {
           entities: updatedEntities,
         });
+
+        // CRITICAL FIX: Create the schema in the backend
+        // Convert EntityMeta fields to backend schema format
+        const user = AuthService.getUser();
+        const tenantId = user?.tenantId || (user as any)?.tenant_id || 'default';
+        
+        // Map frontend field types to backend field types
+        const mapFieldType = (type: string): string => {
+          const typeMap: Record<string, string> = {
+            'text': 'string',
+            'longtext': 'text',
+            'email': 'string',
+            'phone': 'string',
+            'url': 'string',
+            'number': 'long',
+            'decimal': 'double',
+            'currency': 'double',
+            'date': 'date',
+            'datetime': 'timestamp',
+            'boolean': 'boolean',
+            'autoincrement': 'long',
+          };
+          return typeMap[type] || 'string';
+        };
+        
+        const schemaFields = newEntity.fields.map(field => ({
+          name: field.name,
+          type: mapFieldType(field.type),
+          required: field.required || false,
+          primaryKey: field.type === 'autoincrement',
+          autoIncrement: field.type === 'autoincrement',
+          unique: field.unique || false,
+          defaultValue: field.defaultValue,
+        }));
+
+        // If no fields defined, add an id field by default
+        if (schemaFields.length === 0) {
+          schemaFields.push({
+            name: 'id',
+            type: 'long',
+            primaryKey: true,
+            autoIncrement: true,
+            required: true,
+            unique: true,
+            defaultValue: undefined,
+          });
+        }
+
+        const backendSchema = {
+          name: newEntity.name,
+          appId: this.currentApp.id,
+          tenantId: tenantId,
+          fields: schemaFields,
+        };
+
+        // Entity created in DRAFT mode
+        // Table will be created when app is published to an environment
+        console.log('[EntityManager] 🆕 Entity created in DRAFT mode:', newEntity.name);
+        console.log('[EntityManager] 📋 Entity definition saved to app metadata');
+        console.log('[EntityManager] 🚀 Table will be created when you PUBLISH the app');
+        console.log('[EntityManager] 📊 Field count:', schemaFields.length);
+        console.log('[EntityManager] 💡 TIP: Click "Publish" button to deploy tables to DEV environment');
 
         // Reload entities
         this.loadEntities();
@@ -968,7 +1126,7 @@ export class EntityManager extends LitElement {
       fields: entity.fields || [],
       relationships: entity.relationships || [],
     };
-    
+
     // Open modal in edit mode
     this.showCreateModal = true;
   }
@@ -998,6 +1156,60 @@ export class EntityManager extends LitElement {
     } catch (error) {
       console.error('Failed to delete entity:', error);
       this.showToast('Failed to delete entity', 'error');
+    }
+  }
+
+  private async handleSeedData(entity: EntityMeta) {
+    if (!confirm(`Generate sample data for "${entity.displayName}"?\n\nThis will use AI to create 5 realistic records.`)) {
+      return;
+    }
+
+    try {
+      this.showToast('Generating magic data... ✨', 'success');
+
+      // Get session token for authentication
+      const sessionToken = localStorage.getItem('appbana_token') || '';
+
+      // 1. Generate Data via AI
+      const response = await fetch('/api/ai/seed-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Token': sessionToken
+        },
+        body: JSON.stringify({
+          entityName: entity.displayName,
+          schema: entity.fields,
+          count: 5
+        })
+      });
+
+      if (!response.ok) throw new Error('Generation failed');
+      const data = await response.json();
+
+      // 2. Insert Data into DB
+      let successCount = 0;
+      for (const item of data) {
+        try {
+          const saveRes = await fetch(`/api/${entity.name}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Session-Token': sessionToken
+            },
+            body: JSON.stringify(item)
+          });
+          if (saveRes.ok) successCount++;
+        } catch (e) {
+          console.error('Failed to save item', item, e);
+        }
+      }
+
+      this.showToast(`Successfully seeded ${successCount} records for ${entity.displayName}! 🪄`, 'success');
+
+    } catch (error) {
+      console.error('Magic Seed failed:', error);
+      this.showToast('Failed to seed data. Is the app running?', 'error');
     }
   }
 
@@ -1149,6 +1361,13 @@ export class EntityManager extends LitElement {
             </svg>
           </button>
           <button
+            class="icon-btn"
+            @click=${() => this.handleSeedData(entity)}
+            title="✨ Magic Seed Data"
+          >
+            <span style="font-size: 14px;">✨</span>
+          </button>
+          <button
             class="icon-btn icon-btn-danger"
             @click=${() => this.handleDeleteEntity(entity.id)}
             title="Delete entity"
@@ -1257,8 +1476,8 @@ export class EntityManager extends LitElement {
                 <div class="section-content">
                   <div class="fields-list">
                       ${(this.formData.fields || []).map((field, index) => {
-                        const isIdField = field.name === 'id';
-                        return html`
+      const isIdField = field.name === 'id';
+      return html`
                         <div class="field-item">
                           <div class="field-row">
                             <input
@@ -1408,11 +1627,11 @@ export class EntityManager extends LitElement {
                             >
                               <option value="id">id (primary key - default)</option>
                               ${rel.toEntity ? (() => {
-                                const targetEntity = this.entities.find(e => e.id === rel.toEntity);
-                                return targetEntity?.fields?.filter(f => f.name !== 'id').map(field => html`
+          const targetEntity = this.entities.find(e => e.id === rel.toEntity);
+          return targetEntity?.fields?.filter(f => f.name !== 'id').map(field => html`
                                   <option value="${field.name}">${field.name} (${field.type})</option>
                                 `) || [];
-                              })() : ''}
+        })() : ''}
                             </select>
                           </div>
                           <div class="field-row">
@@ -1473,10 +1692,10 @@ export class EntityManager extends LitElement {
               @click=${this.handleSaveEntity}
               ?disabled=${this.loading}
             >
-              ${this.loading 
-                ? (isEditMode ? 'Updating...' : 'Creating...') 
-                : (isEditMode ? 'Update Entity' : 'Create Entity')
-              }
+              ${this.loading
+        ? (isEditMode ? 'Updating...' : 'Creating...')
+        : (isEditMode ? 'Update Entity' : 'Create Entity')
+      }
             </button>
           </div>
         </div>

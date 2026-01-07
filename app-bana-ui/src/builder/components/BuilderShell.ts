@@ -9,34 +9,57 @@ import './PageManager';
 import './PropertiesPanel';
 import './AppManager';
 import './EntityManager';
-import './AiChatBuilder';
+// AI Builder removed - moved to AI-old
+import '../../workflow-designer/WorkflowDesignerPage';
 
-@customElement('studio-builder-shell')
+@customElement('appbana-builder-shell')
 export class BuilderShell extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
-  @state() private activeLeftTab: 'components' | 'entities' | 'ai-builder' = 'components';
+  @state() private activeLeftTab = 'components' as 'components' | 'entities' | 'workflow';
   @state() private leftPanelWidth = 300; // Default width in pixels
   private isResizing = false;
   private startX = 0;
   private startWidth = 0;
 
+  @state() private hasActiveApp = false;
+  private unsubscribeAppStore?: () => void;
+
   connectedCallback(): void {
     super.connectedCallback();
     console.log('[BuilderShell] Initializing...');
 
-    // Check if there's a current app, if not, prompt user to create one
-    const currentApp = appStore.getCurrentApp();
-    if (currentApp) {
-      console.log('[BuilderShell] Current app loaded:', currentApp.name);
-    } else {
-      console.log('[BuilderShell] No app selected - user needs to create or select an app');
-    }
+    // Subscribe to store changes
+    this.unsubscribeAppStore = appStore.onChange(() => {
+      this.checkActiveApp();
+    });
+
+    // Initial check
+    this.checkActiveApp();
 
     // Load saved panel width from localStorage
     const savedWidth = localStorage.getItem('builder-left-panel-width');
     if (savedWidth) {
       this.leftPanelWidth = parseInt(savedWidth, 10);
+    }
+
+    this.requestUpdate();
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.unsubscribeAppStore) {
+      this.unsubscribeAppStore();
+    }
+  }
+
+  private checkActiveApp() {
+    const app = appStore.getCurrentApp();
+    this.hasActiveApp = !!app;
+
+    // If we're on workflow tab but lost the active app, switch to components
+    if (this.activeLeftTab === 'workflow' && !this.hasActiveApp) {
+      this.activeLeftTab = 'components';
     }
 
     this.requestUpdate();
@@ -64,7 +87,7 @@ export class BuilderShell extends LitElement {
     if (!this.isResizing) return;
 
     e.preventDefault();
-    
+
     const delta = e.clientX - this.startX;
     const newWidth = this.startWidth + delta;
 
@@ -94,67 +117,110 @@ export class BuilderShell extends LitElement {
 
   private renderLeftPanelContent() {
     if (this.activeLeftTab === 'components') {
-      return html`<studio-component-library></studio-component-library>`;
+      return html`<appbana-component-library></appbana-component-library>`;
     }
     if (this.activeLeftTab === 'entities') {
-      return html`<studio-entity-manager></studio-entity-manager>`;
+      return html`<appbana-entity-manager></appbana-entity-manager>`;
     }
-    return html`<ai-chat-builder></ai-chat-builder>`;
+    if (this.activeLeftTab === 'workflow') {
+      if (!this.hasActiveApp) {
+        return html`
+          <div style="padding: 24px; text-align: center; color: #64748b;">
+            <p>Please select or create an app to design workflows.</p>
+          </div>
+        `;
+      }
+      return html`<workflow-canvas .metadata=${{ nodes: [], connections: [] }}></workflow-canvas>`;
+    }
+    // Default: Components tab
+    return html`<appbana-component-library></appbana-component-library>`;
   }
 
   render() {
     // Set CSS custom property for dynamic width
     this.style.setProperty('--left-panel-width', `${this.leftPanelWidth}px`);
-    
+
+    // Full-page mode for Workflow Designer
+    if (this.activeLeftTab === 'workflow') {
+      this.setAttribute('data-workflow-mode', 'true');
+
+      if (!this.hasActiveApp) {
+        return html`
+          <div class="app-manager-panel">
+            <appbana-app-manager></appbana-app-manager>
+          </div>
+          <div style="flex: 1; display: flex; align-items: center; justify-content: center; background: #f8fafc; color: #64748b; flex-direction: column; gap: 16px;">
+            <div style="font-size: 48px;">⚡</div>
+            <h2 style="margin: 0; font-weight: 600; color: #1e293b;">Workflow Designer</h2>
+            <p style="margin: 0;">Select an app from the header to start building workflows.</p>
+          </div>
+        `;
+      }
+
+      return html`
+        <div class="app-manager-panel">
+          <appbana-app-manager></appbana-app-manager>
+        </div>
+        <workflow-designer-page .appId=${appStore.getCurrentApp()?.id}></workflow-designer-page>
+      `;
+    }
+
+    this.removeAttribute('data-workflow-mode');
+
     return html`
       <!-- Top: App Manager -->
       <div class="app-manager-panel">
-        <studio-app-manager></studio-app-manager>
+        <appbana-app-manager></appbana-app-manager>
       </div>
 
-      <!-- Second Row: Page Manager -->
-      <div class="page-manager-panel">
-        <studio-page-manager></studio-page-manager>
-      </div>
-
-      <!-- Left: Tabbed Panel (Component Library or Entity Manager or AI Builder) -->
-      <div class="library-panel">
-        <div class="left-panel-tabs">
-          <button 
-            class="tab ${this.activeLeftTab === 'components' ? 'active' : ''}"
-            @click=${() => this.activeLeftTab = 'components'}>
-            Components
-          </button>
-          <button 
-            class="tab ${this.activeLeftTab === 'entities' ? 'active' : ''}"
-            @click=${() => this.activeLeftTab = 'entities'}>
-            Entities
-          </button>
-          <button 
-            class="tab ${this.activeLeftTab === 'ai-builder' ? 'active' : ''}"
-            @click=${() => this.activeLeftTab = 'ai-builder'}>
-            🤖 AI Builder
-          </button>
+      <!-- Second Row: Page Manager (only show when app is active) -->
+      ${this.hasActiveApp ? html`
+        <div class="page-manager-panel">
+          <appbana-page-manager></appbana-page-manager>
         </div>
-        <div class="left-panel-content">
-          ${this.renderLeftPanelContent()}
+      ` : ''}
+
+      <!-- Main Content Grid -->
+      <div class="content-grid">
+        <!-- Left: Tabbed Panel (Component Library or Entity Manager or AI Builder) -->
+        <div class="library-panel">
+          <div class="left-panel-tabs">
+            <button 
+              class="tab ${this.activeLeftTab === 'components' ? 'active' : ''}"
+              @click=${() => this.activeLeftTab = 'components'}>
+              Components
+            </button>
+            <button 
+              class="tab ${this.activeLeftTab === 'entities' ? 'active' : ''}"
+              @click=${() => this.activeLeftTab = 'entities'}>
+              Entities
+            </button>
+            <button 
+              class="tab ${(this.activeLeftTab as any) === 'workflow' ? 'active' : ''}"
+              @click=${() => this.activeLeftTab = 'workflow'}>
+              ⚡ Workflow
+            </button>
+          </div>
+          <div class="left-panel-content">
+            ${this.renderLeftPanelContent()}
+          </div>
+          <!-- Resize Handle -->
+          <div 
+            class="resize-handle"
+            @mousedown=${this.handleResizeStart}
+            title="Drag to resize panel"
+          ></div>
         </div>
-        <!-- Resize Handle -->
-        <div 
-          class="resize-handle"
-          @mousedown=${this.handleResizeStart}
-          title="Drag to resize panel"
-        ></div>
-      </div>
 
-      <!-- Center: Live Preview (WYSIWYG Canvas) -->
-      <div class="center-panel">
-        <studio-live-preview></studio-live-preview>
-      </div>
+        <!-- Center: Live Preview (WYSIWYG Canvas) -->
+        <div class="center-panel">
+          <appbana-live-preview></appbana-live-preview>
+        </div>
 
-      <!-- Right: Property Inspector -->
-      <div class="right-panel">
-        <studio-properties-panel></studio-properties-panel>
+        <!-- Right: Properties Panel -->
+        <div class="right-panel">
+          <appbana-properties-panel></appbana-properties-panel>
+        </div>
       </div>
     `;
   }

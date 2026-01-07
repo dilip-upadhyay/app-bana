@@ -5,7 +5,6 @@ public final class DriverUtil {
 
     public static String inferTypeFromUrl(String url) {
         if (url == null) return null;
-        if (url.startsWith("jdbc:h2:")) return "h2";
         if (url.startsWith("jdbc:postgresql:")) return "postgres";
         if (url.startsWith("jdbc:mysql:")) return "mysql";
         if (url.startsWith("jdbc:mariadb:")) return "mariadb";
@@ -21,7 +20,6 @@ public final class DriverUtil {
         if ((t == null || t.isBlank()) && url != null) t = inferTypeFromUrl(url);
         if (t == null) return null;
         switch (t.toLowerCase()) {
-            case "h2": return "org.h2.Driver";
             case "postgres":
             case "postgresql": return "org.postgresql.Driver";
             case "mysql": return "com.mysql.cj.jdbc.Driver";

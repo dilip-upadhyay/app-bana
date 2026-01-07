@@ -131,8 +131,38 @@ join_args() { # echo joined args for logging only
   if (( ${#VITE_ARGS[@]} )); then printf '%s ' "${VITE_ARGS[@]}"; fi
 }
 
+# Kill any existing Vite dev server on port 5173 (or UI_PORT if set)
+kill_existing_server() {
+  local PORT="${UI_PORT:-5173}"
+  log "Checking for existing server on port $PORT..."
+  
+  # Find process using the port (macOS/Linux compatible)
+  local PID
+  if command -v lsof >/dev/null 2>&1; then
+    PID=$(lsof -ti tcp:"$PORT" 2>/dev/null || true)
+  else
+    # Fallback for systems without lsof
+    PID=$(netstat -anp tcp 2>/dev/null | grep "LISTEN.*:$PORT" | awk '{print $9}' | cut -d'/' -f1 || true)
+  fi
+  
+  # If still not found, try a best-effort grep for vite on this port (helps when lsof is missing or permissions block lookup)
+  if [[ -z "$PID" ]]; then
+    PID=$(ps -ef | grep "vite" | grep -v grep | grep ":$PORT" | awk '{print $2}' || true)
+  fi
+
+  if [[ -n "$PID" ]]; then
+    warn "Found existing server (PID: $PID) on port $PORT. Stopping..."
+    kill "$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
+    sleep 1
+    ok "Existing server stopped"
+  else
+    log "No existing server found on port $PORT"
+  fi
+}
+
 case "$ACTION" in
   dev)
+    kill_existing_server
     log "Starting Vite dev server..."
     log "Command: npm run dev -- $(join_args)"
     if (( ${#VITE_ARGS[@]} )); then
@@ -147,6 +177,7 @@ case "$ACTION" in
     ok "Build complete. Output: dist/"
     ;;
   preview)
+    kill_existing_server
     log "Previewing production build (will build if dist missing)..."
     [[ -d dist ]] || npm run build
     log "Command: npm run preview -- $(join_args)"

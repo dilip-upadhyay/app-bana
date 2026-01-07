@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.29.xsd">
+
+    <changeSet id="V1" author="appbana">
+        <sqlFile path="db/migration/V1__auth_schema.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V2" author="appbana">
+        <sqlFile path="db/migration/V2__field_level_security.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V3" author="appbana">
+        <sqlFile path="db/migration/V3__profile_layer.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V4" author="appbana">
+        <sqlFile path="db/migration/V4__permission_hierarchy.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V5" author="appbana">
+        <sqlFile path="db/migration/V5__permission_scopes.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V6" author="appbana">
+        <sqlFile path="db/migration/V6__workflow_tables.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V7" author="appbana">
+        <sqlFile path="db/migration/V7__release_management.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V8" author="appbana">
+        <sqlFile path="db/migration/V8__multi_env_pipeline.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V9" author="appbana">
+        <sqlFile path="db/migration/V9__app_metadata.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V10" author="appbana">
+        <sqlFile path="db/migration/V10__tenant_app_isolation.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V11" author="appbana">
+        <sqlFile path="db/migration/V11__app_versioning.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+</databaseChangeLog>

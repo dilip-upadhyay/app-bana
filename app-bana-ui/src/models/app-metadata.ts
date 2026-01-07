@@ -40,6 +40,9 @@ export interface AppMeta {
 export interface AppTheme {
   primaryColor?: string;
   secondaryColor?: string;
+  surfaceColor?: string;
+  surfaceAltColor?: string;
+  textColor?: string;
   fontFamily?: string;
   darkMode?: boolean;
   customCSS?: string;

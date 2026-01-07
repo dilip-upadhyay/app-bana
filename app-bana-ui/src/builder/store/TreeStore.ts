@@ -19,6 +19,7 @@ export class TreeStore {
   private persist: boolean;
   private key: string;
   private listeners = new Set<() => void>();
+  private clipboard: ComponentNode | null = null;
 
   static from(page: PageMeta, opts: TreeStoreOptions = {}) { return new TreeStore(page, opts); }
 
@@ -37,8 +38,16 @@ export class TreeStore {
   }
 
   onChange(fn: () => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
+
+  private emitChange() {
+    window.dispatchEvent(new CustomEvent('app-bana-run-change', {
+      detail: { pageId: this.page.id }
+    }));
+  }
+
   private notify() {
     for (const fn of this.listeners) fn();
+    this.emitChange();
   }
 
   getPage(): PageMeta { return { ...this.page, nodes: Array.from(this.nodes.values()) }; }
@@ -48,7 +57,7 @@ export class TreeStore {
     return sel;
   }
   getNode(id: string): ComponentNode | undefined { return this.nodes.get(id); }
-  listChildren(id: string): ComponentNode[] { const n = this.require(id); return (n.children||[]).map(cid=>this.require(cid)); }
+  listChildren(id: string): ComponentNode[] { const n = this.require(id); return (n.children || []).map(cid => this.require(cid)); }
 
   select(id: string | null) {
     if (id && !this.nodes.has(id)) return;
@@ -69,16 +78,16 @@ export class TreeStore {
     const op: Operation = {
       desc: `add:${node.id}`,
       undo: () => {
-        parent.children = (parent.children||[]).filter(c=>c!==node.id);
+        parent.children = (parent.children || []).filter(c => c !== node.id);
         this.nodes.delete(node.id);
       },
       redo: () => {
         this.nodes.set(node.id, node);
-        parent.children = parent.children||[];
-        if (index===undefined||index<0||index>parent.children.length) {
+        parent.children = parent.children || [];
+        if (index === undefined || index < 0 || index > parent.children.length) {
           parent.children.push(node.id);
         } else {
-          parent.children.splice(index,0,node.id);
+          parent.children.splice(index, 0, node.id);
         }
         console.log('[TreeStore] Node added, parent now has children:', parent.children);
       }
@@ -162,8 +171,8 @@ export class TreeStore {
 
   updateProps(id: string, patch: Record<string, any>) {
     const node = this.require(id);
-    const prev = structuredClone(node.props||{});
-    const next = { ...(node.props||{}), ...patch };
+    const prev = structuredClone(node.props || {});
+    const next = { ...(node.props || {}), ...patch };
     const op: Operation = {
       desc: `update:${id}`,
       undo: () => { node.props = structuredClone(prev); },
@@ -178,17 +187,17 @@ export class TreeStore {
     const node = this.require(id);
     // collect subtree
     const subtreeIds: string[] = [];
-    const collect = (n: ComponentNode) => { subtreeIds.push(n.id); (n.children||[]).forEach(cid=>collect(this.require(cid))); };
+    const collect = (n: ComponentNode) => { subtreeIds.push(n.id); (n.children || []).forEach(cid => collect(this.require(cid))); };
     collect(node);
     // parent ref removal
     const parent = this.findParent(id);
     if (!parent) return;
-    const parentChildrenPrev = [...(parent.children||[])];
-    const removedNodes = subtreeIds.map(i=>[i,this.require(i)] as const);
+    const parentChildrenPrev = [...(parent.children || [])];
+    const removedNodes = subtreeIds.map(i => [i, this.require(i)] as const);
     const op: Operation = {
       desc: `remove:${id}`,
-      undo: () => { parent.children = [...parentChildrenPrev]; for (const [nid,nv] of removedNodes) this.nodes.set(nid, structuredClone(nv)); },
-      redo: () => { parent.children = (parent.children||[]).filter(c=>c!==id); for (const nid of subtreeIds) this.nodes.delete(nid); if (this.selection && subtreeIds.includes(this.selection)) this.selection = parent.id; }
+      undo: () => { parent.children = [...parentChildrenPrev]; for (const [nid, nv] of removedNodes) this.nodes.set(nid, structuredClone(nv)); },
+      redo: () => { parent.children = (parent.children || []).filter(c => c !== id); for (const nid of subtreeIds) this.nodes.delete(nid); if (this.selection && subtreeIds.includes(this.selection)) this.selection = parent.id; }
     };
     op.redo();
     this.pushHistory(op);
@@ -199,8 +208,8 @@ export class TreeStore {
     if (!oldParent) return;
     const newParent = this.require(newParentId);
     if (this.isAncestor(id, newParentId)) return; // prevent cycles
-    const oldParentChildrenPrev = [...(oldParent.children||[])];
-    const newParentChildrenPrev = [...(newParent.children||[])];
+    const oldParentChildrenPrev = [...(oldParent.children || [])];
+    const newParentChildrenPrev = [...(newParent.children || [])];
     const op: Operation = {
       desc: `move:${id}`,
       undo: () => {
@@ -208,13 +217,72 @@ export class TreeStore {
         newParent.children = [...newParentChildrenPrev];
       },
       redo: () => {
-        oldParent.children = (oldParent.children||[]).filter(c=>c!==id);
-        newParent.children = newParent.children||[];
-        if (newIndex===undefined||newIndex<0||newIndex>newParent.children.length) newParent.children.push(id); else newParent.children.splice(newIndex,0,id);
+        oldParent.children = (oldParent.children || []).filter(c => c !== id);
+        newParent.children = newParent.children || [];
+        if (newIndex === undefined || newIndex < 0 || newIndex > newParent.children.length) newParent.children.push(id); else newParent.children.splice(newIndex, 0, id);
       }
     };
     op.redo();
     this.pushHistory(op);
+  }
+
+  copy(id: string) {
+    const node = this.nodes.get(id);
+    if (!node || node.id === this.page.rootId) return;
+
+    // Deep clone the node and its children for the clipboard
+    const cloneNode = (n: ComponentNode): ComponentNode => {
+      const cloned = structuredClone(n);
+      cloned.children = (n.children || []).map(cid => {
+        const child = this.nodes.get(cid);
+        return child ? cloneNode(child) : null;
+      }).filter((c): c is ComponentNode => c !== null) as any; // Store full objects in clipboard for simplicity
+      return cloned;
+    };
+
+    this.clipboard = cloneNode(node);
+    console.log('[TreeStore] Copied to clipboard:', this.clipboard);
+  }
+
+  cut(id: string) {
+    this.copy(id);
+    this.removeNode(id);
+  }
+
+  paste(targetId: string) {
+    if (!this.clipboard) return;
+    const target = this.nodes.get(targetId);
+    if (!target) return;
+
+    // Determine parent and index
+    let parentId = targetId;
+    let index: number | undefined = undefined;
+
+    // If target is not a container, paste after it
+    const isContainer = target.type === 'container' || target.type === 'section' || target.type === 'div';
+    if (!isContainer && targetId !== this.page.rootId) {
+      const parent = this.findParent(targetId);
+      if (parent) {
+        parentId = parent.id;
+        index = (parent.children || []).indexOf(targetId) + 1;
+      }
+    }
+
+    // Re-generate IDs for the pasted tree
+    const regenerateIds = (n: ComponentNode): ComponentNode => {
+      const newNode = structuredClone(n);
+      newNode.id = n.type + '-' + Math.random().toString(36).slice(2, 7);
+
+      // If children are stored as objects in clipboard (from copy), process them
+      if (Array.isArray(newNode.children)) {
+        const childrenObjects = newNode.children as any as ComponentNode[];
+        newNode.children = childrenObjects.map(c => regenerateIds(c)) as any;
+      }
+      return newNode;
+    };
+
+    const pastedTree = regenerateIds(this.clipboard);
+    this.addNodeTree(parentId, pastedTree, index);
   }
 
   duplicate(id: string) {
@@ -225,23 +293,23 @@ export class TreeStore {
     if (!parent) return;
     // Collect original subtree
     const originals: ComponentNode[] = [];
-    const collect = (n: ComponentNode) => { originals.push(n); (n.children||[]).forEach(cid=>collect(this.require(cid))); };
+    const collect = (n: ComponentNode) => { originals.push(n); (n.children || []).forEach(cid => collect(this.require(cid))); };
     collect(original);
     // Build id map + cloned nodes
-    const idMap = new Map<string,string>();
+    const idMap = new Map<string, string>();
     const genId = (base: string) => {
-      let candidate: string; let attempt=0;
-      do { candidate = base + '-copy' + (attempt? '-' + attempt : ''); attempt++; } while (this.nodes.has(candidate));
+      let candidate: string; let attempt = 0;
+      do { candidate = base + '-copy' + (attempt ? '-' + attempt : ''); attempt++; } while (this.nodes.has(candidate));
       return candidate;
     };
     for (const n of originals) idMap.set(n.id, genId(n.id));
     const clonedNodes: ComponentNode[] = originals.map(n => ({
       ...structuredClone(n),
       id: idMap.get(n.id)!,
-      children: n.children ? n.children.map(cid=> idMap.get(cid)!) : n.children
+      children: n.children ? n.children.map(cid => idMap.get(cid)!) : n.children
     }));
     const newRootId = idMap.get(id)!;
-    const insertIndex = parent.children ? parent.children.indexOf(id)+1 : 0;
+    const insertIndex = parent.children ? parent.children.indexOf(id) + 1 : 0;
     const op: Operation = {
       desc: `duplicate:${id}`,
       undo: () => {
@@ -250,11 +318,11 @@ export class TreeStore {
       },
       redo: () => {
         for (const cn of clonedNodes) this.nodes.set(cn.id, structuredClone(cn));
-        parent.children = parent.children||[];
+        parent.children = parent.children || [];
         // insert new root id + ensure children order for subtree root only
         if (!parent.children.includes(newRootId)) {
-          if (insertIndex<0 || insertIndex>parent.children.length) parent.children.push(newRootId);
-          else parent.children.splice(insertIndex,0,newRootId);
+          if (insertIndex < 0 || insertIndex > parent.children.length) parent.children.push(newRootId);
+          else parent.children.splice(insertIndex, 0, newRootId);
         }
       }
     };
@@ -275,8 +343,8 @@ export class TreeStore {
     this.notify();
   }
 
-  private require(id: string): ComponentNode { const n = this.nodes.get(id); if (!n) throw new Error('node not found: '+id); return n; }
-  private findParent(id: string): ComponentNode | null {
+  private require(id: string): ComponentNode { const n = this.nodes.get(id); if (!n) throw new Error('node not found: ' + id); return n; }
+  public findParent(id: string): ComponentNode | null {
     for (const n of this.nodes.values()) if (n.children?.includes(id)) return n; return null;
   }
   private isAncestor(ancestorId: string, maybeDesc: string): boolean {

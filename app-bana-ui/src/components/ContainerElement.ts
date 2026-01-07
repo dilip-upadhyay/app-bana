@@ -1,18 +1,36 @@
-import { BaseElement } from '../core/BaseElement';
+import { FormElement } from './FormElement';
 import { registerComponent } from '../core/registry';
 
-export class ContainerElement extends BaseElement {
-  static get observedAttributes() { return ['variant']; }
-  attributeChangedCallback(name: string, _o: string|null, _n: string|null){ if (name==='variant') this.requestRender(); }
-  private variant(): string { const v=(this.getAttribute('variant')||'default').toLowerCase(); return ['outlined','subtle','ghost'].includes(v)? v : 'default'; }
-  protected render(): string { return `<div class="wrap ${this.variant()}"><slot></slot></div>`; }
-  protected styles(): string { return `:host { display:block; }
-    .wrap { background: var(--color-surface); border:1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); box-shadow: var(--shadow-xs); }
-    .wrap.outlined { box-shadow:none; }
-    .wrap.subtle { background: var(--color-surface-alt); }
-    .wrap.ghost { background: transparent; border-color: transparent; box-shadow:none; }
-  `; }
+export class ContainerElement extends FormElement {
+  static get observedAttributes() {
+    return ['layout', 'gap', 'padding'];
+  }
+
+  attributeChangedCallback() {
+    this.requestRender();
+  }
+
+  protected render(): string {
+    return `<slot></slot>`;
+  }
+
+  protected styles(): string {
+    const layout = this.getAttribute('layout') || 'column';
+    const gap = this.getAttribute('gap') || '1rem';
+    const padding = this.getAttribute('padding') || '1rem';
+
+    return `
+      :host {
+        display: flex;
+        flex-direction: ${layout};
+        gap: ${gap};
+        padding: ${padding};
+      }
+    `;
+  }
 }
 
-customElements.define('studio-container', ContainerElement);
-registerComponent('container', ContainerElement);
+if (!customElements.get('appbana-container')) {
+  customElements.define('appbana-container', ContainerElement);
+}
+registerComponent('container', ContainerElement, 'appbana-container');

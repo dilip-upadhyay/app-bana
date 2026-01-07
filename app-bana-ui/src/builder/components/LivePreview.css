@@ -1,10 +1,14 @@
 :host {
   display: flex;
   flex-direction: column;
-  background: white;
+  background: var(--color-bg, white) !important;
+  color: var(--color-text, #1e293b);
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  --grid-outline-color: #e5e7eb;
+  --grid-outline-hover-color: #6366f1;
+  --grid-key-display: block;
 }
 
 .preview-container {
@@ -19,15 +23,15 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid #e5e7eb;
-  background: white;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-surface, white);
 }
 
 .preview-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text, #111827);
 }
 
 .preview-actions {
@@ -53,13 +57,13 @@
 .canvas-wrapper {
   flex: 1;
   overflow: auto;
-  background: #f9fafb;
+  background: var(--color-surface-alt, #f9fafb);
   padding: 24px;
 }
 
 .canvas-content {
   min-height: 100%;
-  background: white;
+  background: var(--color-bg, white);
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
   padding: 24px;
@@ -194,18 +198,18 @@ kbd {
 }
 
 .empty-container {
-  min-height: 120px;
-  border: 2px dashed #d1d5db !important;
+  min-height: 60px;
+  border: 2px dashed var(--color-border, #d1d5db) !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f9fafb !important;
+  background: var(--color-surface-alt, #f9fafb) !important;
   transition: all 0.2s;
 }
 
 .empty-container:hover {
-  border-color: #9ca3af !important;
-  background: #f3f4f6 !important;
+  border-color: var(--color-border-strong, #9ca3af) !important;
+  background: var(--color-surface, #f3f4f6) !important;
 }
 
 .empty-container.drag-over {
@@ -238,8 +242,9 @@ kbd {
 .canvas-element textarea,
 .canvas-element select,
 .canvas-element button {
-  margin: 4px 0;
-  pointer-events: none; /* Prevent interference with drag-drop */
+  margin: 0;
+  pointer-events: none;
+  /* Prevent interference with drag-drop */
 }
 
 .canvas-element input[type="text"],
@@ -305,8 +310,8 @@ kbd {
 .card {
   padding: 1.5rem;
   border-radius: 8px;
-  border: 1px solid #e0e0e0;
-  background: white;
+  border: 1px solid var(--color-border, #e0e0e0);
+  background: var(--color-surface, white);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -330,6 +335,7 @@ kbd {
     transform: translateY(100px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -341,8 +347,44 @@ kbd {
     transform: translateY(0);
     opacity: 1;
   }
+
   to {
     transform: translateY(100px);
     opacity: 0;
   }
 }
+
+/* Dark mode support to match Runtime */
+@media (prefers-color-scheme: dark) {
+  :host {
+    --color-bg: #0f172a;
+    --color-surface: #1e293b;
+    --color-text: #f1f5f9;
+    --color-border: #334155;
+    --color-border-strong: #475569;
+    --color-text-secondary: #cbd5e1;
+    --color-surface-alt: #1e1b4b;
+    /* Dark indigo for subtle backgrounds */
+  }
+}
+
+.preview-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+
+
+
+  :host {
+    /* Match runtime: use var(--color-bg) if defined (from global theme or dark mode above) */
+    background: var(--color-bg, #ffffff) !important;
+    color: var(--color-text, #1e293b);
+  }

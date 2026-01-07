@@ -11,25 +11,31 @@ import type { PageMeta } from './metadata';
  * This is what gets passed to the preview/runtime renderer
  */
 export interface AppRuntimeState {
+  // Tenant ID (optional, defaults to 'default' in runtime)
+  tenantId?: string;
+
   // App metadata
   app: AppMeta;
-  
+
   // All pages in the app
   pages: PageMeta[];
-  
+
   // Current page being viewed
   currentPageId: string;
-  
+
   // Navigation context
   navigation: {
     history: string[];           // Page IDs visited
     canGoBack: boolean;
     canGoForward: boolean;
   };
-  
+
   // Runtime mode
   mode: 'preview' | 'production' | 'development';
-  
+
+  // Optional environment (DEV, SIT, PROD) for deployed versions
+  env?: string;
+
   // Additional context
   context?: {
     studioUrl?: string;          // Link back to studio for preview mode
@@ -43,8 +49,10 @@ export interface AppRuntimeState {
  * More compact for transmission
  */
 export interface AppRuntimeStateCompact {
+  tenantId?: string;             // Tenant ID (defaults to 'default' if not provided)
   appId: string;                 // App ID to load
   pageId?: string;               // Optional specific page (otherwise use default)
+  env?: string;                  // Optional environment (e.g. DEV, PROD) to load snapshot from
   mode?: 'preview' | 'production';
 }
 
@@ -58,7 +66,7 @@ export function createRuntimeState(
   mode: 'preview' | 'production' | 'development' = 'preview'
 ): AppRuntimeState {
   const pageId = currentPageId || app.defaultPage || pages[0]?.id;
-  
+
   return {
     app,
     pages,

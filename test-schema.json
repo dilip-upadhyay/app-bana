@@ -1,0 +1,14 @@
+{
+    "name": "candidate",
+    "fields": [
+        {
+            "name": "id",
+            "type": "string",
+            "primaryKey": true
+        },
+        {
+            "name": "name",
+            "type": "string"
+        }
+    ]
+}

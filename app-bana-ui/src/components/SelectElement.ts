@@ -11,7 +11,29 @@ export class SelectElement extends FormElement {
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, _newValue: string | null) {
+    if (name === 'value') {
+      if (this.shadowRoot) {
+        const select = this.shadowRoot.querySelector('select');
+        if (select && _newValue !== null && select.value !== _newValue) {
+          select.value = _newValue;
+        }
+      }
+      return;
+    }
     this.requestRender();
+  }
+
+  get value(): string {
+    const select = this.shadowRoot?.querySelector('select');
+    return select ? select.value : this.getAttribute('value') || '';
+  }
+
+  set value(val: string) {
+    const select = this.shadowRoot?.querySelector('select');
+    if (select) {
+      select.value = val;
+    }
+    this.setAttribute('value', val);
   }
 
   async connectedCallback() {
@@ -20,7 +42,7 @@ export class SelectElement extends FormElement {
 
   private parseOptions(): Array<{ value: string; label: string }> {
     const optionsAttr = this.getAttribute('options') || '';
-    
+
     // Try to parse as JSON array
     try {
       const parsed = JSON.parse(optionsAttr);
@@ -49,12 +71,12 @@ export class SelectElement extends FormElement {
 
   protected render(): string {
     const fieldName = this.getAttribute('name') || '';
-    
+
     // FLS: Hide non-readable fields
     if (this.isFieldHidden(fieldName)) {
       return this.renderHiddenField();
     }
-    
+
     const label = this.getAttribute('label') || '';
     const value = this.getAttribute('value') || '';
     const placeholder = this.getAttribute('placeholder') || 'Select an option';
@@ -76,7 +98,7 @@ export class SelectElement extends FormElement {
 
     const optionsHtml = [
       placeholder ? `<option value="" disabled ${!value ? 'selected' : ''}>${placeholder}</option>` : '',
-      ...options.map(opt => 
+      ...options.map(opt =>
         `<option value="${opt.value}" ${value === opt.value ? 'selected' : ''}>${opt.label}</option>`
       )
     ].join('');
@@ -94,10 +116,11 @@ export class SelectElement extends FormElement {
       :host {
         display: block;
         font-family: var(--font-sans, system-ui);
+        margin-bottom: var(--margin-bottom, 1rem);
       }
       label {
         display: block;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.2rem;
         font-size: var(--text-sm, 0.875rem);
         font-weight: 500;
         color: var(--color-text, #333);
@@ -141,5 +164,7 @@ export class SelectElement extends FormElement {
   }
 }
 
-customElements.define('studio-select', SelectElement);
-registerComponent('select', SelectElement);
+if (!customElements.get('appbana-select')) {
+  customElements.define('appbana-select', SelectElement);
+}
+registerComponent('select', SelectElement, 'appbana-select');

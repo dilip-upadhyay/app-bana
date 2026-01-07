@@ -2,7 +2,6 @@
   "version": "1.1.0",
   "lastUpdated": "2025-11-22T00:00:00Z",
   "description": "All available UI components in AppBana with properties and usage examples",
-  
   "categories": [
     "Layout Components",
     "Form Components",
@@ -10,7 +9,6 @@
     "Navigation Components",
     "Data Components"
   ],
-
   "components": [
     {
       "type": "container",
@@ -19,30 +17,59 @@
       "file": "src/components/ContainerElement.ts",
       "description": "Generic container for grouping child components with layout control",
       "baseClass": "BaseElement",
+      "customElement": "appbana-container",
       "props": {
         "layout": {
           "type": "string",
-          "values": ["vertical", "horizontal", "grid"],
+          "values": [
+            "vertical",
+            "horizontal",
+            "grid"
+          ],
           "default": "vertical",
           "description": "Layout direction for children"
         },
         "gap": {
           "type": "string",
-          "values": ["sm", "md", "lg"],
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
           "default": "md",
           "description": "Spacing between children"
         },
         "padding": {
           "type": "string",
-          "values": ["none", "sm", "md", "lg"],
+          "values": [
+            "none",
+            "sm",
+            "md",
+            "lg"
+          ],
           "default": "md",
           "description": "Internal padding"
         },
         "align": {
           "type": "string",
-          "values": ["start", "center", "end", "stretch"],
+          "values": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ],
           "default": "stretch",
           "description": "Cross-axis alignment"
+        },
+        "wrap": {
+          "type": "string",
+          "values": [
+            "nowrap",
+            "wrap",
+            "wrap-reverse"
+          ],
+          "default": "nowrap",
+          "description": "Flex wrap behavior"
         }
       },
       "children": true,
@@ -54,7 +81,76 @@
           "gap": "md",
           "padding": "lg"
         },
-        "children": ["child1", "child2"]
+        "children": [
+          "child1",
+          "child2"
+        ]
+      }
+    },
+    {
+      "type": "appbana-form",
+      "name": "FormContainer",
+      "category": "Form Components",
+      "file": "src/components/FormContainer.ts",
+      "description": "Container that handles data loading and submission for an entity record.",
+      "baseClass": "BaseElement",
+      "customElement": "appbana-form",
+      "props": {
+        "entity": {
+          "type": "string",
+          "required": true,
+          "description": "Entity name to create/update (e.g. 'Customer')"
+        },
+        "record-id": {
+          "type": "string",
+          "description": "ID of record to update. If omitted, creates new record."
+        },
+        "redirect-on-success": {
+          "type": "string",
+          "description": "Path to navigate to after successful save (e.g. '/customers')"
+        },
+        "title": {
+          "type": "string",
+          "description": "Form title displayed in header"
+        },
+        "submitLabel": {
+          "type": "string",
+          "default": "Save",
+          "description": "Text label for the submit button"
+        },
+        "layout": {
+          "type": "string",
+          "values": [
+            "vertical",
+            "horizontal"
+          ],
+          "default": "vertical",
+          "description": "Layout direction of form fields"
+        },
+        "apiUrl": {
+          "type": "string",
+          "description": "Optional custom API endpoint override"
+        }
+      },
+      "children": true,
+      "features": [
+        "Auto-load record data",
+        "Auto-collect input values",
+        "Handies API submission",
+        "Show/Hide success/error messages"
+      ],
+      "example": {
+        "id": "form1",
+        "type": "appbana-form",
+        "props": {
+          "entity": "Ticket",
+          "redirect-on-success": "/tickets"
+        },
+        "children": [
+          "input-title",
+          "textarea-desc",
+          "btn-submit"
+        ]
       }
     },
     {
@@ -72,13 +168,23 @@
         },
         "variant": {
           "type": "string",
-          "values": ["primary", "danger", "success", "outline", "ghost"],
+          "values": [
+            "primary",
+            "danger",
+            "success",
+            "outline",
+            "ghost"
+          ],
           "default": "primary",
           "description": "Visual style variant"
         },
         "size": {
           "type": "string",
-          "values": ["sm", "md", "lg"],
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
           "default": "md",
           "description": "Button size"
         },
@@ -89,7 +195,9 @@
         }
       },
       "children": false,
-      "events": ["click"],
+      "events": [
+        "click"
+      ],
       "example": {
         "id": "btn1",
         "type": "button",
@@ -107,11 +215,21 @@
       "file": "src/components/InputElement.ts",
       "description": "Universal text input component supporting text, email, password, number, tel, url, date, datetime-local",
       "baseClass": "BaseElement",
-      "customElement": "studio-input",
+      "customElement": "appbana-input",
       "props": {
         "type": {
           "type": "string",
-          "values": ["text", "email", "password", "number", "tel", "url", "date", "datetime-local", "time"],
+          "values": [
+            "text",
+            "email",
+            "password",
+            "number",
+            "tel",
+            "url",
+            "date",
+            "datetime-local",
+            "time"
+          ],
           "default": "text",
           "description": "Input type"
         },
@@ -156,7 +274,10 @@
         }
       },
       "children": false,
-      "events": ["input", "change"],
+      "events": [
+        "input",
+        "change"
+      ],
       "example": {
         "id": "email1",
         "type": "input",
@@ -166,7 +287,11 @@
           "placeholder": "Enter your email",
           "required": true
         }
-      }
+      },
+      "implementationNotes": [
+        "MUST implement 'value' getter and setter to keep property in sync with internal input element",
+        "MUST implement 'attributeChangedCallback' to sync 'value' attribute to property"
+      ]
     },
     {
       "type": "textarea",
@@ -175,7 +300,7 @@
       "file": "src/components/TextareaElement.ts",
       "description": "Multi-line text input with character count",
       "baseClass": "BaseElement",
-      "customElement": "studio-textarea",
+      "customElement": "appbana-textarea",
       "props": {
         "label": {
           "type": "string",
@@ -215,7 +340,10 @@
         }
       },
       "children": false,
-      "events": ["input", "change"],
+      "events": [
+        "input",
+        "change"
+      ],
       "example": {
         "id": "description1",
         "type": "textarea",
@@ -225,7 +353,11 @@
           "rows": "6",
           "maxlength": "500"
         }
-      }
+      },
+      "implementationNotes": [
+        "MUST implement 'value' getter and setter to keep property in sync with internal textarea",
+        "MUST implement 'attributeChangedCallback' to sync 'value' attribute to property"
+      ]
     },
     {
       "type": "select",
@@ -234,7 +366,7 @@
       "file": "src/components/SelectElement.ts",
       "description": "Dropdown select component with JSON or comma-separated options",
       "baseClass": "BaseElement",
-      "customElement": "studio-select",
+      "customElement": "appbana-select",
       "props": {
         "label": {
           "type": "string",
@@ -270,7 +402,9 @@
         }
       },
       "children": false,
-      "events": ["change"],
+      "events": [
+        "change"
+      ],
       "example": {
         "id": "country1",
         "type": "select",
@@ -289,7 +423,7 @@
       "file": "src/components/CheckboxElement.ts",
       "description": "Single checkbox input with custom styling",
       "baseClass": "BaseElement",
-      "customElement": "studio-checkbox",
+      "customElement": "appbana-checkbox",
       "props": {
         "label": {
           "type": "string",
@@ -316,7 +450,9 @@
         }
       },
       "children": false,
-      "events": ["change"],
+      "events": [
+        "change"
+      ],
       "example": {
         "id": "terms1",
         "type": "checkbox",
@@ -334,7 +470,7 @@
       "file": "src/components/RadioGroupElement.ts",
       "description": "Radio button group with vertical/horizontal layout",
       "baseClass": "BaseElement",
-      "customElement": "studio-radio-group",
+      "customElement": "appbana-radio-group",
       "props": {
         "label": {
           "type": "string",
@@ -366,13 +502,18 @@
         },
         "layout": {
           "type": "string",
-          "values": ["vertical", "horizontal"],
+          "values": [
+            "vertical",
+            "horizontal"
+          ],
           "default": "vertical",
           "description": "Layout direction"
         }
       },
       "children": false,
-      "events": ["change"],
+      "events": [
+        "change"
+      ],
       "example": {
         "id": "gender1",
         "type": "radio-group",
@@ -399,13 +540,23 @@
         },
         "variant": {
           "type": "string",
-          "values": ["heading", "subheading", "body", "caption", "label"],
+          "values": [
+            "heading",
+            "subheading",
+            "body",
+            "caption",
+            "label"
+          ],
           "default": "body",
           "description": "Typography style"
         },
         "align": {
           "type": "string",
-          "values": ["left", "center", "right"],
+          "values": [
+            "left",
+            "center",
+            "right"
+          ],
           "default": "left",
           "description": "Text alignment"
         },
@@ -434,9 +585,12 @@
       "baseClass": "LitElement",
       "props": {
         "columns": {
-          "type": "number",
+          "type": [
+            "number",
+            "object"
+          ],
           "default": 2,
-          "description": "Number of grid columns"
+          "description": "Number of grid columns or responsive object { base: 1, md: 2, lg: 4, xl: 5, 2xl: 6 }"
         },
         "gap": {
           "type": "string",
@@ -452,7 +606,11 @@
           "columns": 3,
           "gap": "24px"
         },
-        "children": ["item1", "item2", "item3"]
+        "children": [
+          "item1",
+          "item2",
+          "item3"
+        ]
       }
     },
     {
@@ -474,8 +632,17 @@
         }
       },
       "children": false,
-      "fields": ["username", "email", "password", "confirmPassword"],
-      "validation": ["required", "email format", "password match"],
+      "fields": [
+        "username",
+        "email",
+        "password",
+        "confirmPassword"
+      ],
+      "validation": [
+        "required",
+        "email format",
+        "password match"
+      ],
       "example": {
         "id": "regForm1",
         "type": "user-registration-form",
@@ -497,7 +664,11 @@
       "props": {},
       "children": false,
       "usage": "Studio Builder only",
-      "features": ["Drag-drop support", "Category filtering", "Component preview"]
+      "features": [
+        "Drag-drop support",
+        "Category filtering",
+        "Component preview"
+      ]
     },
     {
       "type": "entity-explorer",
@@ -509,10 +680,15 @@
       "props": {},
       "children": false,
       "usage": "Studio Builder only",
-      "features": ["Entity CRUD", "Field editor", "Relationship editor", "SQL preview"]
+      "features": [
+        "Entity CRUD",
+        "Field editor",
+        "Relationship editor",
+        "SQL preview"
+      ]
     },
     {
-      "type": "studio-table-live",
+      "type": "appbana-table-live",
       "name": "StudioTableLive",
       "category": "Data Components",
       "file": "app-bana-ui/src/runtime/renderer/StudioTableLive.ts",
@@ -527,7 +703,12 @@
         "fields": {
           "type": "array",
           "description": "Column definitions (name, label, type) to render",
-          "items": { "type": "object", "required": ["name"] }
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ]
+          }
         },
         "pageSize": {
           "type": "number",
@@ -545,7 +726,10 @@
         },
         "bulkActions": {
           "type": "array",
-          "default": ["delete", "export"],
+          "default": [
+            "delete",
+            "export"
+          ],
           "description": "List of actions (delete/export) shown when rows selected"
         },
         "confirmDelete": {
@@ -564,7 +748,10 @@
         },
         "viewMode": {
           "type": "string",
-          "values": ["dynamic", "custom"],
+          "values": [
+            "dynamic",
+            "custom"
+          ],
           "default": "dynamic",
           "description": "Determines whether the view modal reuses selected columns or custom field list"
         },
@@ -575,7 +762,16 @@
         "theme": {
           "type": "string",
           "default": "default",
-          "values": ["default", "minimal", "dark", "striped", "compact", "soft", "auto", "custom"],
+          "values": [
+            "default",
+            "minimal",
+            "dark",
+            "striped",
+            "compact",
+            "soft",
+            "auto",
+            "custom"
+          ],
           "description": "Preset theme; select \"custom\" to override tokens"
         },
         "themeTokens": {
@@ -621,15 +817,36 @@
         "props": {
           "entity": "contacts",
           "fields": [
-            { "name": "id", "label": "ID", "type": "text" },
-            { "name": "name", "label": "Name", "type": "text" },
-            { "name": "email", "label": "Email", "type": "text" },
-            { "name": "status", "label": "Status", "type": "text" }
+            {
+              "name": "id",
+              "label": "ID",
+              "type": "text"
+            },
+            {
+              "name": "name",
+              "label": "Name",
+              "type": "text"
+            },
+            {
+              "name": "email",
+              "label": "Email",
+              "type": "text"
+            },
+            {
+              "name": "status",
+              "label": "Status",
+              "type": "text"
+            }
           ],
           "pageSize": 25,
           "multiSelect": true,
-          "actions": ["view"],
-          "bulkActions": ["delete", "export"],
+          "actions": [
+            "view"
+          ],
+          "bulkActions": [
+            "delete",
+            "export"
+          ],
           "confirmDelete": true,
           "viewMode": "dynamic",
           "theme": "default"
@@ -756,15 +973,90 @@
           "ideaPromptPattern": "(what should i build|suggest (?:an|some)? app|ideas (?:for|to build)|decide what to build|choose (?:an|a)? app)"
         },
         "telemetry": {
-          "events": ["greeting", "idea", "decision"],
+          "events": [
+            "greeting",
+            "idea",
+            "decision"
+          ],
           "destination": "AppStore.recordTelemetry",
-          "payload": ["persona", "phase", "detail"]
+          "payload": [
+            "persona",
+            "phase",
+            "detail"
+          ]
         }
       },
       "children": false
+    },
+    {
+      "type": "table",
+      "name": "StudioTableLive",
+      "category": "Data Components",
+      "file": "src/runtime/renderer/StudioTableLive.ts",
+      "description": "Dynamic data table with filtering, pagination, and inline actions",
+      "baseClass": "LitElement",
+      "customElement": "studio-table-live",
+      "props": {
+        "entity": {
+          "type": "string",
+          "description": "Name of the entity to display"
+        },
+        "fields": {
+          "type": "array",
+          "description": "List of fields to display as columns"
+        },
+        "pageSize": {
+          "type": "number",
+          "default": 25,
+          "description": "Number of rows per page"
+        },
+        "actions": {
+          "type": "array",
+          "description": "List of inline actions (view, edit, delete)"
+        },
+        "bulkActions": {
+          "type": "array",
+          "description": "List of bulk actions (delete, export)"
+        },
+        "viewMode": {
+          "type": "string",
+          "values": [
+            "simple",
+            "dynamic"
+          ],
+          "default": "dynamic",
+          "description": "Render mode"
+        }
+      },
+      "children": false,
+      "example": {
+        "id": "table1",
+        "type": "table",
+        "props": {
+          "entity": "Customer",
+          "fields": [
+            {
+              "name": "name",
+              "label": "Full Name"
+            },
+            {
+              "name": "email",
+              "label": "Email Address"
+            }
+          ],
+          "pageSize": 10,
+          "actions": [
+            "view",
+            "edit"
+          ],
+          "bulkActions": [
+            "delete",
+            "export"
+          ]
+        }
+      }
     }
   ],
-
   "registrationPattern": {
     "file": "src/core/registry.ts",
     "method": "registerComponent(type, constructor)",
@@ -772,23 +1064,29 @@
     "bootstrap": "ensureCoreRegistered()",
     "example": "registerComponent('my-component', () => import('../components/MyComponent'));"
   },
-
   "componentStructure": {
     "baseElement": {
       "file": "src/core/BaseElement.ts",
       "pattern": "String-based HTML rendering",
-      "lifecycle": ["connectedCallback", "attributeChangedCallback", "render", "styles"],
+      "lifecycle": [
+        "connectedCallback",
+        "attributeChangedCallback",
+        "render",
+        "styles"
+      ],
       "usage": "Legacy - prefer Lit for new components"
     },
     "litElement": {
       "library": "Lit 3.1.4",
       "pattern": "Tagged template literals with html``",
       "reactivity": "@state() decorator",
-      "lifecycle": ["connectedCallback", "render"],
+      "lifecycle": [
+        "connectedCallback",
+        "render"
+      ],
       "usage": "Preferred for new components"
     }
   },
-
   "stylingPatterns": {
     "cssImports": "Always use ?inline suffix: import styles from './Component.css?inline';",
     "shadowDOM": true,

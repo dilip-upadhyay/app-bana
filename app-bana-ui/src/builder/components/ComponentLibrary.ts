@@ -44,16 +44,16 @@ const COMPONENT_TEMPLATES: ComponentTemplate[] = [
     label: 'Grid',
     icon: '⊞',
     category: 'Layout',
-    description: 'Drag to add 2×3 grid (configure after drop)',
+    description: 'Drag to add grid layout',
     template: {
-      type: 'container',
+      type: 'app-grid',
       props: {
-        className: 'grid',
-        style: 'display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;',
-        'data-grid-rows': '2',
-        'data-grid-cols': '3'
+        cols: 3, // Default cols (number)
+        rows: 2, // Default rows (number)
+        gap: '1rem',
+        className: 'grid'
       },
-      children: [] // Grid cells will be added dynamically when dropped
+      children: []
     },
     configurable: true
   },
@@ -169,7 +169,7 @@ const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 ];
 
-@customElement('studio-component-library')
+@customElement('appbana-component-library')
 export class ComponentLibrary extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
@@ -284,6 +284,7 @@ export class ComponentLibrary extends LitElement {
     const cellIds: string[] = [];
     const cellNodes: ComponentNode[] = [];
 
+    // Create cells for the configured rows/cols
     for (let i = 0; i < this.gridRows * this.gridCols; i++) {
       const cellId = `cell-${timestamp}-${i}`;
       cellIds.push(cellId);
@@ -292,23 +293,27 @@ export class ComponentLibrary extends LitElement {
         type: 'container',
         props: {
           className: 'grid-cell',
-          style: `min-height: 100px; border: 2px dashed #d1d5db; border-radius: 4px; padding: 0.5rem; background: #f9fafb; display: flex; flex-direction: column; gap: 0.5rem;`,
+          slot: `cell-${i}`, // CRITICAL: Assign to named slot in app-grid
+          // Removed inline styles (border, min-height, bg) to let app-grid CSS handle it
+          style: `display: flex; flex-direction: column;`,
           'data-cell-index': String(i)
         },
         children: []
       });
     }
 
-    // Create configured grid template with child IDs
-    const gridTemplate: Partial<ComponentNode> = {
+    // Create configured grid template using app-grid
+    const gridTemplate: Partial<ComponentNode> & { nestedNodes?: ComponentNode[] } = {
       ...this.pendingGridTemplate.template,
+      type: 'app-grid',
       props: {
         ...this.pendingGridTemplate.template.props,
-        style: `display: grid; grid-template-columns: repeat(${this.gridCols}, 1fr); gap: 1rem;`,
-        'data-grid-rows': String(this.gridRows),
-        'data-grid-cols': String(this.gridCols)
+        cols: this.gridCols,
+        rows: this.gridRows,
+        gap: '1rem'
       },
-      children: cellIds
+      children: cellIds,
+      nestedNodes: cellNodes // Pass the actual cell nodes to receive in LivePreview
     };
 
     // Dispatch event with grid and all cells

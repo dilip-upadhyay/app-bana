@@ -1,6 +1,6 @@
 # 1. ARCHITECTURE & SYSTEM DESIGN
 
-**Last Updated:** October 31, 2025  
+**Last Updated:** December 28, 2025 (Template Preview Enhancement)  
 **Status:** Active - Primary Reference for System Design  
 **Audience:** Architects, Tech Leads, Developers
 
@@ -68,7 +68,7 @@ The **Studio Builder** is the visual application development environment where u
 |---------|--------|----------------|-----|
 | **App Has Name** | ✅ Complete | AppMeta with name, description, version, author, timestamps | None |
 | **App Has Schema** | ⚠️ Partial | Schema builder exists but not app-scoped | Need to link schemas to apps |
-| **App Has Pages** | ✅ Complete | Full page management with 7 templates, 2-step wizard | None |
+| **App Has Pages** | ✅ Complete | Full page management with 8 templates, 2-step wizard | None |
 | **App Has Navigation** | ⚠️ Partial | Runtime nav works, no design UI | Need navigation builder UI |
 | **Page Builder** | ✅ Complete | 3-panel drag-drop builder with live preview | None |
 | **Forms in Pages** | ✅ Complete | All form components available (input, dropdown, etc.) | None |
@@ -186,18 +186,26 @@ localStorage['appbana.current.app'] = 'app1';
 **Features:**
 - 2-step page creation wizard:
   - Step 1: Basic info (name, path)
-  - Step 2: Template selection (7 templates)
+  - Step 2: Template selection with **real HTML preview** (8 templates)
 - Page tabs for quick switching
-- 7 pre-built templates:
+- 8 pre-built templates:
   - **Blank:** Empty canvas
   - **Login:** Email/password form with submit
+  - **Sign Up:** 45/55 split layout with brand panel, feature list, two-column name fields
   - **Dashboard:** Header + sidebar + 3 KPI cards
   - **Contact:** Name/email/message form
   - **Landing:** Hero + features + CTA + footer
   - **Profile:** Avatar + bio + stats grid
   - **Data Table:** Search + filters + table + pagination
+- **Real-time preview rendering:**
+  - Renders actual HTML components from template metadata
+  - 40% scale factor for compact display
+  - Supports containers, text, buttons, inputs, forms
+  - Custom Builder: 2×2 checkbox grid (Nav/Side, Main/Footer)
+  - Preview updates instantly when switching templates
 
 **Time Savings:** 93% reduction (30 min → 2 min per page)
+**UX Improvement:** See actual content before selecting template
 
 #### 3. BuilderCanvas (`src/builder/components/BuilderCanvas.ts`)
 **Purpose:** Visual page editor with drag-drop
@@ -254,6 +262,65 @@ removePage(appId: string, pageId: string): Promise<void>
 loadPage(appId: string, pageId: string): Promise<PageMeta | undefined>
 savePage(appId: string, page: PageMeta): Promise<void>
 ```
+
+### Template System Architecture
+
+**Purpose:** Provide pre-built page layouts to accelerate development
+
+**Backend (Java):**
+- **TemplateService.java** - Template management service
+  - Loads system templates from `/resources/page-templates/*.json`
+  - Manages user-created templates in `data/user-templates/`
+  - Provides CRUD operations for templates
+- **AppRoutes.java** - REST API endpoints
+  - `GET /api/templates` - List all templates (system + user)
+  - `GET /api/templates/{id}` - Get specific template
+  - `POST /api/templates` - Create user template
+  - `PUT /api/templates/{id}` - Update user template
+  - `DELETE /api/templates/{id}` - Delete user template
+
+**Frontend (TypeScript):**
+- **TemplateStore.ts** - Template state management
+  - Fetches templates from `/api/templates` on init
+  - Caches templates locally for performance
+  - Provides `loadTemplates()`, `getTemplate(id)`, `createTemplate()` methods
+- **PageManager.ts** - Template selection UI with real HTML preview
+  - Displays visual template gallery in step 2 of page creation wizard (5-column grid)
+  - Shows template name, icon, and description
+  - **Real-time HTML preview:** Renders actual template components at 40% scale
+  - Preview types:
+    - **Predefined templates:** Renders actual HTML (forms, buttons, inputs, containers)
+    - **Custom Builder:** Shows layout diagram with 2×2 checkbox grid
+  - Preview features:
+    - Recursive node rendering from template metadata
+    - Automatic style scaling (px/rem values × 0.4)
+    - Scrollable preview window (200-300px height)
+    - Instant updates when switching templates
+  - Applies selected template to create page structure
+
+**Template Structure:**
+```json
+{
+  "id": "signup",
+  "name": "Sign Up Page",
+  "description": "Modern split-screen registration...",
+  "category": "auth",
+  "isSystem": true,
+  "nodes": [/* Component node tree */]
+}
+```
+
+**System Templates (8):**
+1. **blank** - Empty canvas
+2. **login** - Login form
+3. **signup** - Registration form (45/55 split, updated Dec 2025)
+4. **dashboard** - Admin dashboard with sidebar
+5. **landing** - Marketing landing page
+6. **contact** - Contact form
+7. **profile** - User profile page
+8. **data-table** - Data grid with search/filters
+
+**Documentation:** See `/resources/page-templates/README.md` for complete guide
 
 ### Architecture Gaps & Roadmap
 
@@ -352,7 +419,7 @@ export interface NavigationItem {
 
 **Current (October 2025):**
 - ✅ Can create multi-page apps visually
-- ✅ 7 pre-built templates available
+- ✅ 8 pre-built templates available
 - ✅ 93% time savings for page creation
 - ✅ Full drag-drop page builder
 - ✅ Preview with app context

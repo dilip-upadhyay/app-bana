@@ -16,7 +16,7 @@ import java.util.*;
 import java.util.function.BiConsumer;
 
 public class Router {
-    private static final ObjectMapper M = new ObjectMapper();
+    private static final ObjectMapper M = new ObjectMapper().findAndRegisterModules();
 
     private static class Route {
         final String method;
@@ -30,6 +30,16 @@ public class Router {
     }
 
     private final List<Route> routes = new ArrayList<>();
+    private final List<BiConsumer<HttpRequest, HttpResponse>> middlewares = new ArrayList<>();
+
+    /**
+     * Add middleware that runs before all route handlers.
+     * Middleware can short-circuit by calling response methods.
+     */
+    public Router use(BiConsumer<HttpRequest, HttpResponse> middleware) {
+        middlewares.add(middleware);
+        return this;
+    }
 
     public Router get(String path, BiConsumer<HttpRequest,HttpResponse> h) { routes.add(new Route("GET", path, h)); return this; }
     public Router post(String path, BiConsumer<HttpRequest,HttpResponse> h) { routes.add(new Route("POST", path, h)); return this; }
@@ -41,7 +51,7 @@ public class Router {
         Headers headers = ex.getResponseHeaders();
         headers.add("Access-Control-Allow-Origin", "*");
         headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-Token, X-Session-Id, X-CSRF-Token");
         
         // Handle preflight OPTIONS requests
         if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
@@ -53,12 +63,29 @@ public class Router {
         URI uri = ex.getRequestURI();
         String path = uri.getPath();
         List<String> req = split(path);
+        
+        // Run middlewares first
+        HttpRequest reqW = new HttpRequest(ex, new HashMap<>(), parseQuery(uri.getQuery()));
+        HttpResponse resW = new HttpResponse(ex);
+        for (BiConsumer<HttpRequest, HttpResponse> middleware : middlewares) {
+            try {
+                middleware.accept(reqW, resW);
+                // If response was already sent by middleware (e.g., 429 rate limit), stop here
+                if (resW.isSent()) {
+                    return;
+                }
+            } catch (Exception e) {
+                sendError(ex, 500, e.getMessage());
+                return;
+            }
+        }
+        
+        // Route to handler
         for (Route r : routes) {
             if (!r.method.equals(method)) continue;
             Map<String,String> params = new HashMap<>();
             if (match(r.parts, req, params)) {
-                HttpRequest reqW = new HttpRequest(ex, params, parseQuery(uri.getQuery()));
-                HttpResponse resW = new HttpResponse(ex);
+                reqW = new HttpRequest(ex, params, parseQuery(uri.getQuery()));
                 try {
                     r.handler.accept(reqW, resW);
                 } catch (Exception e) {
@@ -126,8 +153,16 @@ public class Router {
     }
 
     private static void sendError(HttpExchange exchange, int status, String msg) throws IOException {
+        String method = exchange.getRequestMethod();
         byte[] b = ("{\"error\":\"" + (msg==null?"":msg.replace('"','\'')) + "\"}").getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
+        
+        // HEAD requests should not have a response body
+        if ("HEAD".equalsIgnoreCase(method)) {
+            exchange.sendResponseHeaders(status, -1);
+            return;
+        }
+        
         exchange.sendResponseHeaders(status, b.length);
         try (OutputStream os = exchange.getResponseBody()) { os.write(b); }
     }
@@ -145,6 +180,8 @@ public class Router {
         private final HttpExchange ex;
         private final Map<String,String> pathParams;
         private final Map<String,String> query;
+        private final Map<String,Object> attributes = new HashMap<>();
+        
         public HttpRequest(HttpExchange ex, Map<String,String> pathParams, Map<String,String> query){ this.ex=ex; this.pathParams=pathParams; this.query=query; }
         public String method(){ return ex.getRequestMethod(); }
         public String path(){ return ex.getRequestURI().getPath(); }
@@ -153,6 +190,11 @@ public class Router {
         public Map<String,String> query(){ return query; }
         public String query(String k){ return query.get(k); }
         public String header(String name){ return ex.getRequestHeaders().getFirst(name); }
+        
+        // Attribute support for middleware context passing
+        public void setAttribute(String key, Object value) { attributes.put(key, value); }
+        public Object getAttribute(String key) { return attributes.get(key); }
+        
         public <T> T readJson(TypeReference<T> typ) {
             try (InputStream is = ex.getRequestBody()) {
                 return M.readValue(is, typ);
@@ -189,13 +231,22 @@ public class Router {
 
     public static class HttpResponse {
         private final HttpExchange ex;
+        private boolean sent = false;
         public HttpResponse(HttpExchange ex){ this.ex = ex; }
+        public boolean isSent() { return sent; }
+        
+        // Header support for middleware
+        public void setHeader(String name, String value) {
+            ex.getResponseHeaders().set(name, value);
+        }
+        
         public void json(int status, Object obj) {
             try {
                 byte[] b = M.writeValueAsBytes(obj);
                 ex.getResponseHeaders().set("Content-Type", "application/json");
                 ex.sendResponseHeaders(status, b.length);
                 try (OutputStream os = ex.getResponseBody()) { os.write(b); }
+                sent = true;
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }
@@ -206,6 +257,7 @@ public class Router {
                 ex.getResponseHeaders().set("Content-Type", contentType==null?"text/plain; charset=utf-8":contentType);
                 ex.sendResponseHeaders(status, b.length);
                 try (OutputStream os = ex.getResponseBody()) { os.write(b); }
+                sent = true;
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }
@@ -218,6 +270,7 @@ public class Router {
                 try (OutputStream os = ex.getResponseBody()) {
                     os.write(body);
                 }
+                sent = true;
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }

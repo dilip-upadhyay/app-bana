@@ -33,10 +33,10 @@ CREATE INDEX IF NOT EXISTS idx_permission_hierarchy_depth ON permission_hierarch
 
 -- Add wildcard permissions for resources that already have specific actions
 INSERT INTO permission (id, name, resource, action, description) VALUES
-(RANDOM_UUID(), 'user:*', 'user', '*', 'All user operations'),
-(RANDOM_UUID(), 'role:*', 'role', '*', 'All role operations'),
-(RANDOM_UUID(), 'permission:*', 'permission', '*', 'All permission operations'),
-(RANDOM_UUID(), 'app:*', 'app', '*', 'All app operations');
+(gen_random_uuid(), 'user:*', 'user', '*', 'All user operations'),
+(gen_random_uuid(), 'role:*', 'role', '*', 'All role operations'),
+(gen_random_uuid(), 'permission:*', 'permission', '*', 'All permission operations'),
+(gen_random_uuid(), 'app:*', 'app', '*', 'All app operations');
 
 -- ============================================================================
 -- Step 2: Seed Data - Permission Hierarchy for Existing Permissions
@@ -46,7 +46,7 @@ INSERT INTO permission (id, name, resource, action, description) VALUES
 -- user:* → user:read, user:create, user:update, user:delete
 INSERT INTO permission_hierarchy (id, parent_permission_id, child_permission_id, depth)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     (SELECT id FROM permission WHERE name = 'user:*'),
     child.id,
     1
@@ -57,7 +57,7 @@ WHERE child.name IN ('user:read', 'user:create', 'user:update', 'user:delete');
 -- role:* → role:read, role:create, role:update, role:delete
 INSERT INTO permission_hierarchy (id, parent_permission_id, child_permission_id, depth)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     (SELECT id FROM permission WHERE name = 'role:*'),
     child.id,
     1
@@ -68,7 +68,7 @@ WHERE child.name IN ('role:read', 'role:create', 'role:update', 'role:delete');
 -- permission:* → permission:read, permission:create, permission:update, permission:delete
 INSERT INTO permission_hierarchy (id, parent_permission_id, child_permission_id, depth)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     (SELECT id FROM permission WHERE name = 'permission:*'),
     child.id,
     1
@@ -79,7 +79,7 @@ WHERE child.name IN ('permission:read', 'permission:create', 'permission:update'
 -- app:* → app:read, app:create, app:update, app:delete
 INSERT INTO permission_hierarchy (id, parent_permission_id, child_permission_id, depth)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     (SELECT id FROM permission WHERE name = 'app:*'),
     child.id,
     1
@@ -92,26 +92,26 @@ WHERE child.name IN ('app:read', 'app:create', 'app:update', 'app:delete');
 
 -- Project wildcard permissions
 INSERT INTO permission (id, name, description, resource, action) VALUES
-(RANDOM_UUID(), 'project:*', 'All project operations', 'project', '*'),
-(RANDOM_UUID(), 'project:read', 'View projects', 'project', 'read'),
-(RANDOM_UUID(), 'project:create', 'Create projects', 'project', 'create'),
-(RANDOM_UUID(), 'project:update', 'Update projects', 'project', 'update'),
-(RANDOM_UUID(), 'project:delete', 'Delete projects', 'project', 'delete');
+(gen_random_uuid(), 'project:*', 'All project operations', 'project', '*'),
+(gen_random_uuid(), 'project:read', 'View projects', 'project', 'read'),
+(gen_random_uuid(), 'project:create', 'Create projects', 'project', 'create'),
+(gen_random_uuid(), 'project:update', 'Update projects', 'project', 'update'),
+(gen_random_uuid(), 'project:delete', 'Delete projects', 'project', 'delete');
 
 -- Task wildcard permissions
 INSERT INTO permission (id, name, description, resource, action) VALUES
-(RANDOM_UUID(), 'task:*', 'All task operations', 'task', '*'),
-(RANDOM_UUID(), 'task:read', 'View tasks', 'task', 'read'),
-(RANDOM_UUID(), 'task:create', 'Create tasks', 'task', 'create'),
-(RANDOM_UUID(), 'task:update', 'Update tasks', 'task', 'update'),
-(RANDOM_UUID(), 'task:delete', 'Delete tasks', 'task', 'delete');
+(gen_random_uuid(), 'task:*', 'All task operations', 'task', '*'),
+(gen_random_uuid(), 'task:read', 'View tasks', 'task', 'read'),
+(gen_random_uuid(), 'task:create', 'Create tasks', 'task', 'create'),
+(gen_random_uuid(), 'task:update', 'Update tasks', 'task', 'update'),
+(gen_random_uuid(), 'task:delete', 'Delete tasks', 'task', 'delete');
 
 -- Report wildcard permissions
 INSERT INTO permission (id, name, description, resource, action) VALUES
-(RANDOM_UUID(), 'report:*', 'All report operations', 'report', '*'),
-(RANDOM_UUID(), 'report:read', 'View reports', 'report', 'read'),
-(RANDOM_UUID(), 'report:create', 'Create reports', 'report', 'create'),
-(RANDOM_UUID(), 'report:export', 'Export reports', 'report', 'export');
+(gen_random_uuid(), 'report:*', 'All report operations', 'report', '*'),
+(gen_random_uuid(), 'report:read', 'View reports', 'report', 'read'),
+(gen_random_uuid(), 'report:create', 'Create reports', 'report', 'create'),
+(gen_random_uuid(), 'report:export', 'Export reports', 'report', 'export');
 
 -- ============================================================================
 -- Step 4: Build Hierarchy for New Permissions
@@ -120,7 +120,7 @@ INSERT INTO permission (id, name, description, resource, action) VALUES
 -- Project hierarchy: project:* → project:read, create, update, delete
 INSERT INTO permission_hierarchy (id, parent_permission_id, child_permission_id, depth)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     (SELECT id FROM permission WHERE name = 'project:*'),
     child.id,
     1
@@ -130,7 +130,7 @@ WHERE child.name IN ('project:read', 'project:create', 'project:update', 'projec
 -- Task hierarchy: task:* → task:read, create, update, delete
 INSERT INTO permission_hierarchy (id, parent_permission_id, child_permission_id, depth)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     (SELECT id FROM permission WHERE name = 'task:*'),
     child.id,
     1
@@ -140,7 +140,7 @@ WHERE child.name IN ('task:read', 'task:create', 'task:update', 'task:delete');
 -- Report hierarchy: report:* → report:read, create, export
 INSERT INTO permission_hierarchy (id, parent_permission_id, child_permission_id, depth)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     (SELECT id FROM permission WHERE name = 'report:*'),
     child.id,
     1
@@ -153,11 +153,11 @@ WHERE child.name IN ('report:read', 'report:create', 'report:export');
 
 -- project:write → project:create, project:update
 INSERT INTO permission (id, name, description, resource, action) VALUES
-(RANDOM_UUID(), 'project:write', 'Create and update projects', 'project', 'write');
+(gen_random_uuid(), 'project:write', 'Create and update projects', 'project', 'write');
 
 INSERT INTO permission_hierarchy (id, parent_permission_id, child_permission_id, depth)
 SELECT 
-    RANDOM_UUID(),
+    gen_random_uuid(),
     (SELECT id FROM permission WHERE name = 'project:write'),
     child.id,
     1
@@ -167,7 +167,7 @@ WHERE child.name IN ('project:create', 'project:update');
 -- project:* now includes project:write (which includes create + update)
 INSERT INTO permission_hierarchy (id, parent_permission_id, child_permission_id, depth)
 VALUES (
-    RANDOM_UUID(),
+    gen_random_uuid(),
     (SELECT id FROM permission WHERE name = 'project:*'),
     (SELECT id FROM permission WHERE name = 'project:write'),
     1
@@ -177,7 +177,7 @@ VALUES (
 -- View: v_permission_tree
 -- Description: Flattened view of all permissions with their inherited children
 -- ============================================================================
-CREATE VIEW IF NOT EXISTS v_permission_tree AS
+CREATE OR REPLACE VIEW v_permission_tree AS
 SELECT 
     parent.id AS parent_id,
     parent.name AS parent_name,
@@ -193,7 +193,7 @@ ORDER BY parent.name, ph.depth, child.name;
 -- View: v_effective_user_permissions_with_hierarchy
 -- Description: User permissions including inherited permissions from hierarchy
 -- ============================================================================
-CREATE VIEW IF NOT EXISTS v_effective_user_permissions_with_hierarchy AS
+CREATE OR REPLACE VIEW v_effective_user_permissions_with_hierarchy AS
 -- Direct permissions from roles
 SELECT DISTINCT
     ur.user_id,

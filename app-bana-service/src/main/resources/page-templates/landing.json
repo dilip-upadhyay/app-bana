@@ -1,0 +1,207 @@
+{
+    "id": "landing",
+    "name": "Landing Page",
+    "description": "Marketing landing page with hero section and features",
+    "category": "landing",
+    "isSystem": true,
+    "nodes": [
+        {
+            "id": "root",
+            "type": "container",
+            "props": {
+                "style": "min-height: 100vh;"
+            },
+            "children": [
+                "hero-1",
+                "features-1",
+                "footer-1"
+            ]
+        },
+        {
+            "id": "hero-1",
+            "type": "container",
+            "props": {
+                "style": "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 6rem 2rem; text-align: center;"
+            },
+            "children": [
+                "hero-title-1",
+                "hero-subtitle-1",
+                "hero-cta-1"
+            ]
+        },
+        {
+            "id": "hero-title-1",
+            "type": "text",
+            "props": {
+                "tag": "h1",
+                "text": "🚀 Build Amazing Apps Fast",
+                "style": "margin: 0 0 1rem 0; font-size: 48px; font-weight: 700;"
+            }
+        },
+        {
+            "id": "hero-subtitle-1",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "The no-code platform for enterprise applications",
+                "style": "margin: 0 0 2rem 0; font-size: 20px;"
+            }
+        },
+        {
+            "id": "hero-cta-1",
+            "type": "button",
+            "props": {
+                "text": "Get Started Free →",
+                "style": "padding: 1rem 2.5rem; background: white; color: #667eea; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer;"
+            }
+        },
+        {
+            "id": "features-1",
+            "type": "container",
+            "props": {
+                "style": "padding: 5rem 2rem; background: #f9fafb; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; max-width: 1200px; margin: 0 auto;"
+            },
+            "children": [
+                "feature-1-1",
+                "feature-2-1",
+                "feature-3-1"
+            ]
+        },
+        {
+            "id": "feature-1-1",
+            "type": "container",
+            "props": {
+                "style": "background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center;"
+            },
+            "children": [
+                "feature-1-1-icon",
+                "feature-1-1-title",
+                "feature-1-1-desc"
+            ]
+        },
+        {
+            "id": "feature-1-1-icon",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "⚡",
+                "style": "font-size: 48px; margin-bottom: 1rem;"
+            }
+        },
+        {
+            "id": "feature-1-1-title",
+            "type": "text",
+            "props": {
+                "tag": "h3",
+                "text": "Lightning Fast",
+                "style": "margin: 0 0 0.75rem 0; font-size: 24px; font-weight: 600;"
+            }
+        },
+        {
+            "id": "feature-1-1-desc",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Build 10x faster",
+                "style": "margin: 0; font-size: 16px; color: #6b7280;"
+            }
+        },
+        {
+            "id": "feature-2-1",
+            "type": "container",
+            "props": {
+                "style": "background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center;"
+            },
+            "children": [
+                "feature-2-1-icon",
+                "feature-2-1-title",
+                "feature-2-1-desc"
+            ]
+        },
+        {
+            "id": "feature-2-1-icon",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "🔒",
+                "style": "font-size: 48px; margin-bottom: 1rem;"
+            }
+        },
+        {
+            "id": "feature-2-1-title",
+            "type": "text",
+            "props": {
+                "tag": "h3",
+                "text": "Secure by Default",
+                "style": "margin: 0 0 0.75rem 0; font-size: 24px; font-weight: 600;"
+            }
+        },
+        {
+            "id": "feature-2-1-desc",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Enterprise-grade security",
+                "style": "margin: 0; font-size: 16px; color: #6b7280;"
+            }
+        },
+        {
+            "id": "feature-3-1",
+            "type": "container",
+            "props": {
+                "style": "background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center;"
+            },
+            "children": [
+                "feature-3-1-icon",
+                "feature-3-1-title",
+                "feature-3-1-desc"
+            ]
+        },
+        {
+            "id": "feature-3-1-icon",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "🎨",
+                "style": "font-size: 48px; margin-bottom: 1rem;"
+            }
+        },
+        {
+            "id": "feature-3-1-title",
+            "type": "text",
+            "props": {
+                "tag": "h3",
+                "text": "Beautiful Design",
+                "style": "margin: 0 0 0.75rem 0; font-size: 24px; font-weight: 600;"
+            }
+        },
+        {
+            "id": "feature-3-1-desc",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Professional templates",
+                "style": "margin: 0; font-size: 16px; color: #6b7280;"
+            }
+        },
+        {
+            "id": "footer-1",
+            "type": "container",
+            "props": {
+                "style": "padding: 2rem; background: #1f2937; color: white; text-align: center;"
+            },
+            "children": [
+                "footer-text-1"
+            ]
+        },
+        {
+            "id": "footer-text-1",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "© 2025 Your Company",
+                "style": "margin: 0; font-size: 14px;"
+            }
+        }
+    ]
+}

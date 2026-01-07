@@ -29,13 +29,18 @@ export function setupApiClient(options: {
     onError,
   } = options;
 
+  console.log('[API Setup] Initializing API client with interceptors...');
+
   // Add request ID to all requests
   apiClient.interceptor.use(requestIdInterceptor());
 
   // Add authentication token from localStorage
+  console.log('[API Setup] Registering auth interceptor');
   apiClient.interceptor.use(
     authInterceptor(() => {
-      return localStorage.getItem('appbana_token');
+      const token = localStorage.getItem('appbana_token');
+      console.log('[API Setup] Token provider called, token exists:', !!token);
+      return token;
     })
   );
 

@@ -1,0 +1,400 @@
+{
+    "id": "signup",
+    "name": "Sign Up Page",
+    "description": "Perfect compact - Material Design inputs, zero redundancy, all visible",
+    "category": "auth",
+    "isSystem": true,
+    "nodes": [
+        {
+            "id": "root",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; min-height: 100vh; width: 100%; margin: 0; padding: 0; box-sizing: border-box; background: #f7fafc;"
+            },
+            "children": [
+                "brand-banner-sign",
+                "form-container-sign"
+            ]
+        },
+        {
+            "id": "brand-banner-sign",
+            "type": "container",
+            "props": {
+                "style": "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.5rem 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"
+            },
+            "children": [
+                "brand-banner-content"
+            ]
+        },
+        {
+            "id": "brand-banner-content",
+            "type": "container",
+            "props": {
+                "style": "max-width: 100%; width: 100%; margin: 0 auto; display: flex; justify-content: center; align-items: center; gap: 0.75rem; flex-wrap: nowrap;"
+            },
+            "children": [
+                "brand-title-compact",
+                "feature-badge-1",
+                "feature-badge-2",
+                "feature-badge-3"
+            ]
+        },
+        {
+            "id": "brand-title-compact",
+            "type": "text",
+            "props": {
+                "tag": "h1",
+                "text": "AppBana",
+                "style": "font-size: 1.1rem; font-weight: 700; margin: 0; line-height: 1; white-space: nowrap;"
+            }
+        },
+        {
+            "id": "feature-badge-1",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "✓ No-code",
+                "style": "font-size: 0.7rem; padding: 0.2rem 0.5rem; background: rgba(255,255,255,0.2); border-radius: 10px; white-space: nowrap;"
+            }
+        },
+        {
+            "id": "feature-badge-2",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "✓ Workflows",
+                "style": "font-size: 0.7rem; padding: 0.2rem 0.5rem; background: rgba(255,255,255,0.2); border-radius: 10px; white-space: nowrap;"
+            }
+        },
+        {
+            "id": "feature-badge-3",
+            "type": "text",
+            "props": {
+                "tag": "span",
+                "text": "✓ Deploy",
+                "style": "font-size: 0.7rem; padding: 0.2rem 0.5rem; background: rgba(255,255,255,0.2); border-radius: 10px; white-space: nowrap;"
+            }
+        },
+        {
+            "id": "form-container-sign",
+            "type": "container",
+            "props": {
+                "style": "flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 0.75rem 1rem;"
+            },
+            "children": [
+                "form-card-sign"
+            ]
+        },
+        {
+            "id": "form-card-sign",
+            "type": "container",
+            "props": {
+                "style": "width: 100%; max-width: 900px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); padding: 1rem 1.5rem;"
+            },
+            "children": [
+                "signup-header-compact",
+                "form-sign-compact"
+            ]
+        },
+        {
+            "id": "signup-header-compact",
+            "type": "container",
+            "props": {
+                "style": "margin-bottom: 0.5rem; text-align: center;"
+            },
+            "children": [
+                "title-compact",
+                "subtitle-compact"
+            ]
+        },
+        {
+            "id": "title-compact",
+            "type": "text",
+            "props": {
+                "tag": "h2",
+                "text": "Create Account",
+                "style": "margin: 0 0 0.2rem 0; font-size: 1.25rem; font-weight: 700; color: #1a202c;"
+            }
+        },
+        {
+            "id": "subtitle-compact",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Already have an account? <a href=\"/login\" style=\"color: #667eea; text-decoration: none; font-weight: 600;\">Sign in</a>",
+                "style": "margin: 0; font-size: 0.75rem; color: #718096;"
+            }
+        },
+        {
+            "id": "form-sign-compact",
+            "type": "container",
+            "props": {
+                "tag": "form",
+                "style": "display: flex; flex-direction: column; gap: 0.5rem;"
+            },
+            "children": [
+                "name-row-compact",
+                "email-row-compact",
+                "password-row-compact",
+                "submit-compact"
+            ]
+        },
+        {
+            "id": "name-row-compact",
+            "type": "container",
+            "props": {
+                "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
+            },
+            "children": [
+                "firstname-group-compact",
+                "lastname-group-compact"
+            ]
+        },
+        {
+            "id": "firstname-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "firstname-label-compact",
+                "firstname-input-compact"
+            ]
+        },
+        {
+            "id": "firstname-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "First Name",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
+            }
+        },
+        {
+            "id": "firstname-input-compact",
+            "type": "input",
+            "props": {
+                "label": "First Name",
+                "name": "firstName",
+                "type": "text",
+                "placeholder": "First Name *",
+                "value": "",
+                "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
+            }
+        },
+        {
+            "id": "lastname-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "lastname-label-compact",
+                "lastname-input-compact"
+            ]
+        },
+        {
+            "id": "lastname-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Last Name",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
+            }
+        },
+        {
+            "id": "lastname-input-compact",
+            "type": "input",
+            "props": {
+                "label": "Last Name",
+                "name": "lastName",
+                "type": "text",
+                "placeholder": "Last Name *",
+                "value": "",
+                "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
+            }
+        },
+        {
+            "id": "email-row-compact",
+            "type": "container",
+            "props": {
+                "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
+            },
+            "children": [
+                "email-group-compact",
+                "phone-group-compact"
+            ]
+        },
+        {
+            "id": "email-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "email-label-compact",
+                "email-input-compact"
+            ]
+        },
+        {
+            "id": "email-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Email",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
+            }
+        },
+        {
+            "id": "email-input-compact",
+            "type": "input",
+            "props": {
+                "label": "Email",
+                "name": "email",
+                "type": "email",
+                "placeholder": "Email *",
+                "value": "",
+                "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "We'll never share your email",
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
+            }
+        },
+        {
+            "id": "phone-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "phone-label-compact",
+                "phone-input-compact"
+            ]
+        },
+        {
+            "id": "phone-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Phone (optional)",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
+            }
+        },
+        {
+            "id": "phone-input-compact",
+            "type": "input",
+            "props": {
+                "label": "Phone",
+                "name": "phone",
+                "type": "tel",
+                "placeholder": "Phone (optional)",
+                "value": "",
+                "required": false,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
+            }
+        },
+        {
+            "id": "password-row-compact",
+            "type": "container",
+            "props": {
+                "style": "display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
+            },
+            "children": [
+                "password-group-compact",
+                "confirm-group-compact"
+            ]
+        },
+        {
+            "id": "password-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "password-label-compact",
+                "password-input-compact"
+            ]
+        },
+        {
+            "id": "password-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Password",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
+            }
+        },
+        {
+            "id": "password-input-compact",
+            "type": "input",
+            "props": {
+                "label": "Password",
+                "name": "password",
+                "type": "password",
+                "placeholder": "Password *",
+                "value": "",
+                "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "Min 8 characters",
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
+            }
+        },
+        {
+            "id": "confirm-group-compact",
+            "type": "container",
+            "props": {
+                "style": "display: flex; flex-direction: column; gap: 0.25rem;"
+            },
+            "children": [
+                "confirm-label-compact",
+                "confirm-input-compact"
+            ]
+        },
+        {
+            "id": "confirm-label-compact",
+            "type": "text",
+            "props": {
+                "tag": "label",
+                "text": "Confirm Password",
+                "style": "font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0;"
+            }
+        },
+        {
+            "id": "confirm-input-compact",
+            "type": "input",
+            "props": {
+                "label": "Confirm Password",
+                "name": "confirmPassword",
+                "type": "password",
+                "placeholder": "Confirm Password *",
+                "value": "",
+                "required": true,
+                "disabled": false,
+                "error": "",
+                "helperText": "",
+                "style": "padding: 0.65rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem; font-family: inherit; transition: all 0.2s; width: 100%; box-sizing: border-box;"
+            }
+        },
+        {
+            "id": "submit-compact",
+            "type": "button",
+            "props": {
+                "label": "Sign Up",
+                "style": "width: 100%; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 0.25rem;"
+            }
+        }
+    ]
+}

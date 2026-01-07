@@ -107,6 +107,15 @@ public class JdbcManager {
         HikariDataSource pool = ensurePool(ds);
         return pool.getConnection();
     }
+    
+    public static javax.sql.DataSource getDataSource() {
+        return getDataSource(null);
+    }
+    
+    public static javax.sql.DataSource getDataSource(String datasourceName) {
+        DatasourceConfig ds = findDatasource(datasourceName, ConfigManager.getConfig());
+        return ensurePool(ds);
+    }
 
     private static String detectDialect(DatasourceConfig ds) {
         if (ds == null) ds = resolveActive(ConfigManager.getConfig());

@@ -8,7 +8,9 @@
 
 import type { AppMeta, AppWithPages, CreateAppRequest, UpdateAppRequest, AppListItem } from '../../models/app-metadata';
 import type { PageMeta } from '../../models/metadata';
+import type { EntityMeta } from '../../models/entity-metadata';
 import { apiClient } from '../../core/api-client';
+import { AuthService } from '../../pages/auth/auth-service';
 
 export type ConversationTelemetryType = 'greeting' | 'idea' | 'decision' | 'smallTalk';
 
@@ -43,7 +45,8 @@ export class AppStore {
 
     try {
       // Load apps list from backend
-      const response = await apiClient.get<{apps: AppListItem[]}>('/apps');
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+      const response = await apiClient.get<{ apps: AppListItem[] }>(`/appbana-studio/${tenantId}/apps`);
       const appsList = response.apps || [];
       // Populate apps map with summary data
       this.apps.clear();
@@ -67,6 +70,7 @@ export class AppStore {
       const currentId = localStorage.getItem(CURRENT_APP_KEY);
       if (currentId && this.apps.has(currentId)) {
         this.currentAppId = currentId;
+        this.notify(); // FIX: Notify listeners (AppManager) that session was restored
         // Load full app data for current app
         await this.loadFullApp(currentId);
       }
@@ -84,8 +88,10 @@ export class AppStore {
    */
   private async loadFullApp(appId: string): Promise<void> {
     try {
-      const fullApp = await apiClient.get<AppMeta>(`/apps/${appId}`);
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+      const fullApp = await apiClient.get<AppMeta>(`/appbana-studio/${tenantId}/apps/${appId}`);
       this.apps.set(appId, fullApp);
+      this.notify(); // FIX: Notify listeners that full app data is loaded (pages + entities)
     } catch (error) {
       console.error(`[AppStore] Failed to load full app ${appId}:`, error);
     }
@@ -99,7 +105,7 @@ export class AppStore {
     try {
       const STORAGE_KEY_PREFIX = 'appbana.apps.';
       const APPS_LIST_KEY = 'appbana.apps.list';
-      
+
       const appsList = localStorage.getItem(APPS_LIST_KEY);
       if (appsList) {
         const appIds: string[] = JSON.parse(appsList);
@@ -175,7 +181,7 @@ export class AppStore {
    */
   async createApp(request: CreateAppRequest): Promise<AppMeta> {
     this.setLoading(true);
-    
+
     try {
       const id = this.generateAppId(request.name);
       const now = Date.now();
@@ -200,7 +206,8 @@ export class AppStore {
       };
 
       // Save to backend
-      const created = await apiClient.post<AppMeta>('/apps', app);
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+      const created = await apiClient.post<AppMeta>(`/appbana-studio/${tenantId}/apps`, app);
 
       // Update local cache
       this.apps.set(created.id, created);
@@ -234,7 +241,8 @@ export class AppStore {
     };
 
     // Save to backend
-    const saved = await apiClient.put<AppMeta>(`/apps/${appId}`, updatedApp);
+    const tenantId = AuthService.getUser()?.tenantId || 'default';
+    const saved = await apiClient.put<AppMeta>(`/appbana-studio/${tenantId}/apps/${appId}`, updatedApp);
 
     // Update local cache
     this.apps.set(appId, saved);
@@ -252,8 +260,8 @@ export class AppStore {
     }
 
     // Backend will recursively delete app directory and all pages
-    await apiClient.delete(`/apps/${appId}`);
-
+    const tenantId = AuthService.getUser()?.tenantId || 'default';
+    await apiClient.delete(`/appbana-studio/${tenantId}/apps/${appId}`);
     // Update local cache
     this.apps.delete(appId);
 
@@ -294,10 +302,10 @@ export class AppStore {
     }
     this.currentAppId = appId;
     localStorage.setItem(CURRENT_APP_KEY, appId);
-    
+
     // Load full app data with entities from backend
     await this.loadFullApp(appId);
-    
+
     this.notify();
   }
 
@@ -322,7 +330,7 @@ export class AppStore {
     if (!app) return undefined;
 
     const pages = new Map<string, PageMeta>();
-    
+
     // Load all pages in parallel
     const pagePromises = app.pages.map(async (pageId: string) => {
       const page = await this.loadPage(appId, pageId);
@@ -330,10 +338,41 @@ export class AppStore {
         pages.set(pageId, page);
       }
     });
-    
+
     await Promise.all(pagePromises);
 
     return { app, pages };
+  }
+
+  // ==================== Entity Management ====================
+
+  /**
+   * Add an entity to an app (async - saves to backend)
+   */
+  async addEntity(appId: string, entity: EntityMeta): Promise<void> {
+    const app = this.apps.get(appId);
+    if (!app) {
+      throw new Error(`App not found: ${appId}`);
+    }
+
+    if (!app.entities) {
+      app.entities = [];
+    }
+
+    // Check if entity already exists
+    const exists = app.entities.some(e => e.name === entity.name);
+    if (!exists) {
+      app.entities.push(entity);
+      app.updated = Date.now();
+
+      // Save entire app object since entities are embedded
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+      await apiClient.put<AppMeta>(`/appbana-studio/${tenantId}/apps/${appId}`, app);
+
+      // Update local cache
+      this.apps.set(appId, app);
+      this.notify();
+    }
   }
 
   // ==================== Page Management ====================
@@ -349,12 +388,13 @@ export class AppStore {
 
     if (!app.pages.includes(page.id)) {
       // Save page to backend
-      await apiClient.put(`/apps/${appId}/pages/${page.id}`, page);
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+      await apiClient.put(`/appbana-studio/${tenantId}/apps/${appId}/pages/${page.id}`, page);
 
       // Update app pages list
       app.pages.push(page.id);
       app.updated = Date.now();
-      await apiClient.put(`/apps/${appId}`, app);
+      await apiClient.put(`/appbana-studio/${tenantId}/apps/${appId}`, app);
 
       // Update local cache
       this.apps.set(appId, app);
@@ -377,12 +417,12 @@ export class AppStore {
     }
 
     // Delete page from backend
-    await apiClient.delete(`/apps/${appId}/pages/${pageId}`);
-
+    const tenantId = AuthService.getUser()?.tenantId || 'default';
+    await apiClient.delete(`/appbana-studio/${tenantId}/apps/${appId}/pages/${pageId}`);
     // Update app pages list
     app.pages = app.pages.filter((id: string) => id !== pageId);
     app.updated = Date.now();
-    await apiClient.put(`/apps/${appId}`, app);
+    await apiClient.put(`/appbana-studio/${tenantId}/apps/${appId}`, app);
 
     // Update local cache
     this.apps.set(appId, app);
@@ -394,7 +434,8 @@ export class AppStore {
    */
   async loadPage(appId: string, pageId: string): Promise<PageMeta | undefined> {
     try {
-      const page = await apiClient.get<PageMeta>(`/apps/${appId}/pages/${pageId}`);
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+      const page = await apiClient.get<PageMeta>(`/appbana-studio/${tenantId}/apps/${appId}/pages/${pageId}`);
       return page;
     } catch (error) {
       console.error(`[AppStore] Failed to load page ${pageId}:`, error);
@@ -406,7 +447,8 @@ export class AppStore {
    * Save a page to backend
    */
   async savePage(appId: string, page: PageMeta): Promise<void> {
-    await apiClient.put(`/apps/${appId}/pages/${page.id}`, page);
+    const tenantId = AuthService.getUser()?.tenantId || 'default';
+    await apiClient.put(`/appbana-studio/${tenantId}/apps/${appId}/pages/${page.id}`, page);
   }
 
   /**
@@ -426,7 +468,7 @@ export class AppStore {
 
     // Generate new unique ID
     const newId = this.generateUniquePageId(app, sourcePage.id);
-    
+
     // Generate new name (e.g., "Dashboard" -> "Dashboard Copy")
     const newName = await this.generateCopyName(app, sourcePage.name);
 
@@ -467,17 +509,17 @@ export class AppStore {
     // Check if name already ends with " Copy" or " Copy N"
     const copyPattern = /^(.+?)( Copy)?( \d+)?$/;
     const match = copyPattern.exec(sourceName);
-    
+
     if (!match) {
       return `${sourceName} Copy`;
     }
 
     const baseName = match[1];
-    
+
     // Load all pages to get their names
     const pagePromises = app.pages.map(pageId => this.loadPage(app.id, pageId));
     const pages = await Promise.all(pagePromises);
-    
+
     // Find all pages with similar names
     const existingNames = new Set(
       pages
@@ -488,7 +530,7 @@ export class AppStore {
     // Try "Name Copy", "Name Copy 2", "Name Copy 3", etc.
     let newName = `${baseName} Copy`;
     let counter = 2;
-    
+
     while (existingNames.has(newName)) {
       newName = `${baseName} Copy ${counter}`;
       counter++;
@@ -640,10 +682,10 @@ export class AppStore {
    */
   async clearAll(): Promise<void> {
     // Delete all apps from backend
-    const deletePromises = Array.from(this.apps.keys()).map(appId => 
+    const deletePromises = Array.from(this.apps.keys()).map(appId =>
       this.deleteApp(appId)
     );
-    
+
     await Promise.all(deletePromises);
 
     this.apps.clear();

@@ -3,6 +3,9 @@
 -- Purpose: User management, RBAC, JWT authentication
 -- ============================================================================
 
+-- Enable UUID generation extension
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- Create user table
 CREATE TABLE IF NOT EXISTS "user" (
     id VARCHAR(36) PRIMARY KEY,
@@ -67,9 +70,9 @@ CREATE INDEX IF NOT EXISTS idx_permission_resource ON permission(resource);
 -- ============================================================================
 
 INSERT INTO role (id, name, description, created_at) VALUES
-    (RANDOM_UUID(), 'admin', 'System Administrator - full access to all resources', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'manager', 'Manager - can manage team members and view reports', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'user', 'Standard User - basic access to own resources', CURRENT_TIMESTAMP);
+    (gen_random_uuid(), 'admin', 'System Administrator - full access to all resources', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'manager', 'Manager - can manage team members and view reports', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'user', 'Standard User - basic access to own resources', CURRENT_TIMESTAMP);
 
 -- ============================================================================
 -- Seed Default Permissions
@@ -77,29 +80,29 @@ INSERT INTO role (id, name, description, created_at) VALUES
 
 -- User management permissions
 INSERT INTO permission (id, name, resource, action, description, created_at) VALUES
-    (RANDOM_UUID(), 'user:create', 'user', 'create', 'Create new users', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'user:read', 'user', 'read', 'View user information', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'user:update', 'user', 'update', 'Update user information', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'user:delete', 'user', 'delete', 'Delete users', CURRENT_TIMESTAMP);
+    (gen_random_uuid(), 'user:create', 'user', 'create', 'Create new users', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'user:read', 'user', 'read', 'View user information', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'user:update', 'user', 'update', 'Update user information', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'user:delete', 'user', 'delete', 'Delete users', CURRENT_TIMESTAMP);
 
 -- Role management permissions
 INSERT INTO permission (id, name, resource, action, description, created_at) VALUES
-    (RANDOM_UUID(), 'role:create', 'role', 'create', 'Create new roles', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'role:read', 'role', 'read', 'View roles', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'role:update', 'role', 'update', 'Update roles', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'role:delete', 'role', 'delete', 'Delete roles', CURRENT_TIMESTAMP);
+    (gen_random_uuid(), 'role:create', 'role', 'create', 'Create new roles', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'role:read', 'role', 'read', 'View roles', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'role:update', 'role', 'update', 'Update roles', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'role:delete', 'role', 'delete', 'Delete roles', CURRENT_TIMESTAMP);
 
 -- Permission management permissions
 INSERT INTO permission (id, name, resource, action, description, created_at) VALUES
-    (RANDOM_UUID(), 'permission:read', 'permission', 'read', 'View permissions', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'permission:manage', 'permission', 'manage', 'Manage permissions', CURRENT_TIMESTAMP);
+    (gen_random_uuid(), 'permission:read', 'permission', 'read', 'View permissions', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'permission:manage', 'permission', 'manage', 'Manage permissions', CURRENT_TIMESTAMP);
 
 -- App management permissions
 INSERT INTO permission (id, name, resource, action, description, created_at) VALUES
-    (RANDOM_UUID(), 'app:create', 'app', 'create', 'Create new apps', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'app:read', 'app', 'read', 'View apps', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'app:update', 'app', 'update', 'Update apps', CURRENT_TIMESTAMP),
-    (RANDOM_UUID(), 'app:delete', 'app', 'delete', 'Delete apps', CURRENT_TIMESTAMP);
+    (gen_random_uuid(), 'app:create', 'app', 'create', 'Create new apps', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'app:read', 'app', 'read', 'View apps', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'app:update', 'app', 'update', 'Update apps', CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'app:delete', 'app', 'delete', 'Delete apps', CURRENT_TIMESTAMP);
 
 -- ============================================================================
 -- Assign Permissions to Roles
@@ -134,7 +137,7 @@ WHERE r.name = 'user'
 -- ============================================================================
 
 INSERT INTO "user" (id, email, password_hash, name, status, created_at) VALUES
-    (RANDOM_UUID(), 
+    (gen_random_uuid(), 
      'admin@appbana.com', 
      '$2a$10$N9qo8uLOickgx2ZMRZoMye6J9mKu3fJ4Y5r8S5K5K5K5K5K5K5K5K5', 
      'System Administrator', 

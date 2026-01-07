@@ -13,8 +13,7 @@ export class AppSidebar extends LitElement {
     { label: 'Schemas', path: '/builder', icon: '🧬' },
     { label: 'Explorer', path: '/explorer', icon: '🗂️' },
     { label: 'Runtime', path: '/app', icon: '▶️' },
-    { label: 'Studio', path: '/studio', icon: '🎨' },
-    { label: 'Gallery', path: '/gallery', icon: '🧩' }
+    { label: 'Studio', path: '/studio', icon: '🎨' }
   ];
 
   @state() private current = window.location.pathname;

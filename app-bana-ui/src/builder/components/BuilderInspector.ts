@@ -2,6 +2,7 @@ import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { currentStore } from '../store/TreeStore';
 import type { ComponentNode } from '../../models/metadata';
+import { getComponentDefinition, PropType, type PropDefinition } from '../../core/component-metadata';
 import styles from './BuilderInspector.css?inline';
 
 @customElement('studio-builder-inspector')
@@ -19,49 +20,92 @@ export class BuilderInspector extends LitElement {
     this.node = currentStore?.getSelection() || null;
   }
 
-  private updateProp(key: string, value: string) {
+  private updateProp(key: string, value: any) {
     if (!this.node) return;
     currentStore?.updateProps(this.node.id, { [key]: value });
   }
 
-  private extractStyleValue(style: string, property: string): string {
-    const regex = new RegExp(`${property}:\\s*([^;]+)`, 'i');
-    const match = style.match(regex);
-    return match ? match[1].trim() : '';
-  }
+  private renderPropField(prop: PropDefinition, currentValue: any) {
+    const value = currentValue ?? prop.defaultValue ?? '';
 
-  private updateDimension(property: string, value: string) {
-    if (!this.node) return;
+    switch (prop.type) {
+      case PropType.Text:
+        return html`
+          <div class="form-group">
+            <label>${prop.label || prop.name}</label>
+            <input
+              type="text"
+              .value=${value}
+              @input=${(e: Event) => this.updateProp(prop.name, (e.target as HTMLInputElement).value)}
+              placeholder=${prop.placeholder || ''} />
+          </div>
+        `;
 
-    const currentStyle = this.node.props?.style || '';
-    let newStyle = currentStyle;
+      case PropType.Number:
+        return html`
+          <div class="form-group">
+            <label>${prop.label || prop.name}</label>
+            <input
+              type="number"
+              .value=${value}
+              @input=${(e: Event) => this.updateProp(prop.name, Number((e.target as HTMLInputElement).value))}
+              placeholder=${prop.placeholder || ''} />
+          </div>
+        `;
 
-    // Remove old property
-    const regex = new RegExp(`${property}:\\s*[^;]+;?`, 'gi');
-    newStyle = newStyle.replace(regex, '');
+      case PropType.Boolean:
+        return html`
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                .checked=${!!value}
+                @change=${(e: Event) => this.updateProp(prop.name, (e.target as HTMLInputElement).checked)} />
+              <span>${prop.label || prop.name}</span>
+            </label>
+          </div>
+        `;
 
-    // Add new value if not empty
-    if (value.trim()) {
-      newStyle = newStyle.trim();
-      if (newStyle && !newStyle.endsWith(';')) newStyle += ';';
-      newStyle += ` ${property}: ${value.trim()};`;
+      case PropType.Select:
+        return html`
+          <div class="form-group">
+            <label>${prop.label || prop.name}</label>
+            <select
+              .value=${value}
+              @change=${(e: Event) => this.updateProp(prop.name, (e.target as HTMLSelectElement).value)}>
+              ${prop.options?.map(opt => html`
+                <option value=${opt.value} ?selected=${opt.value === value}>${opt.label}</option>
+              `)}
+            </select>
+          </div>
+        `;
+
+      case PropType.Textarea:
+        return html`
+          <div class="form-group">
+            <label>${prop.label || prop.name}</label>
+            <textarea
+              .value=${value}
+              @input=${(e: Event) => this.updateProp(prop.name, (e.target as HTMLTextAreaElement).value)}
+              placeholder=${prop.placeholder || ''}
+              rows="3"></textarea>
+            ${prop.description ? html`<small>${prop.description}</small>` : ''}
+          </div>
+        `;
+
+      default:
+        return null;
     }
-
-    currentStore?.updateProps(this.node.id, { style: newStyle.trim() });
   }
 
-  private quickSize(width: string, height: string) {
-    if (!this.node) return;
-    const currentStyle = this.node.props?.style || '';
-    let newStyle = currentStyle
-      .replace(/width:\s*[^;]+;?/gi, '')
-      .replace(/height:\s*[^;]+;?/gi, '');
-
-    newStyle = newStyle.trim();
-    if (newStyle && !newStyle.endsWith(';')) newStyle += ';';
-    newStyle += ` width: ${width}; height: ${height};`;
-
-    currentStore?.updateProps(this.node.id, { style: newStyle.trim() });
+  private renderGroup(title: string, props: PropDefinition[], currentProps: Record<string, any>) {
+    if (!props.length) return null;
+    return html`
+      <div class="section">
+        <h5>${title}</h5>
+        ${props.map(p => this.renderPropField(p, currentProps[p.name]))}
+      </div>
+    `;
   }
 
   render() {
@@ -72,96 +116,44 @@ export class BuilderInspector extends LitElement {
       </div>`;
     }
 
+    const def = getComponentDefinition(this.node.type);
     const props = this.node.props || {};
-    const style = props.style || '';
-    const width = this.extractStyleValue(style, 'width');
-    const height = this.extractStyleValue(style, 'height');
-    const minWidth = this.extractStyleValue(style, 'min-width');
-    const minHeight = this.extractStyleValue(style, 'min-height');
+
+    if (!def) {
+      return html`
+        <div class="inspector-header">
+          <h4>Unknown Component</h4>
+          <div class="node-badge">
+            <span class="type-badge">${this.node.type}</span>
+            <span class="id-badge">${this.node.id}</span>
+          </div>
+        </div>
+        <div class="section">
+          <p>No definition found for type "${this.node.type}".</p>
+        </div>
+      `;
+    }
+
+    // Group properties
+    const contentProps = def.props.filter(p => p.group === 'content' || !p.group);
+    const styleProps = def.props.filter(p => p.group === 'style');
+    const layoutProps = def.props.filter(p => p.group === 'layout');
+    const advancedProps = def.props.filter(p => p.group === 'advanced');
 
     return html`
       <div class="inspector-header">
-        <h4>Properties</h4>
+        <h4>${def.label} Properties</h4>
         <div class="node-badge">
-          <span class="type-badge">${this.node.type}</span>
+          <span class="type-badge">${def.icon || ''} ${this.node.type}</span>
           <span class="id-badge">${this.node.id}</span>
         </div>
+        ${def.description ? html`<small class="description">${def.description}</small>` : ''}
       </div>
 
-      <div class="section">
-        <h5>📝 Content</h5>
-        <label>Text / Label</label>
-        <input
-          type="text"
-          .value=${props.text ?? props.label ?? ''}
-          @input=${(e: Event) => this.updateProp('text', (e.target as HTMLInputElement).value)}
-          placeholder="Enter text..." />
-      </div>
-
-      <div class="section">
-        <h5>📏 Dimensions</h5>
-
-        <div class="dimension-row">
-          <div class="dimension-field">
-            <label>Width</label>
-            <input
-              type="text"
-              .value=${width}
-              @change=${(e: Event) => this.updateDimension('width', (e.target as HTMLInputElement).value)}
-              placeholder="auto, 100px, 50%" />
-          </div>
-          <div class="dimension-field">
-            <label>Height</label>
-            <input
-              type="text"
-              .value=${height}
-              @change=${(e: Event) => this.updateDimension('height', (e.target as HTMLInputElement).value)}
-              placeholder="auto, 100px, 50%" />
-          </div>
-        </div>
-
-        <div class="dimension-row">
-          <div class="dimension-field">
-            <label>Min Width</label>
-            <input
-              type="text"
-              .value=${minWidth}
-              @change=${(e: Event) => this.updateDimension('min-width', (e.target as HTMLInputElement).value)}
-              placeholder="100px" />
-          </div>
-          <div class="dimension-field">
-            <label>Min Height</label>
-            <input
-              type="text"
-              .value=${minHeight}
-              @change=${(e: Event) => this.updateDimension('min-height', (e.target as HTMLInputElement).value)}
-              placeholder="50px" />
-          </div>
-        </div>
-
-        <div class="quick-sizes">
-          <label>Quick Sizes</label>
-          <div class="size-buttons">
-            <button @click=${() => this.quickSize('100%', 'auto')}>Full Width</button>
-            <button @click=${() => this.quickSize('50%', 'auto')}>Half</button>
-            <button @click=${() => this.quickSize('auto', 'auto')}>Auto</button>
-          </div>
-          <div class="size-buttons">
-            <button @click=${() => this.quickSize('200px', '200px')}>200×200</button>
-            <button @click=${() => this.quickSize('300px', '200px')}>300×200</button>
-            <button @click=${() => this.quickSize('400px', '300px')}>400×300</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <h5>🎨 Style</h5>
-        <label>CSS Classes</label>
-        <input
-          type="text"
-          .value=${props.className || ''}
-          @input=${(e: Event) => this.updateProp('className', (e.target as HTMLInputElement).value)}
-          placeholder="class-name another-class" />
+      ${this.renderGroup('📝 Content', contentProps, props)}
+      ${this.renderGroup('🎨 Style', styleProps, props)}
+      ${this.renderGroup('📐 Layout', layoutProps, props)}
+      ${this.renderGroup('⚙️ Advanced', advancedProps, props)}
     `;
   }
 }

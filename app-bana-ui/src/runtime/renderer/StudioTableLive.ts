@@ -1,10 +1,10 @@
 // StudioTableLive.ts - Lit component for runtime table rendering with live data
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { fetchTableData, bulkDelete, bulkExport, updateRow, getFieldPermissions, canReadField, canEditField } from '../../core/api-client';
+import { fetchTableData, bulkDelete, bulkExport, updateRow, createRow, getFieldPermissions, canReadField, canEditField } from '../../core/api-client';
 import type { ComponentNode } from '../../models/metadata';
 
-@customElement('studio-table-live')
+@customElement('appbana-table-live')
 export class StudioTableLive extends LitElement {
   @property({ type: Object }) node!: ComponentNode;
   @state() private data: any = null;
@@ -13,10 +13,10 @@ export class StudioTableLive extends LitElement {
   @state() private page: number = 1;
   @state() private pageSize: number = 25;
   @state() private total: number = 0;
-  @state() private filters: Record<string,string> = {};
+  @state() private filters: Record<string, string> = {};
   @state() private effectiveTheme: string = 'default';
   @state() private runtimeThemeOverride: string | null = null;
-  @state() private runtimeThemeTokens: Record<string,string> | null = null;
+  @state() private runtimeThemeTokens: Record<string, string> | null = null;
   @state() private selectedIds: Set<string> = new Set<string>();
   @state() private confirmOpen: boolean = false;
   @state() private confirmMessage: string = '';
@@ -26,12 +26,24 @@ export class StudioTableLive extends LitElement {
   @state() private viewOpen: boolean = false;
   @state() private viewRow: any = null;
   @state() private editMode: boolean = false;
-  @state() private editValues: Record<string,any> = {};
-  @state() private fieldPermissions: {readable: string[], editable: string[]} | null = null;
+  @state() private editValues: Record<string, any> = {};
+  @state() private fieldPermissions: { readable: string[], editable: string[] } | null = null;
+
+  // Quick Create State
+  @state() private createOpen: boolean = false;
+  @state() private createData: Record<string, any> = {};
+
+  // Filter focus tracking
+  private focusedFilterField: string | null = null;
+  private filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private get entityName(): string | undefined {
+    return this.node?.props?.entity?.replace(/=$/, '');
+  }
 
   public static readonly styles = css`
     .table-container {
-      background: var(--tbl-container-bg, linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%));
+      background: var(--tbl-container-bg, var(--color-bg, linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%)));
       border-radius: 18px;
       box-shadow: 0 6px 28px rgba(30,41,59,0.10);
       padding: 1.5rem 1.25rem 2rem;
@@ -55,7 +67,7 @@ export class StudioTableLive extends LitElement {
       width: 100%;
       border-collapse: separate;
       border-spacing: 0;
-      background: #fff;
+      background: var(--color-surface, #fff);
       /* Remove overflow so sticky headers aren't clipped */
       border-radius: 14px;
       font-size: 15px;
@@ -106,7 +118,7 @@ export class StudioTableLive extends LitElement {
       }
 
     .table-live th {
-      background: var(--tbl-header-bg, linear-gradient(90deg, #1e293b 0%, #1d4ed8 50%, #2563eb 100%));
+      background: var(--tbl-header-bg, var(--color-surface-alt, #f8fafc));
       color: var(--tbl-header-color, #fff);
       font-weight: 700;
       padding: 16px 18px;
@@ -121,7 +133,7 @@ export class StudioTableLive extends LitElement {
       background-clip: padding-box;
     }
     .filter-row th {
-      background: #f1f5f9;
+      background: var(--tbl-header-bg, var(--color-surface-alt, #f1f5f9));
       border-bottom: 2px solid #e2e8f0;
       padding: 6px 10px;
       position: sticky;
@@ -135,8 +147,8 @@ export class StudioTableLive extends LitElement {
       border-radius: 6px;
       border: 1px solid #cbd5e1;
       font-size: 13px;
-      background: #fff;
-      color: #334155;
+      background: var(--color-surface, #fff);
+      color: var(--color-text, #334155);
     }
     .filter-row input:focus {
       outline: 2px solid #93c5fd;
@@ -145,24 +157,24 @@ export class StudioTableLive extends LitElement {
     .table-live td {
       padding: 14px 18px;
       border-bottom: 1px solid var(--tbl-border-color, #e2e8f0);
-      background: var(--tbl-row-odd-bg, #ffffff);
-      color: var(--tbl-cell-color, #334155);
+      background: var(--tbl-row-odd-bg, var(--color-surface, #ffffff));
+      color: var(--tbl-cell-color, var(--color-text, #334155));
       transition: background 0.2s;
       font-size: 15px;
     }
     .table-live tbody tr:last-child td {
       border-bottom: none;
     }
-    .table-live tbody tr:hover td { background: var(--tbl-row-hover-bg, #f1f5f9); }
+    .table-live tbody tr:hover td { background: var(--tbl-row-hover-bg, var(--color-surface-alt, #f1f5f9)); }
     .table-live thead th:first-child { border-top-left-radius: 14px; }
     .table-live thead th:last-child { border-top-right-radius: 14px; }
-  .table-live tbody tr:nth-child(even) td { background: var(--tbl-row-even-bg, #f8fafc); }
+  .table-live tbody tr:nth-child(even) td { background: var(--tbl-row-even-bg, var(--color-surface-alt, #f8fafc)); }
     .table-actions button {
       margin-right: 8px;
       padding: 7px 16px;
       border: none;
       border-radius: 6px;
-      background: #2563eb;
+      background: var(--color-brand, #2563eb);
       color: #fff;
       font-size: 15px;
       cursor: pointer;
@@ -174,7 +186,7 @@ export class StudioTableLive extends LitElement {
       margin-right: 0;
     }
     .table-actions button:hover {
-      background: #1e40af;
+      filter: brightness(0.9);
       box-shadow: 0 2px 8px rgba(30,64,175,0.12);
     }
     .table-actions button:focus-visible {
@@ -196,10 +208,10 @@ export class StudioTableLive extends LitElement {
       gap: 1rem;
       flex-wrap: wrap;
       margin: 0 0 1rem 0;
-      background: var(--tbl-pagination-bg, rgba(255,255,255,0.75));
+      background: var(--tbl-pagination-bg, var(--color-surface-alt, rgba(255,255,255,0.75)));
       backdrop-filter: blur(4px);
       padding: 0.5rem 0.75rem;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--color-border, #e2e8f0);
       border-radius: 12px;
       position: sticky;
       top: 0;
@@ -212,24 +224,24 @@ export class StudioTableLive extends LitElement {
     .pagination-bar button {
       padding: 6px 14px;
       border-radius: 6px;
-      border: 1px solid #cbd5e1;
-      background: #ffffff;
-      color: #1e293b;
+      border: 1px solid var(--color-border, #cbd5e1);
+      background: var(--color-surface, #ffffff);
+      color: var(--color-text, #1e293b);
       font-weight: 600;
       cursor: pointer;
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       transition: background 0.15s, box-shadow 0.15s;
     }
     .pagination-bar button:hover:not([disabled]) {
-      background: #f1f5f9;
+      background: var(--color-surface-alt, #f1f5f9);
       box-shadow: 0 2px 6px rgba(0,0,0,0.08);
     }
     .pagination-bar select {
       padding: 4px 6px;
       border-radius: 6px;
-      border: 1px solid #cbd5e1;
-      background: #fff;
-      color: #1e293b;
+      border: 1px solid var(--color-border, #cbd5e1);
+      background: var(--color-surface, #fff);
+      color: var(--color-text, #1e293b);
     }
     @media (max-width: 700px) {
       .table-container {
@@ -256,8 +268,8 @@ export class StudioTableLive extends LitElement {
       animation: fadeIn 120ms ease-out;
     }
     .modal-card {
-      background: #ffffff;
-      color: #0f172a;
+      background: var(--color-surface, #ffffff);
+      color: var(--color-text, #0f172a);
       border-radius: 12px;
       border: 1px solid #e2e8f0;
       box-shadow: 0 20px 60px rgba(0,0,0,0.20);
@@ -312,8 +324,8 @@ export class StudioTableLive extends LitElement {
     .snackbar button:hover { background: #0f172a; }
     /* View Form Modal */
     .view-modal-card {
-      background:#ffffff;
-      color:#0f172a;
+      background: var(--color-surface, #ffffff);
+      color: var(--color-text, #0f172a);
       border-radius:14px;
       border:1px solid #e2e8f0;
       box-shadow:0 24px 70px rgba(0,0,0,0.25);
@@ -326,9 +338,9 @@ export class StudioTableLive extends LitElement {
       max-height:80vh;overflow:auto;
     }
     .view-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:0.75rem 1rem; }
-    .view-field { display:flex; flex-direction:column; gap:4px; background:#f8fafc; border:1px solid #e2e8f0; padding:8px 10px; border-radius:8px; }
-    .view-field label { font-size:0.7rem; font-weight:600; letter-spacing:0.03em; color:#475569; text-transform:uppercase; }
-    .view-value { font-size:0.85rem; color:#1e293b; word-break:break-word; white-space:pre-wrap; }
+    .view-field { display:flex; flex-direction:column; gap:4px; background:var(--color-surface-alt, #f8fafc); border:1px solid var(--color-border, #e2e8f0); padding:8px 10px; border-radius:8px; }
+    .view-field label { font-size:0.7rem; font-weight:600; letter-spacing:0.03em; color:var(--color-text-secondary, #475569); text-transform:uppercase; }
+    .view-value { font-size:0.85rem; color:var(--color-text, #1e293b); word-break:break-word; white-space:pre-wrap; }
   /* Inline Cell Editing */
   .cell { position: relative; cursor: pointer; }
   .cell.editing { background: #fff7ed !important; outline: 2px solid #fdba74; }
@@ -338,8 +350,8 @@ export class StudioTableLive extends LitElement {
   .inline-edit-actions button { padding:2px 6px; font-size:10px; border-radius:4px; border:1px solid #e2e8f0; background:#fff; cursor:pointer; }
   .inline-edit-actions button:hover { background:#f1f5f9; }
     .view-modal-header { display:flex; justify-content:space-between; align-items:center; }
-    .close-btn { background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:0.75rem; }
-    .close-btn:hover { background:#f1f5f9; }
+    .close-btn { background:var(--color-surface, #fff); border:1px solid var(--color-border, #cbd5e1); border-radius:6px; padding:4px 10px; cursor:pointer; font-size:0.75rem; color: var(--color-text, #0f172a); }
+    .close-btn:hover { background:var(--color-surface-alt, #f1f5f9); }
   `;
 
   // Use lifecycle without returning a Promise type per lint rule; wrap async logic
@@ -349,12 +361,13 @@ export class StudioTableLive extends LitElement {
 
   async connectedCallback() {
     super.connectedCallback();
+    console.log('[StudioTableLive] Connected. Node:', this.node);
     // Load field permissions for FLS
     await this.loadFieldPermissions();
   }
 
   private async loadFieldPermissions() {
-    const entity = this.node?.props?.entity;
+    const entity = this.entityName;
     if (!entity) return;
     try {
       this.fieldPermissions = await getFieldPermissions(entity);
@@ -364,7 +377,12 @@ export class StudioTableLive extends LitElement {
     }
   }
 
-  protected updated(): void {
+  protected updated(changedProperties: Map<string, any>): void {
+    if (changedProperties.has('node')) {
+      console.log('[StudioTableLive] Node property changed:', this.node);
+      this.initializeTable();
+    }
+
     if (this.confirmOpen) {
       const card = this.shadowRoot?.getElementById('confirmCard') as HTMLElement | null;
       card?.focus?.();
@@ -383,7 +401,12 @@ export class StudioTableLive extends LitElement {
   }
 
   private async initializeTable() {
-    if (!this.node?.props?.entity || !Array.isArray(this.node.props.fields) || this.node.props.fields.length === 0) {
+    console.log('[StudioTableLive] Initializing table...');
+    if (!this.entityName || !Array.isArray(this.node?.props?.fields) || this.node?.props?.fields.length === 0) {
+      console.error('[StudioTableLive] Configuration Missing:', {
+        entityName: this.entityName,
+        fields: this.node?.props?.fields
+      });
       this.error = 'No entity or columns selected.';
       return;
     }
@@ -401,7 +424,7 @@ export class StudioTableLive extends LitElement {
       if (saved) {
         const obj = JSON.parse(saved);
         if (obj?.theme) this.runtimeThemeOverride = String(obj.theme);
-        if (obj?.tokens && typeof obj.tokens === 'object') this.runtimeThemeTokens = obj.tokens as Record<string,string>;
+        if (obj?.tokens && typeof obj.tokens === 'object') this.runtimeThemeTokens = obj.tokens as Record<string, string>;
       }
     } catch (e) {
       console.error('Failed to load theme overrides', e);
@@ -425,6 +448,7 @@ export class StudioTableLive extends LitElement {
   }
 
   private async loadPage(page: number) {
+    const fieldToFocus = this.focusedFilterField; // Save before async operation
     this.loading = true;
     this.error = '';
     try {
@@ -432,9 +456,13 @@ export class StudioTableLive extends LitElement {
         this.error = 'Component configuration missing.';
         return;
       }
-      const entity = this.node.props.entity;
-      const fields = Array.isArray(this.node.props.fields) ? this.node.props.fields.map((f: any) => f.name) : [];
-      const sort = this.node.props.sort || '';
+      const entity = this.entityName;
+      if (!entity) {
+        this.error = 'Entity not configured.';
+        return;
+      }
+      const fields = Array.isArray(this.node?.props?.fields) ? this.node?.props?.fields.map((f: any) => f.name) : [];
+      const sort = this.node?.props?.sort || '';
       const result = await fetchTableData(entity, fields, { pageSize: this.pageSize, sort, page, filters: this.filters });
       this.data = result;
       this.total = typeof result.total === 'number' ? result.total : (result.rows?.length || 0);
@@ -445,7 +473,24 @@ export class StudioTableLive extends LitElement {
       this.error = err?.message || 'Failed to fetch table data.';
     } finally {
       this.loading = false;
+      // Restore focus after render completes
+      if (fieldToFocus) {
+        await this.updateComplete;
+        this.restoreFocusToFilter(fieldToFocus);
+      }
     }
+  }
+
+  private restoreFocusToFilter(fieldName: string) {
+    requestAnimationFrame(() => {
+      const filterInput = this.shadowRoot?.getElementById(`filter-${fieldName}`) as HTMLInputElement | null;
+      if (filterInput) {
+        filterInput.focus();
+        // Move cursor to end of input
+        const len = filterInput.value.length;
+        filterInput.setSelectionRange(len, len);
+      }
+    });
   }
 
   private changePage(delta: number) {
@@ -466,8 +511,15 @@ export class StudioTableLive extends LitElement {
   private onFilterInput(fieldName: string, e: Event) {
     const value = (e.target as HTMLInputElement).value;
     this.filters = { ...this.filters, [fieldName]: value };
-    // Reset to first page and re-fetch server-side filtered data
-    this.loadPage(1);
+    this.focusedFilterField = fieldName;
+    
+    // Debounce the API call to avoid fetching on every keystroke
+    if (this.filterDebounceTimer) {
+      clearTimeout(this.filterDebounceTimer);
+    }
+    this.filterDebounceTimer = setTimeout(() => {
+      this.loadPage(1);
+    }, 700); // Wait 700ms after last keystroke before fetching
   }
 
   // --- Rendering helpers to reduce cognitive complexity ---
@@ -482,21 +534,21 @@ export class StudioTableLive extends LitElement {
       </div>
       <label style="font-size:0.75rem;color:#475569;display:flex;align-items:center;gap:4px;">Page size:
         <select @change=${this.onPageSizeChange} aria-label="Select page size">
-          ${[10,25,50,100].map(size => html`<option value=${size} ?selected=${size===this.pageSize}>${size}</option>`)}
+          ${[10, 25, 50, 100].map(size => html`<option value=${size} ?selected=${size === this.pageSize}>${size}</option>`)}
         </select>
       </label>
       <label style="font-size:0.75rem;color:#475569;display:flex;align-items:center;gap:4px;">Theme:
         <select @change=${this.onThemeChange} aria-label="Select theme">
-          ${['default','minimal','dark','striped','compact','soft','auto','custom'].map(t => html`<option value=${t} ?selected=${(this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase()===t}>${t}</option>`)}
+          ${['default', 'minimal', 'dark', 'striped', 'compact', 'soft', 'auto', 'custom'].map(t => html`<option value=${t} ?selected=${(this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase() === t}>${t}</option>`)}
         </select>
       </label>
-      ${((this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase()==='custom') ? html`
+      ${((this.runtimeThemeOverride ?? this.node?.props?.theme ?? 'default').toLowerCase() === 'custom') ? html`
         <button @click=${this.promptCustomTokens} aria-label="Edit custom theme" style="padding:4px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;color:#1e293b;">Edit Tokens</button>
       `: ''}
     </div>`;
   }
 
-  private buildHeader(fields: any[], actions: string[], multiSelect: boolean, rowsOnPage: any[]) {
+  private buildHeader(fields: any[], actions: (string | { label: string; onClick: string })[], multiSelect: boolean, rowsOnPage: any[]) {
     const allChecked = multiSelect && rowsOnPage.length > 0 && rowsOnPage.every(r => this.selectedIds.has(String(this.getRowId(r))));
     return html`<tr>
       ${multiSelect ? html`<th><input type="checkbox" aria-label="Select all on page" .checked=${allChecked} @change=${this.onSelectAllChange}></th>` : ''}
@@ -505,25 +557,39 @@ export class StudioTableLive extends LitElement {
     </tr>`;
   }
 
-  private buildFilterRow(fields: any[], actions: string[], multiSelect: boolean) {
+  private buildFilterRow(fields: any[], actions: (string | { label: string; onClick: string })[], multiSelect: boolean) {
     return html`<tr class="filter-row">
       ${multiSelect ? html`<th></th>` : ''}
       ${fields.map((f: any) => html`<th>
-        <input type="text" aria-label="Filter ${f.label || f.name}" placeholder="Filter..." @input=${(e: Event) => this.onFilterInput(f.name, e)} .value=${this.filters[f.name] || ''}>
+        <input type="text" 
+               id="filter-${f.name}" 
+               aria-label="Filter ${f.label || f.name}" 
+               placeholder="Filter..." 
+               @input=${(e: Event) => this.onFilterInput(f.name, e)} 
+               @blur=${() => { this.focusedFilterField = null; }}
+               .value=${this.filters[f.name] || ''}>
       </th>`)}
       ${actions.length > 0 ? html`<th></th>` : ''}
     </tr>`;
   }
 
-  private buildBody(rows: any[], fields: any[], actions: string[], multiSelect: boolean) {
+  private buildBody(rows: any[], fields: any[], actions: (string | { label: string; onClick: string })[], multiSelect: boolean) {
     return rows.map((row: any) => {
       const id = String(this.getRowId(row));
       const checked = this.selectedIds.has(id);
       return html`<tr>
         ${multiSelect ? html`<td><input type="checkbox" aria-label="Select row" .checked=${checked} @change=${(e: Event) => this.onRowSelectChange(id, e)}></td>` : ''}
-        ${fields.map((f: any) => html`<td class="cell" @dblclick=${() => this.startInlineCellEdit(id, f.name, row[f.name])}>${this.renderCellContent(id, f.name, row[f.name])}</td>`)}
+        ${fields.map((f: any) => {
+          const cellValue = this.getFieldValue(row, f.name);
+          return html`<td class="cell" @dblclick=${() => this.startInlineCellEdit(id, f.name, cellValue)}>${this.renderCellContent(id, f.name, cellValue)}</td>`;
+        })}
         ${actions.length > 0 ? html`<td class="table-actions">
-          ${actions.map((action: string) => html`<button aria-label="${action} row" @click=${() => this.handleRowAction(action, row)}>${action.charAt(0).toUpperCase() + action.slice(1)}</button>`)}
+          ${actions.map((action) => {
+        const isString = typeof action === 'string';
+        const label = isString ? (action as string).charAt(0).toUpperCase() + (action as string).slice(1) : (action as { label: string }).label;
+        const handler = isString ? () => this.handleRowAction(action as string, row) : () => this.handleCustomAction(action as { onClick: string }, row);
+        return html`<button aria-label="${label} row" @click=${handler}>${label}</button>`;
+      })}
         </td>` : ''}
       </tr>`;
     });
@@ -531,8 +597,8 @@ export class StudioTableLive extends LitElement {
 
   private computeCustomStyle(rawTheme: string): string {
     if (rawTheme !== 'custom') return '';
-    const map: Record<string,string> = this.runtimeThemeTokens ?? (this.node?.props?.themeTokens as Record<string,string>) ?? {};
-    const tokenToVar: Record<string,string> = {
+    const map: Record<string, string> = this.runtimeThemeTokens ?? (this.node?.props?.themeTokens as Record<string, string>) ?? {};
+    const tokenToVar: Record<string, string> = {
       headerBg: '--tbl-header-bg',
       headerColor: '--tbl-header-color',
       rowEvenBg: '--tbl-row-even-bg',
@@ -544,7 +610,7 @@ export class StudioTableLive extends LitElement {
       containerBg: '--tbl-container-bg'
     };
     const parts: string[] = [];
-    for (const [k,v] of Object.entries(map)) if (v && tokenToVar[k]) parts.push(`${tokenToVar[k]}:${v}`);
+    for (const [k, v] of Object.entries(map)) if (v && tokenToVar[k]) parts.push(`${tokenToVar[k]}:${v}`);
     return parts.join(';');
   }
 
@@ -556,7 +622,7 @@ export class StudioTableLive extends LitElement {
       const key = `table-theme-${this.node?.id}`;
       const payload = { theme, tokens: this.runtimeThemeTokens };
       globalThis.localStorage?.setItem(key, JSON.stringify(payload));
-    } catch {}
+    } catch { }
     // Resolve effective theme for 'auto' or explicit
     this.applyTheme(theme);
     this.requestUpdate();
@@ -579,7 +645,7 @@ export class StudioTableLive extends LitElement {
     try {
       const obj = JSON.parse(input);
       if (obj && typeof obj === 'object') {
-        this.runtimeThemeTokens = obj as Record<string,string>;
+        this.runtimeThemeTokens = obj as Record<string, string>;
         // Persist
         const key = `table-theme-${this.node?.id}`;
         const payload = { theme: 'custom', tokens: this.runtimeThemeTokens };
@@ -596,22 +662,38 @@ export class StudioTableLive extends LitElement {
   render() {
     if (this.loading) return html`<div>Loading table data...</div>`;
     const fields = Array.isArray(this.node?.props?.fields) ? this.node.props.fields : [];
-  const actions: string[] = this.node?.props?.actions || [];
-  const multiSelect: boolean = Boolean(this.node?.props?.multiSelect);
-    const rows = (this.data?.rows && this.data.rows.length > 0)
-      ? this.data.rows
-      : [1,2,3].map(i => Object.fromEntries(fields.map((f: any) => [f.name, `Sample ${i}`])));
-    const activeFilters = Object.entries(this.filters).filter(([_,v]) => v && v.trim() !== '');
+    const actions: (string | { label: string; onClick: string })[] = this.node?.props?.actions || [];
+    const multiSelect: boolean = Boolean(this.node?.props?.multiSelect);
+    
+    // NEVER show sample/fake data at runtime - only show real data or error state
+    const rows = this.data?.rows || [];
+    const hasNoData = rows.length === 0;
+    const activeFilters = Object.entries(this.filters).filter(([_, v]) => v && v.trim() !== '');
     const totalPages = Math.max(1, Math.ceil(this.total / this.pageSize));
     const startIdx = (this.page - 1) * this.pageSize + 1;
     const endIdx = Math.min(this.total, this.page * this.pageSize);
     const rawTheme = (this.node?.props?.theme || 'default').toLowerCase();
     const themeClass = ['table-container', `table-theme-${this.effectiveTheme}`].join(' ');
     const customStyle = this.computeCustomStyle(rawTheme);
-    const bulkActions: string[] = Array.isArray(this.node?.props?.bulkActions) ? this.node.props.bulkActions : ['delete','export'];
+    const bulkActions: string[] = Array.isArray(this.node?.props?.bulkActions) ? this.node.props.bulkActions : ['delete', 'export'];
     const selectedCount = this.selectedIds.size;
+    const showHeader = Boolean(this.node?.label || this.entityName);
+    const canCreate = true; // TODO: Check permissions or props
+
     return html`<div class="${themeClass}" style="${customStyle}">
-      ${this.error ? html`<div class="table-error" style="background:#fef2f2;color:#b91c1c;border:1px solid #fee2e2;">Showing sample data (${this.error})</div>` : ''}
+      ${showHeader ? html`
+        <div class="table-header-bar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+           <h2 style="margin:0;font-size:1.5rem;font-weight:700;color:var(--color-text,#1e293b);">${this.node?.label || (this.entityName ? this.entityName + ' List' : 'Data Table')}</h2>
+           ${canCreate ? html`
+             <button @click=${this.handleCreate} style="padding:8px 16px;background:var(--color-brand,#2563eb);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+               <span>+</span> New
+             </button>
+           ` : ''}
+        </div>
+      ` : ''}
+      ${this.error ? html`<div class="table-error" style="background:#fef2f2;color:#b91c1c;border:1px solid #fee2e2;padding:12px;border-radius:8px;margin-bottom:1rem;">
+        <strong>Error:</strong> ${this.error}
+      </div>` : ''}
       ${this.buildPagination(startIdx, endIdx, totalPages)}
       ${multiSelect && selectedCount > 0 ? html`
         <div class="bulk-bar" role="region" aria-label="Bulk actions">
@@ -629,11 +711,17 @@ export class StudioTableLive extends LitElement {
             ${this.buildFilterRow(fields, actions, multiSelect)}
           </thead>
           <tbody>
-            ${this.buildBody(rows, fields, actions, multiSelect)}
+            ${hasNoData ? html`
+              <tr>
+                <td colspan="${(multiSelect ? 1 : 0) + fields.length + (actions.length > 0 ? 1 : 0)}" style="text-align:center;padding:2rem;color:#64748b;font-style:italic;">
+                  ${activeFilters.length > 0 ? 'No matching records found. Try adjusting your filters.' : 'No data available.'}
+                </td>
+              </tr>
+            ` : this.buildBody(rows, fields, actions, multiSelect)}
           </tbody>
         </table>
       </div>
-      ${activeFilters.length > 0 ? html`<div style="margin-top:0.5rem;font-size:0.7rem;color:#475569;">Applied ${activeFilters.length} filter(s). Showing rows ${startIdx}-${endIdx} of ${this.total}.</div>`: ''}
+      ${activeFilters.length > 0 ? html`<div style="margin-top:0.5rem;font-size:0.7rem;color:#475569;">Applied ${activeFilters.length} filter(s). Showing rows ${startIdx}-${endIdx} of ${this.total}.</div>` : ''}
       ${this.confirmOpen ? html`
         <div class="modal-overlay" role="presentation" @click=${this.closeConfirm}>
           <div id="confirmCard" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" tabindex="0" @click=${(e: Event) => e.stopPropagation()}>
@@ -650,6 +738,35 @@ export class StudioTableLive extends LitElement {
         <div class="snackbar" role="status" aria-live="polite">
           <span>${this.toastMessage}</span>
           <button @click=${() => { this.toastOpen = false; this.toastMessage = ''; }}>Dismiss</button>
+        </div>
+      ` : ''}
+      ${this.createOpen ? html`
+        <div class="modal-overlay" role="presentation" @click=${() => this.createOpen = false}>
+          <div class="view-modal-card" role="dialog" aria-modal="true" aria-labelledby="createTitle" tabindex="0" @click=${(e: Event) => e.stopPropagation()}>
+             <div class="view-modal-header">
+               <h3 id="createTitle" style="margin:0;font-size:1rem;">New ${this.entityName || 'Item'}</h3>
+               <button class="close-btn" @click=${() => this.createOpen = false}>Close</button>
+             </div>
+             <div class="view-form-grid" style="margin-top:1rem;">
+               ${(this.node?.props?.fields || []).filter((f: any) => f.name.toLowerCase() !== 'id').map((f: any) => html`
+                 <div class="view-field" style="background:var(--color-surface,#fff);">
+                   <label for="create_${f.name}">${f.label || f.name}</label>
+                   ${f.type === 'select' || f.options ? html`
+                     <select id="create_${f.name}" .value=${this.createData[f.name] || ''} @change=${(e: Event) => this.createData = { ...this.createData, [f.name]: (e.target as HTMLSelectElement).value }} style="padding:8px;border:1px solid #cbd5e1;border-radius:6px;width:100%;">
+                        <option value="">Select...</option>
+                        ${(f.options || []).map((o: any) => html`<option value=${o}>${o}</option>`)}
+                     </select>
+                   ` : html`
+                     <input type="text" id="create_${f.name}" .value=${this.createData[f.name] || ''} @input=${(e: Event) => this.createData = { ...this.createData, [f.name]: (e.target as HTMLInputElement).value }} style="padding:8px;border:1px solid #cbd5e1;border-radius:6px;width:100%;">
+                   `}
+                 </div>
+               `)}
+             </div>
+             <div class="modal-actions" style="margin-top:1.5rem;">
+                <button class="btn-secondary" @click=${() => this.createOpen = false}>Cancel</button>
+                <button class="btn-danger" style="background:var(--color-brand,#2563eb);border-color:var(--color-brand,#2563eb);" @click=${this.submitCreate}>Create</button>
+             </div>
+          </div>
         </div>
       ` : ''}
       ${this.viewOpen ? html`
@@ -670,9 +787,29 @@ export class StudioTableLive extends LitElement {
     </div>`;
   }
 
+  /**
+   * Case-insensitive field value accessor.
+   * Database may return uppercase column names (ID, NAME, EMAIL) while
+   * field configuration uses lowercase (id, name, email).
+   */
+  private getFieldValue(row: any, fieldName: string): any {
+    if (!row || !fieldName) return undefined;
+    // Try exact match first
+    if (fieldName in row) return row[fieldName];
+    // Try case-insensitive match
+    const lowerKey = fieldName.toLowerCase();
+    const upperKey = fieldName.toUpperCase();
+    if (upperKey in row) return row[upperKey];
+    if (lowerKey in row) return row[lowerKey];
+    // Try finding any matching key case-insensitively
+    const keys = Object.keys(row);
+    const matchingKey = keys.find(k => k.toLowerCase() === lowerKey);
+    return matchingKey ? row[matchingKey] : undefined;
+  }
+
   private getRowId(row: any): string | number {
     const key = (this.node?.props?.idField || 'id');
-    return row[key];
+    return this.getFieldValue(row, key);
   }
 
   private readonly onRowSelectChange = (id: string, e: Event) => {
@@ -722,7 +859,7 @@ export class StudioTableLive extends LitElement {
   private async commitInlineEdit() {
     if (!this.inlineEditing) return;
     const { rowId, field } = this.inlineEditing;
-    const entity = this.node?.props?.entity;
+    const entity = this.entityName;
     if (!entity) { this.cancelInlineEdit(); return; }
     try {
       await updateRow(entity, rowId, { [field]: this.inlineDraft });
@@ -749,7 +886,7 @@ export class StudioTableLive extends LitElement {
   }
 
   private renderCellContent(rowId: string, field: string, value: any) {
-  const editing = this.inlineEditing?.rowId === rowId && this.inlineEditing?.field === field;
+    const editing = this.inlineEditing?.rowId === rowId && this.inlineEditing?.field === field;
     if (!editing) {
       return html`<div>${value == null ? '' : String(value)}</div>`;
     }
@@ -760,6 +897,55 @@ export class StudioTableLive extends LitElement {
         <button @click=${() => this.cancelInlineEdit()} aria-label="Cancel cell edit">✖</button>
       </div>
     </div>`;
+  }
+
+  private handleCustomAction(action: { onClick: string }, row: any) {
+    try {
+      // Evaluate the onClick string in a context where 'row' and 'navigate' are available
+      const navigate = (path: string) => {
+        // Prefer window.navigate if available (Runtime Shell shim)
+        if ((window as any).navigate) {
+          (window as any).navigate(path);
+        } else {
+          // Fallback to custom event
+          this.dispatchEvent(new CustomEvent('navigate', { detail: { path }, bubbles: true, composed: true }));
+        }
+      };
+
+      const createPage = `create-${(this.entityName || '').toLowerCase()}`;
+      // Basic implementation: if action is 'create', navigate
+
+      // Create a function that takes 'row' and 'navigate' as arguments
+      // The action.onClick string (e.g., "navigate('/foo')") matches this if 'navigate' is in scope
+      // We pass 'navigate' as a parameter to the dynamic function so it's available
+      const func = new Function('row', 'navigate', action.onClick);
+      func(row, navigate);
+    } catch (e) {
+      console.error('Failed to execute custom action', e);
+      this.showToast('Action failed: ' + (e as Error).message);
+    }
+  }
+
+  private handleCreate() {
+    // Open Quick Create Modal instead of navigating
+    this.createData = {};
+    this.createOpen = true;
+  }
+
+  private async submitCreate() {
+    const entity = this.entityName;
+    if (!entity) return;
+
+    try {
+      await createRow(entity, this.createData);
+      this.showToast('Created successfully');
+      this.createOpen = false;
+      this.createData = {};
+      this.loadPage(1); // Refresh
+    } catch (e) {
+      console.error(e);
+      this.showToast('Create failed: ' + (e as Error).message);
+    }
   }
 
   private readonly handleRowAction = (action: string, row: any) => {
@@ -789,7 +975,7 @@ export class StudioTableLive extends LitElement {
 
   private readonly onBulkAction = async (action: string) => {
     const ids = Array.from(this.selectedIds);
-    const entity = this.node?.props?.entity;
+    const entity = this.entityName;
     // Fire event regardless, to allow external listeners
     this.dispatchEvent(new CustomEvent('bulk-action', { detail: { action, selectedIds: ids, entity }, bubbles: true, composed: true }));
     if (!entity || ids.length === 0) return;
@@ -816,7 +1002,7 @@ export class StudioTableLive extends LitElement {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${entity}-export-${new Date().toISOString().slice(0,19).replaceAll(/[:T]/g,'-')}.csv`;
+          a.download = `${entity}-export-${new Date().toISOString().slice(0, 19).replaceAll(/[:T]/g, '-')}.csv`;
           document.body.appendChild(a);
           a.click();
           a.remove();
@@ -883,14 +1069,14 @@ export class StudioTableLive extends LitElement {
     if (!fieldDefs.length) return html`<div style="font-size:0.85rem;color:#64748b;">No fields defined for view.</div>`;
     return fieldDefs.map(fd => {
       const label = fd.label || fd.name;
-      const rawValue = this.viewRow[fd.name];
+      const rawValue = this.getFieldValue(this.viewRow, fd.name);
       const type = fd.type || this.inferValueType(rawValue);
-      
+
       // Apply FLS: Hide non-readable fields
       if (this.fieldPermissions && !canReadField(fd.name, this.fieldPermissions.readable)) {
         return html``; // Field hidden (user cannot read)
       }
-      
+
       if (this.editMode) return this.renderEditableField(fd, label, type);
       const display = this.formatDisplayValue(type, rawValue);
       return html`<div class="view-field"><label>${label}</label><div class="view-value">${display}</div></div>`;
@@ -899,11 +1085,11 @@ export class StudioTableLive extends LitElement {
 
   private renderEditableField(fd: any, label: string, type: string) {
     const current = this.editValues[fd.name];
-    
+
     // Apply FLS: Disable non-editable fields
     const disabled = this.fieldPermissions && !canEditField(fd.name, this.fieldPermissions.editable);
     const lockIcon = disabled ? ' 🔒' : '';
-    
+
     if (type === 'textarea') {
       return html`<div class="view-field"><label>${label}${lockIcon}</label><textarea style="resize:vertical;min-height:70px;font-size:0.8rem;" .value=${current ?? ''} ?disabled=${disabled} title=${disabled ? 'Field is read-only (no edit permission)' : ''} @input=${(e: Event) => this.onEditInput(fd.name, (e.target as HTMLTextAreaElement).value)}></textarea></div>`;
     }
@@ -948,13 +1134,13 @@ export class StudioTableLive extends LitElement {
 
   private formatDate(v: any): string {
     if (!v) return '';
-  try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toLocaleString(); } catch {}
+    try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toLocaleString(); } catch { }
     return String(v);
   }
 
   private toDateInputValue(v: any): string {
     if (!v) return '';
-  try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0,10); } catch {}
+    try { const d = new Date(v); if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10); } catch { }
     return '';
   }
 

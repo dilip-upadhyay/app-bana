@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { renderPage } from './Renderer';
+import { renderPage } from '../../app-renderer';
 import { ensureCoreRegistered } from '../../core/registry';
 import { PageMeta } from '../../models/metadata';
 

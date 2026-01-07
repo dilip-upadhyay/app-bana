@@ -5,12 +5,14 @@
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  height: 100%;
 }
 
 .library-container {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -75,11 +77,32 @@
 
 .components-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+  gap: 10px;
   padding: 16px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
+  max-height: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+.components-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.components-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.components-grid::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5);
+  border-radius: 4px;
+}
+
+.components-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 114, 128, 0.7);
 }
 
 .component-item {
@@ -87,7 +110,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12px 8px;
+  padding: 14px 8px;
   background: #f9fafb;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
@@ -95,6 +118,7 @@
   transition: all 0.2s;
   user-select: none;
   position: relative;
+  min-height: 90px;
 }
 
 .component-item.configurable {
@@ -162,8 +186,13 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .modal-dialog {
@@ -182,6 +211,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

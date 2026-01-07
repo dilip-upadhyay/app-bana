@@ -1,0 +1,28 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< com.appbana:app-bana >------------------------
+[INFO] Building app-bana 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.0:resources (default-resources) @ app-bana ---
+[INFO] Copying 10 resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ app-bana ---
+[INFO] Recompiling the module because of added or removed source files.
+[INFO] Compiling 65 source files with javac [debug release 21] to target\classes
+[INFO] /C:/Users/dilip/git/app-bana/app-bana-service/src/main/java/com/appbana/AiAppGeneratorService.java: Some input files use unchecked or unsafe operations.
+[INFO] /C:/Users/dilip/git/app-bana/app-bana-service/src/main/java/com/appbana/AiAppGeneratorService.java: Recompile with -Xlint:unchecked for details.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  11.658 s
+[INFO] Finished at: 2025-12-25T11:59:55+05:30
+[INFO] ------------------------------------------------------------------------
+[WARNING] 
+[WARNING] Plugin validation issues were detected in 1 plugin(s)
+[WARNING] 
+[WARNING]  * org.apache.maven.plugins:maven-resources-plugin:3.3.0
+[WARNING] 
+[WARNING] For more or less details, use 'maven.plugin.validation' property with one of the values (case insensitive): [BRIEF, DEFAULT, VERBOSE]
+[WARNING] 

@@ -1,11 +1,13 @@
 import { ensureCoreRegistered } from './core/registry';
 import type { PageMeta } from './models/metadata';
-import { renderPage as coreRenderPage } from './runtime/renderer/Renderer';
+import { renderPageTemplate } from './runtime/renderer/Renderer';
+import { render } from 'lit';
 
 // Thin facade kept for backward compatibility (tests or legacy imports)
 export async function renderPage(page: PageMeta, host: HTMLElement): Promise<void> {
   await ensureCoreRegistered();
-  coreRenderPage(page, host);
+  const rendered = renderPageTemplate(page, {});
+  render(rendered, host);
 }
 
 // Convenience boot function for studio-entry
@@ -15,7 +17,8 @@ export async function renderDemoIfPresent() {
   try {
     await ensureCoreRegistered();
     const page: PageMeta = (await import('./demo/demo-page.json')).default as any;
-    coreRenderPage(page, el);
+    const rendered = renderPageTemplate(page, {});
+    render(rendered, el);
   } catch (e) {
     el.innerHTML = `<pre style="color:red">Failed to load demo page: ${(e as Error).message}</pre>`;
   }

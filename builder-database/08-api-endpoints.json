@@ -1,12 +1,16 @@
 {
-  "version": "1.0.0",
-  "lastUpdated": "2025-11-08T00:00:00Z",
-  "description": "Complete REST API reference for AppBana backend",
-  
+  "version": "1.2.0",
+  "lastUpdated": "2026-01-06T00:00:00Z",
+  "description": "Complete REST API reference for AppBana backend - Multi-Tenant Physical Isolation",
   "baseURL": "http://localhost:8080",
-  "server": "JDK HttpServer",
+  "server": "JDK HttpServer (Virtual Threads)",
   "file": "app-bana-service/src/main/java/com/appbana/ApiServer.java",
-
+  "multiTenancy": {
+    "architecture": "Physical table isolation - no tenant_id/app_id in entity table queries",
+    "tableNaming": "app_{env}{tenant}_{app}_{entity}",
+    "entityCRUD": "Direct table access via TenantContext, no WHERE filtering",
+    "implementation": "EntityCrudService uses SchemaManager.getPhysicalTableName()"
+  },
   "endpoints": {
     "apps": [
       {
@@ -48,6 +52,17 @@
         "response": "{success: true}",
         "status": 200,
         "notes": "Recursively deletes apps/{appId}/ directory"
+      },
+      {
+        "method": "POST",
+        "path": "/apps/publish",
+        "description": "Publish app to environment (DEV/SIT/PROD)",
+        "body": "{appMetaJson: string, appId: string, tenantId: string, environment: 'DEV'|'SIT'|'PROD', userId: string}",
+        "response": "{success: true, version: {version, deployedAt, tablesCreated: [], environment, userId}}",
+        "status": 200,
+        "notes": "Creates physical tables (app_{env}{tenant}_{app}_{entity}), no tenant_id/app_id columns. Transactional deployment.",
+        "implementation": "AppPublishService.publishApp()",
+        "tables": "Creates isolated physical tables per tenant/app/entity without redundant columns"
       }
     ],
     "pages": [
@@ -168,7 +183,15 @@
         "query": "?entity=users&action=INSERT&limit=100",
         "response": "AuditLog[]",
         "status": 200,
-        "filters": ["entity", "action", "userId", "startDate", "endDate", "limit", "offset"]
+        "filters": [
+          "entity",
+          "action",
+          "userId",
+          "startDate",
+          "endDate",
+          "limit",
+          "offset"
+        ]
       }
     ],
     "datasources": [
@@ -226,14 +249,152 @@
         "response": "HTML page with Swagger UI",
         "status": 200
       }
+    ],
+    "workflows": [
+      {
+        "method": "GET",
+        "path": "/api/workflows",
+        "description": "List all workflow definitions",
+        "query": "?appId={id}&status={status}&triggerEntity={entity}",
+        "response": "[{id, name, version, status, triggerEntity}]",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/workflows",
+        "description": "Create or update workflow definition",
+        "body": "WorkflowDefinition (JSON)",
+        "response": "WorkflowDefinition",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/workflows/{id}",
+        "description": "Get specific workflow definition",
+        "response": "WorkflowDefinition",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/workflows/{id}/publish",
+        "description": "Publish workflow (Draft -> Active, Version++)",
+        "response": "WorkflowDefinition",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/workflows/{id}/start",
+        "description": "Manually start a workflow instance",
+        "body": "{entityId: string, context: object}",
+        "response": "WorkflowInstance",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/my-tasks",
+        "description": "Get pending tasks for current user",
+        "query": "?userId={id}",
+        "response": "[{tokenId, taskName, dueAt, ...}]",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/my-tasks/{tokenId}/complete",
+        "description": "Complete a user task",
+        "body": "{outcome: string, data: object}",
+        "response": "{success: true}",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/workflow-instances",
+        "description": "List workflow instances",
+        "query": "?entityType={type}&status={status}",
+        "response": "[{instanceId, status, currentNode}]",
+        "status": 200
+      }
+    ],
+    "agentMemory": [
+      {
+        "method": "GET",
+        "path": "/api/agent/memory",
+        "description": "Get conversation history",
+        "query": "?userId={id}",
+        "response": "HistoryEntry[]",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/agent/memory/clear",
+        "description": "Clear conversation history",
+        "query": "?userId={id}",
+        "response": "{ok: true}",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/agent/preferences",
+        "description": "Get user preferences",
+        "query": "?userId={id}",
+        "response": "Map<String, Object>",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/agent/preferences",
+        "description": "Set user preference",
+        "query": "?userId={id}",
+        "body": "{key: string, value: any}",
+        "response": "{ok: true}",
+        "status": 200
+      }
+    ],
+    "metadataIntelligence": [
+      {
+        "method": "POST",
+        "path": "/api/meta-intelligence/reload",
+        "description": "Reload intent patterns from disk",
+        "response": "{success: true}",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/meta-intelligence/classify",
+        "description": "Test intent classification",
+        "query": "?input={text}",
+        "response": "{intent: string, confidence: number}",
+        "status": 200
+      }
+    ],
+    "smallTalkCache": [
+      {
+        "method": "GET",
+        "path": "/api/ai/smalltalk-cache/stats",
+        "description": "Get cache statistics",
+        "response": "{stats: {size, totalHits}}",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/ai/smalltalk-cache/clear",
+        "description": "Clear cache",
+        "response": "{success: true}",
+        "status": 200
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/ai/smalltalk-cache/entry",
+        "description": "Remove cache entry",
+        "body": "{text: string}",
+        "response": "{success: true}",
+        "status": 200
+      }
     ]
   },
-
   "requestHeaders": {
     "contentType": "application/json",
     "cors": "Enabled for development (Vite proxy)"
   },
-
   "responseFormat": {
     "success": {
       "status": 200,
@@ -244,7 +405,6 @@
       "body": "{error: 'Error message'}"
     }
   },
-
   "autoLinkingBehavior": {
     "implementedDate": "2025-11-08",
     "description": "Backend automatically maintains app-page relationships",
@@ -253,12 +413,16 @@
     "file": "app-bana-service/src/main/java/com/appbana/AppManager.java",
     "atomicity": "Single PUT /apps/{appId}/pages/{pageId} is sufficient"
   },
-
   "frontendClient": {
     "file": "app-bana-ui/src/core/api-client.ts",
     "class": "ApiClient",
     "baseURL": "http://localhost:8080",
-    "methods": ["get", "post", "put", "delete"],
+    "methods": [
+      "get",
+      "post",
+      "put",
+      "delete"
+    ],
     "usage": "import { apiClient } from './api-client';",
     "example": [
       "const result = await apiClient.get<{apps: AppListItem[]}>('/apps');",
@@ -268,12 +432,26 @@
       "await apiClient.delete('/apps/my-app');"
     ]
   },
-
   "auditLogging": {
     "file": "app-bana-service/src/main/java/com/appbana/AuditLogService.java",
     "table": "audit_log",
-    "actions": ["INSERT", "UPDATE", "DELETE", "BATCH_INSERT"],
-    "fields": ["id", "entity", "entityId", "action", "userId", "before", "after", "diff", "timestamp"],
+    "actions": [
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "BATCH_INSERT"
+    ],
+    "fields": [
+      "id",
+      "entity",
+      "entityId",
+      "action",
+      "userId",
+      "before",
+      "after",
+      "diff",
+      "timestamp"
+    ],
     "diffFormat": "JSON array of changed fields with before/after values"
   }
 }

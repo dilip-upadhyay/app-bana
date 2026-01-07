@@ -1,0 +1,168 @@
+{
+    "id": "profile",
+    "name": "Profile Page",
+    "description": "User profile page with avatar and stats",
+    "category": "profile",
+    "isSystem": true,
+    "nodes": [
+        {
+            "id": "root",
+            "type": "container",
+            "props": {
+                "style": "min-height: 100vh; background: #f9fafb; padding: 2rem;"
+            },
+            "children": [
+                "profile-card-1"
+            ]
+        },
+        {
+            "id": "profile-card-1",
+            "type": "container",
+            "props": {
+                "style": "max-width: 800px; margin: 0 auto; background: white; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center;"
+            },
+            "children": [
+                "avatar-1",
+                "name-1",
+                "title-1",
+                "bio-1",
+                "stats-grid-1"
+            ]
+        },
+        {
+            "id": "avatar-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "👤",
+                "style": "font-size: 96px; margin-bottom: 1rem;"
+            }
+        },
+        {
+            "id": "name-1",
+            "type": "text",
+            "props": {
+                "tag": "h1",
+                "text": "John Doe",
+                "style": "margin: 0 0 0.5rem 0; font-size: 32px; font-weight: 700;"
+            }
+        },
+        {
+            "id": "title-1",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Senior Product Designer",
+                "style": "margin: 0 0 1rem 0; font-size: 16px; color: #6b7280;"
+            }
+        },
+        {
+            "id": "bio-1",
+            "type": "text",
+            "props": {
+                "tag": "p",
+                "text": "Passionate about creating beautiful user experiences",
+                "style": "margin: 0 0 2rem 0; font-size: 14px; color: #374151;"
+            }
+        },
+        {
+            "id": "stats-grid-1",
+            "type": "container",
+            "props": {
+                "style": "display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 2rem; padding-top: 2rem; border-top: 1px solid #e5e7eb;"
+            },
+            "children": [
+                "stat-projects-1",
+                "stat-followers-1",
+                "stat-posts-1"
+            ]
+        },
+        {
+            "id": "stat-projects-1",
+            "type": "container",
+            "props": {
+                "style": "text-align: center;"
+            },
+            "children": [
+                "stat-projects-value-1",
+                "stat-projects-label-1"
+            ]
+        },
+        {
+            "id": "stat-projects-value-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "48",
+                "style": "font-size: 28px; font-weight: 700; color: #111827; margin-bottom: 0.25rem;"
+            }
+        },
+        {
+            "id": "stat-projects-label-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "Projects",
+                "style": "font-size: 14px; color: #6b7280;"
+            }
+        },
+        {
+            "id": "stat-followers-1",
+            "type": "container",
+            "props": {
+                "style": "text-align: center;"
+            },
+            "children": [
+                "stat-followers-value-1",
+                "stat-followers-label-1"
+            ]
+        },
+        {
+            "id": "stat-followers-value-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "2.5K",
+                "style": "font-size: 28px; font-weight: 700; color: #111827; margin-bottom: 0.25rem;"
+            }
+        },
+        {
+            "id": "stat-followers-label-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "Followers",
+                "style": "font-size: 14px; color: #6b7280;"
+            }
+        },
+        {
+            "id": "stat-posts-1",
+            "type": "container",
+            "props": {
+                "style": "text-align: center;"
+            },
+            "children": [
+                "stat-posts-value-1",
+                "stat-posts-label-1"
+            ]
+        },
+        {
+            "id": "stat-posts-value-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "124",
+                "style": "font-size: 28px; font-weight: 700; color: #111827; margin-bottom: 0.25rem;"
+            }
+        },
+        {
+            "id": "stat-posts-label-1",
+            "type": "text",
+            "props": {
+                "tag": "div",
+                "text": "Posts",
+                "style": "font-size: 14px; color: #6b7280;"
+            }
+        }
+    ]
+}

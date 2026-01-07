@@ -1,25 +1,54 @@
 :host {
-  display: grid;
-  grid-template-areas:
-    "apps apps apps"
-    "pages pages pages"
-    "library preview inspector";
-  grid-template-columns: var(--left-panel-width, 300px) minmax(500px, 1fr) minmax(280px, 350px);
-  grid-template-rows: auto auto 1fr;
-  gap: 0;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
+  width: 100vw;
   padding: 0;
+  margin: 0;
   box-sizing: border-box;
   background: #f8f9fb;
   --left-panel-width: 300px;
+  overflow: hidden;
+}
+
+/* Main content area with grid */
+.content-grid {
+  display: grid;
+  grid-template-columns: var(--left-panel-width, 300px) minmax(400px, 1fr) minmax(250px, 320px);
+  grid-template-areas: "library preview inspector";
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+:host([data-workflow-mode]) {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+:host([data-workflow-mode]) > .app-manager-panel {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+:host([data-workflow-mode]) > workflow-designer-page {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
 
 .app-manager-panel {
-  grid-area: apps;
+  flex: 0 0 auto;
 }
 
 .page-manager-panel {
-  grid-area: pages;
+  flex: 0 0 auto;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
 }
 
 .library-panel {
@@ -29,6 +58,7 @@
   overflow: hidden;
   padding: 12px 0 12px 12px;
   position: relative;
+  min-height: 0;
 }
 
 .left-panel-tabs {
@@ -65,7 +95,7 @@
 .left-panel-content {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
   display: flex;
   flex-direction: column;
   margin-right: 10px;
@@ -95,6 +125,18 @@ studio-component-library {
 studio-live-preview {
   flex: 1;
   min-height: 0;
+}
+
+studio-entity-manager {
+  flex: 1;
+  min-height: 0;
+}
+
+ai-chat-builder {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: auto;
 }
 
 studio-builder-inspector {
@@ -152,4 +194,17 @@ studio-builder-inspector {
   background: #3b82f6;
   height: 100px;
 }
+/* Full-page panel for Workflow Designer */
+.full-page-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: calc(100vh - 64px); /* Account for app-manager height */
+  padding: 0;
+}
 
+workflow-canvas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}

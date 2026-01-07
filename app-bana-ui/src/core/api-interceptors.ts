@@ -15,10 +15,14 @@ export function authInterceptor(tokenProvider: () => string | null): Interceptor
     onRequest: (config: RequestConfig) => {
       const token = tokenProvider();
       if (token) {
+        console.log('[Auth Interceptor] Adding session token to request:', config.url);
         config.headers = {
           ...config.headers,
-          'X-AppBana-Token': token,
+          'X-Session-Token': token,
+          'X-Session-Id': token,
         };
+      } else {
+        console.warn('[Auth Interceptor] No token found in localStorage for request:', config.url);
       }
       return config;
     },
@@ -159,6 +163,13 @@ export function errorHandlerInterceptor(onError?: (error: ApiError) => void): In
 
       if (error.status === 401) {
         message = 'Unauthorized. Please log in.';
+        // Clear invalid token and redirect to login
+        localStorage.removeItem('appbana_token');
+        console.warn('[Error Handler] 401 Unauthorized - Redirecting to login');
+        // Delay redirect slightly to allow error message to be logged
+        setTimeout(() => {
+          window.location.href = '/studio.html#/login';
+        }, 100);
       } else if (error.status === 403) {
         message = 'You do not have permission to perform this action.';
       } else if (error.status === 404) {
