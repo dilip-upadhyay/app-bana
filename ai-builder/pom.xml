@@ -93,6 +93,13 @@
             <artifactId>client</artifactId>
             <version>1.7.0</version>
         </dependency>
+        
+        <!-- Protobuf (required by Qdrant) -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.25.1</version>
+        </dependency>
 
         <!-- Guava for caching -->
         <dependency>
@@ -153,6 +160,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <version>1.19.3</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>qdrant</artifactId>
             <version>1.19.3</version>
             <scope>test</scope>
         </dependency>
