@@ -20,6 +20,7 @@ import type { AppRuntimeState } from './models/runtime-state';
 import './styles/theme.css';
 import './pages/auth/LoginPage';
 import './pages/auth/RegisterPage';
+import './components/ai-builder/index';  // AI Chat Builder components
 import { getApiUrl } from './core/api-config';
 
 @customElement('app-root')
