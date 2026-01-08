@@ -29,7 +29,7 @@ class AmbiguityResolverTest {
     }
 
     @Test
-    void testDetectAmbiguity_Clear() {
+    void testDetectAmbiguity_Clear() throws Exception {
         // Mock LLM response for clear input
         String llmResponse = """
                 {
@@ -51,7 +51,7 @@ class AmbiguityResolverTest {
     }
 
     @Test
-    void testDetectAmbiguity_Ambiguous() {
+    void testDetectAmbiguity_Ambiguous() throws Exception {
         // Mock LLM response for ambiguous input
         String llmResponse = """
                 {
@@ -74,7 +74,7 @@ class AmbiguityResolverTest {
     }
 
     @Test
-    void testGenerateClarifyingQuestions() {
+    void testGenerateClarifyingQuestions() throws Exception {
         // Mock LLM response
         String llmResponse = """
                 ["What should the entity be called?", "What fields do you need?", "What data types for the fields?"]
@@ -91,7 +91,7 @@ class AmbiguityResolverTest {
     }
 
     @Test
-    void testOfferInterpretations() {
+    void testOfferInterpretations() throws Exception {
         // Mock LLM response
         String llmResponse = """
                 [
@@ -110,7 +110,7 @@ class AmbiguityResolverTest {
     }
 
     @Test
-    void testDetectAmbiguity_ErrorHandling() {
+    void testDetectAmbiguity_ErrorHandling() throws Exception {
         // Mock LLM throwing exception
         when(llmService.chat(anyString())).thenThrow(new RuntimeException("API error"));
 

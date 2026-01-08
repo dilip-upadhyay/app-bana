@@ -28,7 +28,7 @@ class ChainOfThoughtReasoningTest {
     }
 
     @Test
-    void testGenerateReasoning() {
+    void testGenerateReasoning() throws Exception {
         // Mock LLM response with step-by-step reasoning
         String llmResponse = """
                 Step 1: Understand the requirement
@@ -107,7 +107,7 @@ class ChainOfThoughtReasoningTest {
     }
 
     @Test
-    void testGenerateReasoning_ErrorHandling() {
+    void testGenerateReasoning_ErrorHandling() throws Exception {
         // Mock LLM throwing exception
         when(llmService.chat(anyString())).thenThrow(new RuntimeException("API error"));
 
