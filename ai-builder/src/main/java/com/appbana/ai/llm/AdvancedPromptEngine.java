@@ -77,4 +77,76 @@ public class AdvancedPromptEngine {
 
         return prompt.toString();
     }
+
+    /**
+     * Build agent-specific prompt with tool descriptions
+     * Story 8.4: Agent-LLM Integration
+     */
+    public String buildAgentPrompt(
+            String userMessage,
+            String toolDescriptions,
+            String conversationHistory,
+            Map<String, Object> context) {
+
+        StringBuilder prompt = new StringBuilder();
+
+        // System instructions for agent
+        prompt.append("You are AppBana AI Builder - an intelligent agent that creates applications.\n\n");
+        prompt.append("You can take REAL ACTIONS by calling tools. ");
+        prompt.append("Think step-by-step and use tools to accomplish the user's goal.\n\n");
+
+        // Available tools
+        prompt.append("## Available Tools\n\n");
+        prompt.append(toolDescriptions);
+        prompt.append("\n");
+
+        // AppBana schema context (if enhancer available)
+        if (promptEnhancer != null) {
+            try {
+                String schemaContext = promptEnhancer.getRelevantSchemas(userMessage, 5);
+                if (schemaContext != null && !schemaContext.isEmpty()) {
+                    prompt.append("## AppBana Schemas\n\n");
+                    prompt.append(schemaContext);
+                    prompt.append("\n");
+                }
+            } catch (Exception e) {
+                log.warn("Failed to get schema context", e);
+            }
+        }
+
+        // Response format instructions
+        prompt.append("## Response Format\n\n");
+        prompt.append("You MUST respond with valid JSON in one of two formats:\n\n");
+        prompt.append("**Format 1: Call Tools**\n");
+        prompt.append("```json\n");
+        prompt.append("{\n");
+        prompt.append("  \"thinking\": \"Your step-by-step reasoning...\",\n");
+        prompt.append("  \"tool_calls\": [\n");
+        prompt.append("    {\"name\": \"tool_name\", \"arguments\": {\"arg1\": \"value1\"}}\n");
+        prompt.append("  ]\n");
+        prompt.append("}\n");
+        prompt.append("```\n\n");
+        prompt.append("**Format 2: Final Answer**\n");
+        prompt.append("```json\n");
+        prompt.append("{\n");
+        prompt.append("  \"thinking\": \"My reasoning...\",\n");
+        prompt.append("  \"final_answer\": \"Complete response to user...\"\n");
+        prompt.append("}\n");
+        prompt.append("```\n\n");
+
+        // Conversation history
+        if (conversationHistory != null && !conversationHistory.isEmpty()) {
+            prompt.append("## Previous Steps\n\n");
+            prompt.append(conversationHistory);
+            prompt.append("\n");
+        }
+
+        // User message
+        prompt.append("## User Request\n\n");
+        prompt.append(userMessage);
+        prompt.append("\n\n");
+        prompt.append("Respond with JSON only:");
+
+        return prompt.toString();
+    }
 }

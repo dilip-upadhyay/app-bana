@@ -241,4 +241,26 @@ public class AppBanaPromptEnhancer {
             return Collections.emptyList();
         }
     }
+
+    /**
+     * Get relevant schemas formatted as string for agent prompts
+     * Story 8.4: Agent-LLM Integration
+     */
+    public String getRelevantSchemas(String userMessage, int limit) {
+        try {
+            List<SchemaDefinition> schemas = knowledgeBaseService.searchRelevantSchemas(
+                    userMessage,
+                    Math.min(limit, MAX_SCHEMAS));
+
+            if (schemas.isEmpty()) {
+                return "";
+            }
+
+            return buildSchemaContext(schemas);
+
+        } catch (Exception e) {
+            log.error("Failed to get relevant schemas", e);
+            return "";
+        }
+    }
 }
