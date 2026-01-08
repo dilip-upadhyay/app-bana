@@ -29,6 +29,7 @@ public class QdrantService implements AutoCloseable {
     // Collection names
     private static final String COLLECTION_CONVERSATIONS = "conversations";
     private static final String COLLECTION_PATTERNS = "app_patterns";
+    private static final String COLLECTION_APPBANA_KNOWLEDGE = "appbana_knowledge";
     private static final int VECTOR_SIZE = 1536; // OpenAI text-embedding-3-small dimension
 
     public QdrantService(AiConfig config) {
@@ -70,6 +71,12 @@ public class QdrantService implements AutoCloseable {
             // Create app patterns collection
             createCollectionIfNotExists(
                     COLLECTION_PATTERNS,
+                    VECTOR_SIZE,
+                    Distance.Cosine);
+
+            // Create AppBana knowledge collection
+            createCollectionIfNotExists(
+                    COLLECTION_APPBANA_KNOWLEDGE,
                     VECTOR_SIZE,
                     Distance.Cosine);
 
@@ -187,6 +194,13 @@ public class QdrantService implements AutoCloseable {
      */
     public String getPatternsCollection() {
         return COLLECTION_PATTERNS;
+    }
+
+    /**
+     * Get AppBana knowledge collection name
+     */
+    public String getAppBanaKnowledgeCollection() {
+        return COLLECTION_APPBANA_KNOWLEDGE;
     }
 
     @Override
