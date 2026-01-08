@@ -4,6 +4,7 @@ import lombok.Data;
 
 /**
  * Request DTO for AI chat
+ * Updated: Story 8.5 - Added tenantId and appId for agent context
  */
 @Data
 public class ChatRequest {
@@ -11,4 +12,6 @@ public class ChatRequest {
     private String sessionId;
     private String userId;
     private String appType; // Optional: for context
+    private String tenantId; // Story 8.5: For agent context
+    private String appId; // Story 8.5: For agent context
 }
