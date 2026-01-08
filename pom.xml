@@ -10,6 +10,7 @@
     <modules>
         <module>app-bana-ui</module>
         <module>app-bana-service</module>
+        <module>ai-builder</module>
     </modules>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
