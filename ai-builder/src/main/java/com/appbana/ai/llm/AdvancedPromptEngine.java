@@ -1,6 +1,7 @@
 package com.appbana.ai.llm;
 
 import com.appbana.ai.config.AiConfig;
+import com.appbana.ai.knowledge.AppBanaPromptEnhancer;
 import com.appbana.ai.rag.ConversationMemory;
 import lombok.extern.slf4j.Slf4j;
 import java.util.*;
@@ -8,20 +9,41 @@ import java.util.*;
 /**
  * Advanced prompt engine with RAG enhancement
  * Story: 3.3 - Implement Advanced Prompt Engine
+ * Updated: Story 7.3 - RAG-Enhanced Prompt Engineering
  */
 @Slf4j
 public class AdvancedPromptEngine {
 
     private final AiConfig config;
     private final ConversationMemory conversationMemory;
+    private final AppBanaPromptEnhancer promptEnhancer;
 
-    public AdvancedPromptEngine(AiConfig config, ConversationMemory conversationMemory) {
+    public AdvancedPromptEngine(
+            AiConfig config,
+            ConversationMemory conversationMemory,
+            AppBanaPromptEnhancer promptEnhancer) {
         this.config = config;
         this.conversationMemory = conversationMemory;
-        log.info("Advanced Prompt Engine initialized");
+        this.promptEnhancer = promptEnhancer;
+        log.info("Advanced Prompt Engine initialized with AppBana enhancement");
     }
 
     public String buildPrompt(String userMessage, String userId, Map<String, Object> context) {
+        // Build base prompt
+        String basePrompt = buildBasePrompt(userMessage, userId, context);
+
+        // Enhance with AppBana schemas if enhancer is available
+        if (promptEnhancer != null) {
+            return promptEnhancer.enhancePrompt(userMessage, basePrompt);
+        }
+
+        return basePrompt;
+    }
+
+    /**
+     * Build base prompt without AppBana enhancement
+     */
+    private String buildBasePrompt(String userMessage, String userId, Map<String, Object> context) {
         StringBuilder prompt = new StringBuilder();
 
         // System prompt
