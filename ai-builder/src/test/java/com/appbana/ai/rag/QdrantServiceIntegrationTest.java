@@ -3,9 +3,10 @@ package com.appbana.ai.rag;
 import com.appbana.ai.config.AiConfig;
 import io.qdrant.client.grpc.Collections.CollectionInfo;
 import org.junit.jupiter.api.*;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.qdrant.QdrantContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,7 +21,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class QdrantServiceIntegrationTest {
 
     @Container
-    static QdrantContainer qdrantContainer = new QdrantContainer("qdrant/qdrant:latest");
+    static GenericContainer<?> qdrantContainer = new GenericContainer<>(DockerImageName.parse("qdrant/qdrant:latest"))
+            .withExposedPorts(6333, 6334)
+            .withReuse(true);
 
     private static QdrantService qdrantService;
     private static AiConfig config;
@@ -30,7 +33,7 @@ class QdrantServiceIntegrationTest {
         // Create configuration pointing to test container
         config = new AiConfig();
         config.setQdrantHost(qdrantContainer.getHost());
-        config.setQdrantPort(qdrantContainer.getGrpcPort());
+        config.setQdrantPort(qdrantContainer.getMappedPort(6333));
         config.setQdrantApiKey(null);
 
         // Initialize service
