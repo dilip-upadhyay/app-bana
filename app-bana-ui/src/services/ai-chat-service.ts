@@ -30,7 +30,8 @@ export interface AppPattern {
 }
 
 export class AiChatService {
-    private baseUrl = '/api/ai';
+    // AI Builder runs as separate microservice on port 8081
+    private baseUrl = 'http://localhost:8081/api/ai';
 
     async sendMessage(request: ChatRequest): Promise<ChatResponse> {
         const response = await fetch(`${this.baseUrl}/chat`, {

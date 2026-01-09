@@ -1,132 +1,174 @@
 package com.appbana.ai.server;
 
+import com.appbana.ai.agent.AiAgent;
+import com.appbana.ai.agent.AgentConfig;
+import com.appbana.ai.agent.tool.*;
+import com.appbana.ai.api.AiChatController;
+import com.appbana.ai.api.Router;
 import com.appbana.ai.config.AiConfig;
+import com.appbana.ai.knowledge.AppBanaPromptEnhancer;
+import com.appbana.ai.knowledge.AppBanaSchemaLoader;
+import com.appbana.ai.knowledge.KnowledgeBaseService;
+import com.appbana.ai.knowledge.MetadataValidator;
+import com.appbana.ai.llm.AdvancedPromptEngine;
+import com.appbana.ai.llm.IntentClassifier;
+import com.appbana.ai.llm.OpenAiLlmService;
+import com.appbana.ai.rag.EmbeddingService;
 import com.appbana.ai.rag.QdrantService;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.apache.catalina.Context;
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.startup.Tomcat;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.appbana.ai.rag.VectorStoreService;
+import com.sun.net.httpserver.HttpServer;
+import lombok.extern.slf4j.Slf4j;
 
-import java.io.File;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 
 /**
- * Embedded Tomcat server for AI Builder Service
+ * AI Builder HTTP Server using Router pattern
+ * Runs as a separate microservice on port 8081
  */
+@Slf4j
 public class AiServer {
-    private static final Logger log = LoggerFactory.getLogger(AiServer.class);
     private final AiConfig config;
     private final QdrantService qdrantService;
-    private final Tomcat tomcat;
-    private final ObjectMapper objectMapper;
+    private final HttpServer httpServer;
+    private final Router router;
 
-    public AiServer(AiConfig config, QdrantService qdrantService) {
+    public AiServer(AiConfig config, QdrantService qdrantService) throws IOException {
         this.config = config;
         this.qdrantService = qdrantService;
-        this.objectMapper = new ObjectMapper();
-        this.objectMapper.registerModule(new JavaTimeModule());
+        this.router = buildRouter();
 
-        // Initialize Tomcat
-        this.tomcat = new Tomcat();
-        this.tomcat.setPort(config.getPort());
-        this.tomcat.getConnector();
+        // Create HTTP server
+        this.httpServer = HttpServer.create(new InetSocketAddress(config.getPort()), 0);
+        this.httpServer.createContext("/", router::handle);
+        this.httpServer.setExecutor(null); // Use default executor
 
-        // Create context
-        Context ctx = tomcat.addContext("", new File(".").getAbsolutePath());
-
-        // Register servlets
-        registerServlets(ctx);
+        log.info("AI Server initialized on port {}", config.getPort());
     }
 
-    private void registerServlets(Context ctx) {
-        // Health check endpoint
-        Tomcat.addServlet(ctx, "health", new HealthServlet(qdrantService));
-        ctx.addServletMappingDecoded("/health", "health");
+    /**
+     * Build router with all AI endpoints
+     */
+    private Router buildRouter() {
+        Router router = new Router();
 
-        // AI Chat endpoint (placeholder for now)
-        Tomcat.addServlet(ctx, "chat", new ChatServlet(objectMapper));
-        ctx.addServletMappingDecoded("/api/ai/chat", "chat");
+        try {
+            // Initialize services
+            log.info("Initializing AI services...");
 
-        log.info("Registered servlets: /health, /api/ai/chat");
+            // LLM Service
+            OpenAiLlmService llmService = new OpenAiLlmService(config);
+
+            // Embedding Service
+            EmbeddingService embeddingService = new EmbeddingService(config);
+
+            // Vector Store Service
+            VectorStoreService vectorStoreService = new VectorStoreService(qdrantService, config);
+
+            // Schema Loader
+            AppBanaSchemaLoader schemaLoader = new AppBanaSchemaLoader();
+
+            // Knowledge Base Service
+            KnowledgeBaseService knowledgeBaseService = new KnowledgeBaseService(
+                    qdrantService,
+                    vectorStoreService,
+                    embeddingService,
+                    schemaLoader);
+
+            // Prompt Enhancer
+            AppBanaPromptEnhancer promptEnhancer = new AppBanaPromptEnhancer(knowledgeBaseService);
+
+            // Conversation Memory (set to null for now - requires DataSource)
+            // TODO: Add DataSource and initialize conversation memory
+
+            // Intent Classifier
+            IntentClassifier intentClassifier = new IntentClassifier(llmService);
+
+            // Prompt Engine (can work without conversation memory)
+            AdvancedPromptEngine promptEngine = new AdvancedPromptEngine(
+                    config,
+                    null, // conversationMemory
+                    promptEnhancer);
+
+            // Metadata Validator
+            MetadataValidator metadataValidator = new MetadataValidator(knowledgeBaseService);
+
+            // Tool Registry
+            ToolRegistry toolRegistry = new ToolRegistry();
+
+            // Register essential tools
+            String backendUrl = "http://localhost:8080"; // Main AppBana service
+            toolRegistry.register(new CreateEntityTool(metadataValidator, backendUrl));
+            toolRegistry.register(new ListEntitiesTool(backendUrl));
+            toolRegistry.register(new GeneratePageTool(metadataValidator, backendUrl));
+            toolRegistry.register(new SearchKnowledgeTool(knowledgeBaseService));
+
+            log.info("Registered {} tools", toolRegistry.getToolCount());
+
+            // Agent Config
+            AgentConfig agentConfig = AgentConfig.defaults();
+
+            // AI Agent
+            AiAgent agent = new AiAgent(llmService, toolRegistry, agentConfig);
+
+            // AI Chat Controller
+            AiChatController chatController = new AiChatController(
+                    llmService,
+                    intentClassifier,
+                    promptEngine,
+                    null, // conversationMemory
+                    agent);
+
+            log.info("AI services initialized successfully");
+
+            // Register routes
+            registerRoutes(router, chatController);
+
+        } catch (Exception e) {
+            log.error("Failed to initialize AI services", e);
+            throw new RuntimeException("AI service initialization failed", e);
+        }
+
+        return router;
     }
 
-    public void start() throws LifecycleException {
-        tomcat.start();
-        log.info("Server started on port {}", config.getPort());
+    /**
+     * Register all AI endpoints
+     */
+    private void registerRoutes(Router router, AiChatController chatController) {
+        // Health check
+        router.get("/health", (req, res) -> {
+            boolean qdrantHealthy = qdrantService.healthCheck();
+            res.json(200, java.util.Map.of(
+                    "status", qdrantHealthy ? "UP" : "DOWN",
+                    "service", "ai-builder",
+                    "qdrant", qdrantHealthy ? "UP" : "DOWN"));
+        });
+
+        // Regular chat endpoint
+        router.post("/api/ai/chat", chatController.chat());
+
+        // Agent-based chat endpoint
+        router.post("/api/ai/chat/agent", chatController.chatAgent());
+
+        log.info("Registered AI routes:");
+        log.info("  GET  /health");
+        log.info("  POST /api/ai/chat");
+        log.info("  POST /api/ai/chat/agent");
+    }
+
+    public void start() {
+        httpServer.start();
+        log.info("✅ AI Builder Server started on port {}", config.getPort());
+        log.info("📍 Health check: http://localhost:{}/health", config.getPort());
+        log.info("📍 Chat endpoint: http://localhost:{}/api/ai/chat", config.getPort());
+        log.info("📍 Agent endpoint: http://localhost:{}/api/ai/chat/agent", config.getPort());
     }
 
     public void stop() {
-        try {
-            tomcat.stop();
-            tomcat.destroy();
-        } catch (LifecycleException e) {
-            log.error("Error stopping server", e);
-        }
-    }
-
-    /**
-     * Health check servlet
-     */
-    static class HealthServlet extends HttpServlet {
-        private final QdrantService qdrantService;
-
-        HealthServlet(QdrantService qdrantService) {
-            this.qdrantService = qdrantService;
-        }
-
-        @Override
-        protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-            resp.setContentType("application/json");
-
-            // Check Qdrant health
-            boolean qdrantHealthy = qdrantService.healthCheck();
-            boolean overallHealthy = qdrantHealthy;
-
-            if (overallHealthy) {
-                resp.setStatus(HttpServletResponse.SC_OK);
-                resp.getWriter().write(String.format(
-                        "{\"status\":\"UP\",\"service\":\"ai-builder\",\"qdrant\":\"%s\"}",
-                        qdrantHealthy ? "UP" : "DOWN"));
-            } else {
-                resp.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
-                resp.getWriter().write(String.format(
-                        "{\"status\":\"DOWN\",\"service\":\"ai-builder\",\"qdrant\":\"%s\"}",
-                        qdrantHealthy ? "UP" : "DOWN"));
-            }
-        }
-    }
-
-    /**
-     * Chat servlet (placeholder)
-     */
-    static class ChatServlet extends HttpServlet {
-        private final ObjectMapper objectMapper;
-
-        ChatServlet(ObjectMapper objectMapper) {
-            this.objectMapper = objectMapper;
-        }
-
-        @Override
-        protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-            resp.setContentType("application/json");
-            resp.setStatus(HttpServletResponse.SC_OK);
-
-            // Placeholder response
-            String response = """
-                    {
-                        "message": "AI Builder Service is running! Implementation coming soon...",
-                        "state": "INITIAL",
-                        "timestamp": "%s"
-                    }
-                    """.formatted(java.time.Instant.now());
-
-            resp.getWriter().write(response);
+        if (httpServer != null) {
+            httpServer.stop(0);
+            log.info("AI Builder Server stopped");
         }
     }
 }
