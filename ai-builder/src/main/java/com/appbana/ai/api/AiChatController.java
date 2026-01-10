@@ -64,22 +64,29 @@ public class AiChatController {
                 // Get LLM response
                 String aiResponse = llmService.chat(prompt);
 
-                // Store conversation
-                ConversationMemory.Conversation conversation = new ConversationMemory.Conversation();
-                conversation.setUserId(request.getUserId());
-                conversation.setSessionId(UUID.fromString(request.getSessionId()));
-                conversation.setMessage(request.getMessage());
-                conversation.setResponse(aiResponse);
-                conversation.setIntent(intent.getIntent());
+                // Store conversation (optional - skip if memory is disabled)
+                String conversationId = null;
+                if (conversationMemory != null) {
+                    ConversationMemory.Conversation conversation = new ConversationMemory.Conversation();
+                    conversation.setUserId(request.getUserId());
+                    conversation.setSessionId(UUID.fromString(request.getSessionId()));
+                    conversation.setMessage(request.getMessage());
+                    conversation.setResponse(aiResponse);
+                    conversation.setIntent(intent.getIntent());
 
-                ConversationMemory.Conversation stored = conversationMemory.store(conversation);
+                    ConversationMemory.Conversation stored = conversationMemory.store(conversation);
+                    conversationId = stored.getId();
+                } else {
+                    log.debug("Conversation memory disabled - skipping storage");
+                    conversationId = UUID.randomUUID().toString();
+                }
 
                 // Build response
                 ChatResponse response = new ChatResponse();
                 response.setMessage(aiResponse);
                 response.setIntent(intent.getIntent());
                 response.setSuggestions(new ArrayList<>());
-                response.setConversationId(stored.getId());
+                response.setConversationId(conversationId);
 
                 res.json(200, response);
 
