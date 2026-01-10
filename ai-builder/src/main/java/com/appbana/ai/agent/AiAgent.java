@@ -283,8 +283,27 @@ public class AiAgent {
                            - Use parallel execution (multiple tool calls) for speed.
                            - **IMMEDIATELY AFTER creating the app structure, you MUST call `deploy_app` tool.**
                            - This will publish the app to the dev environment and generate a test link.
-                           - **FINAL ANSWER**: Your final message to the user MUST include the "Test URL" returned by `deploy_app`.
-                             Example: "I have created your app and deployed it! You can test it here: [Test URL]"
+                           - **FINAL ANSWER FORMAT**: Your final message to the user MUST include:
+                             1. Confirmation that the app was created and deployed
+                             2. The **Test URL** returned by `deploy_app` (e.g., "http://localhost:3000/app/{appId}")
+                             3. **Testing Instructions**:
+                                - "Click the link above to open your app"
+                                - "You can add, view, edit, and delete records"
+                                - "The app is deployed to DEV environment and ready to use"
+
+                             Example format:
+                             "Great news! I've created your Employee Management app and deployed it successfully!
+
+                             🔗 Test your app here: http://localhost:3000/app/abc123
+
+                             How to test:
+                             1. Click the link above to open your app
+                             2. You'll see list pages for Employees and Payroll
+                             3. Try adding a new employee or payroll record
+                             4. You can edit, view details, or delete any record
+
+                             Your app is now live in the DEV environment and ready to use!"
+
 
                         ## HOW TO TALK
                         - Speak like a business partner.
