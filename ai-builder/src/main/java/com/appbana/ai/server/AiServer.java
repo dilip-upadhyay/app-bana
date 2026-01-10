@@ -91,7 +91,7 @@ public class AiServer {
                     promptEnhancer);
 
             // Metadata Validator
-            MetadataValidator metadataValidator = new MetadataValidator(knowledgeBaseService);
+            MetadataValidator metadataValidator = new MetadataValidator(schemaLoader);
 
             // Tool Registry
             ToolRegistry toolRegistry = new ToolRegistry();
