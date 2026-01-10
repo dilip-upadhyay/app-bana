@@ -104,6 +104,7 @@ public class AiServer {
 
             // Register essential tools
             String backendUrl = "http://localhost:8080"; // Main AppBana service
+            toolRegistry.register(new CreateAppTool(backendUrl));
             toolRegistry.register(new CreateEntityTool(metadataValidator, backendUrl));
             toolRegistry.register(new ListEntitiesTool(backendUrl));
             toolRegistry.register(new GeneratePageTool(metadataValidator, backendUrl));

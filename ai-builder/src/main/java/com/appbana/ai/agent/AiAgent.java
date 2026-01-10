@@ -287,7 +287,7 @@ public class AiAgent {
                            - The UI will convert these into clickable buttons for better UX.
 
                         4. **FINAL EXECUTION & DEPLOYMENT**:
-                           - Once verification is complete, call the creation tools (`create_entity`, etc.).
+                           - STEP 1: Call create_app FIRST to create the app container. STEP 2: Call create_entity for entities. STEP 3: Call generate_page for pages. STEP 4: Call deploy_app. Once ready, use these creation tools (`create_entity`, etc.).
                            - Use parallel execution (multiple tool calls) for speed.
                            - **IMMEDIATELY AFTER creating the app structure, you MUST call `deploy_app` tool.**
                            - This will publish the app to the dev environment and generate a test link.
