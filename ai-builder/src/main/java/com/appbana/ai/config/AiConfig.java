@@ -22,7 +22,7 @@ public class AiConfig {
 
     // OpenAI configuration
     private String openaiApiKey;
-    private String openaiModel = "gpt-4";
+    private String openaiModel = "gpt-4o";
     private String openaiEmbeddingModel = "text-embedding-3-small";
     private int openaiMaxTokens = 2000;
     private double openaiTemperature = 0.7;
