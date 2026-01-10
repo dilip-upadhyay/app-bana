@@ -232,7 +232,6 @@ export class AiChatBuilder extends LitElement {
         message: userMessage,
         userId: this.userId,
         sessionId: this.sessionId,
-        context: {},
         token: authToken
       });
 
