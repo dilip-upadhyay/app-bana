@@ -1,5 +1,6 @@
 package com.appbana.ai.llm;
 
+import com.appbana.ai.cache.LlmCacheService;
 import com.appbana.ai.config.AiConfig;
 import com.theokanning.openai.completion.chat.*;
 import com.theokanning.openai.service.OpenAiService;
@@ -17,11 +18,29 @@ public class OpenAiLlmService implements AutoCloseable {
 
     private final AiConfig config;
     private final OpenAiService openAiService;
+    private final LlmCacheService cacheService;
+    private boolean cacheEnabled = true; // Feature flag
 
     public OpenAiLlmService(AiConfig config) {
         this.config = config;
         this.openAiService = new OpenAiService(config.getOpenaiApiKey(), Duration.ofSeconds(60));
-        log.info("OpenAI LLM Service initialized with model: {}", config.getOpenaiModel());
+        this.cacheService = new LlmCacheService(100_000, Duration.ofHours(6));
+        log.info("OpenAI LLM Service initialized with model: {}, cache: enabled", config.getOpenaiModel());
+    }
+
+    /**
+     * Enable or disable caching (for testing/debugging)
+     */
+    public void setCacheEnabled(boolean enabled) {
+        this.cacheEnabled = enabled;
+        log.info("LLM cache {}", enabled ? "enabled" : "disabled");
+    }
+
+    /**
+     * Get cache metrics
+     */
+    public String getCacheMetrics() {
+        return cacheService.getMetrics();
     }
 
     public String chat(String prompt) throws LlmException {
@@ -29,15 +48,28 @@ public class OpenAiLlmService implements AutoCloseable {
     }
 
     public String chat(String prompt, Map<String, Object> options) throws LlmException {
+        double temperature = 0.7;
+        String model = config.getOpenaiModel();
+
+        // Check cache first (if enabled)
+        if (cacheEnabled) {
+            var cached = cacheService.get(prompt, model, temperature);
+            if (cached.isPresent()) {
+                log.info("[Cache HIT] Returning cached response for prompt (length: {})", prompt.length());
+                return cached.get();
+            }
+            log.debug("[Cache MISS] Calling OpenAI API");
+        }
+
         try {
             log.debug("Sending chat request to OpenAI");
 
             ChatMessage message = new ChatMessage(ChatMessageRole.USER.value(), prompt);
 
             ChatCompletionRequest request = ChatCompletionRequest.builder()
-                    .model(config.getOpenaiModel())
+                    .model(model)
                     .messages(List.of(message))
-                    .temperature(0.7)
+                    .temperature(temperature)
                     .maxTokens(2000)
                     .build();
 
@@ -56,6 +88,12 @@ public class OpenAiLlmService implements AutoCloseable {
 
                     log.debug("Received response from OpenAI ({} tokens)",
                             result.getUsage().getTotalTokens());
+
+                    // Cache the response (if enabled)
+                    if (cacheEnabled) {
+                        cacheService.put(prompt, model, temperature, response);
+                        log.debug("[Cache PUT] Cached response for future requests");
+                    }
 
                     return response;
 
