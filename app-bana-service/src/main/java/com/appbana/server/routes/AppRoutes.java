@@ -52,17 +52,17 @@ public class AppRoutes {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
             String envParam = req.query("env");
-            
+
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
-            
+
             if (envParam == null || envParam.isBlank()) {
                 res.json(400, Map.of("error", "env query parameter required (DEV, SIT, or PROD)"));
                 return;
             }
-            
+
             // Parse environment
             AppVersion.Environment environment;
             try {
@@ -71,49 +71,65 @@ public class AppRoutes {
                 res.json(400, Map.of("error", "Invalid environment: " + envParam + " (must be DEV, SIT, or PROD)"));
                 return;
             }
-            
+
             try {
-                // Read full AppMeta from request body as raw Map, then convert to JSON
-                Map<String, Object> appMetaMap = req.readJson(new TypeReference<Map<String, Object>>() {});
-                if (appMetaMap == null || appMetaMap.isEmpty()) {
-                    res.json(400, Map.of("error", "Request body must contain full AppMeta JSON"));
-                    return;
+                // Read AppMeta from request body (optional for backward compatibility)
+                Map<String, Object> appMetaMap = null;
+                try {
+                    appMetaMap = req.readJson(new TypeReference<Map<String, Object>>() {
+                    });
+                } catch (Exception e) {
+                    // Ignore - body might be empty
                 }
+
+                // If body is empty/missing, fetch from database
+                if (appMetaMap == null || appMetaMap.isEmpty()) {
+                    LOG.info("[PUBLISH-ENDPOINT] No body provided, fetching metadata from DB for app {}", appId);
+                    AppMetadata metadata = AppManager.getAppFullMetadata(tenantId, appId);
+                    if (metadata == null) {
+                        res.json(404, Map.of("error", "App not found: " + appId));
+                        return;
+                    }
+                    appMetaMap = MAPPER.convertValue(metadata, new TypeReference<Map<String, Object>>() {
+                    });
+                    LOG.info("[PUBLISH-ENDPOINT] Loaded app metadata from DB with {} entities",
+                            metadata.getEntities() != null ? metadata.getEntities().size() : 0);
+                }
+
                 String appMetaJson = MAPPER.writeValueAsString(appMetaMap);
-                
+
                 // Get user ID from auth
                 String userId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
                 if (userId == null) {
                     userId = "system";
                 }
-                
+
                 // Get database connection and initialize publish service
                 try (Connection conn = JdbcManager.getConnection()) {
                     AppPublishService publishService = new AppPublishService(conn, new SchemaManager());
-                    
+
                     // Publish app
                     LOG.info("[PUBLISH-ENDPOINT] Publishing app {} to {} for tenant {}", appId, environment, tenantId);
-                    DeploymentResult result = publishService.publishApp(appMetaJson, appId, tenantId, environment, userId);
-                    
+                    DeploymentResult result = publishService.publishApp(appMetaJson, appId, tenantId, environment,
+                            userId);
+
                     if (result.isSuccess()) {
                         LOG.info("[PUBLISH-ENDPOINT] ✅ Publish successful: {}", result.getSummary());
                         res.json(200, Map.of(
-                            "success", true,
-                            "versionId", result.getVersionId(),
-                            "version", result.getVersion(),
-                            "environment", result.getEnvironment().name(),
-                            "tablesCreated", result.getTablesCreated(),
-                            "durationMs", result.getDurationMs(),
-                            "summary", result.getSummary()
-                        ));
+                                "success", true,
+                                "versionId", result.getVersionId(),
+                                "version", result.getVersion(),
+                                "environment", result.getEnvironment().name(),
+                                "tablesCreated", result.getTablesCreated(),
+                                "durationMs", result.getDurationMs(),
+                                "summary", result.getSummary()));
                     } else {
                         LOG.error("[PUBLISH-ENDPOINT] ❌ Publish failed: {}", result.getSummary());
                         res.json(500, Map.of(
-                            "success", false,
-                            "error", result.getErrorMessage(),
-                            "details", result.getErrorDetails(),
-                            "summary", result.getSummary()
-                        ));
+                                "success", false,
+                                "error", result.getErrorMessage(),
+                                "details", result.getErrorDetails(),
+                                "summary", result.getSummary()));
                     }
                 }
             } catch (Exception e) {

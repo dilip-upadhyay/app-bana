@@ -125,10 +125,10 @@ public class AppManager {
 
         // Use PostgreSQL's INSERT ... ON CONFLICT syntax (upsert)
         String sql = "INSERT INTO appbana_app_workflows (app_id, tenant_id, json_metadata, updated_at) " +
-                     "VALUES (?, ?, ?, ?) " +
-                     "ON CONFLICT (app_id, tenant_id) DO UPDATE SET " +
-                     "json_metadata = EXCLUDED.json_metadata, " +
-                     "updated_at = EXCLUDED.updated_at";
+                "VALUES (?, ?, ?, ?) " +
+                "ON CONFLICT (app_id, tenant_id) DO UPDATE SET " +
+                "json_metadata = EXCLUDED.json_metadata, " +
+                "updated_at = EXCLUDED.updated_at";
 
         try (Connection conn = JdbcManager.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -252,6 +252,63 @@ public class AppManager {
     }
 
     /**
+     * Get app with full metadata including hydrated entities from schemas
+     * Used by publish endpoint to fetch complete app data from DB
+     */
+    public static AppMetadata getAppFullMetadata(String tenantId, String appId) throws IOException {
+        AppMetadata app = getApp(tenantId, appId);
+        if (app == null) {
+            return null;
+        }
+
+        // Hydrate entities from schema names
+        if (app.getSchemas() != null && !app.getSchemas().isEmpty()) {
+            List<Object> hydratedEntities = new ArrayList<>();
+
+            for (String schemaName : app.getSchemas()) {
+                try {
+                    // Load schema from database
+                    EntitySchema schema = SchemaManager.loadSchema(appId, schemaName, tenantId);
+                    if (schema == null) {
+                        LOG.warn("[AppManager] Schema not found: {} for app {}", schemaName, appId);
+                        continue;
+                    }
+
+                    // Apply mandatory defaults to ensure data integrity
+                    if (schema.getFields() != null) {
+                        for (EntitySchema.Field field : schema.getFields()) {
+                            // 1. Length (default 255 if missing/invalid)
+                            if (field.getLength() == null || field.getLength() <= 0) {
+                                field.setLength(255);
+                            }
+
+                            // 2. Label (auto-generate if missing)
+                            if (field.getLabel() == null || field.getLabel().isEmpty()) {
+                                String name = field.getName();
+                                if (name != null && !name.isEmpty()) {
+                                    String label = name.substring(0, 1).toUpperCase() +
+                                            name.substring(1).replaceAll("([A-Z])", " $1").trim();
+                                    field.setLabel(label);
+                                }
+                            }
+                        }
+                    }
+
+                    hydratedEntities.add(schema);
+                    LOG.debug("[AppManager] Hydrated schema: {}", schemaName);
+                } catch (Exception e) {
+                    LOG.error("[AppManager] Failed to hydrate schema: {}", schemaName, e);
+                }
+            }
+
+            app.setEntities(hydratedEntities);
+            LOG.info("[AppManager] Hydrated {} entities for app {}", hydratedEntities.size(), appId);
+        }
+
+        return app;
+    }
+
+    /**
      * Create a new app
      */
     public static AppMetadata createApp(String tenantId, AppMetadata app) throws IOException {
@@ -371,15 +428,16 @@ public class AppManager {
             tenantId = "default";
 
         // Use PostgreSQL's INSERT ... ON CONFLICT syntax (upsert)
-        String sql = "INSERT INTO appbana_apps (id, tenant_id, name, description, version, author, created_at, updated_at, json_metadata) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-                     "ON CONFLICT (id, tenant_id) DO UPDATE SET " +
-                     "name = EXCLUDED.name, " +
-                     "description = EXCLUDED.description, " +
-                     "version = EXCLUDED.version, " +
-                     "author = EXCLUDED.author, " +
-                     "updated_at = EXCLUDED.updated_at, " +
-                     "json_metadata = EXCLUDED.json_metadata";
+        String sql = "INSERT INTO appbana_apps (id, tenant_id, name, description, version, author, created_at, updated_at, json_metadata) "
+                +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                "ON CONFLICT (id, tenant_id) DO UPDATE SET " +
+                "name = EXCLUDED.name, " +
+                "description = EXCLUDED.description, " +
+                "version = EXCLUDED.version, " +
+                "author = EXCLUDED.author, " +
+                "updated_at = EXCLUDED.updated_at, " +
+                "json_metadata = EXCLUDED.json_metadata";
 
         try (Connection conn = JdbcManager.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -457,12 +515,12 @@ public class AppManager {
 
         // Use PostgreSQL's INSERT ... ON CONFLICT syntax (upsert)
         String sql = "INSERT INTO appbana_pages (id, app_id, tenant_id, name, type, json_metadata, updated_at) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, ?) " +
-                     "ON CONFLICT (id, app_id, tenant_id) DO UPDATE SET " +
-                     "name = EXCLUDED.name, " +
-                     "type = EXCLUDED.type, " +
-                     "json_metadata = EXCLUDED.json_metadata, " +
-                     "updated_at = EXCLUDED.updated_at";
+                "VALUES (?, ?, ?, ?, ?, ?, ?) " +
+                "ON CONFLICT (id, app_id, tenant_id) DO UPDATE SET " +
+                "name = EXCLUDED.name, " +
+                "type = EXCLUDED.type, " +
+                "json_metadata = EXCLUDED.json_metadata, " +
+                "updated_at = EXCLUDED.updated_at";
 
         try (Connection conn = JdbcManager.getConnection()) {
             // Disable auto-commit to control transaction explicitly

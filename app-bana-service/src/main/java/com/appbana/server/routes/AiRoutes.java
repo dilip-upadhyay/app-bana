@@ -1,6 +1,5 @@
 package com.appbana.server.routes;
 
-import com.appbana.ai.api.AiChatController;
 import com.appbana.api.Router;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

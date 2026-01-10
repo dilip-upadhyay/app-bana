@@ -67,138 +67,59 @@ public class DeployAppTool implements Tool {
         }
 
         try {
-            // Step 1: Fetch full App Metadata
-            String fetchUrl = String.format("%s/appbana-studio/%s/apps/%s", backendUrl, tenantId, appId);
-            log.info("Fetching app metadata from: {}", fetchUrl);
+            // Call backend publish endpoint with empty body
+            // Backend will fetch metadata from DB using AppManager.getAppFullMetadata()
+            String publishUrl = String.format("%s/api/%s/apps/%s/publish?env=DEV", backendUrl, tenantId, appId);
+            log.info("[DeployAppTool] Publishing app {} to DEV environment", appId);
+            log.info("[DeployAppTool] Backend will fetch metadata from database");
 
-            HttpRequest fetchReq = HttpRequest.newBuilder()
-                    .uri(URI.create(fetchUrl))
+            HttpRequest publishReq = HttpRequest.newBuilder()
+                    .uri(URI.create(publishUrl))
+                    .header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + token)
-                    .GET()
+                    .POST(HttpRequest.BodyPublishers.ofString("{}")) // Empty body
                     .build();
 
-            HttpResponse<String> fetchRes = httpClient.send(fetchReq, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> publishRes = httpClient.send(publishReq, HttpResponse.BodyHandlers.ofString());
+            long executionTime = System.currentTimeMillis() - startTime;
 
-            if (fetchRes.statusCode() != 200) {
-                return ToolResult.error(getName(), "Failed to fetch app metadata: " + fetchRes.body());
-            }
+            if (publishRes.statusCode() >= 200 && publishRes.statusCode() < 300) {
+                // Parse success response
+                Map<String, Object> response = objectMapper.readValue(publishRes.body(), Map.class);
 
-            String appMetaJson = fetchRes.body();
-            Map<String, Object> appData = objectMapper.readValue(appMetaJson, Map.class);
+                log.info("[DeployAppTool] ✅ Deployment successful");
+                log.info("[DeployAppTool] Version: {}", response.get("version"));
+                log.info("[DeployAppTool] Tables created: {}", response.get("tablesCreated"));
 
-            // Hydrate entities from schemas if missing
-            if (!appData.containsKey("entities") || ((java.util.List) appData.get("entities")).isEmpty()) {
-                if (appData.containsKey("schemas")) {
-                    java.util.List<String> schemaNames = (java.util.List<String>) appData.get("schemas");
-                    java.util.List<Map<String, Object>> hydratedEntities = new java.util.ArrayList<>();
+                Map<String, Object> result = Map.of(
+                        "status", "deployed",
+                        "environment", "DEV",
+                        "version", response.getOrDefault("version", "unknown"),
+                        "tablesCreated", response.getOrDefault("tablesCreated", java.util.List.of()),
+                        "summary", response.getOrDefault("summary", "Deployment successful"));
 
-                    log.info("Hydrating {} entities from schemas list...", schemaNames.size());
+                return ToolResult.success(getName(), result, executionTime);
+            } else {
+                // Parse error response
+                String errorBody = publishRes.body();
+                log.error("[DeployAppTool] ❌ Deployment failed: {}", errorBody);
 
-                    for (String schemaName : schemaNames) {
-                        String schemaUrl = String.format("%s/schema/%s", backendUrl, schemaName);
-                        HttpRequest schemaReq = HttpRequest.newBuilder()
-                                .uri(URI.create(schemaUrl))
-                                .header("Authorization", "Bearer " + token)
-                                .GET()
-                                .build();
+                try {
+                    Map<String, Object> errorResponse = objectMapper.readValue(errorBody, Map.class);
+                    String errorMessage = (String) errorResponse.getOrDefault("error", "Unknown error");
+                    String errorDetails = (String) errorResponse.get("details");
 
-                        HttpResponse<String> schemaRes = httpClient.send(schemaReq,
-                                HttpResponse.BodyHandlers.ofString());
-                        if (schemaRes.statusCode() == 200) {
-                            Map<String, Object> schemaObj = objectMapper.readValue(schemaRes.body(), Map.class);
-
-                            // Sanitize and Apply Mandatory Defaults
-                            if (schemaObj.containsKey("fields") && schemaObj.get("fields") instanceof java.util.List) {
-                                java.util.List<Map<String, Object>> fields = (java.util.List<Map<String, Object>>) schemaObj
-                                        .get("fields");
-                                for (Map<String, Object> field : fields) {
-                                    String name = (String) field.get("name");
-
-                                    // 1. Length (Mandatory, default 255)
-                                    Object lenObj = field.get("length");
-                                    int length = 255;
-                                    if (lenObj instanceof Number) {
-                                        length = ((Number) lenObj).intValue();
-                                    } else if (lenObj instanceof String) {
-                                        try {
-                                            length = Integer.parseInt((String) lenObj);
-                                        } catch (Exception ignored) {
-                                        }
-                                    }
-                                    if (length <= 0)
-                                        length = 255;
-                                    field.put("length", length);
-
-                                    // 2. Boolean Flags (Mandatory not null)
-                                    if (field.get("primaryKey") == null)
-                                        field.put("primaryKey", false);
-                                    if (field.get("autoIncrement") == null)
-                                        field.put("autoIncrement", false);
-                                    if (field.get("required") == null)
-                                        field.put("required", false);
-
-                                    // 3. Label (Mandatory)
-                                    if (field.get("label") == null && name != null && !name.isEmpty()) {
-                                        String label = name.substring(0, 1).toUpperCase()
-                                                + name.substring(1).replaceAll("([A-Z])", " $1").trim();
-                                        field.put("label", label);
-                                    }
-                                }
-                            }
-
-                            hydratedEntities.add(schemaObj);
-                        } else {
-                            log.warn("Failed to hydration schema {}: {}", schemaName, schemaRes.statusCode());
-                        }
-                    }
-
-                    if (hydratedEntities.isEmpty()) {
-                        log.warn("No entities hydrated for app {}. Schemas list was: {}", appId, schemaNames);
-                    } else {
-                        try {
-                            log.info("Hydrated entities JSON: {}", objectMapper.writeValueAsString(hydratedEntities));
-                        } catch (Exception e) {
-                            log.error("Failed to log entities", e);
-                        }
-                    }
-
-                    appData.put("entities", hydratedEntities);
-                    // Update JSON for publishing
-                    appMetaJson = objectMapper.writeValueAsString(appData);
+                    return ToolResult.error(getName(),
+                            "Deployment failed: " + errorMessage +
+                                    (errorDetails != null ? "\n" + errorDetails : ""));
+                } catch (Exception e) {
+                    return ToolResult.error(getName(), "Deployment failed: " + errorBody);
                 }
             }
 
-            // Step 2: Publish App
-            String publishUrl = String.format("%s/api/%s/apps/%s/publish?env=DEV", backendUrl, tenantId, appId);
-            log.info("Publishing app to: {}", publishUrl);
-
-            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
-                    .uri(URI.create(publishUrl))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(appMetaJson));
-
-            if (token != null) {
-                reqBuilder.header("Authorization", "Bearer " + token);
-            }
-
-            HttpResponse<String> publishRes = httpClient.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
-            long duration = System.currentTimeMillis() - startTime;
-
-            if (publishRes.statusCode() == 200) {
-                // Construct test URL (assuming standard UI port 3000)
-                // TODO: Get UI URL from config if possible
-                String testUrl = String.format("http://localhost:3000/app/%s", appId);
-
-                return ToolResult.success(getName(), String.format(
-                        "App deployed successfully to DEV environment!\nTest URL: %s\nDeployment Details: %s",
-                        testUrl, publishRes.body()), duration);
-            } else {
-                return ToolResult.error(getName(), "Deployment failed: " + publishRes.body());
-            }
-
         } catch (Exception e) {
-            log.error("DeployAppTool execution failed", e);
-            return ToolResult.error(getName(), "Error deploying app: " + e.getMessage());
+            log.error("[DeployAppTool] Exception during deployment", e);
+            return ToolResult.error(getName(), "Deployment error: " + e.getMessage());
         }
     }
 }
