@@ -68,6 +68,10 @@ public class CreateEntityTool implements Tool {
                 },
                 "required": ["name", "type", "required"]
               }
+            },
+            "appId": {
+              "type": "string",
+              "description": "Target App ID. If not provided, uses current context."
             }
           },
           "required": ["name", "fields"]
@@ -105,7 +109,26 @@ public class CreateEntityTool implements Tool {
       }
 
       // 3. Call backend API
-      String url = baseUrl + "/schema";
+      String tenantId = context.tenantId();
+      String token = context.token();
+
+      // Prefer appId from args, fallback to context
+      String appId = (String) arguments.get("appId");
+      if (appId == null || appId.isEmpty()) {
+        appId = context.appId();
+      }
+
+      // Use app-specific endpoint if appId is available
+      String url;
+      if (appId != null && !appId.equals("default") && !appId.isEmpty()) {
+        url = String.format("%s/appbana-studio/%s/apps/%s/entities", baseUrl, tenantId, appId);
+      } else {
+        // Fallback to legacy endpoint (only if no appId)
+        url = baseUrl + "/schema";
+      }
+
+      log.info("[CreateEntityTool] POST {}", url);
+
       String jsonBody = new com.fasterxml.jackson.databind.ObjectMapper()
           .writeValueAsString(entityMetadata);
 
