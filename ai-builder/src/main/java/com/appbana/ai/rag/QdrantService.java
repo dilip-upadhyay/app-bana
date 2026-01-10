@@ -68,6 +68,10 @@ public class QdrantService implements AutoCloseable {
                     VECTOR_SIZE,
                     Distance.Cosine);
 
+            // Create payload indexes for reliable filtering
+            createPayloadIndex(COLLECTION_CONVERSATIONS, "sessionId", PayloadSchemaType.Keyword);
+            createPayloadIndex(COLLECTION_CONVERSATIONS, "userId", PayloadSchemaType.Keyword);
+
             // Create app patterns collection
             createCollectionIfNotExists(
                     COLLECTION_PATTERNS,
@@ -194,6 +198,21 @@ public class QdrantService implements AutoCloseable {
      */
     public String getPatternsCollection() {
         return COLLECTION_PATTERNS;
+    }
+
+    /**
+     * Create payload index for a field
+     */
+    private void createPayloadIndex(String collectionName, String fieldName, PayloadSchemaType fieldType) {
+        try {
+            log.info("Creating payload index for field '{}' in collection '{}'", fieldName, collectionName);
+            client.createPayloadIndexAsync(collectionName, fieldName, fieldType, null, null, null, null).get();
+            log.info("Payload index created successfully");
+        } catch (Exception e) {
+            // Log but don't fail startup if index already exists or error occurs
+            log.warn("Failed to create payload index for field '{}' (might already exist): {}", fieldName,
+                    e.getMessage());
+        }
     }
 
     /**

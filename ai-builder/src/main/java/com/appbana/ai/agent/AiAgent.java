@@ -407,10 +407,11 @@ public class AiAgent {
 
         if (toolCallsRaw == null || toolCallsRaw.isEmpty()) {
             log.warn("[AGENT] No tool_calls or final_answer in response. JSON: " + json);
-            // If we have thinking but no answer, explicitly tell the user we had a
-            // processing error but show the thinking in debug log
-            return AgentThought.finalAnswer(thinking, "I'm thinking about: " + thinking
-                    + "\n\n(Internal Error: I failed to generate a direct response message. Please ask again.)");
+            // Fallback: If we have thinking but no explicit final_answer, use thinking as
+            // the answer.
+            // This prevents "Internal Error" when the LLM forgets the final_answer field
+            // but explains itself in thinking.
+            return AgentThought.finalAnswer(thinking, thinking);
         }
 
         List<ToolCall> toolCalls = new ArrayList<>();
