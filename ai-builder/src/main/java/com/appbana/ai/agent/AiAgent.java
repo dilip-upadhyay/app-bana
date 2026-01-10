@@ -261,21 +261,30 @@ public class AiAgent {
                            - HR (Employee directory, onboarding)
                            - Operations (Project tracking, equipment logs)
 
-                        ## HOW TO TALK TO ME
-                        Speak like a business owner, not a developer.
+                        ## INTERACTION RULES - CRITICAL
+                        1. **ACKNOWLEDGE & PLAN FIRST**: When a user asks for an app, DO NOT build it immediately.
+                           - First, say "Okay, that's a great idea."
+                           - List the features you will build (e.g., "I will create a Leave Management system with paid, sick, and holiday leaves.")
+                           - Describe what the user will see (e.g., "Employees can log in to view their balance.")
 
-                        INSTEAD OF SAYING: "Create an entity with text fields and a lookup."
-                        SAY: "I need to keep a list of my trusted vendors and what products they supply."
+                        2. **ASK CLARIFYING QUESTIONS**:
+                           - Ask 1 or 2 relevant follow-up questions to customize the app.
+                           - Example: "What kind of leaves do you have in your organization?"
+                           - Do NOT ask too many questions. Keep it simple.
 
-                        INSTEAD OF SAYING: "Add a form component with validation."
-                        SAY: "Make sure people can't submit the order without a phone number."
+                        3. **WAIT FOR CONFIRMATION**:
+                           - Ask: "Are you satisfied with this plan? Shall I go ahead and create the app?"
+                           - **ONLY call the tools (`create_entity`, etc.) AFTER the user says YES/Proceed.**
+                           - If the user answers your questions, incorporate their answers into the plan and ASK FOR CONFIRMATION AGAIN.
 
-                        PERFORMANCE TIP: You can and SHOULD call multiple tools in a single turn. If the user asks to create 3 things, generate ONE response with 3 tool calls in the `tool_calls` list. I will run them all in parallel for maximum speed. Do not wait for one to finish before asking for the next if they are independent.
+                        4. **FINAL EXECUTION**:
+                           - Once verified/confirmed, THEN you can call the tools.
+                           - Use parallel execution (multiple tool calls) for speed as previously instructed.
 
-                        ## MY PROMISE
-                        - I will build the forms, lists, and databases you need.
-                        - I will set up the security so your data is safe.
-                        - I will explain things in plain English.
+                        ## HOW TO TALK
+                        - Speak like a business partner.
+                        - Be encouraging and clear.
+                        - Do not use jargon.
 
                         Let's get to work! What business problem can I solve for you today?
                         """);
@@ -297,13 +306,15 @@ public class AiAgent {
         prompt.append("  ]\n");
         prompt.append("}\n");
         prompt.append("```\n\n");
-        prompt.append("**Format 2: Final Answer**\n");
+        prompt.append("**Format 2: Final Answer (Conversation)**\n");
         prompt.append("```json\n");
         prompt.append("{\n");
-        prompt.append("  \"thinking\": \"My reasoning...\",\n");
-        prompt.append("  \"final_answer\": \"The complete response to the user...\"\n");
+        prompt.append("  \"thinking\": \"Internal monologue...\",\n");
+        prompt.append("  \"final_answer\": \"The actual message to show to the user. MUST BE PRESENT.\"\n");
         prompt.append("}\n");
         prompt.append("```\n\n");
+        prompt.append(
+                "IMPORTANT: Do NOT output raw text. ALWAYS use JSON. Verification step: Did you include `tool_calls` OR `final_answer`? One is REQUIRED.\n\n");
 
         // Conversation history
         if (!history.isEmpty()) {
@@ -350,6 +361,17 @@ public class AiAgent {
         String thinking = (String) response.get("thinking");
         String finalAnswer = (String) response.get("final_answer");
 
+        // Robustness: Check for alternative keys if final_answer is missing
+        if (finalAnswer == null)
+            finalAnswer = (String) response.get("message");
+        if (finalAnswer == null)
+            finalAnswer = (String) response.get("answer");
+        if (finalAnswer == null)
+            finalAnswer = (String) response.get("text");
+
+        // DO NOT use thinking as finalAnswer. It contains internal monologue (3rd
+        // person) which confuses the user.
+
         // Check for final answer
         if (finalAnswer != null && !finalAnswer.isEmpty()) {
             return AgentThought.finalAnswer(thinking, finalAnswer);
@@ -360,8 +382,11 @@ public class AiAgent {
         List<Map<String, Object>> toolCallsRaw = (List<Map<String, Object>>) response.get("tool_calls");
 
         if (toolCallsRaw == null || toolCallsRaw.isEmpty()) {
-            log.warn("[AGENT] No tool_calls or final_answer in response");
-            return AgentThought.finalAnswer(thinking, "I'm not sure what to do next.");
+            log.warn("[AGENT] No tool_calls or final_answer in response. JSON: " + json);
+            // If we have thinking but no answer, explicitly tell the user we had a
+            // processing error but show the thinking in debug log
+            return AgentThought.finalAnswer(thinking, "I'm thinking about: " + thinking
+                    + "\n\n(Internal Error: I failed to generate a direct response message. Please ask again.)");
         }
 
         List<ToolCall> toolCalls = new ArrayList<>();
