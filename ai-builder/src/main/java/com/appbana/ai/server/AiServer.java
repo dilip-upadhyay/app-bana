@@ -16,6 +16,7 @@ import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.rag.EmbeddingService;
 import com.appbana.ai.rag.QdrantService;
 import com.appbana.ai.rag.VectorStoreService;
+import com.appbana.ai.rag.ConversationMemory;
 import com.sun.net.httpserver.HttpServer;
 import lombok.extern.slf4j.Slf4j;
 
@@ -78,16 +79,21 @@ public class AiServer {
             // Prompt Enhancer
             AppBanaPromptEnhancer promptEnhancer = new AppBanaPromptEnhancer(knowledgeBaseService);
 
-            // Conversation Memory (set to null for now - requires DataSource)
-            // TODO: Add DataSource and initialize conversation memory
+            // Conversation Memory (no DataSource required for Qdrant-only mode)
+            ConversationMemory conversationMemory = new ConversationMemory(
+                    null, // dataSource
+                    embeddingService,
+                    vectorStoreService,
+                    qdrantService,
+                    config);
 
             // Intent Classifier
             IntentClassifier intentClassifier = new IntentClassifier(llmService);
 
-            // Prompt Engine (can work without conversation memory)
+            // Prompt Engine (now with conversation memory)
             AdvancedPromptEngine promptEngine = new AdvancedPromptEngine(
                     config,
-                    null, // conversationMemory
+                    conversationMemory,
                     promptEnhancer);
 
             // Metadata Validator
@@ -101,6 +107,7 @@ public class AiServer {
             toolRegistry.register(new CreateEntityTool(metadataValidator, backendUrl));
             toolRegistry.register(new ListEntitiesTool(backendUrl));
             toolRegistry.register(new GeneratePageTool(metadataValidator, backendUrl));
+            toolRegistry.register(new DeployAppTool(backendUrl));
             toolRegistry.register(new SearchKnowledgeTool(knowledgeBaseService));
 
             log.info("Registered {} tools", toolRegistry.getToolCount());
@@ -116,7 +123,7 @@ public class AiServer {
                     llmService,
                     intentClassifier,
                     promptEngine,
-                    null, // conversationMemory
+                    conversationMemory,
                     agent);
 
             log.info("AI services initialized successfully");

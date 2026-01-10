@@ -5,6 +5,7 @@ import com.appbana.ai.agent.tool.ToolCall;
 import com.appbana.ai.agent.tool.ToolRegistry;
 import com.appbana.ai.agent.tool.ToolResult;
 import com.appbana.ai.llm.OpenAiLlmService;
+import com.appbana.ai.rag.ConversationMemory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -277,9 +278,13 @@ public class AiAgent {
                            - **ONLY call the tools (`create_entity`, etc.) AFTER the user says YES/Proceed.**
                            - If the user answers your questions, incorporate their answers into the plan and ASK FOR CONFIRMATION AGAIN.
 
-                        4. **FINAL EXECUTION**:
-                           - Once verified/confirmed, THEN you can call the tools.
-                           - Use parallel execution (multiple tool calls) for speed as previously instructed.
+                        4. **FINAL EXECUTION & DEPLOYMENT**:
+                           - Once verification is complete, call the creation tools (`create_entity`, etc.).
+                           - Use parallel execution (multiple tool calls) for speed.
+                           - **IMMEDIATELY AFTER creating the app structure, you MUST call `deploy_app` tool.**
+                           - This will publish the app to the dev environment and generate a test link.
+                           - **FINAL ANSWER**: Your final message to the user MUST include the "Test URL" returned by `deploy_app`.
+                             Example: "I have created your app and deployed it! You can test it here: [Test URL]"
 
                         ## HOW TO TALK
                         - Speak like a business partner.
@@ -316,7 +321,26 @@ public class AiAgent {
         prompt.append(
                 "IMPORTANT: Do NOT output raw text. ALWAYS use JSON. Verification step: Did you include `tool_calls` OR `final_answer`? One is REQUIRED.\n\n");
 
-        // Conversation history
+        // Conversation History (From Database/Qdrant)
+        if (context.hasVariable("chat_history")) {
+            try {
+                @SuppressWarnings("unchecked")
+                List<ConversationMemory.Conversation> chatHistory = (List<ConversationMemory.Conversation>) context
+                        .getVariable("chat_history");
+
+                if (chatHistory != null && !chatHistory.isEmpty()) {
+                    prompt.append("## Conversation History\n\n");
+                    for (ConversationMemory.Conversation conv : chatHistory) {
+                        prompt.append(String.format("User: %s\n", conv.getMessage()));
+                        prompt.append(String.format("Assistant: %s\n\n", conv.getResponse()));
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to format chat history", e);
+            }
+        }
+
+        // Previous Steps (Current thinking process)
         if (!history.isEmpty()) {
             prompt.append("## Previous Steps\n\n");
             for (AgentResponse.AgentStep step : history) {

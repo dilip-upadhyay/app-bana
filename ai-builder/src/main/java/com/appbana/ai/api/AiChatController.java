@@ -14,6 +14,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
@@ -104,36 +106,71 @@ public class AiChatController {
     public BiConsumer<Router.HttpRequest, Router.HttpResponse> chatAgent() {
         return (req, res) -> {
             try {
-                ChatRequest request = req.readJson(new TypeReference<ChatRequest>() {
+                ChatRequest chatRequest = req.readJson(new TypeReference<ChatRequest>() {
                 });
-                log.info("[AGENT-ENDPOINT] Chat request from user: {}", request.getUserId());
+                log.info("[AGENT-ENDPOINT] Chat request from user: {}", chatRequest.getUserId());
 
-                // Build agent context
-                AgentContext context = AgentContext.create(
-                        request.getTenantId() != null ? request.getTenantId() : "default",
-                        request.getAppId() != null ? request.getAppId() : "default",
-                        request.getUserId(),
-                        request.getSessionId(),
-                        request.getToken());
+                // Extract context details from the request
+                String tenantId = chatRequest.getTenantId() != null ? chatRequest.getTenantId() : "default";
+                String appId = chatRequest.getAppId() != null ? chatRequest.getAppId() : "default";
+                String userId = chatRequest.getUserId();
+                String sessionId = chatRequest.getSessionId();
+                String token = chatRequest.getToken();
 
-                // Execute agent
-                AgentResponse agentResponse = agent.process(request.getMessage(), context);
-
-                // Build chat response
-                ChatResponse response = new ChatResponse();
-
-                if (agentResponse.isSuccess()) {
-                    response.setMessage(agentResponse.getFinalAnswer());
-                    response.setIntent("agent_action");
-                } else {
-                    response.setMessage("I encountered an error: " + agentResponse.getError());
-                    response.setIntent("agent_error");
+                // 1. Get Conversation History
+                List<ConversationMemory.Conversation> history = new ArrayList<>();
+                if (conversationMemory != null) {
+                    try {
+                        history = conversationMemory.getSessionHistory(UUID.fromString(sessionId));
+                    } catch (Exception e) {
+                        log.warn("Failed to retrieve conversation history for session {}: {}", sessionId,
+                                e.getMessage());
+                    }
                 }
 
-                response.setSuggestions(new ArrayList<>());
-                response.setConversationId(UUID.randomUUID().toString());
-                res.json(200, response);
+                // 2. Prepare Agent Context
+                // Pass token for authenticated tool calls and history for context
+                AgentContext agentContext = AgentContext.create(
+                        tenantId,
+                        appId,
+                        userId,
+                        sessionId,
+                        token).withVariable("chat_history", history);
 
+                // 3. Execute Agent
+                // The agent will decide which tools to call based on the user's message
+                AgentResponse result = agent.process(chatRequest.getMessage(), agentContext);
+
+                // 4. Handle Result
+                if (result.isSuccess()) {
+                    // Store conversation in memory
+                    if (conversationMemory != null) {
+                        ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
+                        conv.setUserId(userId);
+                        conv.setSessionId(UUID.fromString(sessionId));
+                        conv.setMessage(chatRequest.getMessage());
+                        conv.setResponse(result.getFinalAnswer());
+                        conv.setIntent("agent_action");
+
+                        try {
+                            conversationMemory.store(conv);
+                        } catch (Exception e) {
+                            log.warn("Failed to store conversation for user {} session {}: {}", userId, sessionId,
+                                    e.getMessage());
+                        }
+                    }
+
+                    // Return success response
+                    res.json(200, Map.of(
+                            "status", "success",
+                            "response", result.getFinalAnswer(),
+                            "steps", result.getSteps()));
+                } else {
+                    // Return error response
+                    res.json(500, Map.of(
+                            "status", "error",
+                            "message", result.getError() != null ? result.getError() : "Unknown error occurred"));
+                }
             } catch (Exception e) {
                 log.error("[AGENT-ENDPOINT] Error processing agent chat", e);
                 res.json(500, Map.of("error", "Agent processing failed: " + e.getMessage()));
