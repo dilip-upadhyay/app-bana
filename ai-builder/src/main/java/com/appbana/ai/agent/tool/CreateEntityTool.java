@@ -108,9 +108,28 @@ public class CreateEntityTool implements Tool {
         log.info("[CreateEntityTool] Auto-fix applied successfully");
       }
 
-      // 3. Call backend API
+      // 3. Step 1: Create Schema (Global)
+      // Always use /schema endpoint to create the entity definition first
+      String schemaUrl = baseUrl + "/schema";
       String tenantId = context.tenantId();
       String token = context.token();
+
+      log.info("[CreateEntityTool] POST {}", schemaUrl);
+
+      String jsonBody = new com.fasterxml.jackson.databind.ObjectMapper()
+          .writeValueAsString(entityMetadata);
+
+      HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+          .uri(URI.create(schemaUrl))
+          .header("Content-Type", "application/json");
+
+      if (token != null && !token.isEmpty()) {
+        requestBuilder.header("Authorization", "Bearer " + token);
+      }
+
+      HttpResponse<String> response = httpClient.send(
+          requestBuilder.POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build(),
+          HttpResponse.BodyHandlers.ofString());
 
       // Prefer appId from args, fallback to context
       String appId = (String) arguments.get("appId");
@@ -118,40 +137,16 @@ public class CreateEntityTool implements Tool {
         appId = context.appId();
       }
 
-      // Use app-specific endpoint if appId is available
-      String url;
-      if (appId != null && !appId.equals("default") && !appId.isEmpty()) {
-        url = String.format("%s/appbana-studio/%s/apps/%s/entities", baseUrl, tenantId, appId);
-      } else {
-        // Fallback to legacy endpoint (only if no appId)
-        url = baseUrl + "/schema";
-      }
-
-      log.info("[CreateEntityTool] POST {}", url);
-
-      String jsonBody = new com.fasterxml.jackson.databind.ObjectMapper()
-          .writeValueAsString(entityMetadata);
-
-      HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-          .uri(URI.create(url))
-          .header("Content-Type", "application/json");
-
-      if (context.token() != null && !context.token().isEmpty()) {
-        requestBuilder.header("Authorization", "Bearer " + context.token());
-      }
-
-      HttpRequest request = requestBuilder
-          .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-          .build();
-
-      HttpResponse<String> response = httpClient.send(request,
-          HttpResponse.BodyHandlers.ofString());
-
       long executionTime = System.currentTimeMillis() - startTime;
 
       // 4. Handle response
       if (response.statusCode() >= 200 && response.statusCode() < 300) {
-        log.info("[CreateEntityTool] Entity created successfully: {}", arguments.get("name"));
+        log.info("[CreateEntityTool] Schema created successfully: {}", arguments.get("name"));
+
+        // Step 2: Link to App (if appId provided)
+        if (appId != null && !appId.equals("default") && !appId.isEmpty()) {
+          linkEntityToApp(appId, tenantId, token, (String) arguments.get("name"));
+        }
 
         Map<String, Object> result = new HashMap<>();
         result.put("entityName", arguments.get("name"));
@@ -168,6 +163,57 @@ public class CreateEntityTool implements Tool {
     } catch (Exception e) {
       log.error("[CreateEntityTool] Execution failed", e);
       return ToolResult.error(getName(), "Execution error: " + e.getMessage());
+    }
+  }
+
+  // Method to link entity to app
+  private void linkEntityToApp(String appId, String tenantId, String token, String entityName) {
+    try {
+      String appUrl = String.format("%s/appbana-studio/%s/apps/%s", baseUrl, tenantId, appId);
+
+      // 1. Fetch App
+      HttpRequest getReq = HttpRequest.newBuilder()
+          .uri(URI.create(appUrl))
+          .header("Authorization", "Bearer " + token)
+          .GET()
+          .build();
+
+      HttpResponse<String> getRes = httpClient.send(getReq, HttpResponse.BodyHandlers.ofString());
+      if (getRes.statusCode() != 200) {
+        log.error("Failed to fetch app for linking: {}", getRes.body());
+        return;
+      }
+
+      Map<String, Object> appData = new com.fasterxml.jackson.databind.ObjectMapper().readValue(getRes.body(),
+          Map.class);
+
+      // 2. Add to schemas list
+      List<String> schemas = (List<String>) appData.get("schemas");
+      if (schemas == null) {
+        schemas = new java.util.ArrayList<>();
+      }
+      if (!schemas.contains(entityName)) {
+        schemas.add(entityName);
+        appData.put("schemas", schemas);
+
+        // 3. Save App
+        String updateBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(appData);
+        HttpRequest putReq = HttpRequest.newBuilder()
+            .uri(URI.create(appUrl))
+            .header("Content-Type", "application/json")
+            .header("Authorization", "Bearer " + token)
+            .PUT(HttpRequest.BodyPublishers.ofString(updateBody))
+            .build();
+
+        HttpResponse<String> putRes = httpClient.send(putReq, HttpResponse.BodyHandlers.ofString());
+        if (putRes.statusCode() == 200) {
+          log.info("Linked entity {} to app {}", entityName, appId);
+        } else {
+          log.error("Failed to link entity to app: {}", putRes.body());
+        }
+      }
+    } catch (Exception e) {
+      log.error("Error linking entity to app", e);
     }
   }
 
