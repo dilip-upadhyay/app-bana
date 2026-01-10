@@ -117,6 +117,11 @@ export class AiChatBuilder extends LitElement {
     }
 
     .empty-state h3 {
+      margin: 0 0 12px 0;
+      color: #666;
+    }
+
+    .empty-state p {
       margin: 0 0 8px 0;
       color: #666;
     }
@@ -133,18 +138,19 @@ export class AiChatBuilder extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     // Add welcome message
-    this.messages = [{
-      role: 'assistant',
-      content: 'Hello! I\'m here to help you build business applications - no technical skills needed! Just describe what you want to track or manage in your business, and I\'ll create it for you. What would you like to build today?',
-      timestamp: new Date()
-    }];
+    this.messages = [
+      {
+        role: 'assistant',
+        content: "Hello! I'm here to help you build business applications - no technical skills needed! Just describe what you want to track or manage in your business, and I'll create it for you. What would you like to build today?",
+        timestamp: new Date()
+      }
+    ];
   }
 
   render() {
     return html`
-      <div class="header">
-        <span>🤖</span>
-        <span>AI App Builder</span>
+     <div class="header">
+        🤖 AI App Builder
       </div>
 
       <div class="messages" @scroll=${this.handleScroll}>
@@ -157,7 +163,8 @@ export class AiChatBuilder extends LitElement {
           <ai-message
             .role=${msg.role}
             .content=${msg.content}
-            .timestamp=${msg.timestamp}>
+            .timestamp=${msg.timestamp}
+            @action-click=${this.handleActionClick}>
           </ai-message>
         `)}
         
@@ -196,6 +203,13 @@ export class AiChatBuilder extends LitElement {
     }
   }
 
+  private handleActionClick(e: CustomEvent) {
+    const action = e.detail.action;
+    // Send the action text as a message
+    this.inputValue = action;
+    this.sendMessage();
+  }
+
   private async sendMessage() {
     if (!this.inputValue.trim() || this.isLoading) return;
 
@@ -213,19 +227,20 @@ export class AiChatBuilder extends LitElement {
     this.scrollToBottom();
 
     try {
+      const authToken = AuthService.getToken() || '';
       const response = await this.chatService.sendMessage({
         message: userMessage,
-        sessionId: this.sessionId,
         userId: this.userId,
-        token: AuthService.getToken() || undefined
+        sessionId: this.sessionId,
+        context: {},
+        token: authToken
       });
 
-      // Add assistant response
+      // Add assistant message
       this.messages = [...this.messages, {
         role: 'assistant',
-        content: response.message,
-        timestamp: new Date(),
-        conversationId: response.conversationId
+        content: response.response,
+        timestamp: new Date()
       }];
 
       this.scrollToBottom();

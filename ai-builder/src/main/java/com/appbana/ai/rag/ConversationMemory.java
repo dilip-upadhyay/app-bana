@@ -7,7 +7,6 @@ import com.appbana.ai.rag.VectorStoreService.VectorStoreException;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
-import io.qdrant.client.grpc.JsonWithInt;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.time.Instant;

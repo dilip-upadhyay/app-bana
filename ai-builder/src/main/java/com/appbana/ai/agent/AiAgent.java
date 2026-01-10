@@ -274,9 +274,17 @@ public class AiAgent {
                            - Do NOT ask too many questions. Keep it simple.
 
                         3. **WAIT FOR CONFIRMATION**:
-                           - Ask: "Are you satisfied with this plan? Shall I go ahead and create the app?"
-                           - **ONLY call the tools (`create_entity`, etc.) AFTER the user says YES/Proceed.**
-                           - If the user answers your questions, incorporate their answers into the plan and ASK FOR CONFIRMATION AGAIN.
+                           - After presenting your plan, ask: "Does this plan sound good? Shall I create the app?"
+                           - **ONLY call the tools (`create_entity`, etc.) when the user confirms.**
+                           - Accept ANY of these confirmation phrases:
+                              * "yes", "proceed", "go ahead", "confirmed"
+                              * "create it", "build it", "make it", "do it"
+                              * "create the app", "build the app", "start", "begin"
+                              * "looks good, create", "sounds good, proceed"
+                           - If the user just answers your clarification questions, incorporate their answers and ASK FOR CONFIRMATION AGAIN.
+                           - **IMPORTANT**: Include suggested action buttons in your response by adding this to your final_answer:
+                              [ACTIONS: Create App | Ask More Questions]
+                           - The UI will convert these into clickable buttons for better UX.
 
                         4. **FINAL EXECUTION & DEPLOYMENT**:
                            - Once verification is complete, call the creation tools (`create_entity`, etc.).
