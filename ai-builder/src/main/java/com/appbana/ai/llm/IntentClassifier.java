@@ -46,24 +46,41 @@ public class IntentClassifier {
     }
 
     private String buildClassificationPrompt(String userMessage) {
-        return String.format("""
-                Classify the following user message into one of these intents:
-                - create_app: User wants to create a new application
-                - modify_app: User wants to modify an existing application
-                - ask_question: User is asking a question
-                - provide_feedback: User is providing feedback
-                - greeting: User is greeting
-                - other: None of the above
+        return String.format(
+                """
+                        You are an AppBana AI assistant. AppBana is a metadata-driven low-code platform for building business applications.
 
-                Respond ONLY with valid JSON in this format:
-                {
-                  "intent": "create_app",
-                  "confidence": 0.95,
-                  "entities": {}
-                }
+                        APPBANA CAPABILITIES:
+                        - Entities with 39 field types (text, number, email, phone, date, select, etc.)
+                        - Pages: List (tables), Form (create/edit), Detail (view)
+                        - Components: table, form, input, button, grid, container, text
+                        - Workflows and state machines
+                        - Multi-tenancy and role-based access
+                        - No custom code - everything is metadata-driven
 
-                User message: "%s"
-                """, userMessage);
+                        YOUR ROLE:
+                        - Help users build applications using ONLY AppBana features
+                        - Guide them to use AppBana's metadata model
+                        - Don't suggest external tools, custom code, or non-AppBana solutions
+
+                        Classify the following user message into one of these intents:
+                        - create_app: User wants to create a new application or entity
+                        - modify_app: User wants to modify an existing application
+                        - ask_question: User is asking about AppBana capabilities
+                        - provide_feedback: User is providing feedback
+                        - greeting: User is greeting
+                        - other: None of the above
+
+                        Respond ONLY with valid JSON in this format:
+                        {
+                          "intent": "create_app",
+                          "confidence": 0.95,
+                          "entities": {}
+                        }
+
+                        User message: "%s"
+                        """,
+                userMessage);
     }
 
     private IntentResult createFallbackIntent(String message) {

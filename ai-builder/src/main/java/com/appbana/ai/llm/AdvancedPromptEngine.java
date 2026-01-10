@@ -46,22 +46,77 @@ public class AdvancedPromptEngine {
     private String buildBasePrompt(String userMessage, String userId, Map<String, Object> context) {
         StringBuilder prompt = new StringBuilder();
 
-        // System prompt
-        prompt.append("You are an intelligent AI assistant that helps users build applications.\n\n");
+        // AppBana-specific system prompt
+        prompt.append("""
+                You are an AppBana AI Assistant - an expert in the AppBana low-code platform.
 
-        // Add context from past conversations
-        try {
-            List<ConversationMemory.Conversation> recentConvs = conversationMemory.getRecentByUser(userId, 5);
-            if (!recentConvs.isEmpty()) {
-                prompt.append("Recent conversation history:\n");
-                for (ConversationMemory.Conversation conv : recentConvs) {
-                    prompt.append("User: ").append(conv.getMessage()).append("\n");
-                    prompt.append("Assistant: ").append(conv.getResponse()).append("\n");
+                ABOUT APPBANA:
+                AppBana is a metadata-driven platform for building business applications without code.
+                Everything is defined through metadata (JSON) - entities, pages, forms, workflows.
+
+                APPBANA CAPABILITIES:
+
+                1. ENTITIES (Data Models):
+                   - 39 field types available: text, number, email, phone, date, datetime, boolean,
+                     select, multiselect, file, image, currency, url, color, json, etc.
+                   - Automatic CRUD API generation
+                   - Relationships: one-to-one, one-to-many, many-to-many
+                   - Field validation rules
+
+                2. PAGES (User Interface):
+                   - List Pages: Display data in tables with sorting, filtering, pagination
+                   - Form Pages: Create/edit records with validation
+                   - Detail Pages: View individual records
+                   - All pages use AppBana components (no custom HTML/CSS)
+
+                3. COMPONENTS:
+                   - Data: table, form, input, select, checkbox, radio, date-picker
+                   - Layout: container, grid, section, tabs
+                   - Actions: button, link
+                   - Display: text, heading, image, icon
+
+                4. WORKFLOWS:
+                   - State machines for business processes
+                   - Automated actions and notifications
+                   - Approval workflows
+
+                5. SECURITY:
+                   - Multi-tenancy built-in
+                   - Role-based access control (RBAC)
+                   - Field-level permissions
+
+                IMPORTANT CONSTRAINTS:
+                - ONLY suggest solutions using AppBana features
+                - NO custom code, external libraries, or frameworks
+                - NO direct HTML/CSS editing
+                - Everything must be metadata-driven
+                - Use ONLY the 39 available field types
+                - Use ONLY AppBana components
+
+                YOUR RESPONSES SHOULD:
+                - Be specific about AppBana entities, fields, and components
+                - Provide concrete metadata examples when helpful
+                - Guide users through AppBana's capabilities
+                - If something isn't possible in AppBana, explain why and suggest alternatives
+                - Be encouraging and educational
+
+                """);
+
+        // Add context from past conversations (if available)
+        if (conversationMemory != null) {
+            try {
+                List<ConversationMemory.Conversation> recentConvs = conversationMemory.getRecentByUser(userId, 5);
+                if (!recentConvs.isEmpty()) {
+                    prompt.append("Recent conversation history:\n");
+                    for (ConversationMemory.Conversation conv : recentConvs) {
+                        prompt.append("User: ").append(conv.getMessage()).append("\n");
+                        prompt.append("Assistant: ").append(conv.getResponse()).append("\n");
+                    }
+                    prompt.append("\n");
                 }
-                prompt.append("\n");
+            } catch (Exception e) {
+                log.warn("Failed to fetch conversation history", e);
             }
-        } catch (Exception e) {
-            log.warn("Failed to fetch conversation history", e);
         }
 
         // Add current context
