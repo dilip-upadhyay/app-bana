@@ -1,13 +1,26 @@
 import { LitElement, html, css } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import '../components/ai-builder/index';
+import { AuthService } from './auth/auth-service';
 
 /**
  * AI Chat Page - Dedicated page for AI-powered app building chat
+ * Requires authentication
  */
 @customElement('ai-chat-page')
 export class AiChatPage extends LitElement {
-    static styles = css`
+
+  connectedCallback() {
+    super.connectedCallback();
+
+    // Check authentication
+    if (!AuthService.isAuthenticated()) {
+      console.log('User not authenticated, redirecting to login');
+      window.location.href = '/login';
+      return;
+    }
+  }
+  static styles = css`
     :host {
       display: flex;
       flex-direction: column;
@@ -70,18 +83,29 @@ export class AiChatPage extends LitElement {
     }
   `;
 
-    render() {
-        return html`
+  render() {
+    const user = AuthService.getUser();
+
+    return html`
       <a href="/studio.html" class="back-link">← Back to Studio</a>
       
       <div class="page-header">
         <h1>🤖 AI App Builder</h1>
         <p>Tell me what you want to build, and I'll help you create it!</p>
+        ${user ? html`
+          <div style="margin-top: 1rem; font-size: 0.9rem;">
+            Logged in as: <strong>${user.email}</strong>
+            <button @click="${() => AuthService.logout()}" 
+                    style="margin-left: 1rem; padding: 0.5rem 1rem; background: rgba(255,255,255,0.2); border: none; color: white; border-radius: 4px; cursor: pointer;">
+              Logout
+            </button>
+          </div>
+        ` : ''}
       </div>
 
       <div class="chat-container">
         <ai-chat-builder></ai-chat-builder>
       </div>
     `;
-    }
+  }
 }
