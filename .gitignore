@@ -72,3 +72,4 @@ node_modules/
 /app-bana-ui/src/main/resources/ui/dist/
 /app-bana-ui/package-lock.json
 app-bana-service/.mvn/
+cookies.txt

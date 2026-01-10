@@ -42,4 +42,15 @@
   "lastLogin" : null,
   "updatedAt" : [ 2026, 1, 6, 1, 59, 51, 754682000 ],
   "active" : true
+}, {
+  "id" : 5,
+  "email" : "demo@demo.com",
+  "passwordHash" : "demo",
+  "name" : "Demo",
+  "tenantId" : "t-2c440300",
+  "status" : "ACTIVE",
+  "createdAt" : [ 2026, 1, 10, 14, 51, 54, 819893000 ],
+  "lastLogin" : null,
+  "updatedAt" : [ 2026, 1, 10, 14, 51, 54, 819935000 ],
+  "active" : true
 } ]
