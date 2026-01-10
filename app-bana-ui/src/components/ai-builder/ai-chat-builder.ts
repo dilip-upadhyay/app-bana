@@ -1,22 +1,22 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { AiChatService, ChatMessage } from '../../services/ai-chat-service.ts';
+import { AuthService } from '../../pages/auth/auth-service.ts';
 import './ai-message.ts';
 
 @customElement('ai-chat-builder')
 export class AiChatBuilder extends LitElement {
-    static styles = css`
+  static styles = css`
     :host {
       display: flex;
       flex-direction: column;
-      height: 600px;
-      max-width: 800px;
-      margin: 0 auto;
-      border: 1px solid #e0e0e0;
-      border-radius: 12px;
+      height: 100%;
+      width: 100%;
+      border: none;
+      border-radius: 0;
       overflow: hidden;
       background: white;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      box-shadow: none;
     }
 
     .header {
@@ -122,26 +122,26 @@ export class AiChatBuilder extends LitElement {
     }
   `;
 
-    @state() private messages: ChatMessage[] = [];
-    @state() private inputValue = '';
-    @state() private isLoading = false;
+  @state() private messages: ChatMessage[] = [];
+  @state() private inputValue = '';
+  @state() private isLoading = false;
 
-    private chatService = new AiChatService();
-    private sessionId = crypto.randomUUID();
-    private userId = 'demo-user'; // TODO: Get from auth
+  private chatService = new AiChatService();
+  private sessionId = crypto.randomUUID();
+  private userId = 'demo-user'; // TODO: Get from auth
 
-    connectedCallback() {
-        super.connectedCallback();
-        // Add welcome message
-        this.messages = [{
-            role: 'assistant',
-            content: 'Hello! I\'m your AI assistant. I can help you build applications. What would you like to create?',
-            timestamp: new Date()
-        }];
-    }
+  connectedCallback() {
+    super.connectedCallback();
+    // Add welcome message
+    this.messages = [{
+      role: 'assistant',
+      content: 'Hello! I\'m here to help you build business applications - no technical skills needed! Just describe what you want to track or manage in your business, and I\'ll create it for you. What would you like to build today?',
+      timestamp: new Date()
+    }];
+  }
 
-    render() {
-        return html`
+  render() {
+    return html`
       <div class="header">
         <span>🤖</span>
         <span>AI App Builder</span>
@@ -184,72 +184,84 @@ export class AiChatBuilder extends LitElement {
         </button>
       </div>
     `;
+  }
+
+  private handleInput(e: Event) {
+    this.inputValue = (e.target as HTMLInputElement).value;
+  }
+
+  private handleKeyPress(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !this.isLoading && this.inputValue.trim()) {
+      this.sendMessage();
     }
+  }
 
-    private handleInput(e: Event) {
-        this.inputValue = (e.target as HTMLInputElement).value;
+  private async sendMessage() {
+    if (!this.inputValue.trim() || this.isLoading) return;
+
+    const userMessage = this.inputValue.trim();
+    this.inputValue = '';
+
+    // Add user message
+    this.messages = [...this.messages, {
+      role: 'user',
+      content: userMessage,
+      timestamp: new Date()
+    }];
+
+    this.isLoading = true;
+    this.scrollToBottom();
+
+    try {
+      const response = await this.chatService.sendMessage({
+        message: userMessage,
+        sessionId: this.sessionId,
+        userId: this.userId,
+        token: AuthService.getToken() || undefined
+      });
+
+      // Add assistant response
+      this.messages = [...this.messages, {
+        role: 'assistant',
+        content: response.message,
+        timestamp: new Date(),
+        conversationId: response.conversationId
+      }];
+
+      this.scrollToBottom();
+    } catch (error) {
+      console.error('Chat error:', error);
+      this.messages = [...this.messages, {
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date()
+      }];
+    } finally {
+      this.isLoading = false;
+      // Auto-focus the input field after response
+      this.focusInput();
     }
+  }
 
-    private handleKeyPress(e: KeyboardEvent) {
-        if (e.key === 'Enter' && !this.isLoading && this.inputValue.trim()) {
-            this.sendMessage();
-        }
-    }
+  private handleScroll() {
+    // Auto-scroll logic if needed
+  }
 
-    private async sendMessage() {
-        if (!this.inputValue.trim() || this.isLoading) return;
+  private scrollToBottom() {
+    setTimeout(() => {
+      const messagesEl = this.shadowRoot?.querySelector('.messages');
+      if (messagesEl) {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+    }, 100);
+  }
 
-        const userMessage = this.inputValue.trim();
-        this.inputValue = '';
-
-        // Add user message
-        this.messages = [...this.messages, {
-            role: 'user',
-            content: userMessage,
-            timestamp: new Date()
-        }];
-
-        this.isLoading = true;
-        this.scrollToBottom();
-
-        try {
-            const response = await this.chatService.sendMessage({
-                message: userMessage,
-                sessionId: this.sessionId,
-                userId: this.userId
-            });
-
-            // Add assistant response
-            this.messages = [...this.messages, {
-                role: 'assistant',
-                content: response.message,
-                timestamp: new Date(),
-                conversationId: response.conversationId
-            }];
-
-            this.scrollToBottom();
-        } catch (error) {
-            console.error('Chat error:', error);
-            this.messages = [...this.messages, {
-                role: 'assistant',
-                content: 'Sorry, I encountered an error. Please try again.',
-                timestamp: new Date()
-            }];
-        } finally {
-            this.isLoading = false;
-        }
-    }
-
-    private handleScroll() {
-        // Auto-scroll logic if needed
-    }
-
-    private scrollToBottom() {
-        setTimeout(() => {
-            const messagesEl = this.shadowRoot?.querySelector('.messages');
-            if (messagesEl) {
-                messagesEl.scrollTop = messagesEl.scrollHeight;
-            }
-        }, 100);
-    }
+  private focusInput() {
+    setTimeout(() => {
+      const inputEl = this.shadowRoot?.querySelector('input');
+      if (inputEl) {
+        inputEl.focus();
+      }
+    }, 100);
+  }
 }

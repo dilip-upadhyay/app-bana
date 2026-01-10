@@ -14,4 +14,5 @@ public class ChatRequest {
     private String appType; // Optional: for context
     private String tenantId; // Story 8.5: For agent context
     private String appId; // Story 8.5: For agent context
+    private String token; // Story 8.5: For authentication
 }

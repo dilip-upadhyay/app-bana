@@ -12,6 +12,12 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
+import java.util.stream.Collectors;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Main AI Agent orchestrator implementing Think → Act → Observe loop
@@ -170,40 +176,56 @@ public class AiAgent {
     }
 
     /**
-     * ACT step - Execute tool calls
+     * ACT step - Execute tool calls in parallel using Virtual Threads
      */
     private List<ToolResult> executeTools(List<ToolCall> toolCalls, AgentContext context) {
-        List<ToolResult> results = new ArrayList<>();
-
-        for (ToolCall call : toolCalls) {
-            long startTime = System.currentTimeMillis();
-
-            try {
-                log.debug("[AGENT] Executing tool: {} with args: {}", call.getName(), call.getArguments());
-
-                // Get tool from registry
-                Tool tool = toolRegistry.getTool(call.getName());
-
-                if (tool == null) {
-                    log.error("[AGENT] Tool not found: {}", call.getName());
-                    results.add(ToolResult.error(call.getName(), "Tool not found: " + call.getName()));
-                    continue;
-                }
-
-                // Execute tool
-                ToolResult result = tool.execute(call.getArguments(), context);
-                result.setExecutionTimeMs(System.currentTimeMillis() - startTime);
-                result.setToolName(call.getName());
-
-                results.add(result);
-
-            } catch (Exception e) {
-                log.error("[AGENT] Error executing tool: " + call.getName(), e);
-                results.add(ToolResult.error(call.getName(), "Execution error: " + e.getMessage()));
-            }
+        if (toolCalls.isEmpty()) {
+            return Collections.emptyList();
         }
 
-        return results;
+        log.info("[AGENT] Executing {} tool(s) in parallel using Virtual Threads", toolCalls.size());
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Callable<ToolResult>> tasks = new ArrayList<>();
+
+            for (ToolCall call : toolCalls) {
+                tasks.add(() -> {
+                    long startTime = System.currentTimeMillis();
+                    try {
+                        log.debug("[AGENT] executing: {} args: {}", call.getName(), call.getArguments());
+                        Tool tool = toolRegistry.getTool(call.getName());
+
+                        if (tool == null) {
+                            return ToolResult.error(call.getName(), "Tool not found: " + call.getName());
+                        }
+
+                        ToolResult result = tool.execute(call.getArguments(), context);
+                        result.setExecutionTimeMs(System.currentTimeMillis() - startTime);
+                        result.setToolName(call.getName());
+                        return result;
+
+                    } catch (Exception e) {
+                        log.error("[AGENT] Tool execution failed: " + call.getName(), e);
+                        return ToolResult.error(call.getName(), "Execution error: " + e.getMessage());
+                    }
+                });
+            }
+
+            return executor.invokeAll(tasks).stream()
+                    .map(future -> {
+                        try {
+                            return future.get();
+                        } catch (Exception e) {
+                            return ToolResult.error("unknown", "Parallel execution failed: " + e.getMessage());
+                        }
+                    })
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            log.error("[AGENT] Critical error in parallel execution", e);
+            return Collections.singletonList(
+                    ToolResult.error("agent_system", "Parallel execution failed: " + e.getMessage()));
+        }
     }
 
     /**
@@ -213,35 +235,49 @@ public class AiAgent {
         StringBuilder prompt = new StringBuilder();
 
         // AppBana-specific system instructions
+        // AppBana-specific system instructions
         prompt.append(
                 """
-                        You are the AppBana AI Builder Agent - an intelligent assistant specialized in building applications using the AppBana low-code platform.
+                        Hello! I'm your AppBana assistant, here to build the business tools you need.
 
-                        ## About AppBana
+                        I am a smart app builder that takes your business ideas and turns them into working software instantly.
 
-                        AppBana is a metadata-driven platform where everything is defined through JSON metadata:
-                        - Entities (data models) with 39 field types
-                        - Pages (list, form, detail) using AppBana components
-                        - Workflows and state machines
-                        - All without writing code
+                        ## WHAT I DO FOR YOU
+                        You don't need to know technical terms. Just tell me what you want to achieve in your business.
 
-                        ## Your Role
+                        I can help you build:
+                        1. TRACKING SYSTEMS:
+                           - "I need to track customer orders"
+                           - "Manage my inventory and stock levels"
+                           - "Keep track of employee leave requests"
 
-                        You help users build AppBana applications by:
-                        1. Understanding their requirements
-                        2. Creating entities with appropriate fields
-                        3. Generating pages to display and edit data
-                        4. Using ONLY AppBana's built-in features
+                        2. DATA COLLECTION:
+                           - "Create a signup form for events"
+                           - "Collect feedback from customers"
+                           - "Allow staff to submit expenses"
 
-                        ## Important Rules
+                        3. BUSINESS MANAGEMENT:
+                           - CRM (Customer lists, sales pipeline)
+                           - HR (Employee directory, onboarding)
+                           - Operations (Project tracking, equipment logs)
 
-                        - ONLY suggest AppBana features and components
-                        - NEVER suggest custom code, external libraries, or non-AppBana solutions
-                        - Use the provided tools to create entities and pages
-                        - Use AppBana's 39 field types: text, number, email, phone, date, datetime, boolean, select, multiselect, etc.
-                        - Use AppBana components: table, form, input, button, grid, container
-                        - Be specific and provide concrete examples
+                        ## HOW TO TALK TO ME
+                        Speak like a business owner, not a developer.
 
+                        INSTEAD OF SAYING: "Create an entity with text fields and a lookup."
+                        SAY: "I need to keep a list of my trusted vendors and what products they supply."
+
+                        INSTEAD OF SAYING: "Add a form component with validation."
+                        SAY: "Make sure people can't submit the order without a phone number."
+
+                        PERFORMANCE TIP: You can and SHOULD call multiple tools in a single turn. If the user asks to create 3 things, generate ONE response with 3 tool calls in the `tool_calls` list. I will run them all in parallel for maximum speed. Do not wait for one to finish before asking for the next if they are independent.
+
+                        ## MY PROMISE
+                        - I will build the forms, lists, and databases you need.
+                        - I will set up the security so your data is safe.
+                        - I will explain things in plain English.
+
+                        Let's get to work! What business problem can I solve for you today?
                         """);
 
         // Available tools

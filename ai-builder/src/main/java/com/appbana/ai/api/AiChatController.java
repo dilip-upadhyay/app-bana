@@ -113,7 +113,8 @@ public class AiChatController {
                         request.getTenantId() != null ? request.getTenantId() : "default",
                         request.getAppId() != null ? request.getAppId() : "default",
                         request.getUserId(),
-                        request.getSessionId());
+                        request.getSessionId(),
+                        request.getToken());
 
                 // Execute agent
                 AgentResponse agentResponse = agent.process(request.getMessage(), context);

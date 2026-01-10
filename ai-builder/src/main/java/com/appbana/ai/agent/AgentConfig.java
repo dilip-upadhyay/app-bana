@@ -17,7 +17,7 @@ public class AgentConfig {
     /**
      * Timeout in seconds for entire agent execution
      */
-    private int timeoutSeconds = 60;
+    private int timeoutSeconds = 180;
 
     /**
      * Whether to enable debug logging

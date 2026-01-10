@@ -14,12 +14,13 @@ public record AgentContext(
         String appId,
         String userId,
         String sessionId,
+        String token,
         Map<String, Object> variables) {
     /**
      * Create a new context with default empty variables
      */
-    public static AgentContext create(String tenantId, String appId, String userId, String sessionId) {
-        return new AgentContext(tenantId, appId, userId, sessionId, new HashMap<>());
+    public static AgentContext create(String tenantId, String appId, String userId, String sessionId, String token) {
+        return new AgentContext(tenantId, appId, userId, sessionId, token, new HashMap<>());
     }
 
     /**
@@ -28,7 +29,7 @@ public record AgentContext(
     public AgentContext withVariable(String key, Object value) {
         Map<String, Object> newVars = new HashMap<>(variables);
         newVars.put(key, value);
-        return new AgentContext(tenantId, appId, userId, sessionId, newVars);
+        return new AgentContext(tenantId, appId, userId, sessionId, token, newVars);
     }
 
     /**
