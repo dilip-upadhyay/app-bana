@@ -30,7 +30,7 @@ class EssentialToolsTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        context = AgentContext.create("tenant1", "app1", "user1", "session1");
+        context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
     }
 
     @Test

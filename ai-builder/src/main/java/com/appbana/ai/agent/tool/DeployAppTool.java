@@ -84,6 +84,89 @@ public class DeployAppTool implements Tool {
             }
 
             String appMetaJson = fetchRes.body();
+            Map<String, Object> appData = objectMapper.readValue(appMetaJson, Map.class);
+
+            // Hydrate entities from schemas if missing
+            if (!appData.containsKey("entities") || ((java.util.List) appData.get("entities")).isEmpty()) {
+                if (appData.containsKey("schemas")) {
+                    java.util.List<String> schemaNames = (java.util.List<String>) appData.get("schemas");
+                    java.util.List<Map<String, Object>> hydratedEntities = new java.util.ArrayList<>();
+
+                    log.info("Hydrating {} entities from schemas list...", schemaNames.size());
+
+                    for (String schemaName : schemaNames) {
+                        String schemaUrl = String.format("%s/schema/%s", backendUrl, schemaName);
+                        HttpRequest schemaReq = HttpRequest.newBuilder()
+                                .uri(URI.create(schemaUrl))
+                                .header("Authorization", "Bearer " + token)
+                                .GET()
+                                .build();
+
+                        HttpResponse<String> schemaRes = httpClient.send(schemaReq,
+                                HttpResponse.BodyHandlers.ofString());
+                        if (schemaRes.statusCode() == 200) {
+                            Map<String, Object> schemaObj = objectMapper.readValue(schemaRes.body(), Map.class);
+
+                            // Sanitize and Apply Mandatory Defaults
+                            if (schemaObj.containsKey("fields") && schemaObj.get("fields") instanceof java.util.List) {
+                                java.util.List<Map<String, Object>> fields = (java.util.List<Map<String, Object>>) schemaObj
+                                        .get("fields");
+                                for (Map<String, Object> field : fields) {
+                                    String name = (String) field.get("name");
+
+                                    // 1. Length (Mandatory, default 255)
+                                    Object lenObj = field.get("length");
+                                    int length = 255;
+                                    if (lenObj instanceof Number) {
+                                        length = ((Number) lenObj).intValue();
+                                    } else if (lenObj instanceof String) {
+                                        try {
+                                            length = Integer.parseInt((String) lenObj);
+                                        } catch (Exception ignored) {
+                                        }
+                                    }
+                                    if (length <= 0)
+                                        length = 255;
+                                    field.put("length", length);
+
+                                    // 2. Boolean Flags (Mandatory not null)
+                                    if (field.get("primaryKey") == null)
+                                        field.put("primaryKey", false);
+                                    if (field.get("autoIncrement") == null)
+                                        field.put("autoIncrement", false);
+                                    if (field.get("required") == null)
+                                        field.put("required", false);
+
+                                    // 3. Label (Mandatory)
+                                    if (field.get("label") == null && name != null && !name.isEmpty()) {
+                                        String label = name.substring(0, 1).toUpperCase()
+                                                + name.substring(1).replaceAll("([A-Z])", " $1").trim();
+                                        field.put("label", label);
+                                    }
+                                }
+                            }
+
+                            hydratedEntities.add(schemaObj);
+                        } else {
+                            log.warn("Failed to hydration schema {}: {}", schemaName, schemaRes.statusCode());
+                        }
+                    }
+
+                    if (hydratedEntities.isEmpty()) {
+                        log.warn("No entities hydrated for app {}. Schemas list was: {}", appId, schemaNames);
+                    } else {
+                        try {
+                            log.info("Hydrated entities JSON: {}", objectMapper.writeValueAsString(hydratedEntities));
+                        } catch (Exception e) {
+                            log.error("Failed to log entities", e);
+                        }
+                    }
+
+                    appData.put("entities", hydratedEntities);
+                    // Update JSON for publishing
+                    appMetaJson = objectMapper.writeValueAsString(appData);
+                }
+            }
 
             // Step 2: Publish App
             String publishUrl = String.format("%s/api/%s/apps/%s/publish?env=DEV", backendUrl, tenantId, appId);

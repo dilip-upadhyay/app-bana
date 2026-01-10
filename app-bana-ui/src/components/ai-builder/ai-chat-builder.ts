@@ -133,7 +133,6 @@ export class AiChatBuilder extends LitElement {
 
   private chatService = new AiChatService();
   private sessionId = crypto.randomUUID();
-  private userId = 'demo-user'; // TODO: Get from auth
 
   connectedCallback() {
     super.connectedCallback();
@@ -228,11 +227,27 @@ export class AiChatBuilder extends LitElement {
 
     try {
       const authToken = AuthService.getToken() || '';
+      const user = AuthService.getUser();
+
+      if (!user) {
+        console.error('User not authenticated');
+        this.messages = [...this.messages, {
+          role: 'assistant',
+          content: 'Please log in to use the AI Builder.',
+          timestamp: new Date()
+        }];
+        return;
+      }
+
+      const tenantId = user.tenantId;
+      const userId = user.email || user.id.toString();
+
       const response = await this.chatService.sendMessage({
         message: userMessage,
-        userId: this.userId,
+        userId: userId,
         sessionId: this.sessionId,
-        token: authToken
+        token: authToken,
+        tenantId: tenantId
       });
 
       // Add assistant message

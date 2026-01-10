@@ -184,6 +184,42 @@ public class AiAgent {
             return Collections.emptyList();
         }
 
+        // Check if sequential execution is required for safety
+        // CreateEntityTool and GeneratePageTool modify shared app metadata and are not
+        // thread-safe
+        boolean requiresSequential = toolCalls.stream()
+                .anyMatch(call -> call.getName().equals("create_entity") ||
+                        call.getName().equals("generate_page") ||
+                        call.getName().equals("create_app")); // create_app usually singleton but safe to serialize
+
+        if (requiresSequential) {
+            log.info("[AGENT] Forcing sequential execution for {} tool(s) to prevent race conditions",
+                    toolCalls.size());
+            List<ToolResult> results = new ArrayList<>();
+            for (ToolCall call : toolCalls) {
+                long startTime = System.currentTimeMillis();
+                try {
+                    log.debug("[AGENT] executing (sequential): {} args: {}", call.getName(), call.getArguments());
+                    Tool tool = toolRegistry.getTool(call.getName());
+
+                    if (tool == null) {
+                        results.add(ToolResult.error(call.getName(), "Tool not found: " + call.getName()));
+                        continue;
+                    }
+
+                    ToolResult result = tool.execute(call.getArguments(), context);
+                    result.setExecutionTimeMs(System.currentTimeMillis() - startTime);
+                    result.setToolName(call.getName());
+                    results.add(result);
+
+                } catch (Exception e) {
+                    log.error("[AGENT] Tool execution failed: " + call.getName(), e);
+                    results.add(ToolResult.error(call.getName(), "Execution error: " + e.getMessage()));
+                }
+            }
+            return results;
+        }
+
         log.info("[AGENT] Executing {} tool(s) in parallel using Virtual Threads", toolCalls.size());
 
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -281,6 +317,7 @@ public class AiAgent {
                               * "create it", "build it", "make it", "do it"
                               * "create the app", "build the app", "start", "begin"
                               * "looks good, create", "sounds good, proceed"
+                           - **CRITICAL**: If the user says "Create App" (or clicks the button), it means "YES, EXECUTE THE PLAN". Do NOT ask for confirmation again. It is NOT a new request. START SEQUENTIAL EXECUTION IMMEDIATELY.
                            - If the user just answers your clarification questions, incorporate their answers and ASK FOR CONFIRMATION AGAIN.
                            - **IMPORTANT**: Include suggested action buttons in your response by adding this to your final_answer:
                               [ACTIONS: Create App | Ask More Questions]
@@ -288,12 +325,12 @@ public class AiAgent {
 
                         4. **FINAL EXECUTION & DEPLOYMENT**:
                            - STEP 1: Call `create_app` FIRST to create the app container.
-                           - STEP 2: **Captue the `appId` returned by `create_app`**.
+                           - STEP 2: **Capture the `appId` returned by `create_app`**.
                            - STEP 3: Pass this `appId` to ALL subsequent tools (`create_entity`, `generate_page`, `deploy_app`) to ensure they target the correct app.
                           - STEP 4: Call `create_entity` for entities.
                            - STEP 5: Call `generate_page` for pages (passing `appId`).
                            - STEP 6: Call `deploy_app` (passing `appId`).
-                           - Use parallel execution (multiple tool calls) for speed.
+                           - CRITICAL: Do NOT execute `create_entity` or `generate_page` in parallel. They modify the same app metadata and will overwrite each other. You MUST queue them sequentially or call them one by one.
                            - **IMMEDIATELY AFTER creating the app structure, you MUST call `deploy_app` tool.**
                            - This will publish the app to the dev environment and generate a test link.
                            - **FINAL ANSWER FORMAT**: Your final message to the user MUST include:
@@ -353,7 +390,12 @@ public class AiAgent {
         prompt.append(
                 "IMPORTANT: Do NOT output raw text. ALWAYS use JSON. Verification step: Did you include `tool_calls` OR `final_answer`? One is REQUIRED.\n\n");
 
-        // Conversation History (From Database/Qdrant)
+        // 1. User Request (The Goal)
+        prompt.append("## ORIGINAL USER REQUEST\n\n");
+        prompt.append(userMessage);
+        prompt.append("\n\n");
+
+        // 2. Conversation History (Context)
         if (context.hasVariable("chat_history")) {
             try {
                 @SuppressWarnings("unchecked")
@@ -361,7 +403,7 @@ public class AiAgent {
                         .getVariable("chat_history");
 
                 if (chatHistory != null && !chatHistory.isEmpty()) {
-                    prompt.append("## Conversation History\n\n");
+                    prompt.append("## Conversation Context\n\n");
                     for (ConversationMemory.Conversation conv : chatHistory) {
                         prompt.append(String.format("User: %s\n", conv.getMessage()));
                         prompt.append(String.format("Assistant: %s\n\n", conv.getResponse()));
@@ -372,9 +414,9 @@ public class AiAgent {
             }
         }
 
-        // Previous Steps (Current thinking process)
+        // 3. Execution Progress (What has been done so far)
         if (!history.isEmpty()) {
-            prompt.append("## Previous Steps\n\n");
+            prompt.append("## EXECUTION PROGRESS (Current Task)\n\n");
             for (AgentResponse.AgentStep step : history) {
                 prompt.append(String.format("**Iteration %d:**\n", step.getIteration()));
                 prompt.append(String.format("Thinking: %s\n", step.getThinking()));
@@ -392,12 +434,12 @@ public class AiAgent {
                 }
                 prompt.append("\n");
             }
+
+            prompt.append("## INSTRUCTION: \n");
+            prompt.append(
+                    "Review the EXECUTION PROGRESS above. If the ORIGINAL USER REQUEST is not yet fully completed (e.g. app not deployed), CONTINUE to the next necessary step. Do not ask for clarification if you are already making progress.\n\n");
         }
 
-        // User message
-        prompt.append("## User Request\n\n");
-        prompt.append(userMessage);
-        prompt.append("\n\n");
         prompt.append("Respond with JSON only:");
 
         return prompt.toString();

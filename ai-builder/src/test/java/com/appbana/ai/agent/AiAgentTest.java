@@ -41,7 +41,7 @@ class AiAgentTest {
     void testAgentLoop_FinalAnswerImmediately() throws Exception {
         // Arrange
         String userMessage = "Hello";
-        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1");
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
 
         String llmResponse = """
                 {
@@ -66,7 +66,7 @@ class AiAgentTest {
     void testAgentLoop_WithToolCalls() throws Exception {
         // Arrange
         String userMessage = "Create a customer entity";
-        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1");
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
 
         // Register a mock tool
         Tool mockTool = new Tool() {
@@ -135,7 +135,7 @@ class AiAgentTest {
     void testAgentLoop_MaxIterationsReached() throws Exception {
         // Arrange
         String userMessage = "Do something complex";
-        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1");
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
         config.setMaxIterations(3);
 
         // Create a new agent with updated config
@@ -166,7 +166,7 @@ class AiAgentTest {
     void testAgentLoop_ToolNotFound() throws Exception {
         // Arrange
         String userMessage = "Use unknown tool";
-        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1");
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
 
         // First call: try unknown tool
         String llmResponse1 = """
@@ -207,7 +207,7 @@ class AiAgentTest {
     void testAgentLoop_LlmError() throws Exception {
         // Arrange
         String userMessage = "Test error handling";
-        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1");
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
         config.setRetryOnError(false);
 
         when(llmService.chat(anyString())).thenThrow(new RuntimeException("LLM API error"));
@@ -224,7 +224,7 @@ class AiAgentTest {
     void testAgentLoop_InvalidJson() throws Exception {
         // Arrange
         String userMessage = "Test invalid JSON";
-        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1");
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
         config.setRetryOnError(false);
 
         when(llmService.chat(anyString())).thenReturn("This is not JSON");
@@ -239,7 +239,7 @@ class AiAgentTest {
     @Test
     void testAgentContext_Immutability() {
         // Arrange
-        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1");
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
 
         // Act
         AgentContext newContext = context.withVariable("key", "value");

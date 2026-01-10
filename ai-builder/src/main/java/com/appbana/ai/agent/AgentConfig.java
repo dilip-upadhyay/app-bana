@@ -12,7 +12,7 @@ public class AgentConfig {
     /**
      * Maximum number of iterations before stopping
      */
-    private int maxIterations = 10;
+    private int maxIterations = 25;
 
     /**
      * Timeout in seconds for entire agent execution

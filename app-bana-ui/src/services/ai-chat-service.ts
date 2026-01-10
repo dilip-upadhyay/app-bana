@@ -11,6 +11,8 @@ export interface ChatRequest {
     userId: string;
     token?: string;
     appType?: string;
+    tenantId?: string;
+    appId?: string;
 }
 
 export interface ChatResponse {

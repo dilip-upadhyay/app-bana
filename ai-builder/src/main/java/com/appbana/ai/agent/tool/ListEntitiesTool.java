@@ -62,11 +62,15 @@ public class ListEntitiesTool implements Tool {
             // Call backend API
             String url = baseUrl + "/schema";
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .header("Accept", "application/json")
-                    .GET()
-                    .build();
+                    .header("Accept", "application/json");
+
+            if (context.token() != null && !context.token().isEmpty()) {
+                reqBuilder.header("Authorization", "Bearer " + context.token());
+            }
+
+            HttpRequest request = reqBuilder.GET().build();
 
             HttpResponse<String> response = httpClient.send(request,
                     HttpResponse.BodyHandlers.ofString());
