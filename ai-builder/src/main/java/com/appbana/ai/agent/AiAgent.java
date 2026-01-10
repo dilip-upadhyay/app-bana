@@ -37,14 +37,25 @@ public class AiAgent {
     private final ToolRegistry toolRegistry;
     private final AgentConfig config;
     private final ObjectMapper objectMapper;
+    private final BatchedToolExecutor batchedExecutor;
+    private boolean batchingEnabled = true; // Feature flag
 
     public AiAgent(OpenAiLlmService llmService, ToolRegistry toolRegistry, AgentConfig config) {
         this.llmService = llmService;
         this.toolRegistry = toolRegistry;
         this.config = config;
         this.objectMapper = new ObjectMapper();
-        log.info("AiAgent initialized with {} tools, max iterations: {}",
+        this.batchedExecutor = new BatchedToolExecutor(llmService);
+        log.info("AiAgent initialized with {} tools, max iterations: {}, batching: enabled",
                 toolRegistry.getToolCount(), config.getMaxIterations());
+    }
+
+    /**
+     * Enable or disable batched execution (for testing/debugging)
+     */
+    public void setBatchingEnabled(boolean enabled) {
+        this.batchingEnabled = enabled;
+        log.info("Batched execution {}", enabled ? "enabled" : "disabled");
     }
 
     /**
@@ -57,6 +68,12 @@ public class AiAgent {
         try {
             log.info("[AGENT] Starting processing for user: {}", context.userId());
             log.debug("[AGENT] User message: {}", userMessage);
+
+            // Check if this is a batchable create-app workflow
+            if (batchingEnabled && BatchedToolExecutor.isBatchableCreateApp(userMessage)) {
+                log.info("[AGENT] Detected batchable create-app workflow, using batched execution");
+                return processBatchedCreateApp(userMessage, context, startTime);
+            }
 
             // Agent loop
             for (int iteration = 1; iteration <= config.getMaxIterations(); iteration++) {
@@ -523,5 +540,121 @@ public class AiAgent {
         }
 
         return cleaned.trim();
+    }
+
+    /**
+     * Process create-app workflow using batched execution
+     * Combines app + entities + pages into single LLM call
+     */
+    private AgentResponse processBatchedCreateApp(String userMessage, AgentContext context, long startTime) {
+        List<AgentResponse.AgentStep> steps = new ArrayList<>();
+
+        try {
+            // Extract app name from user message (simple heuristic)
+            String appName = extractAppName(userMessage);
+            String appDescription = null;
+            List<String> entityNames = List.of(); // Let LLM decide default entities
+
+            log.info("[AGENT-BATCHED] Creating app '{}' using batched execution", appName);
+
+            // Execute batched workflow
+            Map<String, Object> batchedResult = batchedExecutor.batchCreateApp(appName, appDescription, entityNames);
+
+            // Execute create_app tool with batched result
+            Tool createAppTool = toolRegistry.getTool("create_app");
+            if (createAppTool == null) {
+                return AgentResponse.error("create_app tool not found", steps,
+                        System.currentTimeMillis() - startTime);
+            }
+
+            Map<String, Object> appData = (Map<String, Object>) batchedResult.get("app");
+            Map<String, Object> createAppArgs = Map.of(
+                    "name", appData.get("name"),
+                    "description", appData.getOrDefault("description", ""),
+                    "version", appData.getOrDefault("version", "1.0.0"));
+
+            ToolResult createAppResult = createAppTool.execute(createAppArgs, context);
+
+            if (!createAppResult.isSuccess()) {
+                return AgentResponse.error("Failed to create app: " + createAppResult.getError(),
+                        steps, System.currentTimeMillis() - startTime);
+            }
+
+            log.info("[AGENT-BATCHED] App '{}' created successfully", appName);
+
+            // Execute create_entity tools for each entity
+            List<Map<String, Object>> entities = (List<Map<String, Object>>) batchedResult.get("entities");
+            Tool createEntityTool = toolRegistry.getTool("create_entity");
+
+            if (createEntityTool != null && entities != null) {
+                for (Map<String, Object> entity : entities) {
+                    ToolResult entityResult = createEntityTool.execute(entity, context);
+                    if (!entityResult.isSuccess()) {
+                        log.warn("[AGENT-BATCHED] Failed to create entity: {}", entity.get("name"));
+                    }
+                }
+                log.info("[AGENT-BATCHED] Created {} entities", entities.size());
+            }
+
+            // Execute create_page tools for each page
+            List<Map<String, Object>> pages = (List<Map<String, Object>>) batchedResult.get("pages");
+            Tool createPageTool = toolRegistry.getTool("create_page");
+
+            if (createPageTool != null && pages != null) {
+                for (Map<String, Object> page : pages) {
+                    ToolResult pageResult = createPageTool.execute(page, context);
+                    if (!pageResult.isSuccess()) {
+                        log.warn("[AGENT-BATCHED] Failed to create page: {}", page.get("name"));
+                    }
+                }
+                log.info("[AGENT-BATCHED] Created {} pages", pages.size());
+            }
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            String finalAnswer = String.format(
+                    "✅ Successfully created app '%s' with %d entities and %d pages using batched execution (saved ~%d API calls!)",
+                    appName, entities != null ? entities.size() : 0, pages != null ? pages.size() : 0,
+                    (entities != null ? entities.size() : 0) + (pages != null ? pages.size() : 0));
+
+            return AgentResponse.success(finalAnswer, steps, elapsed);
+
+        } catch (Exception e) {
+            log.error("[AGENT-BATCHED] Failed to execute batched create-app", e);
+            return AgentResponse.error("Batched execution failed: " + e.getMessage(),
+                    steps, System.currentTimeMillis() - startTime);
+        }
+    }
+
+    /**
+     * Extract app name from user message (simple heuristic)
+     */
+    private String extractAppName(String message) {
+        // Simple extraction: look for "create X app" or "build X application"
+        String lower = message.toLowerCase();
+        String[] patterns = { "create ", "build ", "make " };
+
+        for (String pattern : patterns) {
+            int idx = lower.indexOf(pattern);
+            if (idx >= 0) {
+                String after = message.substring(idx + pattern.length()).trim();
+                // Take first 1-3 words before "app" or "application"
+                String[] words = after.split("\\s+");
+                StringBuilder name = new StringBuilder();
+                for (int i = 0; i < Math.min(3, words.length); i++) {
+                    String word = words[i];
+                    if (word.equalsIgnoreCase("app") || word.equalsIgnoreCase("application")) {
+                        break;
+                    }
+                    if (name.length() > 0)
+                        name.append(" ");
+                    name.append(word.substring(0, 1).toUpperCase()).append(word.substring(1));
+                }
+                if (name.length() > 0) {
+                    return name.toString();
+                }
+            }
+        }
+
+        return "MyApp"; // Default fallback
     }
 }
