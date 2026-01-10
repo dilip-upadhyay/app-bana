@@ -35,18 +35,35 @@ public class DeployAppTool implements Tool {
 
     @Override
     public String getParameterSchema() {
-        return "{}";
+        return """
+                {
+                  "type": "object",
+                  "properties": {
+                    "appId": {
+                      "type": "string",
+                      "description": "The ID of the application to deploy. If not provided, uses the current context app ID."
+                    }
+                  }
+                }
+                """;
     }
 
     @Override
     public ToolResult execute(Map<String, Object> args, AgentContext context) {
         long startTime = System.currentTimeMillis();
         String tenantId = context.tenantId();
-        String appId = context.appId();
+
+        // Prefer appId from args, fallback to context
+        String appId = (String) args.get("appId");
+        if (appId == null || appId.isEmpty()) {
+            appId = context.appId();
+        }
+
         String token = context.token();
 
-        if (appId == null || appId.equals("default")) {
-            return ToolResult.error(getName(), "No active application found to deploy. Please create an app first.");
+        if (appId == null || appId.equals("default") || appId.isEmpty()) {
+            return ToolResult.error(getName(),
+                    "No active application found to deploy. Please create an app first or provide an appId.");
         }
 
         try {

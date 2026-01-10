@@ -64,6 +64,10 @@ public class GeneratePageTool implements Tool {
                     "entityName": {
                       "type": "string",
                       "description": "Entity this page is for (e.g., 'Customer')"
+                    },
+                    "appId": {
+                      "type": "string",
+                      "description": "Target App ID. If not provided, uses current context."
                     }
                   },
                   "required": ["name", "path", "type", "entityName"]
@@ -109,7 +113,13 @@ public class GeneratePageTool implements Tool {
 
             // 3. Call backend API
             String tenantId = context.tenantId();
-            String appId = context.appId();
+
+            // Prefer appId from args, fallback to context
+            String appId = (String) arguments.get("appId");
+            if (appId == null || appId.isEmpty()) {
+                appId = context.appId();
+            }
+
             String pageId = (String) pageMetadata.get("id");
 
             String url = String.format("%s/appbana-studio/%s/apps/%s/pages/%s",
