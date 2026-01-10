@@ -396,34 +396,39 @@ public class AiAgent {
         // DO NOT use thinking as finalAnswer. It contains internal monologue (3rd
         // person) which confuses the user.
 
+        // Parse tool calls first (Prioritize Action over Talk)
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> toolCallsRaw = (List<Map<String, Object>>) response.get("tool_calls");
+
+        if (toolCallsRaw != null && !toolCallsRaw.isEmpty()) {
+            List<ToolCall> toolCalls = new ArrayList<>();
+            for (Map<String, Object> callRaw : toolCallsRaw) {
+                String name = (String) callRaw.get("name");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> arguments = (Map<String, Object>) callRaw.get("arguments");
+
+                toolCalls.add(new ToolCall(name, arguments));
+            }
+
+            if (finalAnswer != null) {
+                log.warn(
+                        "[AGENT] LLM provided both tool_calls and final_answer. Ignoring final_answer to execute tools.");
+            }
+
+            return AgentThought.toolCalls(thinking, toolCalls);
+        }
+
         // Check for final answer
         if (finalAnswer != null && !finalAnswer.isEmpty()) {
             return AgentThought.finalAnswer(thinking, finalAnswer);
         }
 
-        // Parse tool calls
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> toolCallsRaw = (List<Map<String, Object>>) response.get("tool_calls");
-
-        if (toolCallsRaw == null || toolCallsRaw.isEmpty()) {
-            log.warn("[AGENT] No tool_calls or final_answer in response. JSON: " + json);
-            // Fallback: If we have thinking but no explicit final_answer, use thinking as
-            // the answer.
-            // This prevents "Internal Error" when the LLM forgets the final_answer field
-            // but explains itself in thinking.
-            return AgentThought.finalAnswer(thinking, thinking);
-        }
-
-        List<ToolCall> toolCalls = new ArrayList<>();
-        for (Map<String, Object> callRaw : toolCallsRaw) {
-            String name = (String) callRaw.get("name");
-            @SuppressWarnings("unchecked")
-            Map<String, Object> arguments = (Map<String, Object>) callRaw.get("arguments");
-
-            toolCalls.add(new ToolCall(name, arguments));
-        }
-
-        return AgentThought.toolCalls(thinking, toolCalls);
+        log.warn("[AGENT] No tool_calls or final_answer in response. JSON: " + json);
+        // Fallback: If we have thinking but no explicit final_answer, use thinking as
+        // the answer.
+        // This prevents "Internal Error" when the LLM forgets the final_answer field
+        // but explains itself in thinking.
+        return AgentThought.finalAnswer(thinking, thinking);
     }
 
     /**
