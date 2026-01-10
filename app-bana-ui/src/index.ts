@@ -20,6 +20,7 @@ import type { AppRuntimeState } from './models/runtime-state';
 import './styles/theme.css';
 import './pages/auth/LoginPage';
 import './pages/auth/RegisterPage';
+import './pages/AiChatPage';  // AI Chat page
 import './components/ai-builder/index';  // AI Chat Builder components
 import { getApiUrl } from './core/api-config';
 
@@ -287,6 +288,8 @@ export class AppRoot extends LitElement {
       return html`<login-page></login-page>`;
     } else if (path === '/register') {
       return html`<register-page></register-page>`;
+    } else if (path === '/ai-chat') {
+      return html`<ai-chat-page></ai-chat-page>`;
     } else if (path.includes('/builder') && !path.includes('/studio/builder')) {
       return html`<schema-builder></schema-builder>`;
     } else if (path.includes('/explorer')) {
