@@ -73,8 +73,12 @@ public class CreateAppTool implements Tool {
       String tenantId = context.tenantId();
       String token = context.token();
 
+      // Generate app ID (backend requires it upfront)
+      String appId = UUID.randomUUID().toString();
+
       // Build app metadata matching backend AppMetadata class
       Map<String, Object> appMeta = new HashMap<>();
+      appMeta.put("id", appId); // Required by backend
       appMeta.put("name", name);
       appMeta.put("description", description);
       appMeta.put("tenantId", tenantId);
@@ -104,11 +108,6 @@ public class CreateAppTool implements Tool {
       long executionTime = System.currentTimeMillis() - startTime;
 
       if (response.statusCode() >= 200 && response.statusCode() < 300) {
-        // Parse response to get app ID
-        @SuppressWarnings("unchecked")
-        Map<String, Object> responseData = objectMapper.readValue(response.body(), Map.class);
-        String appId = (String) responseData.get("id");
-
         log.info("[CreateAppTool] App created successfully: {} (ID: {})", name, appId);
 
         Map<String, Object> result = new HashMap<>();
