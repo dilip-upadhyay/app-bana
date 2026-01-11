@@ -108,8 +108,10 @@ class ScaffoldAppToolTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) result.getData();
 
-        assertEquals("skeleton", data.get("status"));
+        // Story 3: Now creates actual app, not just skeleton
+        assertEquals("app_created", data.get("status"));
         assertEquals("Salon Manager", data.get("appName"));
+        assertNotNull(data.get("appId")); // App ID should be present
         assertEquals(1, data.get("entitiesProvided"));
         assertEquals(1, data.get("pagesProvided"));
     }
