@@ -120,8 +120,9 @@ public class ScaffoldAppTool implements Tool {
     long startTime = System.currentTimeMillis();
     String createdAppId = null; // Track for rollback
 
-    log.info("[ScaffoldAppTool] Starting one-shot app creation");
-    log.info("[ScaffoldAppTool] Arguments: {}", arguments);
+    log.info("[ScaffoldAppTool] ═══════════════════════════════════════════════════════");
+    log.info("[ScaffoldAppTool] Starting ONE-SHOT app creation");
+    log.info("[ScaffoldAppTool] ═══════════════════════════════════════════════════════");
 
     try {
       // Story 2: Parameter validation
@@ -140,6 +141,49 @@ public class ScaffoldAppTool implements Tool {
       List<Map<String, Object>> pages = (List<Map<String, Object>>) arguments.getOrDefault("pages", new ArrayList<>());
 
       String description = (String) arguments.getOrDefault("description", "");
+
+      // Log AI-generated metadata structure
+      log.info("[ScaffoldAppTool] 📋 AI-Generated App Metadata:");
+      log.info("[ScaffoldAppTool]   App Name: {}", appName);
+      log.info("[ScaffoldAppTool]   Description: {}", description.isEmpty() ? "(none)" : description);
+      log.info("[ScaffoldAppTool]   Entities: {} defined", entities.size());
+      log.info("[ScaffoldAppTool]   Pages: {} defined", pages.size());
+
+      // Log entity details
+      log.info("[ScaffoldAppTool] 🗂️  Entity Definitions:");
+      for (int i = 0; i < entities.size(); i++) {
+        Map<String, Object> entity = entities.get(i);
+        String entityName = (String) entity.get("name");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) entity.get("fields");
+        int fieldCount = fields != null ? fields.size() : 0;
+        log.info("[ScaffoldAppTool]   {}. {} ({} fields)", i + 1, entityName, fieldCount);
+
+        if (fields != null) {
+          for (Map<String, Object> field : fields) {
+            String fieldName = (String) field.get("name");
+            String fieldType = (String) field.get("type");
+            Boolean required = (Boolean) field.getOrDefault("required", false);
+            log.info("[ScaffoldAppTool]      - {} : {} {}",
+                fieldName, fieldType, required ? "[REQUIRED]" : "");
+          }
+        }
+      }
+
+      // Log page details
+      if (!pages.isEmpty()) {
+        log.info("[ScaffoldAppTool] 📄 Page Definitions:");
+        for (int i = 0; i < pages.size(); i++) {
+          Map<String, Object> page = pages.get(i);
+          String pageName = (String) page.get("name");
+          String pageType = (String) page.get("type");
+          String entityName = (String) page.get("entityName");
+          String path = (String) page.get("path");
+          log.info("[ScaffoldAppTool]   {}. {} ({}) for {} → {}",
+              i + 1, pageName, pageType, entityName, path);
+        }
+      }
+      log.info("[ScaffoldAppTool] ───────────────────────────────────────────────────────");
 
       // Story 3: Phase 1 - Create App
       log.info("[ScaffoldAppTool] Phase 1: Creating app '{}'", appName);
@@ -236,6 +280,14 @@ public class ScaffoldAppTool implements Tool {
       String testUrl = (String) deployData.get("testUrl");
 
       log.info("[ScaffoldAppTool] ✅ App deployed successfully");
+      log.info("[ScaffoldAppTool] ═══════════════════════════════════════════════════════");
+      log.info("[ScaffoldAppTool] 🎉 ONE-SHOT CREATION COMPLETE");
+      log.info("[ScaffoldAppTool]   App: {}", appName);
+      log.info("[ScaffoldAppTool]   App ID: {}", createdAppId);
+      log.info("[ScaffoldAppTool]   Entities Created: {}", createdEntities);
+      log.info("[ScaffoldAppTool]   Pages Created: {}", createdPages);
+      log.info("[ScaffoldAppTool]   Test URL: {}", testUrl);
+      log.info("[ScaffoldAppTool] ═══════════════════════════════════════════════════════");
 
       // Story 6: Consolidated Summary
       Map<String, Object> result = new HashMap<>();
