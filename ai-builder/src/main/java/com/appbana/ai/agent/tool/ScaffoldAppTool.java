@@ -162,16 +162,92 @@ public class ScaffoldAppTool implements Tool {
 
       log.info("[ScaffoldAppTool] ✅ App created successfully: {}", createdAppId);
 
-      // Story 4-6: TODO - Entity, Page, Deploy phases
+      // Story 4: Phase 2 - Create Entities
+      log.info("[ScaffoldAppTool] Phase 2: Creating {} entities", entities.size());
+      CreateEntityTool entityTool = new CreateEntityTool(validator, baseUrl);
+      List<String> createdEntities = new ArrayList<>();
 
-      // Temporary success response for Story 3 testing
+      for (int i = 0; i < entities.size(); i++) {
+        Map<String, Object> entityDef = entities.get(i);
+        String entityName = (String) entityDef.get("name");
+
+        log.info("[ScaffoldAppTool] Creating entity {}/{}: {}", i + 1, entities.size(), entityName);
+
+        // Inject appId into entity definition
+        entityDef.put("appId", createdAppId);
+
+        ToolResult entityResult = entityTool.execute(entityDef, context);
+        if (!entityResult.isSuccess()) {
+          log.error("[ScaffoldAppTool] Entity creation failed for '{}': {}", entityName, entityResult.getError());
+          throw new RuntimeException("Entity creation failed for '" + entityName + "': " + entityResult.getError());
+        }
+
+        createdEntities.add(entityName);
+        log.info("[ScaffoldAppTool] ✅ Entity created: {}", entityName);
+      }
+
+      log.info("[ScaffoldAppTool] ✅ All {} entities created successfully", createdEntities.size());
+
+      // Story 5: Phase 3 - Generate Pages
+      List<String> createdPages = new ArrayList<>();
+      if (!pages.isEmpty()) {
+        log.info("[ScaffoldAppTool] Phase 3: Generating {} pages", pages.size());
+        GeneratePageTool pageTool = new GeneratePageTool(validator, baseUrl);
+
+        for (int i = 0; i < pages.size(); i++) {
+          Map<String, Object> pageDef = pages.get(i);
+          String pageName = (String) pageDef.get("name");
+
+          log.info("[ScaffoldAppTool] Generating page {}/{}: {}", i + 1, pages.size(), pageName);
+
+          // Inject appId into page definition
+          pageDef.put("appId", createdAppId);
+
+          ToolResult pageResult = pageTool.execute(pageDef, context);
+          if (!pageResult.isSuccess()) {
+            log.error("[ScaffoldAppTool] Page generation failed for '{}': {}", pageName, pageResult.getError());
+            throw new RuntimeException("Page generation failed for '" + pageName + "': " + pageResult.getError());
+          }
+
+          createdPages.add(pageName);
+          log.info("[ScaffoldAppTool] ✅ Page generated: {}", pageName);
+        }
+
+        log.info("[ScaffoldAppTool] ✅ All {} pages generated successfully", createdPages.size());
+      } else {
+        log.info("[ScaffoldAppTool] Phase 3: No pages to generate (optional)");
+      }
+
+      // Story 6: Phase 4 - Deploy App
+      log.info("[ScaffoldAppTool] Phase 4: Deploying app to DEV environment");
+      DeployAppTool deployTool = new DeployAppTool(baseUrl);
+
+      Map<String, Object> deployArgs = new HashMap<>();
+      deployArgs.put("appId", createdAppId);
+
+      ToolResult deployResult = deployTool.execute(deployArgs, context);
+      if (!deployResult.isSuccess()) {
+        log.error("[ScaffoldAppTool] Deployment failed: {}", deployResult.getError());
+        throw new RuntimeException("Deployment failed: " + deployResult.getError());
+      }
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> deployData = (Map<String, Object>) deployResult.getData();
+      String testUrl = (String) deployData.get("testUrl");
+
+      log.info("[ScaffoldAppTool] ✅ App deployed successfully");
+
+      // Story 6: Consolidated Summary
       Map<String, Object> result = new HashMap<>();
-      result.put("status", "app_created");
+      result.put("status", "deployed");
       result.put("appId", createdAppId);
       result.put("appName", appName);
-      result.put("entitiesProvided", entities.size());
-      result.put("pagesProvided", pages.size());
-      result.put("message", "Story 3: App creation complete. Entity/Page/Deploy phases coming in Stories 4-6.");
+      result.put("entitiesCreated", createdEntities);
+      result.put("pagesCreated", createdPages);
+      result.put("testUrl", testUrl);
+      result.put("summary", String.format(
+          "✅ Successfully created '%s' with %d entities and %d pages. App is now deployed.",
+          appName, createdEntities.size(), createdPages.size()));
 
       long executionTime = System.currentTimeMillis() - startTime;
       return ToolResult.success(getName(), result, executionTime);
