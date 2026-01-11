@@ -83,13 +83,26 @@ public class CreateEntityTool implements Tool {
   public ToolResult execute(Map<String, Object> arguments, AgentContext context) {
     long startTime = System.currentTimeMillis();
 
+    // 1. Resolve context (appId, tenantId)
+    String tenantId = context.tenantId();
+    String appId = (String) arguments.get("appId");
+    if (appId == null || appId.isEmpty()) {
+      appId = context.appId();
+    }
+
     try {
       log.info("[CreateEntityTool] Creating entity with args: {}", arguments);
 
-      // 1. Build entity metadata
+      // 2. Build entity metadata
       Map<String, Object> entityMetadata = buildEntityMetadata(arguments);
 
-      // 2. Validate metadata
+      // Inject app context into metadata
+      if (appId != null && !appId.isEmpty() && !appId.equals("default")) {
+        entityMetadata.put("appId", appId);
+        entityMetadata.put("tenantId", tenantId);
+      }
+
+      // 3. Validate metadata
       ValidationResult validation = validator.validateEntity(entityMetadata);
 
       if (!validation.isValid()) {
@@ -108,10 +121,9 @@ public class CreateEntityTool implements Tool {
         log.info("[CreateEntityTool] Auto-fix applied successfully");
       }
 
-      // 3. Step 1: Create Schema (Global)
+      // 4. Step 1: Create Schema (Global)
       // Always use /schema endpoint to create the entity definition first
       String schemaUrl = baseUrl + "/schema";
-      String tenantId = context.tenantId();
       String token = context.token();
 
       log.info("[CreateEntityTool] POST {}", schemaUrl);
@@ -130,12 +142,6 @@ public class CreateEntityTool implements Tool {
       HttpResponse<String> response = httpClient.send(
           requestBuilder.POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build(),
           HttpResponse.BodyHandlers.ofString());
-
-      // Prefer appId from args, fallback to context
-      String appId = (String) arguments.get("appId");
-      if (appId == null || appId.isEmpty()) {
-        appId = context.appId();
-      }
 
       long executionTime = System.currentTimeMillis() - startTime;
 

@@ -4,6 +4,12 @@
 
 echo "🚀 Starting AI Builder Service..."
 
+# Load environment variables from .env if it exists
+if [ -f ai-builder/.env ]; then
+    echo "📝 Loading environment from ai-builder/.env"
+    export $(cat ai-builder/.env | grep -v '^#' | xargs)
+fi
+
 # Check if OPENAI_API_KEY is set
 if [ -z "$OPENAI_API_KEY" ]; then
     echo "❌ ERROR: OPENAI_API_KEY environment variable is not set"
@@ -11,10 +17,18 @@ if [ -z "$OPENAI_API_KEY" ]; then
     exit 1
 fi
 
-# Load environment variables from .env if it exists
-if [ -f ai-builder/.env ]; then
-    echo "📝 Loading environment from ai-builder/.env"
-    export $(cat ai-builder/.env | grep -v '^#' | xargs)
+# Define port
+PORT=${AI_PORT:-8081}
+
+# Check if port is in use and kill process
+echo "🔍 Checking if port $PORT is in use..."
+PID=$(lsof -ti:$PORT)
+if [ ! -z "$PID" ]; then
+    echo "⚠️  Found process $PID running on port $PORT. Stopping it..."
+    kill -9 $PID
+    echo "✅ Stopped existing process."
+else
+    echo "✅ Port $PORT is free."
 fi
 
 # Check if Qdrant is running

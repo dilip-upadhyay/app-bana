@@ -95,8 +95,8 @@ public class SchemaManager {
 
     public static void saveSchema(EntitySchema schema) {
         validateSchema(schema);
-        LOG.info("[SAVE-SCHEMA] Saving schema: name={}, appId={}, tenantId={}", 
-                 schema.getName(), schema.getAppId(), schema.getTenantId());
+        LOG.info("[SAVE-SCHEMA] Saving schema: name={}, appId={}, tenantId={}",
+                schema.getName(), schema.getAppId(), schema.getTenantId());
         LOG.debug("[SAVE-SCHEMA] Schema fields: {}", schema.getFields().size());
         DatasourceConfig ds = resolveTarget(schema);
         String dsName = ds.getName();
@@ -127,11 +127,11 @@ public class SchemaManager {
             } else {
                 // Use PostgreSQL's INSERT ... ON CONFLICT syntax (upsert)
                 String upsert = "INSERT INTO appbana_schemas (name, json, tenant_id, app_id) " +
-                               "VALUES (?, ?, ?, ?) " +
-                               "ON CONFLICT (name) DO UPDATE SET " +
-                               "json = EXCLUDED.json, " +
-                               "tenant_id = EXCLUDED.tenant_id, " +
-                               "app_id = EXCLUDED.app_id";
+                        "VALUES (?, ?, ?, ?) " +
+                        "ON CONFLICT (name) DO UPDATE SET " +
+                        "json = EXCLUDED.json, " +
+                        "tenant_id = EXCLUDED.tenant_id, " +
+                        "app_id = EXCLUDED.app_id";
                 try (PreparedStatement ps = c.prepareStatement(upsert)) {
                     ps.setString(1, getUniqueSchemaKey(schema));
                     ps.setString(2, json);
@@ -156,7 +156,7 @@ public class SchemaManager {
                             upd.setString(3, appId);
                             upd.setString(4, getUniqueSchemaKey(schema));
                             upd.executeUpdate();
-            LOG.info("[SAVE-SCHEMA] Calling ensureTable for schema: {}", schema.getName());
+                            LOG.info("[SAVE-SCHEMA] Calling ensureTable for schema: {}", schema.getName());
                         }
                     }
                 }
@@ -222,10 +222,10 @@ public class SchemaManager {
     private static void ensureTable(EntitySchema schema, Connection c, DatasourceConfig dsCfg) throws SQLException {
         String table = getPhysicalTableName(schema);
         DatabaseMetaData md = c.getMetaData();
-                LOG.info("[ENSURE-TABLE] Table does not exist, creating: {}", table);
+        LOG.info("[ENSURE-TABLE] Table does not exist, creating: {}", table);
         String d = dialect(dsCfg);
         try (ResultSet tables = md.getTables(null, null, table.toUpperCase(), null)) {
-                LOG.info("[ENSURE-TABLE] Table exists, checking for schema updates: {}", table);
+            LOG.info("[ENSURE-TABLE] Table exists, checking for schema updates: {}", table);
             boolean exists = tables.next();
             if (!exists) {
                 createTable(schema, c, d);
@@ -270,11 +270,20 @@ public class SchemaManager {
                         String currentType = normalizeSqlType(
                                 info.typeName + (info.size > 0 ? "(" + info.size + ")" : ""));
                         if (!typesEquivalent(currentType, desiredType)) {
-                            String alterType = "postgres".equals(d)
-                                    ? ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name) + " TYPE "
-                                            + sqlType(f, d, true))
-                                    : ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name)
-                                            + " SET DATA TYPE " + sqlType(f, d, true));
+                            String targetSqlType = sqlType(f, d, true);
+                            String alterType;
+
+                            if ("postgres".equals(d)) {
+                                // Add USING clause for explicit casting
+                                alterType = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name)
+                                        + " TYPE "
+                                        + targetSqlType + " USING " + quote(info.name) + "::" + targetSqlType
+                                                .replaceAll("SERIAL", "INTEGER").replaceAll("BIGSERIAL", "BIGINT");
+                            } else {
+                                alterType = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name)
+                                        + " SET DATA TYPE " + targetSqlType;
+                            }
+
                             try (Statement s = c.createStatement()) {
                                 s.execute(alterType);
                                 recordMigration(c, schema.getName(), alterType);
@@ -356,17 +365,18 @@ public class SchemaManager {
         if (pk != null)
             sb.append(", PRIMARY KEY(").append(pk).append(")");
         sb.append(")");
-        
+
         String createTableSql = sb.toString();
         LOG.info("[CREATE-TABLE] Executing SQL: {}", createTableSql);
-        
+
         try (Statement s = c.createStatement()) {
             s.execute(createTableSql);
             LOG.info("[CREATE-TABLE] Successfully created table: {}", table);
             recordMigration(c, schema.getName(), createTableSql);
             LOG.debug("[CREATE-TABLE] Migration recorded for table creation");
-            
-            // Physical table name provides isolation - no tenant_id/app_id columns, no index needed
+
+            // Physical table name provides isolation - no tenant_id/app_id columns, no
+            // index needed
         }
     }
 
@@ -385,10 +395,11 @@ public class SchemaManager {
                 if (ctx != null && ctx.getEnvironment() != null) {
                     String env = ctx.getEnvironment().toUpperCase();
                     // Only prefix for non-DEV environments to keep backward compatibility
-            LOG.info("[TABLE-NAME] Using environment prefix: '{}' for table (env from TenantContext: {})", 
-                     envPrefix.isEmpty() ? "NONE" : envPrefix.substring(0, envPrefix.length()-1), 
-                     ctx != null ? ctx.getEnvironment() : "NOT_SET");
-            LOG.debug("[TABLE-NAME] Final table name: app_{}{}_{}", envPrefix, safeTenantId + "_" + safeAppId, schema.getName());
+                    LOG.info("[TABLE-NAME] Using environment prefix: '{}' for table (env from TenantContext: {})",
+                            envPrefix.isEmpty() ? "NONE" : envPrefix.substring(0, envPrefix.length() - 1),
+                            ctx != null ? ctx.getEnvironment() : "NOT_SET");
+                    LOG.debug("[TABLE-NAME] Final table name: app_{}{}_{}", envPrefix, safeTenantId + "_" + safeAppId,
+                            schema.getName());
                     if (!"DEV".equals(env)) {
                         envPrefix = env + "_";
                     }
@@ -444,10 +455,10 @@ public class SchemaManager {
     private static String sqlType(EntitySchema.Field f, String dialect, boolean forAlter) {
         String t = f.getType().toLowerCase();
         boolean aiPk = f.isPrimaryKey() && f.isAutoIncrement();
-        
+
         // For ALTER statements, we can't use SERIAL/BIGSERIAL, must use INTEGER/BIGINT
         boolean useSerial = aiPk && !forAlter;
-        
+
         if ("postgres".equals(dialect)) {
             switch (t) {
                 case "string":
