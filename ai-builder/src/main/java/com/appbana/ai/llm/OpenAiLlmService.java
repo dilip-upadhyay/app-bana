@@ -70,7 +70,7 @@ public class OpenAiLlmService implements AutoCloseable {
                     .model(model)
                     .messages(List.of(message))
                     .temperature(temperature)
-                    .maxTokens(2000)
+                    .maxTokens(config.getOpenaiMaxTokens())
                     .build();
 
             int maxRetries = 5;

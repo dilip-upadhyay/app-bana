@@ -44,28 +44,29 @@ public class StreamingLlmService {
                     .model(config.getOpenaiModel())
                     .messages(List.of(message))
                     .temperature(temperature)
-                    .maxTokens(2000)
+                    .maxTokens(config.getOpenaiMaxTokens())
                     .stream(true) // Enable streaming
                     .build();
 
-            // Stream tokens
-            openAiService.streamChatCompletion(request)
+            // Stream tokens using the library's accumulator pattern
+            openAiService.mapStreamToAccumulator(openAiService.streamChatCompletion(request))
                     .doOnError(error -> {
                         log.error("[StreamingLLM] Stream error", error);
                         observer.onError(error);
                     })
-                    .blockingForEach(chunk -> {
-                        if (chunk.getChoices() != null && !chunk.getChoices().isEmpty()) {
-                            ChatCompletionChunk choice = chunk.getChoices().get(0);
-                            if (choice.getMessage() != null && choice.getMessage().getContent() != null) {
-                                String token = choice.getMessage().getContent();
-                                observer.onNext(token);
-                            }
+                    .doOnNext(accumulator -> {
+                        // Get the incremental content from each chunk
+                        if (accumulator.getMessageChunk() != null &&
+                                accumulator.getMessageChunk().getContent() != null) {
+                            String token = accumulator.getMessageChunk().getContent();
+                            observer.onNext(token);
                         }
-                    });
-
-            observer.onComplete();
-            log.debug("[StreamingLLM] Stream completed successfully");
+                    })
+                    .doOnComplete(() -> {
+                        observer.onComplete();
+                        log.debug("[StreamingLLM] Stream completed successfully");
+                    })
+                    .blockingSubscribe();
 
         } catch (Exception e) {
             log.error("[StreamingLLM] Failed to stream chat completion", e);

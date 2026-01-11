@@ -22,14 +22,14 @@ public class AiConfig {
 
     // OpenAI configuration
     private String openaiApiKey;
-    private String openaiModel = "gpt-4o";
+    private String openaiModel = "gpt-4o-mini";
     private String openaiEmbeddingModel = "text-embedding-3-small";
     private int openaiMaxTokens = 2000;
     private double openaiTemperature = 0.7;
 
     // Qdrant configuration
     private String qdrantHost = "localhost";
-    private int qdrantPort = 6334; // gRPC port (6333 is HTTP port)
+    private int qdrantPort = 6334; // Qdrant gRPC port (6333 is HTTP/REST API)
     private String qdrantApiKey;
     private String qdrantCollectionConversations = "conversations";
     private String qdrantCollectionPatterns = "app_patterns";
