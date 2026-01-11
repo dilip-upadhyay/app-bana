@@ -65,6 +65,13 @@ build/
 # Database / runtime data
 /data/
 appbana.mv.db
+qdrant_storage/
+
+# Process IDs
+*.pid
+
+# AI Builder logs
+ai-builder.log
 
 # Misc
 node_modules/
