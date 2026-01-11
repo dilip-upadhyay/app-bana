@@ -96,6 +96,7 @@ public class DeployAppTool implements Tool {
                         "environment", "DEV",
                         "version", response.getOrDefault("version", "unknown"),
                         "tablesCreated", response.getOrDefault("tablesCreated", java.util.List.of()),
+                        "testUrl", String.format("http://localhost:3000/app/%s", appId),
                         "summary", response.getOrDefault("summary", "Deployment successful"));
 
                 return ToolResult.success(getName(), result, executionTime);

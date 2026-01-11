@@ -69,11 +69,16 @@ public class AiAgent {
             log.info("[AGENT] Starting processing for user: {}", context.userId());
             log.debug("[AGENT] User message: {}", userMessage);
 
-            // Check if this is a batchable create-app workflow
-            if (batchingEnabled && BatchedToolExecutor.isBatchableCreateApp(userMessage)) {
-                log.info("[AGENT] Detected batchable create-app workflow, using batched execution");
-                return processBatchedCreateApp(userMessage, context, startTime);
-            }
+            // Removed batched shortcut to respect "Plan First" workflow
+            /*
+             * if (batchingEnabled && BatchedToolExecutor.isBatchableCreateApp(userMessage))
+             * {
+             * log.
+             * info("[AGENT] Detected batchable create-app workflow, using batched execution"
+             * );
+             * return processBatchedCreateApp(userMessage, context, startTime);
+             * }
+             */
 
             // Agent loop
             for (int iteration = 1; iteration <= config.getMaxIterations(); iteration++) {
@@ -550,7 +555,9 @@ public class AiAgent {
 
             if (createPageTool != null && pages != null) {
                 for (Map<String, Object> page : pages) {
-                    ToolResult pageResult = createPageTool.execute(page, context);
+                    Map<String, Object> pageArgs = new HashMap<>(page);
+                    pageArgs.put("appId", appId); // Explicitly pass appId
+                    ToolResult pageResult = createPageTool.execute(pageArgs, context);
                     if (!pageResult.isSuccess()) {
                         log.warn("[AGENT-BATCHED] Failed to create page: {}", page.get("name"));
                     }
@@ -558,11 +565,28 @@ public class AiAgent {
                 log.info("[AGENT-BATCHED] Created {} pages", pages.size());
             }
 
+            // NEW: Execute deploy_app tool
+            log.info("[AGENT-BATCHED] Deploying app '{}'...", appName);
+            Tool deployTool = toolRegistry.getTool("deploy_app");
+            String testUrl = " (link pending) ";
+            if (deployTool != null) {
+                ToolResult deployResult = deployTool.execute(Map.of("appId", appId), context);
+                if (deployResult.isSuccess() && deployResult.getData() instanceof Map) {
+                    Map<String, Object> deployData = (Map<String, Object>) deployResult.getData();
+                    testUrl = (String) deployData.getOrDefault("testUrl", " (link pending) ");
+                    log.info("[AGENT-BATCHED] App deployed successfully. URL: {}", testUrl);
+                } else {
+                    log.warn("[AGENT-BATCHED] Deployment failed: {}", deployResult.getError());
+                }
+            }
+
             long elapsed = System.currentTimeMillis() - startTime;
             String finalAnswer = String.format(
-                    "✅ Successfully created app '%s' with %d entities and %d pages using batched execution (saved ~%d API calls!)",
+                    "✅ Successfully created and deployed app '%s' with %d entities and %d pages!\\n\\n" +
+                            "🔗 **Test your app here**: %s\\n\\n" +
+                            "You can now add, edit, and view records in your new application.",
                     appName, entities != null ? entities.size() : 0, pages != null ? pages.size() : 0,
-                    (entities != null ? entities.size() : 0) + (pages != null ? pages.size() : 0));
+                    testUrl);
 
             return AgentResponse.success(finalAnswer, steps, elapsed);
 
