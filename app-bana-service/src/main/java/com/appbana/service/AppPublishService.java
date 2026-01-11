@@ -109,6 +109,54 @@ public class AppPublishService {
     }
 
     /**
+     * Publish app to LOCAL environment with sample data.
+     * LOCAL deployments don't create versions - they always update the same tables.
+     * 
+     * @param appMetaJson Full AppMeta JSON
+     * @param appId       App identifier
+     * @param tenantId    Tenant identifier
+     * @return Deployment result
+     */
+    public DeploymentResult publishToLocal(String appMetaJson, String appId, String tenantId) {
+        LOG.info("[LOCAL] Starting LOCAL deployment: app={}, tenant={}", appId, tenantId);
+        long startTime = System.currentTimeMillis();
+
+        try {
+            // Parse and validate
+            JsonNode appMeta = objectMapper.readTree(appMetaJson);
+            List<EntitySchema> schemas = validateAndConvertEntities(appMeta);
+
+            // Deploy to LOCAL environment (always uses "LOCAL" prefix)
+            List<String> tablesCreated = deploySchemasTransactionally(schemas, appId, tenantId, Environment.LOCAL);
+            LOG.info("[LOCAL] Created/updated {} tables", tablesCreated.size());
+
+            // Generate sample data for LOCAL testing
+            SampleDataGenerator sampleDataGen = new SampleDataGenerator();
+            sampleDataGen.generateSampleData(tenantId, appId, "local", schemas);
+
+            long duration = System.currentTimeMillis() - startTime;
+            LOG.info("[LOCAL] ✅ LOCAL deployment completed in {}ms", duration);
+
+            // Return success (no version for LOCAL)
+            AppVersion localVersion = new AppVersion();
+            localVersion.setAppId(appId);
+            localVersion.setTenantId(tenantId);
+            localVersion.setEnvironment(Environment.LOCAL);
+            localVersion.setVersion(0); // LOCAL always v0
+            localVersion.setDeployedAt(Instant.now());
+            localVersion.setDeployedBy("auto");
+            localVersion.setStatus(DeploymentStatus.SUCCESS);
+
+            return DeploymentResult.success(localVersion);
+
+        } catch (Exception e) {
+            LOG.error("[LOCAL] ❌ Deployment failed: {}", e.getMessage(), e);
+            return DeploymentResult.failure(appId, tenantId, Environment.LOCAL,
+                    "LOCAL deployment failed: " + e.getMessage(), getStackTrace(e));
+        }
+    }
+
+    /**
      * Step 1: Validate entities and convert to EntitySchema objects
      * Automatically sanitizes invalid field names (e.g. "Home Address" ->
      * "Home_Address")

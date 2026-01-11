@@ -138,6 +138,55 @@ public class AppRoutes {
             }
         });
 
+        // Auto-deploy to LOCAL environment (NEW - for Studio auto-deploy)
+        router.put("/api/{tenantId}/apps/{id}/deploy/local", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+
+            try {
+                LOG.info("[LOCAL-DEPLOY] Starting LOCAL deployment for app {} (tenant: {})", appId, tenantId);
+
+                // Fetch current app metadata from database
+                AppMetadata metadata = AppManager.getAppFullMetadata(tenantId, appId);
+                if (metadata == null) {
+                    res.json(404, Map.of("error", "App not found: " + appId));
+                    return;
+                }
+
+                // Convert to JSON
+                String appMetaJson = MAPPER.writeValueAsString(metadata);
+
+                // Deploy to LOCAL with sample data
+                try (Connection conn = JdbcManager.getConnection()) {
+                    AppPublishService publishService = new AppPublishService(conn, new SchemaManager());
+                    DeploymentResult result = publishService.publishToLocal(appMetaJson, appId, tenantId);
+
+                    if (result.isSuccess()) {
+                        LOG.info("[LOCAL-DEPLOY] ✅ LOCAL deployment successful");
+                        res.json(200, Map.of(
+                                "success", true,
+                                "environment", "LOCAL",
+                                "tablesCreated", result.getTablesCreated(),
+                                "durationMs", result.getDurationMs(),
+                                "message", "Deployed to LOCAL with sample data"));
+                    } else {
+                        LOG.error("[LOCAL-DEPLOY] ❌ LOCAL deployment failed: {}", result.getErrorMessage());
+                        res.json(500, Map.of(
+                                "success", false,
+                                "error", result.getErrorMessage()));
+                    }
+                }
+            } catch (Exception e) {
+                LOG.error("[LOCAL-DEPLOY] Exception during LOCAL deployment", e);
+                res.json(500, Map.of("error", "LOCAL deployment failed: " + e.getMessage()));
+            }
+        });
+
         // Create app version
         router.post("/api/{tenantId}/apps/{id}/versions", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
