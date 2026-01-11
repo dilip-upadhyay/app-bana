@@ -467,15 +467,24 @@ public class SchemaManager {
                     return "VARCHAR(" + len + ")";
                 case "int":
                 case "integer":
+                case "number": // Handle 'number' as INTEGER
                     return useSerial ? "SERIAL" : "INTEGER";
                 case "long":
+                case "bigint":
                     return useSerial ? "BIGSERIAL" : "BIGINT";
                 case "boolean":
                     return "BOOLEAN";
                 case "date":
                 case "timestamp":
+                case "datetime":
                     return "TIMESTAMP";
+                case "decimal":
+                case "double":
+                case "float":
+                case "currency": // Handle 'currency' as NUMERIC
+                    return "NUMERIC(19,4)";
                 case "text":
+                case "longtext":
                     return "TEXT";
                 default:
                     return "VARCHAR(255)";
@@ -488,15 +497,24 @@ public class SchemaManager {
                 return "VARCHAR(" + len + ")" + (aiPk ? " AUTO_INCREMENT" : "");
             case "int":
             case "integer":
+            case "number":
                 return "INT" + (aiPk ? " AUTO_INCREMENT" : "");
             case "long":
+            case "bigint":
                 return "BIGINT" + (aiPk ? " AUTO_INCREMENT" : "");
             case "boolean":
                 return "BOOLEAN";
             case "date":
             case "timestamp":
+            case "datetime":
                 return "TIMESTAMP";
+            case "decimal":
+            case "double":
+            case "float":
+            case "currency":
+                return "DECIMAL(19,4)";
             case "text":
+            case "longtext":
                 return "CLOB";
             default:
                 return "VARCHAR(255)";

@@ -326,7 +326,7 @@ public class AppRoutes {
                 return;
             }
             try {
-                AppMetadata app = AppManager.getApp(tenantId, appId);
+                AppMetadata app = AppManager.getAppFullMetadata(tenantId, appId);
                 if (app == null) {
                     res.json(404, Map.of("error", "App not found: " + appId));
                     return;

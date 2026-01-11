@@ -45,6 +45,11 @@ public class AiConfig {
     private boolean enableVoice = true;
     private int maxContextMessages = 10;
 
+    // Retries and Debugging
+    private boolean retryOnError = false; // Disabled by default as per user request
+    private int maxRetries = 0;
+    private boolean debugMode = true;
+
     // Caching
     private int embeddingCacheSizeMax = 10000;
     private int embeddingCacheTtlHours = 1;

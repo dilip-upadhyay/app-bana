@@ -305,6 +305,32 @@ public class AppManager {
             LOG.info("[AppManager] Hydrated {} entities for app {}", hydratedEntities.size(), appId);
         }
 
+        // Hydrate pages for publication
+        try {
+            String sqlPages = "SELECT json_metadata FROM appbana_pages WHERE tenant_id = ? AND app_id = ?";
+            try (Connection conn = JdbcManager.getConnection();
+                    PreparedStatement ps = conn.prepareStatement(sqlPages)) {
+
+                ps.setString(1, tenantId == null ? "default" : tenantId);
+                ps.setString(2, appId);
+
+                List<Map<String, Object>> pages = new ArrayList<>();
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String json = rs.getString("json_metadata");
+                        if (json != null) {
+                            pages.add(mapper.readValue(json, new TypeReference<Map<String, Object>>() {
+                            }));
+                        }
+                    }
+                }
+                app.setPages(pages);
+                LOG.info("[AppManager] Hydrated {} pages for app {}", pages.size(), appId);
+            }
+        } catch (Exception e) {
+            LOG.error("[AppManager] Failed to hydrate pages for app {}", appId, e);
+        }
+
         return app;
     }
 
