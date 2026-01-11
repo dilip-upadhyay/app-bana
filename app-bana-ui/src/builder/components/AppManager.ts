@@ -245,7 +245,7 @@ export class AppManager extends LitElement {
               <div class="current-app">
                 <span class="app-icon">📦</span>
                 <span class="app-name">${this.currentApp.name}</span>
-                <span class="page-count">${this.currentApp.pages.length} page${this.currentApp.pages.length !== 1 ? 's' : ''}</span>
+                <span class="page-count">${this.currentApp.pages?.length || 0} page${(this.currentApp.pages?.length || 0) !== 1 ? 's' : ''}</span>
               </div>
             ` : html`
               <div class="current-app no-app">
