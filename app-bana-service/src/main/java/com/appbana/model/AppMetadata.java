@@ -23,7 +23,8 @@ public class AppMetadata {
     private Long updated;
 
     // Pages
-    private List<Object> pages;
+    private List<String> pages; // Page IDs (for backward compatibility with frontend)
+    private List<Object> pagesData; // Full page objects (optional, for optimization)
     private String defaultPage;
 
     // Entities

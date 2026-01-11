@@ -314,18 +314,28 @@ public class AppManager {
                 ps.setString(1, tenantId == null ? "default" : tenantId);
                 ps.setString(2, appId);
 
-                List<Object> pages = new ArrayList<>();
+                List<String> pageIds = new ArrayList<>();
+                List<Object> pagesData = new ArrayList<>();
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         String json = rs.getString("json_metadata");
                         if (json != null) {
-                            pages.add(mapper.readValue(json, new TypeReference<Map<String, Object>>() {
-                            }));
+                            Map<String, Object> pageData = mapper.readValue(json,
+                                    new TypeReference<Map<String, Object>>() {
+                                    });
+                            pagesData.add(pageData);
+                            // Extract page ID for backward compatibility
+                            String pageId = (String) pageData.get("id");
+                            if (pageId != null) {
+                                pageIds.add(pageId);
+                            }
                         }
                     }
                 }
-                app.setPages(pages);
-                LOG.info("[AppManager] Hydrated {} pages for app {}", pages.size(), appId);
+                app.setPages(pageIds); // Set IDs for frontend compatibility
+                app.setPagesData(pagesData); // Set full objects for optimization
+                LOG.info("[AppManager] Hydrated {} pages for app {} (IDs: {}, Data: {})",
+                        pageIds.size(), appId, pageIds.size(), pagesData.size());
             }
         } catch (Exception e) {
             LOG.error("[AppManager] Failed to hydrate pages for app {}", appId, e);
