@@ -114,7 +114,7 @@ public class SchemaManager {
                     : "default";
 
             // upsert by name, tenant_id, app_id; NOTE: name must be unique per tenant/app
-            if ("postgres".equals(d)) {
+            if ("postgres".equals(d) || "postgresql".equals(d)) {
                 String upsert = "INSERT INTO appbana_schemas(name, json, tenant_id, app_id) VALUES (?, ?, ?, ?) " +
                         "ON CONFLICT (name) DO UPDATE SET json = EXCLUDED.json, tenant_id = EXCLUDED.tenant_id, app_id = EXCLUDED.app_id";
                 try (PreparedStatement ps = c.prepareStatement(upsert)) {
@@ -273,7 +273,7 @@ public class SchemaManager {
                             String targetSqlType = sqlType(f, d, true);
                             String alterType;
 
-                            if ("postgres".equals(d)) {
+                            if ("postgres".equals(d) || "postgresql".equals(d)) {
                                 // Add USING clause for explicit casting
                                 alterType = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name)
                                         + " TYPE "
@@ -459,7 +459,7 @@ public class SchemaManager {
         // For ALTER statements, we can't use SERIAL/BIGSERIAL, must use INTEGER/BIGINT
         boolean useSerial = aiPk && !forAlter;
 
-        if ("postgres".equals(dialect)) {
+        if ("postgres".equals(dialect) || "postgresql".equals(dialect)) {
             switch (t) {
                 case "string":
                 case "varchar":

@@ -11,7 +11,9 @@ public class EntitySchema {
     private List<Field> fields;
     private String datasourceName; // optional: target datasource for this schema's table
     private String modelKind; // 'relational' | 'document' | 'apiResource' (default: relational)
+    @com.fasterxml.jackson.annotation.JsonProperty("appId")
     private String appId; // Owner App ID for isolation
+    @com.fasterxml.jackson.annotation.JsonProperty("tenantId")
     private String tenantId; // Owner Tenant ID for global uniqueness
 
     public EntitySchema() {

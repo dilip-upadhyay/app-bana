@@ -23,7 +23,7 @@ public class AppMetadata {
     private Long updated;
 
     // Pages
-    private List<String> pages;
+    private List<Object> pages;
     private String defaultPage;
 
     // Entities

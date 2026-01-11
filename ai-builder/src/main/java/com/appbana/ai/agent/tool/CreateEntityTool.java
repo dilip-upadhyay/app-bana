@@ -106,19 +106,19 @@ public class CreateEntityTool implements Tool {
       ValidationResult validation = validator.validateEntity(entityMetadata);
 
       if (!validation.isValid()) {
-        log.warn("[CreateEntityTool] Validation failed: {}", validation.getDetailedErrors());
-
-        // Try auto-fix
+        // Try auto-fix immediately without warring first
+        ValidationResult originalValidation = validation;
         entityMetadata = validator.autoFix(entityMetadata, validation);
 
         // Re-validate
         validation = validator.validateEntity(entityMetadata);
         if (!validation.isValid()) {
+          log.warn("[CreateEntityTool] Validation failed even after auto-fix: {}", validation.getDetailedErrors());
           return ToolResult.error(getName(),
               "Entity validation failed: " + validation.getDetailedErrors());
         }
 
-        log.info("[CreateEntityTool] Auto-fix applied successfully");
+        log.info("[CreateEntityTool] Applied auto-fixes (IDs/Types) successfully.");
       }
 
       // 4. Step 1: Create Schema (Global)

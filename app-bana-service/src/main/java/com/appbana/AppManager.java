@@ -314,7 +314,7 @@ public class AppManager {
                 ps.setString(1, tenantId == null ? "default" : tenantId);
                 ps.setString(2, appId);
 
-                List<Map<String, Object>> pages = new ArrayList<>();
+                List<Object> pages = new ArrayList<>();
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         String json = rs.getString("json_metadata");

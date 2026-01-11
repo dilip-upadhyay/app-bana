@@ -76,7 +76,20 @@ else
 fi
 
 # Build the project
+# Build the project
 echo "🔨 Building AI Builder Service..."
+
+# First build the service dependency to ensure changes in SchemaManager etc are picked up
+echo "📦 Installing app-bana-service..."
+cd app-bana-service
+mvn clean install -DskipTests
+cd ..
+
+if [ $? -ne 0 ]; then
+    echo "❌ Service build failed!"
+    exit 1
+fi
+
 cd ai-builder
 mvn clean package -DskipTests
 
