@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Collections;
 import java.util.stream.Collectors;
 import java.util.concurrent.Callable;
@@ -333,9 +334,6 @@ public class AiAgent {
                         - You are an expert architect, not just a command executor.
                         """);
 
-                        Be clear, encouraging, and avoid jargon.
-                        """);
-
         // Available tools
         prompt.append("## Available Tools\n\n");
         prompt.append(toolRegistry.getToolDescriptions());
@@ -542,7 +540,11 @@ public class AiAgent {
                         steps, System.currentTimeMillis() - startTime);
             }
 
-            log.info("[AGENT-BATCHED] App '{}' created successfully", appName);
+            // Extract appId for subsequent steps
+            Map<String, Object> resultData = (Map<String, Object>) createAppResult.getData();
+            String appId = (String) resultData.get("id");
+
+            log.info("[AGENT-BATCHED] App '{}' created successfully (ID: {})", appName, appId);
 
             // Execute create_entity tools for each entity
             List<Map<String, Object>> entities = (List<Map<String, Object>>) batchedResult.get("entities");
