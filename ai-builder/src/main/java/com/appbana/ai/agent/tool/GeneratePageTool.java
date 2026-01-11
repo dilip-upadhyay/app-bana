@@ -201,39 +201,157 @@ public class GeneratePageTool implements Tool {
         String name = (String) arguments.get("name");
         String path = (String) arguments.get("path");
         String entityName = (String) arguments.get("entityName");
+        String appId = (String) arguments.get("appId");
 
         Map<String, Object> page = new HashMap<>();
         page.put("id", generatePageId(name));
         page.put("name", name);
         page.put("path", path);
         page.put("rootId", "root");
+        page.put("metaVersion", 1);
 
-        // Create app-grid container with input components
-        List<Map<String, Object>> nodes = new ArrayList<>();
+        // Fetch entity schema to get fields (from arguments if provided)
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> entityFields = (List<Map<String, Object>>) arguments.get("entityFields");
+        if (entityFields == null) {
+            entityFields = new ArrayList<>();
+            log.warn("[GeneratePageTool] No entity fields provided for form page - form will be empty");
+        }
+        // Build nodes list: app-grid + containers + inputs
+        List<Map<String, Object>> allNodes = new ArrayList<>();
+        List<String> gridChildren = new ArrayList<>();
 
+        // Create app-grid as root
         Map<String, Object> gridNode = new HashMap<>();
-        gridNode.put("id", "grid-" + UUID.randomUUID().toString().substring(0, 8));
+        String gridId = "app-grid";
+        gridNode.put("id", gridId);
         gridNode.put("type", "app-grid");
-        gridNode.put("children", new ArrayList<>());
 
-        nodes.add(gridNode);
+        Map<String, Object> gridProps = new HashMap<>();
+        gridProps.put("cols", 3);
+        gridProps.put("rows", Math.max(1, (entityFields.size() + 2) / 3)); // Auto-calculate rows
+        gridProps.put("gap", "0");
+        gridProps.put("className", "grid");
+        gridProps.put("minCellHeight", "auto");
+        gridProps.put("marginBottom", "0");
+        gridNode.put("props", gridProps);
 
-        // Add save button
-        Map<String, Object> buttonNode = new HashMap<>();
-        buttonNode.put("id", "save-btn-" + UUID.randomUUID().toString().substring(0, 8));
-        buttonNode.put("type", "button");
+        // Generate container + input pairs for each field
+        int containerIndex = 0;
+        for (Map<String, Object> field : entityFields) {
+            String fieldName = (String) field.get("name");
+            String fieldType = (String) field.get("type");
+            String fieldLabel = (String) field.getOrDefault("label", fieldName);
 
-        Map<String, Object> buttonProps = new HashMap<>();
-        buttonProps.put("label", "Save");
-        buttonProps.put("actionType", "save");
-        buttonProps.put("entities", List.of(entityName));
-        buttonNode.put("props", buttonProps);
+            // Skip auto-increment/primary key fields
+            if ("id".equalsIgnoreCase(fieldName) || "autoincrement".equals(fieldType) ||
+                    "long".equals(fieldType) && fieldName.equals("id")) {
+                continue;
+            }
 
-        nodes.add(buttonNode);
+            // Create container
+            String containerId = containerIndex == 0 ? "container" : "container-" + containerIndex;
+            Map<String, Object> container = new HashMap<>();
+            container.put("id", containerId);
+            container.put("type", "container");
 
-        page.put("nodes", nodes);
+            Map<String, Object> containerProps = new HashMap<>();
+            containerProps.put("className", "grid-cell");
+            containerProps.put("slot", "cell-" + containerIndex);
+            containerProps.put("style",
+                    "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;");
+            containerProps.put("data-cell-index", String.valueOf(containerIndex));
+            container.put("props", containerProps);
+
+            // Create input
+            String inputId = containerIndex == 0 ? "input" : "input-" + containerIndex;
+            container.put("children", List.of(inputId));
+
+            Map<String, Object> input = new HashMap<>();
+            input.put("id", inputId);
+            input.put("type", mapFieldToInputType(fieldType));
+
+            Map<String, Object> inputProps = new HashMap<>();
+            inputProps.put("entity", entityName);
+            inputProps.put("field", fieldName);
+            inputProps.put("name", fieldName);
+            inputProps.put("label", fieldLabel);
+            inputProps.put("className", "input");
+            inputProps.put("marginBottom", "0");
+            if (!"reference".equals(fieldType)) {
+                inputProps.put("placeholder", "Enter " + fieldLabel.toLowerCase() + "...");
+            }
+            input.put("props", inputProps);
+
+            gridChildren.add(containerId);
+            allNodes.add(container);
+            allNodes.add(input);
+            containerIndex++;
+        }
+
+        // Add save button container
+        String saveContainerId = "container-save";
+        Map<String, Object> saveContainer = new HashMap<>();
+        saveContainer.put("id", saveContainerId);
+        saveContainer.put("type", "container");
+        Map<String, Object> saveContainerProps = new HashMap<>();
+        saveContainerProps.put("className", "grid-cell");
+        saveContainerProps.put("slot", "cell-" + containerIndex);
+        saveContainerProps.put("style", "min-height: 100px; padding: 0.5rem; display: flex; align-items: center;");
+        saveContainer.put("props", saveContainerProps);
+
+        String saveButtonId = "save-btn";
+        saveContainer.put("children", List.of(saveButtonId));
+
+        Map<String, Object> saveButton = new HashMap<>();
+        saveButton.put("id", saveButtonId);
+        saveButton.put("type", "button");
+        Map<String, Object> saveButtonProps = new HashMap<>();
+        saveButtonProps.put("label", "Save");
+        saveButtonProps.put("actionType", "save");
+        saveButtonProps.put("entities", List.of(entityName));
+        saveButtonProps.put("className", "button");
+        saveButton.put("props", saveButtonProps);
+
+        gridChildren.add(saveContainerId);
+        allNodes.add(saveContainer);
+        allNodes.add(saveButton);
+
+        // Set grid children and add grid to start of nodes
+        gridNode.put("children", gridChildren);
+        allNodes.add(0, gridNode);
+
+        page.put("nodes", allNodes);
 
         return page;
+    }
+
+    /**
+     * Map field type to input component type
+     */
+    private String mapFieldToInputType(String fieldType) {
+        return switch (fieldType.toLowerCase()) {
+            case "date" -> "date";
+            case "datetime", "timestamp" -> "datetime";
+            case "reference" -> "reference";
+            case "status" -> "select";
+            case "boolean" -> "checkbox";
+            case "longtext" -> "textarea";
+            default -> "input";
+        };
+    }
+
+    /**
+     * Fetch entity fields from backend (simplified version - returns empty list for
+     * now)
+     * In production, this would make an HTTP call to fetch the entity schema
+     */
+    private List<Map<String, Object>> fetchEntityFields(String entityName) {
+        // TODO: Fetch from backend API
+        // For now, return empty list - the page will be created but empty
+        // The UI should handle this gracefully
+        log.warn("[GeneratePageTool] Entity field fetching not implemented - form will be empty");
+        return new ArrayList<>();
     }
 
     /**
