@@ -104,6 +104,10 @@ public class AiServer {
 
             // Register essential tools
             String backendUrl = "http://localhost:8080"; // Main AppBana service
+            // Story 7: Register compounds tool FIRST (prioritized for LLM)
+            toolRegistry.register(new ScaffoldAppTool(metadataValidator, backendUrl));
+
+            // Register granular tools (used by ScaffoldAppTool internally or individually)
             toolRegistry.register(new CreateAppTool(backendUrl));
             toolRegistry.register(new CreateEntityTool(metadataValidator, backendUrl));
             toolRegistry.register(new ListEntitiesTool(backendUrl));
