@@ -141,8 +141,14 @@ public class AiAgent {
 
             // Max iterations reached
             log.warn("[AGENT] Max iterations ({}) reached without final answer", config.getMaxIterations());
-            return AgentResponse.error(
-                    "Maximum iterations reached without completing task",
+
+            // Graceful exit: don't error, just return what we have with a note
+            String partialSummary = "I've reached the maximum number of steps (" + config.getMaxIterations()
+                    + ") allowed for this request to save costs. " +
+                    "I may have completed some parts of your request. Please check the logs or ask me to continue if more work is needed.";
+
+            return AgentResponse.success(
+                    partialSummary,
                     steps,
                     System.currentTimeMillis() - startTime);
 

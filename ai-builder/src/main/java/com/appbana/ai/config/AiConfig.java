@@ -49,6 +49,7 @@ public class AiConfig {
     private boolean retryOnError = false; // Disabled by default as per user request
     private int maxRetries = 0;
     private boolean debugMode = true;
+    private int maxIterations = 5; // Default limit as per user request (was 25)
 
     // Caching
     private int embeddingCacheSizeMax = 10000;
@@ -76,6 +77,7 @@ public class AiConfig {
         config.port = Integer.parseInt(getEnv("AI_PORT", String.valueOf(config.port)));
         config.enableLearning = Boolean.parseBoolean(getEnv("AI_ENABLE_LEARNING", "true"));
         config.enableVoice = Boolean.parseBoolean(getEnv("AI_ENABLE_VOICE", "true"));
+        config.maxIterations = Integer.parseInt(getEnv("AI_MAX_ITERATIONS", "5"));
 
         // Validate required configuration
         if (config.openaiApiKey == null || config.openaiApiKey.isEmpty()) {
