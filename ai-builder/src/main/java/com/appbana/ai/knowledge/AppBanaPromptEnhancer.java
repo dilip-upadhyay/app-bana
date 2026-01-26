@@ -21,13 +21,23 @@ public class AppBanaPromptEnhancer {
     private final KnowledgeBaseService knowledgeBaseService;
 
     // Token limits
-    private static final int MAX_SCHEMA_TOKENS = 1000;
+    // Optimization: Reduced from 10 to 5 for cost saving and better focus
+    private static final int MAX_SCHEMA_TOKENS = 500;
     private static final int AVG_TOKENS_PER_SCHEMA = 100;
     private static final int MAX_SCHEMAS = MAX_SCHEMA_TOKENS / AVG_TOKENS_PER_SCHEMA;
 
+    // Technical keywords to trigger RAG
+    private static final Set<String> TECHNICAL_KEYWORDS = Set.of(
+            "app", "application", "entity", "table", "base", "database",
+            "field", "column", "property", "attribute",
+            "page", "screen", "view", "list", "form",
+            "component", "input", "button", "grid",
+            "create", "build", "make", "generate", "deploy",
+            "validation", "rule", "schema", "model");
+
     public AppBanaPromptEnhancer(KnowledgeBaseService knowledgeBaseService) {
         this.knowledgeBaseService = knowledgeBaseService;
-        log.info("AppBanaPromptEnhancer initialized");
+        log.info("AppBanaPromptEnhancer initialized with conditional RAG (Max Schemas: {})", MAX_SCHEMAS);
     }
 
     /**
@@ -39,7 +49,13 @@ public class AppBanaPromptEnhancer {
      */
     public String enhancePrompt(String userMessage, String basePrompt) {
         try {
-            log.debug("Enhancing prompt for message: {}", userMessage);
+            // Conditional RAG: Only search if query looks technical
+            if (!isTechnicalQuery(userMessage)) {
+                log.debug("Query '{}' identified as non-technical. Skipping RAG.", userMessage);
+                return basePrompt;
+            }
+
+            log.debug("Enhancing prompt for technical message: {}", userMessage);
 
             // Get relevant schemas
             List<SchemaDefinition> relevantSchemas = getRelevantSchemas(userMessage);
@@ -77,6 +93,28 @@ public class AppBanaPromptEnhancer {
     }
 
     /**
+     * Check if the query contains technical keywords
+     */
+    private boolean isTechnicalQuery(String message) {
+        if (message == null || message.isBlank())
+            return false;
+
+        String lower = message.toLowerCase();
+
+        // Always trigger for "scaffold" or explicit tool requests
+        if (lower.contains("scaffold") || lower.contains("tool"))
+            return true;
+
+        // Check common keywords
+        for (String keyword : TECHNICAL_KEYWORDS) {
+            if (lower.contains(keyword))
+                return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Get relevant schemas for the user message using semantic search
      */
     private List<SchemaDefinition> getRelevantSchemas(String userMessage) {
@@ -101,21 +139,11 @@ public class AppBanaPromptEnhancer {
     private String buildCapabilitiesSection() {
         return """
                 AppBana Platform Context:
-                AppBana is a metadata-driven low-code platform for building business applications.
+                AppBana is a metadata-driven low-code platform.
 
-                Available Components:
-                - input: Text input fields with validation
-                - button: Action buttons (save, navigate, API calls)
-                - table: Data tables with pagination and actions
-                - app-grid: Responsive grid layout for forms
-                - container: Container for grouping components
-
-                Field Types: 39 types available including text, email, phone, number, date, boolean, reference, etc.
-
-                Metadata Structure:
-                - Entities: Define data models with fields
-                - Pages: Define UI layouts with components
-                - Components: Nested structure with props and children
+                Available Components: input, button, table, app-grid, container
+                Field Types: 39 types (text, number, email, date, reference, etc.)
+                Metadata: Entities (data), Pages (UI), Components (elements)
                 """;
     }
 

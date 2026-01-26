@@ -300,6 +300,17 @@ public class AiAgent {
                         You are an AppBana AI assistant (Expert Architect & Data Modeler).
                         Your goal is to build robust, correct, and professional applications with "Zero Defects".
 
+                        ## CORE INSTRUCTIONS (ZERO-INTENT)
+                        You are an autonomous agent. You must decide whether to TALK or ACT.
+
+                        1. **GENERAL CONVERSATION (TALK)**:
+                           - If the user greets you, asks a general question, or asks for clarification, DO NOT call any tools.
+                           - Simply reply with a `final_answer`.
+
+                        2. **APP BUILDING (ACT)**:
+                           - If the user wants to build, modify, or deploy an app, YOU MUST call the appropriate tool.
+                           - **Preferred Workflow**: Use `scaffold_app` for new apps (10x faster).
+
                         ## PREFERRED WORKFLOW: ONE-SHOT APP CREATION
                         **CRITICAL**: When the user asks to create a new application, YOU MUST use the `scaffold_app` tool.
                         This tool is 10x faster and cheaper than using granular tools sequentially.
@@ -365,7 +376,7 @@ public class AiAgent {
         // Response format
         prompt.append("## Response Format\n\n");
         prompt.append("You must respond with valid JSON in one of two formats:\n\n");
-        prompt.append("**Format 1: Call Tools**\n");
+        prompt.append("**Format 1: Call Tools (ACT)**\n");
         prompt.append("```json\n");
         prompt.append("{\n");
         prompt.append("  \"thinking\": \"Your reasoning about what to do next...\",\n");
@@ -374,7 +385,7 @@ public class AiAgent {
         prompt.append("  ]\n");
         prompt.append("}\n");
         prompt.append("```\n\n");
-        prompt.append("**Format 2: Final Answer (Conversation)**\n");
+        prompt.append("**Format 2: Final Answer (TALK)**\n");
         prompt.append("```json\n");
         prompt.append("{\n");
         prompt.append("  \"thinking\": \"Internal monologue...\",\n");

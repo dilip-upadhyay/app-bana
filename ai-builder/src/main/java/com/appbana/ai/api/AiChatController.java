@@ -5,7 +5,7 @@ import com.appbana.ai.agent.AiAgent;
 import com.appbana.ai.agent.AgentContext;
 import com.appbana.ai.agent.AgentResponse;
 import com.appbana.ai.dialogue.DialogueManager;
-import com.appbana.ai.llm.IntentClassifier;
+// IntentClassifier removed
 import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.llm.AdvancedPromptEngine;
 import com.appbana.ai.rag.ConversationMemory;
@@ -28,24 +28,26 @@ import java.util.stream.Collectors;
 public class AiChatController {
 
     private final OpenAiLlmService llmService;
-    private final IntentClassifier intentClassifier;
+    // IntentClassifier removed
     private final AdvancedPromptEngine promptEngine;
     private final ConversationMemory conversationMemory;
-    private final AiAgent agent; // Story 8.5
+    private final AiAgent agent;
 
     public AiChatController(
             OpenAiLlmService llmService,
-            IntentClassifier intentClassifier,
             AdvancedPromptEngine promptEngine,
             ConversationMemory conversationMemory,
             AiAgent agent) {
         this.llmService = llmService;
-        this.intentClassifier = intentClassifier;
         this.promptEngine = promptEngine;
         this.conversationMemory = conversationMemory;
         this.agent = agent;
     }
 
+    /**
+     * Unified Chat Endpoint
+     * Handles both general conversation and tool execution via AiAgent
+     */
     public BiConsumer<Router.HttpRequest, Router.HttpResponse> chat() {
         return (req, res) -> {
             try {
@@ -54,43 +56,13 @@ public class AiChatController {
 
                 log.info("Chat request from user: {}", request.getUserId());
 
-                // Classify intent
-                IntentClassifier.IntentResult intent = intentClassifier.classifyIntent(request.getMessage());
+                // Reuse the unified agent logic
+                // For the generic chat endpoint, we might not have app/tenant details, so use
+                // defaults
+                String tenantId = request.getTenantId() != null ? request.getTenantId() : "default";
+                String appId = request.getAppId() != null ? request.getAppId() : "default";
 
-                // Build context-aware prompt
-                String prompt = promptEngine.buildPrompt(
-                        request.getMessage(),
-                        request.getUserId(),
-                        null);
-
-                // Get LLM response
-                String aiResponse = llmService.chat(prompt);
-
-                // Store conversation (optional - skip if memory is disabled)
-                String conversationId = null;
-                if (conversationMemory != null) {
-                    ConversationMemory.Conversation conversation = new ConversationMemory.Conversation();
-                    conversation.setUserId(request.getUserId());
-                    conversation.setSessionId(UUID.fromString(request.getSessionId()));
-                    conversation.setMessage(request.getMessage());
-                    conversation.setResponse(aiResponse);
-                    conversation.setIntent(intent.getIntent());
-
-                    ConversationMemory.Conversation stored = conversationMemory.store(conversation);
-                    conversationId = stored.getId();
-                } else {
-                    log.debug("Conversation memory disabled - skipping storage");
-                    conversationId = UUID.randomUUID().toString();
-                }
-
-                // Build response
-                ChatResponse response = new ChatResponse();
-                response.setMessage(aiResponse);
-                response.setIntent(intent.getIntent());
-                response.setSuggestions(new ArrayList<>());
-                response.setConversationId(conversationId);
-
-                res.json(200, response);
+                processAgentRequest(req, res, request, tenantId, appId);
 
             } catch (Exception e) {
                 log.error("Error processing chat", e);
@@ -101,7 +73,7 @@ public class AiChatController {
 
     /**
      * Agent-based chat endpoint
-     * Story 8.5: Controller Integration
+     * Preserved for backward compatibility, but logic is shared
      */
     public BiConsumer<Router.HttpRequest, Router.HttpResponse> chatAgent() {
         return (req, res) -> {
@@ -110,71 +82,86 @@ public class AiChatController {
                 });
                 log.info("[AGENT-ENDPOINT] Chat request from user: {}", chatRequest.getUserId());
 
-                // Extract context details from the request
                 String tenantId = chatRequest.getTenantId() != null ? chatRequest.getTenantId() : "default";
                 String appId = chatRequest.getAppId() != null ? chatRequest.getAppId() : "default";
-                String userId = chatRequest.getUserId();
-                String sessionId = chatRequest.getSessionId();
-                String token = chatRequest.getToken();
 
-                // 1. Get Conversation History
-                List<ConversationMemory.Conversation> history = new ArrayList<>();
-                if (conversationMemory != null) {
-                    try {
-                        history = conversationMemory.getSessionHistory(UUID.fromString(sessionId));
-                    } catch (Exception e) {
-                        log.warn("Failed to retrieve conversation history for session {}: {}", sessionId,
-                                e.getMessage());
-                    }
-                }
+                processAgentRequest(req, res, chatRequest, tenantId, appId);
 
-                // 2. Prepare Agent Context
-                // Pass token for authenticated tool calls and history for context
-                AgentContext agentContext = AgentContext.create(
-                        tenantId,
-                        appId,
-                        userId,
-                        sessionId,
-                        token).withVariable("chat_history", history);
-
-                // 3. Execute Agent
-                // The agent will decide which tools to call based on the user's message
-                AgentResponse result = agent.process(chatRequest.getMessage(), agentContext);
-
-                // 4. Handle Result
-                if (result.isSuccess()) {
-                    // Store conversation in memory
-                    if (conversationMemory != null) {
-                        ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
-                        conv.setUserId(userId);
-                        conv.setSessionId(UUID.fromString(sessionId));
-                        conv.setMessage(chatRequest.getMessage());
-                        conv.setResponse(result.getFinalAnswer());
-                        conv.setIntent("agent_action");
-
-                        try {
-                            conversationMemory.store(conv);
-                        } catch (Exception e) {
-                            log.warn("Failed to store conversation for user {} session {}: {}", userId, sessionId,
-                                    e.getMessage());
-                        }
-                    }
-
-                    // Return success response
-                    res.json(200, Map.of(
-                            "status", "success",
-                            "response", result.getFinalAnswer(),
-                            "steps", result.getSteps()));
-                } else {
-                    // Return error response
-                    res.json(500, Map.of(
-                            "status", "error",
-                            "message", result.getError() != null ? result.getError() : "Unknown error occurred"));
-                }
             } catch (Exception e) {
                 log.error("[AGENT-ENDPOINT] Error processing agent chat", e);
                 res.json(500, Map.of("error", "Agent processing failed: " + e.getMessage()));
             }
         };
+    }
+
+    private void processAgentRequest(Router.HttpRequest req, Router.HttpResponse res, ChatRequest chatRequest,
+            String tenantId, String appId) throws Exception {
+        String userId = chatRequest.getUserId();
+        String sessionId = chatRequest.getSessionId();
+        String token = chatRequest.getToken();
+
+        // 1. Get Conversation History
+        List<ConversationMemory.Conversation> history = new ArrayList<>();
+        if (conversationMemory != null) {
+            try {
+                history = conversationMemory.getSessionHistory(UUID.fromString(sessionId));
+            } catch (Exception e) {
+                log.warn("Failed to retrieve conversation history for session {}: {}", sessionId,
+                        e.getMessage());
+            }
+        }
+
+        // 2. Prepare Agent Context
+        // Pass token for authenticated tool calls and history for context
+        AgentContext agentContext = AgentContext.create(
+                tenantId,
+                appId,
+                userId,
+                sessionId,
+                token).withVariable("chat_history", history);
+
+        // 3. Execute Agent
+        // The agent will decide which tools to call based on the user's message
+        // Or simply reply if no tool is needed (Zero-Intent Flow)
+        AgentResponse result = agent.process(chatRequest.getMessage(), agentContext);
+
+        // 4. Handle Result
+        if (result.isSuccess()) {
+            // Store conversation in memory
+            if (conversationMemory != null) {
+                ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
+                conv.setUserId(userId);
+                conv.setSessionId(UUID.fromString(sessionId));
+                conv.setMessage(chatRequest.getMessage());
+                conv.setResponse(result.getFinalAnswer());
+                conv.setIntent("agent_conversation"); // Generic intent for stored history
+
+                try {
+                    conversationMemory.store(conv);
+                } catch (Exception e) {
+                    log.warn("Failed to store conversation for user {} session {}: {}", userId, sessionId,
+                            e.getMessage());
+                }
+            }
+
+            // Return success response
+            // Map legacy 'message' field for older clients if needed, primarily use
+            // 'response'
+            Map<String, Object> responseMap = new HashMap<>();
+            responseMap.put("status", "success");
+            responseMap.put("response", result.getFinalAnswer());
+            responseMap.put("message", result.getFinalAnswer()); // Legacy support
+            responseMap.put("steps", result.getSteps());
+
+            // Populate intent if available from agent thought (optional in future)
+            responseMap.put("intent", "agent_processed");
+
+            res.json(200, responseMap);
+        } else {
+            // Return error response
+            res.json(500, Map.of(
+                    "status", "error",
+                    "message", result.getError() != null ? result.getError() : "Unknown error occurred"));
+        }
     }
 }

@@ -11,7 +11,7 @@ import com.appbana.ai.knowledge.AppBanaSchemaLoader;
 import com.appbana.ai.knowledge.KnowledgeBaseService;
 import com.appbana.ai.knowledge.MetadataValidator;
 import com.appbana.ai.llm.AdvancedPromptEngine;
-import com.appbana.ai.llm.IntentClassifier;
+// IntentClassifier import removed
 import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.rag.EmbeddingService;
 import com.appbana.ai.rag.QdrantService;
@@ -87,8 +87,7 @@ public class AiServer {
                     qdrantService,
                     config);
 
-            // Intent Classifier
-            IntentClassifier intentClassifier = new IntentClassifier(llmService);
+            // Intent Classifier removed
 
             // Prompt Engine (now with conversation memory)
             AdvancedPromptEngine promptEngine = new AdvancedPromptEngine(
@@ -126,7 +125,6 @@ public class AiServer {
             // AI Chat Controller
             AiChatController chatController = new AiChatController(
                     llmService,
-                    intentClassifier,
                     promptEngine,
                     conversationMemory,
                     agent);
