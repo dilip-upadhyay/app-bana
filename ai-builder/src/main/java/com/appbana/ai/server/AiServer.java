@@ -110,6 +110,11 @@ public class AiServer {
             toolRegistry.register(new CreateAppTool(backendUrl));
             toolRegistry.register(new CreateEntityTool(metadataValidator, backendUrl));
             toolRegistry.register(new ListEntitiesTool(backendUrl));
+            // New context-aware listing tools
+            toolRegistry.register(new ListPagesTool(backendUrl));
+            toolRegistry.register(new ListWorkflowsTool(backendUrl));
+            toolRegistry.register(new ListAppsTool(backendUrl));
+
             toolRegistry.register(new GeneratePageTool(metadataValidator, backendUrl));
             toolRegistry.register(new DeployAppTool(backendUrl));
             toolRegistry.register(new SearchKnowledgeTool(knowledgeBaseService));
