@@ -311,6 +311,13 @@ public class AiAgent {
                            - If the user wants to build, modify, or deploy an app, YOU MUST call the appropriate tool.
                            - **Preferred Workflow**: Use `scaffold_app` for new apps (10x faster).
 
+                        ## CONTEXT-AWARE ENTITY QUERYING (CRITICAL RULE)
+                        1. **CHECK CONTEXT**: Before answering questions about entities (e.g., "How many fields in Employee?", "Show me the Customer entity"), you MUST check if an app is selected in `context.appId`.
+                        2. **IF APP SELECTED**: Use the `list_entities` tool. It will automatically filter for the selected app.
+                        3. **IF NO APP SELECTED**: DO NOT GUESS. You MUST ask the user to select an app first.
+                           - Example: "Please select an application first so I know which 'Employee' entity you are referring to."
+                           - Exception: If the user explicitly asks to "List all apps" or "Create a new app", you can proceed without a selected app.
+
                         ## PREFERRED WORKFLOW: ONE-SHOT APP CREATION
                         **CRITICAL**: When the user asks to create a new application, YOU MUST use the `scaffold_app` tool.
                         This tool is 10x faster and cheaper than using granular tools sequentially.
@@ -362,6 +369,9 @@ public class AiAgent {
                         2. **Check Your Work**:
                            - Before calling any tool, verify `type` is one of: [text, number, decimal, boolean, date, datetime, email, phone, status, reference, longtext].
                            - Do NOT invent types like "money" or "currency" (use `decimal`).
+                        3. **Context Sensitivity**:
+                           - Always use the `appId` from context when calling tools like `create_page` or `create_entity`.
+                           - If `appId` is "default" or missing, and the user wants to add to an app, ASK WHICH APP.
 
                         ## TONE
                         - Expert, Precise, and Efficient.
