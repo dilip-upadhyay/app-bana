@@ -411,6 +411,14 @@ public class AiAgent {
         prompt.append(
                 "IMPORTANT: Do NOT output raw text. ALWAYS use JSON. Verification step: Did you include `tool_calls` OR `final_answer`? One is REQUIRED.\n\n");
 
+        // 0. Current Context (CRITICAL for Context-Aware Rules)
+        prompt.append("## CURRENT EXECUTION CONTEXT\n");
+        prompt.append(String.format("- **Tenant ID**: %s\n", context.tenantId()));
+        prompt.append(
+                String.format("- **App ID**: %s\n", context.appId() != null ? context.appId() : "(none selected)"));
+        prompt.append(String.format("- **User ID**: %s\n", context.userId()));
+        prompt.append("\n");
+
         // 1. User Request (The Goal)
         prompt.append("## ORIGINAL USER REQUEST\n\n");
         prompt.append(userMessage);

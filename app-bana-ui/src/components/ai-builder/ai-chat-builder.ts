@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { AiChatService, ChatMessage } from '../../services/ai-chat-service.ts';
 import { AuthService } from '../../pages/auth/auth-service.ts';
+import { appStore } from '../../builder/store/AppStore';
 import './ai-message.ts';
 
 @customElement('ai-chat-builder')
@@ -242,12 +243,23 @@ export class AiChatBuilder extends LitElement {
       const tenantId = user.tenantId;
       const userId = user.email || user.id.toString();
 
+      // Get current app ID from store
+      const currentApp = appStore.getCurrentApp();
+      const appId = currentApp ? currentApp.id : undefined;
+
+      console.log('[AiChatBuilder] Sending message with Context:', {
+        appId: appId,
+        appName: currentApp?.name,
+        tenantId: tenantId
+      });
+
       const response = await this.chatService.sendMessage({
         message: userMessage,
         userId: userId,
         sessionId: this.sessionId,
         token: authToken,
-        tenantId: tenantId
+        tenantId: tenantId,
+        appId: appId
       });
 
       // Add assistant message
