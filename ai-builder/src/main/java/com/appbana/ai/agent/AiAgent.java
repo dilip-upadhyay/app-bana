@@ -81,9 +81,13 @@ public class AiAgent {
              * }
              */
 
+            // Fail-safe limit
+            int effectiveMaxIterations = Math.min(config.getMaxIterations(), 5);
+            log.info("[AGENT] Effective max iterations: {}", effectiveMaxIterations);
+
             // Agent loop
-            for (int iteration = 1; iteration <= config.getMaxIterations(); iteration++) {
-                log.info("[AGENT] === Iteration {} ===", iteration);
+            for (int iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
+                log.info("[AGENT] === Iteration {} / {} ===", iteration, effectiveMaxIterations);
 
                 // Check timeout
                 long elapsed = System.currentTimeMillis() - startTime;
@@ -127,9 +131,21 @@ public class AiAgent {
                     List<ToolResult> results = executeTools(thought.getToolCalls(), context);
 
                     // Add results to step
+                    boolean allToolsFailed = true;
                     for (ToolResult result : results) {
                         step.addToolResult(result);
                         log.info("[AGENT] {}", result.getSummary());
+                        if (result.isSuccess()) {
+                            allToolsFailed = false;
+                        }
+                    }
+
+                    // Safety: If all tools failed in this step, and we are near the limit, stop
+                    // early to save cost
+                    if (allToolsFailed) {
+                        log.warn("[AGENT] All tools failed in iteration {}. Checking if we should abort.", iteration);
+                        // If it's the last attempt or we've failed multiple times, maybe stop?
+                        // For now, let it retry once more if iterations allow, but log it clearly.
                     }
                 } else {
                     log.warn("[AGENT] No tool calls and no final answer - LLM may be confused");
