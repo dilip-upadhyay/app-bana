@@ -4,7 +4,6 @@ import com.appbana.ai.api.dto.*;
 import com.appbana.ai.agent.AiAgent;
 import com.appbana.ai.agent.AgentContext;
 import com.appbana.ai.agent.AgentResponse;
-import com.appbana.ai.dialogue.DialogueManager;
 // IntentClassifier removed
 import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.llm.AdvancedPromptEngine;
@@ -12,15 +11,11 @@ import com.appbana.ai.rag.ConversationMemory;
 import com.appbana.ai.learning.UserPreferenceEngine;
 import com.appbana.ai.optimization.DirectAnswerService;
 import com.appbana.ai.optimization.PatternExecutor;
-import com.appbana.ai.api.Router;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
 
 /**
  * AI Chat controller using plain Java Router pattern
@@ -30,9 +25,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AiChatController {
 
-    private final OpenAiLlmService llmService;
-    // IntentClassifier removed
-    private final AdvancedPromptEngine promptEngine;
     private final ConversationMemory conversationMemory;
     private final AiAgent agent;
     private final UserPreferenceEngine userPreferenceEngine;
@@ -47,8 +39,6 @@ public class AiChatController {
             UserPreferenceEngine userPreferenceEngine,
             DirectAnswerService directAnswerService,
             PatternExecutor patternExecutor) {
-        this.llmService = llmService;
-        this.promptEngine = promptEngine;
         this.conversationMemory = conversationMemory;
         this.agent = agent;
         this.userPreferenceEngine = userPreferenceEngine;
@@ -143,19 +133,16 @@ public class AiChatController {
             if (directAnswer.isPresent()) {
                 log.info("[RAG-FIRST] Direct answer provided (0 LLM cost)");
 
-                // Save to conversation history
+                // Save to conversation history using the store() method
                 if (conversationMemory != null) {
                     try {
-                        conversationMemory.addMessage(
-                                UUID.fromString(sessionId),
-                                userId,
-                                "user",
-                                chatRequest.getMessage());
-                        conversationMemory.addMessage(
-                                UUID.fromString(sessionId),
-                                "assistant",
-                                "assistant",
-                                directAnswer.get().getAnswer());
+                        ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
+                        conv.setSessionId(UUID.fromString(sessionId));
+                        conv.setUserId(userId);
+                        conv.setMessage(chatRequest.getMessage());
+                        conv.setResponse(directAnswer.get().getAnswer());
+                        conv.setIntent("rag_direct");
+                        conversationMemory.store(conv);
                     } catch (Exception e) {
                         log.warn("Failed to save direct answer to history: {}", e.getMessage());
                     }

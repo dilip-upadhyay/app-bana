@@ -166,8 +166,7 @@ public class BatchUpdateEntitiesTool implements Tool {
             if (failedUpdates.isEmpty()) {
                 log.info("[BatchUpdateEntities] ✅ All {} updates completed successfully in {}ms",
                         successfulUpdates.size(), duration);
-                return ToolResult.success(getName(), resultData,
-                        String.format("Successfully updated %d entities in %dms", successfulUpdates.size(), duration));
+                return ToolResult.success(getName(), resultData, duration);
             } else if (successfulUpdates.isEmpty()) {
                 log.error("[BatchUpdateEntities] ❌ All {} updates failed", failedUpdates.size());
                 return ToolResult.error(getName(),
@@ -175,9 +174,7 @@ public class BatchUpdateEntitiesTool implements Tool {
             } else {
                 log.warn("[BatchUpdateEntities] ⚠️ Partial success: {}/{} updates completed",
                         successfulUpdates.size(), updates.size());
-                return ToolResult.success(getName(), resultData,
-                        String.format("Partial success: %d/%d updates completed. Failed: %s",
-                                successfulUpdates.size(), updates.size(), failedUpdates));
+                return ToolResult.success(getName(), resultData, duration);
             }
 
         } catch (Exception e) {

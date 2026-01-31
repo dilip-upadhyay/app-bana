@@ -65,7 +65,7 @@ public class OpenAiLlmService implements AutoCloseable {
     }
 
     public String chat(String prompt) throws LlmException {
-        return chat(prompt, null);
+        return chatWithOptions(prompt, null, null);
     }
 
     /**

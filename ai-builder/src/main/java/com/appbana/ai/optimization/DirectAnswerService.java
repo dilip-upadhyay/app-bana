@@ -181,10 +181,12 @@ public class DirectAnswerService {
             answer.append(String.format("### %s\n", schema.getName()));
             answer.append(String.format("%s\n\n", schema.getDescription()));
 
-            if (schema.getExample() != null) {
-                answer.append("**Example:**\n```\n");
-                answer.append(schema.getExample());
-                answer.append("\n```\n\n");
+            if (schema.getExamples() != null && !schema.getExamples().isEmpty()) {
+                answer.append("**Examples:**\n```\n");
+                for (String example : schema.getExamples()) {
+                    answer.append(example).append("\n");
+                }
+                answer.append("```\n\n");
             }
         }
     }
