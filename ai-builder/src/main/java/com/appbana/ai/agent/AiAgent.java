@@ -5,6 +5,8 @@ import com.appbana.ai.agent.tool.ToolCall;
 import com.appbana.ai.agent.tool.ToolRegistry;
 import com.appbana.ai.agent.tool.ToolResult;
 import com.appbana.ai.agent.BatchedToolExecutor;
+import com.appbana.ai.agent.PatternExecutor;
+import com.appbana.ai.cache.SemanticCache;
 import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.rag.ConversationMemory;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -40,7 +42,11 @@ public class AiAgent {
     private final AgentConfig config;
     private final ObjectMapper objectMapper;
     private final BatchedToolExecutor batchedExecutor;
+    private final PatternExecutor patternExecutor;
+    private final SemanticCache semanticCache;
     private boolean batchingEnabled = true; // Feature flag
+    private boolean patternMatchingEnabled = true; // Cost optimization
+    private boolean semanticCacheEnabled = true; // Cost optimization - cache LLM responses
 
     public AiAgent(OpenAiLlmService llmService, ToolRegistry toolRegistry, AgentConfig config) {
         this.llmService = llmService;
@@ -48,7 +54,9 @@ public class AiAgent {
         this.config = config;
         this.objectMapper = new ObjectMapper();
         this.batchedExecutor = new BatchedToolExecutor(llmService);
-        log.info("AiAgent initialized with {} tools, max iterations: {}, batching: enabled",
+        this.patternExecutor = new PatternExecutor(toolRegistry);
+        this.semanticCache = new SemanticCache();
+        log.info("AiAgent initialized with {} tools, max iterations: {}, batching: enabled, patterns: enabled, semantic-cache: enabled",
                 toolRegistry.getToolCount(), config.getMaxIterations());
     }
 
@@ -61,6 +69,22 @@ public class AiAgent {
     }
 
     /**
+     * Enable or disable pattern matching (for testing/debugging)
+     */
+    public void setPatternMatchingEnabled(boolean enabled) {
+        this.patternMatchingEnabled = enabled;
+        log.info("Pattern matching {}", enabled ? "enabled" : "disabled");
+    }
+
+    /**
+     * Enable or disable semantic caching (for testing/debugging)
+     */
+    public void setSemanticCacheEnabled(boolean enabled) {
+        this.semanticCacheEnabled = enabled;
+        log.info("Semantic cache {}", enabled ? "enabled" : "disabled");
+    }
+
+    /**
      * Process a user message through the agent loop
      */
     public AgentResponse process(String userMessage, AgentContext context) {
@@ -70,6 +94,15 @@ public class AiAgent {
         try {
             log.info("[AGENT] Starting processing for user: {}", context.userId());
             log.debug("[AGENT] User message: {}", userMessage);
+
+            // COST OPTIMIZATION: Try pattern matching first (no LLM call)
+            if (patternMatchingEnabled) {
+                java.util.Optional<AgentResponse> patternResult = patternExecutor.tryExecute(userMessage, context);
+                if (patternResult.isPresent()) {
+                    log.info("[AGENT] Pattern matched - skipping LLM call (100% cost savings)");
+                    return patternResult.get();
+                }
+            }
 
             // Removed batched shortcut to respect "Plan First" workflow
             /*
@@ -180,6 +213,7 @@ public class AiAgent {
 
     /**
      * THINK step - Ask LLM what to do next
+     * Integrates SemanticCache for cost optimization
      */
     private AgentThought think(String userMessage, List<AgentResponse.AgentStep> history, AgentContext context) {
         try {
@@ -190,8 +224,28 @@ public class AiAgent {
                 log.debug("[AGENT] Prompt:\n{}", prompt);
             }
 
-            // Call LLM
-            String llmResponse = llmService.chat(prompt);
+            // COST OPTIMIZATION: Check semantic cache before LLM call
+            String llmResponse = null;
+            if (semanticCacheEnabled) {
+                java.util.Optional<com.appbana.ai.cache.SemanticCache.CachedResponse> cachedResponse = 
+                    semanticCache.get(prompt, "agent_think");
+                if (cachedResponse.isPresent()) {
+                    llmResponse = cachedResponse.get().response();
+                    log.info("[AGENT] SemanticCache HIT - skipping LLM call (100% cost savings for this request)");
+                }
+            }
+
+            // Call LLM if not cached - with task-type routing for cost optimization
+            if (llmResponse == null) {
+                // Use "agent_think" task type for intelligent model selection
+                llmResponse = llmService.chat(prompt, "agent_think");
+                
+                // Store in cache for future similar requests
+                if (semanticCacheEnabled) {
+                    semanticCache.put(prompt, llmResponse, Map.of("taskType", "agent_think"));
+                    log.debug("[AGENT] Stored response in SemanticCache");
+                }
+            }
 
             if (config.isDebugMode()) {
                 log.debug("[AGENT] LLM Response:\n{}", llmResponse);

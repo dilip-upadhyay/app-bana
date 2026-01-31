@@ -22,10 +22,12 @@ public class AiConfig {
 
     // OpenAI configuration
     private String openaiApiKey;
-    private String openaiModel = "gpt-4o-mini";
+    private String openaiModel = "gpt-4o-mini";           // Standard model (cost-effective)
+    private String openaiPremiumModel = "gpt-4o";         // Premium model (high-quality)
     private String openaiEmbeddingModel = "text-embedding-3-small";
     private int openaiMaxTokens = 2000;
     private double openaiTemperature = 0.7;
+    private boolean hybridModeEnabled = true;             // Enable model switching
 
     // Qdrant configuration
     private String qdrantHost = "localhost";
@@ -64,7 +66,9 @@ public class AiConfig {
         // Load from environment variables (highest priority)
         config.openaiApiKey = getEnv("OPENAI_API_KEY", null);
         config.openaiModel = getEnv("OPENAI_MODEL", config.openaiModel);
+        config.openaiPremiumModel = getEnv("OPENAI_PREMIUM_MODEL", config.openaiPremiumModel);
         config.openaiEmbeddingModel = getEnv("OPENAI_EMBEDDING_MODEL", config.openaiEmbeddingModel);
+        config.hybridModeEnabled = Boolean.parseBoolean(getEnv("AI_HYBRID_MODE", "true"));
 
         config.qdrantHost = getEnv("QDRANT_HOST", config.qdrantHost);
         config.qdrantPort = Integer.parseInt(getEnv("QDRANT_PORT", String.valueOf(config.qdrantPort)));

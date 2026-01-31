@@ -10,8 +10,9 @@ import java.time.Duration;
 import java.util.*;
 
 /**
- * OpenAI GPT-4 integration service
+ * OpenAI GPT-4 integration service with Hybrid Model Routing
  * Story: 4.1 - Implement GPT-4 Integration
+ * Enhancement: Cost Optimization via ModelRouter
  */
 @Slf4j
 public class OpenAiLlmService implements AutoCloseable {
@@ -19,13 +20,18 @@ public class OpenAiLlmService implements AutoCloseable {
     private final AiConfig config;
     private final OpenAiService openAiService;
     private final LlmCacheService cacheService;
+    private final ModelRouter modelRouter;
     private boolean cacheEnabled = true; // Feature flag
+    private boolean hybridModeEnabled = true; // Model switching feature flag
 
     public OpenAiLlmService(AiConfig config) {
         this.config = config;
         this.openAiService = new OpenAiService(config.getOpenaiApiKey(), Duration.ofSeconds(60));
         this.cacheService = new LlmCacheService(100_000, Duration.ofHours(6));
-        log.info("OpenAI LLM Service initialized with model: {}, cache: enabled", config.getOpenaiModel());
+        this.modelRouter = new ModelRouter(config.getOpenaiPremiumModel(), config.getOpenaiModel());
+        this.hybridModeEnabled = config.isHybridModeEnabled();
+        log.info("OpenAI LLM Service initialized - standard: {}, premium: {}, hybrid: {}, cache: enabled", 
+                config.getOpenaiModel(), config.getOpenaiPremiumModel(), hybridModeEnabled);
     }
 
     /**
@@ -34,6 +40,21 @@ public class OpenAiLlmService implements AutoCloseable {
     public void setCacheEnabled(boolean enabled) {
         this.cacheEnabled = enabled;
         log.info("LLM cache {}", enabled ? "enabled" : "disabled");
+    }
+
+    /**
+     * Enable or disable hybrid model routing
+     */
+    public void setHybridModeEnabled(boolean enabled) {
+        this.hybridModeEnabled = enabled;
+        log.info("Hybrid model routing {}", enabled ? "enabled" : "disabled");
+    }
+
+    /**
+     * Get the model router for external configuration
+     */
+    public ModelRouter getModelRouter() {
+        return modelRouter;
     }
 
     /**
@@ -47,9 +68,35 @@ public class OpenAiLlmService implements AutoCloseable {
         return chat(prompt, null);
     }
 
+    /**
+     * Chat with task-type awareness for model routing
+     */
+    public String chat(String prompt, String taskType) throws LlmException {
+        return chatWithOptions(prompt, taskType, null);
+    }
+
     public String chat(String prompt, Map<String, Object> options) throws LlmException {
+        String taskType = options != null ? (String) options.get("taskType") : null;
+        return chatWithOptions(prompt, taskType, options);
+    }
+
+    /**
+     * Core chat method with hybrid model selection
+     */
+    private String chatWithOptions(String prompt, String taskType, Map<String, Object> options) throws LlmException {
         double temperature = 0.7;
-        String model = config.getOpenaiModel();
+        
+        // Select model based on task type (hybrid mode)
+        String model;
+        if (hybridModeEnabled && taskType != null) {
+            model = modelRouter.selectModel(taskType);
+            log.debug("[Hybrid] Task '{}' -> Model '{}'", taskType, model);
+        } else if (hybridModeEnabled) {
+            model = modelRouter.selectModelForPrompt(prompt, null);
+            log.debug("[Hybrid] Prompt analysis -> Model '{}'", model);
+        } else {
+            model = config.getOpenaiModel();
+        }
 
         // Check cache first (if enabled)
         if (cacheEnabled) {

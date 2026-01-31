@@ -36,8 +36,6 @@ import java.net.InetSocketAddress;
 public class AiServer {
     private final AiConfig config;
     private final QdrantService qdrantService;
-    private final AiConfig config;
-    private final QdrantService qdrantService;
     private final HttpServer httpServer;
     private final Router router;
     private HikariDataSource dataSource; // Keep reference for closing
@@ -147,6 +145,9 @@ public class AiServer {
             toolRegistry.register(new GeneratePageTool(metadataValidator, backendUrl));
             toolRegistry.register(new DeployAppTool(backendUrl));
             toolRegistry.register(new SearchKnowledgeTool(knowledgeBaseService));
+            
+            // Cost Optimization: Compound tools for batch operations (Phase 2)
+            toolRegistry.register(new BatchUpdateEntitiesTool(backendUrl));
 
             log.info("Registered {} tools", toolRegistry.getToolCount());
 

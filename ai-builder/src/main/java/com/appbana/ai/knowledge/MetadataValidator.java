@@ -340,32 +340,246 @@ public class MetadataValidator {
     }
 
     /**
+     * Validate scaffold_app input (full app metadata)
+     * Used by ScaffoldAppTool to validate before calling backend
+     */
+    public ValidationResult validateScaffoldApp(Map<String, Object> scaffoldInput) {
+        ValidationResult result = new ValidationResult();
+
+        try {
+            // Validate app name
+            validateRequiredField(scaffoldInput, "appName", "root", result);
+            Object appName = scaffoldInput.get("appName");
+            if (appName instanceof String) {
+                String name = (String) appName;
+                if (name.length() < 2) {
+                    result.addError(ValidationError.error("appName", "App name must be at least 2 characters"));
+                }
+                if (!name.matches("^[a-zA-Z][a-zA-Z0-9 _-]*$")) {
+                    result.addError(ValidationError.errorWithFix(
+                            "appName",
+                            "App name should start with a letter and contain only letters, numbers, spaces, hyphens, or underscores",
+                            "Try: '" + name.replaceAll("[^a-zA-Z0-9 _-]", "") + "'"));
+                }
+            }
+
+            // Validate entities array
+            Object entitiesObj = scaffoldInput.get("entities");
+            if (entitiesObj instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> entities = (List<Map<String, Object>>) entitiesObj;
+
+                if (entities.isEmpty()) {
+                    result.addWarning(ValidationError.warning("entities", 
+                            "No entities defined. App will have no data storage."));
+                } else {
+                    for (int i = 0; i < entities.size(); i++) {
+                        validateEntityForScaffold(entities.get(i), "entities[" + i + "]", result);
+                    }
+                }
+            }
+
+            // Validate pages array (optional but recommended)
+            Object pagesObj = scaffoldInput.get("pages");
+            if (pagesObj instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> pages = (List<Map<String, Object>>) pagesObj;
+
+                for (int i = 0; i < pages.size(); i++) {
+                    validatePageForScaffold(pages.get(i), "pages[" + i + "]", result);
+                }
+            }
+
+            log.debug("Scaffold validation complete: {}", result.getSummary());
+
+        } catch (Exception e) {
+            log.error("Error validating scaffold input", e);
+            result.addError(ValidationError.error("root", "Validation failed: " + e.getMessage()));
+        }
+
+        return result;
+    }
+
+    /**
+     * Validate entity metadata within scaffold context
+     */
+    private void validateEntityForScaffold(Map<String, Object> entity, String path, ValidationResult result) {
+        validateRequiredField(entity, "name", path, result);
+        
+        // Entity name should be PascalCase
+        Object nameObj = entity.get("name");
+        if (nameObj instanceof String) {
+            String name = (String) nameObj;
+            if (!name.isEmpty() && !Character.isUpperCase(name.charAt(0))) {
+                result.addWarning(ValidationError.warning(
+                        path + ".name",
+                        "Entity name '" + name + "' should use PascalCase (e.g., '" + toPascalCase(name) + "')"));
+            }
+        }
+
+        // Validate fields
+        Object fieldsObj = entity.get("fields");
+        if (fieldsObj instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> fields = (List<Map<String, Object>>) fieldsObj;
+
+            if (fields.isEmpty()) {
+                result.addError(ValidationError.error(path + ".fields", 
+                        "Entity must have at least one field"));
+            } else {
+                for (int i = 0; i < fields.size(); i++) {
+                    validateFieldForScaffold(fields.get(i), path + ".fields[" + i + "]", result);
+                }
+            }
+        } else {
+            result.addError(ValidationError.error(path + ".fields", "Entity must have a 'fields' array"));
+        }
+    }
+
+    /**
+     * Validate field metadata within scaffold context
+     */
+    private void validateFieldForScaffold(Map<String, Object> field, String path, ValidationResult result) {
+        // Every field MUST have an id
+        if (!field.containsKey("id")) {
+            Object nameObj = field.get("name");
+            if (nameObj instanceof String) {
+                String suggested = toSnakeCase((String) nameObj);
+                result.addError(ValidationError.errorWithFix(
+                        path + ".id",
+                        "Field is missing 'id' property",
+                        "Add: \"id\": \"" + suggested + "\""));
+            } else {
+                result.addError(ValidationError.error(path + ".id", "Field is missing 'id' property"));
+            }
+        }
+
+        // Validate field type
+        Object typeObj = field.get("type");
+        if (typeObj instanceof String) {
+            String fieldType = (String) typeObj;
+            if (!validFieldTypes.contains(fieldType)) {
+                String suggestion = suggestFieldType(fieldType);
+                if (suggestion != null) {
+                    result.addError(ValidationError.errorWithFix(
+                            path + ".type",
+                            "Invalid type: '" + fieldType + "'",
+                            "Use: \"type\": \"" + suggestion + "\""));
+                } else {
+                    result.addError(ValidationError.error(
+                            path + ".type",
+                            "Invalid type: '" + fieldType + "'. Valid: " + String.join(", ", validFieldTypes)));
+                }
+            }
+
+            // Reference fields MUST have referenceEntity
+            if ("reference".equals(fieldType) && !field.containsKey("referenceEntity")) {
+                result.addError(ValidationError.error(
+                        path + ".referenceEntity",
+                        "Reference field requires 'referenceEntity' property"));
+            }
+
+            // Status/Select fields SHOULD have options
+            if (("status".equals(fieldType) || "select".equals(fieldType)) && !field.containsKey("options")) {
+                result.addWarning(ValidationError.warning(
+                        path + ".options",
+                        "Status/select field should have an 'options' array"));
+            }
+        } else {
+            result.addError(ValidationError.error(path + ".type", "Field is missing 'type' property"));
+        }
+    }
+
+    /**
+     * Validate page metadata within scaffold context
+     */
+    private void validatePageForScaffold(Map<String, Object> page, String path, ValidationResult result) {
+        validateRequiredField(page, "name", path, result);
+        validateRequiredField(page, "path", path, result);
+
+        // Path should start with /
+        Object pathObj = page.get("path");
+        if (pathObj instanceof String) {
+            String pagePath = (String) pathObj;
+            if (!pagePath.startsWith("/")) {
+                result.addError(ValidationError.errorWithFix(
+                        path + ".path",
+                        "Page path must start with '/'",
+                        "Use: \"path\": \"/" + pagePath + "\""));
+            }
+        }
+
+        // Page type should be valid
+        Object typeObj = page.get("type");
+        if (typeObj instanceof String) {
+            String pageType = (String) typeObj;
+            Set<String> validPageTypes = Set.of("list", "form", "dashboard", "detail", "crud", "custom");
+            if (!validPageTypes.contains(pageType)) {
+                result.addWarning(ValidationError.warning(
+                        path + ".type",
+                        "Unknown page type: '" + pageType + "'. Common types: list, form, dashboard"));
+            }
+        }
+    }
+
+    /**
      * Suggest a field type for a typo/unknown type
      */
     private String suggestFieldType(String invalidType) {
         String lower = invalidType.toLowerCase();
 
-        // Common typos
+        // Comprehensive typo map
         Map<String, String> typoMap = Map.ofEntries(
+                // Text variations
                 Map.entry("txt", "text"),
                 Map.entry("string", "text"),
                 Map.entry("str", "text"),
+                Map.entry("varchar", "text"),
+                Map.entry("char", "text"),
+                // Email variations
                 Map.entry("emails", "email"),
                 Map.entry("mail", "email"),
+                Map.entry("e-mail", "email"),
+                // Phone variations
                 Map.entry("phones", "phone"),
                 Map.entry("tel", "phone"),
+                Map.entry("telephone", "phone"),
+                Map.entry("mobile", "phone"),
+                // Number variations
                 Map.entry("int", "number"),
                 Map.entry("integer", "number"),
+                Map.entry("count", "number"),
+                Map.entry("quantity", "number"),
+                // Decimal variations
                 Map.entry("float", "decimal"),
                 Map.entry("double", "decimal"),
+                Map.entry("money", "decimal"),
+                Map.entry("price", "decimal"),
+                Map.entry("currency", "decimal"),
+                Map.entry("amount", "decimal"),
+                // Boolean variations
                 Map.entry("bool", "boolean"),
                 Map.entry("checkbox", "boolean"),
+                Map.entry("flag", "boolean"),
+                // DateTime variations
                 Map.entry("timestamp", "datetime"),
+                Map.entry("time", "datetime"),
+                // Status variations
                 Map.entry("select", "status"),
                 Map.entry("dropdown", "status"),
+                Map.entry("enum", "status"),
+                Map.entry("choice", "status"),
+                // Longtext variations
                 Map.entry("textarea", "longtext"),
+                Map.entry("multiline", "longtext"),
+                Map.entry("description", "longtext"),
+                Map.entry("notes", "longtext"),
+                // Reference variations
                 Map.entry("fk", "reference"),
-                Map.entry("foreign_key", "reference"));
+                Map.entry("foreign_key", "reference"),
+                Map.entry("foreignkey", "reference"),
+                Map.entry("relation", "reference"),
+                Map.entry("lookup", "reference"));
 
         if (typoMap.containsKey(lower)) {
             return typoMap.get(lower);
@@ -376,6 +590,34 @@ public class MetadataValidator {
                 .filter(valid -> valid.toLowerCase().contains(lower) || lower.contains(valid.toLowerCase()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Convert string to PascalCase
+     */
+    private String toPascalCase(String input) {
+        if (input == null || input.isEmpty()) return input;
+        String[] parts = input.split("[\\s_-]+");
+        StringBuilder result = new StringBuilder();
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                result.append(Character.toUpperCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1).toLowerCase());
+                }
+            }
+        }
+        return result.toString();
+    }
+
+    /**
+     * Convert string to snake_case
+     */
+    private String toSnakeCase(String input) {
+        if (input == null || input.isEmpty()) return input;
+        return input.replaceAll("([a-z])([A-Z])", "$1_$2")
+                .replaceAll("[\\s-]+", "_")
+                .toLowerCase();
     }
 
     /**
