@@ -10,6 +10,8 @@ import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.llm.AdvancedPromptEngine;
 import com.appbana.ai.rag.ConversationMemory;
 import com.appbana.ai.learning.UserPreferenceEngine;
+import com.appbana.ai.optimization.DirectAnswerService;
+import com.appbana.ai.optimization.PatternExecutor;
 import com.appbana.ai.api.Router;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -34,18 +36,24 @@ public class AiChatController {
     private final ConversationMemory conversationMemory;
     private final AiAgent agent;
     private final UserPreferenceEngine userPreferenceEngine;
+    private final DirectAnswerService directAnswerService;
+    private final PatternExecutor patternExecutor;
 
     public AiChatController(
             OpenAiLlmService llmService,
             AdvancedPromptEngine promptEngine,
             ConversationMemory conversationMemory,
             AiAgent agent,
-            UserPreferenceEngine userPreferenceEngine) {
+            UserPreferenceEngine userPreferenceEngine,
+            DirectAnswerService directAnswerService,
+            PatternExecutor patternExecutor) {
         this.llmService = llmService;
         this.promptEngine = promptEngine;
         this.conversationMemory = conversationMemory;
         this.agent = agent;
         this.userPreferenceEngine = userPreferenceEngine;
+        this.directAnswerService = directAnswerService;
+        this.patternExecutor = patternExecutor;
     }
 
     /**
@@ -124,6 +132,64 @@ public class AiChatController {
                 log.warn("Failed to retrieve preferences for user {}: {}", userId, e.getMessage());
             }
         }
+
+        // === DECISION TREE: RAG-First Cost Optimization ===
+
+        // Stage 1: Try RAG-only answer (zero LLM cost)
+        if (directAnswerService != null) {
+            Optional<DirectAnswerService.DirectAnswer> directAnswer = directAnswerService
+                    .tryDirectAnswer(chatRequest.getMessage());
+
+            if (directAnswer.isPresent()) {
+                log.info("[RAG-FIRST] Direct answer provided (0 LLM cost)");
+
+                // Save to conversation history
+                if (conversationMemory != null) {
+                    try {
+                        conversationMemory.addMessage(
+                                UUID.fromString(sessionId),
+                                userId,
+                                "user",
+                                chatRequest.getMessage());
+                        conversationMemory.addMessage(
+                                UUID.fromString(sessionId),
+                                "assistant",
+                                "assistant",
+                                directAnswer.get().getAnswer());
+                    } catch (Exception e) {
+                        log.warn("Failed to save direct answer to history: {}", e.getMessage());
+                    }
+                }
+
+                res.json(200, Map.of(
+                        "response", directAnswer.get().getAnswer(),
+                        "source", "rag_direct",
+                        "schemasUsed", directAnswer.get().getSchemasUsed(),
+                        "llmCost", 0.0));
+                return;
+            }
+        }
+
+        // Stage 2: Try pattern-based execution (minimal LLM cost)
+        if (patternExecutor != null) {
+            Optional<PatternExecutor.PatternExecutionResult> patternResult = patternExecutor
+                    .tryPatternExecution(chatRequest.getMessage(), userId);
+
+            if (patternResult.isPresent()) {
+                log.info("[RAG-FIRST] Pattern execution successful (minimal LLM cost)");
+
+                res.json(200, Map.of(
+                        "response", "Successfully created " + patternResult.get().getAppName() +
+                                " using learned pattern: " + patternResult.get().getPatternType(),
+                        "source", "pattern",
+                        "patternType", patternResult.get().getPatternType(),
+                        "metadata", patternResult.get().getMetadata()));
+                return;
+            }
+        }
+
+        // Stage 3: Full agent loop (standard LLM cost)
+        log.info("[RAG-FIRST] Falling back to full agent loop");
 
         // 2. Prepare Agent Context
         // Pass token for authenticated tool calls and history for context

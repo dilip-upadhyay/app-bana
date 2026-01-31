@@ -14,6 +14,8 @@ import com.appbana.ai.llm.AdvancedPromptEngine;
 // IntentClassifier import removed
 import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.learning.UserPreferenceEngine;
+import com.appbana.ai.optimization.DirectAnswerService;
+import com.appbana.ai.optimization.PatternExecutor;
 import com.appbana.ai.rag.EmbeddingService;
 import com.appbana.ai.rag.QdrantService;
 import com.appbana.ai.rag.VectorStoreService;
@@ -94,6 +96,14 @@ public class AiServer {
                     embeddingService,
                     schemaLoader);
 
+            // Optimization Services (RAG-First cost optimization)
+            DirectAnswerService directAnswerService = new DirectAnswerService(knowledgeBaseService);
+            PatternExecutor patternExecutor = new PatternExecutor(
+                    userPreferenceEngine,
+                    embeddingService,
+                    qdrantService);
+            log.info("Optimization services initialized (DirectAnswer + PatternExecutor)");
+
             // Prompt Enhancer
             AppBanaPromptEnhancer promptEnhancer = new AppBanaPromptEnhancer(knowledgeBaseService);
 
@@ -152,7 +162,9 @@ public class AiServer {
                     promptEngine,
                     conversationMemory,
                     agent,
-                    userPreferenceEngine);
+                    userPreferenceEngine,
+                    directAnswerService,
+                    patternExecutor);
 
             log.info("AI services initialized successfully");
 
