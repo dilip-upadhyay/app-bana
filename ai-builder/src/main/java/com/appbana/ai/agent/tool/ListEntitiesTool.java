@@ -98,6 +98,18 @@ public class ListEntitiesTool implements Tool {
                     result.put("count", entityNames.size());
                     result.put("context", "app");
                     result.put("appId", appId);
+                    
+                    // Provide a formatted message for the AI to use
+                    StringBuilder formattedMessage = new StringBuilder();
+                    if (entityNames.isEmpty()) {
+                        formattedMessage.append("No entities found in app **").append(appId).append("**. You can create entities by describing your data model.");
+                    } else {
+                        formattedMessage.append("Found ").append(entityNames.size()).append(" entity/entities in app **").append(appId).append("**:\n\n");
+                        for (int i = 0; i < entityNames.size(); i++) {
+                            formattedMessage.append(i + 1).append(". `").append(entityNames.get(i)).append("`\n");
+                        }
+                    }
+                    result.put("message", formattedMessage.toString());
 
                     return ToolResult.success(getName(), result, executionTime);
                 } else {
@@ -138,6 +150,18 @@ public class ListEntitiesTool implements Tool {
                     result.put("count", entityNames.size());
                     result.put("context", "global");
                     result.put("warning", "No app selected. Listing all global schemas.");
+                    
+                    // Provide a formatted message for the AI to use
+                    StringBuilder formattedMessage = new StringBuilder();
+                    formattedMessage.append("⚠️ No app selected. Showing all global schemas:\n\n");
+                    if (entityNames.isEmpty()) {
+                        formattedMessage.append("No global schemas found.");
+                    } else {
+                        for (int i = 0; i < entityNames.size(); i++) {
+                            formattedMessage.append(i + 1).append(". `").append(entityNames.get(i)).append("`\n");
+                        }
+                    }
+                    result.put("message", formattedMessage.toString());
 
                     return ToolResult.success(getName(), result, executionTime);
                 } else {

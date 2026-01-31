@@ -94,6 +94,18 @@ public class ListWorkflowsTool implements Tool {
                 result.put("workflows", workflowNames);
                 result.put("count", workflowCount);
                 result.put("appId", appId);
+                
+                // Provide a formatted message for the AI to use
+                StringBuilder formattedMessage = new StringBuilder();
+                if (workflowNames.isEmpty()) {
+                    formattedMessage.append("No workflows found in app **").append(appId).append("**. You can create workflows by describing your business process.");
+                } else {
+                    formattedMessage.append("Found ").append(workflowCount).append(" workflow(s) in app **").append(appId).append("**:\n\n");
+                    for (int i = 0; i < workflowNames.size(); i++) {
+                        formattedMessage.append(i + 1).append(". `").append(workflowNames.get(i)).append("`\n");
+                    }
+                }
+                result.put("message", formattedMessage.toString());
 
                 return ToolResult.success(getName(), result, executionTime);
             } else {

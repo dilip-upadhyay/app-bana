@@ -99,9 +99,28 @@ public class ListAppsTool implements Tool {
 
                 log.info("[ListAppsTool] Found {} apps", appNames.size());
 
+                // Format as user-friendly string for AI to present
                 Map<String, Object> result = new HashMap<>();
                 result.put("apps", appDetails);
                 result.put("count", appNames.size());
+                
+                // Provide a formatted message for the AI to use
+                StringBuilder formattedMessage = new StringBuilder();
+                if (appDetails.isEmpty()) {
+                    formattedMessage.append("No applications found. You can create a new app by asking me to help you build one.");
+                } else {
+                    formattedMessage.append("Found ").append(appDetails.size()).append(" application(s):\n\n");
+                    for (int i = 0; i < appDetails.size(); i++) {
+                        Map<String, String> app = appDetails.get(i);
+                        formattedMessage.append(i + 1).append(". **").append(app.get("name")).append("**\n");
+                        formattedMessage.append("   - ID: `").append(app.get("id")).append("`\n");
+                        if (app.get("description") != null && !app.get("description").isEmpty()) {
+                            formattedMessage.append("   - Description: ").append(app.get("description")).append("\n");
+                        }
+                        formattedMessage.append("\n");
+                    }
+                }
+                result.put("message", formattedMessage.toString());
 
                 return ToolResult.success(getName(), result, executionTime);
             } else {

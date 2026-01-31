@@ -110,6 +110,18 @@ public class ListPagesTool implements Tool {
                 result.put("pages", pageNames);
                 result.put("count", pageNames.size());
                 result.put("appId", appId);
+                
+                // Provide a formatted message for the AI to use
+                StringBuilder formattedMessage = new StringBuilder();
+                if (pageNames.isEmpty()) {
+                    formattedMessage.append("No pages found in app **").append(appId).append("**. You can create pages by asking me to generate UI components.");
+                } else {
+                    formattedMessage.append("Found ").append(pageNames.size()).append(" page(s) in app **").append(appId).append("**:\n\n");
+                    for (int i = 0; i < pageNames.size(); i++) {
+                        formattedMessage.append(i + 1).append(". `").append(pageNames.get(i)).append("`\n");
+                    }
+                }
+                result.put("message", formattedMessage.toString());
 
                 return ToolResult.success(getName(), result, executionTime);
             } else {
