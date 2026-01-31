@@ -94,7 +94,7 @@ class KnowledgeBaseServiceTest {
         // Setup search result for email field
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("schemaId", "field_email");
-        metadata.put("schemaType", "ENTITY_FIELD");
+        metadata.put("schemaType", "field-type");
         metadata.put("schemaName", "email");
         metadata.put("description", "Email with validation");
         metadata.put("examples", "[\"user@example.com\"]");
@@ -113,7 +113,7 @@ class KnowledgeBaseServiceTest {
         SchemaDefinition emailSchema = results.get(0);
         assertEquals("field_email", emailSchema.getId());
         assertEquals("email", emailSchema.getName());
-        assertEquals(SchemaDefinition.SchemaType.ENTITY_FIELD, emailSchema.getType());
+        assertEquals("field-type", emailSchema.getType());
     }
 
     @Test
@@ -126,14 +126,14 @@ class KnowledgeBaseServiceTest {
         // Setup search result for input component
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("schemaId", "component_input");
-        metadata.put("schemaType", "COMPONENT");
+        metadata.put("schemaType", "component");
         metadata.put("schemaName", "input");
         metadata.put("description", "Text input field");
         metadata.put("examples", "[]");
 
         SearchResult searchResult = new SearchResult("component_input", 0.90f, metadata);
 
-        Map<String, Object> expectedFilter = Map.of("schemaType", "COMPONENT");
+        Map<String, Object> expectedFilter = Map.of("schemaType", "component");
         when(vectorStoreService.search(eq(COLLECTION_NAME), any(float[].class), eq(10), eq(expectedFilter)))
                 .thenReturn(List.of(searchResult));
 
@@ -146,7 +146,7 @@ class KnowledgeBaseServiceTest {
         // Assert
         assertNotNull(results);
         assertEquals(1, results.size());
-        assertEquals(SchemaDefinition.SchemaType.COMPONENT, results.get(0).getType());
+        assertEquals("component", results.get(0).getType());
 
         // Verify filter was used
         verify(vectorStoreService).search(

@@ -1,5 +1,6 @@
 package com.appbana.ai.knowledge;
 
+import com.appbana.ai.knowledge.SchemaDefinition.SchemaType;
 import com.appbana.ai.rag.EmbeddingService;
 import com.appbana.ai.rag.EmbeddingService.EmbeddingException;
 import com.appbana.ai.rag.QdrantService;
@@ -258,8 +259,8 @@ public class KnowledgeBaseService {
             // Generate query embedding
             float[] queryEmbedding = embeddingService.embed(query);
 
-            // Build filter for schema type
-            Map<String, Object> filter = Map.of("schemaType", type.name());
+            // Build filter for schema type - use getValue() to match stored values
+            Map<String, Object> filter = Map.of("schemaType", type.getValue());
 
             // Search in Qdrant with filter
             String collectionName = qdrantService.getAppBanaKnowledgeCollection();
@@ -355,10 +356,10 @@ public class KnowledgeBaseService {
             schema.setName((String) metadata.get("schemaName"));
             schema.setDescription((String) metadata.get("description"));
 
-            // Parse schema type
-            String typeStr = (String) metadata.get("schemaType");
-            if (typeStr != null) {
-                schema.setType(SchemaDefinition.SchemaType.valueOf(typeStr));
+            // Parse schema type - use String directly (not enum) to support all knowledge types
+            SchemaType type = (SchemaType) metadata.get("schemaType");
+            if (type != null) {
+                schema.setType(type);
             }
 
             // Parse examples

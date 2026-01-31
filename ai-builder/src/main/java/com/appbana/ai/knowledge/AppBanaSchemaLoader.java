@@ -192,6 +192,7 @@ public class AppBanaSchemaLoader {
                 schema.setId("field_" + name);
                 schema.setName(name);
                 schema.setType(SchemaDefinition.SchemaType.ENTITY_FIELD);
+                schema.setType(SchemaDefinition.SchemaType.ENTITY_FIELD);
                 schema.setDescription(description);
                 schema.setExamples(examples);
                 Map<String, Object> metadata = new HashMap<>();

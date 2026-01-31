@@ -86,12 +86,15 @@ public class ListAppsTool implements Tool {
                         .map(a -> (String) a.get("name"))
                         .toList();
 
-                // Detailed info for agent
+                // Detailed info for agent - use HashMap to handle null values
                 List<Map<String, String>> appDetails = apps.stream()
-                        .map(a -> Map.of(
-                                "name", (String) a.get("name"),
-                                "id", (String) a.get("id"),
-                                "description", (String) a.getOrDefault("description", "")))
+                        .map(a -> {
+                            Map<String, String> details = new HashMap<>();
+                            details.put("name", a.get("name") != null ? (String) a.get("name") : "Unnamed");
+                            details.put("id", a.get("id") != null ? (String) a.get("id") : "");
+                            details.put("description", a.get("description") != null ? (String) a.get("description") : "");
+                            return details;
+                        })
                         .toList();
 
                 log.info("[ListAppsTool] Found {} apps", appNames.size());

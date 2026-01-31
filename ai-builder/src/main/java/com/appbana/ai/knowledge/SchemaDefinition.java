@@ -50,11 +50,12 @@ public class SchemaDefinition {
         }
     }
 
+
     /**
-     * Set type from enum for backward compatibility
+     * Set type as String - primary method for new code
      */
-    public void setType(SchemaType schemaType) {
-        this.type = schemaType.getValue();
+    public void setType(SchemaType type) {
+        this.type = type.getValue();
     }
 
     /**

@@ -180,7 +180,7 @@ class KnowledgeBaseServiceIntegrationTest {
 
         // Verify all results are components
         for (SchemaDefinition schema : componentResults) {
-            assertEquals(SchemaDefinition.SchemaType.COMPONENT, schema.getType());
+            assertEquals("component", schema.getType());
             System.out.println("    - " + schema.getName());
         }
 
@@ -198,7 +198,7 @@ class KnowledgeBaseServiceIntegrationTest {
 
         // Verify all results are entity fields
         for (SchemaDefinition schema : fieldResults) {
-            assertEquals(SchemaDefinition.SchemaType.ENTITY_FIELD, schema.getType());
+            assertEquals("field-type", schema.getType());
         }
     }
 
