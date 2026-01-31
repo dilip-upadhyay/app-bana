@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -68,7 +69,7 @@ public class KnowledgeBaseService {
 
             for (SchemaDefinition schema : allSchemas) {
                 try {
-                    indexSchema(schema, collectionName);
+                    indexSchemaInternal(schema, collectionName);
                     successCount++;
                 } catch (Exception e) {
                     log.error("Failed to index schema: {}", schema.getId(), e);
@@ -94,9 +95,28 @@ public class KnowledgeBaseService {
     }
 
     /**
-     * Index a single schema into Qdrant
+     * Index a single schema into Qdrant (public method for external loaders)
+     * Used by AppBanaKnowledgeLoader to add comprehensive platform knowledge
+     * 
+     * @param schema The schema to index
+     * @throws KnowledgeBaseException if indexing fails
      */
-    private void indexSchema(SchemaDefinition schema, String collectionName)
+    public void indexSchema(SchemaDefinition schema) throws KnowledgeBaseException {
+        try {
+            String collectionName = qdrantService.getAppBanaKnowledgeCollection();
+            indexSchemaInternal(schema, collectionName);
+            indexedCount++;
+            initialized = true;
+        } catch (Exception e) {
+            log.error("Failed to index schema: {}", schema.getId(), e);
+            throw new KnowledgeBaseException("Failed to index schema: " + schema.getId(), e);
+        }
+    }
+
+    /**
+     * Index a single schema into Qdrant (internal implementation)
+     */
+    private void indexSchemaInternal(SchemaDefinition schema, String collectionName)
             throws EmbeddingException, VectorStoreException, JsonProcessingException {
 
         // Generate searchable text from schema
@@ -110,10 +130,15 @@ public class KnowledgeBaseService {
         // Build metadata
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("schemaId", schema.getId());
-        metadata.put("schemaType", schema.getType().name());
+        metadata.put("schemaType", schema.getType() != null ? schema.getType() : "entity");
         metadata.put("schemaName", schema.getName());
         metadata.put("description", schema.getDescription());
         metadata.put("examples", objectMapper.writeValueAsString(schema.getExamples()));
+        
+        // Add category if available
+        if (schema.getCategory() != null) {
+            metadata.put("category", schema.getCategory());
+        }
 
         // Add schema-specific metadata
         if (schema.getMetadata() != null) {
@@ -124,10 +149,19 @@ public class KnowledgeBaseService {
         metadata.put("userId", "system");
         metadata.put("timestamp", System.currentTimeMillis());
 
-        // Store in Qdrant
-        vectorStoreService.store(collectionName, schema.getId(), embedding, metadata);
+        // Store in Qdrant - generate UUID from the ID since Qdrant requires UUID format
+        String vectorId = generateUuidFromString(schema.getId());
+        vectorStoreService.store(collectionName, vectorId, embedding, metadata);
 
-        log.debug("Successfully indexed schema: {}", schema.getId());
+        log.debug("Successfully indexed schema: {} (vectorId: {})", schema.getId(), vectorId);
+    }
+    
+    /**
+     * Generate a deterministic UUID from a string.
+     * Uses UUID v5 (name-based UUID) with a namespace UUID.
+     */
+    private String generateUuidFromString(String input) {
+        return UUID.nameUUIDFromBytes(input.getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     /**
@@ -147,7 +181,7 @@ public class KnowledgeBaseService {
         }
 
         // Add metadata for field types
-        if (schema.getMetadata() != null && schema.getType() == SchemaDefinition.SchemaType.ENTITY_FIELD) {
+        if (schema.getMetadata() != null && schema.getTypeAsEnum() == SchemaDefinition.SchemaType.ENTITY_FIELD) {
             String htmlType = (String) schema.getMetadata().get("htmlType");
             if (htmlType != null) {
                 text.append(" - HTML type: ").append(htmlType);
@@ -339,9 +373,9 @@ public class KnowledgeBaseService {
             // Parse schema metadata
             String schemaMetadataJson = (String) metadata.get("schemaMetadata");
             if (schemaMetadataJson != null) {
-                Map<String, String> schemaMetadata = objectMapper.readValue(
+                Map<String, Object> schemaMetadata = objectMapper.readValue(
                         schemaMetadataJson,
-                        objectMapper.getTypeFactory().constructMapType(Map.class, String.class, String.class));
+                        objectMapper.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
                 schema.setMetadata(schemaMetadata);
             }
 

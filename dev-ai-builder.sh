@@ -35,4 +35,14 @@ echo "🚀 Starting in development mode (Ctrl+C to stop)..."
 echo "📝 Code changes will require restart"
 echo ""
 
+# Database configuration
+export DATABASE_URL=${DATABASE_URL:-"jdbc:postgresql://localhost:5432/appbana"}
+export DATABASE_USER=${DATABASE_USER:-"appbana"}
+export DATABASE_PASSWORD=${DATABASE_PASSWORD:-"appbana_dev_2026"}
+echo "🔗 Database: ${DATABASE_URL} (user: ${DATABASE_USER})"
+echo ""
+
+DATABASE_URL="${DATABASE_URL}" \
+DATABASE_USER="${DATABASE_USER}" \
+DATABASE_PASSWORD="${DATABASE_PASSWORD}" \
 mvn compile exec:java -Dexec.mainClass="com.appbana.ai.AiBuilderMain"

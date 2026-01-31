@@ -35,7 +35,7 @@ public class MetadataValidator {
 
         // Load valid field types from schema loader
         this.validFieldTypes = schemaLoader.getAllSchemas().stream()
-                .filter(s -> s.getType() == SchemaDefinition.SchemaType.ENTITY_FIELD)
+                .filter(s -> s.getTypeAsEnum() == SchemaDefinition.SchemaType.ENTITY_FIELD)
                 .map(SchemaDefinition::getName)
                 .collect(Collectors.toSet());
 

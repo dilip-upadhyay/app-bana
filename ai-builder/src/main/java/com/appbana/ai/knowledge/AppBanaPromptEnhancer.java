@@ -154,9 +154,10 @@ public class AppBanaPromptEnhancer {
         StringBuilder context = new StringBuilder();
         context.append("Relevant AppBana Schemas:\n");
 
-        // Group schemas by type
+        // Group schemas by type (using getTypeAsEnum for enum-based grouping)
         Map<SchemaDefinition.SchemaType, List<SchemaDefinition>> byType = schemas.stream()
-                .collect(Collectors.groupingBy(SchemaDefinition::getType));
+                .filter(s -> s.getTypeAsEnum() != null)
+                .collect(Collectors.groupingBy(SchemaDefinition::getTypeAsEnum));
 
         // Add field types
         if (byType.containsKey(SchemaDefinition.SchemaType.ENTITY_FIELD)) {

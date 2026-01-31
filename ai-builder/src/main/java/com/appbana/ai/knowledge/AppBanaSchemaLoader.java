@@ -32,7 +32,7 @@ public class AppBanaSchemaLoader {
 
         public List<SchemaDefinition> getSchemasByType(SchemaDefinition.SchemaType type) {
                 return schemas.values().stream()
-                                .filter(s -> s.getType() == type)
+                                .filter(s -> s.getTypeAsEnum() == type)
                                 .toList();
         }
 
@@ -194,8 +194,8 @@ public class AppBanaSchemaLoader {
                 schema.setType(SchemaDefinition.SchemaType.ENTITY_FIELD);
                 schema.setDescription(description);
                 schema.setExamples(examples);
-                Map<String, String> metadata = new HashMap<>();
-                config.forEach((k, v) -> metadata.put(k, v.toString()));
+                Map<String, Object> metadata = new HashMap<>();
+                config.forEach((k, v) -> metadata.put(k, v));
                 metadata.put("htmlType", htmlType);
                 schema.setMetadata(metadata);
 

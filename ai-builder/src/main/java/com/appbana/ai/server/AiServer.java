@@ -6,6 +6,7 @@ import com.appbana.ai.agent.tool.*;
 import com.appbana.ai.api.AiChatController;
 import com.appbana.ai.api.Router;
 import com.appbana.ai.config.AiConfig;
+import com.appbana.ai.knowledge.AppBanaKnowledgeLoader;
 import com.appbana.ai.knowledge.AppBanaPromptEnhancer;
 import com.appbana.ai.knowledge.AppBanaSchemaLoader;
 import com.appbana.ai.knowledge.KnowledgeBaseService;
@@ -93,6 +94,11 @@ public class AiServer {
                     vectorStoreService,
                     embeddingService,
                     schemaLoader);
+
+            // Load AppBana knowledge into vector database
+            AppBanaKnowledgeLoader knowledgeLoader = new AppBanaKnowledgeLoader(knowledgeBaseService);
+            knowledgeLoader.loadAllKnowledge();
+            log.info("AppBana knowledge base loaded");
 
             // Optimization Services (RAG-First cost optimization)
             DirectAnswerService directAnswerService = new DirectAnswerService(knowledgeBaseService);
@@ -221,6 +227,40 @@ public class AiServer {
         if (dataSource != null && !dataSource.isClosed()) {
             dataSource.close();
             log.info("Database connection pool closed");
+        }
+    }
+
+    /**
+     * Main entry point for the AI Builder Server
+     */
+    public static void main(String[] args) {
+        try {
+            log.info("Starting AI Builder Server...");
+
+            // Load configuration
+            AiConfig config = AiConfig.load();
+            log.info("Configuration loaded - Port: {}, Model: {}", config.getPort(), config.getOpenaiModel());
+
+            // Initialize Qdrant
+            QdrantService qdrantService = new QdrantService(config);
+            log.info("Qdrant service initialized");
+
+            // Create and start server
+            AiServer server = new AiServer(config, qdrantService);
+            server.start();
+
+            // Add shutdown hook
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                log.info("Shutting down AI Builder Server...");
+                server.stop();
+            }));
+
+            // Keep the main thread alive
+            Thread.currentThread().join();
+
+        } catch (Exception e) {
+            log.error("Failed to start AI Builder Server", e);
+            System.exit(1);
         }
     }
 }

@@ -45,7 +45,7 @@ class AppBanaPromptEnhancerTest {
         emailSchema.setType(SchemaDefinition.SchemaType.ENTITY_FIELD);
         emailSchema.setDescription("Email with validation");
         emailSchema.setExamples(List.of("user@example.com"));
-        Map<String, String> emailMeta = new HashMap<>();
+        Map<String, Object> emailMeta = new HashMap<>();
         emailMeta.put("htmlType", "email");
         emailSchema.setMetadata(emailMeta);
         mockSchemas.add(emailSchema);
@@ -57,7 +57,7 @@ class AppBanaPromptEnhancerTest {
         phoneSchema.setType(SchemaDefinition.SchemaType.ENTITY_FIELD);
         phoneSchema.setDescription("Phone number with formatting");
         phoneSchema.setExamples(List.of("+1-555-0123"));
-        Map<String, String> phoneMeta = new HashMap<>();
+        Map<String, Object> phoneMeta = new HashMap<>();
         phoneMeta.put("htmlType", "tel");
         phoneSchema.setMetadata(phoneMeta);
         mockSchemas.add(phoneSchema);

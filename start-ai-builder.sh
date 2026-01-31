@@ -100,14 +100,23 @@ fi
 
 echo "✅ Build successful!"
 
+# Database configuration
+export DATABASE_URL=${DATABASE_URL:-"jdbc:postgresql://localhost:5432/appbana"}
+export DATABASE_USER=${DATABASE_USER:-"appbana"}
+export DATABASE_PASSWORD=${DATABASE_PASSWORD:-"appbana_dev_2026"}
+
 # Run the service
 echo "🚀 Starting AI Builder server on port ${AI_PORT:-8081}..."
 echo "📍 Health check: http://localhost:${AI_PORT:-8081}/health"
 echo "📍 Chat API: http://localhost:${AI_PORT:-8081}/api/ai/chat"
+echo "🔗 Database: ${DATABASE_URL} (user: ${DATABASE_USER})"
 echo ""
 echo "Press Ctrl+C to stop the service"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
+DATABASE_URL="${DATABASE_URL}" \
+DATABASE_USER="${DATABASE_USER}" \
+DATABASE_PASSWORD="${DATABASE_PASSWORD}" \
 java -jar target/ai-builder-1.0-SNAPSHOT-fat.jar
 

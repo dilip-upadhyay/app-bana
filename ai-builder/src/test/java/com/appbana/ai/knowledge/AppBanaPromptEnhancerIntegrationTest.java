@@ -211,9 +211,9 @@ class AppBanaPromptEnhancerIntegrationTest {
 
         // Verify all results are of correct type
         assertTrue(components.stream()
-                .allMatch(s -> s.getType() == SchemaDefinition.SchemaType.COMPONENT));
+                .allMatch(s -> s.getTypeAsEnum() == SchemaDefinition.SchemaType.COMPONENT));
         assertTrue(fieldTypes.stream()
-                .allMatch(s -> s.getType() == SchemaDefinition.SchemaType.ENTITY_FIELD));
+                .allMatch(s -> s.getTypeAsEnum() == SchemaDefinition.SchemaType.ENTITY_FIELD));
 
         System.out.println("✓ Type-filtered search working correctly");
     }
