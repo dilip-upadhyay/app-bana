@@ -13,11 +13,14 @@ import com.appbana.ai.knowledge.MetadataValidator;
 import com.appbana.ai.llm.AdvancedPromptEngine;
 // IntentClassifier import removed
 import com.appbana.ai.llm.OpenAiLlmService;
+import com.appbana.ai.learning.UserPreferenceEngine;
 import com.appbana.ai.rag.EmbeddingService;
 import com.appbana.ai.rag.QdrantService;
 import com.appbana.ai.rag.VectorStoreService;
 import com.appbana.ai.rag.ConversationMemory;
 import com.sun.net.httpserver.HttpServer;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -31,8 +34,11 @@ import java.net.InetSocketAddress;
 public class AiServer {
     private final AiConfig config;
     private final QdrantService qdrantService;
+    private final AiConfig config;
+    private final QdrantService qdrantService;
     private final HttpServer httpServer;
     private final Router router;
+    private HikariDataSource dataSource; // Keep reference for closing
 
     public AiServer(AiConfig config, QdrantService qdrantService) throws IOException {
         this.config = config;
@@ -59,6 +65,18 @@ public class AiServer {
 
             // LLM Service
             OpenAiLlmService llmService = new OpenAiLlmService(config);
+
+            // Database Connection (HikariCP)
+            HikariConfig hikariConfig = new HikariConfig();
+            hikariConfig.setJdbcUrl(config.getDatabaseUrl());
+            hikariConfig.setUsername(config.getDatabaseUser());
+            hikariConfig.setPassword(config.getDatabasePassword());
+            hikariConfig.setMaximumPoolSize(config.getDatabasePoolSize());
+            this.dataSource = new HikariDataSource(hikariConfig);
+            log.info("Database connection pool initialized");
+
+            // User Preference Engine
+            UserPreferenceEngine userPreferenceEngine = new UserPreferenceEngine(dataSource, config);
 
             // Embedding Service
             EmbeddingService embeddingService = new EmbeddingService(config);
@@ -133,7 +151,8 @@ public class AiServer {
                     llmService,
                     promptEngine,
                     conversationMemory,
-                    agent);
+                    agent,
+                    userPreferenceEngine);
 
             log.info("AI services initialized successfully");
 
@@ -185,6 +204,10 @@ public class AiServer {
         if (httpServer != null) {
             httpServer.stop(0);
             log.info("AI Builder Server stopped");
+        }
+        if (dataSource != null && !dataSource.isClosed()) {
+            dataSource.close();
+            log.info("Database connection pool closed");
         }
     }
 }

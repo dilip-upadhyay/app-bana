@@ -9,6 +9,7 @@ import com.appbana.ai.dialogue.DialogueManager;
 import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.llm.AdvancedPromptEngine;
 import com.appbana.ai.rag.ConversationMemory;
+import com.appbana.ai.learning.UserPreferenceEngine;
 import com.appbana.ai.api.Router;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -32,16 +33,19 @@ public class AiChatController {
     private final AdvancedPromptEngine promptEngine;
     private final ConversationMemory conversationMemory;
     private final AiAgent agent;
+    private final UserPreferenceEngine userPreferenceEngine;
 
     public AiChatController(
             OpenAiLlmService llmService,
             AdvancedPromptEngine promptEngine,
             ConversationMemory conversationMemory,
-            AiAgent agent) {
+            AiAgent agent,
+            UserPreferenceEngine userPreferenceEngine) {
         this.llmService = llmService;
         this.promptEngine = promptEngine;
         this.conversationMemory = conversationMemory;
         this.agent = agent;
+        this.userPreferenceEngine = userPreferenceEngine;
     }
 
     /**
@@ -111,6 +115,16 @@ public class AiChatController {
             }
         }
 
+        // 2a. Get User Preferences
+        Map<String, String> userPreferences = new HashMap<>();
+        if (userPreferenceEngine != null) {
+            try {
+                userPreferences = userPreferenceEngine.getPreferences(userId);
+            } catch (Exception e) {
+                log.warn("Failed to retrieve preferences for user {}: {}", userId, e.getMessage());
+            }
+        }
+
         // 2. Prepare Agent Context
         // Pass token for authenticated tool calls and history for context
         AgentContext agentContext = AgentContext.create(
@@ -118,7 +132,9 @@ public class AiChatController {
                 appId,
                 userId,
                 sessionId,
-                token).withVariable("chat_history", history);
+                token)
+                .withVariable("chat_history", history)
+                .withVariable("user_preferences", userPreferences);
 
         // 3. Execute Agent
         // The agent will decide which tools to call based on the user's message

@@ -491,6 +491,18 @@ public class AiAgent {
                     "Review the EXECUTION PROGRESS above. If the ORIGINAL USER REQUEST is not yet fully completed (e.g. app not deployed), CONTINUE to the next necessary step. Do not ask for clarification if you are already making progress.\n\n");
         }
 
+        // 4. User Preferences (Learning)
+        if (context.hasVariable("user_preferences")) {
+            @SuppressWarnings("unchecked")
+            Map<String, String> prefs = (Map<String, String>) context.getVariable("user_preferences");
+            if (prefs != null && !prefs.isEmpty()) {
+                prompt.append("## USER PREFERENCES & STYLE\n");
+                prompt.append("You MUST respect the following user preferences:\n");
+                prefs.forEach((k, v) -> prompt.append(String.format("- **%s**: %s\n", k, v)));
+                prompt.append("\n");
+            }
+        }
+
         prompt.append("Respond with JSON only:");
 
         return prompt.toString();
