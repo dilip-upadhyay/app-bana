@@ -6,6 +6,7 @@ import type { PageMeta, ComponentNode } from '../../models/metadata';
 import { templateStore, PageTemplate } from '../store/TemplateStore';
 import { renderPageTemplate } from '../../runtime/renderer/Renderer';
 import styles from './PageManager.css?inline';
+import { autoDeployService } from '../services/AutoDeployService';
 
 @customElement('appbana-page-manager')
 export class PageManager extends LitElement {
@@ -154,6 +155,9 @@ export class PageManager extends LitElement {
 
     const page = currentStore.getPage();
     await appStore.savePage(this.currentApp.id, page);
+
+    // ✅ Trigger auto-deploy to LOCAL
+    autoDeployService.scheduleDeployToLocal(this.currentApp.id);
   }
 
   private handleCreatePage() {
@@ -285,7 +289,7 @@ export class PageManager extends LitElement {
     try {
       // Capture pageId explicitly to avoid scope issues in closures
       const deletedPageId = pageId;
-      
+
       // Clear the draft from localStorage before deleting
       const draftKey = `studio.draft.${deletedPageId}`;
       console.log('[PageManager] Clearing draft for deleted page:', draftKey);

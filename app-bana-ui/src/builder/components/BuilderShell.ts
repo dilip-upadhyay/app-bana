@@ -9,14 +9,14 @@ import './PageManager';
 import './PropertiesPanel';
 import './AppManager';
 import './EntityManager';
-// AI Builder removed - moved to AI-old
+import '../../components/ai-builder/ai-chat-builder';
 import '../../workflow-designer/WorkflowDesignerPage';
 
 @customElement('appbana-builder-shell')
 export class BuilderShell extends LitElement {
   static styles = css`${unsafeCSS(styles)}`;
 
-  @state() private activeLeftTab = 'components' as 'components' | 'entities' | 'workflow';
+  @state() private activeLeftTab = 'ai-builder' as 'components' | 'entities' | 'workflow' | 'ai-builder';
   @state() private leftPanelWidth = 300; // Default width in pixels
   private isResizing = false;
   private startX = 0;
@@ -41,6 +41,12 @@ export class BuilderShell extends LitElement {
     const savedWidth = localStorage.getItem('builder-left-panel-width');
     if (savedWidth) {
       this.leftPanelWidth = parseInt(savedWidth, 10);
+    }
+
+    // Load saved active tab from localStorage
+    const savedTab = localStorage.getItem('builder-active-tab') as 'components' | 'entities' | 'workflow' | 'ai-builder' | null;
+    if (savedTab) {
+      this.activeLeftTab = savedTab;
     }
 
     this.requestUpdate();
@@ -115,12 +121,20 @@ export class BuilderShell extends LitElement {
     }
   }
 
+  private handleTabChange(tab: 'components' | 'entities' | 'workflow' | 'ai-builder') {
+    this.activeLeftTab = tab;
+    localStorage.setItem('builder-active-tab', tab);
+  }
+
   private renderLeftPanelContent() {
     if (this.activeLeftTab === 'components') {
       return html`<appbana-component-library></appbana-component-library>`;
     }
     if (this.activeLeftTab === 'entities') {
       return html`<appbana-entity-manager></appbana-entity-manager>`;
+    }
+    if (this.activeLeftTab === 'ai-builder') {
+      return html`<ai-chat-builder></ai-chat-builder>`;
     }
     if (this.activeLeftTab === 'workflow') {
       if (!this.hasActiveApp) {
@@ -187,17 +201,22 @@ export class BuilderShell extends LitElement {
           <div class="left-panel-tabs">
             <button 
               class="tab ${this.activeLeftTab === 'components' ? 'active' : ''}"
-              @click=${() => this.activeLeftTab = 'components'}>
+              @click=${() => this.handleTabChange('components')}>
               Components
             </button>
             <button 
               class="tab ${this.activeLeftTab === 'entities' ? 'active' : ''}"
-              @click=${() => this.activeLeftTab = 'entities'}>
+              @click=${() => this.handleTabChange('entities')}>
               Entities
             </button>
             <button 
+              class="tab ${this.activeLeftTab === 'ai-builder' ? 'active' : ''}"
+              @click=${() => this.handleTabChange('ai-builder')}>
+              🤖 AI Agent
+            </button>
+            <button 
               class="tab ${(this.activeLeftTab as any) === 'workflow' ? 'active' : ''}"
-              @click=${() => this.activeLeftTab = 'workflow'}>
+              @click=${() => this.handleTabChange('workflow')}>
               ⚡ Workflow
             </button>
           </div>

@@ -865,7 +865,7 @@ export class PropertiesPanel extends LitElement {
     this.updateProperty('bulkActions', actions);
   }
 
-  private getPropertyType(propKey: string): 'text' | 'number' | 'boolean' | 'textarea' | 'spacing' {
+  private getPropertyType(propKey: string): 'text' | 'number' | 'boolean' | 'textarea' | 'spacing' | 'select' {
     const booleanProps = ['required', 'disabled', 'checked'];
     const numberProps = ['rows', 'cols', 'level', 'width', 'height'];
     const textareaProps = ['content', 'options'];

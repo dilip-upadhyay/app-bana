@@ -68,6 +68,7 @@ export class PipelineDashboard extends LitElement {
       text-transform: uppercase;
     }
     
+    .env-badge.local { background: #fef3c7; color: #92400e; }
     .env-badge.dev { background: #dbeafe; color: #1e40af; }
     .env-badge.sit { background: #fce7f3; color: #9d174d; }
     .env-badge.prod { background: #dcfce7; color: #166534; }
@@ -210,6 +211,26 @@ export class PipelineDashboard extends LitElement {
     }
   }
 
+  private async publishToDev() {
+    if (!confirm('Publish LOCAL changes to DEV? This will create a new version in DEV.')) return;
+
+    try {
+      const tenantId = AuthService.getUser()?.tenantId || 'default';
+
+      // Call publish API for DEV environment
+      const response = await apiClient.post(
+        getApiUrl(`/api/${tenantId}/apps/${this.appId}/publish?env=DEV`),
+        {} // Empty body - backend will fetch latest metadata
+      );
+
+      await this.fetchStatus();
+      alert('✅ Successfully published to DEV!');
+    } catch (e) {
+      console.error('Error publishing to DEV:', e);
+      alert('Error publishing to DEV: ' + (e instanceof Error ? e.message : 'Unknown error'));
+    }
+  }
+
   private launch(env: string) {
     // Get tenant ID from logged-in user
     const user = AuthService.getUser();
@@ -225,17 +246,39 @@ export class PipelineDashboard extends LitElement {
   }
 
   render() {
+    const local = this.status['LOCAL'];
     const dev = this.status['DEV'];
     const sit = this.status['SIT'];
     const prod = this.status['PROD'];
 
     // Determine promotion flows
+    const canPublishToDev = local && (!dev || dev.versionNumber < 1);
     const canPromoteToSit = dev && (!sit || sit.versionNumber < dev.versionNumber);
     const canPromoteToProd = sit && (!prod || prod.versionNumber < sit.versionNumber);
 
     return html`
       <div class="pipeline-container">
         
+        <!-- LOCAL (NEW) -->
+        <div class="env-stage">
+          <div class="env-header">
+            <span class="env-name">Local</span>
+            <span class="env-badge local">LOCAL</span>
+          </div>
+          <div class="env-body">
+            ${local ? this.renderVersion(local, 'LOCAL') : html`<div class="empty-state">⚡ Auto-deployed on save</div>`}
+            
+            ${canPublishToDev ? html`
+              <button class="promote-btn" style="width:100%; margin-top:8px" 
+                      @click=${() => this.publishToDev()}>
+                📤 Publish to DEV
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="arrow-connector">→</div>
+
         <!-- DEV -->
         <div class="env-stage">
           <div class="env-header">

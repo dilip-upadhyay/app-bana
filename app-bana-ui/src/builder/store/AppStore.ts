@@ -317,7 +317,7 @@ export class AppStore {
       id: app.id,
       name: app.name,
       description: app.description,
-      pageCount: app.pages.length,
+      pageCount: app.pages?.length || 0,
       updated: app.updated,
     }));
   }

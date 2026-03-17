@@ -63,8 +63,18 @@ build/
 *.log
 
 # Database / runtime data
-/data/
+data/
+**/data/
 appbana.mv.db
+qdrant_storage/
+
+# Process IDs
+*.pid
+**/*.pid
+
+# AI Builder logs
+ai-builder.log
+**/*.log
 
 # Misc
 node_modules/
@@ -72,3 +82,4 @@ node_modules/
 /app-bana-ui/src/main/resources/ui/dist/
 /app-bana-ui/package-lock.json
 app-bana-service/.mvn/
+cookies.txt

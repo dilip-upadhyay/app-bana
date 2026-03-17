@@ -245,7 +245,7 @@ export class AppManager extends LitElement {
               <div class="current-app">
                 <span class="app-icon">📦</span>
                 <span class="app-name">${this.currentApp.name}</span>
-                <span class="page-count">${this.currentApp.pages.length} page${this.currentApp.pages.length !== 1 ? 's' : ''}</span>
+                <span class="page-count">${this.currentApp.pages?.length || 0} page${(this.currentApp.pages?.length || 0) !== 1 ? 's' : ''}</span>
               </div>
             ` : html`
               <div class="current-app no-app">
@@ -473,7 +473,7 @@ export class AppManager extends LitElement {
     try {
       console.log('[PUBLISH] 🚀 Starting backend-driven publish for app:', this.currentApp.name);
       console.log('[PUBLISH] 📦 App has', this.currentApp.entities?.length || 0, 'entities');
-      
+
       // Log entities
       if (this.currentApp.entities && this.currentApp.entities.length > 0) {
         console.log('[PUBLISH] 📊 Entities to deploy:');
@@ -481,7 +481,7 @@ export class AppManager extends LitElement {
           console.log(`  - ${entity.name} (${entity.fields?.length || 0} fields)`);
         });
       }
-      
+
       // Save current page before publish
       if (currentStore) {
         const page = currentStore.getPage();
@@ -493,15 +493,15 @@ export class AppManager extends LitElement {
       const tenantId = AuthService.getUser()?.tenantId || 'default';
       const env = 'DEV'; // Default to DEV environment
 
-      // NEW BACKEND-DRIVEN PUBLISH
-      // Call the new transactional publish endpoint
+      // Server-side metadata fetching
+      // Backend will load app metadata from DB using AppManager.getAppFullMetadata()
       console.log('[PUBLISH] 📡 Calling backend publish endpoint...');
-      console.log('[PUBLISH] Endpoint: POST /api/${tenantId}/apps/${appId}/publish?env=${env}');
-      console.log('[PUBLISH] Sending full AppMeta with entities, pages, navigation...');
-      
+      console.log(`[PUBLISH] Endpoint: POST /api/${tenantId}/apps/${this.currentApp.id}/publish?env=${env}`);
+      console.log('[PUBLISH] Backend will fetch metadata from database');
+
       const publishResponse = await apiClient.post(
         `/api/${tenantId}/apps/${this.currentApp.id}/publish?env=${env}`,
-        this.currentApp  // Send complete AppMeta
+        {}  // Empty body - backend fetches from DB
       );
 
       console.log('[PUBLISH] ✅ Backend publish response:', publishResponse);
@@ -511,7 +511,7 @@ export class AppManager extends LitElement {
         console.log(`[PUBLISH] 🗄️  Tables created: ${publishResponse.tablesCreated.join(', ')}`);
         console.log(`[PUBLISH] ⏱️  Duration: ${publishResponse.durationMs}ms`);
         console.log(`[PUBLISH] 📝 Summary: ${publishResponse.summary}`);
-        
+
         this.showPublishModal = false;
         this.showToast(`✅ App published! Version ${publishResponse.version} deployed to ${publishResponse.environment}. ${publishResponse.tablesCreated.length} tables created.`);
       } else {

@@ -1,6 +1,7 @@
 package com.appbana;
 
 import com.appbana.model.EntitySchema;
+import com.appbana.service.SessionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.*;
@@ -19,73 +20,96 @@ public class AuditLogTest {
     private static final int PORT = 18081; // separate port from AdvancedQueryTest
     private static final String BASE = "http://localhost:" + PORT;
     private static long createdId;
+    private static String TOKEN;
 
     @BeforeAll
     static void init() throws Exception {
         // Start server first (this runs Flyway migrations which clean the DB)
         ApiServer.startJdk(PORT);
         Thread.sleep(300);
-        
+
+        // Use SessionService to create a valid session
+        SessionService.SessionData session = SessionService.createSession("test-user");
+        TOKEN = session.sessionId();
+
         // Now initialize SchemaManager and create the test schema
         SchemaManager.init();
         EntitySchema s = new EntitySchema();
         s.setName("audit_demo");
-        s.setFields(List.of(field("id","long", true, true), field("name","string", false, false)));
+        // Set default tenant context to match API resolution expectations
+        s.setTenantId("default");
+        s.setAppId("default");
+        s.setFields(List.of(field("id", "long", true, true), field("name", "string", false, false)));
         SchemaManager.saveSchema(s);
     }
 
     private static EntitySchema.Field field(String name, String type, boolean pk, boolean auto) {
         EntitySchema.Field f = new EntitySchema.Field();
-        f.setName(name); f.setType(type); f.setPrimaryKey(pk); f.setAutoIncrement(auto); return f;
+        f.setName(name);
+        f.setType(type);
+        f.setPrimaryKey(pk);
+        f.setAutoIncrement(auto);
+        return f;
     }
 
     private static JsonNode post(String path, String json) throws Exception {
         HttpClient c = HttpClient.newHttpClient();
-        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE+path))
-                .header("Content-Type","application/json")
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))
+                .header("Content-Type", "application/json")
+                .header("X-Session-Token", TOKEN)
                 .POST(HttpRequest.BodyPublishers.ofString(json)).build();
         HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
-        assertTrue(resp.statusCode()==200 || resp.statusCode()==201, ()->"Unexpected status: "+resp.statusCode()+" body="+resp.body());
-        return M.readTree(resp.body());
-    }
-    private static JsonNode put(String path, String json) throws Exception {
-        HttpClient c = HttpClient.newHttpClient();
-        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE+path))
-                .header("Content-Type","application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(json)).build();
-        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
-        assertEquals(200, resp.statusCode(), ()->"Unexpected status: "+resp.statusCode()+" body="+resp.body());
-        return M.readTree(resp.body());
-    }
-    private static JsonNode delete(String path) throws Exception {
-        HttpClient c = HttpClient.newHttpClient();
-        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE+path)).DELETE().build();
-        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
-        assertEquals(200, resp.statusCode(), ()->"Unexpected status: "+resp.statusCode()+" body="+resp.body());
-        return M.readTree(resp.body());
-    }
-    private static JsonNode get(String path) throws Exception {
-        HttpClient c = HttpClient.newHttpClient();
-        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE+path)).GET().build();
-        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
-        assertEquals(200, resp.statusCode(), ()->"Unexpected status: "+resp.statusCode()+" body="+resp.body());
+        assertTrue(resp.statusCode() == 200 || resp.statusCode() == 201,
+                () -> "Unexpected status: " + resp.statusCode() + " body=" + resp.body());
         return M.readTree(resp.body());
     }
 
-    @Test @Order(1)
+    private static JsonNode put(String path, String json) throws Exception {
+        HttpClient c = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))
+                .header("Content-Type", "application/json")
+                .header("X-Session-Token", TOKEN)
+                .PUT(HttpRequest.BodyPublishers.ofString(json)).build();
+        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, resp.statusCode(), () -> "Unexpected status: " + resp.statusCode() + " body=" + resp.body());
+        return M.readTree(resp.body());
+    }
+
+    private static JsonNode delete(String path) throws Exception {
+        HttpClient c = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))
+                .header("X-Session-Token", TOKEN)
+                .DELETE().build();
+        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, resp.statusCode(), () -> "Unexpected status: " + resp.statusCode() + " body=" + resp.body());
+        return M.readTree(resp.body());
+    }
+
+    private static JsonNode get(String path) throws Exception {
+        HttpClient c = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))
+                .header("X-Session-Token", TOKEN)
+                .GET().build();
+        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, resp.statusCode(), () -> "Unexpected status: " + resp.statusCode() + " body=" + resp.body());
+        return M.readTree(resp.body());
+    }
+
+    @Test
+    @Order(1)
     void createUpdateDeleteGeneratesAudit() throws Exception {
         // create
         JsonNode created = post("/api/audit_demo", "{\"name\":\"Alpha\"}");
         createdId = created.get("id").asLong();
         assertTrue(createdId > 0);
         // update
-        JsonNode upd = put("/api/audit_demo/"+createdId, "{\"name\":\"Beta\"}");
+        JsonNode upd = put("/api/audit_demo/" + createdId, "{\"name\":\"Beta\"}");
         assertEquals(1, upd.get("updated").asInt());
         // delete
-        JsonNode del = delete("/api/audit_demo/"+createdId);
+        JsonNode del = delete("/api/audit_demo/" + createdId);
         assertEquals(1, del.get("deleted").asInt());
         // fetch audit
-        JsonNode audit = get("/audit?entity=audit_demo&pk="+createdId+"&limit=10");
+        JsonNode audit = get("/audit?entity=audit_demo&pk=" + createdId + "&limit=10");
         assertTrue(audit.has("rows"));
         JsonNode rows = audit.get("rows");
         assertEquals(3, rows.size(), "Expected 3 audit rows (INSERT, UPDATE, DELETE)");
@@ -110,4 +134,3 @@ public class AuditLogTest {
         assertEquals("Beta", rows.get(2).get("before").get("NAME").asText());
     }
 }
-

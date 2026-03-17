@@ -136,25 +136,47 @@ kill_existing_server() {
   local PORT="${UI_PORT:-5173}"
   log "Checking for existing server on port $PORT..."
   
-  # Find process using the port (macOS/Linux compatible)
-  local PID
-  if command -v lsof >/dev/null 2>&1; then
-    PID=$(lsof -ti tcp:"$PORT" 2>/dev/null || true)
+  # Find all processes using the port (macOS/Linux compatible)
+  local PIDS=()
+  if command -v lsof > /dev/null 2>&1; then
+    # lsof returns PIDs separated by newlines, read into array
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] && PIDS+=("$pid")
+    done < <(lsof -ti tcp:"$PORT" 2>/dev/null || true)
   else
     # Fallback for systems without lsof
-    PID=$(netstat -anp tcp 2>/dev/null | grep "LISTEN.*:$PORT" | awk '{print $9}' | cut -d'/' -f1 || true)
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] && PIDS+=("$pid")
+    done < <(netstat -anp tcp 2>/dev/null | grep "LISTEN.*:$PORT" | awk '{print $9}' | cut -d'/' -f1 || true)
   fi
   
-  # If still not found, try a best-effort grep for vite on this port (helps when lsof is missing or permissions block lookup)
-  if [[ -z "$PID" ]]; then
-    PID=$(ps -ef | grep "vite" | grep -v grep | grep ":$PORT" | awk '{print $2}' || true)
+  # If still not found, try a best-effort grep for vite/node processes
+  if [[ ${#PIDS[@]} -eq 0 ]]; then
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] && PIDS+=("$pid")
+    done < <(ps -ef | grep -E "vite|node.*$PORT" | grep -v grep | awk '{print $2}' || true)
   fi
 
-  if [[ -n "$PID" ]]; then
-    warn "Found existing server (PID: $PID) on port $PORT. Stopping..."
-    kill "$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
-    sleep 1
-    ok "Existing server stopped"
+  if [[ ${#PIDS[@]} -gt 0 ]]; then
+    warn "Found ${#PIDS[@]} process(es) on port $PORT: ${PIDS[*]}"
+    for pid in "${PIDS[@]}"; do
+      log "Killing PID $pid..."
+      kill "$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null || true
+    done
+    
+    # Wait for port to be freed (max 5 seconds)
+    local retries=0
+    while lsof -ti tcp:"$PORT" > /dev/null 2>&1 && [[ $retries -lt 10 ]]; do
+      sleep 0.5
+      ((retries++))
+    done
+    
+    if lsof -ti tcp:"$PORT" > /dev/null 2>&1; then
+      err "Port $PORT still in use after killing processes. Manual intervention required."
+      exit 1
+    fi
+    
+    ok "All processes stopped, port $PORT is free"
   else
     log "No existing server found on port $PORT"
   fi

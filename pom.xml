@@ -10,6 +10,7 @@
     <modules>
         <module>app-bana-ui</module>
         <module>app-bana-service</module>
+        <module>ai-builder</module>
     </modules>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -45,8 +46,8 @@
                             <configuration>
                                 <rules>
                                     <requireJavaVersion>
-                                        <version>[25,26)</version>
-                                        <message>AppBana requires Java 25 (LTS). Set JAVA_HOME to a JDK 25 installation.</message>
+                                        <version>[21,22)</version>
+                                        <message>AppBana requires Java 21 (LTS). Set JAVA_HOME to a JDK 21 installation.</message>
                                     </requireJavaVersion>
                                 </rules>
                                 <fail>true</fail>

@@ -22,11 +22,11 @@ public class RouteRegistry {
 
         // Register global middlewares (run before all routes)
         LOG.info("Registering global middlewares");
-        
+
         // Rate limiting middleware - protects all endpoints
         router.use(RateLimitMiddleware.create());
         LOG.info("Rate limiting middleware registered");
-        
+
         // Session validation middleware - authenticates requests
         router.use(SessionMiddleware.create());
         LOG.info("Session middleware registered");
@@ -35,7 +35,7 @@ public class RouteRegistry {
         AuthRoutes.register(router);
         WorkflowRoutes.register(router);
         AppRoutes.register(router);
-        //AiRoutes.register(router);
+        AiRoutes.register(router); // AI Builder routes
         SchemaRoutes.register(router);
         GenericEntityRoutes.register(router);
 
