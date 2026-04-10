@@ -311,9 +311,28 @@ public class VectorStoreService {
             Object value = entry.getValue();
 
             // Handle special range filters
-            if (key.endsWith("_gte") || key.endsWith("_lte")) {
-                String fieldName = key.substring(0, key.lastIndexOf('_'));
-                // Range filters would be implemented here
+            if (key.endsWith("_gte")) {
+                String fieldName = key.substring(0, key.lastIndexOf("_gte"));
+                filterBuilder.addMust(Condition.newBuilder()
+                        .setField(FieldCondition.newBuilder()
+                                .setKey(fieldName)
+                                .setRange(io.qdrant.client.grpc.Points.Range.newBuilder()
+                                        .setGte(((Number) value).doubleValue())
+                                        .build())
+                                .build())
+                        .build());
+                continue;
+            }
+            if (key.endsWith("_lte")) {
+                String fieldName = key.substring(0, key.lastIndexOf("_lte"));
+                filterBuilder.addMust(Condition.newBuilder()
+                        .setField(FieldCondition.newBuilder()
+                                .setKey(fieldName)
+                                .setRange(io.qdrant.client.grpc.Points.Range.newBuilder()
+                                        .setLte(((Number) value).doubleValue())
+                                        .build())
+                                .build())
+                        .build());
                 continue;
             }
 

@@ -138,16 +138,26 @@ public class ConversationMemory {
                     // Start: Fallback to metadata for search results
                     conv = new Conversation();
                     conv.setId(result.id());
-                    // Note: VectorStoreService.SearchResult doesn't have metadata. We'd need to
-                    // fetch point.
-                    // For now, if DB is null, search might return incomplete objects or we skip it.
-                    // Given time constraints, we will defer fixing search() full object refetch for
-                    // Qdrant-only mode
-                    // as it is not critical for session history context.
-                    // Use a placeholder or try to fetch point if possible. But VectorStoreService
-                    // obscures it.
-                    // Let's just return empty for now if DB is missing to avoid NPE in getById
-                    conv = null;
+                    conv.setUserId(result.getUserId());
+                    
+                    Object msg = result.metadata().get("message");
+                    if (msg instanceof String) conv.setMessage((String) msg);
+                    
+                    Object resp = result.metadata().get("response");
+                    if (resp instanceof String) conv.setResponse((String) resp);
+                    
+                    Object intent = result.metadata().get("intent");
+                    if (intent instanceof String) conv.setIntent((String) intent);
+                    
+                    Long ts = result.getTimestamp();
+                    if (ts != null) conv.setCreatedAt(Instant.ofEpochMilli(ts));
+                    
+                    Object sessionIdStr = result.metadata().get("sessionId");
+                    if (sessionIdStr instanceof String && !((String) sessionIdStr).isEmpty()) {
+                        try {
+                            conv.setSessionId(UUID.fromString((String) sessionIdStr));
+                        } catch (Exception e) {}
+                    }
                 }
 
                 if (conv != null) {
@@ -156,6 +166,82 @@ public class ConversationMemory {
             }
 
             log.debug("Found {} similar conversations", conversations.size());
+            return conversations;
+
+        } catch (EmbeddingException e) {
+            log.error("Failed to generate query embedding", e);
+            throw new ConversationMemoryException("Failed to generate query embedding", e);
+        } catch (VectorStoreException e) {
+            log.error("Failed to search vector store", e);
+            throw new ConversationMemoryException("Failed to search", e);
+        }
+    }
+
+    /**
+     * Search past conversations semantically with time range filter
+     */
+    public List<Conversation> search(String userId, String query, TimeRange timeRange, int topK)
+            throws ConversationMemoryException {
+        try {
+            log.debug("Searching conversations: query='{}', userId={}, timeRange={}, topK={}",
+                    query, userId, timeRange, topK);
+
+            float[] queryEmbedding = embeddingService.embed(query);
+
+            Map<String, Object> filter = new HashMap<>();
+            if (userId != null) {
+                filter.put("userId", userId);
+            }
+
+            if (timeRange != null && timeRange != TimeRange.ALL_TIME) {
+                Instant now = Instant.now();
+                Instant from = now;
+                if (timeRange == TimeRange.LAST_7_DAYS) {
+                    from = now.minus(java.time.Duration.ofDays(7));
+                } else if (timeRange == TimeRange.LAST_30_DAYS) {
+                    from = now.minus(java.time.Duration.ofDays(30));
+                }
+                filter.put("timestamp_gte", from.toEpochMilli());
+            }
+
+            List<SearchResult> results = vectorStoreService.search(COLLECTION_NAME, queryEmbedding, topK, filter);
+
+            List<Conversation> conversations = new ArrayList<>();
+            for (SearchResult result : results) {
+                Conversation conv;
+                if (dataSource != null) {
+                    conv = getById(result.id());
+                } else {
+                    conv = new Conversation();
+                    conv.setId(result.id());
+                    conv.setUserId(result.getUserId());
+
+                    Object msg = result.metadata().get("message");
+                    if (msg instanceof String) conv.setMessage((String) msg);
+
+                    Object resp = result.metadata().get("response");
+                    if (resp instanceof String) conv.setResponse((String) resp);
+
+                    Object intent = result.metadata().get("intent");
+                    if (intent instanceof String) conv.setIntent((String) intent);
+
+                    Long ts = result.getTimestamp();
+                    if (ts != null) conv.setCreatedAt(Instant.ofEpochMilli(ts));
+
+                    Object sessionIdStr = result.metadata().get("sessionId");
+                    if (sessionIdStr instanceof String && !((String) sessionIdStr).isEmpty()) {
+                        try {
+                            conv.setSessionId(UUID.fromString((String) sessionIdStr));
+                        } catch (Exception e) {}
+                    }
+                }
+
+                if (conv != null) {
+                    conversations.add(conv);
+                }
+            }
+
+            log.debug("Found {} similar conversations within time range", conversations.size());
             return conversations;
 
         } catch (EmbeddingException e) {

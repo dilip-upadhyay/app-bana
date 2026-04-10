@@ -34,10 +34,11 @@ fi
 # Check if Qdrant is running
 echo "🔍 Checking Qdrant status..."
 QDRANT_HOST=${QDRANT_HOST:-localhost}
-QDRANT_PORT=${QDRANT_PORT:-6333}
+QDRANT_HTTP_PORT=${QDRANT_HTTP_PORT:-6333}
+QDRANT_PORT=${QDRANT_PORT:-6334}
 
-if curl -s "http://${QDRANT_HOST}:${QDRANT_PORT}/health" > /dev/null 2>&1; then
-    echo "✅ Qdrant is already running on ${QDRANT_HOST}:${QDRANT_PORT}"
+if curl -s "http://${QDRANT_HOST}:${QDRANT_HTTP_PORT}/health" > /dev/null 2>&1; then
+    echo "✅ Qdrant is already running on ${QDRANT_HOST}:${QDRANT_HTTP_PORT}"
 else
     echo "⚠️  Qdrant is not running. Starting Qdrant container..."
     
@@ -55,7 +56,8 @@ else
         echo "📦 Creating and starting new Qdrant container..."
         docker run -d \
             --name qdrant \
-            -p ${QDRANT_PORT}:6333 \
+            -p ${QDRANT_HTTP_PORT}:6333 \
+            -p ${QDRANT_PORT}:6334 \
             -v $(pwd)/qdrant_storage:/qdrant/storage \
             qdrant/qdrant
     fi
@@ -63,7 +65,7 @@ else
     # Wait for Qdrant to be ready
     echo "⏳ Waiting for Qdrant to be ready..."
     for i in {1..30}; do
-        if curl -s "http://${QDRANT_HOST}:${QDRANT_PORT}/health" > /dev/null 2>&1; then
+        if curl -s "http://${QDRANT_HOST}:${QDRANT_HTTP_PORT}/health" > /dev/null 2>&1; then
             echo "✅ Qdrant is ready!"
             break
         fi
