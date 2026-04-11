@@ -101,6 +101,19 @@
             <version>1.7.0</version>
         </dependency>
         
+        <!-- Liquibase for database migrations (alternative) -->
+        <!-- Flyway for database migrations (used by ai-builder) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>10.10.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>10.10.0</version>
+        </dependency>
+
         <!-- Protobuf (required by Qdrant) -->
         <dependency>
             <groupId>com.google.protobuf</groupId>

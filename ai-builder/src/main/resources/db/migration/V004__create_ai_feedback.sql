@@ -1,5 +1,6 @@
 -- Migration: Create AI feedback table
 -- Story: 2.3 - Implement Feedback Loop
+-- Fixed: Removed MySQL-style inline INDEX syntax (invalid in PostgreSQL)
 
 CREATE TABLE IF NOT EXISTS ai_feedback (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -12,16 +13,16 @@ CREATE TABLE IF NOT EXISTS ai_feedback (
     created_at TIMESTAMP DEFAULT NOW(),
     processed BOOLEAN DEFAULT FALSE,
     
-    -- Indexes
-    INDEX idx_ai_feedback_user (user_id),
-    INDEX idx_ai_feedback_conversation (conversation_id),
-    INDEX idx_ai_feedback_type (feedback_type),
-    INDEX idx_ai_feedback_processed (processed),
-    INDEX idx_ai_feedback_created (created_at DESC),
-    
     -- Foreign key
     FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE
 );
+
+-- Indexes as separate statements (PostgreSQL-compatible)
+CREATE INDEX IF NOT EXISTS idx_ai_feedback_user         ON ai_feedback(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_feedback_conversation ON ai_feedback(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_ai_feedback_type         ON ai_feedback(feedback_type);
+CREATE INDEX IF NOT EXISTS idx_ai_feedback_processed    ON ai_feedback(processed);
+CREATE INDEX IF NOT EXISTS idx_ai_feedback_created      ON ai_feedback(created_at DESC);
 
 -- Add comments
 COMMENT ON TABLE ai_feedback IS 'Stores user feedback for continuous improvement';

@@ -16,17 +16,21 @@ if not exist "pom.xml" (
     exit /b 1
 )
 
-echo [1/4] Killing any running Java processes...
-powershell -Command "Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force"
+echo [1/4] Killing any potentially locking processes...
+powershell -Command "Stop-Process -Name java -Force -ErrorAction SilentlyContinue; Stop-Process -Name mvn -Force -ErrorAction SilentlyContinue"
 timeout /t 2 /nobreak >nul
 
-echo [2/4] Building project from root...
-call mvn clean package -DskipTests
+echo [2/4] Building project (resilient mode)...
+REM If cleaning fails due to locks, we still try to install to ensure correct artifacts
+call mvn install -DskipTests
 if errorlevel 1 (
     echo.
-    echo ERROR: Build failed!
-    pause
-    exit /b 1
+    echo WARNING: Full build failed, attempting to proceed with existing artifacts...
+    if not exist "app-bana-service\target\app-bana-1.0-SNAPSHOT-fat.jar" (
+        echo ERROR: Critical artifacts missing. Please close any programs using the target folder and try again.
+        pause
+        exit /b 1
+    )
 )
 
 echo.

@@ -64,6 +64,31 @@ export class AiChatService {
         return response.json();
     }
 
+    /**
+     * Load persisted chat history for a user's session from the backend.
+     * Returns messages in chronological order (oldest first).
+     */
+    async getHistory(userId: string, sessionId: string): Promise<ChatMessage[]> {
+        const params = new URLSearchParams({ userId, sessionId });
+        const response = await fetch(`${this.baseUrl}/chat/history?${params}`);
+
+        if (!response.ok) {
+            // Non-fatal: if history load fails, start fresh
+            console.warn('[AiChatService] Could not load history:', response.statusText);
+            return [];
+        }
+
+        const data = await response.json();
+        const rawMessages: Array<{ role: string; content: string; timestamp?: number }> =
+            data.messages || [];
+
+        return rawMessages.map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
+        }));
+    }
+
     async submitFeedback(conversationId: string, userId: string, rating: number, comment?: string): Promise<void> {
         const response = await fetch(`${this.baseUrl}/feedback`, {
             method: 'POST',

@@ -5,6 +5,9 @@ import { AuthService } from '../../pages/auth/auth-service.ts';
 import { appStore } from '../../builder/store/AppStore';
 import './ai-message.ts';
 
+// localStorage key pattern: ai_session_<userId>
+const SESSION_STORAGE_KEY_PREFIX = 'ai_session_';
+
 @customElement('ai-chat-builder')
 export class AiChatBuilder extends LitElement {
   static styles = css`
@@ -45,6 +48,65 @@ export class AiChatBuilder extends LitElement {
     .messages::-webkit-scrollbar-thumb {
       background: #ccc;
       border-radius: 3px;
+    }
+
+    /* ── History divider ── */
+    .history-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 8px 0 16px 0;
+      color: #aaa;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .history-divider::before,
+    .history-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e0e0e0;
+    }
+
+    /* ── Loading states ── */
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #999;
+    }
+
+    .history-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px;
+      color: #aaa;
+      font-size: 12px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .spinner-sm {
+      width: 14px;
+      height: 14px;
+      border-width: 2px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
 
     .input-area {
@@ -90,27 +152,6 @@ export class AiChatBuilder extends LitElement {
       cursor: not-allowed;
     }
 
-    .loading {
-      text-align: center;
-      padding: 20px;
-      color: #999;
-    }
-
-    .spinner {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #667eea;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
     .empty-state {
       text-align: center;
       padding: 60px 20px;
@@ -131,20 +172,76 @@ export class AiChatBuilder extends LitElement {
   @state() private messages: ChatMessage[] = [];
   @state() private inputValue = '';
   @state() private isLoading = false;
+  @state() private isLoadingHistory = false;
+  @state() private hasHistory = false;
 
   private chatService = new AiChatService();
-  private sessionId = crypto.randomUUID();
+  private sessionId = '';
 
-  connectedCallback() {
+  /**
+   * Returns the localStorage key for storing this user's sessionId.
+   */
+  private getSessionStorageKey(userId: string): string {
+    return `${SESSION_STORAGE_KEY_PREFIX}${userId}`;
+  }
+
+  /**
+   * Loads or creates a persistent sessionId for the current user.
+   * Stored in localStorage so it survives page reloads.
+   */
+  private getOrCreateSessionId(userId: string): string {
+    const key = this.getSessionStorageKey(userId);
+    let existingSessionId = localStorage.getItem(key);
+    if (!existingSessionId) {
+      existingSessionId = crypto.randomUUID();
+      localStorage.setItem(key, existingSessionId);
+      console.log('[AiChatBuilder] Created new session:', existingSessionId);
+    } else {
+      console.log('[AiChatBuilder] Resumed session:', existingSessionId);
+    }
+    return existingSessionId;
+  }
+
+  async connectedCallback() {
     super.connectedCallback();
-    // Add welcome message
-    this.messages = [
-      {
-        role: 'assistant',
-        content: "Hello! I'm here to help you build business applications - no technical skills needed! Just describe what you want to track or manage in your business, and I'll create it for you. What would you like to build today?",
-        timestamp: new Date()
+
+    const user = AuthService.getUser();
+    if (!user) {
+      // Not authenticated yet — show welcome
+      this.messages = [this.welcomeMessage()];
+      return;
+    }
+
+    const userId = user.email || user.id.toString();
+    this.sessionId = this.getOrCreateSessionId(userId);
+
+    // Load persisted history
+    this.isLoadingHistory = true;
+    try {
+      const history = await this.chatService.getHistory(userId, this.sessionId);
+      if (history.length > 0) {
+        this.hasHistory = true;
+        this.messages = history;
+        // Scroll after render
+        setTimeout(() => this.scrollToBottom(), 150);
+      } else {
+        // Fresh session — show welcome
+        this.messages = [this.welcomeMessage()];
       }
-    ];
+    } catch (err) {
+      console.warn('[AiChatBuilder] History load failed, starting fresh:', err);
+      this.messages = [this.welcomeMessage()];
+    } finally {
+      this.isLoadingHistory = false;
+    }
+  }
+
+  private welcomeMessage(): ChatMessage {
+    return {
+      role: 'assistant',
+      content: "Hello! I'm here to help you build business applications - no technical skills needed! Just describe what you want to track or manage in your business, and I'll create it for you. What would you like to build today?",
+      timestamp: new Date()
+    };
   }
 
   render() {
@@ -154,12 +251,19 @@ export class AiChatBuilder extends LitElement {
       </div>
 
       <div class="messages" @scroll=${this.handleScroll}>
-        ${this.messages.length === 0 ? html`
-          <div class="empty-state">
-            <h3>Start a conversation</h3>
-            <p>Ask me to build an application for you!</p>
+
+        ${this.isLoadingHistory ? html`
+          <div class="history-loading">
+            <div class="spinner spinner-sm"></div>
+            Loading previous conversation…
           </div>
-        ` : this.messages.map(msg => html`
+        ` : ''}
+
+        ${this.hasHistory && !this.isLoadingHistory ? html`
+          <div class="history-divider">📜 Previous conversation</div>
+        ` : ''}
+
+        ${this.messages.map(msg => html`
           <ai-message
             .role=${msg.role}
             .content=${msg.content}
@@ -167,7 +271,7 @@ export class AiChatBuilder extends LitElement {
             @action-click=${this.handleActionClick}>
           </ai-message>
         `)}
-        
+
         ${this.isLoading ? html`
           <div class="loading">
             <div class="spinner"></div>
@@ -182,11 +286,11 @@ export class AiChatBuilder extends LitElement {
           .value=${this.inputValue}
           @input=${this.handleInput}
           @keypress=${this.handleKeyPress}
-          ?disabled=${this.isLoading}
+          ?disabled=${this.isLoading || this.isLoadingHistory}
         />
-        <button 
+        <button
           @click=${this.sendMessage}
-          ?disabled=${this.isLoading || !this.inputValue.trim()}>
+          ?disabled=${this.isLoading || this.isLoadingHistory || !this.inputValue.trim()}>
           Send
         </button>
       </div>
@@ -205,7 +309,6 @@ export class AiChatBuilder extends LitElement {
 
   private handleActionClick(e: CustomEvent) {
     const action = e.detail.action;
-    // Send the action text as a message
     this.inputValue = action;
     this.sendMessage();
   }
@@ -250,7 +353,8 @@ export class AiChatBuilder extends LitElement {
       console.log('[AiChatBuilder] Sending message with Context:', {
         appId: appId,
         appName: currentApp?.name,
-        tenantId: tenantId
+        tenantId: tenantId,
+        sessionId: this.sessionId
       });
 
       const response = await this.chatService.sendMessage({
@@ -265,7 +369,7 @@ export class AiChatBuilder extends LitElement {
       // Add assistant message
       this.messages = [...this.messages, {
         role: 'assistant',
-        content: response.response,
+        content: (response as any).response ?? response.message,
         timestamp: new Date()
       }];
 
@@ -279,7 +383,6 @@ export class AiChatBuilder extends LitElement {
       }];
     } finally {
       this.isLoading = false;
-      // Auto-focus the input field after response
       this.focusInput();
     }
   }
@@ -301,7 +404,7 @@ export class AiChatBuilder extends LitElement {
     setTimeout(() => {
       const inputEl = this.shadowRoot?.querySelector('input');
       if (inputEl) {
-        inputEl.focus();
+        (inputEl as HTMLInputElement).focus();
       }
     }, 100);
   }

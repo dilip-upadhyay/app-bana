@@ -1,5 +1,6 @@
 -- Migration: Create AI app patterns table
 -- Story: 2.1 - Implement Pattern Miner
+-- Fixed: Removed MySQL-style inline INDEX syntax (invalid in PostgreSQL)
 
 CREATE TABLE IF NOT EXISTS ai_app_patterns (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -13,14 +14,14 @@ CREATE TABLE IF NOT EXISTS ai_app_patterns (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     
-    -- Indexes
-    INDEX idx_ai_app_patterns_type (app_type),
-    INDEX idx_ai_app_patterns_usage (usage_count DESC),
-    INDEX idx_ai_app_patterns_success (success_rate DESC),
-    
     -- Constraints
     CONSTRAINT chk_success_rate CHECK (success_rate >= 0.0 AND success_rate <= 1.0)
 );
+
+-- Indexes as separate statements (PostgreSQL-compatible)
+CREATE INDEX IF NOT EXISTS idx_ai_app_patterns_type    ON ai_app_patterns(app_type);
+CREATE INDEX IF NOT EXISTS idx_ai_app_patterns_usage   ON ai_app_patterns(usage_count DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_app_patterns_success ON ai_app_patterns(success_rate DESC);
 
 -- Add comments
 COMMENT ON TABLE ai_app_patterns IS 'Stores discovered patterns from successfully created applications';

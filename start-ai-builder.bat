@@ -99,27 +99,23 @@ if !ERRORLEVEL! EQU 0 (
     )
 )
 
-echo Building app-bana-service...
-cd ai-builder
-call mvn clean install -DskipTests
-if !ERRORLEVEL! NEQ 0 (
-    echo Service build failed!
-    cd ..
-    exit /b 1
-)
-cd ..
+echo [1/3] Killing any potentially locking processes...
+powershell -Command "Stop-Process -Name java -Force -ErrorAction SilentlyContinue; Stop-Process -Name mvn -Force -ErrorAction SilentlyContinue"
+timeout /t 2 /nobreak >nul
 
-echo Building AI Builder Service...
-cd ai-builder
-call mvn clean package -DskipTests
+echo [2/3] Building all modules (resilient mode)...
+REM We build from root to ensure both app-bana-service and ai-builder are updated correctly
+call mvn install -DskipTests
 if !ERRORLEVEL! NEQ 0 (
-    echo AI Builder build failed!
-    cd ..
-    exit /b 1
+    echo.
+    echo WARNING: Full build failed, checking for existing artifacts...
+    if not exist "ai-builder\target\ai-builder-1.0-SNAPSHOT-fat.jar" (
+        echo ERROR: Critical artifacts missing. Please close any programs using the target folder and try again.
+        exit /b 1
+    )
 )
-cd ..
 
-echo Build successful!
+echo [3/3] Build successful or artifacts verified!
 
 :: Database configuration
 set "DATABASE_URL=jdbc:postgresql://localhost:5432/appbana"

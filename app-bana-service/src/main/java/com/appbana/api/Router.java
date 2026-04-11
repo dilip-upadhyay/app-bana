@@ -16,7 +16,9 @@ import java.util.*;
 import java.util.function.BiConsumer;
 
 public class Router {
-    private static final ObjectMapper M = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper M = new ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+            .configure(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
 
     private static class Route {
         final String method;
@@ -239,7 +241,6 @@ public class Router {
         public void setHeader(String name, String value) {
             ex.getResponseHeaders().set(name, value);
         }
-        
         public void json(int status, Object obj) {
             try {
                 byte[] b = M.writeValueAsBytes(obj);
@@ -247,8 +248,15 @@ public class Router {
                 ex.sendResponseHeaders(status, b.length);
                 try (OutputStream os = ex.getResponseBody()) { os.write(b); }
                 sent = true;
-            } catch (IOException ioe) {
-                throw new RuntimeException(ioe);
+            } catch (Exception e) {
+                // Defensive: If JSON serialization fails, send a clean error instead of an empty body
+                try {
+                    byte[] err = ("{\"error\":\"Internal Serialization Error\",\"message\":\"" + e.getMessage().replace("\"", "'") + "\"}").getBytes(StandardCharsets.UTF_8);
+                    ex.getResponseHeaders().set("Content-Type", "application/json");
+                    ex.sendResponseHeaders(500, err.length);
+                    try (OutputStream os = ex.getResponseBody()) { os.write(err); }
+                } catch (IOException ignored) {}
+                throw new RuntimeException(e);
             }
         }
         public void text(int status, String body, String contentType) {

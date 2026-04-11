@@ -1,5 +1,6 @@
 -- Migration: Create AI user preferences table
 -- Story: 2.2 - Implement User Preference Engine
+-- Fixed: Removed MySQL-style inline INDEX syntax (invalid in PostgreSQL)
 
 CREATE TABLE IF NOT EXISTS ai_user_preferences (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -11,14 +12,14 @@ CREATE TABLE IF NOT EXISTS ai_user_preferences (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     
-    -- Indexes
-    INDEX idx_ai_user_preferences_user (user_id),
-    INDEX idx_ai_user_preferences_type (preference_type),
-    INDEX idx_ai_user_preferences_user_key (user_id, preference_key),
-    
     -- Unique constraint
     UNIQUE (user_id, preference_type, preference_key)
 );
+
+-- Indexes as separate statements (PostgreSQL-compatible)
+CREATE INDEX IF NOT EXISTS idx_ai_user_preferences_user     ON ai_user_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_user_preferences_type     ON ai_user_preferences(preference_type);
+CREATE INDEX IF NOT EXISTS idx_ai_user_preferences_user_key ON ai_user_preferences(user_id, preference_key);
 
 -- Add comments
 COMMENT ON TABLE ai_user_preferences IS 'Stores learned user preferences for personalization';

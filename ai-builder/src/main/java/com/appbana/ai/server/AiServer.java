@@ -4,6 +4,7 @@ import com.appbana.ai.agent.AiAgent;
 import com.appbana.ai.agent.AgentConfig;
 import com.appbana.ai.agent.tool.*;
 import com.appbana.ai.api.AiChatController;
+import com.appbana.ai.api.ChatHistoryController;
 import com.appbana.ai.api.Router;
 import com.appbana.ai.config.AiConfig;
 import com.appbana.ai.knowledge.AppBanaKnowledgeLoader;
@@ -21,6 +22,7 @@ import com.appbana.ai.rag.EmbeddingService;
 import com.appbana.ai.rag.QdrantService;
 import com.appbana.ai.rag.VectorStoreService;
 import com.appbana.ai.rag.ConversationMemory;
+import org.flywaydb.core.Flyway;
 import com.sun.net.httpserver.HttpServer;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -76,6 +78,18 @@ public class AiServer {
             this.dataSource = new HikariDataSource(hikariConfig);
             log.info("Database connection pool initialized");
 
+            // Run DB Migrations (Flyway)
+            log.info("Running database migrations...");
+            Flyway.configure()
+                    .dataSource(this.dataSource)
+                    .locations("classpath:db/migration")
+                    .baselineOnMigrate(true)
+                    .baselineVersion("0")
+                    .cleanDisabled(false)
+                    .load()
+                    .migrate();
+            log.info("Database migrations complete");
+
             // User Preference Engine
             UserPreferenceEngine userPreferenceEngine = new UserPreferenceEngine(dataSource, config);
 
@@ -116,9 +130,9 @@ public class AiServer {
             // Prompt Enhancer
             AppBanaPromptEnhancer promptEnhancer = new AppBanaPromptEnhancer(knowledgeBaseService);
 
-            // Conversation Memory (no DataSource required for Qdrant-only mode)
+            // Conversation Memory — backed by PostgreSQL for persistence + Qdrant for semantic search
             ConversationMemory conversationMemory = new ConversationMemory(
-                    null, // dataSource
+                    dataSource,        // PostgreSQL: persists history across restarts
                     embeddingService,
                     vectorStoreService,
                     qdrantService,
@@ -178,10 +192,13 @@ public class AiServer {
                     directAnswerService,
                     patternExecutor);
 
+            // Chat History Controller
+            ChatHistoryController historyController = new ChatHistoryController(conversationMemory);
+
             log.info("AI services initialized successfully");
 
             // Register routes
-            registerRoutes(router, chatController);
+            registerRoutes(router, chatController, historyController);
 
         } catch (Exception e) {
             log.error("Failed to initialize AI services", e);
@@ -194,7 +211,8 @@ public class AiServer {
     /**
      * Register all AI endpoints
      */
-    private void registerRoutes(Router router, AiChatController chatController) {
+    private void registerRoutes(Router router, AiChatController chatController,
+                                ChatHistoryController historyController) {
         // Health check
         router.get("/health", (req, res) -> {
             boolean qdrantHealthy = qdrantService.healthCheck();
@@ -210,10 +228,16 @@ public class AiServer {
         // Agent-based chat endpoint
         router.post("/api/ai/chat/agent", chatController.chatAgent());
 
+        // Chat history endpoints
+        router.get("/api/ai/chat/history",  historyController.getHistory());
+        router.get("/api/ai/chat/sessions", historyController.getSessions());
+
         log.info("Registered AI routes:");
         log.info("  GET  /health");
         log.info("  POST /api/ai/chat");
         log.info("  POST /api/ai/chat/agent");
+        log.info("  GET  /api/ai/chat/history");
+        log.info("  GET  /api/ai/chat/sessions");
     }
 
     public void start() {
