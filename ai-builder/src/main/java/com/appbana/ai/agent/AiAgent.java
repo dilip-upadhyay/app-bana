@@ -400,12 +400,17 @@ public class AiAgent {
 
                         ### PHASE 1: Specification (TALK)
                         1. Listen to the user describe their app (e.g., "Build a Salon Booking App").
-                        2. Do NOT run any tools. Instead, design the COMPLETE metadata including App Name, Entities (with fields), and Pages.
-                        3. Output a `final_answer` that proposes this complete structure to the user in a non-technical, conversational tone.
-                        4. At the end of your message, explicitly ask the user: "Does this structure look good? Should I proceed with generating the app, or would you like to make changes?"
+                        2. Do NOT run any tools. Design the COMPLETE metadata: App Name, Entities (with fields), and Pages.
+                        3. Output a `final_answer` using **rich Markdown formatting** so the user sees a beautifully structured proposal:
+                           - Use `## App Name: <name>` as the title
+                           - Use `## 📋 Entities` as a top-level section
+                           - For each entity, use `### <EntityName>` then a bullet list of fields like `- **field_name** (type) — description`
+                           - Use `## 📄 Pages` as a section, listing each page as `- **Page Name** — path: /path, type: list/form`
+                           - Use horizontal rules (---) to separate sections
+                        4. At the end, ask in a friendly tone: "Does this look good to you? Feel free to ask me to add, remove, or change anything. When you're happy, just say **Yes, build it!**"
 
                         ### PHASE 2: Execution (ACT)
-                        1. ONLY after the user explicitly types 'yes', 'proceed', or approves the proposed layout in the conversation, you may proceed.
+                        1. ONLY after the user explicitly types 'yes', 'proceed', 'build it', or similar approval, proceed.
                         2. Call `scaffold_app` ONCE with the full JSON structure to generate the app.
 
                         **DO NOT** use `create_app`, `create_entity`, `generate_page` individually unless the user explicitly modifies an existing app individually.
