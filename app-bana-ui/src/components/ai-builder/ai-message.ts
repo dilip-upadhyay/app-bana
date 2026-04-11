@@ -42,7 +42,7 @@ export class AiMessage extends LitElement {
     }
 
     .content {
-      max-width: 80%;
+      max-width: 92%;
       padding: 12px 16px;
       border-radius: 12px;
       line-height: 1.6;
@@ -60,41 +60,93 @@ export class AiMessage extends LitElement {
       color: #1a1a2e;
       border-bottom-left-radius: 4px;
       border: 1px solid #e8eaf6;
-      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.08);
+      box-shadow: 0 2px 10px rgba(102, 126, 234, 0.10);
+      overflow: hidden;
     }
 
-    /* ── Markdown rendered styles ── */
-    .content.assistant h1,
-    .content.assistant h2,
+    /* ── H1: App title banner ── */
+    .content.assistant h1 {
+      font-size: 17px;
+      font-weight: 800;
+      color: #fff;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      margin: -12px -16px 16px -16px;
+      padding: 16px 20px;
+      border-radius: 0;
+      letter-spacing: 0.3px;
+    }
+
+    /* ── H2: Section labels (pill style) ── */
+    .content.assistant h2 {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: #764ba2;
+      background: #f3f0ff;
+      border-radius: 20px;
+      padding: 4px 14px;
+      margin: 18px 0 10px 0;
+      display: inline-block;
+    }
+
+    /* ── H3: Entity / group card ── */
     .content.assistant h3 {
-      margin: 14px 0 6px 0;
-      padding-bottom: 4px;
-      color: #4a4a8a;
+      font-size: 14px;
       font-weight: 700;
+      color: #2d2d6b;
+      background: #f7f8ff;
+      border-left: 4px solid #667eea;
+      border-radius: 0 8px 8px 0;
+      padding: 9px 14px;
+      margin: 10px 0 6px 0;
     }
-
-    .content.assistant h1 { font-size: 17px; border-bottom: 2px solid #e8eaf6; }
-    .content.assistant h2 { font-size: 15px; border-bottom: 1px solid #eee; }
-    .content.assistant h3 { font-size: 14px; color: #667eea; border: none; }
 
     .content.assistant p {
-      margin: 6px 0;
+      margin: 5px 0;
+      color: #4a4a6a;
+      font-size: 13.5px;
+      line-height: 1.6;
     }
 
-    .content.assistant ul,
+    /* ── Lists: checkmark bullets ── */
+    .content.assistant ul {
+      margin: 4px 0 4px 0;
+      padding: 0;
+      list-style: none;
+    }
+
     .content.assistant ol {
-      margin: 6px 0 6px 20px;
+      margin: 4px 0 4px 18px;
       padding: 0;
     }
 
     .content.assistant li {
-      margin: 4px 0;
-      line-height: 1.5;
+      font-size: 13.5px;
+      color: #333355;
+      padding: 4px 8px 4px 26px;
+      margin: 2px 0;
+      position: relative;
+      line-height: 1.55;
+    }
+
+    .content.assistant ul > li::before {
+      content: "✔";
+      position: absolute;
+      left: 6px;
+      color: #667eea;
+      font-size: 10px;
+      top: 7px;
     }
 
     .content.assistant strong {
-      color: #333366;
+      color: #2d2d6b;
       font-weight: 700;
+    }
+
+    .content.assistant em {
+      color: #777;
+      font-style: italic;
     }
 
     .content.assistant code {
@@ -122,10 +174,11 @@ export class AiMessage extends LitElement {
       padding: 0;
     }
 
+    /* ── HR: dashed divider ── */
     .content.assistant hr {
       border: none;
-      border-top: 1px solid #e8eaf6;
-      margin: 10px 0;
+      border-top: 2px dashed #e0e0f0;
+      margin: 16px 0;
     }
 
     .timestamp {
@@ -186,12 +239,13 @@ export class AiMessage extends LitElement {
   }
 
   private markdownToHtml(md: string): string {
+    // Escape HTML entities first
     let out = md
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
-    // Fenced code blocks (must run before inline code)
+    // Fenced code blocks (before inline code)
     out = out.replace(/```[\w]*\n([\s\S]*?)```/g, (_m, code) =>
       `<pre><code>${code.trim()}</code></pre>`);
 
@@ -200,7 +254,7 @@ export class AiMessage extends LitElement {
     out = out.replace(/^## (.+)$/gm,  '<h2>$1</h2>');
     out = out.replace(/^# (.+)$/gm,   '<h1>$1</h1>');
 
-    // Bold + italic combos
+    // Bold + italic
     out = out.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
     out = out.replace(/\*\*(.+?)\*\*/g,     '<strong>$1</strong>');
     out = out.replace(/\*(.+?)\*/g,         '<em>$1</em>');
@@ -211,24 +265,24 @@ export class AiMessage extends LitElement {
     // Horizontal rules
     out = out.replace(/^---+$/gm, '<hr/>');
 
-    // List items (unordered and ordered)
+    // List items
     out = out.replace(/^[ \t]*[-*] (.+)$/gm, '<li>$1</li>');
     out = out.replace(/^[ \t]*\d+\. (.+)$/gm, '<li class="ol">$1</li>');
 
-    // Wrap consecutive <li> in <ul>
+    // Wrap consecutive <li> blocks in <ul>
     out = out.replace(/((?:<li(?:[^>]*)>[\s\S]*?<\/li>\n?)+)/g, (block) => {
       const tag = block.includes('class="ol"') ? 'ol' : 'ul';
       return `<${tag}>${block}</${tag}>`;
     });
 
-    // Paragraphs: non-block lines become <p>
-    const blockTags = /^<(h[1-3]|ul|ol|li|pre|hr|blockquote)/;
+    // Paragraphs for plain text lines
+    const blockStart = /^<(h[1-3]|ul|ol|li|pre|hr|blockquote)/;
     const lines = out.split('\n');
     const result: string[] = [];
     for (const line of lines) {
       const t = line.trim();
       if (!t) continue;
-      if (blockTags.test(t) || t.startsWith('</') || t.startsWith('<pre') || t.startsWith('<hr')) {
+      if (blockStart.test(t) || t.startsWith('</') || t.startsWith('<pre') || t.startsWith('<hr')) {
         result.push(t);
       } else {
         result.push(`<p>${t}</p>`);
