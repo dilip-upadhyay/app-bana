@@ -181,7 +181,7 @@ public class GeneratePageTool implements Tool {
         List<Map<String, Object>> nodes = new ArrayList<>();
 
         Map<String, Object> tableNode = new HashMap<>();
-        tableNode.put("id", "table-" + UUID.randomUUID().toString().substring(0, 8));
+        tableNode.put("id", "root");
         tableNode.put("type", "table");
 
         Map<String, Object> tableProps = new HashMap<>();
@@ -223,7 +223,7 @@ public class GeneratePageTool implements Tool {
 
         // Create app-grid as root
         Map<String, Object> gridNode = new HashMap<>();
-        String gridId = "app-grid";
+        String gridId = "root";
         gridNode.put("id", gridId);
         gridNode.put("type", "app-grid");
 
@@ -269,13 +269,14 @@ public class GeneratePageTool implements Tool {
 
             Map<String, Object> input = new HashMap<>();
             input.put("id", inputId);
-            input.put("type", mapFieldToInputType(fieldType));
+            input.put("type", "input");
 
             Map<String, Object> inputProps = new HashMap<>();
             inputProps.put("entity", entityName);
             inputProps.put("field", fieldName);
             inputProps.put("name", fieldName);
             inputProps.put("label", fieldLabel);
+            inputProps.put("inputType", mapFieldToInputType(fieldType));
             inputProps.put("className", "input");
             inputProps.put("marginBottom", "0");
             if (!"reference".equals(fieldType)) {
