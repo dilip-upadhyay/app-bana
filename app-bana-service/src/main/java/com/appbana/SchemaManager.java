@@ -408,7 +408,7 @@ public class SchemaManager {
                 // If TenantContext not set, use default table naming
             }
 
-            return "app_" + envPrefix + safeTenantId + "_" + safeAppId + "_" + schema.getName();
+            return ("app_" + envPrefix + safeTenantId + "_" + safeAppId + "_" + schema.getName()).toUpperCase(Locale.ROOT);
         }
         return schema.getName();
     }

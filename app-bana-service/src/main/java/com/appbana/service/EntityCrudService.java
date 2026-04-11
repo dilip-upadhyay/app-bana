@@ -224,7 +224,7 @@ public class EntityCrudService {
         }
     }
 
-    public Map<String, Object> getById(EntitySchema schema, String id) throws SQLException {
+    public Map<String, Object> getById(EntitySchema schema, Object id) throws SQLException {
         EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
                 .orElse(null);
         if (pk == null) {
@@ -232,9 +232,19 @@ public class EntityCrudService {
         }
         String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema)) + " WHERE "
                 + quote(pk.getName()) + " = ?";
+        
+        Object parsedId;
+        if (id instanceof String idStr) {
+            parsedId = parseId(idStr, pk);
+        } else {
+            parsedId = id; // use raw object (Long, Integer, etc.) if already available
+        }
+        
+        LOG.info("[GET_BY_ID] SQL: {}, ID: {} ({})", sql, parsedId, (parsedId != null ? parsedId.getClass().getSimpleName() : "null"));
+        
         try (Connection c = schemaConnection(schema);
                 PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setObject(1, parseId(id, pk));
+            ps.setObject(1, parsedId);
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
                 return list.isEmpty() ? null : list.getFirst();
@@ -539,25 +549,39 @@ public class EntityCrudService {
             return null;
         }
         // PostgreSQL identifiers are case-sensitive when quoted.
-        // We preserve the case as-is to match the actual table/column names.
-        return '"' + id + '"';
+        // We always use UPPERCASE to match the database's consistent naming convention.
+        return '"' + id.toUpperCase(Locale.ROOT) + '"';
     }
 
     private static Object parseId(String idStr, EntitySchema.Field pk) {
         if (idStr == null) {
             return null;
         }
-        String t = pk.getType().toLowerCase(Locale.ROOT);
+        String t = pk != null && pk.getType() != null ? pk.getType().toLowerCase(Locale.ROOT) : "string";
+        String val = idStr.trim();
+        LOG.info("[PARSE_ID] Input: '{}', Field: {}, Type: {}", val, (pk != null ? pk.getName() : "null"), t);
+
         try {
             return switch (t) {
-                case "int", "integer" -> Integer.valueOf(idStr.trim());
-                case "long" -> Long.valueOf(idStr.trim());
-                case "uuid" -> java.util.UUID.fromString(idStr.trim());
-                default -> idStr;
+                case "int", "integer", "serial" -> Integer.valueOf(val);
+                case "long", "bigint", "bigserial" -> Long.valueOf(val);
+                case "uuid" -> java.util.UUID.fromString(val);
+                default -> {
+                    // Fallback: If it's a digit-only string but we didn't match the type, 
+                    // try parsing as Long if it looks like one, to avoid "bigint = varchar" mismatch
+                    if (val.matches("\\d+")) {
+                        try {
+                            yield Long.valueOf(val);
+                        } catch (NumberFormatException ignored) {}
+                    }
+                    yield val;
+                }
             };
         } catch (Exception e) {
-            LOG.warn("[PARSE_ID] Failed to parse ID '{}' as {}: {}", idStr, t, e.getMessage());
-            return idStr;
+            LOG.warn("[PARSE_ID] Failed to parse ID '{}' as {}: {}", val, t, e.getMessage());
+            // Last resort: If the DB expects a numeric, this String return will likely trigger an error,
+            // but we'll see the warning in the logs.
+            return val;
         }
     }
 
@@ -624,7 +648,7 @@ public class EntityCrudService {
                         throw new IllegalArgumentException("field '" + f.getName() + "' invalid integer format");
                     }
                 }
-                case "long" -> {
+                case "long", "bigint", "bigserial" -> {
                     if (raw instanceof Number) {
                         long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin())
@@ -702,8 +726,8 @@ public class EntityCrudService {
         String t = f.getType().toLowerCase(Locale.ROOT);
         try {
             return switch (t) {
-                case "int", "integer" -> Integer.parseInt(v);
-                case "long" -> Long.parseLong(v);
+                case "int", "integer", "serial" -> Integer.parseInt(v);
+                case "long", "bigint", "bigserial" -> Long.parseLong(v);
                 case "boolean" -> ("true".equalsIgnoreCase(v) || "1".equals(v));
                 case "date", "timestamp" -> {
                     // Accept only valid ISO-8601 instant strings; if parsing fails treat as raw

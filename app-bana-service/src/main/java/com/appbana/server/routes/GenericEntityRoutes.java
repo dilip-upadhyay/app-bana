@@ -454,8 +454,8 @@ public class GenericEntityRoutes {
             });
             try {
                 Object idObj = crud.insertRecord(schema, data);
+                Map<String, Object> after = crud.getById(schema, idObj);
                 String id = String.valueOf(idObj);
-                Map<String, Object> after = crud.getById(schema, id);
                 AuditLogService.log("INSERT", schema.getName(), id, actor, null, after);
 
                 if (after != null) {
