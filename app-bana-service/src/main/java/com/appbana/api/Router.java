@@ -77,6 +77,8 @@ public class Router {
                     return;
                 }
             } catch (Exception e) {
+                System.err.println("Middleware error: " + e.getMessage());
+                e.printStackTrace(System.err);
                 sendError(ex, 500, e.getMessage());
                 return;
             }
@@ -91,6 +93,8 @@ public class Router {
                 try {
                     r.handler.accept(reqW, resW);
                 } catch (Exception e) {
+                    System.err.println("Route handler error: " + e.getMessage());
+                    e.printStackTrace(System.err);
                     sendError(ex, 500, e.getMessage());
                 }
                 return;
@@ -113,6 +117,8 @@ public class Router {
                 try {
                     r.handler.accept(reqW, resW);
                 } catch (Exception e) {
+                    System.err.println("Route handler error (servlet): " + e.getMessage());
+                    e.printStackTrace(System.err);
                     sendError(resp, 500, e.getMessage());
                 }
                 return;

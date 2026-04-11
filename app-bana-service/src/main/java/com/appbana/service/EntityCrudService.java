@@ -201,7 +201,11 @@ public class EntityCrudService {
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
-                    return rs.getObject(1);
+                    Object generatedId = rs.getObject(1);
+                    if (generatedId != null) {
+                        return generatedId;
+                    }
+                    LOG.warn("[INSERT] Generated keys row found but ID value is null for table: {}", tableName);
                 }
             }
 
@@ -212,7 +216,10 @@ public class EntityCrudService {
                 return data.get(pk.getName());
             }
         }
-        return -1L;
+
+        LOG.warn("[INSERT] No ID could be retrieved after insertion for table: {}. Data keys: {}", 
+                SchemaManager.getPhysicalTableName(schema), data.keySet());
+        return -1L; // Return numeric sentinel instead of null to prevent NPE
     }
 
     public List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {
@@ -554,7 +561,7 @@ public class EntityCrudService {
     }
 
     private static Object parseId(String idStr, EntitySchema.Field pk) {
-        if (idStr == null) {
+        if (idStr == null || "null".equalsIgnoreCase(idStr.trim())) {
             return null;
         }
         String t = pk != null && pk.getType() != null ? pk.getType().toLowerCase(Locale.ROOT) : "string";

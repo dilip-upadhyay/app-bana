@@ -468,9 +468,11 @@ public class GenericEntityRoutes {
                     }
                 }
 
-                res.json(201, Map.of("id", idObj));
-            } catch (SQLException e) {
-                LOG.error("Insert failed for entity {}", entity, e);
+                Map<String, Object> response = new LinkedHashMap<>();
+                response.put("id", idObj);
+                res.json(201, response);
+            } catch (Exception e) {
+                LOG.error("Insert failed for entity={}", entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
             }
         });
@@ -924,8 +926,8 @@ public class GenericEntityRoutes {
                 try {
                     // EntityCrudService will auto-inject tenant_id and app_id
                     Object idObj = crud.insertRecord(schema, data);
+                    Map<String, Object> after = crud.getById(schema, idObj);
                     String id = String.valueOf(idObj);
-                    Map<String, Object> after = crud.getById(schema, id);
 
                     // Audit logging
                     AuditLogService.log("INSERT", schema.getName(), id, "studio", null, after);
@@ -935,7 +937,7 @@ public class GenericEntityRoutes {
                     // Always clear context
                     TenantContext.clear();
                 }
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 LOG.error("App-scoped insert failed for app={} entity={}", appId, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
             }
@@ -1201,18 +1203,21 @@ public class GenericEntityRoutes {
                 try {
                     // EntityCrudService will auto-inject tenant_id and app_id
                     Object idObj = crud.insertRecord(schema, data);
+                    Map<String, Object> after = crud.getById(schema, idObj);
                     String id = String.valueOf(idObj);
-                    Map<String, Object> after = crud.getById(schema, id);
 
                     // Audit logging
                     AuditLogService.log("INSERT", schema.getName(), id, "runtime", null, after);
 
-                    res.json(201, Map.of("id", idObj, "appId", appId));
+                    Map<String, Object> response = new LinkedHashMap<>();
+                    response.put("id", idObj);
+                    response.put("appId", appId);
+                    res.json(201, response);
                 } finally {
                     // Always clear context
                     TenantContext.clear();
                 }
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 LOG.error("Runtime app-scoped insert failed for app={} entity={}", appId, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
             }
@@ -1263,19 +1268,23 @@ public class GenericEntityRoutes {
 
                 try {
                     Object idObj = crud.insertRecord(schema, data);
+                    Map<String, Object> after = crud.getById(schema, idObj);
                     String id = String.valueOf(idObj);
-                    Map<String, Object> after = crud.getById(schema, id);
                     LOG.info("[ENV-CREATE] Successfully created entity: id={}, entity={}, env={}", idObj, entity, env);
                     LOG.debug("[ENV-CREATE] Audit logged for entity: {} id={}", entity, id);
 
                     AuditLogService.log("INSERT", schema.getName(), id, "runtime-" + env, null, after);
 
                     LOG.debug("[ENV-CREATE] Clearing TenantContext for env={}", env);
-                    res.json(201, Map.of("id", idObj, "appId", appId, "env", env));
+                    Map<String, Object> response = new LinkedHashMap<>();
+                    response.put("id", idObj);
+                    response.put("appId", appId);
+                    response.put("env", env);
+                    res.json(201, response);
                 } finally {
                     TenantContext.clear();
                 }
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 LOG.error("[ENV-CREATE] Failed to create entity: tenant={}, app={}, env={}, entity={}", tenantId, appId, env, entity, e);
                 LOG.error("Env-scoped insert failed for app={} env={} entity={}", appId, env, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
