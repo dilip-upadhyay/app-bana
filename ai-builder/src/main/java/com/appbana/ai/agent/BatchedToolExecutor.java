@@ -112,6 +112,8 @@ public class BatchedToolExecutor {
                 - Set length=255 for text fields
                 - Create both list and form pages for each entity
                 - Use professional, business-appropriate naming
+                - CRITICAL: For name fields (e.g. Customer Name), do NOT add regex patterns that block spaces.
+                - CRITICAL: For fields with no validation, use JSON null. NEVER use the literal string "null".
 
                 Return ONLY the JSON, no explanations.
                 """, appName, appDescription != null ? appDescription : "A business application", entitiesStr);

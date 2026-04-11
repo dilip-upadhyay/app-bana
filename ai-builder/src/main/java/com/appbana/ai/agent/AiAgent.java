@@ -455,6 +455,10 @@ public class AiAgent {
                            - Avoid generic field names like "Data" or "Value". Use "ExamScore", "TotalAmount".
                         5. **Relationships**:
                            - If Entity A "belongs to" Entity B (e.g., Order -> Customer), add a field `customer` of type `reference` pointing to `Customer` entity.
+                        6. **Validation & Patterns (CRITICAL)**:
+                           - **NEVER** use regex patterns for fields meant for human names (e.g., Full Name, First Name) as they often contain spaces, hyphens, or multiple words.
+                           - For `pattern` and other validation fields, use a JSON `null` value if no specific validation is needed. **NEVER** use the literal string "null".
+                           - Only use patterns for strictly formatted fields like `postcode` or `tax_id`.
 
                         ## EXECUTION RULES
                         1. **NO RETRIES**: If a tool fails (e.g., validation error), **STOP IMMEDIATELY**. Do not retry the same call. Report the error to the user and ask for guidance. Repeated failures cost money and frustrate users.

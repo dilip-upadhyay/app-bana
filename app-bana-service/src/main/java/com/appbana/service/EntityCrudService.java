@@ -538,18 +538,25 @@ public class EntityCrudService {
         if (id == null) {
             return null;
         }
-        return '"' + id.toUpperCase(Locale.ROOT) + '"';
+        // PostgreSQL identifiers are case-sensitive when quoted.
+        // We preserve the case as-is to match the actual table/column names.
+        return '"' + id + '"';
     }
 
     private static Object parseId(String idStr, EntitySchema.Field pk) {
+        if (idStr == null) {
+            return null;
+        }
         String t = pk.getType().toLowerCase(Locale.ROOT);
         try {
             return switch (t) {
-                case "int", "integer" -> Integer.parseInt(idStr);
-                case "long" -> Long.parseLong(idStr);
+                case "int", "integer" -> Integer.valueOf(idStr.trim());
+                case "long" -> Long.valueOf(idStr.trim());
+                case "uuid" -> java.util.UUID.fromString(idStr.trim());
                 default -> idStr;
             };
         } catch (Exception e) {
+            LOG.warn("[PARSE_ID] Failed to parse ID '{}' as {}: {}", idStr, t, e.getMessage());
             return idStr;
         }
     }
@@ -663,7 +670,7 @@ public class EntityCrudService {
                     if (f.getLength() != null && str.length() > f.getLength())
                         throw new IllegalArgumentException(
                                 "field '" + f.getName() + "' length exceeds " + f.getLength());
-                    if (f.getPattern() != null && !f.getPattern().isEmpty()) {
+                    if (f.getPattern() != null && !f.getPattern().isEmpty() && !"null".equals(f.getPattern())) {
                         if (!Pattern.compile(f.getPattern()).matcher(str).matches())
                             throw new IllegalArgumentException("field '" + f.getName() + "' does not match pattern");
                     }
@@ -675,7 +682,7 @@ public class EntityCrudService {
                     if (f.getLength() != null && str.length() > f.getLength())
                         throw new IllegalArgumentException(
                                 "field '" + f.getName() + "' length exceeds " + f.getLength());
-                    if (f.getPattern() != null && !f.getPattern().isEmpty()) {
+                    if (f.getPattern() != null && !f.getPattern().isEmpty() && !"null".equals(f.getPattern())) {
                         if (!Pattern.compile(f.getPattern()).matcher(str).matches())
                             throw new IllegalArgumentException("field '" + f.getName() + "' does not match pattern");
                     }
@@ -769,7 +776,7 @@ public class EntityCrudService {
                     }
                 }
 
-                String quotedKey = quote(e.getKey());
+                String quotedKey = quote(f.getName());
 
                 // If filter value is NULL (parsing failed), we skip it to avoid DB errors
                 if (e.getValue() == null) {
@@ -778,18 +785,27 @@ public class EntityCrudService {
                     continue;
                 }
 
+                // Coerce filter value to match column type if it's a string from JSON
+                Object finalValue = e.getValue();
+                if (finalValue instanceof String sVal) {
+                    Object parsed = parseFilterValue(f, sVal);
+                    if (parsed != null) {
+                        finalValue = parsed;
+                    }
+                }
+
                 // Use LIKE with wildcards for string/text fields, exact match for others
                 if (t.equals("string") || t.equals("text") || t.equals("varchar")) {
                     // Case-insensitive LIKE match for string fields
                     LOG.info("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey,
-                            e.getValue());
+                            finalValue);
                     parts.add("UPPER(" + quotedKey + ") LIKE ?");
-                    params.add("%" + String.valueOf(e.getValue()).toUpperCase(Locale.ROOT) + "%");
+                    params.add("%" + String.valueOf(finalValue).toUpperCase(Locale.ROOT) + "%");
                 } else {
-                    LOG.info("[BUILD_WHERE] Adding exact filter condition: {} = ? (param: {})", quotedKey,
-                            e.getValue());
+                    LOG.info("[BUILD_WHERE] Adding exact filter condition: {} = ? (param: {} [type: {}])", quotedKey,
+                            finalValue, finalValue != null ? finalValue.getClass().getSimpleName() : "null");
                     parts.add(quotedKey + " = ?");
-                    params.add(e.getValue());
+                    params.add(finalValue);
                 }
             }
         }
