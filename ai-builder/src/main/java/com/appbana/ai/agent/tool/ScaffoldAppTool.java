@@ -48,11 +48,9 @@ public class ScaffoldAppTool implements Tool {
     return "scaffold_app";
   }
 
-  @Override
   public String getDescription() {
     return "Creates a complete AppBana application in ONE SHOT: App + Entities + Pages + Deployment. " +
-        "Use this when the user asks to 'create an app' or 'build an application'. " +
-        "This is MUCH faster and cheaper than using individual tools sequentially.";
+        "WARNING: Because of Specification Driven Development rules, DO NOT invoke this tool until you have proposed the features to the user and they have explicitly replied with confirmation/approval.";
   }
 
   @Override

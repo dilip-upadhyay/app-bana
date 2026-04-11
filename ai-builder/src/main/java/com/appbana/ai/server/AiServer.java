@@ -95,10 +95,15 @@ public class AiServer {
                     embeddingService,
                     schemaLoader);
 
-            // Load AppBana knowledge into vector database
-            AppBanaKnowledgeLoader knowledgeLoader = new AppBanaKnowledgeLoader(knowledgeBaseService);
-            knowledgeLoader.loadAllKnowledge();
-            log.info("AppBana knowledge base loaded");
+            // Load AppBana knowledge into vector database only if not already loaded
+            if (knowledgeBaseService.initializeIfPopulated()) {
+                log.info("AppBana knowledge base already populated ({} schemas) - skipping initialization to save time and API costs", 
+                         knowledgeBaseService.getIndexedCount());
+            } else {
+                AppBanaKnowledgeLoader knowledgeLoader = new AppBanaKnowledgeLoader(knowledgeBaseService);
+                knowledgeLoader.loadAllKnowledge();
+                log.info("AppBana knowledge base loaded");
+            }
 
             // Optimization Services (RAG-First cost optimization)
             DirectAnswerService directAnswerService = new DirectAnswerService(knowledgeBaseService);

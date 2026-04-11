@@ -52,6 +52,27 @@ public class KnowledgeBaseService {
     }
 
     /**
+     * Checks if the Qdrant collection is already populated with data.
+     * If so, sets the initialized flag to true to skip reloading on every boot.
+     */
+    public boolean initializeIfPopulated() {
+        try {
+            String collectionName = qdrantService.getAppBanaKnowledgeCollection();
+            if (qdrantService.collectionExists(collectionName)) {
+                long points = qdrantService.getCollectionInfo(collectionName).getPointsCount();
+                if (points > 0) {
+                    this.indexedCount = points;
+                    this.initialized = true;
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to check collection info, assuming not populated: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    /**
      * Index all schemas from AppBanaSchemaLoader into Qdrant
      * 
      * @throws KnowledgeBaseException if indexing fails

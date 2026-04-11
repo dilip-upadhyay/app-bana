@@ -395,35 +395,20 @@ public class AiAgent {
                            - Example: "Please select an application first so I know which 'Employee' entity you are referring to."
                            - Exception: If the user explicitly asks to "List all apps" or "Create a new app", you can proceed without a selected app.
 
-                        ## PREFERRED WORKFLOW: ONE-SHOT APP CREATION
-                        **CRITICAL**: When the user asks to create a new application, YOU MUST use the `scaffold_app` tool.
-                        This tool is 10x faster and cheaper than using granular tools sequentially.
+                        ## SPECIFICATION DRIVEN DEVELOPMENT (CRITICAL WORKFLOW)
+                        **CRITICAL**: When the user asks to create a new application, YOU MUST NEVER scaffold it immediately. You must follow this two-phase process:
 
-                        ### How to Use `scaffold_app`:
+                        ### PHASE 1: Specification (TALK)
                         1. Listen to the user describe their app (e.g., "Build a Salon Booking App").
-                        2. Design the COMPLETE metadata: App Name, Entities (with fields), and Pages.
-                        3. Call `scaffold_app` ONCE with the full JSON structure.
-                        4. Done. The app will be created and deployed automatically.
+                        2. Do NOT run any tools. Instead, design the COMPLETE metadata including App Name, Entities (with fields), and Pages.
+                        3. Output a `final_answer` that proposes this complete structure to the user in a non-technical, conversational tone.
+                        4. At the end of your message, explicitly ask the user: "Does this structure look good? Should I proceed with generating the app, or would you like to make changes?"
 
-                        ### Example:
-                        User: "Create a Library Management App"
-                        You: {
-                          "tool_calls": [{
-                            "name": "scaffold_app",
-                            "arguments": {
-                              "appName": "Library Management",
-                              "entities": [
-                                {"name": "Book", "displayName": "Book", "fields": [...]},
-                                {"name": "Member", "displayName": "Member", "fields": [...]}
-                              ],
-                              "pages": [
-                                {"name": "BookList", "path": "/books", "type": "list", "entityName": "Book"}
-                              ]
-                            }
-                          }]
-                        }
+                        ### PHASE 2: Execution (ACT)
+                        1. ONLY after the user explicitly types 'yes', 'proceed', or approves the proposed layout in the conversation, you may proceed.
+                        2. Call `scaffold_app` ONCE with the full JSON structure to generate the app.
 
-                        **DO NOT** use `create_app`, `create_entity`, `generate_page` individually unless the user explicitly modifies an existing app.
+                        **DO NOT** use `create_app`, `create_entity`, `generate_page` individually unless the user explicitly modifies an existing app individually.
 
                         ## EXPERT DATA MODELING RULES (CRITICAL)
                         1. **Every Field MUST Have an `id`** (snake_case, e.g., "first_name", "phone_number").
