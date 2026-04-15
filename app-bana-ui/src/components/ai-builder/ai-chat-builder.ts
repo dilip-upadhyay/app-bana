@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { AiChatService, ChatMessage } from '../../services/ai-chat-service.ts';
+import { AiChatService, ChatMessage, ChatSession } from '../../services/ai-chat-service.ts';
 import { AuthService } from '../../pages/auth/auth-service.ts';
 import { appStore } from '../../builder/store/AppStore';
 import './ai-message.ts';
@@ -19,6 +19,7 @@ export class AiChatBuilder extends LitElement {
       border: none;
       border-radius: 0;
       overflow: hidden;
+      position: relative;
       background: white;
       box-shadow: none;
     }
@@ -31,7 +32,120 @@ export class AiChatBuilder extends LitElement {
       font-size: 16px;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 12px;
+    }
+
+    .history-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+    .history-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: none;
+      box-shadow: none;
+    }
+
+    .sessions-drawer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: white;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+    }
+    .sessions-drawer.open {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      padding: 16px 20px;
+      background: #f8f9fb;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: #666;
+      font-size: 20px;
+      padding: 4px;
+      cursor: pointer;
+      box-shadow: none;
+    }
+    .close-btn:hover {
+      color: #333;
+      transform: none;
+      background: #eee;
+      border-radius: 4px;
+    }
+
+    .drawer-actions {
+      padding: 16px 20px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .new-chat-btn {
+      width: 100%;
+      justify-content: center;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sessions-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 0;
+    }
+
+    .session-item {
+      padding: 12px 20px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .session-item:hover {
+      background: #f8f9fb;
+    }
+    
+    .session-item.active {
+      background: #eef2ff;
+      border-left: 3px solid #667eea;
+    }
+
+    .session-date {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    .session-id {
+      font-size: 13px;
+      color: #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .messages {
@@ -175,6 +289,10 @@ export class AiChatBuilder extends LitElement {
   @state() private isLoadingHistory = false;
   @state() private hasHistory = false;
 
+  @state() private showSessionsPanel = false;
+  @state() private pastSessions: ChatSession[] = [];
+  @state() private isLoadingSessionsPanel = false;
+
   private chatService = new AiChatService();
   private sessionId = '';
 
@@ -247,7 +365,42 @@ export class AiChatBuilder extends LitElement {
   render() {
     return html`
      <div class="header">
-        🤖 AI App Builder
+        <div>🤖 AI App Builder</div>
+        <button class="history-btn" @click=${this.toggleSessionsPanel}>
+           🕘 History
+        </button>
+      </div>
+
+      <!-- Sessions Drawer -->
+      <div class="sessions-drawer ${this.showSessionsPanel ? 'open' : ''}">
+        <div class="drawer-header">
+           Past Sessions
+           <button class="close-btn" @click=${this.toggleSessionsPanel}>&times;</button>
+        </div>
+        <div class="drawer-actions">
+           <button class="new-chat-btn" @click=${this.startNewSession}>
+             ➕ New Chat
+           </button>
+        </div>
+        <div class="sessions-list">
+          ${this.isLoadingSessionsPanel ? html`
+            <div class="loading"><div class="spinner spinner-sm"></div></div>
+          ` : this.pastSessions.length === 0 ? html`
+            <div class="empty-state">
+              <p>No past sessions found.</p>
+            </div>
+          ` : this.pastSessions.map(session => html`
+            <div class="session-item ${session.sessionId === this.sessionId ? 'active' : ''}" 
+                 @click=${() => this.switchSession(session.sessionId)}>
+              <div class="session-date">
+                ${new Date(session.lastActivity).toLocaleString()}
+              </div>
+              <div class="session-id">
+                Session: ${session.sessionId.substring(0, 8)}...
+              </div>
+            </div>
+          `)}
+        </div>
       </div>
 
       <div class="messages" @scroll=${this.handleScroll}>
@@ -389,6 +542,82 @@ export class AiChatBuilder extends LitElement {
 
   private handleScroll() {
     // Auto-scroll logic if needed
+  }
+
+  private async toggleSessionsPanel() {
+    this.showSessionsPanel = !this.showSessionsPanel;
+    if (this.showSessionsPanel && this.pastSessions.length === 0) {
+      await this.loadSessions();
+    }
+  }
+
+  private async loadSessions() {
+    const user = AuthService.getUser();
+    if (!user) return;
+    const userId = user.email || user.id.toString();
+
+    this.isLoadingSessionsPanel = true;
+    try {
+      this.pastSessions = await this.chatService.getSessions(userId, 20);
+    } catch (err) {
+      console.error('[AiChatBuilder] Failed to load sessions:', err);
+    } finally {
+      this.isLoadingSessionsPanel = false;
+    }
+  }
+
+  private async startNewSession() {
+    const user = AuthService.getUser();
+    if (!user) return;
+    const userId = user.email || user.id.toString();
+
+    const newSessionId = crypto.randomUUID();
+    const key = this.getSessionStorageKey(userId);
+    localStorage.setItem(key, newSessionId);
+    
+    this.sessionId = newSessionId;
+    this.messages = [this.welcomeMessage()];
+    this.hasHistory = false;
+    this.showSessionsPanel = false;
+    
+    // Refresh sessions list in background
+    this.loadSessions();
+  }
+
+  private async switchSession(targetSessionId: string) {
+    if (this.sessionId === targetSessionId) {
+      this.showSessionsPanel = false;
+      return;
+    }
+
+    const user = AuthService.getUser();
+    if (!user) return;
+    const userId = user.email || user.id.toString();
+
+    const key = this.getSessionStorageKey(userId);
+    localStorage.setItem(key, targetSessionId);
+    
+    this.sessionId = targetSessionId;
+    this.showSessionsPanel = false;
+    this.isLoadingHistory = true;
+    this.hasHistory = false;
+    this.messages = [];
+
+    try {
+      const history = await this.chatService.getHistory(userId, this.sessionId);
+      if (history.length > 0) {
+        this.hasHistory = true;
+        this.messages = history;
+        setTimeout(() => this.scrollToBottom(), 150);
+      } else {
+        this.messages = [this.welcomeMessage()];
+      }
+    } catch (err) {
+      console.warn('[AiChatBuilder] History load failed for switched session:', err);
+      this.messages = [this.welcomeMessage()];
+    } finally {
+      this.isLoadingHistory = false;
+    }
   }
 
   private scrollToBottom() {

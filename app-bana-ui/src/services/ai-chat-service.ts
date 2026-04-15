@@ -22,6 +22,11 @@ export interface ChatResponse {
     conversationId?: string;
 }
 
+export interface ChatSession {
+    sessionId: string;
+    lastActivity: number;
+}
+
 export interface AppPattern {
     id: string;
     patternName: string;
@@ -87,6 +92,22 @@ export class AiChatService {
             content: m.content,
             timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
         }));
+    }
+
+    /**
+     * Load recent past sessions for the user.
+     */
+    async getSessions(userId: string, limit: number = 20): Promise<ChatSession[]> {
+        const params = new URLSearchParams({ userId, limit: limit.toString() });
+        const response = await fetch(`${this.baseUrl}/chat/sessions?${params}`);
+
+        if (!response.ok) {
+            console.warn('[AiChatService] Could not load sessions:', response.statusText);
+            return [];
+        }
+
+        const data = await response.json();
+        return data.sessions || [];
     }
 
     async submitFeedback(conversationId: string, userId: string, rating: number, comment?: string): Promise<void> {
