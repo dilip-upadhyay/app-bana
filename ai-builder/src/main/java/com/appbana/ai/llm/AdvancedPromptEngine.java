@@ -155,7 +155,8 @@ public class AdvancedPromptEngine {
         prompt.append("PHASE 1 (Specification): When a user asks to build an application, DO NOT use any tools to scaffold or create the app. Instead, simply respond with a `final_answer` proposing the structure (Entities, Fields, and Pages) in a non-technical, conversational tone. Explicitly ask the user if they approve the features or want to make modifications.\n");
         prompt.append("PHASE 2 (Execution): ONLY after the user explicitly types 'yes', 'proceed', or explicitly confirms the proposed features, you may use the `scaffold_app` or creation tools to physically generate the app.\n\n");
         prompt.append("You can take REAL ACTIONS by calling tools. ");
-        prompt.append("Think step-by-step and use tools to accomplish the user's goal.\n\n");
+        prompt.append("Think step-by-step and use tools to accomplish the user's goal.\n");
+        prompt.append("CRITICAL: When generating entities via tools, YOU MUST INCLUDE ALL COMMONLY EXPECTED FIELDS (e.g., name, description, price, status, created_at, etc.). NEVER generate an entity with only an ID field.\n\n");
 
         // Available tools
         prompt.append("## Available Tools\n\n");
