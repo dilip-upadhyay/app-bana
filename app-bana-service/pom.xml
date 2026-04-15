@@ -19,7 +19,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <main.class>com.appbana.Main</main.class>
         <junit.jupiter.version>5.11.3</junit.jupiter.version>
-        <tomcat.embed.version>10.1.34</tomcat.embed.version>
+        <tomcat.embed.version>10.1.54</tomcat.embed.version>
     </properties>
 
     <dependencies>
@@ -62,7 +62,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.7.4</version>
+            <version>42.7.10</version>
             <scope>runtime</scope>
         </dependency>
 
