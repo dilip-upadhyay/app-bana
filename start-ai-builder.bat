@@ -101,7 +101,7 @@ if !ERRORLEVEL! EQU 0 (
 
 echo [1/3] Killing any potentially locking processes...
 powershell -Command "Stop-Process -Name java -Force -ErrorAction SilentlyContinue; Stop-Process -Name mvn -Force -ErrorAction SilentlyContinue"
-timeout /t 2 /nobreak >nul
+ping 127.0.0.1 -n 3 > nul
 
 echo [2/3] Building all modules (resilient mode)...
 REM We build from root to ensure both app-bana-service and ai-builder are updated correctly

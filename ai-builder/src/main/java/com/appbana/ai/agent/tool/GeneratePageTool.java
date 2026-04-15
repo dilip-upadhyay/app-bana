@@ -186,6 +186,25 @@ public class GeneratePageTool implements Tool {
 
         Map<String, Object> tableProps = new HashMap<>();
         tableProps.put("entity", entityName);
+
+        // Fetch entity schema to get fields (from arguments if provided)
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> entityFields = (List<Map<String, Object>>) arguments.get("entityFields");
+        if (entityFields != null && !entityFields.isEmpty()) {
+            List<Map<String, Object>> tableFields = new ArrayList<>();
+            for (Map<String, Object> field : entityFields) {
+                Map<String, Object> f = new HashMap<>();
+                f.put("name", field.get("name"));
+                f.put("label", field.getOrDefault("label", field.get("name")));
+                f.put("type", field.get("type"));
+                tableFields.add(f);
+            }
+            tableProps.put("fields", tableFields);
+        } else {
+            tableProps.put("fields", new ArrayList<>());
+            log.warn("[GeneratePageTool] No entity fields provided for list page - columns will be empty");
+        }
+
         tableNode.put("props", tableProps);
 
         nodes.add(tableNode);

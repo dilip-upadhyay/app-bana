@@ -245,17 +245,16 @@ public class ScaffoldAppTool implements Tool {
           // Inject appId into page definition
           pageDef.put("appId", createdAppId);
 
-          // For form pages, inject entity fields so GeneratePageTool can create inputs
-          String pageType = (String) pageDef.get("type");
-          if ("form".equals(pageType)) {
-            String entityName = (String) pageDef.get("entityName");
+          // Inject entity fields so GeneratePageTool can create inputs and table columns
+          String entityName = (String) pageDef.get("entityName");
+          if (entityName != null) {
             // Find matching entity and pass its fields
             for (Map<String, Object> entity : entities) {
               if (entityName.equals(entity.get("name"))) {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> fields = (List<Map<String, Object>>) entity.get("fields");
                 pageDef.put("entityFields", fields);
-                log.info("[ScaffoldAppTool] Injected {} fields for form page", fields != null ? fields.size() : 0);
+                log.info("[ScaffoldAppTool] Injected {} fields for {} page", fields != null ? fields.size() : 0, pageDef.get("type"));
                 break;
               }
             }
