@@ -1,889 +1,494 @@
-# GitHub Copilot Instructions for AppBana
+# AppBana — AI Copilot Master Instructions
 
-## Project Overview
-AppBana is a **metadata-driven platform** generating end-to-end functionality from a single source: `Entity Definition → Schema → Database → REST APIs → UI Pages`. Changes to metadata propagate automatically.
+> **Read this entire document before touching any code.** It is specifically written so that any AI Agent, Copilot, or Developer joining this project can get up to speed in under 10 minutes and never break the environment.
 
-**Core Architecture Pattern**:
+---
+
+## Table of Contents
+1. [What is AppBana?](#1-what-is-appbana)
+2. [Monorepo Structure](#2-monorepo-structure)
+3. [How to Start the Application](#3-how-to-start-the-application)
+4. [Key Configuration Files](#4-key-configuration-files)
+5. [Architecture Deep Dive](#5-architecture-deep-dive)
+6. [The AI Builder Engine (ai-builder/)](#6-the-ai-builder-engine-ai-builder)
+7. [Agent Tool System](#7-agent-tool-system)
+8. [Critical Rules — Multi-Tenant Entity Endpoints](#8-critical-rules--multi-tenant-entity-endpoints)
+9. [Backend API Reference](#9-backend-api-reference)
+10. [Frontend Architecture](#10-frontend-architecture)
+11. [Database & Schema Management](#11-database--schema-management)
+12. [Active Work & Known Issues](#12-active-work--known-issues)
+13. [Development Conventions](#13-development-conventions)
+14. [Common Pitfalls](#14-common-pitfalls)
+
+---
+
+## 1. What is AppBana?
+
+AppBana is a **metadata-driven, AI-powered application builder**. Non-technical users describe what they want in natural language and the AI Agent autonomously:
+1. Defines the data model
+2. Creates PostgreSQL tables (via `SchemaManager`)
+3. Generates REST CRUD APIs (automatically)
+4. Renders UI pages (via LitElement web components)
+
+**Core Principle:** A single schema definition drives the entire stack — database, API, and UI are all metadata-driven.
+
+---
+
+## 2. Monorepo Structure
+
 ```
-Metadata JSON (builder-database/*.json)
-    ↓
-Backend Services (Java 21 - ApiServer, SchemaManager)
-    ↓
-Database (H2/PostgreSQL + Flyway migrations)
-    ↓
-REST APIs (Auto-generated CRUD + OpenAPI spec)
-    ↓
-Frontend (Lit Web Components + TypeScript)
-    ↓
-Runtime UI (Rendered from PageMeta/ComponentNode tree)
+app-bana/
+├── ai-builder/                  ← AI LLM engine (port 8081)
+│   └── src/main/java/com/appbana/ai/
+│       ├── agent/               ← AiAgent.java — the Think/Act/Observe loop
+│       │   └── tool/            ← All agent tools (scaffold, mock data, etc.)
+│       ├── api/                 ← REST endpoints (AiChatController.java)
+│       ├── dialogue/            ← DialogueManager.java — conversation state machine
+│       ├── llm/                 ← AdvancedPromptEngine.java, OpenAiLlmService.java
+│       ├── rag/                 ← ConversationMemory.java, Qdrant vector store
+│       ├── learning/            ← UserPreferenceEngine.java
+│       ├── optimization/        ← DirectAnswerService.java, SemanticCache.java
+│       └── server/              ← AiServer.java, ToolRegistry.java
+│
+├── app-bana-service/            ← Core backend API (port 8080)
+│   └── src/main/java/com/appbana/
+│       ├── ApiServer.java       ← HTTP server entry point
+│       ├── SchemaManager.java   ← CREATE TABLE, migrations, multi-tenant isolation
+│       ├── JdbcManager.java     ← Database connection pools (HikariCP)
+│       ├── AppManager.java      ← App/entity lifecycle management
+│       └── server/routes/
+│           ├── GenericEntityRoutes.java  ← /api/{entity}/* CRUD
+│           ├── AppRoutes.java            ← /appbana-studio/* app management
+│           └── SchemaRoutes.java         ← /schema/* management
+│
+├── app-bana-ui/                 ← Frontend Studio (port 5173, Vite + LitElement)
+│   └── src/
+│       ├── builder/             ← Visual app builder (AppManager, PageManager)
+│       ├── runtime/             ← Live renderers (StudioTableLive.ts is key)
+│       ├── services/            ← API clients
+│       └── main/                ← AI chat UI (AiChatBuilder.ts)
+│
+├── docs/                        ← Architecture & story documentation
+│   ├── 01-ARCHITECTURE.md       ← Full system architecture reference
+│   ├── AI_AGENT_ARCHITECTURE.md ← Agent design details
+│   ├── ACTIVE_TASKS.md          ← Current sprint tasks
+│   └── session_summary.md       ← Latest session notes
+│
+├── config.json                  ← Database + OpenAI config (DO NOT commit secrets)
+├── start-everything.bat         ← Master startup script (Windows)
+├── start-ai-builder.bat         ← AI Builder startup (Maven compile + run)
+└── .github/copilot-instructions.md  ← This file
 ```
 
 ---
 
-## CURRENT PRIORITIES (January 2026)
+## 3. How to Start the Application
 
-### 1. Multi-Tenant Architecture 🔴 ACTIVE SPRINT
-**Status**: Runtime publishing and URL tenant isolation  
-**Branch**: runtime-publish  
-**Key Pattern**: `TenantContext` ThreadLocal for request-scoped tenant isolation
+### ✅ The ONLY correct way to start locally (Windows):
 
-**Critical Files**:
-- `model/TenantContext.java` - ThreadLocal tenant context holder
-- `model/AppMetadata.java` - Has `tenantId` field
-- `model/User.java` - Has `tenantId` field for tenant isolation
-- `AppManager.java` - App CRUD with tenant filtering
-
-**Usage Pattern**:
-```java
-// Set tenant context (in middleware/request handler)
-TenantContext.set(new TenantContext("tenant-123", "app-hr"));
-try {
-    // All operations now tenant-scoped
-    crud.insertRecord(TenantContext.get(), schema, data);
-} finally {
-    TenantContext.clear(); // Always cleanup
-}
-```
-
-### 2. Workflow Automation Phase 1 ✅ PRODUCTION READY
-**Status**: 95% Complete (Runtime verification pending)  
-**Components**: WorkflowEngine, WorkflowService, WorkflowExecutionService  
-**Database**: 4 tables via Flyway migration V6  
-**Reference**: [WORKFLOW_FEATURE_SPEC.md](../docs/WORKFLOW_FEATURE_SPEC.md)
-
-### 3. Security Suite ✅ PRODUCTION READY
-**Status**: 156/156 tests passing (100% coverage)  
-**Components**: CSRF, Session Management, Rate Limiting, Field-Level Security  
-**Reference**: [SECURITY_FEATURES.md](../docs/SECURITY_FEATURES.md)
-
-### 4. AI Builder Experience (ONGOING)
-**Key**: `builder-database/*.json` files drive ALL AI behavior through metadata  
-**Pattern**: Metadata Intelligence Engine hot-reloads JSON without restart  
-**Files**: `11-intent-patterns.json`, `AiAppGeneratorService.java`, `MetadataIntelligenceEngine.java`
-
----
-
-## Technology Stack & Build System
-
-### Backend (Java 21 LTS)
-- **HTTP Server**: JDK HttpServer (default) or Tomcat (configurable via `config.json`)
-- **Entry Point**: `com.appbana.Main` → starts server on port 8080 (configurable)
-- **Database**: H2 (default file-based), PostgreSQL (production)
-- **Connection Pool**: HikariCP with per-datasource configuration
-- **Migrations**: Flyway OSS 10.4.1 (auto-runs on startup, `.clean()` in dev mode)
-- **JSON**: Jackson 2.18.2 with JSR310 module for Java 8 date/time
-- **Logging**: SLF4J-simple
-- **Virtual Threads**: `server.setExecutor(r -> Thread.ofVirtual().start(r))` for 10K+ concurrent requests
-
-**Build Tool**: Maven multi-module project
-```bash
-# Build everything from root
-mvn clean package -DskipTests
-
-# Produces: app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar
-```
-
-### Frontend (TypeScript + Lit)
-- **Framework**: Lit 3.1.4 (Web Components with Shadow DOM)
-- **Build**: Vite 5.3.1 (fast dev server, optimized production builds)
-- **Testing**: Vitest 1.5.0 + jsdom
-- **Package Manager**: npm (Node 18.17+ required)
-
-**Component Pattern**:
-```typescript
-import { LitElement, html, css, unsafeCSS } from 'lit';
-import { customElement, state, property } from 'lit/decorators.js';
-import styles from './MyComponent.css?inline';
-
-@customElement('my-component')
-export class MyComponent extends LitElement {
-  static styles = css`${unsafeCSS(styles)}`;
-  
-  @property({ type: String }) label = '';
-  @state() private isActive = false;
-  
-  render() {
-    return html`<button @click=${this.handleClick}>${this.label}</button>`;
-  }
-}
-```
-
-**Build Commands**:
-```bash
-cd app-bana-ui
-npm install
-npm run dev      # Development server on http://localhost:5173
-npm run build    # Production build → src/main/resources/ui/dist/
-npm test         # Run Vitest tests
-```
-
----
-
-## Development Workflows
-
-### Quick Start Scripts (macOS/Linux)
-
-**Backend Restart** (ALWAYS USE THIS):
-```bash
-./restart-backend.sh
-```
-- Manages PostgreSQL Docker container (auto-starts if needed)
-- Stops running backend gracefully (via PID file)
-- Builds: `mvn clean package -DskipTests`
-- Starts backend with logging to `backend.log`
-- Saves PID to `backend.pid`
-
-**Frontend Dev Server**:
-```bash
-./run-ui.sh         # Start Vite dev server
-./run-ui.sh build   # Production build
-./run-ui.sh preview # Preview production build
-./run-ui.sh clean   # Clean node_modules and dist
-```
-- Auto-kills existing server on port 5173
-- Checks Node version (18.17+ required)
-- Installs dependencies if needed
-- **DO NOT manually kill Vite processes** - script handles it
-
-### Windows PowerShell Workflow
-
-**⚠️ CRITICAL PATTERN**:
 ```powershell
-# Terminal 1: Backend (continuous logs) - NEVER RUN COMMANDS HERE!
-.\start-backend.bat
-
-# Terminal 2: Commands and testing - ALWAYS USE THIS TERMINAL
-mvn clean compile
-Invoke-WebRequest -Uri "http://localhost:8080/apps"
+.\start-everything.bat
 ```
 
-**Why**: Running commands in Terminal 1 stops the backend server
+### What this script does (step-by-step):
 
-### Database Migration Workflow
+| Step | Action | Why |
+|------|--------|-----|
+| `[0/3]` | `Stop-Process -Name java -Force` AND `Stop-Process -Name node -Force` | **Kills ALL old Java + Node processes.** Without this, stale processes occupy ports 8080 and 8081 causing race conditions. |
+| `[1/3]` | Launches `start-ai-builder.bat` in a new window | Compiles `ai-builder` with Maven, connects to Qdrant on ports 6333/6334, binds port **8081** |
+| `[wait]` | Polls `netstat` for port 8081 in a loop | **Only when 8081 is confirmed open** does it proceed. This prevents the backend from starting before the AI engine is ready. |
+| `[2/3]` | Launches `app-bana-service` jar in a new window | Starts the core API on port **8080** |
+| `[3/3]` | Launches `npm run dev` in `app-bana-ui/` | Starts the Vite frontend on port **5173** |
 
-**Location**: `app-bana-service/src/main/resources/db/migration/`  
-**Convention**: `V{version}__{description}.sql`
+> [!CAUTION]
+> **NEVER** start services individually unless debugging a single module in isolation. Always use `.\start-everything.bat` to ensure correct port sequencing.
 
-**Current Migrations**:
-- V1: Auth schema (User/Role/Permission + seed data)
-- V2: Field-level security tables
-- V3-V5: System tables
-- V6: Workflow tables (definition, instance, token, history)
+### Service Ports Summary
 
-**Development Pattern**:
-```bash
-# Clean slate testing
-rm -f data/appbana.*          # Delete H2 database files
-./restart-backend.sh          # Rebuild + restart (Flyway auto-runs)
-```
+| Service | Port | URL |
+|---------|------|-----|
+| AI Builder | 8081 | http://localhost:8081/health |
+| Core API Backend | 8080 | http://localhost:8080/health |
+| Vite Frontend | 5173 | http://localhost:5173 |
+| Qdrant Vector DB | 6333 | http://localhost:6333/dashboard |
 
-**⚠️ Development Mode**: Flyway runs `.clean()` on startup (drops all objects)  
-**Production**: Disable `.clean()` in ConfigManager before deploying
-
-**Column Naming Convention**: Use `can_read`, `can_edit` (not `readable`, `editable`) to match Java getter conventions
+### After Changes to Java Code:
+Always restart with `.\start-everything.bat` to trigger Maven recompile and clean restart.
 
 ---
 
-## Key Architecture Patterns
+## 4. Key Configuration Files
 
-### 1. Metadata-Driven Entity-to-UI Flow
+### `config.json` (root directory)
+The single source of truth for all runtime configuration:
 
-**The Core Pattern**:
-```
-1. Define Entity → builder-database/03-entities.json (AI-readable)
-2. Create Schema → POST /schema (SchemaManager.saveSchema())
-3. Auto-create Table → Flyway migration or ALTER TABLE
-4. Generate APIs → GET/POST/PUT/DELETE /api/{entity}
-5. Render UI → PageMeta + ComponentNode tree → Lit components
-```
-
-**Critical Classes**:
-- `SchemaManager.java` - Schema lifecycle, DDL generation, migration planning
-- `JdbcManager.java` - Database abstraction, HikariCP pool management
-- `ApiServer.java` - HTTP routing, CRUD endpoint generation
-- `AppStore.ts` - Frontend global state (singleton, never instantiate)
-- `app-renderer.ts` - Runtime page renderer from metadata
-
-### 2. Builder Database Pattern (AI Intelligence)
-
-**Location**: `builder-database/*.json`
-
-**Purpose**: Machine-readable capability definitions that drive AI behavior
-
-**Key Files**:
-- `01-core-concepts.json` - Fundamental concepts
-- `02-components.json` - All UI components (19 types)
-- `11-intent-patterns.json` - AI intent classification rules
-- `99-capabilities-index.json` - Quick reference index
-
-**Pattern**: Metadata Intelligence Engine hot-reloads JSON without restart
-```java
-// MetadataIntelligenceEngine.java
-POST /api/meta-intelligence/reload    // Reload JSON files
-GET /api/meta-intelligence/classify?input=xxx  // Classify intent
-```
-
-**AI Builder Integration**:
-```typescript
-// AiChatBuilder.ts
-@customElement('ai-chat-builder')
-export class AiChatBuilder extends LitElement {
-  // Connects to AiAppGeneratorService.java
-  // Uses intent patterns from 11-intent-patterns.json
+```json
+{
+  "jdbcUrl": "jdbc:postgresql://localhost:5432/appbana",
+  "username": "appbana",
+  "password": "appbana_dev_2026",
+  "driver": "org.postgresql.Driver",
+  "name": "default",
+  "aiProvider": "openai",
+  "openaiApiKey": "YOUR_OPENAI_API_KEY_HERE",
+  "openaiModel": "gpt-4o-mini",
+  "anthropicApiKey": null,
+  "anthropicModel": "claude-3-5-sonnet-20241022",
+  "ollamaUrl": "http://localhost:11434",
+  "ollamaModel": "llama3.1",
+  "flywayCleanOnStart": false
 }
 ```
 
-### 3. Component Registration System
+> [!WARNING]
+> `flywayCleanOnStart: false` must stay `false` in dev. Setting it to `true` drops and recreates ALL database tables, destroying all user data.
 
-**Pattern**: Dynamic component registry for runtime extensibility
+### Database
+- **PostgreSQL 16** running locally
+- DB name: `appbana`
+- User: `appbana` / Password: `appbana_dev_2026`
+- Schema migrations managed by **Liquibase** (not Flyway) — changesets live in `app-bana-service/src/main/resources/db/changelog/`
 
-```typescript
-// core/registry.ts
-export const registry = {
-  register(type: string, componentClass: CustomElementConstructor): void,
-  get(type: string): CustomElementConstructor | undefined,
-  list(): string[]
-};
+---
 
-// Usage in components
-registry.register('my-button', MyButtonComponent);
+## 5. Architecture Deep Dive
+
+### Metadata-Driven Flow
+
+```
+User (natural language)
+        ↓
+  ai-builder (port 8081)
+  [AiAgent → Tools → scaffold_app]
+        ↓
+  app-bana-service (port 8080)
+  [SchemaManager creates table]
+  [GenericEntityRoutes auto-generates CRUD API]
+        ↓
+  app-bana-ui (port 5173)
+  [StudioTableLive renders table from schema metadata]
 ```
 
-**Fallback Component**:
-```typescript
-// components/UnknownElement.ts
-@customElement('unknown-element')
-export class UnknownElement extends LitElement {
-  // Renders when component type not found
-  // Shows placeholder with component type name
-}
+### Multi-Tenant Isolation
+Every app created in AppBana is completely isolated at the database level. The `SchemaManager` prefixes every table name:
+
+```
+Physical table name = app_{envPrefix}{tenantId}_{appId}_{entityName}
 ```
 
-### 4. Multi-Tenant Isolation Pattern
+**Example:**
+- `tenantId = default`
+- `appId = 7495460a-bc30-40e9-8235-9ddb08720b2a`
+- `entityName = Customer`
+- **Physical PostgreSQL table = `APP_DEFAULT_7495460A_BC30_40E9_8235_9DDB08720B2A_CUSTOMER`**
 
-**Key**: `TenantContext` ThreadLocal for request-scoped tenant isolation
-
-```java
-// model/TenantContext.java
-public class TenantContext {
-    private static final ThreadLocal<TenantContext> CONTEXT = new ThreadLocal<>();
-    
-    private final String tenantId;
-    private final String appId;
-    
-    public static void set(TenantContext context) {
-        CONTEXT.set(context);
-    }
-    
-    public static TenantContext get() {
-        return CONTEXT.get();
-    }
-    
-    public static void clear() {
-        CONTEXT.remove(); // ALWAYS cleanup in finally block
-    }
-}
+The schema key stored in `appbana_schemas` table also follows:
 ```
-
-**Usage Pattern** (in middleware/handlers):
-```java
-TenantContext.set(new TenantContext(tenantId, appId));
-try {
-    // All operations inherit tenant context
-    List<Map<String, Object>> data = crud.query(TenantContext.get(), entity, filters);
-} finally {
-    TenantContext.clear(); // Prevent thread pool pollution
-}
-```
-
-**Tenant-Aware Models**:
-- `AppMetadata.java` - Has `tenantId` field
-- `User.java` - Has `tenantId` field
-- `FieldPermission.java` - Scoped by tenant
-
-### 5. Workflow Engine Pattern
-
-**Location**: `app-bana-service/src/main/java/com/appbana/workflow/`
-
-**Tables** (Flyway V6):
-- `appbana_wf_definition` - Workflow templates
-- `appbana_wf_instance` - Running workflows
-- `appbana_wf_token` - Current execution state
-- `appbana_wf_history` - Audit trail
-
-**Key Classes**:
-- `WorkflowEngine.java` - State machine execution
-- `WorkflowService.java` - CRUD + publish
-- `WorkflowExecutionService.java` - Trigger + execute
-- `ExpressionEvaluator.java` - Condition evaluation
-
-**Trigger Pattern**:
-```java
-// Workflows trigger on entity creation events
-// PostOperationHooks integration
-POST /api/{entity} → trigger workflows → create tasks
+schema key = {tenantId}_{appId}_{entityName}
 ```
 
 ---
 
-## Java 21 Best Practices (ALWAYS USE)
+## 6. The AI Builder Engine (`ai-builder/`)
 
-### Modern Language Features
+### The Agent Loop (`AiAgent.java`)
 
-**Virtual Threads** (already implemented):
+The agent implements a **Think → Act → Observe** loop:
+
+1. **THINK**: `buildAgentPrompt()` constructs a rich prompt including:
+   - System instructions (`AdvancedPromptEngine.java`)
+   - Available tools (from `ToolRegistry`)
+   - Current execution context (appId, tenantId, userId)
+   - Conversation history (last 5 messages)
+   - Execution progress (tool results from prior iterations)
+   
+2. **ACT**: LLM returns a JSON response with either `tool_calls` or `final_answer`
+
+3. **OBSERVE**: Tool results are collected and fed back into next iteration
+
+### The Two Phases (CRITICAL WORKFLOW)
+
+The agent enforces a mandatory two-phase app creation process:
+
+**Phase 1 — Specification (TALK, no tools):**
+- User describes what they want ("I want a spice selling app")
+- Agent responds with plain English business description (NO technical terms)
+- Asks: "Does this match? Say **Yes, let's build it!** when ready"
+
+**Phase 2 — Execution (ACT, tools):**
+- User says "yes" / "build it" / "proceed"
+- Agent calls `scaffold_app` ONCE with the complete specification
+- **NEVER** use `create_entity` or `generate_page` individually for new apps
+
+### Important Agent Configuration
+
 ```java
-// ApiServer.java
-server.setExecutor(r -> Thread.ofVirtual().start(r));
-// Handles 10,000+ concurrent requests vs 200 with platform threads
+// AiAgent.java line ~119
+int effectiveMaxIterations = Math.min(config.getMaxIterations(), 5);
+```
+- Maximum 5 iterations per request (cost control)
+- If all tools fail in an iteration, agent logs a warning and retries once more
+
+### Tool Execution
+- **Sequential** (mandatory): `create_entity`, `generate_page`, `create_app`
+- **Parallel** (virtual threads): Everything else including `generate_mock_data`
+
+---
+
+## 7. Agent Tool System
+
+All tools live in `ai-builder/src/main/java/com/appbana/ai/agent/tool/` and implement the `Tool` interface.
+
+### Registered Tools (in `AiServer.java`)
+
+| Tool Name | Class | Purpose |
+|-----------|-------|---------|
+| `scaffold_app` | `ScaffoldAppTool` | **Primary tool** — Creates entire app (App + Entities + Pages) in one shot |
+| `create_app` | `CreateAppTool` | Creates just the app shell |
+| `create_entity` | `CreateEntityTool` | Creates a single entity/table |
+| `generate_page` | `GeneratePageTool` | Generates a UI page for an entity |
+| `list_apps` | `ListAppsTool` | Lists all apps for this tenant |
+| `list_entities` | `ListEntitiesTool` | Lists entities in an app |
+| `get_entity_details` | `GetEntityDetailsTool` | Gets schema fields for an entity |
+| `list_pages` | `ListPagesTool` | Lists pages in an app |
+| `generate_mock_data` | `GenerateMockDataTool` | Seeds database with AI-generated records |
+| `deploy_app` | `DeployAppTool` | Deploys/publishes an app |
+| `list_workflows` | `ListWorkflowsTool` | Lists automation workflows |
+| `search_knowledge` | `SearchKnowledgeTool` | Searches RAG knowledge base |
+| `batch_update_entities` | `BatchUpdateEntitiesTool` | Bulk updates entity schemas |
+
+### Creating a New Tool (Guidelines)
+
+1. Implement `Tool` interface with `getName()`, `getDescription()`, `getParameterSchema()`, `execute()`
+2. Register it in `AiServer.java` inside `toolRegistry.register(new MyTool(backendBaseUrl))`
+3. Add clear JSON schema for parameters — the LLM reads this to know how to call the tool
+4. Always handle `ConnectException` — the ai-builder and app-bana-service are separate processes
+5. Return `ToolResult.error(name, message)` on failure — never throw exceptions silently
+
+---
+
+## 8. Critical Rules — Multi-Tenant Entity Endpoints
+
+> [!CAUTION]
+> This is the #1 source of bugs. Read carefully.
+
+### ❌ WRONG (will return 404):
+```java
+String url = baseUrl + "/api/Customer/batch";
+String url = baseUrl + "/api/Spice/batch";
 ```
 
-**Records for Immutable DTOs**:
+### ✅ CORRECT (how `GenerateMockDataTool` does it):
 ```java
-// model/dto/UserDTO.java
-public record UserDTO(Long id, String email, String name) {
-    public static UserDTO fromUser(User user) {
-        return new UserDTO(user.getId(), user.getEmail(), user.getName());
-    }
-}
+String appId = context.appId();
+String tenantId = context.tenantId();
+
+String tenantPart = (tenantId != null && !tenantId.isEmpty()) ? tenantId : "default";
+String targetSchemaId = tenantPart + "_" + appId + "_" + entityName;
+
+String url = String.format("%s/api/%s/batch", baseUrl, targetSchemaId);
+// Result: http://localhost:8080/api/default_7495460a-bc30-40e9-8235-9ddb08720b2a_Customer/batch
 ```
 
-**Switch Expressions** (no fall-through):
-```java
-String url = switch (type) {
-    case "h2" -> { yield "jdbc:h2:file:./data/appbana"; }
-    case "postgres" -> { yield "jdbc:postgresql://localhost:5432/appbana"; }
-    case "mysql" -> { yield "jdbc:mysql://localhost:3306/appbana"; }
-    default -> null;
-};
+### Why this exists
+`SchemaManager.loadSchema()` looks up entities by key, not by raw name. The key **must** include the tenant and app prefix to uniquely identify it across multiple tenants/apps.
+
+---
+
+## 9. Backend API Reference
+
+### Studio (App Management)
+```
+GET    /appbana-studio/{tenantId}/apps              → List all apps
+GET    /appbana-studio/{tenantId}/apps/{appId}      → Get app with entities and pages
+POST   /appbana-studio/{tenantId}/apps              → Create new app
+PUT    /appbana-studio/{tenantId}/apps/{appId}      → Update app
+DELETE /appbana-studio/{tenantId}/apps/{appId}      → Delete app
 ```
 
-**Pattern Matching**:
-```java
-if (obj instanceof String s && s.length() > 5) {
-    // Use 's' directly
-}
+### Schema Management
+```
+GET    /schema                  → List schema names
+GET    /schema/{name}           → Get schema definition
+POST   /schema                  → Create/update schema (or preview with ?preview=true)
+DELETE /schema/{name}           → Delete schema
 ```
 
-**Text Blocks** (for SQL/JSON):
-```java
-String sql = """
-    SELECT u.id, u.email, r.name as role
-    FROM users u
-    JOIN roles r ON u.role_id = r.id
-    WHERE u.status = 'active'
-    """;
+### Dynamic Entity CRUD (auto-generated per schema)
+```
+GET    /api/{entity}            → Query (pagination, search, filters, projection, sort)
+GET    /api/{entity}/{id}       → Get single record
+POST   /api/{entity}            → Insert record
+POST   /api/{entity}/batch      → Insert multiple records (JSON array)
+PUT    /api/{entity}/{id}       → Update record
+DELETE /api/{entity}/{id}       → Delete record
 ```
 
-### Lombok vs Records Strategy
+**Remember:** `{entity}` must follow the multi-tenant format: `{tenantId}_{appId}_{entityName}`
 
-| Use Case | Tool | Reason |
-|----------|------|--------|
-| **Mutable entities** (User, Role, Permission) | Lombok `@Data` | Need setters, builders |
-| **Immutable DTOs** (UserDTO, API responses) | Java 21 `record` | Immutable, less code |
-| **Configuration** (AppConfig, DatasourceConfig) | Java 21 `record` | Immutable config |
+### Query Parameters
+```
+?limit=50&offset=0             → Pagination
+?search=John                   → Full-text search
+?name=John&status=active       → Field-level filters (AND logic)
+?name:like=%oh%                → Advanced filters (:like, :>, :<, :in)
+?_fields=name,email            → Column projection
+?_sort=name:asc,age:desc       → Sorting
+?_count=true                   → Count only
+```
 
-**Example**:
-```java
-// Mutable entity
-@Data
-public class User {
-    private Long id;
-    private String email;
-    private String tenantId;
-}
-
-// Immutable DTO
-public record UserDTO(Long id, String email) {
-    public static UserDTO fromUser(User user) { ... }
-}
+### AI Endpoints
+```
+POST   /api/ai/chat             → General chat
+POST   /api/ai/chat/agent       → Agent loop (full tool execution)
+GET    /api/ai/chat/history     → Conversation history
+GET    /api/ai/chat/sessions    → Past sessions
 ```
 
 ---
 
-## Frontend Patterns
+## 10. Frontend Architecture
 
-### Component Lifecycle
+### Technology Stack
+- **Framework**: LitElement (Web Components) + TypeScript
+- **Build**: Vite 5
+- **Testing**: Vitest + jsdom
 
+### Key Source Files
+
+| File | Purpose |
+|------|---------|
+| `src/runtime/renderer/StudioTableLive.ts` | Renders dynamic entity tables from schema metadata |
+| `src/builder/store/AppStore.ts` | Centralized state for apps and pages (REST-backed) |
+| `src/builder/components/AppManager.ts` | App lifecycle UI component |
+| `src/builder/components/PageManager.ts` | Page creation with 8 templates |
+| `src/main/AiChatBuilder.ts` | AI chat interface component |
+| `src/services/` | API client services |
+
+### StudioTableLive.ts — Critical Knowledge
+This is the live data table rendered in deployed apps. It relies on:
 ```typescript
-@customElement('my-component')
-export class MyComponent extends LitElement {
-  
-  // 1. Constructor (rarely used, prefer properties/state)
-  constructor() {
-    super();
-  }
-  
-  // 2. Connected to DOM
-  connectedCallback() {
-    super.connectedCallback();
-    // Subscribe to stores, add event listeners
-    appStore.subscribe(this.handleStoreChange);
-  }
-  
-  // 3. Disconnected from DOM
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    // Cleanup: unsubscribe, remove listeners
-    appStore.unsubscribe(this.handleStoreChange);
-  }
-  
-  // 4. After each render
-  updated(changedProperties: Map<string, any>) {
-    super.updated(changedProperties);
-    // React to property changes
-  }
-}
+// node.props.fields - comes from backend entity schema
+// node.props.entityName - the multi-tenant entity key
+// node.props.tableColumns - column definitions from schema
 ```
+**Rule:** If you modify how backend schemas are saved, you MUST verify that `StudioTableLive` still receives `fields` metadata correctly in `node.props.tableColumns`. Failing this will silently break data rendering.
 
-### State Management Pattern
-
-**Global State**: Use `AppStore.ts` singleton
-```typescript
-// WRONG: Never instantiate
-const store = new AppStore(); // ❌
-
-// CORRECT: Import singleton
-import { appStore } from '../store/AppStore';
-appStore.setCurrentApp('my-app'); // ✅
-```
-
-**Component State**:
-```typescript
-@state() private isLoading = false;  // Triggers re-render
-@property({ type: String }) label = '';  // Public API
-```
-
-### CSS Import Pattern
-
-**ALWAYS use `?inline` suffix**:
-```typescript
-import styles from './MyComponent.css?inline';
-
-static styles = css`${unsafeCSS(styles)}`;
-```
-
-**Type Declaration** (`vite-env.d.ts`):
-```typescript
-declare module '*.css?inline' {
-  const content: string;
-  export default content;
-}
-```
-
-### Metadata-Driven Rendering
-
-**Page Structure**:
-```typescript
-interface PageMeta {
-  id: string;
-  name: string;
-  rootId: string;  // MUST match root node ID in nodes array
-  nodes: ComponentNode[];
-}
-
-interface ComponentNode {
-  id: string;
-  type: string;  // Matches @customElement name
-  props?: Record<string, any>;
-  children?: string[];  // Array of node IDs (not objects!)
-}
-```
-
-**Renderer Pattern**:
-```typescript
-// runtime/renderer/Renderer.ts
-class Renderer {
-  render(pageMeta: PageMeta): HTMLElement {
-    const rootNode = pageMeta.nodes.find(n => n.id === pageMeta.rootId);
-    return this.renderNode(rootNode, pageMeta.nodes);
-  }
-  
-  private renderNode(node: ComponentNode, allNodes: ComponentNode[]): HTMLElement {
-    const ComponentClass = registry.get(node.type) || UnknownElement;
-    const element = new ComponentClass();
-    
-    // Set properties
-    Object.entries(node.props || {}).forEach(([key, value]) => {
-      element[key] = value;
-    });
-    
-    // Render children recursively
-    (node.children || []).forEach(childId => {
-      const childNode = allNodes.find(n => n.id === childId);
-      element.appendChild(this.renderNode(childNode, allNodes));
-    });
-    
-    return element;
-  }
-}
-```
+### Adding a New Field Type
+1. Add the SQL type mapping in `SchemaManager.sqlType()` (Java)
+2. Add the field renderer in `StudioTableLive.ts` (TypeScript)  
+3. Add the input component in the form handling code
 
 ---
 
-## Testing Patterns
+## 11. Database & Schema Management
 
-### Backend JUnit Tests
+### EntitySchema Field Types (valid values)
+```
+text        → VARCHAR(255)
+longtext    → TEXT
+number      → INTEGER
+decimal     → NUMERIC(19,4)     ← Use for money/prices, NOT "currency" or "float"
+boolean     → BOOLEAN
+date        → TIMESTAMP (date only)
+datetime    → TIMESTAMP
+email       → VARCHAR(255) with email validation
+phone       → VARCHAR(50)
+status      → VARCHAR(100) with options[]
+reference   → VARCHAR(255) referencing another entity
+```
 
-**Pattern**: JUnit 5 with `@BeforeEach` setup and `@Test` methods
+> [!WARNING]
+> Never use types like `money`, `currency`, `float`, or `string` in schemas. These are not mapped and will default to `VARCHAR(255)` silently.
 
+### Schema Validation Rules
+- Every entity MUST have at least one Primary Key field with `autoIncrement: true`
+- Field names must be snake_case (e.g., `first_name`, NOT `firstName`)
+- Relationship fields must include `referenceEntity` (e.g., `{"type": "reference", "referenceEntity": "Customer"}`)
+- Never use regex patterns for human name fields (names contain spaces, hyphens, etc.)
+
+### Migration Strategy
+AppBana uses **safe, non-destructive migrations**:
+- New fields → `ALTER TABLE ADD COLUMN`
+- Renamed fields → `ALTER TABLE RENAME COLUMN` (tracked via `existingName` property)
+- No production drops — data is preserved
+
+---
+
+## 12. Active Work & Known Issues
+
+### 🚧 In Progress: DialogueManager Integration (Story 3.1)
+**File**: `ai-builder/src/main/java/com/appbana/ai/dialogue/DialogueManager.java`
+
+**Goal**: Enforce strict conversation state transitions in `AiChatController` using a Java-level state machine instead of relying solely on LLM prompt engineering.
+
+**Planned States**:
 ```java
-class MyServiceTest {
-    private Connection testConnection;
-    private MyService service;
-    
-    @BeforeEach
-    void setUp() throws Exception {
-        // Setup H2 in-memory database
-        testConnection = DriverManager.getConnection("jdbc:h2:mem:test");
-        service = new MyService(testConnection);
-        
-        // Create test tables
-        try (Statement stmt = testConnection.createStatement()) {
-            stmt.execute("""
-                CREATE TABLE users (
-                    id BIGINT PRIMARY KEY,
-                    email VARCHAR(255),
-                    tenant_id VARCHAR(255)
-                )
-                """);
-        }
-    }
-    
-    @Test
-    void testSomething() {
-        // Test implementation
-        assertNotNull(service.doSomething());
-    }
-    
-    @AfterEach
-    void tearDown() throws Exception {
-        if (testConnection != null) {
-            testConnection.close();
-        }
-    }
-}
+INITIAL → GATHERING_INFO → CONFIRMING_DETAILS → CREATING → COMPLETED
 ```
 
-**Test Location**: `app-bana-service/src/test/java/com/appbana/`
+**Impact**: The `AiAgent.buildAgentPrompt()` will dynamically expose different tools based on the active `ConversationState` (e.g., only show `scaffold_app` when in `CREATING` state).
 
-**Run Tests**:
-```bash
-mvn test                           # All tests
-mvn test -Dtest=MyServiceTest     # Specific test
-mvn test -Dtest=*Service*         # Pattern match
+**Files to modify**:
+- `DialogueManager.java` — implement LLM-based intent classification
+- `AiChatController.java` — integrate state checks before delegating to `AiAgent`
+- `AiAgent.java` — inject state into `buildAgentPrompt()`
+
+### ✅ Recently Fixed
+- **Mock data 404 bug**: `GenerateMockDataTool` now correctly prefixes entity URLs with `tenantId_appId_`
+- **Boot race condition**: `start-everything.bat` now kills all stale Java/Node processes before starting
+- **Scaffold entity fields**: `ScaffoldAppTool` now propagates `entityFields` to `GeneratePageTool` for `tableProps`
+
+### ⚠️ Known Limitations
+- **Agent iteration limit**: Capped at 5 iterations per request. Complex multi-entity scaffolding may hit this limit.
+- **Semantic cache**: Enabled by default (`SemanticCache.java`). If you see stale LLM responses, disable it temporarily for debugging.
+- **Schema pluralization**: Entity names must be used exactly as saved — no auto-pluralization is applied.
+
+---
+
+## 13. Development Conventions
+
+### Java Code Style
+- **Java 21**: Use virtual threads, records, sealed classes, and switch expressions where appropriate
+- **Logging**: Always use `@Slf4j` (Lombok) — never `System.out.println`
+- **Error handling**: Catch specific exceptions, not bare `Exception`, except at controller boundaries
+- **Cross-service calls**: Always wrap HTTP calls in try-catch for `ConnectException` — the two Java services are on different ports
+
+### When Adding a Backend Feature
+1. Add route in appropriate `*Routes.java` file
+2. Implement service logic in `service/` or directly in service class
+3. Add integration test in `src/test/`
+4. Update `GenericEntityRoutes.java` only if it's a generic entity operation
+
+### When Adding an AI Tool
+1. Create `MyTool.java` in `ai-builder/.../agent/tool/`
+2. Register in `AiServer.java`: `toolRegistry.register(new MyTool(backendBaseUrl))`
+3. Keep tool descriptions concise — they go into the LLM context window
+4. Limit batch operations to **10-20 records max** (see `GenerateMockDataTool` for reference)
+
+### Commit Message Convention
 ```
-
-### Frontend Vitest Tests
-
-**Pattern**: Vitest with jsdom for DOM simulation
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { MyComponent } from './MyComponent';
-
-describe('MyComponent', () => {
-  let element: MyComponent;
-  
-  beforeEach(() => {
-    element = document.createElement('my-component') as MyComponent;
-    document.body.appendChild(element);
-  });
-  
-  it('renders correctly', async () => {
-    element.label = 'Test';
-    await element.updateComplete; // Wait for Lit render
-    
-    const button = element.shadowRoot?.querySelector('button');
-    expect(button?.textContent).toContain('Test');
-  });
-});
-```
-
-**Run Tests**:
-```bash
-cd app-bana-ui
-npm test              # Run all tests
-npm test -- --watch   # Watch mode
+feat: add GenerateMockDataTool for AI database seeding
+fix: correct multi-tenant URL prefix in GenerateMockDataTool
+chore: update copilot instructions with DialogueManager plans
 ```
 
 ---
 
-## Common Pitfalls & Solutions
+## 14. Common Pitfalls
 
-### 1. Backend Process Won't Stop (Windows)
-**Problem**: Old backend still running, port 8080 locked
-
-**Solution**:
-```powershell
-# Kill all Java processes
-Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force
-
-# Then rebuild
-mvn clean package -DskipTests
-```
-
-### 2. CORS Errors in Frontend
-**Problem**: Frontend (5173) can't call backend (8080)
-
-**Solution**: Verify `Router.java` includes CORS headers
-```java
-// api/Router.java
-res.header("Access-Control-Allow-Origin", "*");
-res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-res.header("Access-Control-Allow-Headers", "*");
-```
-
-### 3. Component Not Rendering
-**Problem**: Custom element shows as `<unknown-element>`
-
-**Solution**: Check registration
-```typescript
-// BEFORE using in PageMeta
-import { MyComponent } from './components/MyComponent';
-registry.register('my-component', MyComponent);
-
-// THEN in PageMeta
-{ type: 'my-component', props: { ... } }
-```
-
-### 4. TenantContext Leaking Between Requests
-**Problem**: Request sees wrong tenant data
-
-**Solution**: ALWAYS clear in finally block
-```java
-TenantContext.set(context);
-try {
-    // Do work
-} finally {
-    TenantContext.clear(); // Prevents thread pool pollution
-}
-```
-
-### 5. Flyway Migration Fails
-**Problem**: `V6__workflow_tables.sql` fails on restart
-
-**Solution**: Clean H2 database
-```bash
-rm -f data/appbana.*
-./restart-backend.sh
-```
-
-**Production**: Disable `.clean()` in ConfigManager:
-```java
-// ConfigManager.java
-// flyway.clean(); // Comment out in production
-flyway.migrate();
-```
-
-### 6. AppStore State Not Updating
-**Problem**: Changes to appStore don't trigger re-render
-
-**Solution**: Use reactive properties
-```typescript
-class MyComponent extends LitElement {
-  @state() private apps: AppMeta[] = [];
-  
-  connectedCallback() {
-    super.connectedCallback();
-    // Subscribe to store changes
-    appStore.subscribe(() => {
-      this.apps = appStore.listApps(); // Triggers re-render
-    });
-  }
-}
-```
+| Pitfall | Symptom | Fix |
+|---------|---------|-----|
+| Starting services individually | Port conflicts, wrong startup order | Always use `.\start-everything.bat` |
+| Using raw entity name in API URL | `404 {"error":"unknown entity"}` | Prefix with `{tenantId}_{appId}_` |
+| Using wrong field type in schema | Silent type mismatch / VARCHAR fallback | Only use types in the approved list (Section 11) |
+| Modifying `ApiServer.java` directly | Boot failures | It's a thin wrapper — delegate logic to `*Routes.java` |
+| Not restarting after Java changes | Old code runs silently | Always restart with `.\start-everything.bat` |
+| Adding `regex` pattern to name fields | Validation failures for normal names | Set `pattern: null` for human-readable name fields |
+| Calling `create_entity` for new apps | Mismatched entities without pages | Use `scaffold_app` — it creates App + Entities + Pages atomically |
+| LLM returns old cached response | Debugging frustration | Disable `SemanticCache` or call `semanticCache.clear()` |
 
 ---
 
-## Critical File Reference
-
-### Backend Core
-| File | Purpose | Key Methods |
-|------|---------|-------------|
-| `Main.java` | Entry point | `main()` - starts server |
-| `ApiServer.java` | HTTP routing | `startJdk()`, `buildRouter()` |
-| `SchemaManager.java` | Schema lifecycle | `saveSchema()`, `generateMigrationPlan()` |
-| `JdbcManager.java` | Database ops | `getConnection()`, `execute()` |
-| `AppManager.java` | App CRUD | `createApp()`, `loadApp()` |
-| `TenantContext.java` | Multi-tenant | `set()`, `get()`, `clear()` |
-| `WorkflowEngine.java` | Workflow execution | `execute()`, `evaluateCondition()` |
-| `PermissionService.java` | Field-level security | `filterFields()`, `canRead()` |
-
-### Frontend Core
-| File | Purpose | Key Components |
-|------|---------|----------------|
-| `index.ts` | Main entry | Router, app initialization |
-| `studio-entry.ts` | Studio entry | Builder initialization |
-| `AppStore.ts` | Global state | `appStore` singleton |
-| `app-renderer.ts` | Page renderer | `renderPage()` |
-| `core/registry.ts` | Component registry | `register()`, `get()` |
-| `AiChatBuilder.ts` | AI interface | Chat, intent classification |
-| `PageManager.ts` | Page management | Create, edit, template selection |
-
-### Configuration & Data
-| File | Purpose | Content |
-|------|---------|---------|
-| `config.json` | Server config | Port, datasources, HTTPS |
-| `builder-database/02-components.json` | Component definitions | 19 UI components |
-| `builder-database/11-intent-patterns.json` | AI intent rules | Classification patterns |
-| `builder-database/99-capabilities-index.json` | Capability index | Quick reference |
-| `V1__auth_schema.sql` | Auth migration | Users, roles, permissions |
-| `V6__workflow_tables.sql` | Workflow migration | Definition, instance, token, history |
-
----
-
-## 📚 Essential Documentation References
-
-**ALWAYS refer to these docs when working on related features:**
-
-### Core Architecture & Development
-- **[docs/01-ARCHITECTURE.md](../docs/01-ARCHITECTURE.md)** - System architecture, metadata-driven flow, tech stack
-- **[docs/02-DEVELOPMENT_GUIDE.md](../docs/02-DEVELOPMENT_GUIDE.md)** - Setup, build, run, troubleshooting
-- **[docs/03-ROADMAP.md](../docs/03-ROADMAP.md)** - Product roadmap, Q4 2025 delivery phases
-- **[docs/04-USER_MANUAL.md](../docs/04-USER_MANUAL.md)** - User guide for app builders
-
-### Strategic Planning
-- **[docs/STRATEGIC_PLAN_SUMMARY.md](../docs/STRATEGIC_PLAN_SUMMARY.md)** - 5-minute executive summary (5 critical gaps, ROI)
-- **[docs/STRATEGIC_PLAN_FINAL.md](../docs/STRATEGIC_PLAN_FINAL.md)** - Complete strategic analysis (read for UX decisions)
-
-### Security & Authentication
-- **[docs/AUTH_RBAC_DESIGN.md](../docs/AUTH_RBAC_DESIGN.md)** - RBAC architecture (User/Role/Permission model)
-- **[docs/AUTH_PHASE1_IMPLEMENTATION.md](../docs/AUTH_PHASE1_IMPLEMENTATION.md)** - 6-week auth implementation roadmap
-- **[docs/SECURITY_FEATURES.md](../docs/SECURITY_FEATURES.md)** - ✅ Complete Security Suite Guide (Production Ready)
-  - Password Security, CSRF Protection, Session Management, Rate Limiting, Field-Level Security
-  - Middleware Pipeline, Frontend Integration, API Reference
-  - 156/156 tests passing (100% coverage)
-  - **Reference this for ANY security feature implementation including FLS**
-
-### Workflow Automation
-- **[docs/specs/WORKFLOW.md](../docs/specs/WORKFLOW.md)** - Complete workflow architecture (2200+ lines)
-  - Task types, versioning, maker-checker patterns
-  - **Reference this for ANY workflow-related work**
-
-### AI & Technical Reference
-- **[docs/specs/AI_BUILDER.md](../docs/specs/AI_BUILDER.md)** - AI builder architecture, intent classification
-- **[docs/JAVA21_QUICK_REFERENCE.md](../docs/JAVA21_QUICK_REFERENCE.md)** - Java 21 features (virtual threads, records, etc.)
-
-### Complete Documentation Index
-- **[docs/README.md](../docs/README.md)** - Complete navigation hub with role-based guides
-
-**Documentation Status (December 30, 2025)**:
-- ✅ Consolidated from 70+ files to 15 essential docs
-- ✅ Security suite fully documented (SECURITY_FEATURES.md)
-- ✅ Builder database updated with security APIs
-- ✅ Zero duplicate content
-- ✅ Clear hierarchy by domain
-- ✅ Role-based navigation in README
-
----
-
-## Quick Commands Reference
-
-### Backend (macOS/Linux)
-```bash
-# Start/restart backend (PREFERRED METHOD)
-./restart-backend.sh
-
-# View logs
-tail -f backend.log
-
-# Stop backend
-kill $(cat backend.pid)
-
-# Clean database and restart
-rm -f data/appbana.* && ./restart-backend.sh
-
-# Run tests
-cd app-bana-service
-mvn test
-mvn test -Dtest=PermissionServiceTest
-```
-
-### Backend (Windows PowerShell)
-```powershell
-# Start backend
-.\start-backend.bat
-
-# Kill stuck processes
-Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force
-
-# Port check
-Get-NetTCPConnection -LocalPort 8080 -State Listen
-
-# Test API
-Invoke-WebRequest -Uri "http://localhost:8080/apps" | Select-Object StatusCode
-
-# Pretty JSON response
-(Invoke-WebRequest -Uri "http://localhost:8080/apps").Content | ConvertFrom-Json | ConvertTo-Json -Depth 5
-```
-
-### Frontend
-```bash
-cd app-bana-ui
-
-# Start dev server (PREFERRED METHOD)
-./run-ui.sh              # macOS/Linux
-npm run dev              # Windows or direct
-
-# Build for production
-npm run build
-
-# Run tests
-npm test
-npm test -- --watch      # Watch mode
-```
-
-### Maven Build
-```bash
-# Full build (from project root)
-mvn clean package -DskipTests
-
-# Skip UI build (backend only)
-cd app-bana-service
-mvn clean package -DskipTests
-
-# With tests
-mvn clean verify
-```
-
-### Docker (PostgreSQL)
-```bash
-# Status check
-docker ps | grep appbana-postgres
-
-# View logs
-docker logs appbana-postgres
-
-# Stop container
-docker stop appbana-postgres
-
-# Remove container (caution: deletes data)
-docker rm appbana-postgres
-
-# Remove volume (caution: permanent data loss)
-docker volume rm appbana-postgres-data
-```
-
-### API Testing
-```bash
-# Health check
-curl http://localhost:8080/health
-
-# List apps
-curl http://localhost:8080/apps
-
-# Create schema
-curl -X POST http://localhost:8080/schema \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"person","fields":[{"name":"id","type":"long","primaryKey":true}]}'
-
-# Query entity
-curl "http://localhost:8080/api/person?limit=10"
-```
-
----
-
-**Last Updated**: January 5, 2026  
-**Documentation Status**: Major cleanup completed - removed 35+ duplicate/outdated files  
-**Current Sprint**: Multi-Tenant Architecture (runtime-publish branch)  
-**Next Sprint**: Workflow Phase 2 (SLA, timeouts, parallel execution) + Tenant URL isolation
+*Last updated: April 2026 | Maintained by: AppBana Development Team*
+*For session history and task tracking, see `docs/ACTIVE_TASKS.md` and `docs/session_summary.md`*
