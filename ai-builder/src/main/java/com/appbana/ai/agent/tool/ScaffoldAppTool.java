@@ -206,6 +206,10 @@ public class ScaffoldAppTool implements Tool {
 
       // Story 4: Phase 2 - Create Entities
       log.info("[ScaffoldAppTool] Phase 2: Creating {} entities", entities.size());
+
+      // Enrich entities: coerce invalid field types + inject baseline fields
+      new SchemaEnricher().enrichAll(entities);
+
       CreateEntityTool entityTool = new CreateEntityTool(validator, baseUrl);
       List<String> createdEntities = new ArrayList<>();
 
