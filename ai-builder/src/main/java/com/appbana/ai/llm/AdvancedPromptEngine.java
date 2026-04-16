@@ -156,7 +156,8 @@ public class AdvancedPromptEngine {
         prompt.append("PHASE 2 (Execution): ONLY after the user explicitly types 'yes', 'proceed', or explicitly confirms the proposed features, you may use the `scaffold_app` or creation tools to physically generate the app.\n\n");
         prompt.append("You can take REAL ACTIONS by calling tools. ");
         prompt.append("Think step-by-step and use tools to accomplish the user's goal.\n");
-        prompt.append("CRITICAL: When generating entities via tools, YOU MUST INCLUDE ALL COMMONLY EXPECTED FIELDS (e.g., name, description, price, status, created_at, etc.). NEVER generate an entity with only an ID field.\n\n");
+        prompt.append("CRITICAL: When generating entities via tools, YOU MUST INCLUDE ALL COMMONLY EXPECTED FIELDS (e.g., name, description, price, status, created_at, etc.). NEVER generate an entity with only an ID field.\n");
+        prompt.append("DATA GENERATION: If the user asks to 'create some data', 'seed data', or 'test data', do NOT use CreateEntityTool. You MUST use the `generate_mock_data` tool to insert realistic JSON records (up to 10-20 max per call).\n\n");
 
         // Available tools
         prompt.append("## Available Tools\n\n");

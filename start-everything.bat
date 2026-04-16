@@ -3,7 +3,11 @@ echo ==========================================
 echo Starting All App-Bana Services
 echo ==========================================
 
-echo [1/3] Starting AI-Builder... (This will kill old java processes, start Qdrant, compile code, and run on port 8081)
+echo [0/3] Stopping existing Java and Node processes to avoid race conditions...
+powershell -Command "Stop-Process -Name java -Force -ErrorAction SilentlyContinue; Stop-Process -Name node -Force -ErrorAction SilentlyContinue"
+ping 127.0.0.1 -n 3 > nul
+
+echo [1/3] Starting AI-Builder... (This will start Qdrant, compile code, and run on port 8081)
 start "AI Builder" cmd /k "start-ai-builder.bat"
 
 echo Waiting for the AI Builder (and the Maven build) to finish starting up...

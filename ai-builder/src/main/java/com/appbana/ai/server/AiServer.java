@@ -170,9 +170,9 @@ public class AiServer {
             toolRegistry.register(new GeneratePageTool(metadataValidator, backendUrl));
             toolRegistry.register(new DeployAppTool(backendUrl));
             toolRegistry.register(new SearchKnowledgeTool(knowledgeBaseService));
-            
             // Cost Optimization: Compound tools for batch operations (Phase 2)
             toolRegistry.register(new BatchUpdateEntitiesTool(metadataValidator, backendUrl));
+            toolRegistry.register(new GenerateMockDataTool(backendUrl));
 
             log.info("Registered {} tools", toolRegistry.getToolCount());
 
