@@ -7,6 +7,7 @@ import com.appbana.ai.agent.tool.ToolResult;
 import com.appbana.ai.agent.BatchedToolExecutor;
 import com.appbana.ai.agent.PatternExecutor;
 import com.appbana.ai.cache.SemanticCache;
+import com.appbana.ai.dialogue.ConversationSpec;
 import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.rag.ConversationMemory;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -516,6 +517,22 @@ public class AiAgent {
                 String.format("- **App ID**: %s\n", context.appId() != null ? context.appId() : "(none selected)"));
         prompt.append(String.format("- **User ID**: %s\n", context.userId()));
         prompt.append("\n");
+
+        // 0b. Spec Coverage Tracker — dynamic checklist of what's been discussed
+        if (context.hasVariable("chat_history")) {
+            try {
+                @SuppressWarnings("unchecked")
+                List<ConversationMemory.Conversation> specHistory =
+                        (List<ConversationMemory.Conversation>) context.getVariable("chat_history");
+                ConversationSpec spec = ConversationSpec.analyse(specHistory, userMessage);
+                String snippet = spec.toPromptSnippet();
+                if (!snippet.isEmpty()) {
+                    prompt.append(snippet);
+                }
+            } catch (Exception e) {
+                log.warn("[AGENT] Failed to build spec coverage tracker: {}", e.getMessage());
+            }
+        }
 
         // 1. User Request (The Goal)
         prompt.append("## ORIGINAL USER REQUEST\n\n");
