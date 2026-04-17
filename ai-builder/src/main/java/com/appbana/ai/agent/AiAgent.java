@@ -235,10 +235,17 @@ public class AiAgent {
                 }
             }
 
-            // Call LLM if not cached - with task-type routing for cost optimization
+            // Call LLM if not cached - with JSON mode to guarantee valid JSON output
             if (llmResponse == null) {
-                // Use "agent_think" task type for intelligent model selection
-                llmResponse = llmService.chat(prompt, "agent_think");
+                // Use chatWithJsonMode to enforce valid JSON (prevents parse failures)
+                // Falls back to regular chat if JSON mode call fails (e.g. unsupported model)
+                try {
+                    llmResponse = llmService.chatWithJsonMode(prompt);
+                    log.debug("[AGENT] LLM responded via JSON mode");
+                } catch (Exception jsonModeEx) {
+                    log.warn("[AGENT] JSON mode unavailable ({}), falling back to standard chat", jsonModeEx.getMessage());
+                    llmResponse = llmService.chat(prompt, "agent_think");
+                }
                 
                 // Store in cache for future similar requests
                 if (semanticCacheEnabled) {
