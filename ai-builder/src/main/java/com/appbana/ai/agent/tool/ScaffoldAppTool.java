@@ -306,20 +306,23 @@ public class ScaffoldAppTool implements Tool {
       log.info("[ScaffoldAppTool]   Test URL: {}", testUrl);
       log.info("[ScaffoldAppTool] ═══════════════════════════════════════════════════════");
 
+      long executionTime = System.currentTimeMillis() - startTime;
+      
       // Story 6: Consolidated Summary
-      Map<String, Object> result = new HashMap<>();
-      result.put("status", "deployed");
-      result.put("appId", createdAppId);
-      result.put("appName", appName);
-      result.put("entitiesCreated", createdEntities);
-      result.put("pagesCreated", createdPages);
-      result.put("testUrl", testUrl);
-      result.put("summary", String.format(
-          "✅ Successfully created '%s' with %d entities and %d pages. App is now deployed.",
+      Map<String, Object> resultData = new HashMap<>();
+      resultData.put("status", "deployed");
+      resultData.put("appId", createdAppId);
+      resultData.put("appName", appName);
+      resultData.put("entitiesCreated", createdEntities);
+      resultData.put("pagesCreated", createdPages);
+      resultData.put("testUrl", testUrl);
+      
+      // Neutral summary allows the LLM to decide if it was a 'build' or 'update' based on context (Story 3.2 logic)
+      resultData.put("summary", String.format(
+          "Successfully processed '%s' with %d entities and %d pages. App is now deployed.",
           appName, createdEntities.size(), createdPages.size()));
 
-      long executionTime = System.currentTimeMillis() - startTime;
-      return ToolResult.success(getName(), result, executionTime);
+      return ToolResult.success(getName(), resultData, executionTime);
 
     } catch (Exception e) {
       log.error("[ScaffoldAppTool] Execution failed", e);

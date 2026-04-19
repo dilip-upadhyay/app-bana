@@ -129,39 +129,7 @@ public class AiChatController {
 
         // === DECISION TREE: RAG-First Cost Optimization ===
 
-        // Stage 1: Try RAG-only answer (zero LLM cost)
-        if (directAnswerService != null) {
-            Optional<DirectAnswerService.DirectAnswer> directAnswer = directAnswerService
-                    .tryDirectAnswer(chatRequest.getMessage());
-
-            if (directAnswer.isPresent()) {
-                log.info("[RAG-FIRST] Direct answer provided (0 LLM cost)");
-
-                // Save to conversation history using the store() method
-                if (conversationMemory != null) {
-                    try {
-                        ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
-                        conv.setSessionId(UUID.fromString(sessionId));
-                        conv.setUserId(userId);
-                        conv.setMessage(chatRequest.getMessage());
-                        conv.setResponse(directAnswer.get().getAnswer());
-                        conv.setIntent("rag_direct");
-                        conversationMemory.store(conv);
-                    } catch (Exception e) {
-                        log.warn("Failed to save direct answer to history: {}", e.getMessage());
-                    }
-                }
-
-                res.json(200, Map.of(
-                        "response", directAnswer.get().getAnswer(),
-                        "source", "rag_direct",
-                        "schemasUsed", directAnswer.get().getSchemasUsed(),
-                        "llmCost", 0.0));
-                return;
-            }
-        }
-
-        // Stage 2: Try pattern-based execution (minimal LLM cost)
+        // Stage 1: Try pattern-based execution (minimal LLM cost)
         if (patternExecutor != null) {
             Optional<PatternExecutor.PatternExecutionResult> patternResult = patternExecutor
                     .tryPatternExecution(chatRequest.getMessage(), userId);

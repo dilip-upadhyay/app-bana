@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -137,6 +138,7 @@ public class AiAgent {
 
             // Agent loop
             int consecutiveFailures = 0;
+            Set<String> failedSignatures = new HashSet<>(); // Story 3.2: track repeating failures
             for (int iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
                 log.info("[AGENT] === Iteration {} / {} ===", iteration, effectiveMaxIterations);
 
@@ -183,7 +185,26 @@ public class AiAgent {
 
                     // Add results to step
                     boolean allToolsFailed = true;
-                    for (ToolResult result : results) {
+                    for (int i = 0; i < results.size(); i++) {
+                        ToolResult result = results.get(i);
+                        
+                        // Story 3.2: Loop Detection & Hard Guard
+                        // Check if this specific tool call (name + args) has failed before.
+                        String signature = result.getToolName() + ":" + result.getArguments();
+                        if (!result.isSuccess()) {
+                            if (failedSignatures.contains(signature)) {
+                                // LLM is repeating a failed call! Inject a Hard Guard warning.
+                                log.warn("[AGENT] REPETITION DETECTED for tool: {}. Injecting Hard Guard.", result.getToolName());
+                                result.setError("CRITICAL: You are repeating a previously failed call. REFRAIN from retrying this exact request. " +
+                                               "Analyze the error below and try a different approach (check names, check exists) or ask the user for clarification.\n\n" +
+                                               "Error: " + result.getError());
+                            }
+                            failedSignatures.add(signature);
+                        } else {
+                            // If it succeeded, remove it from failed signatures (case where user fixed data manually)
+                            failedSignatures.remove(signature);
+                        }
+
                         step.addToolResult(result);
                         log.info("[AGENT] {}", result.getSummary());
                         if (result.isSuccess()) {
@@ -191,20 +212,20 @@ public class AiAgent {
                         }
                     }
 
-                    // Abort early after 2 consecutive all-tools-failed iterations to avoid
+                    // Abort early after 3 consecutive all-tools-failed iterations to avoid
                     // burning the remaining budget on the same unrecoverable error.
                     if (allToolsFailed) {
                         consecutiveFailures++;
                         log.warn("[AGENT] All tools failed in iteration {} (consecutive failures: {}).",
                                 iteration, consecutiveFailures);
-                        if (consecutiveFailures >= 2) {
+                        if (consecutiveFailures >= 3) {
                             log.warn("[AGENT] Aborting early after {} consecutive tool failures to save cost.",
                                     consecutiveFailures);
                             steps.add(step);
                             return AgentResponse.error(
-                                    "I was unable to complete your request after multiple attempts. " +
-                                    "The last error was: " + results.get(0).getError() + 
-                                    ". Please check the app exists and try rephrasing your request.",
+                                    "I'm stuck and unable to complete this request after multiple failed attempts. " +
+                                    "The main issue seems to be: " + results.get(0).getError() + 
+                                    ". Please try rephrasing or checking that the application/entities exist.",
                                     steps,
                                     System.currentTimeMillis() - startTime);
                         }
@@ -373,14 +394,23 @@ public class AiAgent {
                             return ToolResult.error(call.getName(), "Tool not found: " + call.getName());
                         }
 
+                        String argsJson = "";
+                        try {
+                            argsJson = objectMapper.writeValueAsString(call.getArguments());
+                        } catch (Exception e2) {
+                            argsJson = call.getArguments().toString();
+                        }
+
                         ToolResult result = tool.execute(call.getArguments(), context);
                         result.setExecutionTimeMs(System.currentTimeMillis() - startTime);
                         result.setToolName(call.getName());
+                        result.setArguments(argsJson); // Required for Story 3.2
                         return result;
 
                     } catch (Exception e) {
                         log.error("[AGENT] Tool execution failed: " + call.getName(), e);
-                        return ToolResult.error(call.getName(), "Execution error: " + e.getMessage());
+                        String args = (call.getArguments() != null) ? call.getArguments().toString() : "";
+                        return ToolResult.error(call.getName(), "Execution error: " + e.getMessage(), args);
                     }
                 });
             }
@@ -510,6 +540,11 @@ public class AiAgent {
                         - During Phase 1 Specification: Warm, friendly, and non-technical. You are a helpful business consultant.
                         - During Phase 2 Execution: Precise, expert, and efficient. You are a senior engineer.
                         - Always be encouraging. Make the user feel confident about what they're building.
+
+                        ## SUCCESS MESSAGE PHRASING (CRITICAL)
+                        When providing your `final_answer` after successful tool execution:
+                        1. **MODIFICATION / UPDATE**: If an `appId` was already present in the "CURRENT EXECUTION CONTEXT" below, you are MODifying an existing app. You MUST use words like "updated", "enhanced", or "modified". NEVER say "built and deployed" for an existing app.
+                        2. **NEW BUILD**: If the `appId` was "(none selected)" or you just created a brand new app, you MUST use words like "built and deployed" or "created".
                         """);
 
         // Available tools — filtered by conversation state to prevent the LLM from
@@ -548,6 +583,14 @@ public class AiAgent {
         prompt.append("```\n\n");
         prompt.append(
                 "IMPORTANT: Do NOT output raw text. ALWAYS use JSON. Verification step: Did you include `tool_calls` OR `final_answer`? One is REQUIRED.\n\n");
+
+        // Story 3.2: Iteration Threshold Warnings
+        if (history != null && history.size() >= 7) {
+            prompt.append("ALERT: Budget Warning\n");
+            prompt.append("You are on step ").append(history.size() + 1).append(" of ").append(config.getMaxIterations()).append(". ");
+            prompt.append("You MUST either complete the request in the next few steps OR ask the user for missing info. ");
+            prompt.append("Do NOT enter a repetition loop.\n\n");
+        }
 
         // 0. Current Context (CRITICAL for Context-Aware Rules)
         prompt.append("## CURRENT EXECUTION CONTEXT\n");
