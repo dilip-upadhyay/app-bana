@@ -1,6 +1,7 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/AppStore';
+import { AuthService } from '../../pages/auth/auth-service';
 import type { PageMeta } from '../../models/metadata';
 import styles from './BuilderShell.css?inline';
 import './LivePreview';
@@ -18,6 +19,8 @@ export class BuilderShell extends LitElement {
 
   @state() private activeLeftTab = 'ai-builder' as 'components' | 'entities' | 'workflow' | 'ai-builder';
   @state() private leftPanelWidth = 300; // Default width in pixels
+  @state() private currentAppId: string | null = null;
+  @state() private currentTenantId: string | null = null;
   private isResizing = false;
   private startX = 0;
   private startWidth = 0;
@@ -62,6 +65,11 @@ export class BuilderShell extends LitElement {
   private checkActiveApp() {
     const app = appStore.getCurrentApp();
     this.hasActiveApp = !!app;
+    this.currentAppId = app?.id ?? null;
+
+    // Resolve tenantId from AuthService
+    const user = AuthService.getUser();
+    this.currentTenantId = user?.tenantId ?? null;
 
     // If we're on workflow tab but lost the active app, switch to components
     if (this.activeLeftTab === 'workflow' && !this.hasActiveApp) {
@@ -150,6 +158,51 @@ export class BuilderShell extends LitElement {
     return html`<appbana-component-library></appbana-component-library>`;
   }
 
+  /** Returns the URL the iframe should embed, or null if not determinable */
+  private getLiveAppUrl(): string | null {
+    if (!this.currentAppId || !this.currentTenantId) return null;
+    const base = (import.meta as any).env?.VITE_API_BASE_URL ?? 'http://localhost:8080';
+    return `${base}/appbana-studio/${this.currentTenantId}/apps/${this.currentAppId}/live`;
+  }
+
+  /** Center panel content — iframe in AI mode, live preview otherwise */
+  private renderCenterPanel() {
+    if (this.activeLeftTab !== 'ai-builder') {
+      return html`<appbana-live-preview></appbana-live-preview>`;
+    }
+
+    const url = this.getLiveAppUrl();
+    if (!url) {
+      return html`
+        <div class="live-preview-placeholder">
+          <div class="placeholder-icon">🚀</div>
+          <h3>Live App Preview</h3>
+          <p>Build or select an app with the AI Agent on the left,<br>and your running app will appear here.</p>
+        </div>
+      `;
+    }
+
+    return html`
+      <div class="live-app-frame-wrapper">
+        <div class="live-app-toolbar">
+          <span class="live-dot"></span>
+          <span class="live-label">Live App</span>
+          <a class="live-open-link" href=${url} target="_blank" title="Open in new tab">↗ Open</a>
+          <button class="live-refresh-btn" @click=${() => {
+            const frame = this.shadowRoot?.querySelector('.live-app-frame') as HTMLIFrameElement;
+            if (frame) frame.src = frame.src;
+          }} title="Refresh">⟳</button>
+        </div>
+        <iframe
+          class="live-app-frame"
+          src=${url}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          allow="fullscreen"
+        ></iframe>
+      </div>
+    `;
+  }
+
   render() {
     // Set CSS custom property for dynamic width
     this.style.setProperty('--left-panel-width', `${this.leftPanelWidth}px`);
@@ -231,15 +284,17 @@ export class BuilderShell extends LitElement {
           ></div>
         </div>
 
-        <!-- Center: Live Preview (WYSIWYG Canvas) -->
-        <div class="center-panel">
-          <appbana-live-preview></appbana-live-preview>
+        <!-- Center: Live Preview or Embedded Live App (AI mode) -->
+        <div class="center-panel ${this.activeLeftTab === 'ai-builder' ? 'ai-mode' : ''}">
+          ${this.renderCenterPanel()}
         </div>
 
-        <!-- Right: Properties Panel -->
-        <div class="right-panel">
-          <appbana-properties-panel></appbana-properties-panel>
-        </div>
+        <!-- Right: Properties Panel (hidden in AI Agent mode) -->
+        ${this.activeLeftTab !== 'ai-builder' ? html`
+          <div class="right-panel">
+            <appbana-properties-panel></appbana-properties-panel>
+          </div>
+        ` : ''}
       </div>
     `;
   }
