@@ -23,15 +23,29 @@ public class DirectAnswerService {
             "available", "supported",
             "can i", "does it", "explain", "tell me about");
 
-    // Commands that look like "list|show" but target the user's OWN data — must
-    // reach the agent/tools, never the RAG knowledge shortcut.
+    // Commands that look like "list|show|what" but target the user's OWN data —
+    // must reach the agent/tools, never the RAG knowledge shortcut.
+    // Rule of thumb: if the question mentions a specific app context or the user's
+    // data (entities, pages, features) it MUST go to the agent.
     private static final Set<String> PERSONAL_DATA_SIGNALS = Set.of(
+            // Possessive — clearly the user's own data
             "my apps", "my app", "my entities", "my entity",
             "my pages", "my page", "my workflows", "my workflow",
+            "my features", "my feature",
+            // List / show commands pointing at real data
             "list apps", "list all apps", "list all",
             "show apps", "show all apps", "show all",
             "show me my", "show me the", "list me",
-            "the apps", "the entities", "the pages");
+            "the apps", "the entities", "the pages",
+            // "in the app" / "in my app" — question is about a specific app
+            "in the app", "in my app", "in the application",
+            // "what feature/entities/pages" scoped to user's app
+            "what feature", "what features", "what entities", "what pages",
+            "what modules", "what fields", "what section",
+            // "feature" + context implies user's app, not platform docs
+            "feature in", "features in", "entities in", "pages in",
+            // Generic 'the app' references
+            "the app ", "in app ");
 
     public DirectAnswerService(KnowledgeBaseService knowledgeBase) {
         this.knowledgeBase = knowledgeBase;
@@ -92,18 +106,17 @@ public class DirectAnswerService {
             return false;
         }
 
-        // Check for knowledge patterns
+        // Check for keyword-based knowledge patterns (platform documentation questions)
         for (String pattern : KNOWLEDGE_PATTERNS) {
             if (lower.contains(pattern)) {
                 return true;
             }
         }
 
-        // Check for question words at start
-        if (lower.startsWith("what") || lower.startsWith("how") ||
-                lower.startsWith("which")) {
-            return true;
-        }
+        // REMOVED: blanket startsWith("what") / startsWith("how") catch-alls.
+        // Those were too broad and caused "What features do we have in the app X?"
+        // to be served RAG platform docs instead of calling the list_entities tool.
+        // Only the explicit KNOWLEDGE_PATTERNS above qualify now.
 
         return false;
     }
