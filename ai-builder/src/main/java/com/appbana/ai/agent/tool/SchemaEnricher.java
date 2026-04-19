@@ -162,13 +162,73 @@ public class SchemaEnricher {
     }
 
     /**
-     * Enriches all entities in the list.
+     * Step 1c — if a field has type=reference but is missing referenceEntity,
+     * try to infer it from the field name by matching against the known entity names.
+     *
+     * @param fields       mutable list of field maps for one entity
+     * @param entityName   name of the owning entity (for log messages)
+     * @param knownEntities set of entity names declared in this scaffold run
+     */
+    @SuppressWarnings("unchecked")
+    private void inferMissingReferenceEntities(
+            List<Map<String, Object>> fields,
+            String entityName,
+            Set<String> knownEntities) {
+
+        for (Map<String, Object> field : fields) {
+            if (!"reference".equals(field.get(F_TYPE))) continue;
+            if (field.get("referenceEntity") != null) continue; // already set
+
+            // Try to match field name/label against known entity names
+            String fieldName  = String.valueOf(field.getOrDefault(F_NAME,  "")).toLowerCase();
+            String fieldLabel = String.valueOf(field.getOrDefault(F_LABEL, "")).toLowerCase();
+
+            String matched = null;
+            for (String candidate : knownEntities) {
+                String candidateLower = candidate.toLowerCase();
+                if (fieldName.contains(candidateLower) || fieldLabel.contains(candidateLower)) {
+                    matched = candidate; // keep original casing
+                    break;
+                }
+            }
+
+            if (matched != null) {
+                field.put("referenceEntity", matched);
+                log.info("[SchemaEnricher] Entity '{}': inferred referenceEntity='{}' for field '{}'",
+                        entityName, matched, field.get(F_NAME));
+            } else {
+                log.warn("[SchemaEnricher] Entity '{}': cannot infer referenceEntity for field '{}' — known entities: {}",
+                        entityName, field.get(F_NAME), knownEntities);
+            }
+        }
+    }
+
+    /**
+     * Enriches all entities in the list (no reference-entity inference).
      *
      * @param entities mutable list of entity maps from LLM output
      */
     public void enrichAll(List<Map<String, Object>> entities) {
+        enrichAll(entities, Collections.emptySet());
+    }
+
+    /**
+     * Enriches all entities in the list, including inference of missing
+     * referenceEntity values using the supplied set of sibling entity names.
+     *
+     * @param entities      mutable list of entity maps from LLM output
+     * @param knownEntities set of entity names declared in this scaffold run
+     */
+    @SuppressWarnings("unchecked")
+    public void enrichAll(List<Map<String, Object>> entities, Set<String> knownEntities) {
         for (Map<String, Object> entity : entities) {
             enrich(entity);
+            // After baseline enrichment, fix any reference fields with missing referenceEntity
+            String entityName = (String) entity.getOrDefault(F_NAME, "unknown");
+            List<Map<String, Object>> fields = (List<Map<String, Object>>) entity.get("fields");
+            if (fields != null && !knownEntities.isEmpty()) {
+                inferMissingReferenceEntities(fields, entityName, knownEntities);
+            }
         }
     }
 

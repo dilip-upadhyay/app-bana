@@ -215,8 +215,14 @@ public class ScaffoldAppTool implements Tool {
       // Story 4: Phase 2 - Create Entities
       log.info("[ScaffoldAppTool] Phase 2: Creating {} entities", entities.size());
 
-      // Enrich entities: coerce invalid field types + inject baseline fields
-      new SchemaEnricher().enrichAll(entities);
+      // Collect known entity names for reference-entity inference
+      Set<String> knownEntityNames = new java.util.LinkedHashSet<>();
+      for (Map<String, Object> e : entities) {
+        Object n = e.get("name");
+        if (n != null) knownEntityNames.add((String) n);
+      }
+      // Enrich entities: coerce types + inject baseline + auto-infer referenceEntity
+      new SchemaEnricher().enrichAll(entities, knownEntityNames);
 
       CreateEntityTool entityTool = new CreateEntityTool(validator, baseUrl);
       List<String> createdEntities = new ArrayList<>();
