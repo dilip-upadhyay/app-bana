@@ -183,26 +183,34 @@ public class ScaffoldAppTool implements Tool {
       }
       log.info("[ScaffoldAppTool] ───────────────────────────────────────────────────────");
 
-      // Story 3: Phase 1 - Create App
-      log.info("[ScaffoldAppTool] Phase 1: Creating app '{}'", appName);
-      CreateAppTool appTool = new CreateAppTool(baseUrl);
+      // Story 3: Phase 1 - Create App (or use existing)
+      if (context.appId() != null && !context.appId().isBlank() && !"default".equals(context.appId())) {
+        log.info("[ScaffoldAppTool] Phase 1: Re-using existing app ID '{}' from context", context.appId());
+        createdAppId = context.appId();
+      } else {
+        log.info("[ScaffoldAppTool] Phase 1: Creating new app '{}'", appName);
+        CreateAppTool appTool = new CreateAppTool(baseUrl);
 
-      Map<String, Object> appArgs = new HashMap<>();
-      appArgs.put("name", appName);
-      appArgs.put("description", description);
+        Map<String, Object> appArgs = new HashMap<>();
+        appArgs.put("name", appName);
+        appArgs.put("description", description);
 
-      ToolResult appResult = appTool.execute(appArgs, context);
-      if (!appResult.isSuccess()) {
-        log.error("[ScaffoldAppTool] App creation failed: {}", appResult.getError());
-        return ToolResult.error(getName(), "App creation failed: " + appResult.getError());
+        ToolResult appResult = appTool.execute(appArgs, context);
+        if (!appResult.isSuccess()) {
+          log.error("[ScaffoldAppTool] App creation failed: {}", appResult.getError());
+          return ToolResult.error(getName(), "App creation failed: " + appResult.getError());
+        }
+
+        // Extract appId from result
+        @SuppressWarnings("unchecked")
+        Map<String, Object> appData = (Map<String, Object>) appResult.getData();
+        createdAppId = (String) appData.get("appId");
+
+        log.info("[ScaffoldAppTool] ✅ App created successfully: {}", createdAppId);
       }
-
-      // Extract appId from result
-      @SuppressWarnings("unchecked")
-      Map<String, Object> appData = (Map<String, Object>) appResult.getData();
-      createdAppId = (String) appData.get("appId");
-
-      log.info("[ScaffoldAppTool] ✅ App created successfully: {}", createdAppId);
+      
+      // Store in context for AiChatController to use for auto-commit
+      context.variables().put("createdAppId", createdAppId);
 
       // Story 4: Phase 2 - Create Entities
       log.info("[ScaffoldAppTool] Phase 2: Creating {} entities", entities.size());
@@ -327,9 +335,11 @@ public class ScaffoldAppTool implements Tool {
     } catch (Exception e) {
       log.error("[ScaffoldAppTool] Execution failed", e);
 
-      // Story 3: Rollback mechanism - delete the app if it was created
-      if (createdAppId != null) {
-        log.warn("[ScaffoldAppTool] Rolling back - deleting app: {}", createdAppId);
+      // Story 3: Rollback mechanism - delete the app ONLY IF IT WAS CREATED in this session
+      // Do NOT delete an existing app if we were just adding to it
+      boolean isNewApp = !(context.appId() != null && !context.appId().isBlank() && !"default".equals(context.appId()));
+      if (createdAppId != null && isNewApp) {
+        log.warn("[ScaffoldAppTool] Rolling back - deleting NEW app: {}", createdAppId);
         try {
           rollback(createdAppId, context);
           log.info("[ScaffoldAppTool] Rollback successful");
@@ -337,6 +347,8 @@ public class ScaffoldAppTool implements Tool {
           log.error("[ScaffoldAppTool] Rollback failed", rollbackError);
           // Continue to return the original error
         }
+      } else if (createdAppId != null) {
+        log.warn("[ScaffoldAppTool] Partial failure while modifying EXISTING app {}. Deletion rollback skipped safely since App Versioning handles it.", createdAppId);
       }
 
       return ToolResult.error(getName(), "Execution error: " + e.getMessage());

@@ -11,6 +11,8 @@ import com.appbana.model.DeploymentResult;
 import com.appbana.model.EntitySchema;
 import com.appbana.model.TenantContext;
 import com.appbana.repository.AppVersionRepository;
+import com.appbana.AppManager;
+import com.appbana.model.AppMetadata;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -20,6 +22,7 @@ import java.sql.Connection;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Core service for publishing apps to environments.
@@ -154,6 +157,82 @@ public class AppPublishService {
             return DeploymentResult.failure(appId, tenantId, Environment.LOCAL,
                     "LOCAL deployment failed: " + e.getMessage(), getStackTrace(e));
         }
+    }
+
+    /**
+     * Create an AI Commit snapshot without formal deployment.
+     */
+    public AppVersion createCommit(String tenantId, String appId, String message, String author) throws Exception {
+        LOG.info("[COMMIT] Creating snapshot for app: {}", appId);
+        
+        // Fetch full state directly from database
+        AppMetadata fullState = AppManager.getAppFullMetadata(tenantId, appId);
+        if (fullState == null) {
+            throw new IllegalArgumentException("App not found: " + appId);
+        }
+        
+        String snapshotJson = objectMapper.writeValueAsString(fullState);
+        
+        // Use STUDIO environment for these drafts
+        int nextVersion = versionRepository.getNextVersion(appId, tenantId, Environment.STUDIO);
+        
+        return saveVersionSnapshot(
+            appId, tenantId, nextVersion, Environment.STUDIO, snapshotJson, 
+            new ArrayList<>(), author, 0L, DeploymentStatus.SUCCESS, message, null
+        );
+    }
+
+    /**
+     * Rollback the application to a specific version.
+     */
+    public AppVersion rollbackToCommit(String tenantId, String appId, int version) throws Exception {
+        LOG.info("[ROLLBACK] Initiating rollback for app: {} to version: {}", appId, version);
+        
+        // Find version
+        List<AppVersion> history = versionRepository.getVersionHistory(appId, tenantId, Environment.STUDIO);
+        AppVersion targetVersion = history.stream()
+            .filter(v -> v.getVersion().equals(version))
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Version " + version + " not found."));
+            
+        // Parse snapshot back to metadata
+        AppMetadata snapshotMeta = objectMapper.readValue(targetVersion.getAppSnapshot(), AppMetadata.class);
+        
+        // 1. Restore App Metadata
+        AppManager.updateApp(tenantId, appId, snapshotMeta);
+        
+        // 2. Restore Pages
+        if (snapshotMeta.getPagesData() != null) {
+            // First clear existing pages to ensure clean rollback
+            Map<String, Object> currentApp = AppManager.getAppWithPages(tenantId, appId);
+            if (currentApp != null && currentApp.get("pages") != null) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> currentPages = (List<Map<String, Object>>) currentApp.get("pages");
+                for (Map<String, Object> page : currentPages) {
+                    AppManager.deletePage(tenantId, appId, (String) page.get("id"));
+                }
+            }
+            
+            // Now insert snapshot pages
+            for (Object pageObj : snapshotMeta.getPagesData()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> pageDef = (Map<String, Object>) pageObj;
+                AppManager.savePage(tenantId, appId, (String) pageDef.get("id"), pageDef);
+            }
+        }
+        
+        // 3. Restore Schemas
+        if (snapshotMeta.getEntities() != null) {
+            for (Object entityObj : snapshotMeta.getEntities()) {
+                EntitySchema schema = objectMapper.convertValue(entityObj, EntitySchema.class);
+                SchemaManager.saveSchema(schema);
+            }
+        }
+        
+        LOG.info("[ROLLBACK] Successfully restored app {} to version {}", appId, version);
+        
+        // Create a new "Rollback" commit to log this action
+        return createCommit(tenantId, appId, "Rollback to version " + version, "System");
     }
 
     /**

@@ -187,6 +187,62 @@ public class AppRoutes {
             }
         });
 
+        // ==================== AI COMMITS & ROLLBACK ====================
+
+        // Create an AI commit snapshot
+        router.post("/api/{tenantId}/apps/{id}/commits", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+
+            try {
+                Map<String, String> body = req.readJson(new TypeReference<>() {});
+                String message = body.getOrDefault("message", "AI Snapshot");
+                String userId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
+                if (userId == null) userId = "system";
+
+                try (Connection conn = JdbcManager.getConnection()) {
+                    AppPublishService publishService = new AppPublishService(conn, new SchemaManager());
+                    AppVersion version = publishService.createCommit(tenantId, appId, message, userId);
+                    res.json(201, Map.of("version", version.getVersion(), "message", version.getErrorMessage(), "status", "commit_created"));
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to create commit", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
+        // Rollback to a specific AI commit
+        router.post("/api/{tenantId}/apps/{id}/commits/rollback", (req, res) -> {
+            String tenantId = req.pathParam("tenantId");
+            String appId = req.pathParam("id");
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+
+            try {
+                Map<String, Object> body = req.readJson(new TypeReference<>() {});
+                if (!body.containsKey("version")) {
+                    res.json(400, Map.of("error", "target 'version' number is required"));
+                    return;
+                }
+                int targetVersion = ((Number) body.get("version")).intValue();
+
+                try (Connection conn = JdbcManager.getConnection()) {
+                    AppPublishService publishService = new AppPublishService(conn, new SchemaManager());
+                    AppVersion newCommit = publishService.rollbackToCommit(tenantId, appId, targetVersion);
+                    res.json(200, Map.of("status", "rolled_back", "newCommitVersion", newCommit.getVersion(), "rolledBackTo", targetVersion));
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to rollback", e);
+                res.json(500, Map.of("error", e.getMessage()));
+            }
+        });
+
         // Create app version
         router.post("/api/{tenantId}/apps/{id}/versions", (req, res) -> {
             String tenantId = req.pathParam("tenantId");

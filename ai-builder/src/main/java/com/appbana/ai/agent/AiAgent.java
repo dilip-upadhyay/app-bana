@@ -453,7 +453,7 @@ public class AiAgent {
 
                         2. **APP BUILDING (ACT)**:
                            - If the user wants to build, modify, or deploy an app, YOU MUST call the appropriate tool.
-                           - **Preferred Workflow**: Use `scaffold_app` for new apps (10x faster).
+                           - **Preferred Workflow**: Use `scaffold_app` for new apps AND when making bulk additions (new entities/pages) to an existing app (it is 10x faster and automatically merges into the current app if `context.appId` is set).
 
                         ## CONTEXT-AWARE ENTITY QUERYING (CRITICAL RULE)
                         1. **CHECK CONTEXT**: Before answering questions about entities (e.g., "How many fields in Employee?", "Show me the Customer entity"), you MUST check if an app is selected in `context.appId`.
@@ -463,16 +463,16 @@ public class AiAgent {
                            - Exception: If the user explicitly asks to "List all apps" or "Create a new app", you can proceed without a selected app.
 
                         ## SPECIFICATION DRIVEN DEVELOPMENT (CRITICAL WORKFLOW)
-                        **CRITICAL**: When the user asks to create a new application, YOU MUST NEVER scaffold it immediately. You must follow this two-phase process:
+                        **CRITICAL**: When the user asks to create a new application or significantly modify an existing one, YOU MUST follow this two-phase process:
 
                         ### PHASE 1: Specification (TALK) - BUSINESS FRIENDLY
-                        1. Listen to the user describe their app (e.g., "Build a Salon Booking App").
+                        1. Listen to the user describe their app or feature (e.g., "Build a Salon Booking App" or "Add an Inventory feature to this app").
                         2. Do NOT run any tools. Think like a business analyst: what information does this business need to track, and what will their team need to do daily?
                         3. Output a `final_answer` written entirely in **plain business English**. NO technical jargon. Format it as follows:
 
                         ---
-                        ## 🚀 [Friendly App Name]
-                        [One warm sentence describing what this app helps the business achieve.]
+                        ## 🚀 [Friendly App/Feature Name]
+                        [One warm sentence describing what this app/feature helps the business achieve.]
 
                         ## 📦 What We'll Keep Track Of
                         ### [Friendly Name, e.g. "Customers"]
@@ -503,9 +503,9 @@ public class AiAgent {
                         ### PHASE 2: Execution (ACT)
                         1. ONLY after the user explicitly says 'yes', 'build it', 'proceed', or clearly approves, proceed.
                         2. Internally map the plain-English spec back to proper technical entities and fields.
-                        3. Call `scaffold_app` ONCE with the full JSON structure.
+                        3. Call `scaffold_app` ONCE with the full JSON structure (it will safely merge into the current app if one is selected).
 
-                        **DO NOT** use `create_app`, `create_entity`, `generate_page` individually unless the user explicitly modifies an existing app individually.
+                        **DO NOT** use `create_app`, `create_entity`, `generate_page` individually unless the user explicitly asks to create a single specific item bypassing the bulk scaffold process.
 
                         ## EXPERT DATA MODELING RULES (CRITICAL)
                         1. **Every Field MUST Have an `id`** (snake_case, e.g., "first_name", "phone_number").

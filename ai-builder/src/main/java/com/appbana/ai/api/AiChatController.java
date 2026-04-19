@@ -181,6 +181,40 @@ public class AiChatController {
                 dialogueManager.notifyCompleted(sessionId);
             }
 
+            // AUTO-COMMIT Feature (HTTP call to app-bana-service)
+            String modifiedAppId = (String) agentContext.getVariable("createdAppId");
+            if (modifiedAppId == null && !appId.equals("default")) {
+                modifiedAppId = appId; // Fallback to provided appId if applicable
+            }
+            if (modifiedAppId != null && !modifiedAppId.isBlank() && !modifiedAppId.equals("default")) {
+                try {
+                    String commitMessage = "Agent Chat: " + 
+                        (chatRequest.getMessage().length() > 50 ? 
+                         chatRequest.getMessage().substring(0, 47) + "..." : 
+                         chatRequest.getMessage());
+
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    String bodyString = mapper.writeValueAsString(Map.of("message", commitMessage));
+                    
+                    String commitUrl = "http://localhost:8080/api/" + tenantId + "/apps/" + modifiedAppId + "/commits";
+                    java.net.http.HttpClient commitClient = java.net.http.HttpClient.newHttpClient();
+                    
+                    java.net.http.HttpRequest.Builder reqBuilder = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create(commitUrl))
+                        .header("Content-Type", "application/json")
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(bodyString));
+                        
+                    if (token != null && !token.isBlank()) {
+                        reqBuilder.header("Authorization", "Bearer " + token);
+                    }
+                        
+                    java.net.http.HttpResponse<String> resp = commitClient.send(reqBuilder.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+                    log.info("[AUTO-COMMIT] Triggered commit via HTTP. Status: {} for app {}", resp.statusCode(), modifiedAppId);
+                } catch (Exception e) {
+                    log.error("[AUTO-COMMIT] Failed to trigger auto-commit for app {}", modifiedAppId, e);
+                }
+            }
+
             // Refresh state after possible notify
             DialogueManager.ConversationState updatedState = dialogueManager.getCurrentState(sessionId);
             // Store conversation in memory

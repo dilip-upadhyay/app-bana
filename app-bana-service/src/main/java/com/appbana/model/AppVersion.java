@@ -45,6 +45,7 @@ public class AppVersion {
      */
     public enum Environment {
         LOCAL, // Local development (auto-deployed)
+        STUDIO, // AI Builder draft changes
         DEV, // Development
         SIT, // System Integration Testing (Staging)
         PROD // Production

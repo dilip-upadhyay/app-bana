@@ -177,6 +177,7 @@ public class AiServer {
             // Cost Optimization: Compound tools for batch operations (Phase 2)
             toolRegistry.register(new BatchUpdateEntitiesTool(metadataValidator, backendUrl));
             toolRegistry.register(new GenerateMockDataTool(backendUrl));
+            toolRegistry.register(new RollbackAppTool(backendUrl));
 
             log.info("Registered {} tools", toolRegistry.getToolCount());
 
