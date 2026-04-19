@@ -1,0 +1,457 @@
+======================================================
+Starting AI Builder Service...
+======================================================
+Checking if port 8081 is in use...
+Checking Qdrant status...
+Qdrant is already running on localhost:6333
+[1/3] Killing any potentially locking processes...
+[2/3] Building all modules (resilient mode)...
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] app-bana-parent                                                    [pom]
+[INFO] AppBana UI Resources                                               [jar]
+[INFO] app-bana                                                           [jar]
+[INFO] AI Builder Service                                                 [jar]
+[INFO] 
+[INFO] --------------------< com.appbana:app-bana-parent >---------------------
+[INFO] Building app-bana-parent 1.0-SNAPSHOT                              [1/4]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --- install:3.1.0:install (default-install) @ app-bana-parent ---
+[INFO] Installing C:\Users\dilip\git\app-bana\pom.xml to C:\Users\dilip\.m2\repository\com\appbana\app-bana-parent\1.0-SNAPSHOT\app-bana-parent-1.0-SNAPSHOT.pom
+[INFO] 
+[INFO] ----------------------< com.appbana:app-bana-ui >-----------------------
+[INFO] Building AppBana UI Resources 1.0-SNAPSHOT                         [2/4]
+[INFO]   from app-bana-ui\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.0:resources (default-resources) @ app-bana-ui ---
+[INFO] Copying 27 resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ app-bana-ui ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- resources:3.3.0:testResources (default-testResources) @ app-bana-ui ---
+[INFO] skip non existing resourceDirectory C:\Users\dilip\git\app-bana\app-bana-ui\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ app-bana-ui ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.0.0:test (default-test) @ app-bana-ui ---
+[INFO] Tests are skipped.
+[INFO] 
+[INFO] --- jar:3.3.0:jar (default-jar) @ app-bana-ui ---
+[INFO] 
+[INFO] --- install:3.1.0:install (default-install) @ app-bana-ui ---
+[INFO] Installing C:\Users\dilip\git\app-bana\app-bana-ui\pom.xml to C:\Users\dilip\.m2\repository\com\appbana\app-bana-ui\1.0-SNAPSHOT\app-bana-ui-1.0-SNAPSHOT.pom
+[INFO] Installing C:\Users\dilip\git\app-bana\app-bana-ui\target\app-bana-ui-1.0-SNAPSHOT.jar to C:\Users\dilip\.m2\repository\com\appbana\app-bana-ui\1.0-SNAPSHOT\app-bana-ui-1.0-SNAPSHOT.jar
+[INFO] 
+[INFO] ------------------------< com.appbana:app-bana >------------------------
+[INFO] Building app-bana 1.0-SNAPSHOT                                     [3/4]
+[INFO]   from app-bana-service\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.0:resources (default-resources) @ app-bana ---
+[INFO] Copying 21 resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ app-bana ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.0:testResources (default-testResources) @ app-bana ---
+[INFO] skip non existing resourceDirectory C:\Users\dilip\git\app-bana\app-bana-service\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ app-bana ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ app-bana ---
+[INFO] Tests are skipped.
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ app-bana ---
+[INFO] 
+[INFO] --- shade:3.6.0:shade (default) @ app-bana ---
+[INFO] Including com.appbana:app-bana-ui:jar:1.0-SNAPSHOT in the shaded jar.
+[INFO] Including com.fasterxml.jackson.core:jackson-databind:jar:2.18.2 in the shaded jar.
+[INFO] Including com.fasterxml.jackson.core:jackson-annotations:jar:2.18.2 in the shaded jar.
+[INFO] Including com.fasterxml.jackson.core:jackson-core:jar:2.18.2 in the shaded jar.
+[INFO] Including com.fasterxml.jackson.datatype:jackson-datatype-jsr310:jar:2.18.2 in the shaded jar.
+[INFO] Including org.slf4j:slf4j-simple:jar:2.0.16 in the shaded jar.
+[INFO] Including org.slf4j:slf4j-api:jar:2.0.16 in the shaded jar.
+[INFO] Including com.zaxxer:HikariCP:jar:6.2.0 in the shaded jar.
+[INFO] Including org.apache.commons:commons-compress:jar:1.28.0 in the shaded jar.
+[INFO] Including commons-codec:commons-codec:jar:1.19.0 in the shaded jar.
+[INFO] Including org.postgresql:postgresql:jar:42.7.10 in the shaded jar.
+[INFO] Including org.checkerframework:checker-qual:jar:3.52.0 in the shaded jar.
+[INFO] Including org.apache.tomcat.embed:tomcat-embed-core:jar:10.1.54 in the shaded jar.
+[INFO] Including org.apache.tomcat:tomcat-annotations-api:jar:10.1.54 in the shaded jar.
+[INFO] Including jakarta.servlet:jakarta.servlet-api:jar:6.1.0 in the shaded jar.
+[INFO] Including com.theokanning.openai-gpt3-java:service:jar:0.18.2 in the shaded jar.
+[INFO] Including com.theokanning.openai-gpt3-java:client:jar:0.18.2 in the shaded jar.
+[INFO] Including com.theokanning.openai-gpt3-java:api:jar:0.18.2 in the shaded jar.
+[INFO] Including com.knuddels:jtokkit:jar:0.5.1 in the shaded jar.
+[INFO] Including com.squareup.retrofit2:retrofit:jar:2.9.0 in the shaded jar.
+[INFO] Including com.squareup.retrofit2:adapter-rxjava2:jar:2.9.0 in the shaded jar.
+[INFO] Including io.reactivex.rxjava2:rxjava:jar:2.0.0 in the shaded jar.
+[INFO] Including org.reactivestreams:reactive-streams:jar:1.0.3 in the shaded jar.
+[INFO] Including com.squareup.retrofit2:converter-jackson:jar:2.9.0 in the shaded jar.
+[INFO] Including com.kjetland:mbknor-jackson-jsonschema_2.12:jar:1.0.34 in the shaded jar.
+[INFO] Including org.scala-lang:scala-library:jar:2.12.8 in the shaded jar.
+[INFO] Including javax.validation:validation-api:jar:2.0.1.Final in the shaded jar.
+[INFO] Including io.github.classgraph:classgraph:jar:4.8.21 in the shaded jar.
+[INFO] Including com.squareup.okhttp3:okhttp:jar:4.12.0 in the shaded jar.
+[INFO] Including com.squareup.okio:okio:jar:3.6.0 in the shaded jar.
+[INFO] Including com.squareup.okio:okio-jvm:jar:3.6.0 in the shaded jar.
+[INFO] Including org.jetbrains.kotlin:kotlin-stdlib-common:jar:1.9.10 in the shaded jar.
+[INFO] Including org.jetbrains.kotlin:kotlin-stdlib-jdk8:jar:1.8.21 in the shaded jar.
+[INFO] Including org.jetbrains.kotlin:kotlin-stdlib:jar:1.8.21 in the shaded jar.
+[INFO] Including org.jetbrains:annotations:jar:13.0 in the shaded jar.
+[INFO] Including org.jetbrains.kotlin:kotlin-stdlib-jdk7:jar:1.8.21 in the shaded jar.
+[INFO] Including org.mindrot:jbcrypt:jar:0.4 in the shaded jar.
+[INFO] Including com.auth0:java-jwt:jar:4.4.0 in the shaded jar.
+[INFO] Including org.liquibase:liquibase-core:jar:4.29.2 in the shaded jar.
+[INFO] Including com.opencsv:opencsv:jar:5.9 in the shaded jar.
+[INFO] Including org.yaml:snakeyaml:jar:2.2 in the shaded jar.
+[INFO] Including javax.xml.bind:jaxb-api:jar:2.3.1 in the shaded jar.
+[INFO] Including commons-io:commons-io:jar:2.16.1 in the shaded jar.
+[INFO] Including org.apache.commons:commons-collections4:jar:4.4 in the shaded jar.
+[INFO] Including org.apache.commons:commons-text:jar:1.12.0 in the shaded jar.
+[INFO] Including org.apache.commons:commons-lang3:jar:3.15.0 in the shaded jar.
+[INFO] Including org.mvel:mvel2:jar:2.5.2.Final in the shaded jar.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] commons-codec-1.19.0.jar, commons-collections4-4.4.jar, commons-compress-1.28.0.jar, commons-io-2.16.1.jar, commons-lang3-3.15.0.jar, commons-text-1.12.0.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/NOTICE.txt
+[WARNING] classgraph-4.8.21.jar, commons-codec-1.19.0.jar, commons-compress-1.28.0.jar, commons-io-2.16.1.jar, commons-lang3-3.15.0.jar, commons-text-1.12.0.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, jackson-datatype-jsr310-2.18.2.jar, java-jwt-4.4.0.jar, kotlin-stdlib-1.8.21.jar, kotlin-stdlib-jdk7-1.8.21.jar, kotlin-stdlib-jdk8-1.8.21.jar, slf4j-api-2.0.16.jar, slf4j-simple-2.0.16.jar, snakeyaml-2.2.jar define 1 overlapping classes: 
+[WARNING]   - META-INF.versions.9.module-info
+[WARNING] HikariCP-6.2.0.jar, adapter-rxjava2-2.9.0.jar, annotations-13.0.jar, api-0.18.2.jar, app-bana-1.0-SNAPSHOT.jar, app-bana-ui-1.0-SNAPSHOT.jar, checker-qual-3.52.0.jar, classgraph-4.8.21.jar, client-0.18.2.jar, commons-codec-1.19.0.jar, commons-collections4-4.4.jar, commons-compress-1.28.0.jar, commons-io-2.16.1.jar, commons-lang3-3.15.0.jar, commons-text-1.12.0.jar, converter-jackson-2.9.0.jar, jackson-annotations-2.18.2.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, jackson-datatype-jsr310-2.18.2.jar, jakarta.servlet-api-6.1.0.jar, java-jwt-4.4.0.jar, jaxb-api-2.3.1.jar, jbcrypt-0.4.jar, jtokkit-0.5.1.jar, kotlin-stdlib-1.8.21.jar, kotlin-stdlib-common-1.9.10.jar, kotlin-stdlib-jdk7-1.8.21.jar, kotlin-stdlib-jdk8-1.8.21.jar, liquibase-core-4.29.2.jar, mbknor-jackson-jsonschema_2.12-1.0.34.jar, mvel2-2.5.2.Final.jar, okhttp-4.12.0.jar, okio-3.6.0.jar, okio-jvm-3.6.0.jar, opencsv-5.9.jar, postgresql-42.7.10.jar, reactive-streams-1.0.3.jar, retrofit-2.9.0.jar, rxjava-2.0.0.jar, scala-library-2.12.8.jar, service-0.18.2.jar, slf4j-api-2.0.16.jar, slf4j-simple-2.0.16.jar, snakeyaml-2.2.jar, tomcat-annotations-api-10.1.54.jar, tomcat-embed-core-10.1.54.jar, validation-api-2.0.1.Final.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/MANIFEST.MF
+[WARNING] checker-qual-3.52.0.jar, commons-codec-1.19.0.jar, commons-collections4-4.4.jar, commons-compress-1.28.0.jar, commons-io-2.16.1.jar, commons-lang3-3.15.0.jar, commons-text-1.12.0.jar, jaxb-api-2.3.1.jar, slf4j-api-2.0.16.jar, slf4j-simple-2.0.16.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/LICENSE.txt
+[WARNING] jackson-annotations-2.18.2.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, jackson-datatype-jsr310-2.18.2.jar, tomcat-annotations-api-10.1.54.jar, tomcat-embed-core-10.1.54.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/NOTICE
+[WARNING] jakarta.servlet-api-6.1.0.jar, tomcat-embed-core-10.1.54.jar define 131 overlapping classes and resources: 
+[WARNING]   - jakarta.servlet.AsyncContext
+[WARNING]   - jakarta.servlet.AsyncEvent
+[WARNING]   - jakarta.servlet.AsyncListener
+[WARNING]   - jakarta.servlet.DispatcherType
+[WARNING]   - jakarta.servlet.Filter
+[WARNING]   - jakarta.servlet.FilterChain
+[WARNING]   - jakarta.servlet.FilterConfig
+[WARNING]   - jakarta.servlet.FilterRegistration
+[WARNING]   - jakarta.servlet.FilterRegistration$Dynamic
+[WARNING]   - jakarta.servlet.GenericFilter
+[WARNING]   - 121 more...
+[WARNING] okio-3.6.0.jar, okio-jvm-3.6.0.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/okio.kotlin_module
+[WARNING] jackson-annotations-2.18.2.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, jackson-datatype-jsr310-2.18.2.jar, postgresql-42.7.10.jar, tomcat-annotations-api-10.1.54.jar, tomcat-embed-core-10.1.54.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/LICENSE
+[WARNING] maven-shade-plugin has detected that some files are
+[WARNING] present in two or more JARs. When this happens, only one
+[WARNING] single version of the file is copied to the uber jar.
+[WARNING] Usually this is not harmful and you can skip these warnings,
+[WARNING] otherwise try to manually exclude artifacts based on
+[WARNING] mvn dependency:tree -Ddetail=true and the above output.
+[WARNING] See https://maven.apache.org/plugins/maven-shade-plugin/
+[INFO] Replacing C:\Users\dilip\git\app-bana\app-bana-service\target\app-bana-1.0-SNAPSHOT-fat.jar with C:\Users\dilip\git\app-bana\app-bana-service\target\app-bana-1.0-SNAPSHOT-shaded.jar
+[INFO] 
+[INFO] --- install:3.1.0:install (default-install) @ app-bana ---
+[INFO] Installing C:\Users\dilip\git\app-bana\app-bana-service\pom.xml to C:\Users\dilip\.m2\repository\com\appbana\app-bana\1.0-SNAPSHOT\app-bana-1.0-SNAPSHOT.pom
+[INFO] Installing C:\Users\dilip\git\app-bana\app-bana-service\target\app-bana-1.0-SNAPSHOT.jar to C:\Users\dilip\.m2\repository\com\appbana\app-bana\1.0-SNAPSHOT\app-bana-1.0-SNAPSHOT.jar
+[INFO] 
+[INFO] -----------------------< com.appbana:ai-builder >-----------------------
+[INFO] Building AI Builder Service 1.0-SNAPSHOT                           [4/4]
+[INFO]   from ai-builder\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.0:resources (default-resources) @ ai-builder ---
+[INFO] Copying 4 resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ ai-builder ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.0:testResources (default-testResources) @ ai-builder ---
+[INFO] skip non existing resourceDirectory C:\Users\dilip\git\app-bana\ai-builder\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ ai-builder ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ ai-builder ---
+[INFO] Tests are skipped.
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ ai-builder ---
+[INFO] 
+[INFO] --- shade:3.6.0:shade (default) @ ai-builder ---
+[INFO] Including com.fasterxml.jackson.core:jackson-databind:jar:2.18.2 in the shaded jar.
+[INFO] Including com.fasterxml.jackson.core:jackson-annotations:jar:2.18.2 in the shaded jar.
+[INFO] Including com.fasterxml.jackson.core:jackson-core:jar:2.18.2 in the shaded jar.
+[INFO] Including com.fasterxml.jackson.datatype:jackson-datatype-jsr310:jar:2.18.2 in the shaded jar.
+[INFO] Including org.slf4j:slf4j-simple:jar:2.0.16 in the shaded jar.
+[INFO] Including org.slf4j:slf4j-api:jar:2.0.16 in the shaded jar.
+[INFO] Including org.postgresql:postgresql:jar:42.7.4 in the shaded jar.
+[INFO] Including org.checkerframework:checker-qual:jar:3.42.0 in the shaded jar.
+[INFO] Including com.zaxxer:HikariCP:jar:6.2.0 in the shaded jar.
+[INFO] Including org.apache.commons:commons-compress:jar:1.28.0 in the shaded jar.
+[INFO] Including commons-codec:commons-codec:jar:1.19.0 in the shaded jar.
+[INFO] Including commons-io:commons-io:jar:2.20.0 in the shaded jar.
+[INFO] Including org.apache.commons:commons-lang3:jar:3.18.0 in the shaded jar.
+[INFO] Including org.apache.tomcat.embed:tomcat-embed-core:jar:10.1.34 in the shaded jar.
+[INFO] Including org.apache.tomcat:tomcat-annotations-api:jar:10.1.34 in the shaded jar.
+[INFO] Including jakarta.servlet:jakarta.servlet-api:jar:6.1.0 in the shaded jar.
+[INFO] Including com.github.ben-manes.caffeine:caffeine:jar:3.1.8 in the shaded jar.
+[INFO] Including com.google.errorprone:error_prone_annotations:jar:2.21.1 in the shaded jar.
+[INFO] Including com.theokanning.openai-gpt3-java:service:jar:0.18.2 in the shaded jar.
+[INFO] Including com.theokanning.openai-gpt3-java:client:jar:0.18.2 in the shaded jar.
+[INFO] Including com.theokanning.openai-gpt3-java:api:jar:0.18.2 in the shaded jar.
+[INFO] Including com.knuddels:jtokkit:jar:0.5.1 in the shaded jar.
+[INFO] Including com.squareup.retrofit2:retrofit:jar:2.9.0 in the shaded jar.
+[INFO] Including com.squareup.retrofit2:adapter-rxjava2:jar:2.9.0 in the shaded jar.
+[INFO] Including io.reactivex.rxjava2:rxjava:jar:2.0.0 in the shaded jar.
+[INFO] Including org.reactivestreams:reactive-streams:jar:1.0.3 in the shaded jar.
+[INFO] Including com.squareup.retrofit2:converter-jackson:jar:2.9.0 in the shaded jar.
+[INFO] Including com.kjetland:mbknor-jackson-jsonschema_2.12:jar:1.0.34 in the shaded jar.
+[INFO] Including org.scala-lang:scala-library:jar:2.12.8 in the shaded jar.
+[INFO] Including javax.validation:validation-api:jar:2.0.1.Final in the shaded jar.
+[INFO] Including io.github.classgraph:classgraph:jar:4.8.21 in the shaded jar.
+[INFO] Including com.squareup.okhttp3:okhttp:jar:4.12.0 in the shaded jar.
+[INFO] Including com.squareup.okio:okio:jar:3.6.0 in the shaded jar.
+[INFO] Including com.squareup.okio:okio-jvm:jar:3.6.0 in the shaded jar.
+[INFO] Including org.jetbrains.kotlin:kotlin-stdlib-common:jar:1.9.10 in the shaded jar.
+[INFO] Including org.jetbrains.kotlin:kotlin-stdlib-jdk8:jar:1.8.21 in the shaded jar.
+[INFO] Including org.jetbrains.kotlin:kotlin-stdlib:jar:1.8.21 in the shaded jar.
+[INFO] Including org.jetbrains.kotlin:kotlin-stdlib-jdk7:jar:1.8.21 in the shaded jar.
+[INFO] Including io.qdrant:client:jar:1.7.0 in the shaded jar.
+[INFO] Including io.grpc:grpc-protobuf:jar:1.59.0 in the shaded jar.
+[INFO] Including io.grpc:grpc-api:jar:1.59.0 in the shaded jar.
+[INFO] Including com.google.api.grpc:proto-google-common-protos:jar:2.22.0 in the shaded jar.
+[INFO] Including io.grpc:grpc-protobuf-lite:jar:1.59.0 in the shaded jar.
+[INFO] Including io.grpc:grpc-services:jar:1.59.0 in the shaded jar.
+[INFO] Including io.grpc:grpc-util:jar:1.59.0 in the shaded jar.
+[INFO] Including org.codehaus.mojo:animal-sniffer-annotations:jar:1.23 in the shaded jar.
+[INFO] Including com.google.protobuf:protobuf-java-util:jar:3.24.0 in the shaded jar.
+[INFO] Including io.grpc:grpc-stub:jar:1.59.0 in the shaded jar.
+[INFO] Including io.grpc:grpc-netty-shaded:jar:1.59.0 in the shaded jar.
+[INFO] Including io.perfmark:perfmark-api:jar:0.26.0 in the shaded jar.
+[INFO] Including io.grpc:grpc-core:jar:1.59.0 in the shaded jar.
+[INFO] Including com.google.android:annotations:jar:4.1.1.4 in the shaded jar.
+[INFO] Including io.grpc:grpc-context:jar:1.59.0 in the shaded jar.
+[INFO] Including org.flywaydb:flyway-core:jar:10.10.0 in the shaded jar.
+[INFO] Including com.fasterxml.jackson.dataformat:jackson-dataformat-toml:jar:2.15.2 in the shaded jar.
+[INFO] Including com.google.code.gson:gson:jar:2.10.1 in the shaded jar.
+[INFO] Including org.flywaydb:flyway-database-postgresql:jar:10.10.0 in the shaded jar.
+[INFO] Including com.google.protobuf:protobuf-java:jar:3.25.1 in the shaded jar.
+[INFO] Including com.google.guava:guava:jar:33.0.0-jre in the shaded jar.
+[INFO] Including com.google.guava:failureaccess:jar:1.0.2 in the shaded jar.
+[INFO] Including com.google.guava:listenablefuture:jar:9999.0-empty-to-avoid-conflict-with-guava in the shaded jar.
+[INFO] Including com.google.code.findbugs:jsr305:jar:3.0.2 in the shaded jar.
+[INFO] Including com.google.j2objc:j2objc-annotations:jar:2.8 in the shaded jar.
+[INFO] Including org.jetbrains:annotations:jar:17.0.0 in the shaded jar.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] Discovered module-info.class. Shading will break its strong encapsulation.
+[WARNING] caffeine-3.1.8.jar, guava-33.0.0-jre.jar, jackson-annotations-2.18.2.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, jackson-dataformat-toml-2.15.2.jar, jackson-datatype-jsr310-2.18.2.jar, postgresql-42.7.4.jar, tomcat-annotations-api-10.1.34.jar, tomcat-embed-core-10.1.34.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/LICENSE
+[WARNING] HikariCP-6.2.0.jar, adapter-rxjava2-2.9.0.jar, ai-builder-1.0-SNAPSHOT.jar, animal-sniffer-annotations-1.23.jar, annotations-17.0.0.jar, annotations-4.1.1.4.jar, api-0.18.2.jar, caffeine-3.1.8.jar, checker-qual-3.42.0.jar, classgraph-4.8.21.jar, client-0.18.2.jar, client-1.7.0.jar, commons-codec-1.19.0.jar, commons-compress-1.28.0.jar, commons-io-2.20.0.jar, commons-lang3-3.18.0.jar, converter-jackson-2.9.0.jar, error_prone_annotations-2.21.1.jar, failureaccess-1.0.2.jar, flyway-core-10.10.0.jar, flyway-database-postgresql-10.10.0.jar, grpc-api-1.59.0.jar, grpc-context-1.59.0.jar, grpc-core-1.59.0.jar, grpc-netty-shaded-1.59.0.jar, grpc-protobuf-1.59.0.jar, grpc-protobuf-lite-1.59.0.jar, grpc-services-1.59.0.jar, grpc-stub-1.59.0.jar, grpc-util-1.59.0.jar, gson-2.10.1.jar, guava-33.0.0-jre.jar, j2objc-annotations-2.8.jar, jackson-annotations-2.18.2.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, jackson-dataformat-toml-2.15.2.jar, jackson-datatype-jsr310-2.18.2.jar, jakarta.servlet-api-6.1.0.jar, jsr305-3.0.2.jar, jtokkit-0.5.1.jar, kotlin-stdlib-1.8.21.jar, kotlin-stdlib-common-1.9.10.jar, kotlin-stdlib-jdk7-1.8.21.jar, kotlin-stdlib-jdk8-1.8.21.jar, listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar, mbknor-jackson-jsonschema_2.12-1.0.34.jar, okhttp-4.12.0.jar, okio-3.6.0.jar, okio-jvm-3.6.0.jar, perfmark-api-0.26.0.jar, postgresql-42.7.4.jar, proto-google-common-protos-2.22.0.jar, protobuf-java-3.25.1.jar, protobuf-java-util-3.24.0.jar, reactive-streams-1.0.3.jar, retrofit-2.9.0.jar, rxjava-2.0.0.jar, scala-library-2.12.8.jar, service-0.18.2.jar, slf4j-api-2.0.16.jar, slf4j-simple-2.0.16.jar, tomcat-annotations-api-10.1.34.jar, tomcat-embed-core-10.1.34.jar, validation-api-2.0.1.Final.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/MANIFEST.MF
+[WARNING] commons-codec-1.19.0.jar, commons-compress-1.28.0.jar, commons-io-2.20.0.jar, commons-lang3-3.18.0.jar, grpc-netty-shaded-1.59.0.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/NOTICE.txt
+[WARNING] jakarta.servlet-api-6.1.0.jar, tomcat-embed-core-10.1.34.jar define 131 overlapping classes and resources: 
+[WARNING]   - jakarta.servlet.AsyncContext
+[WARNING]   - jakarta.servlet.AsyncEvent
+[WARNING]   - jakarta.servlet.AsyncListener
+[WARNING]   - jakarta.servlet.DispatcherType
+[WARNING]   - jakarta.servlet.Filter
+[WARNING]   - jakarta.servlet.FilterChain
+[WARNING]   - jakarta.servlet.FilterConfig
+[WARNING]   - jakarta.servlet.FilterRegistration
+[WARNING]   - jakarta.servlet.FilterRegistration$Dynamic
+[WARNING]   - jakarta.servlet.GenericFilter
+[WARNING]   - 121 more...
+[WARNING] classgraph-4.8.21.jar, commons-codec-1.19.0.jar, commons-compress-1.28.0.jar, commons-io-2.20.0.jar, commons-lang3-3.18.0.jar, gson-2.10.1.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, jackson-dataformat-toml-2.15.2.jar, jackson-datatype-jsr310-2.18.2.jar, kotlin-stdlib-1.8.21.jar, kotlin-stdlib-jdk7-1.8.21.jar, kotlin-stdlib-jdk8-1.8.21.jar, slf4j-api-2.0.16.jar, slf4j-simple-2.0.16.jar define 1 overlapping classes: 
+[WARNING]   - META-INF.versions.9.module-info
+[WARNING] checker-qual-3.42.0.jar, commons-codec-1.19.0.jar, commons-compress-1.28.0.jar, commons-io-2.20.0.jar, commons-lang3-3.18.0.jar, flyway-core-10.10.0.jar, grpc-netty-shaded-1.59.0.jar, slf4j-api-2.0.16.jar, slf4j-simple-2.0.16.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/LICENSE.txt
+[WARNING] okio-3.6.0.jar, okio-jvm-3.6.0.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/okio.kotlin_module
+[WARNING] jackson-annotations-2.18.2.jar, jackson-core-2.18.2.jar, jackson-databind-2.18.2.jar, jackson-dataformat-toml-2.15.2.jar, jackson-datatype-jsr310-2.18.2.jar, tomcat-annotations-api-10.1.34.jar, tomcat-embed-core-10.1.34.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/NOTICE
+[WARNING] maven-shade-plugin has detected that some files are
+[WARNING] present in two or more JARs. When this happens, only one
+[WARNING] single version of the file is copied to the uber jar.
+[WARNING] Usually this is not harmful and you can skip these warnings,
+[WARNING] otherwise try to manually exclude artifacts based on
+[WARNING] mvn dependency:tree -Ddetail=true and the above output.
+[WARNING] See https://maven.apache.org/plugins/maven-shade-plugin/
+[INFO] Replacing C:\Users\dilip\git\app-bana\ai-builder\target\ai-builder-1.0-SNAPSHOT-fat.jar with C:\Users\dilip\git\app-bana\ai-builder\target\ai-builder-1.0-SNAPSHOT-shaded.jar
+[INFO] 
+[INFO] --- install:3.1.0:install (default-install) @ ai-builder ---
+[INFO] Installing C:\Users\dilip\git\app-bana\ai-builder\pom.xml to C:\Users\dilip\.m2\repository\com\appbana\ai-builder\1.0-SNAPSHOT\ai-builder-1.0-SNAPSHOT.pom
+[INFO] Installing C:\Users\dilip\git\app-bana\ai-builder\target\ai-builder-1.0-SNAPSHOT.jar to C:\Users\dilip\.m2\repository\com\appbana\ai-builder\1.0-SNAPSHOT\ai-builder-1.0-SNAPSHOT.jar
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for app-bana-parent 1.0-SNAPSHOT:
+[INFO] 
+[INFO] app-bana-parent .................................... SUCCESS [  0.153 s]
+[INFO] AppBana UI Resources ............................... SUCCESS [  0.693 s]
+[INFO] app-bana ........................................... SUCCESS [  4.328 s]
+[INFO] AI Builder Service ................................. SUCCESS [  5.947 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  11.234 s
+[INFO] Finished at: 2026-04-20T00:37:39+05:30
+[INFO] ------------------------------------------------------------------------
+[WARNING] 
+[WARNING] Plugin validation issues were detected in 1 plugin(s)
+[WARNING] 
+[WARNING]  * org.apache.maven.plugins:maven-resources-plugin:3.3.0
+[WARNING] 
+[WARNING] For more or less details, use 'maven.plugin.validation' property with one of the values (case insensitive): [BRIEF, DEFAULT, VERBOSE]
+[WARNING] 
+[3/3] Build successful or artifacts verified
+Starting AI Builder server on port 8081...
+Health check: http://localhost:8081/health
+Chat API: http://localhost:8081/api/ai/chat
+Database: jdbc:postgresql://localhost:5432/appbana (user: appbana)
+
+Press Ctrl+C to stop the service
+======================================================
+[main] INFO com.appbana.ai.AiBuilderMain - ? Starting AI Builder Service...
+[main] INFO com.appbana.ai.config.AiConfig - Configuration loaded successfully
+[main] INFO com.appbana.ai.AiBuilderMain - ? Configuration loaded: AiConfig{port=8081, openaiModel=gpt-4o-mini, qdrantHost=localhost:6334, enableLearning=true}
+[main] INFO com.appbana.ai.AiBuilderMain - ? Initializing Qdrant vector database...
+[main] INFO com.appbana.ai.rag.QdrantService - Initializing Qdrant client: localhost:6334
+[main] INFO com.appbana.ai.rag.QdrantService - Qdrant client initialized successfully
+[main] INFO com.appbana.ai.AiBuilderMain - ? Qdrant health check passed
+[main] INFO com.appbana.ai.rag.QdrantService - Initializing Qdrant collections...
+[main] INFO com.appbana.ai.rag.QdrantService - Collection 'conversations' already exists
+[main] INFO com.appbana.ai.rag.QdrantService - Collection 'conversations' has 63 points
+[main] INFO com.appbana.ai.rag.QdrantService - Creating payload index for field 'sessionId' in collection 'conversations'
+[main] INFO com.appbana.ai.rag.QdrantService - Payload index created successfully
+[main] INFO com.appbana.ai.rag.QdrantService - Creating payload index for field 'userId' in collection 'conversations'
+[main] INFO com.appbana.ai.rag.QdrantService - Payload index created successfully
+[main] INFO com.appbana.ai.rag.QdrantService - Collection 'app_patterns' already exists
+[main] INFO com.appbana.ai.rag.QdrantService - Collection 'app_patterns' has 0 points
+[main] INFO com.appbana.ai.rag.QdrantService - Collection 'appbana_knowledge' already exists
+[main] INFO com.appbana.ai.rag.QdrantService - Collection 'appbana_knowledge' has 97 points
+[main] INFO com.appbana.ai.rag.QdrantService - Creating payload index for field 'category' in collection 'appbana_knowledge'
+[main] INFO com.appbana.ai.rag.QdrantService - Payload index created successfully
+[main] INFO com.appbana.ai.rag.QdrantService - Creating payload index for field 'schemaType' in collection 'appbana_knowledge'
+[main] INFO com.appbana.ai.rag.QdrantService - Payload index created successfully
+[main] INFO com.appbana.ai.rag.QdrantService - Qdrant collections initialized successfully
+[main] INFO com.appbana.ai.AiBuilderMain - ? Qdrant collections initialized
+[main] INFO com.appbana.ai.server.AiServer - Initializing AI services...
+[main] INFO com.appbana.ai.cache.LlmCacheService - [LlmCache] Initialized with maxSize=100000, ttl=PT6H
+[main] INFO com.appbana.ai.llm.ModelRouter - [ModelRouter] Initialized with premium=gpt-4o, standard=gpt-4o-mini
+[main] INFO com.appbana.ai.llm.OpenAiLlmService - OpenAI LLM Service initialized - standard: gpt-4o-mini, premium: gpt-4o, hybrid: true, cache: enabled
+[main] INFO com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+[main] INFO com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@560513ce
+[main] INFO com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+[main] INFO com.appbana.ai.server.AiServer - Database connection pool initialized
+[main] INFO com.appbana.ai.server.AiServer - Running database migrations...
+[main] INFO org.flywaydb.core.FlywayExecutor - Database: jdbc:postgresql://localhost:5432/appbana (PostgreSQL 18.1)
+[main] WARN org.flywaydb.core.internal.database.base.Database - Flyway upgrade recommended: PostgreSQL 18.1 is newer than this version of Flyway and support has not been tested. The latest supported version of PostgreSQL is 16.
+[main] INFO org.flywaydb.core.internal.command.DbValidate - Successfully validated 5 migrations (execution time 00:00.141s)
+[main] INFO org.flywaydb.core.internal.command.DbMigrate - Current version of schema "public": 004
+[main] INFO org.flywaydb.core.internal.command.DbMigrate - Schema "public" is up to date. No migration necessary.
+[main] INFO com.appbana.ai.server.AiServer - Database migrations complete
+[main] INFO com.appbana.ai.learning.UserPreferenceEngine - User Preference Engine initialized
+[main] INFO com.appbana.ai.rag.EmbeddingService - Initializing Embedding Service with model: text-embedding-3-small
+[main] INFO com.appbana.ai.rag.EmbeddingService - Embedding Service initialized successfully
+[main] INFO com.appbana.ai.rag.EmbeddingService - Cache config: max=10000, TTL=1h
+[main] INFO com.appbana.ai.rag.VectorStoreService - Vector Store Service initialized
+[main] INFO com.appbana.ai.knowledge.AppBanaSchemaLoader - Schema loading complete
+[main] INFO com.appbana.ai.knowledge.AppBanaSchemaLoader - Loaded 47 AppBana schemas
+[main] INFO com.appbana.ai.knowledge.KnowledgeBaseService - KnowledgeBaseService initialized
+[main] INFO com.appbana.ai.server.AiServer - AppBana knowledge base already populated (97 schemas) - skipping full initialization
+[main] INFO com.appbana.ai.knowledge.KnowledgeBaseService - Syncing 8 domain templates (upsert, idempotent)...
+[main] INFO com.appbana.ai.knowledge.KnowledgeBaseService - Domain template sync complete: 8/8
+[main] INFO com.appbana.ai.optimization.DirectAnswerService - DirectAnswerService initialized
+[main] INFO com.appbana.ai.optimization.PatternExecutor - PatternExecutor initialized
+[main] INFO com.appbana.ai.server.AiServer - Optimization services initialized (DirectAnswer + PatternExecutor)
+[main] INFO com.appbana.ai.knowledge.AppBanaPromptEnhancer - AppBanaPromptEnhancer initialized with conditional RAG (Max Schemas: 5)
+[main] INFO com.appbana.ai.rag.ConversationMemory - Conversation Memory initialized
+[main] INFO com.appbana.ai.llm.AdvancedPromptEngine - Advanced Prompt Engine initialized with AppBana enhancement
+[main] INFO com.appbana.ai.knowledge.MetadataValidator - MetadataValidator initialized with 35 field types
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: scaffold_app
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: create_app
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: create_entity
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: list_entities
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: get_entity_details
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: list_pages
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: list_workflows
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: list_apps
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: generate_page
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: deploy_app
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: search_knowledge
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: batch_update_entities
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: generate_mock_data
+[main] INFO com.appbana.ai.agent.tool.ToolRegistry - Registered tool: rollback_app
+[main] INFO com.appbana.ai.server.AiServer - Registered 14 tools
+[main] INFO com.appbana.ai.agent.PatternExecutor - PatternExecutor initialized with 8 patterns
+[main] INFO com.appbana.ai.cache.SemanticCache - SemanticCache initialized: maxEntries=10000, ttl=PT6H, threshold=0.85
+[main] INFO com.appbana.ai.agent.AiAgent - AiAgent initialized with 14 tools, max iterations: 25, batching: enabled, patterns: enabled, semantic-cache: enabled
+[main] INFO com.appbana.ai.agent.AiAgent - AiAgent: RAG domain examples enabled
+[main] INFO com.appbana.ai.dialogue.DialogueManager - [DialogueManager] Initialized — per-session state machine ready
+[main] INFO com.appbana.ai.server.AiServer - AI services initialized successfully
+[main] INFO com.appbana.ai.server.AiServer - Registered AI routes:
+[main] INFO com.appbana.ai.server.AiServer -   GET  /health
+[main] INFO com.appbana.ai.server.AiServer -   POST /api/ai/chat
+[main] INFO com.appbana.ai.server.AiServer -   POST /api/ai/chat/agent
+[main] INFO com.appbana.ai.server.AiServer -   GET  /api/ai/chat/history
+[main] INFO com.appbana.ai.server.AiServer -   GET  /api/ai/chat/sessions
+[main] INFO com.appbana.ai.server.AiServer - AI Server initialized on port 8081
+[main] INFO com.appbana.ai.server.AiServer - ? AI Builder Server started on port 8081
+[main] INFO com.appbana.ai.server.AiServer - ? Health check: http://localhost:8081/health
+[main] INFO com.appbana.ai.server.AiServer - ? Chat endpoint: http://localhost:8081/api/ai/chat
+[main] INFO com.appbana.ai.server.AiServer - ? Agent endpoint: http://localhost:8081/api/ai/chat/agent
+[main] INFO com.appbana.ai.AiBuilderMain - ? AI Builder Service started successfully on port 8081
+[main] INFO com.appbana.ai.AiBuilderMain - ? Health check: http://localhost:8081/health
+[main] INFO com.appbana.ai.AiBuilderMain - ? API endpoint: http://localhost:8081/api/ai/chat
+[HTTP-Dispatcher] INFO com.appbana.ai.api.ChatHistoryController - [ChatHistory] Loading sessions for user=dilip_upadhyay@outlook.com limit=20
+[HTTP-Dispatcher] INFO com.appbana.ai.api.ChatHistoryController - [ChatHistory] Loading history for user=dilip_upadhyay@outlook.com session=140d5c0b-0ed2-4536-8527-57d4d3f0bf1a
+[HTTP-Dispatcher] INFO com.appbana.ai.api.ChatHistoryController - [ChatHistory] Returning 30 messages for session 140d5c0b-0ed2-4536-8527-57d4d3f0bf1a
+[HTTP-Dispatcher] INFO com.appbana.ai.api.ChatHistoryController - [ChatHistory] Loading sessions for user=dilip_upadhyay@outlook.com limit=20
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [AGENT-ENDPOINT] Chat request from user: dilip_upadhyay@outlook.com
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [RAG-FIRST] Falling back to full agent loop
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [DIALOGUE] session=1abf2ce3-198e-4aa1-ab46-23665c4f1b14 resolved state=GREETING
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Starting processing for user: dilip_upadhyay@outlook.com
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.PatternExecutor - [PatternExecutor] Matched pattern: GREETING for input: Hi
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.PatternExecutor - [PatternExecutor] Executed in 0ms
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Pattern matched - skipping LLM call (100% cost savings)
+[HTTP-Dispatcher] INFO com.appbana.ai.api.ChatHistoryController - [ChatHistory] Loading history for user=dilip_upadhyay@outlook.com session=1abf2ce3-198e-4aa1-ab46-23665c4f1b14
+[HTTP-Dispatcher] INFO com.appbana.ai.api.ChatHistoryController - [ChatHistory] Returning 2 messages for session 1abf2ce3-198e-4aa1-ab46-23665c4f1b14
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [AGENT-ENDPOINT] Chat request from user: dilip_upadhyay@outlook.com
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [RAG-FIRST] Falling back to full agent loop
+[HTTP-Dispatcher] INFO com.appbana.ai.dialogue.DialogueManager - [DialogueManager] session=1abf2ce3-198e-4aa1-ab46-23665c4f1b14 transition: GREETING ? GATHERING_REQUIREMENTS
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [DIALOGUE] session=1abf2ce3-198e-4aa1-ab46-23665c4f1b14 resolved state=GATHERING_REQUIREMENTS
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Starting processing for user: dilip_upadhyay@outlook.com
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Effective max iterations: 5
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] === Iteration 1 / 5 ===
+[HTTP-Dispatcher] INFO com.appbana.ai.dialogue.DialogueManager - [DialogueManager] Initialized — per-session state machine ready
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Final answer reached after 1 iterations
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [AGENT-ENDPOINT] Chat request from user: dilip_upadhyay@outlook.com
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [RAG-FIRST] Falling back to full agent loop
+[HTTP-Dispatcher] INFO com.appbana.ai.dialogue.DialogueManager - [DialogueManager] session=1abf2ce3-198e-4aa1-ab46-23665c4f1b14 transition: GATHERING_REQUIREMENTS ? CONFIRMING
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [DIALOGUE] session=1abf2ce3-198e-4aa1-ab46-23665c4f1b14 resolved state=CONFIRMING
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Starting processing for user: dilip_upadhyay@outlook.com
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Effective max iterations: 5
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] === Iteration 1 / 5 ===
+[HTTP-Dispatcher] INFO com.appbana.ai.dialogue.DialogueManager - [DialogueManager] Initialized — per-session state machine ready
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Final answer reached after 1 iterations
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [AGENT-ENDPOINT] Chat request from user: dilip_upadhyay@outlook.com
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [RAG-FIRST] Falling back to full agent loop
+[HTTP-Dispatcher] INFO com.appbana.ai.api.AiChatController - [DIALOGUE] session=1abf2ce3-198e-4aa1-ab46-23665c4f1b14 resolved state=CONFIRMING
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Starting processing for user: dilip_upadhyay@outlook.com
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Effective max iterations: 5
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] === Iteration 1 / 5 ===
+[HTTP-Dispatcher] INFO com.appbana.ai.dialogue.DialogueManager - [DialogueManager] Initialized — per-session state machine ready
+[HTTP-Dispatcher] INFO com.appbana.ai.agent.AiAgent - [AGENT] Final answer reached after 1 iterations
