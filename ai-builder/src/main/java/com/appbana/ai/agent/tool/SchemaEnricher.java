@@ -115,9 +115,25 @@ public class SchemaEnricher {
             String original = (String) field.get(F_TYPE);
             String coerced = coerceType(original);
             if (!coerced.equals(original)) {
-                log.warn("[SchemaEnricher] Entity '{}': field '{}' type '{}' → '{}' (coerced)",
+                log.warn("[SchemaEnricher] Entity '{}': field '{}' type '{}' \u2192 '{}' (coerced)",
                         entityName, field.get(F_NAME), original, coerced);
                 field.put(F_TYPE, coerced);
+            }
+        }
+
+        // Step 1b — any autoIncrement+primaryKey field MUST be numeric.
+        // The backend enforces this strictly; the LLM often generates type "text"
+        // for id fields even when it correctly marks autoIncrement/primaryKey.
+        for (Map<String, Object> field : fields) {
+            boolean isPk = Boolean.TRUE.equals(field.get(F_PRIMARY_KEY));
+            boolean isAi = Boolean.TRUE.equals(field.get(F_AUTO_INC));
+            if (isPk && isAi) {
+                String type = (String) field.get(F_TYPE);
+                if (!T_NUMBER.equals(type)) {
+                    log.warn("[SchemaEnricher] Entity '{}': autoIncrement PK field '{}' has type '{}' \u2192 forcing 'number'",
+                            entityName, field.get(F_NAME), type);
+                    field.put(F_TYPE, T_NUMBER);
+                }
             }
         }
 

@@ -134,6 +134,7 @@ public class AiAgent {
             log.info("[AGENT] Effective max iterations: {}", effectiveMaxIterations);
 
             // Agent loop
+            int consecutiveFailures = 0;
             for (int iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
                 log.info("[AGENT] === Iteration {} / {} ===", iteration, effectiveMaxIterations);
 
@@ -188,12 +189,25 @@ public class AiAgent {
                         }
                     }
 
-                    // Safety: If all tools failed in this step, and we are near the limit, stop
-                    // early to save cost
+                    // Abort early after 2 consecutive all-tools-failed iterations to avoid
+                    // burning the remaining budget on the same unrecoverable error.
                     if (allToolsFailed) {
-                        log.warn("[AGENT] All tools failed in iteration {}. Checking if we should abort.", iteration);
-                        // If it's the last attempt or we've failed multiple times, maybe stop?
-                        // For now, let it retry once more if iterations allow, but log it clearly.
+                        consecutiveFailures++;
+                        log.warn("[AGENT] All tools failed in iteration {} (consecutive failures: {}).",
+                                iteration, consecutiveFailures);
+                        if (consecutiveFailures >= 2) {
+                            log.warn("[AGENT] Aborting early after {} consecutive tool failures to save cost.",
+                                    consecutiveFailures);
+                            steps.add(step);
+                            return AgentResponse.error(
+                                    "I was unable to complete your request after multiple attempts. " +
+                                    "The last error was: " + results.get(0).getError() + 
+                                    ". Please check the app exists and try rephrasing your request.",
+                                    steps,
+                                    System.currentTimeMillis() - startTime);
+                        }
+                    } else {
+                        consecutiveFailures = 0; // reset on any partial success
                     }
                 } else {
                     log.warn("[AGENT] No tool calls and no final answer - LLM may be confused");
