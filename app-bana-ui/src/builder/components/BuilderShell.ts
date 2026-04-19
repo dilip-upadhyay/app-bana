@@ -161,8 +161,8 @@ export class BuilderShell extends LitElement {
   /** Returns the URL the iframe should embed, or null if not determinable */
   private getLiveAppUrl(): string | null {
     if (!this.currentAppId || !this.currentTenantId) return null;
-    const base = (import.meta as any).env?.VITE_API_BASE_URL ?? 'http://localhost:8080';
-    return `${base}/appbana-studio/${this.currentTenantId}/apps/${this.currentAppId}/live`;
+    // Use the frontend runtime route with the dev environment parameter
+    return `/run/${this.currentTenantId}/${this.currentAppId}?env=dev`;
   }
 
   /** Center panel content — iframe in AI mode, live preview otherwise */
