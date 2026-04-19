@@ -1,5 +1,18 @@
 # AppBana AI Builder - Active Tasks
 
+## ✅ Completed: AI Schema Quality Stack (feature/ai-schema-quality)
+
+**Branch**: `feature/ai-schema-quality` — 4 commits, ready to review/merge into `main`
+
+| Phase | Summary | Status |
+|-------|---------|--------|
+| Phase 1 — SchemaEnricher | Type coercion (10 aliases) + baseline field injection (`id`, `created_at`, `updated_at`) in `ScaffoldAppTool` | ✅ Done |
+| Phase 2 — Structured Generation | `chatWithJsonMode()` + `chatStructured()` in `OpenAiLlmService`; JSON mode in `AiAgent.think()` | ✅ Done |
+| Phase 3 — Dynamic Prompt Builder | `ConversationSpec.java` keyword tracker — injects ✓/✗ spec coverage checklist into every scaffold prompt | ✅ Done |
+| Phase 4 — RAG Domain Examples | 8 domain templates in `AppBanaSchemaLoader`; `getDomainExamples()` in `KnowledgeBaseService`; few-shot injection in `AiAgent.buildAgentPrompt()` | ✅ Done |
+
+---
+
 ## Current Epic: Intelligent Dialogue (Epic 3)
 
 ### 🚀 Next Up: Story 3.1 - Implement Dialogue Manager
@@ -12,5 +25,6 @@
 - [ ] **Tests**: Create Unit tests covering LLM integration with `DialogueManagerTest.java`.
 
 ### 📌 Backlog
+- Merge `feature/ai-schema-quality` into `main`
 - Refine LLM Error Recovery loops (preventing max iteration starvation on failed API calls).
 - Enhance Visual Feedback (Vite UI) to show typing indicators while the `AiAgent` executes long-running internal thoughts.
