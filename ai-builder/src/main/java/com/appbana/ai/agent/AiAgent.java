@@ -8,6 +8,7 @@ import com.appbana.ai.agent.BatchedToolExecutor;
 import com.appbana.ai.agent.PatternExecutor;
 import com.appbana.ai.cache.SemanticCache;
 import com.appbana.ai.dialogue.ConversationSpec;
+import com.appbana.ai.dialogue.DialogueManager;
 import com.appbana.ai.knowledge.KnowledgeBaseService;
 import com.appbana.ai.knowledge.SchemaDefinition;
 import com.appbana.ai.llm.OpenAiLlmService;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Collections;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -510,9 +512,19 @@ public class AiAgent {
                         - Always be encouraging. Make the user feel confident about what they're building.
                         """);
 
-        // Available tools
+        // Available tools — filtered by conversation state to prevent the LLM from
+        // calling build tools (scaffold_app, deploy_app, etc.) before the user has
+        // confirmed.  If no state is stored in context, we fall back to all tools.
         prompt.append("## Available Tools\n\n");
-        prompt.append(toolRegistry.getToolDescriptions());
+
+        Set<String> allowedTools = resolveAllowedTools(context);
+        if (allowedTools != null) {
+            prompt.append(toolRegistry.getToolDescriptions(allowedTools));
+            log.debug("[AGENT] Tool filter active — state={}, exposed={}",
+                    context.getVariable("conversation_state"), allowedTools);
+        } else {
+            prompt.append(toolRegistry.getToolDescriptions());
+        }
         prompt.append("\n\n");
 
         // Response format
@@ -655,6 +667,27 @@ public class AiAgent {
         prompt.append("Respond with JSON only:");
 
         return prompt.toString();
+    }
+
+    /**
+     * Resolve the set of tool names allowed for the current conversation state.
+     * Returns {@code null} when no state is set (backwards-compatible: show all).
+     */
+    private Set<String> resolveAllowedTools(AgentContext context) {
+        if (!context.hasVariable("conversation_state")) {
+            return null;
+        }
+        try {
+            String stateName = (String) context.getVariable("conversation_state");
+            DialogueManager.ConversationState state =
+                    DialogueManager.ConversationState.valueOf(stateName);
+            // Create a temporary DialogueManager just to call getAllowedTools.
+            // getAllowedTools() is a pure function — no side effects.
+            return new DialogueManager().getAllowedTools(state);
+        } catch (Exception e) {
+            log.warn("[AGENT] Could not resolve allowed tools from conversation_state: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**

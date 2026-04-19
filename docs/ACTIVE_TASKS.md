@@ -13,18 +13,19 @@
 
 ---
 
-## Current Epic: Intelligent Dialogue (Epic 3)
+## ✅ Completed: Intelligent Dialogue — Story 3.1 (Dialogue Manager)
 
-### 🚀 Next Up: Story 3.1 - Implement Dialogue Manager
-**Goal:** Implement a strict state machine `DialogueManager` into `AiChatController` to orchestrate deterministic phases of the app building process, preventing the `AiAgent` LLM from relying purely on autonomous system prompting.
+| Task | Summary | Status |
+|------|---------|--------|
+| State Machine | `DialogueManager` rewritten — `ConcurrentHashMap` per-session, `resolveState()` auto-transitions via `ConversationSpec` | ✅ Done |
+| Controller Integration | `AiChatController` injects `DialogueManager`, resolves state before agent call, returns `conversationState` in response | ✅ Done |
+| Prompt Trimming | `AiAgent.buildAgentPrompt()` uses `toolRegistry.getToolDescriptions(allowedTools)` filtered by state | ✅ Done |
+| Tests | 16 unit tests in `DialogueManagerTest` — all green | ✅ Done |
 
-#### Tasks to Complete:
-- [ ] **State Machine Logic**: Enhance `com.appbana.ai.dialogue.DialogueManager` to classify active user intents (`INITIAL`, `GATHERING_INFO`, `CONFIRMING_DETAILS`, `CREATING`).
-- [ ] **Controller Integration**: Update `com.appbana.ai.api.AiChatController` to proxy requests through `DialogueManager` state checks *before* delegating execution to the `AiAgent`.
-- [ ] **Prompt Trimming**: Modify `AiAgent.java` (`buildAgentPrompt`) to dynamically constrain available tools based on the active `ConversationState`. (e.g., Only expose `scaffold_app` when state is `CREATING`).
-- [ ] **Tests**: Create Unit tests covering LLM integration with `DialogueManagerTest.java`.
+---
 
-### 📌 Backlog
-- Merge `feature/ai-schema-quality` into `main`
-- Refine LLM Error Recovery loops (preventing max iteration starvation on failed API calls).
-- Enhance Visual Feedback (Vite UI) to show typing indicators while the `AiAgent` executes long-running internal thoughts.
+## 📌 Backlog
+
+- **Merge `feature/ai-schema-quality` into `main`**
+- Story 3.2 — LLM Error Recovery loops (prevent max iteration starvation on repeated tool failures)
+- Story 3.3 — UI Visual Feedback: typing indicator in Vite UI while `AiAgent` executes long-running thoughts

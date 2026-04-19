@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Registry for managing available tools
@@ -89,6 +90,37 @@ public class ToolRegistry {
         }
 
         return sb.toString();
+    }
+
+    /**
+     * Get tool descriptions filtered to only the allowed tool names.
+     * Used by {@code AiAgent.buildAgentPrompt()} to hide build tools in early
+     * conversation phases (GREETING / GATHERING_REQUIREMENTS).
+     *
+     * @param allowedToolNames set of tool names to include; if null or empty, all tools are returned
+     */
+    public String getToolDescriptions(Set<String> allowedToolNames) {
+        if (allowedToolNames == null || allowedToolNames.isEmpty()) {
+            return getToolDescriptions(); // fallback: show all
+        }
+
+        if (tools.isEmpty()) {
+            return "No tools available.";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (Tool tool : tools.values()) {
+            if (allowedToolNames.contains(tool.getName())) {
+                sb.append("### ").append(tool.getName()).append("\n");
+                sb.append(tool.getDescription()).append("\n\n");
+                sb.append("**Parameters:**\n");
+                sb.append("```json\n");
+                sb.append(tool.getParameterSchema()).append("\n");
+                sb.append("```\n\n");
+            }
+        }
+
+        return sb.isEmpty() ? "No tools available for current conversation phase." : sb.toString();
     }
 
     /**

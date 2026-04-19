@@ -1,71 +1,214 @@
 package com.appbana.ai.dialogue;
 
+import com.appbana.ai.rag.ConversationMemory;
 import lombok.extern.slf4j.Slf4j;
+
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Dialogue manager for conversation state management
- * Story: 3.1 - Implement Dialogue Manager
+ * DialogueManager — Story 3.1: Implement Dialogue Manager
+ *
+ * A per-session state machine that autonomously classifies conversation phases
+ * so that the {@code AiAgent} does not rely solely on system-prompting to
+ * remember whether it is gathering requirements or building an app.
+ *
+ * <h3>State Transitions</h3>
+ * <pre>
+ *   GREETING
+ *     │  (entities detected in conversation)
+ *     ▼
+ *   GATHERING_REQUIREMENTS
+ *     │  (user says "yes", "build it", "proceed", etc.)
+ *     ▼
+ *   CONFIRMING
+ *     │  (controller calls notifyScaffolding after scaffold_app succeeds)
+ *     ▼
+ *   GENERATING
+ *     │  (controller calls notifyCompleted after full agent response succeeds)
+ *     ▼
+ *   COMPLETED
+ * </pre>
+ *
+ * The only forward-only rule: once a session reaches CONFIRMING or beyond,
+ * confirmation keywords in subsequent messages do NOT reset it back.
+ *
+ * <h3>Thread Safety</h3>
+ * Uses a {@link ConcurrentHashMap} so multiple concurrent requests for
+ * different sessions are safe without global locking.
  */
 @Slf4j
 public class DialogueManager {
 
+    // ── State Definition ───────────────────────────────────────────────────────
+
     public enum ConversationState {
-        GREETING, GATHERING_REQUIREMENTS, CLARIFYING, CONFIRMING,
-        GENERATING, COMPLETED
+        /** New session — no requirements captured yet. */
+        GREETING,
+
+        /** At least one entity/domain topic has been mentioned. */
+        GATHERING_REQUIREMENTS,
+
+        /** User has explicitly confirmed the proposed plan. */
+        CONFIRMING,
+
+        /** scaffold_app (or equivalent) has been called successfully. */
+        GENERATING,
+
+        /** App generation completed. User may request modifications. */
+        COMPLETED
     }
 
-    private ConversationState currentState = ConversationState.GREETING;
-    private final Map<String, Object> context = new HashMap<>();
+    // ── Tool Buckets per State ─────────────────────────────────────────────────
+
+    /**
+     * Read-only tools — safe to expose in any state.
+     */
+    public static final Set<String> READ_ONLY_TOOLS = Set.of(
+            "search_knowledge",
+            "list_apps",
+            "list_entities",
+            "get_entity_details",
+            "list_pages",
+            "list_workflows"
+    );
+
+    /**
+     * Write/build tools — only unlocked once the user has confirmed (CONFIRMING+).
+     */
+    public static final Set<String> BUILD_TOOLS = Set.of(
+            "scaffold_app",
+            "create_app",
+            "create_entity",
+            "generate_page",
+            "deploy_app",
+            "generate_mock_data",
+            "batch_update_entities"
+    );
+
+    // ── Per-session state storage ──────────────────────────────────────────────
+
+    private final ConcurrentHashMap<String, ConversationState> sessionStates = new ConcurrentHashMap<>();
 
     public DialogueManager() {
-        log.info("Dialogue Manager initialized");
+        log.info("[DialogueManager] Initialized — per-session state machine ready");
     }
 
-    public String handle(String userMessage, ConversationState state) {
-        this.currentState = state;
+    // ── Core API ───────────────────────────────────────────────────────────────
 
+    /**
+     * Derive the current {@link ConversationState} for a session, automatically
+     * advancing it based on the conversation history and the latest user message.
+     *
+     * <p>This method is idempotent: calling it multiple times with the same inputs
+     * produces the same state (it only advances, never regresses mid-conversation).
+     *
+     * @param sessionId   unique session identifier
+     * @param history     conversation turns so far (may be empty)
+     * @param userMessage current message from the user
+     * @return the resolved state for this session
+     */
+    public ConversationState resolveState(String sessionId,
+                                          List<ConversationMemory.Conversation> history,
+                                          String userMessage) {
+        ConversationState current = sessionStates.getOrDefault(sessionId, ConversationState.GREETING);
+
+        // States GENERATING and COMPLETED are only set via explicit notify*() calls.
+        // We don't auto-transition into them from text analysis.
+        if (current == ConversationState.GENERATING || current == ConversationState.COMPLETED) {
+            log.debug("[DialogueManager] session={} state={} (locked — manual transition only)", sessionId, current);
+            return current;
+        }
+
+        // Run keyword analysis on the full conversation corpus
+        ConversationSpec spec = ConversationSpec.analyse(history, userMessage);
+
+        ConversationState next = computeNextState(current, spec);
+
+        if (next != current) {
+            sessionStates.put(sessionId, next);
+            log.info("[DialogueManager] session={} transition: {} → {}", sessionId, current, next);
+        } else {
+            log.debug("[DialogueManager] session={} state={} (unchanged)", sessionId, current);
+        }
+
+        return next;
+    }
+
+    /**
+     * Force state to {@code GENERATING} after a successful scaffold/build tool call.
+     * Called by the controller, not by text analysis.
+     */
+    public void notifyScaffolding(String sessionId) {
+        ConversationState prev = sessionStates.put(sessionId, ConversationState.GENERATING);
+        log.info("[DialogueManager] session={} notifyScaffolding: {} → GENERATING", sessionId, prev);
+    }
+
+    /**
+     * Force state to {@code COMPLETED} after the agent reports full success.
+     * Called by the controller, not by text analysis.
+     */
+    public void notifyCompleted(String sessionId) {
+        ConversationState prev = sessionStates.put(sessionId, ConversationState.COMPLETED);
+        log.info("[DialogueManager] session={} notifyCompleted: {} → COMPLETED", sessionId, prev);
+    }
+
+    /**
+     * Return the current persisted state for a session without running analysis.
+     * Returns {@code GREETING} for unknown sessions.
+     */
+    public ConversationState getCurrentState(String sessionId) {
+        return sessionStates.getOrDefault(sessionId, ConversationState.GREETING);
+    }
+
+    /**
+     * Returns the set of tool names that the LLM is allowed to call in a given state.
+     * Used by {@code AiAgent.buildAgentPrompt()} to produce a filtered tool list.
+     */
+    public Set<String> getAllowedTools(ConversationState state) {
         return switch (state) {
-            case GREETING -> handleGreeting(userMessage);
-            case GATHERING_REQUIREMENTS -> handleGathering(userMessage);
-            case CLARIFYING -> handleClarifying(userMessage);
-            case CONFIRMING -> handleConfirming(userMessage);
-            case GENERATING -> handleGenerating(userMessage);
-            case COMPLETED -> handleCompleted(userMessage);
+            case GREETING -> Set.of("search_knowledge", "list_apps");
+            case GATHERING_REQUIREMENTS -> READ_ONLY_TOOLS;
+            case CONFIRMING, GENERATING, COMPLETED -> {
+                Set<String> all = new HashSet<>(READ_ONLY_TOOLS);
+                all.addAll(BUILD_TOOLS);
+                yield Collections.unmodifiableSet(all);
+            }
         };
     }
 
-    private String handleGreeting(String message) {
-        context.put("started", true);
-        return "Hello! I'll help you build your application. What would you like to create?";
+    /**
+     * Convenience: resolve state and immediately return the allowed tool set.
+     */
+    public Set<String> resolveAllowedTools(String sessionId,
+                                            List<ConversationMemory.Conversation> history,
+                                            String userMessage) {
+        ConversationState state = resolveState(sessionId, history, userMessage);
+        return getAllowedTools(state);
     }
 
-    private String handleGathering(String message) {
-        context.put("requirements", message);
-        return "I understand. Let me clarify a few details...";
-    }
+    // ── Internal Transition Logic ──────────────────────────────────────────────
 
-    private String handleClarifying(String message) {
-        return "Thank you for clarifying. Let me confirm what I understood...";
-    }
+    private ConversationState computeNextState(ConversationState current, ConversationSpec spec) {
+        return switch (current) {
+            case GREETING -> {
+                // Advance if user has started describing their domain
+                if (spec.isEntitiesDiscussed()) {
+                    yield ConversationState.GATHERING_REQUIREMENTS;
+                }
+                yield ConversationState.GREETING;
+            }
 
-    private String handleConfirming(String message) {
-        return "Great! I'll start generating your application now.";
-    }
+            case GATHERING_REQUIREMENTS -> {
+                // Advance when the user explicitly confirms the plan
+                if (spec.isUserConfirmed()) {
+                    yield ConversationState.CONFIRMING;
+                }
+                yield ConversationState.GATHERING_REQUIREMENTS;
+            }
 
-    private String handleGenerating(String message) {
-        return "Your application is being generated...";
-    }
-
-    private String handleCompleted(String message) {
-        return "Your application is ready! Would you like to make any changes?";
-    }
-
-    public ConversationState getCurrentState() {
-        return currentState;
-    }
-
-    public Map<String, Object> getContext() {
-        return new HashMap<>(context);
+            // CONFIRMING, GENERATING, COMPLETED: never auto-regress
+            default -> current;
+        };
     }
 }

@@ -7,6 +7,7 @@ import com.appbana.ai.api.AiChatController;
 import com.appbana.ai.api.ChatHistoryController;
 import com.appbana.ai.api.Router;
 import com.appbana.ai.config.AiConfig;
+import com.appbana.ai.dialogue.DialogueManager;
 import com.appbana.ai.knowledge.AppBanaKnowledgeLoader;
 import com.appbana.ai.knowledge.AppBanaPromptEnhancer;
 import com.appbana.ai.knowledge.AppBanaSchemaLoader;
@@ -186,7 +187,8 @@ public class AiServer {
             AiAgent agent = new AiAgent(llmService, toolRegistry, agentConfig)
                     .withKnowledgeBase(knowledgeBaseService);
 
-            // AI Chat Controller
+            // AI Chat Controller (Story 3.1 — wire in DialogueManager)
+            DialogueManager dialogueManager = new DialogueManager();
             AiChatController chatController = new AiChatController(
                     llmService,
                     promptEngine,
@@ -194,7 +196,8 @@ public class AiServer {
                     agent,
                     userPreferenceEngine,
                     directAnswerService,
-                    patternExecutor);
+                    patternExecutor,
+                    dialogueManager);
 
             // Chat History Controller
             ChatHistoryController historyController = new ChatHistoryController(conversationMemory);

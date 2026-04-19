@@ -4,6 +4,7 @@ import com.appbana.ai.api.dto.*;
 import com.appbana.ai.agent.AiAgent;
 import com.appbana.ai.agent.AgentContext;
 import com.appbana.ai.agent.AgentResponse;
+import com.appbana.ai.dialogue.DialogueManager;
 // IntentClassifier removed
 import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.llm.AdvancedPromptEngine;
@@ -30,6 +31,7 @@ public class AiChatController {
     private final UserPreferenceEngine userPreferenceEngine;
     private final DirectAnswerService directAnswerService;
     private final PatternExecutor patternExecutor;
+    private final DialogueManager dialogueManager;
 
     public AiChatController(
             OpenAiLlmService llmService,
@@ -38,12 +40,14 @@ public class AiChatController {
             AiAgent agent,
             UserPreferenceEngine userPreferenceEngine,
             DirectAnswerService directAnswerService,
-            PatternExecutor patternExecutor) {
+            PatternExecutor patternExecutor,
+            DialogueManager dialogueManager) {
         this.conversationMemory = conversationMemory;
         this.agent = agent;
         this.userPreferenceEngine = userPreferenceEngine;
         this.directAnswerService = directAnswerService;
         this.patternExecutor = patternExecutor;
+        this.dialogueManager = dialogueManager;
     }
 
     /**
@@ -175,11 +179,16 @@ public class AiChatController {
             }
         }
 
-        // Stage 3: Full agent loop (standard LLM cost)
+        // === Stage 3: Full agent loop (standard LLM cost) ===
         log.info("[RAG-FIRST] Falling back to full agent loop");
 
-        // 2. Prepare Agent Context
-        // Pass token for authenticated tool calls and history for context
+        // 2a. Resolve conversation state via DialogueManager
+        //     This determines which phase the user is in and filters the tool set.
+        DialogueManager.ConversationState conversationState =
+                dialogueManager.resolveState(sessionId, history, chatRequest.getMessage());
+        log.info("[DIALOGUE] session={} resolved state={}", sessionId, conversationState);
+
+        // 2b. Prepare Agent Context (with conversation state injected)
         AgentContext agentContext = AgentContext.create(
                 tenantId,
                 appId,
@@ -187,15 +196,25 @@ public class AiChatController {
                 sessionId,
                 token)
                 .withVariable("chat_history", history)
-                .withVariable("user_preferences", userPreferences);
+                .withVariable("user_preferences", userPreferences)
+                .withVariable("conversation_state", conversationState.name());
 
         // 3. Execute Agent
-        // The agent will decide which tools to call based on the user's message
-        // Or simply reply if no tool is needed (Zero-Intent Flow)
         AgentResponse result = agent.process(chatRequest.getMessage(), agentContext);
 
         // 4. Handle Result
         if (result.isSuccess()) {
+            // Advance dialogue state if the agent built the app
+            String finalAnswer = result.getFinalAnswer() != null ? result.getFinalAnswer().toLowerCase() : "";
+            if (finalAnswer.contains("scaffold") || finalAnswer.contains("app created")
+                    || finalAnswer.contains("successfully created") || finalAnswer.contains("application has been created")) {
+                dialogueManager.notifyScaffolding(sessionId);
+            } else if (finalAnswer.contains("deployed") || finalAnswer.contains("app is ready")) {
+                dialogueManager.notifyCompleted(sessionId);
+            }
+
+            // Refresh state after possible notify
+            DialogueManager.ConversationState updatedState = dialogueManager.getCurrentState(sessionId);
             // Store conversation in memory
             if (conversationMemory != null) {
                 ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
@@ -203,7 +222,7 @@ public class AiChatController {
                 conv.setSessionId(UUID.fromString(sessionId));
                 conv.setMessage(chatRequest.getMessage());
                 conv.setResponse(result.getFinalAnswer());
-                conv.setIntent("agent_conversation"); // Generic intent for stored history
+                conv.setIntent("agent_conversation");
 
                 try {
                     conversationMemory.store(conv);
@@ -214,16 +233,13 @@ public class AiChatController {
             }
 
             // Return success response
-            // Map legacy 'message' field for older clients if needed, primarily use
-            // 'response'
             Map<String, Object> responseMap = new HashMap<>();
             responseMap.put("status", "success");
             responseMap.put("response", result.getFinalAnswer());
             responseMap.put("message", result.getFinalAnswer()); // Legacy support
             responseMap.put("steps", result.getSteps());
-
-            // Populate intent if available from agent thought (optional in future)
             responseMap.put("intent", "agent_processed");
+            responseMap.put("conversationState", updatedState.name()); // Story 3.1
 
             res.json(200, responseMap);
         } else {
