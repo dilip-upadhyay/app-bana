@@ -34,10 +34,16 @@ public class MetadataValidator {
         this.objectMapper = new ObjectMapper();
 
         // Load valid field types from schema loader
-        this.validFieldTypes = schemaLoader.getAllSchemas().stream()
+        Set<String> types = schemaLoader.getAllSchemas().stream()
                 .filter(s -> s.getTypeAsEnum() == SchemaDefinition.SchemaType.ENTITY_FIELD)
                 .map(SchemaDefinition::getName)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toCollection(HashSet::new));
+        // Also accept the backend's native integer types for autoIncrement PKs:
+        // SchemaManager.validate() only accepts 'int', 'integer', 'long' — not 'number'.
+        types.add("integer");
+        types.add("int");
+        types.add("long");
+        this.validFieldTypes = Collections.unmodifiableSet(types);
 
         log.info("MetadataValidator initialized with {} field types", validFieldTypes.size());
     }
@@ -547,7 +553,6 @@ public class MetadataValidator {
                 Map.entry("mobile", "phone"),
                 // Number variations
                 Map.entry("int", "number"),
-                Map.entry("integer", "number"),
                 Map.entry("count", "number"),
                 Map.entry("quantity", "number"),
                 // Decimal variations
