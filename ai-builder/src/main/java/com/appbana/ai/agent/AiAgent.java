@@ -52,7 +52,7 @@ public class AiAgent {
     private final SemanticCache semanticCache;
     private boolean batchingEnabled = true; // Feature flag
     private boolean patternMatchingEnabled = true; // Cost optimization
-    private boolean semanticCacheEnabled = true; // Cost optimization - cache LLM responses
+    private boolean semanticCacheEnabled = false; // DISABLED TEMPORARILY: Cache returning stale prompt responses
     private KnowledgeBaseService knowledgeBase = null; // Optional - RAG domain examples (Phase 4)
 
     public AiAgent(OpenAiLlmService llmService, ToolRegistry toolRegistry, AgentConfig config) {
@@ -498,7 +498,7 @@ public class AiAgent {
                            - Name screens like a business person: "Customer List", "Book Appointment", "Service Menu" — NOT "CustomerList" or "CreateAppointmentPage"
                            - Use a friendly emoji per entity section (👤 for people, 📅 for appointments, ✂️ for services, etc.)
                         5. **CONVERSATIONAL FOLLOW-UPS (CRITICAL)**: If the user asks a clarification question (e.g., "How does the user find spices?"), requests a tweak, or gives feedback, **DO NOT repeat the template above**. Instead, answer naturally and conversationally like a human. You only need to present the full template once per feature request.
-                        6. Always ensure the user is comfortable. Close initial proposals with: "Does this match what you had in mind? Feel free to ask me to add, remove, or change anything. When you're ready, just say **Yes, let's build it!** ✅"
+                        6. Always ensure the user is comfortable. Close initial proposals with exactly: "Does this match what you had in mind? Feel free to ask me to add, remove, or change anything. When you're ready, click the button below to proceed! [ACTIONS: Yes, let's build it!]"
 
                         ### PHASE 2: Execution (ACT)
                         1. ONLY after the user explicitly says 'yes', 'build it', 'proceed', or clearly approves, proceed.
