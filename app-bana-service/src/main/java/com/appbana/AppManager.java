@@ -214,12 +214,26 @@ public class AppManager {
     }
 
     /**
-     * Get app with all its pages
+     * Get app with all its pages, hydrated entities, and workflow (Live Snapshot)
      */
     public static Map<String, Object> getAppWithPages(String tenantId, String appId) throws IOException {
         AppMetadata app = getApp(tenantId, appId);
         if (app == null)
             return null;
+
+        // Hydrate entities from schemas if available
+        if (app.getSchemas() != null && !app.getSchemas().isEmpty()) {
+            List<Object> hydratedEntities = new ArrayList<>();
+            for (String schemaName : app.getSchemas()) {
+                try {
+                    EntitySchema schema = SchemaManager.loadSchema(appId, schemaName, tenantId);
+                    if (schema != null) hydratedEntities.add(schema);
+                } catch (Exception e) {
+                    LOG.warn("Failed to hydrate schema {} for app {}", schemaName, appId);
+                }
+            }
+            app.setEntities(hydratedEntities);
+        }
 
         Map<String, Object> appMap = mapper.convertValue(app, new TypeReference<Map<String, Object>>() {
         });
@@ -248,6 +262,17 @@ public class AppManager {
         }
 
         appMap.put("pages", pages);
+
+        // Load workflow
+        try {
+            Map<String, Object> workflow = getWorkflow(tenantId, appId);
+            if (workflow != null) {
+                appMap.put("workflow", workflow);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to load workflow for app {}", appId);
+        }
+
         return appMap;
     }
 

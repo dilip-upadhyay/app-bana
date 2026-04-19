@@ -161,8 +161,8 @@ export class BuilderShell extends LitElement {
   /** Returns the URL the iframe should embed, or null if not determinable */
   private getLiveAppUrl(): string | null {
     if (!this.currentAppId || !this.currentTenantId) return null;
-    // Use the frontend runtime route with the dev environment parameter
-    return `/run/${this.currentTenantId}/${this.currentAppId}?env=dev`;
+    // Point to the frontend runtime route for the live working copy
+    return `/run/${this.currentTenantId}/${this.currentAppId}`;
   }
 
   /** Center panel content — iframe in AI mode, live preview otherwise */

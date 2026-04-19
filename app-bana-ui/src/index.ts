@@ -150,11 +150,13 @@ export class AppRoot extends LitElement {
       console.log('[AppRoot] Loaded app:', app.name, 'with', app.pages?.length || 0, 'pages');
 
       // Build full runtime state
-      const currentPageId = compactState.pageId || app.defaultPage || app.pages?.[0]?.id || '';
+      const pages = app.pagesData || app.pages || [];
+      const currentPageId = compactState.pageId || app.defaultPage || (pages[0] && typeof pages[0] === 'object' ? (pages[0] as any).id : pages[0]) || '';
+      
       const fullRuntimeState: AppRuntimeState = {
         tenantId: tenantId,  // Add tenantId to runtime state
         app,
-        pages: app.pages || [],
+        pages: pages,
         currentPageId,
         navigation: {
           history: [currentPageId],
