@@ -17,11 +17,21 @@ public class DirectAnswerService {
 
     private final KnowledgeBaseService knowledgeBase;
 
-    // Knowledge query patterns
+    // Patterns that indicate a knowledge/documentation query (about the platform)
     private static final Set<String> KNOWLEDGE_PATTERNS = Set.of(
             "what is", "what are", "how do i", "how to",
-            "show me", "list", "available", "supported",
+            "available", "supported",
             "can i", "does it", "explain", "tell me about");
+
+    // Commands that look like "list|show" but target the user's OWN data — must
+    // reach the agent/tools, never the RAG knowledge shortcut.
+    private static final Set<String> PERSONAL_DATA_SIGNALS = Set.of(
+            "my apps", "my app", "my entities", "my entity",
+            "my pages", "my page", "my workflows", "my workflow",
+            "list apps", "list all apps", "list all",
+            "show apps", "show all apps", "show all",
+            "show me my", "show me the", "list me",
+            "the apps", "the entities", "the pages");
 
     public DirectAnswerService(KnowledgeBaseService knowledgeBase) {
         this.knowledgeBase = knowledgeBase;
@@ -63,7 +73,11 @@ public class DirectAnswerService {
     }
 
     /**
-     * Check if query is a simple knowledge request
+     * Check if query is a simple knowledge request.
+     *
+     * <p>Returns {@code false} (do NOT intercept) when the message is clearly
+     * targeting the user's own live data — e.g. "list my apps", "show me my
+     * entities" — so it falls through to the agent which calls the right tool.
      */
     private boolean isKnowledgeQuery(String query) {
         if (query == null || query.isBlank()) {
@@ -71,6 +85,12 @@ public class DirectAnswerService {
         }
 
         String lower = query.toLowerCase().trim();
+
+        // Guard: personal/actionable data commands must bypass the RAG shortcut
+        if (isActionableDataCommand(lower)) {
+            log.debug("[DirectAnswer] Detected actionable data command — bypassing RAG shortcut: {}", query);
+            return false;
+        }
 
         // Check for knowledge patterns
         for (String pattern : KNOWLEDGE_PATTERNS) {
@@ -81,10 +101,24 @@ public class DirectAnswerService {
 
         // Check for question words at start
         if (lower.startsWith("what") || lower.startsWith("how") ||
-                lower.startsWith("which") || lower.startsWith("show")) {
+                lower.startsWith("which")) {
             return true;
         }
 
+        return false;
+    }
+
+    /**
+     * Returns {@code true} when the message is clearly asking about the user's
+     * live data (apps, entities, pages) rather than platform knowledge.
+     * These must always reach the agent so a tool call is made.
+     */
+    private boolean isActionableDataCommand(String lower) {
+        for (String signal : PERSONAL_DATA_SIGNALS) {
+            if (lower.contains(signal)) {
+                return true;
+            }
+        }
         return false;
     }
 
