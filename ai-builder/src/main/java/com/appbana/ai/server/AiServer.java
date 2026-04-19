@@ -111,8 +111,11 @@ public class AiServer {
 
             // Load AppBana knowledge into vector database only if not already loaded
             if (knowledgeBaseService.initializeIfPopulated()) {
-                log.info("AppBana knowledge base already populated ({} schemas) - skipping initialization to save time and API costs", 
+                log.info("AppBana knowledge base already populated ({} schemas) - skipping full initialization",
                          knowledgeBaseService.getIndexedCount());
+                // Always upsert domain templates so new templates added in code are picked up
+                // without requiring a manual refreshKnowledgeBase() call (upserts are idempotent)
+                knowledgeBaseService.syncDomainTemplates();
             } else {
                 AppBanaKnowledgeLoader knowledgeLoader = new AppBanaKnowledgeLoader(knowledgeBaseService);
                 knowledgeLoader.loadAllKnowledge();

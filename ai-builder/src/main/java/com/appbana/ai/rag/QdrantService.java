@@ -84,6 +84,10 @@ public class QdrantService implements AutoCloseable {
                     VECTOR_SIZE,
                     Distance.Cosine);
 
+            // Payload indexes for filtered queries on knowledge collection
+            createPayloadIndex(COLLECTION_APPBANA_KNOWLEDGE, "category", PayloadSchemaType.Keyword);
+            createPayloadIndex(COLLECTION_APPBANA_KNOWLEDGE, "schemaType", PayloadSchemaType.Keyword);
+
             log.info("Qdrant collections initialized successfully");
 
         } catch (Exception e) {

@@ -255,14 +255,13 @@ public class VectorStoreService {
         if (metadata == null) {
             return;
         }
-
-        // Ensure required fields
+        // userId and timestamp are recommended for conversation data but not required
+        // for knowledge/schema vectors — warn only
         if (!metadata.containsKey("userId")) {
-            throw new IllegalArgumentException("Metadata must contain 'userId'");
+            log.debug("Metadata missing 'userId' field");
         }
-
         if (!metadata.containsKey("timestamp")) {
-            throw new IllegalArgumentException("Metadata must contain 'timestamp'");
+            log.debug("Metadata missing 'timestamp' field");
         }
     }
 

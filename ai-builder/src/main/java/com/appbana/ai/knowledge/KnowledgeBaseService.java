@@ -84,17 +84,25 @@ public class KnowledgeBaseService {
             String collectionName = qdrantService.getAppBanaKnowledgeCollection();
             List<SchemaDefinition> allSchemas = schemaLoader.getAllSchemas();
 
-            log.info("Found {} schemas to index", allSchemas.size());
+            log.info("Found {} schemas to index — using batch embedding", allSchemas.size());
+
+            // Build all searchable texts up-front
+            List<String> searchableTexts = allSchemas.stream()
+                    .map(this::buildSearchableText)
+                    .collect(Collectors.toList());
+
+            // Batch embed: 1 API call per 100 schemas instead of N sequential calls
+            List<float[]> embeddings = embeddingService.embedBatch(searchableTexts);
 
             int successCount = 0;
             int failCount = 0;
 
-            for (SchemaDefinition schema : allSchemas) {
+            for (int i = 0; i < allSchemas.size(); i++) {
                 try {
-                    indexSchemaInternal(schema, collectionName);
+                    storeSchemaEmbedding(allSchemas.get(i), embeddings.get(i), collectionName);
                     successCount++;
                 } catch (Exception e) {
-                    log.error("Failed to index schema: {}", schema.getId(), e);
+                    log.error("Failed to store schema: {}", allSchemas.get(i).getId(), e);
                     failCount++;
                 }
             }
@@ -110,10 +118,67 @@ public class KnowledgeBaseService {
                                 failCount, allSchemas.size()));
             }
 
+        } catch (KnowledgeBaseException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to index schemas", e);
             throw new KnowledgeBaseException("Failed to index schemas", e);
         }
+    }
+
+    /**
+     * Always sync domain templates on startup — upserts are idempotent so existing
+     * installations pick up new templates without a full re-index.
+     */
+    public void syncDomainTemplates() {
+        List<SchemaDefinition> templates = schemaLoader.getAllSchemas().stream()
+                .filter(s -> "domain-template".equals(s.getCategory()))
+                .collect(Collectors.toList());
+
+        if (templates.isEmpty()) {
+            return;
+        }
+
+        log.info("Syncing {} domain templates (upsert, idempotent)...", templates.size());
+        String collectionName = qdrantService.getAppBanaKnowledgeCollection();
+        int synced = 0;
+
+        for (SchemaDefinition template : templates) {
+            try {
+                indexSchemaInternal(template, collectionName);
+                synced++;
+            } catch (Exception e) {
+                log.warn("Failed to sync domain template '{}': {}", template.getId(), e.getMessage());
+            }
+        }
+
+        initialized = true; // ensure search works even on existing populated DB
+        log.info("Domain template sync complete: {}/{}", synced, templates.size());
+    }
+
+    /**
+     * Store a schema with a pre-computed embedding (used by batch indexing path).
+     */
+    private void storeSchemaEmbedding(SchemaDefinition schema, float[] embedding, String collectionName)
+            throws VectorStoreException, JsonProcessingException {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("schemaId", schema.getId());
+        metadata.put("schemaType", schema.getType() != null ? schema.getType() : "entity");
+        metadata.put("schemaName", schema.getName());
+        metadata.put("description", schema.getDescription());
+        metadata.put("examples", objectMapper.writeValueAsString(schema.getExamples()));
+        if (schema.getCategory() != null) {
+            metadata.put("category", schema.getCategory());
+        }
+        if (schema.getMetadata() != null) {
+            metadata.put("schemaMetadata", objectMapper.writeValueAsString(schema.getMetadata()));
+        }
+        metadata.put("userId", "system");
+        metadata.put("timestamp", System.currentTimeMillis());
+
+        String vectorId = generateUuidFromString(schema.getId());
+        vectorStoreService.store(collectionName, vectorId, embedding, metadata);
+        log.debug("Stored schema: {}", schema.getId());
     }
 
     /**
@@ -196,17 +261,29 @@ public class KnowledgeBaseService {
         text.append(schema.getName()).append(" - ");
         text.append(schema.getDescription());
 
-        // Add examples
+        // Add keyword examples
         if (schema.getExamples() != null && !schema.getExamples().isEmpty()) {
             text.append(" - Examples: ");
             text.append(String.join(", ", schema.getExamples()));
         }
 
-        // Add metadata for field types
-        if (schema.getMetadata() != null && schema.getTypeAsEnum() == SchemaDefinition.SchemaType.ENTITY_FIELD) {
-            String htmlType = (String) schema.getMetadata().get("htmlType");
-            if (htmlType != null) {
-                text.append(" - HTML type: ").append(htmlType);
+        if (schema.getMetadata() != null) {
+            // Domain templates: include entity field definitions — the richest semantic signal
+            if ("domain-template".equals(schema.getCategory())) {
+                @SuppressWarnings("unchecked")
+                Map<String, String> entities = (Map<String, String>) schema.getMetadata().get("entities");
+                if (entities != null) {
+                    text.append(" - Entities: ");
+                    entities.forEach((entityName, fields) ->
+                            text.append(entityName).append("(").append(fields).append(") "));
+                }
+            }
+            // Entity field types: include HTML input type
+            if (schema.getTypeAsEnum() == SchemaDefinition.SchemaType.ENTITY_FIELD) {
+                String htmlType = (String) schema.getMetadata().get("htmlType");
+                if (htmlType != null) {
+                    text.append(" - HTML type: ").append(htmlType);
+                }
             }
         }
 
@@ -409,10 +486,15 @@ public class KnowledgeBaseService {
             schema.setName((String) metadata.get("schemaName"));
             schema.setDescription((String) metadata.get("description"));
 
-            // Parse schema type - use String directly (not enum) to support all knowledge types
-            SchemaType type = (SchemaType) metadata.get("schemaType");
-            if (type != null) {
-                schema.setType(type);
+            // Parse schema type safely — Qdrant returns String, not enum; cast would throw
+            String typeStr = (String) metadata.get("schemaType");
+            if (typeStr != null) {
+                try {
+                    schema.setType(SchemaType.valueOf(typeStr.toUpperCase().replace("-", "_")));
+                } catch (IllegalArgumentException e) {
+                    // Custom type like "domain-template" — not an enum value, skip
+                    log.debug("Non-enum schema type '{}', skipping setType", typeStr);
+                }
             }
 
             // Parse examples
