@@ -28,6 +28,7 @@ public class SchemaEnricher {
     // --- Approved type constants ---
     private static final String T_TEXT     = "text";
     private static final String T_NUMBER   = "number";
+    private static final String T_INTEGER  = "integer"; // backend validator requires this for autoIncrement PKs
     private static final String T_DECIMAL  = "decimal";
     private static final String T_DATETIME = "datetime";
     private static final String T_BOOLEAN  = "boolean";
@@ -63,7 +64,7 @@ public class SchemaEnricher {
         Map<String, Object> id = new LinkedHashMap<>();
         id.put("id", "id");
         id.put(F_NAME, "id");
-        id.put(F_TYPE, T_NUMBER);
+        id.put(F_TYPE, T_INTEGER); // backend requires 'integer' (not 'number') for autoIncrement PKs
         id.put(F_LABEL, "ID");
         id.put(F_REQUIRED, true);
         id.put(F_PRIMARY_KEY, true);
@@ -121,18 +122,19 @@ public class SchemaEnricher {
             }
         }
 
-        // Step 1b — any autoIncrement+primaryKey field MUST be numeric.
-        // The backend enforces this strictly; the LLM often generates type "text"
-        // for id fields even when it correctly marks autoIncrement/primaryKey.
+        // Step 1b — any autoIncrement+primaryKey field MUST be type 'integer'.
+        // The backend SchemaManager.validate() only accepts 'int', 'integer', or 'long'.
+        // The LLM and even SchemaEnricher's own baseline used 'number' — fix both.
         for (Map<String, Object> field : fields) {
             boolean isPk = Boolean.TRUE.equals(field.get(F_PRIMARY_KEY));
             boolean isAi = Boolean.TRUE.equals(field.get(F_AUTO_INC));
             if (isPk && isAi) {
                 String type = (String) field.get(F_TYPE);
-                if (!T_NUMBER.equals(type)) {
-                    log.warn("[SchemaEnricher] Entity '{}': autoIncrement PK field '{}' has type '{}' \u2192 forcing 'number'",
+                boolean isIntegerCompatible = T_INTEGER.equals(type) || "int".equals(type) || "long".equals(type);
+                if (!isIntegerCompatible) {
+                    log.warn("[SchemaEnricher] Entity '{}': autoIncrement PK field '{}' has type '{}' \u2192 forcing 'integer'",
                             entityName, field.get(F_NAME), type);
-                    field.put(F_TYPE, T_NUMBER);
+                    field.put(F_TYPE, T_INTEGER);
                 }
             }
         }
