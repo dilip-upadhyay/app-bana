@@ -182,9 +182,19 @@ public class EntityCrudService {
                     }
                 }
             }
-            cols.add(quote(field.getName()));
+
+            String fieldName = field.getName();
+            Object raw = data.get(fieldName);
+
+            // Audit field auto-injection
+            if (raw == null || (raw instanceof String s && s.isBlank())) {
+                if ("created_at".equalsIgnoreCase(fieldName) || "updated_at".equalsIgnoreCase(fieldName)) {
+                    raw = new Timestamp(System.currentTimeMillis());
+                }
+            }
+
+            cols.add(quote(fieldName));
             placeholders.add("?");
-            Object raw = data.get(field.getName());
             Object val = coerceAndValidate(field, raw);
             values.add(val);
         }
@@ -613,14 +623,14 @@ public class EntityCrudService {
     }
 
     private static Object coerceAndValidate(EntitySchema.Field f, Object raw) {
+        String t = f.getType().toLowerCase(Locale.ROOT);
         // required
-        if (raw == null) {
+        if (raw == null || (raw instanceof String s && s.isBlank() && !t.equals("string") && !t.equals("text"))) {
             if (f.isRequired()) {
                 throw new IllegalArgumentException("field '" + f.getName() + "' is required");
             }
             return null;
         }
-        String t = f.getType().toLowerCase(Locale.ROOT);
         try {
             return switch (t) {
                 case "int", "integer" -> {
@@ -628,8 +638,13 @@ public class EntityCrudService {
                         long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin())
                             throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                        if (f.getMax() != null && lv > f.getMax())
-                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        
+                        // Strict validation only if max > min (handles AI-generated 0/0 defaults)
+                        if (f.getMax() != null && (f.getMin() == null || f.getMax() > f.getMin())) {
+                            if (lv > f.getMax())
+                                throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        }
+                        
                         // Check for overflow if strict int
                         if (lv > Integer.MAX_VALUE || lv < Integer.MIN_VALUE) {
                             throw new IllegalArgumentException("field '" + f.getName() + "' value " + lv
@@ -641,8 +656,11 @@ public class EntityCrudService {
                         int iv = Integer.parseInt(raw.toString());
                         if (f.getMin() != null && iv < f.getMin())
                             throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                        if (f.getMax() != null && iv > f.getMax())
-                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        
+                        if (f.getMax() != null && (f.getMin() == null || f.getMax() > f.getMin())) {
+                            if (iv > f.getMax())
+                                throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        }
                         yield iv;
                     } catch (NumberFormatException e) {
                         // Try parsing as Long to give better error message
@@ -683,6 +701,11 @@ public class EntityCrudService {
                     throw new IllegalArgumentException("field '" + f.getName() + "' invalid boolean");
                 }
                 case "date", "timestamp" -> {
+                    // if already a date/timestamp, just return
+                    if (raw instanceof java.util.Date) {
+                        if (raw instanceof Timestamp) yield raw;
+                        yield new Timestamp(((java.util.Date) raw).getTime());
+                    }
                     // accept epoch millis or ISO-8601
                     if (raw instanceof Number) {
                         yield new Timestamp(((Number) raw).longValue());

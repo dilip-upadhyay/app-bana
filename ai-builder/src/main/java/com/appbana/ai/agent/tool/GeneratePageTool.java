@@ -262,9 +262,10 @@ public class GeneratePageTool implements Tool {
             String fieldType = (String) field.get("type");
             String fieldLabel = (String) field.getOrDefault("label", fieldName);
 
-            // Skip auto-increment/primary key fields
+            // Skip auto-increment/primary key fields and audit fields
             if ("id".equalsIgnoreCase(fieldName) || "autoincrement".equals(fieldType) ||
-                    "long".equals(fieldType) && fieldName.equals("id")) {
+                    "long".equals(fieldType) && fieldName.equals("id") ||
+                    "created_at".equalsIgnoreCase(fieldName) || "updated_at".equalsIgnoreCase(fieldName)) {
                 continue;
             }
 
