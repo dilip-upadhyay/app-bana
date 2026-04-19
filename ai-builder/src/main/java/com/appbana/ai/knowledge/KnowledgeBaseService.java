@@ -257,6 +257,38 @@ public class KnowledgeBaseService {
     }
 
     /**
+     * Retrieve domain-specific few-shot examples for the given user query.
+     * Searches only among schemas of category "domain-template", returning the
+     * most semantically similar domains to the user's app description.
+     *
+     * @param query the user's app description / message
+     * @param topK  max number of domain examples to return
+     * @return list of matching domain templates (may be empty if not initialized)
+     */
+    public List<SchemaDefinition> getDomainExamples(String query, int topK) {
+        if (!initialized) {
+            log.debug("[KnowledgeBase] Not initialized — skipping domain examples");
+            return List.of();
+        }
+        try {
+            float[] queryEmbedding = embeddingService.embed(query);
+            String collectionName = qdrantService.getAppBanaKnowledgeCollection();
+            Map<String, Object> filter = Map.of("category", "domain-template");
+
+            List<VectorStoreService.SearchResult> results = vectorStoreService.search(
+                    collectionName, queryEmbedding, topK, filter);
+
+            return results.stream()
+                    .map(this::searchResultToSchema)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.debug("[KnowledgeBase] getDomainExamples failed (non-critical): {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
      * Search for schemas filtered by type
      * 
      * @param type  Schema type to filter by

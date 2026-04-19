@@ -8,6 +8,8 @@ import com.appbana.ai.agent.BatchedToolExecutor;
 import com.appbana.ai.agent.PatternExecutor;
 import com.appbana.ai.cache.SemanticCache;
 import com.appbana.ai.dialogue.ConversationSpec;
+import com.appbana.ai.knowledge.KnowledgeBaseService;
+import com.appbana.ai.knowledge.SchemaDefinition;
 import com.appbana.ai.llm.OpenAiLlmService;
 import com.appbana.ai.rag.ConversationMemory;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -48,6 +50,7 @@ public class AiAgent {
     private boolean batchingEnabled = true; // Feature flag
     private boolean patternMatchingEnabled = true; // Cost optimization
     private boolean semanticCacheEnabled = true; // Cost optimization - cache LLM responses
+    private KnowledgeBaseService knowledgeBase = null; // Optional - RAG domain examples (Phase 4)
 
     public AiAgent(OpenAiLlmService llmService, ToolRegistry toolRegistry, AgentConfig config) {
         this.llmService = llmService;
@@ -59,6 +62,16 @@ public class AiAgent {
         this.semanticCache = new SemanticCache();
         log.info("AiAgent initialized with {} tools, max iterations: {}, batching: enabled, patterns: enabled, semantic-cache: enabled",
                 toolRegistry.getToolCount(), config.getMaxIterations());
+    }
+
+    /**
+     * Attach a KnowledgeBaseService so the agent can inject domain-specific
+     * few-shot examples into scaffold prompts. Optional — agent works without it.
+     */
+    public AiAgent withKnowledgeBase(KnowledgeBaseService kb) {
+        this.knowledgeBase = kb;
+        log.info("AiAgent: RAG domain examples enabled");
+        return this;
     }
 
     /**
@@ -531,6 +544,29 @@ public class AiAgent {
                 }
             } catch (Exception e) {
                 log.warn("[AGENT] Failed to build spec coverage tracker: {}", e.getMessage());
+            }
+        }
+
+        // 0c. Domain Examples — RAG-retrieved few-shot templates (Phase 4)
+        if (knowledgeBase != null) {
+            try {
+                List<SchemaDefinition> domainExamples = knowledgeBase.getDomainExamples(userMessage, 2);
+                if (!domainExamples.isEmpty()) {
+                    prompt.append("## DOMAIN EXAMPLES (similar apps built before)\n");
+                    prompt.append("Use these as reference for correct field types. Do NOT copy them verbatim — adapt to the user's request.\n\n");
+                    for (SchemaDefinition example : domainExamples) {
+                        prompt.append("**").append(example.getDescription()).append("**\n");
+                        if (example.getMetadata() != null && example.getMetadata().containsKey("entities")) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, String> entities = (Map<String, String>) example.getMetadata().get("entities");
+                            entities.forEach((entityName, fields) ->
+                                    prompt.append("  ").append(entityName).append(": ").append(fields).append("\n"));
+                        }
+                        prompt.append("\n");
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("[AGENT] Domain examples unavailable: {}", e.getMessage());
             }
         }
 

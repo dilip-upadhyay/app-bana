@@ -179,8 +179,9 @@ public class AiServer {
             // Agent Config
             AgentConfig agentConfig = AgentConfig.defaults();
 
-            // AI Agent
-            AiAgent agent = new AiAgent(llmService, toolRegistry, agentConfig);
+            // AI Agent (with optional RAG domain examples — Phase 4)
+            AiAgent agent = new AiAgent(llmService, toolRegistry, agentConfig)
+                    .withKnowledgeBase(knowledgeBaseService);
 
             // AI Chat Controller
             AiChatController chatController = new AiChatController(

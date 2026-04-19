@@ -42,6 +42,7 @@ public class AppBanaSchemaLoader {
                 loadComponentSchemas();
                 loadPageSchemas();
                 loadValidationSchemas();
+                loadDomainTemplates();
 
                 log.info("Schema loading complete");
         }
@@ -204,8 +205,97 @@ public class AppBanaSchemaLoader {
         }
 
         /**
-         * Load AppBana component schemas
+         * Load proven domain schema templates.
+         * These are injected as few-shot examples in the agent prompt when the user
+         * describes a business domain, improving field-type accuracy for that domain.
          */
+        private void loadDomainTemplates() {
+                addDomainTemplate("ecommerce",
+                        "E-commerce / online shop / product store / spice shop / retail",
+                        List.of("spice shop", "online store", "product catalog", "retail"),
+                        Map.of(
+                                "Product", "name:text, description:longtext, price:decimal, stock_qty:number, category:status",
+                                "Customer", "full_name:text, email:email, phone:phone, address:text",
+                                "Order", "customer:reference->Customer, order_date:datetime, status:status[Pending|Processing|Shipped|Delivered], total_amount:decimal",
+                                "OrderItem", "order:reference->Order, product:reference->Product, quantity:number, unit_price:decimal"));
+
+                addDomainTemplate("crm",
+                        "CRM / customer relationship management / sales pipeline / leads tracking",
+                        List.of("CRM", "sales", "leads", "pipeline", "contacts"),
+                        Map.of(
+                                "Contact", "full_name:text, email:email, phone:phone, company:text",
+                                "Lead", "contact:reference->Contact, source:status[Web|Referral|Cold], stage:status[New|Qualified|Proposal|Won|Lost], value:decimal",
+                                "Activity", "lead:reference->Lead, type:status[Call|Email|Meeting], notes:longtext, activity_date:datetime"));
+
+                addDomainTemplate("hr",
+                        "HR / human resources / employee management / payroll / staff",
+                        List.of("HR", "employees", "staff", "payroll", "human resources"),
+                        Map.of(
+                                "Employee", "full_name:text, email:email, phone:phone, department:status, position:text, hire_date:date, salary:decimal",
+                                "Department", "name:text, manager:reference->Employee",
+                                "LeaveRequest", "employee:reference->Employee, leave_type:status[Annual|Sick|Unpaid], start_date:date, end_date:date, status:status[Pending|Approved|Rejected]"));
+
+                addDomainTemplate("restaurant",
+                        "Restaurant / cafe / food ordering / menu management / table booking",
+                        List.of("restaurant", "cafe", "food", "menu", "booking"),
+                        Map.of(
+                                "MenuItem", "name:text, description:longtext, price:decimal, category:status[Starter|Main|Dessert|Drink], available:boolean",
+                                "RestaurantTable", "table_number:number, capacity:number, status:status[Available|Occupied|Reserved]",
+                                "RestaurantOrder", "table:reference->RestaurantTable, order_time:datetime, status:status[Open|Preparing|Served|Closed], total_amount:decimal",
+                                "OrderItem", "order:reference->RestaurantOrder, menu_item:reference->MenuItem, quantity:number, notes:text"));
+
+                addDomainTemplate("project_management",
+                        "Project management / task tracker / agile / sprint / team work",
+                        List.of("project", "tasks", "sprint", "agile", "kanban"),
+                        Map.of(
+                                "Project", "name:text, description:longtext, start_date:date, end_date:date, status:status[Planning|Active|On Hold|Done]",
+                                "Task", "project:reference->Project, title:text, description:longtext, priority:status[Low|Medium|High|Critical], status:status[Todo|In Progress|Review|Done], due_date:date",
+                                "TeamMember", "full_name:text, email:email, role:status[Developer|Designer|QA|Manager]"));
+
+                addDomainTemplate("clinic",
+                        "Healthcare / clinic / hospital / patient management / appointments",
+                        List.of("clinic", "hospital", "patient", "doctor", "healthcare"),
+                        Map.of(
+                                "Patient", "full_name:text, date_of_birth:date, email:email, phone:phone",
+                                "Doctor", "full_name:text, specialization:text, email:email, phone:phone",
+                                "Appointment", "patient:reference->Patient, doctor:reference->Doctor, appointment_date:datetime, reason:text, status:status[Scheduled|Completed|Cancelled]"));
+
+                addDomainTemplate("school",
+                        "School / education / students / courses / grades / learning management",
+                        List.of("school", "education", "students", "courses", "grades"),
+                        Map.of(
+                                "Student", "full_name:text, email:email, date_of_birth:date, enrollment_date:date",
+                                "Course", "name:text, description:longtext, credits:number",
+                                "Instructor", "full_name:text, email:email, department:text",
+                                "Enrollment", "student:reference->Student, course:reference->Course, grade:decimal, status:status[Active|Completed|Dropped]"));
+
+                addDomainTemplate("finance",
+                        "Finance / accounting / invoices / expenses / budget tracking",
+                        List.of("finance", "accounting", "invoice", "expense", "budget"),
+                        Map.of(
+                                "Account", "name:text, account_type:status[Asset|Liability|Revenue|Expense], balance:decimal",
+                                "Transaction", "account:reference->Account, amount:decimal, transaction_date:datetime, description:text, type:status[Credit|Debit]",
+                                "Invoice", "client_name:text, issue_date:date, due_date:date, total_amount:decimal, status:status[Draft|Sent|Paid|Overdue]"));
+        }
+
+        private void addDomainTemplate(String id, String description,
+                        List<String> searchKeywords, Map<String, String> entities) {
+                Map<String, Object> metadata = new HashMap<>();
+                metadata.put("entities", entities);
+
+                SchemaDefinition schema = SchemaDefinition.builder()
+                        .id("domain_" + id)
+                        .name(id)
+                        .type("domain-template")
+                        .category("domain-template")
+                        .description(description)
+                        .examples(searchKeywords)
+                        .metadata(metadata)
+                        .build();
+
+                schemas.put(schema.getId(), schema);
+        }
+
         private void loadComponentSchemas() {
                 // INPUT component
                 addComponentSchema("input", "Text input field",
