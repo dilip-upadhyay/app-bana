@@ -111,7 +111,7 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           class="${className}"
           style="${style}"
           label="${props?.label || ''}"
-          type="${props?.type || 'text'}"
+          type="${props?.type || props?.inputType || 'text'}"
           placeholder="${props?.placeholder || ''}"
           value="${props?.value || ''}"
           name="${props?.name || ''}"

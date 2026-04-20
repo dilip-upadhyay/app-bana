@@ -296,7 +296,7 @@ public class GeneratePageTool implements Tool {
             inputProps.put("field", fieldName);
             inputProps.put("name", fieldName);
             inputProps.put("label", fieldLabel);
-            inputProps.put("inputType", mapFieldToInputType(fieldType));
+            inputProps.put("type", mapFieldToInputType(fieldType));
             inputProps.put("className", "input");
             inputProps.put("marginBottom", "0");
             if (!"reference".equals(fieldType)) {
@@ -353,7 +353,7 @@ public class GeneratePageTool implements Tool {
     private String mapFieldToInputType(String fieldType) {
         return switch (fieldType.toLowerCase()) {
             case "date" -> "date";
-            case "datetime", "timestamp" -> "datetime";
+            case "datetime", "timestamp" -> "datetime-local";
             case "reference" -> "reference";
             case "status" -> "select";
             case "boolean" -> "checkbox";

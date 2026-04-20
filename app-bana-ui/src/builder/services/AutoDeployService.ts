@@ -4,7 +4,7 @@ import { AuthService } from '../../pages/auth/auth-service';
  * Service for auto-deploying apps to LOCAL environment on Studio save
  */
 class AutoDeployService {
-    private deployTimer: number | null = null;
+    private deployTimer: any = null;
     private readonly DEBOUNCE_MS = 2000;
 
     /**
@@ -37,7 +37,7 @@ class AutoDeployService {
                 {
                     method: 'PUT',
                     headers: {
-                        'X-Session-Token': user?.token || '',
+                        'X-Session-Token': (user as any)?.token || '',
                         'Content-Type': 'application/json'
                     }
                 }

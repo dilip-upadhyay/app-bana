@@ -109,7 +109,37 @@ export class InputElement extends FormElement {
     const disabled = this.hasAttribute('disabled');
     const readonly = this.hasAttribute('readonly') || this.hasAttribute('readOnly');
     const error = this.getAttribute('error');
-    const helperText = this.getAttribute('helper-text');
+    let helperText = this.getAttribute('helper-text');
+
+    // Granular Date/Time Logic
+    let displayType = type;
+    let step = '';
+    
+    // Auto-generate format helper if not provided
+    if (!helperText) {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (type === 'date') helperText = 'Format: YYYY-MM-DD';
+      else if (type === 'datetime-local') helperText = 'Format: YYYY-MM-DD HH:MM';
+      else if (type === 'datetime' || (type === 'text' && (this.getAttribute('field')?.toLowerCase().includes('date') || this.getAttribute('field')?.toLowerCase().includes('time')))) {
+         // Default to date-only as per user request
+         displayType = 'date';
+         helperText = 'Format: YYYY-MM-DD';
+      }
+      else if (type === 'datetime-with-seconds') {
+        displayType = 'datetime-local';
+        step = '1';
+        helperText = 'Format: YYYY-MM-DD HH:MM:SS';
+      }
+      else if (type === 'datetime-with-ms') {
+        displayType = 'datetime-local';
+        step = '0.001';
+        helperText = 'Format: YYYY-MM-DD HH:MM:SS.SSS';
+      }
+      else if (type === 'datetime-with-timezone') {
+        displayType = 'datetime-local';
+        helperText = `Format: YYYY-MM-DD HH:MM (TZ: ${tz})`;
+      }
+    }
 
     const flsDisabled = this.isFieldDisabled(fieldName);
     const isDisabled = disabled || flsDisabled;
@@ -120,11 +150,13 @@ export class InputElement extends FormElement {
     if (error) classes.push('error');
     if (isDisabled) classes.push('disabled');
     if (value) classes.push('has-value');
+    if (displayType === 'date' || displayType === 'datetime-local') classes.push('date-input');
 
     const inputAttrs = [
-      `type="${type}"`,
+      `type="${displayType}"`,
       `value="${value}"`,
       `placeholder="${placeholder}"`,
+      step ? `step="${step}"` : '',
       required ? 'required' : '',
       isDisabled ? 'disabled' : '',
       readonly ? 'readonly' : '',
@@ -269,6 +301,34 @@ export class InputElement extends FormElement {
         transform: translate(0, 0); /* Stabilize */
       }
 
+      /* Date Input Styling */
+      input[type="date"],
+      input[type="datetime-local"] {
+        min-height: 1.2em;
+      }
+
+      /* Special logic for floating label with date picker placeholder */
+      .date-input input:not(:focus)::placeholder {
+        opacity: 0;
+      }
+      
+      /* Webkit specific tweaks for date pickers to prevent clash with label */
+      input::-webkit-calendar-picker-indicator {
+        position: relative;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: opacity 0.2s;
+        z-index: 3;
+      }
+      input::-webkit-calendar-picker-indicator:hover {
+        opacity: 1;
+      }
+
+      /* Hide native date format text when placeholder should be hidden and field is empty */
+      .date-input:not(.has-value) input:not(:focus)::-webkit-datetime-edit {
+        color: transparent;
+      }
+
       /* Focus State - Border on Fieldset */
       input:focus ~ fieldset {
         border-color: var(--color-brand);
@@ -306,7 +366,11 @@ export class InputElement extends FormElement {
         margin-left: 0.25rem;
       }
       .error-message { color: var(--color-error); }
-      .helper-text { color: var(--color-text-light); }
+      .helper-text { 
+        color: var(--color-text-light); 
+        font-weight: 500;
+        letter-spacing: 0.02em;
+      }
       .required { color: var(--color-error); margin-left: 2px; }
     `;
   }
