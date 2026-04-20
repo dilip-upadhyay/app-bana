@@ -1,5 +1,5 @@
-import { ComponentNode } from '../models/metadata';
-import { createRow } from './api-client';
+import { ComponentNode } from '../../models/metadata';
+import { createRow } from '../../core/api-client';
 
 const SAVE_TIMEOUT_MS = 30000;
 const NAVIGATION_DELAY_MS = 500;
