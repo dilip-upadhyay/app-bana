@@ -3,6 +3,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchTableData, bulkDelete, bulkExport, updateRow, createRow, getFieldPermissions, canReadField, canEditField } from '../../core/api-client';
 import type { ComponentNode } from '../../models/metadata';
+import { handleAction, interpolate } from '../core/ActionHandler';
 
 @customElement('appbana-table-live')
 export class StudioTableLive extends LitElement {
@@ -586,9 +587,27 @@ export class StudioTableLive extends LitElement {
         ${actions.length > 0 ? html`<td class="table-actions">
           ${actions.map((action) => {
         const isString = typeof action === 'string';
-        const label = isString ? (action as string).charAt(0).toUpperCase() + (action as string).slice(1) : (action as { label: string }).label;
-        const handler = isString ? () => this.handleRowAction(action as string, row) : () => this.handleCustomAction(action as { onClick: string }, row);
-        return html`<button aria-label="${label} row" @click=${handler}>${label}</button>`;
+        if (isString) {
+          const label = (action as string).charAt(0).toUpperCase() + (action as string).slice(1);
+          return html`<button aria-label="${label} row" @click=${() => this.handleRowAction(action as string, row)}>${label}</button>`;
+        } else {
+          // It's a custom action object
+          const act = action as any;
+          const label = interpolate(act.label || 'Action', row);
+          
+          // If it has specialized metadata, wrap it as a virtual ComponentNode
+          const node: ComponentNode = act.node || {
+            id: `row-btn-${id}`,
+            type: 'button',
+            props: act.props || { label, onClick: act.onClick }
+          };
+
+          return html`<button 
+            aria-label="${label} row" 
+            @click=${(e: Event) => act.onClick ? this.handleLegacyClick(act, row) : handleAction(node, e, row)}>
+            ${label}
+          </button>`;
+        }
       })}
         </td>` : ''}
       </tr>`;
@@ -899,29 +918,19 @@ export class StudioTableLive extends LitElement {
     </div>`;
   }
 
-  private handleCustomAction(action: { onClick: string }, row: any) {
+  private handleLegacyClick(action: { onClick: string }, row: any) {
     try {
-      // Evaluate the onClick string in a context where 'row' and 'navigate' are available
       const navigate = (path: string) => {
-        // Prefer window.navigate if available (Runtime Shell shim)
         if ((window as any).navigate) {
           (window as any).navigate(path);
         } else {
-          // Fallback to custom event
           this.dispatchEvent(new CustomEvent('navigate', { detail: { path }, bubbles: true, composed: true }));
         }
       };
-
-      const createPage = `create-${(this.entityName || '').toLowerCase()}`;
-      // Basic implementation: if action is 'create', navigate
-
-      // Create a function that takes 'row' and 'navigate' as arguments
-      // The action.onClick string (e.g., "navigate('/foo')") matches this if 'navigate' is in scope
-      // We pass 'navigate' as a parameter to the dynamic function so it's available
       const func = new Function('row', 'navigate', action.onClick);
       func(row, navigate);
     } catch (e) {
-      console.error('Failed to execute custom action', e);
+      console.error('Failed to execute legacy custom action', e);
       this.showToast('Action failed: ' + (e as Error).message);
     }
   }

@@ -27,7 +27,7 @@ public class MetadataValidator {
 
     // Valid component types
     private static final Set<String> VALID_COMPONENT_TYPES = Set.of(
-            "input", "button", "table", "app-grid", "container");
+            "input", "button", "table", "app-grid", "container", "form", "studio-form");
 
     public MetadataValidator(AppBanaSchemaLoader schemaLoader) {
         this.schemaLoader = schemaLoader;

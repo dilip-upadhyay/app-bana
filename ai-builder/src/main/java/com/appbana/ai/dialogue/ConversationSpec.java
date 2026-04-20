@@ -34,14 +34,21 @@ public class ConversationSpec {
     @Getter private final boolean userConfirmed;
     @Getter private final boolean modificationRequested;
 
+    // Discovery of existing context
+    @Getter private final String currentAppName;
+    @Getter private final String currentAppId;
+
     private ConversationSpec(boolean entities, boolean relationships,
-                              boolean userRoles, boolean reporting, boolean confirmed, boolean modification) {
+                              boolean userRoles, boolean reporting, boolean confirmed, boolean modification,
+                              String appName, String appId) {
         this.entitiesDiscussed      = entities;
         this.relationshipsDiscussed = relationships;
         this.userRolesDiscussed     = userRoles;
         this.reportingDiscussed     = reporting;
         this.userConfirmed          = confirmed;
         this.modificationRequested  = modification;
+        this.currentAppName        = appName;
+        this.currentAppId          = appId;
     }
 
     /**
@@ -86,14 +93,37 @@ public class ConversationSpec {
                 "yes", "build it", "proceed", "go ahead", "let's build",
                 "sounds good", "looks good", "approved", "confirm", "correct");
 
-        // Detection of feedback, bugs, or requests for changes
-        // This is primarily looking at the current message to detect regression intent
-        String currentLower = currentMsg != null ? currentMsg.toLowerCase(Locale.ROOT) : "";
-        boolean modification = containsAny(currentLower,
-                "fix", "bug", "issue", "doesn't work", "nothing happened", 
-                "error", "change", "modify", "update", "wrong", "incorrect", "add a", "remove");
+        // Discovery of existing app context from history (look for IDs and Names)
+        String foundAppName = null;
+        String foundAppId = null;
 
-        return new ConversationSpec(entities, relationships, userRoles, reporting, confirmed, modification);
+        // Scan history for "App Name: ..." or "App ID: ..." or patterns from logs/scaffold tool
+        if (history != null) {
+            for (ConversationMemory.Conversation turn : history) {
+                String fullTurn = (turn.getMessage() + " " + turn.getResponse()).toLowerCase(Locale.ROOT);
+                
+                // Extract App ID (UUID pattern)
+                if (foundAppId == null) {
+                    java.util.regex.Matcher idMatcher = java.util.regex.Pattern.compile("([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})").matcher(fullTurn);
+                    if (idMatcher.find()) {
+                        foundAppId = idMatcher.group(1);
+                    }
+                }
+                
+                // Extract App Name
+                if (foundAppName == null) {
+                    if (fullTurn.contains("app name:") || fullTurn.contains("application name:")) {
+                        int index = fullTurn.indexOf("app name:") != -1 ? fullTurn.indexOf("app name:") : fullTurn.indexOf("application name:");
+                        int start = fullTurn.indexOf(":", index) + 1;
+                        int end = fullTurn.indexOf("\n", start);
+                        if (end == -1) end = Math.min(start + 50, fullTurn.length());
+                        foundAppName = fullTurn.substring(start, end).trim();
+                    }
+                }
+            }
+        }
+
+        return new ConversationSpec(entities, relationships, userRoles, reporting, confirmed, modification, foundAppName, foundAppId);
     }
 
     /**
@@ -131,6 +161,13 @@ public class ConversationSpec {
             sb.append("\nIMPORTANT: Items marked ✗ have NOT been discussed. ");
             sb.append("Ask about them naturally in your next response ");
             sb.append("before proceeding to build.\n");
+        }
+
+        if (currentAppName != null || currentAppId != null) {
+            sb.append("\n## ACTIVE APP CONTEXT\n");
+            if (currentAppName != null) sb.append("  - APP NAME: ").append(currentAppName).append("\n");
+            if (currentAppId != null) sb.append("  - APP ID:   ").append(currentAppId).append("\n");
+            sb.append("IMPORTANT: Use this existing app context for any updates or modification requests.\n");
         }
 
         sb.append('\n');

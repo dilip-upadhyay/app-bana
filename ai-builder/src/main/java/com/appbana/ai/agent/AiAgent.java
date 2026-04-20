@@ -535,6 +535,18 @@ public class AiAgent {
                            - For `pattern` and other validation fields, use a JSON `null` value if no specific validation is needed. **NEVER** use the literal string "null".
                            - Only use patterns for strictly formatted fields like `postcode` or `tax_id`.
 
+                        ## UX DESIGN & WORKFLOW PATTERNS (Generic)
+                        Follow these patterns to ensure applications are interconnected and professional:
+                        1. **The 'Success Loop' Pattern**:
+                           - After a user creates a new record (e.g. Registration, New Lead), ALWAYS redirect them to a confirmation or list page.
+                           - Use `"onSuccess": "navigate"` and `"navigateUrl": "/target-path"` in the button props.
+                        2. **The 'Linear Selection' Pattern (Add to Cart)**:
+                           - On 'List' pages for entities that can be 'selected' or 'added', include a button in the row actions.
+                           - Use `"actionType": "save-entity"` with `"fixedFields"` to map current row data to a new record.
+                           - Example for Product -> Cart mapping: `"fixedFields": { "Cart": { "productId": "{{id}}", "qty": 1 } }`.
+                        3. **The 'Global Navigation' Pattern**:
+                           - Always suggest a navigation menu or home links that ensure the user never gets stuck on a page.
+
                         ## EXECUTION RULES
                         1. **NO RETRIES**: If a tool fails (e.g., validation error), **STOP IMMEDIATELY**. Do not retry the same call. Report the error to the user and ask for guidance. Repeated failures cost money and frustrate users.
                         2. **Check Your Work**:

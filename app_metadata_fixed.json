@@ -47,7 +47,26 @@
                 "type": "text"
               }
             ],
-            "entity": "Spices"
+            "entity": "Spices",
+            "actions": [
+              "view",
+              {
+                "label": "Add to Cart",
+                "props": {
+                  "actionType": "save-entity",
+                  "entities": ["Orders"],
+                  "fixedFields": {
+                    "Orders": {
+                      "Spices_Ordered": "{{Name}}",
+                      "Total_Amount": "{{Price_Per_Unit}}",
+                      "Order_Status": "In Cart"
+                    }
+                  },
+                  "onSuccess": "navigate",
+                  "navigateUrl": "/cart"
+                }
+              }
+            ]
           }
         }
       ],
@@ -213,6 +232,8 @@
           "props": {
             "type": "submit",
             "actionType": "save-entity",
+            "onSuccess": "navigate",
+            "navigateUrl": "/spices",
             "entities": [
               "Customers"
             ],

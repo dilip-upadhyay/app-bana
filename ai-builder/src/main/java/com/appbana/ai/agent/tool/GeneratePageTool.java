@@ -68,6 +68,19 @@ public class GeneratePageTool implements Tool {
                     "appId": {
                       "type": "string",
                       "description": "Target App ID. If not provided, uses current context."
+                    },
+                    "onSuccess": {
+                      "type": "string",
+                      "enum": ["navigate", "refresh"],
+                      "description": "Action to take after successful save"
+                    },
+                    "navigateUrl": {
+                      "type": "string",
+                      "description": "URL to navigate to after success (can use {{id}})"
+                    },
+                    "fixedFields": {
+                      "type": "object",
+                      "description": "Static field values to merge into the save request (e.g. { 'Cart': { 'qty': 1 } })"
                     }
                   },
                   "required": ["name", "path", "type", "entityName"]
@@ -343,6 +356,18 @@ public class GeneratePageTool implements Tool {
         saveButtonProps.put("actionType", "save-entity");
         saveButtonProps.put("entities", List.of(entityName));
         saveButtonProps.put("className", "button");
+        
+        // GENERIC FEATURE: Pass through workflow props from AI if provided
+        if (arguments.containsKey("onSuccess")) {
+            saveButtonProps.put("onSuccess", arguments.get("onSuccess"));
+        }
+        if (arguments.containsKey("navigateUrl")) {
+            saveButtonProps.put("navigateUrl", arguments.get("navigateUrl"));
+        }
+        if (arguments.containsKey("fixedFields")) {
+            saveButtonProps.put("fixedFields", arguments.get("fixedFields"));
+        }
+
         saveButton.put("props", saveButtonProps);
 
         gridChildren.add(saveContainerId);
