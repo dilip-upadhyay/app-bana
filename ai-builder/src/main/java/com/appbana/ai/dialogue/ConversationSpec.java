@@ -32,14 +32,16 @@ public class ConversationSpec {
     @Getter private final boolean userRolesDiscussed;
     @Getter private final boolean reportingDiscussed;
     @Getter private final boolean userConfirmed;
+    @Getter private final boolean modificationRequested;
 
     private ConversationSpec(boolean entities, boolean relationships,
-                              boolean userRoles, boolean reporting, boolean confirmed) {
+                              boolean userRoles, boolean reporting, boolean confirmed, boolean modification) {
         this.entitiesDiscussed      = entities;
         this.relationshipsDiscussed = relationships;
         this.userRolesDiscussed     = userRoles;
         this.reportingDiscussed     = reporting;
         this.userConfirmed          = confirmed;
+        this.modificationRequested  = modification;
     }
 
     /**
@@ -84,7 +86,14 @@ public class ConversationSpec {
                 "yes", "build it", "proceed", "go ahead", "let's build",
                 "sounds good", "looks good", "approved", "confirm", "correct");
 
-        return new ConversationSpec(entities, relationships, userRoles, reporting, confirmed);
+        // Detection of feedback, bugs, or requests for changes
+        // This is primarily looking at the current message to detect regression intent
+        String currentLower = currentMsg != null ? currentMsg.toLowerCase(Locale.ROOT) : "";
+        boolean modification = containsAny(currentLower,
+                "fix", "bug", "issue", "doesn't work", "nothing happened", 
+                "error", "change", "modify", "update", "wrong", "incorrect", "add a", "remove");
+
+        return new ConversationSpec(entities, relationships, userRoles, reporting, confirmed, modification);
     }
 
     /**

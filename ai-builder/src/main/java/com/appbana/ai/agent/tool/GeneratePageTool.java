@@ -236,13 +236,23 @@ public class GeneratePageTool implements Tool {
             entityFields = new ArrayList<>();
             log.warn("[GeneratePageTool] No entity fields provided for form page - form will be empty");
         }
-        // Build nodes list: app-grid + containers + inputs
+        // Build nodes list
         List<Map<String, Object>> allNodes = new ArrayList<>();
         List<String> gridChildren = new ArrayList<>();
 
-        // Create app-grid as root
+        // 1. Create appbana-form as root
+        Map<String, Object> formNode = new HashMap<>();
+        String formId = "root";
+        formNode.put("id", formId);
+        formNode.put("type", "form"); // Standard form container
+        Map<String, Object> formProps = new HashMap<>();
+        formProps.put("entity", entityName);
+        formNode.put("props", formProps);
+        formNode.put("children", List.of("grid"));
+
+        // 2. Create app-grid
         Map<String, Object> gridNode = new HashMap<>();
-        String gridId = "root";
+        String gridId = "grid";
         gridNode.put("id", gridId);
         gridNode.put("type", "app-grid");
 
@@ -270,7 +280,7 @@ public class GeneratePageTool implements Tool {
             }
 
             // Create container
-            String containerId = containerIndex == 0 ? "container" : "container-" + containerIndex;
+            String containerId = "container-" + containerIndex;
             Map<String, Object> container = new HashMap<>();
             container.put("id", containerId);
             container.put("type", "container");
@@ -284,7 +294,7 @@ public class GeneratePageTool implements Tool {
             container.put("props", containerProps);
 
             // Create input
-            String inputId = containerIndex == 0 ? "input" : "input-" + containerIndex;
+            String inputId = "input-" + containerIndex;
             container.put("children", List.of(inputId));
 
             Map<String, Object> input = new HashMap<>();
@@ -329,7 +339,8 @@ public class GeneratePageTool implements Tool {
         saveButton.put("type", "button");
         Map<String, Object> saveButtonProps = new HashMap<>();
         saveButtonProps.put("label", "Save");
-        saveButtonProps.put("actionType", "save");
+        saveButtonProps.put("type", "submit"); // ESSENTIAL for FormContainer
+        saveButtonProps.put("actionType", "save-entity");
         saveButtonProps.put("entities", List.of(entityName));
         saveButtonProps.put("className", "button");
         saveButton.put("props", saveButtonProps);
@@ -338,9 +349,10 @@ public class GeneratePageTool implements Tool {
         allNodes.add(saveContainer);
         allNodes.add(saveButton);
 
-        // Set grid children and add grid to start of nodes
+        // Finalize assembly
         gridNode.put("children", gridChildren);
         allNodes.add(0, gridNode);
+        allNodes.add(0, formNode);
 
         page.put("nodes", allNodes);
 

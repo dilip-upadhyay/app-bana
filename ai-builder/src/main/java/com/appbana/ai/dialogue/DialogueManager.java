@@ -113,12 +113,7 @@ public class DialogueManager {
                                           String userMessage) {
         ConversationState current = sessionStates.getOrDefault(sessionId, ConversationState.GREETING);
 
-        // States GENERATING and COMPLETED are only set via explicit notify*() calls.
-        // We don't auto-transition into them from text analysis.
-        if (current == ConversationState.GENERATING || current == ConversationState.COMPLETED) {
-            log.debug("[DialogueManager] session={} state={} (locked — manual transition only)", sessionId, current);
-            return current;
-        }
+        // Allow computeNextState to handle transitions, including regressions.
 
         // Run keyword analysis on the full conversation corpus
         ConversationSpec spec = ConversationSpec.analyse(history, userMessage);
@@ -190,6 +185,14 @@ public class DialogueManager {
     // ── Internal Transition Logic ──────────────────────────────────────────────
 
     private ConversationState computeNextState(ConversationState current, ConversationSpec spec) {
+        // GLOBAL REGRESSION RULE: If the user provides feedback or requests a change 
+        // while in a late stage, move back to GATHERING_REQUIREMENTS.
+        if ((current == ConversationState.COMPLETED || current == ConversationState.GENERATING || current == ConversationState.CONFIRMING) 
+                && spec.isModificationRequested()) {
+            log.info("[DialogueManager] Regression detected: feedback/bug reported. Moving to GATHERING_REQUIREMENTS.");
+            return ConversationState.GATHERING_REQUIREMENTS;
+        }
+
         return switch (current) {
             case GREETING -> {
                 // Advance if user has started describing their domain
@@ -207,7 +210,7 @@ public class DialogueManager {
                 yield ConversationState.GATHERING_REQUIREMENTS;
             }
 
-            // CONFIRMING, GENERATING, COMPLETED: never auto-regress
+            // CONFIRMING, GENERATING, COMPLETED: stay put unless regression rule (above) triggered
             default -> current;
         };
     }

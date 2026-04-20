@@ -445,7 +445,7 @@ async function handleAction(node: ComponentNode, event: Event) {
 
   const button = event.target as HTMLElement;
 
-  if (actionType === 'save-entity') {
+  if (actionType === 'save-entity' || actionType === 'save') {
     const buttonEntities: string[] = node.props?.entities || [];
 
     // Validate button configuration
