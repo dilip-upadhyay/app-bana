@@ -1,6 +1,6 @@
 package com.appbana.ai.agent;
 
-import com.appbana.ai.llm.OpenAiLlmService;
+import com.appbana.ai.llm.LlmService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -14,10 +14,10 @@ import java.util.*;
 @Slf4j
 public class BatchedToolExecutor {
 
-    private final OpenAiLlmService llmService;
+    private final LlmService llmService;
     private final ObjectMapper objectMapper;
 
-    public BatchedToolExecutor(OpenAiLlmService llmService) {
+    public BatchedToolExecutor(LlmService llmService) {
         this.llmService = llmService;
         this.objectMapper = new ObjectMapper();
     }

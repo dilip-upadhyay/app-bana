@@ -281,6 +281,89 @@ export class AiChatBuilder extends LitElement {
       margin: 0 0 8px 0;
       color: #666;
     }
+
+    /* ── Provider Toggle ── */
+    .provider-toggle {
+      display: flex;
+      gap: 4px;
+      padding: 0 20px 8px 20px;
+      background: white;
+    }
+
+    .provider-btn {
+      padding: 6px 12px;
+      background: #f0f0f0;
+      color: #666;
+      border: 1px solid #e0e0e0;
+      border-radius: 16px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: none;
+    }
+
+    .provider-btn:hover {
+      background: #e0e0e0;
+      transform: none;
+    }
+
+    .provider-btn.active {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+      box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+    }
+
+    /* ── Image Previews ── */
+    .image-previews {
+      display: flex;
+      gap: 10px;
+      padding: 10px 20px;
+      background: #fdfdfd;
+      border-top: 1px solid #f0f0f0;
+      overflow-x: auto;
+    }
+
+    .preview-container {
+      position: relative;
+      width: 60px;
+      height: 60px;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .preview-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .remove-img {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      box-shadow: none;
+    }
+
+    .remove-img:hover {
+      background: rgba(255,0,0,0.8);
+      transform: scale(1.1);
+    }
   `;
 
   @state() private messages: ChatMessage[] = [];
@@ -292,6 +375,8 @@ export class AiChatBuilder extends LitElement {
   @state() private showSessionsPanel = false;
   @state() private pastSessions: ChatSession[] = [];
   @state() private isLoadingSessionsPanel = false;
+  @state() private selectedProvider = localStorage.getItem('ai_preferred_provider') || 'openai';
+  @state() private attachedImages: string[] = [];
 
   private chatService = new AiChatService();
   private sessionId = '';
@@ -432,13 +517,36 @@ export class AiChatBuilder extends LitElement {
         ` : ''}
       </div>
 
+      ${this.attachedImages.length > 0 ? html`
+        <div class="image-previews">
+          ${this.attachedImages.map((img, index) => html`
+            <div class="preview-container">
+              <img src="${img}" />
+              <button class="remove-img" @click=${() => this.removeImage(index)}>&times;</button>
+            </div>
+          `)}
+        </div>
+      ` : ''}
+
+      <div class="provider-toggle">
+        <button class="provider-btn ${this.selectedProvider === 'openai' ? 'active' : ''}" 
+                @click=${() => this.setProvider('openai')}>
+          OpenAI (GPT-4o)
+        </button>
+        <button class="provider-btn ${this.selectedProvider === 'gemini' ? 'active' : ''}" 
+                @click=${() => this.setProvider('gemini')}>
+          Google Gemini 1.5
+        </button>
+      </div>
+
       <div class="input-area">
         <input
           type="text"
-          placeholder="Type your message..."
+          placeholder="Type or paste images to analyze..."
           .value=${this.inputValue}
           @input=${this.handleInput}
           @keypress=${this.handleKeyPress}
+          @paste=${this.handlePaste}
           ?disabled=${this.isLoading || this.isLoadingHistory}
         />
         <button
@@ -467,15 +575,19 @@ export class AiChatBuilder extends LitElement {
   }
 
   private async sendMessage() {
-    if (!this.inputValue.trim() || this.isLoading) return;
+    if (!this.inputValue.trim() && this.attachedImages.length === 0) return;
+    if (this.isLoading) return;
 
     const userMessage = this.inputValue.trim();
+    const imagesToSend = [...this.attachedImages];
+    
     this.inputValue = '';
+    this.attachedImages = [];
 
-    // Add user message
+    // Add user message to UI
     this.messages = [...this.messages, {
       role: 'user',
-      content: userMessage,
+      content: userMessage || (imagesToSend.length > 0 ? "[Images attached]" : ""),
       timestamp: new Date()
     }];
 
@@ -516,7 +628,9 @@ export class AiChatBuilder extends LitElement {
         sessionId: this.sessionId,
         token: authToken,
         tenantId: tenantId,
-        appId: appId
+        appId: appId,
+        provider: this.selectedProvider,
+        images: imagesToSend
       });
 
       // Add assistant message
@@ -538,6 +652,35 @@ export class AiChatBuilder extends LitElement {
       this.isLoading = false;
       this.focusInput();
     }
+  }
+
+  private setProvider(provider: string) {
+    this.selectedProvider = provider;
+    localStorage.setItem('ai_preferred_provider', provider);
+    console.log('[AiChatBuilder] Provider switched to:', provider);
+  }
+
+  private handlePaste(e: ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const base64 = event.target?.result as string;
+            this.attachedImages = [...this.attachedImages, base64];
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    }
+  }
+
+  private removeImage(index: number) {
+    this.attachedImages = this.attachedImages.filter((_, i) => i !== index);
   }
 
   private handleScroll() {

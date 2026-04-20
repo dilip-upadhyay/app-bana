@@ -13,6 +13,8 @@ export interface ChatRequest {
     appType?: string;
     tenantId?: string;
     appId?: string;
+    provider?: string;
+    images?: string[];
 }
 
 export interface ChatResponse {

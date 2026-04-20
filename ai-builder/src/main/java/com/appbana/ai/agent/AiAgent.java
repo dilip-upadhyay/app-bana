@@ -11,7 +11,8 @@ import com.appbana.ai.dialogue.ConversationSpec;
 import com.appbana.ai.dialogue.DialogueManager;
 import com.appbana.ai.knowledge.KnowledgeBaseService;
 import com.appbana.ai.knowledge.SchemaDefinition;
-import com.appbana.ai.llm.OpenAiLlmService;
+import com.appbana.ai.llm.LlmService;
+import com.appbana.ai.llm.LlmRegistry;
 import com.appbana.ai.rag.ConversationMemory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,7 +44,7 @@ import java.util.concurrent.ExecutionException;
 @Slf4j
 public class AiAgent {
 
-    private final OpenAiLlmService llmService;
+    private final LlmRegistry llmRegistry;
     private final ToolRegistry toolRegistry;
     private final AgentConfig config;
     private final ObjectMapper objectMapper;
@@ -55,16 +56,16 @@ public class AiAgent {
     private boolean semanticCacheEnabled = false; // DISABLED TEMPORARILY: Cache returning stale prompt responses
     private KnowledgeBaseService knowledgeBase = null; // Optional - RAG domain examples (Phase 4)
 
-    public AiAgent(OpenAiLlmService llmService, ToolRegistry toolRegistry, AgentConfig config) {
-        this.llmService = llmService;
+    public AiAgent(LlmRegistry llmRegistry, ToolRegistry toolRegistry, AgentConfig config) {
+        this.llmRegistry = llmRegistry;
         this.toolRegistry = toolRegistry;
         this.config = config;
         this.objectMapper = new ObjectMapper();
-        this.batchedExecutor = new BatchedToolExecutor(llmService);
+        this.batchedExecutor = new BatchedToolExecutor(null); // Will be set per call or registry
         this.patternExecutor = new PatternExecutor(toolRegistry);
         this.semanticCache = new SemanticCache();
-        log.info("AiAgent initialized with {} tools, max iterations: {}, batching: enabled, patterns: enabled, semantic-cache: enabled",
-                toolRegistry.getToolCount(), config.getMaxIterations());
+        log.info("AiAgent initialized with {} tools, using LlmRegistry for multi-provider support",
+                toolRegistry.getToolCount());
     }
 
     /**
@@ -105,13 +106,21 @@ public class AiAgent {
      * Process a user message through the agent loop
      */
     public AgentResponse process(String userMessage, AgentContext context) {
+        return process(userMessage, context, null, null);
+    }
+
+    /**
+     * Process a user message through the agent loop using a specific provider and optional images
+     */
+    public AgentResponse process(String userMessage, AgentContext context, String provider, List<String> images) {
+        LlmService llmService = llmRegistry.getService(provider);
         long startTime = System.currentTimeMillis();
         List<AgentResponse.AgentStep> steps = new ArrayList<>();
 
         try {
-            log.info("[AGENT] Starting processing for user: {}", context.userId());
-            System.out.println("DEBUG: [AGENT] process() call detected - binary is LIVE");
-            log.debug("[AGENT] User message: {}", userMessage);
+            log.info("[AGENT] Starting processing for user: {} (Provider: {}, Images: {})", 
+                context.userId(), provider != null ? provider : "default", 
+                images != null ? images.size() : 0);
 
             // COST OPTIMIZATION: Try pattern matching first (no LLM call)
             if (patternMatchingEnabled) {
@@ -122,24 +131,12 @@ public class AiAgent {
                 }
             }
 
-            // Removed batched shortcut to respect "Plan First" workflow
-            /*
-             * if (batchingEnabled && BatchedToolExecutor.isBatchableCreateApp(userMessage))
-             * {
-             * log.
-             * info("[AGENT] Detected batchable create-app workflow, using batched execution"
-             * );
-             * return processBatchedCreateApp(userMessage, context, startTime);
-             * }
-             */
-
             // Fail-safe limit
-            int effectiveMaxIterations = Math.min(config.getMaxIterations(), 5);
-            log.info("[AGENT] Effective max iterations: {}", effectiveMaxIterations);
-
+            int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
+            
             // Agent loop
             int consecutiveFailures = 0;
-            Set<String> failedSignatures = new HashSet<>(); // Story 3.2: track repeating failures
+            Set<String> failedSignatures = new HashSet<>(); 
             for (int iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
                 log.info("[AGENT] === Iteration {} / {} ===", iteration, effectiveMaxIterations);
 
@@ -147,193 +144,114 @@ public class AiAgent {
                 long elapsed = System.currentTimeMillis() - startTime;
                 if (elapsed > config.getTimeoutSeconds() * 1000) {
                     log.warn("[AGENT] Timeout reached after {}ms", elapsed);
-                    return AgentResponse.error(
-                            "Agent timeout after " + elapsed + "ms",
-                            steps,
-                            elapsed);
+                    return AgentResponse.error("Agent timeout after " + elapsed + "ms", steps, elapsed);
                 }
 
                 // 1. THINK - Ask LLM what to do
-                AgentThought thought = think(userMessage, steps, context);
+                AgentThought thought = think(userMessage, steps, context, llmService, images);
 
                 if (thought == null) {
                     log.error("[AGENT] Failed to get thought from LLM");
-                    return AgentResponse.error(
-                            "Failed to get response from LLM",
-                            steps,
-                            System.currentTimeMillis() - startTime);
+                    return AgentResponse.error("Failed to get response from LLM", steps, System.currentTimeMillis() - startTime);
                 }
 
                 log.debug("[AGENT] Thinking: {}", thought.getThinking());
-
-                // Create step for this iteration
                 AgentResponse.AgentStep step = new AgentResponse.AgentStep(iteration, thought.getThinking());
 
                 // 2. Check if done
                 if (thought.isFinalAnswer()) {
                     log.info("[AGENT] Final answer reached after {} iterations", iteration);
                     steps.add(step);
-                    return AgentResponse.success(
-                            thought.getFinalAnswer(),
-                            steps,
-                            System.currentTimeMillis() - startTime);
+                    return AgentResponse.success(thought.getFinalAnswer(), steps, System.currentTimeMillis() - startTime);
                 }
 
                 // 3. ACT - Execute tools
                 if (thought.hasToolCalls()) {
-                    log.info("[AGENT] Executing {} tool(s)", thought.getToolCalls().size());
                     List<ToolResult> results = executeTools(thought.getToolCalls(), context);
-
-                    // Add results to step
                     boolean allToolsFailed = true;
-                    for (int i = 0; i < results.size(); i++) {
-                        ToolResult result = results.get(i);
-                        
-                        // Story 3.2: Loop Detection & Hard Guard
-                        // Check if this specific tool call (name + args) has failed before.
+
+                    for (ToolResult result : results) {
                         String signature = result.getToolName() + ":" + result.getArguments();
                         if (!result.isSuccess()) {
                             if (failedSignatures.contains(signature)) {
-                                // LLM is repeating a failed call! Inject a Hard Guard warning.
-                                log.warn("[AGENT] REPETITION DETECTED for tool: {}. Injecting Hard Guard.", result.getToolName());
-                                result.setError("CRITICAL: You are repeating a previously failed call. REFRAIN from retrying this exact request. " +
-                                               "Analyze the error below and try a different approach (check names, check exists) or ask the user for clarification.\n\n" +
-                                               "Error: " + result.getError());
+                                result.setError("CRITICAL: Repeated failure. " + result.getError());
                             }
                             failedSignatures.add(signature);
                         } else {
-                            // If it succeeded, remove it from failed signatures (case where user fixed data manually)
                             failedSignatures.remove(signature);
-                        }
-
-                        step.addToolResult(result);
-                        log.info("[AGENT] {}", result.getSummary());
-                        if (result.isSuccess()) {
                             allToolsFailed = false;
                         }
+                        step.addToolResult(result);
                     }
 
-                    // Abort early after 3 consecutive all-tools-failed iterations to avoid
-                    // burning the remaining budget on the same unrecoverable error.
                     if (allToolsFailed) {
                         consecutiveFailures++;
-                        log.warn("[AGENT] All tools failed in iteration {} (consecutive failures: {}).",
-                                iteration, consecutiveFailures);
                         if (consecutiveFailures >= 3) {
-                            log.warn("[AGENT] Aborting early after {} consecutive tool failures to save cost.",
-                                    consecutiveFailures);
                             steps.add(step);
-                            return AgentResponse.error(
-                                    "I'm stuck and unable to complete this request after multiple failed attempts. " +
-                                    "The main issue seems to be: " + results.get(0).getError() + 
-                                    ". Please try rephrasing or checking that the application/entities exist.",
-                                    steps,
-                                    System.currentTimeMillis() - startTime);
+                            return AgentResponse.error("Stuck after 3 failures: " + results.get(0).getError(), steps, System.currentTimeMillis() - startTime);
                         }
                     } else {
-                        consecutiveFailures = 0; // reset on any partial success
+                        consecutiveFailures = 0;
                     }
-                } else {
-                    log.warn("[AGENT] No tool calls and no final answer - LLM may be confused");
                 }
-
-                // 4. OBSERVE - Add step to history
-                steps.add(step);
+                
+                steps.add(step); // 4. OBSERVE
             }
 
-            // Max iterations reached
-            log.warn("[AGENT] Max iterations ({}) reached without final answer", config.getMaxIterations());
-
-            // Graceful exit: don't error, just return what we have with a note
-            String partialSummary = "I've reached the maximum number of steps (" + config.getMaxIterations()
-                    + ") allowed for this request to save costs. " +
-                    "I may have completed some parts of your request. Please check the logs or ask me to continue if more work is needed.";
-
-            return AgentResponse.success(
-                    partialSummary,
-                    steps,
-                    System.currentTimeMillis() - startTime);
+            return AgentResponse.error("Max iterations reached", steps, System.currentTimeMillis() - startTime);
 
         } catch (Exception e) {
-            log.error("[AGENT] Error during processing", e);
-            return AgentResponse.error(
-                    "Agent error: " + e.getMessage(),
-                    steps,
-                    System.currentTimeMillis() - startTime);
+            log.error("[AGENT] Error in processing", e);
+            return AgentResponse.error("Agent error: " + e.getMessage(), steps, System.currentTimeMillis() - startTime);
         }
     }
 
     /**
-     * THINK step - Ask LLM what to do next
-     * Integrates SemanticCache for cost optimization
+     * Determine next action via LLM with multimodal support
      */
-    private AgentThought think(String userMessage, List<AgentResponse.AgentStep> history, AgentContext context) {
+    private AgentThought think(String userMessage, List<AgentResponse.AgentStep> previousSteps,
+                              AgentContext context, LlmService llmService, List<String> images) {
         try {
-            // Build prompt with system instructions, tools, history, and user message
-            String prompt = buildAgentPrompt(userMessage, history, context);
-
-            if (config.isDebugMode()) {
-                log.debug("[AGENT] Prompt:\n{}", prompt);
+            // Build prompt
+            StringBuilder promptBuilder = new StringBuilder();
+            promptBuilder.append("### SYSTEM INSTRUCTIONS ###\n");
+            promptBuilder.append(buildSystemPrompt(context)).append("\n\n");
+            
+            promptBuilder.append("### AVAILABLE TOOLS ###\n");
+            promptBuilder.append(toolRegistry.getToolsDescription()).append("\n\n");
+            
+            if (!previousSteps.isEmpty()) {
+                promptBuilder.append("### CONVERSATION HISTORY ###\n");
+                for (AgentResponse.AgentStep step : previousSteps) {
+                    promptBuilder.append("Thought: ").append(step.getThought()).append("\n");
+                    for (ToolResult result : step.getToolResults()) {
+                        promptBuilder.append("Tool [").append(result.getToolName()).append("] Output: ")
+                                     .append(result.getSummary()).append("\n");
+                    }
+                }
+                promptBuilder.append("\n");
             }
+            
+            promptBuilder.append("### USER REQUEST ###\n");
+            promptBuilder.append(userMessage).append("\n\n");
+            promptBuilder.append("Analyze requirements from the text and any provided images. Return your next step in valid JSON format.");
 
-            // COST OPTIMIZATION: Check semantic cache before LLM call (HARD-DISABLED FOR DEBUGGING)
-            String llmResponse = null;
-            /*
-            if (semanticCacheEnabled) {
-                java.util.Optional<com.appbana.ai.cache.SemanticCache.CachedResponse> cachedResponse = 
-                    semanticCache.get(prompt, "agent_think");
-                if (cachedResponse.isPresent()) {
-                    llmResponse = cachedResponse.get().response();
-                    log.info("[AGENT] SemanticCache HIT - skipping LLM call (100% cost savings for this request)");
-                }
-            }
-            */
-            System.out.println("--- NEW AI SYSTEM PROMPT ACTIVE ---");
-
-            // Call LLM if not cached - with JSON mode to guarantee valid JSON output
-            if (llmResponse == null) {
-                // Use chatWithJsonMode to enforce valid JSON (prevents parse failures)
-                // Falls back to regular chat if JSON mode call fails (e.g. unsupported model)
-                try {
-                    llmResponse = llmService.chatWithJsonMode(prompt);
-                    log.debug("[AGENT] LLM responded via JSON mode");
-                } catch (Exception jsonModeEx) {
-                    log.warn("[AGENT] JSON mode unavailable ({}), falling back to standard chat", jsonModeEx.getMessage());
-                    llmResponse = llmService.chat(prompt, "agent_think");
-                }
-                
-                // Store in cache for future similar requests
-                if (semanticCacheEnabled) {
-                    semanticCache.put(prompt, llmResponse, Map.of("taskType", "agent_think"));
-                    log.debug("[AGENT] Stored response in SemanticCache");
-                }
+            String fullPrompt = promptBuilder.toString();
+            String llmResponse;
+            
+            if (images != null && !images.isEmpty()) {
+                llmResponse = llmService.chatWithJsonMode(fullPrompt, images);
+            } else {
+                llmResponse = llmService.chatWithJsonMode(fullPrompt);
             }
 
             if (config.isDebugMode()) {
-                log.debug("[AGENT] LLM Response:\n{}", llmResponse);
+                log.debug("[AGENT] LLM Response: {}", llmResponse);
             }
 
-            // Parse LLM response as JSON
-            AgentThought thought = parseAgentThought(llmResponse);
-
-            return thought;
-
+            return parseAgentThought(llmResponse);
         } catch (Exception e) {
             log.error("[AGENT] Error in think step", e);
-
-            // Retry if configured
-            if (config.isRetryOnError() && config.getMaxRetries() > 0) {
-                log.info("[AGENT] Retrying think step...");
-                // Simple retry without recursion
-                try {
-                    String prompt = buildAgentPrompt(userMessage, history, context);
-                    String llmResponse = llmService.chat(prompt);
-                    return parseAgentThought(llmResponse);
-                } catch (Exception retryError) {
-                    log.error("[AGENT] Retry failed", retryError);
-                }
-            }
-
             return null;
         }
     }

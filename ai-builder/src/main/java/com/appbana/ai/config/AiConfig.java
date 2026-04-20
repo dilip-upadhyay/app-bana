@@ -25,9 +25,14 @@ public class AiConfig {
     private String openaiModel = "gpt-4o-mini";           // Standard model (cost-effective)
     private String openaiPremiumModel = "gpt-4o";         // Premium model (high-quality)
     private String openaiEmbeddingModel = "text-embedding-3-small";
-    private int openaiMaxTokens = 2000;
+    private int openaiMaxTokens = 4000;                   // Increased for multimodal/complex tasks
     private double openaiTemperature = 0.7;
     private boolean hybridModeEnabled = true;             // Enable model switching
+
+    // Gemini configuration
+    private String geminiApiKey;
+    private String geminiModel = "gemini-1.5-flash";     // Standard model
+    private String geminiPremiumModel = "gemini-1.5-pro"; // Premium model
 
     // Qdrant configuration
     private String qdrantHost = "localhost";
@@ -68,7 +73,12 @@ public class AiConfig {
         config.openaiModel = getEnv("OPENAI_MODEL", config.openaiModel);
         config.openaiPremiumModel = getEnv("OPENAI_PREMIUM_MODEL", config.openaiPremiumModel);
         config.openaiEmbeddingModel = getEnv("OPENAI_EMBEDDING_MODEL", config.openaiEmbeddingModel);
+        config.openaiMaxTokens = Integer.parseInt(getEnv("AI_MAX_TOKENS", String.valueOf(config.openaiMaxTokens)));
         config.hybridModeEnabled = Boolean.parseBoolean(getEnv("AI_HYBRID_MODE", "true"));
+
+        config.geminiApiKey = getEnv("GEMINI_API_KEY", null);
+        config.geminiModel = getEnv("GEMINI_MODEL", config.geminiModel);
+        config.geminiPremiumModel = getEnv("GEMINI_PREMIUM_MODEL", config.geminiPremiumModel);
 
         config.qdrantHost = getEnv("QDRANT_HOST", config.qdrantHost);
         config.qdrantPort = Integer.parseInt(getEnv("QDRANT_PORT", String.valueOf(config.qdrantPort)));

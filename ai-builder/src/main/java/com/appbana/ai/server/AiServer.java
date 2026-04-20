@@ -14,8 +14,7 @@ import com.appbana.ai.knowledge.AppBanaSchemaLoader;
 import com.appbana.ai.knowledge.KnowledgeBaseService;
 import com.appbana.ai.knowledge.MetadataValidator;
 import com.appbana.ai.llm.AdvancedPromptEngine;
-// IntentClassifier import removed
-import com.appbana.ai.llm.OpenAiLlmService;
+import com.appbana.ai.llm.LlmRegistry;
 import com.appbana.ai.learning.UserPreferenceEngine;
 import com.appbana.ai.optimization.DirectAnswerService;
 import com.appbana.ai.optimization.PatternExecutor;
@@ -67,8 +66,8 @@ public class AiServer {
             // Initialize services
             log.info("Initializing AI services...");
 
-            // LLM Service
-            OpenAiLlmService llmService = new OpenAiLlmService(config);
+            // LLM Registry (Multi-Provider Support)
+            LlmRegistry llmRegistry = new LlmRegistry(config);
 
             // Database Connection (HikariCP)
             HikariConfig hikariConfig = new HikariConfig();
@@ -185,13 +184,13 @@ public class AiServer {
             AgentConfig agentConfig = AgentConfig.defaults();
 
             // AI Agent (with optional RAG domain examples — Phase 4)
-            AiAgent agent = new AiAgent(llmService, toolRegistry, agentConfig)
+            AiAgent agent = new AiAgent(llmRegistry, toolRegistry, agentConfig)
                     .withKnowledgeBase(knowledgeBaseService);
 
             // AI Chat Controller (Story 3.1 — wire in DialogueManager)
             DialogueManager dialogueManager = new DialogueManager();
             AiChatController chatController = new AiChatController(
-                    llmService,
+                    llmRegistry,
                     promptEngine,
                     conversationMemory,
                     agent,
