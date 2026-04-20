@@ -1,0 +1,778 @@
+{
+  "id": "e9f58057-d181-4e1b-b13f-54773f0644e0",
+  "tenantId": "t-cfe77e13",
+  "name": "Spice Selling Website",
+  "description": "This app helps you manage and sell various spices online, making it easy for customers to browse and purchase their favorite spices.",
+  "version": "1.0.0",
+  "created": 1776630937153,
+  "updated": 1776630937724,
+  "pages": [
+    "spicelist",
+    "customerregistration",
+    "orderoverview",
+    "shoppingcart"
+  ],
+  "pagesData": [
+    {
+      "path": "/spices",
+      "nodes": [
+        {
+          "id": "root",
+          "type": "table",
+          "props": {
+            "fields": [
+              {
+                "name": "Name",
+                "label": "Name of the spice",
+                "type": "text"
+              },
+              {
+                "name": "Description",
+                "label": "Description of the spice",
+                "type": "longtext"
+              },
+              {
+                "name": "Price_Per_Unit",
+                "label": "Price per unit",
+                "type": "decimal"
+              },
+              {
+                "name": "Stock_Quantity",
+                "label": "Stock quantity available",
+                "type": "number"
+              },
+              {
+                "name": "Category",
+                "label": "Category of spice",
+                "type": "text"
+              }
+            ],
+            "entity": "Spices"
+          }
+        }
+      ],
+      "rootId": "root",
+      "name": "SpiceList",
+      "id": "spicelist"
+    },
+    {
+      "path": "/customers/new",
+      "nodes": [
+        {
+          "children": [
+            "container-2",
+            "container-3",
+            "container-4",
+            "container-5",
+            "container-save"
+          ],
+          "id": "root",
+          "type": "app-grid",
+          "props": {
+            "gap": "0",
+            "className": "grid",
+            "minCellHeight": "auto",
+            "marginBottom": "0",
+            "rows": 3,
+            "cols": 3
+          }
+        },
+        {
+          "children": [
+            "input-2"
+          ],
+          "id": "container-2",
+          "type": "container",
+          "props": {
+            "data-cell-index": "2",
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
+            "slot": "cell-2"
+          }
+        },
+        {
+          "id": "input-2",
+          "type": "input",
+          "props": {
+            "field": "Full_Name",
+            "name": "Full_Name",
+            "inputType": "input",
+            "className": "input",
+            "marginBottom": "0",
+            "label": "Full name",
+            "placeholder": "Enter full name...",
+            "entity": "Customers"
+          }
+        },
+        {
+          "children": [
+            "input-3"
+          ],
+          "id": "container-3",
+          "type": "container",
+          "props": {
+            "data-cell-index": "3",
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
+            "slot": "cell-3"
+          }
+        },
+        {
+          "id": "input-3",
+          "type": "input",
+          "props": {
+            "field": "Contact_Details",
+            "name": "Contact_Details",
+            "inputType": "input",
+            "className": "input",
+            "marginBottom": "0",
+            "label": "Contact details (phone, email)",
+            "placeholder": "Enter contact details (phone, email)...",
+            "entity": "Customers"
+          }
+        },
+        {
+          "children": [
+            "input-4"
+          ],
+          "id": "container-4",
+          "type": "container",
+          "props": {
+            "data-cell-index": "4",
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
+            "slot": "cell-4"
+          }
+        },
+        {
+          "id": "input-4",
+          "type": "input",
+          "props": {
+            "field": "Shipping_Address",
+            "name": "Shipping_Address",
+            "inputType": "input",
+            "className": "input",
+            "marginBottom": "0",
+            "label": "Shipping address",
+            "placeholder": "Enter shipping address...",
+            "entity": "Customers"
+          }
+        },
+        {
+          "children": [
+            "input-5"
+          ],
+          "id": "container-5",
+          "type": "container",
+          "props": {
+            "data-cell-index": "5",
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
+            "slot": "cell-5"
+          }
+        },
+        {
+          "id": "input-5",
+          "type": "input",
+          "props": {
+            "field": "Purchase_History",
+            "name": "Purchase_History",
+            "inputType": "textarea",
+            "className": "input",
+            "marginBottom": "0",
+            "label": "Purchase history",
+            "placeholder": "Enter purchase history...",
+            "entity": "Customers"
+          }
+        },
+        {
+          "children": [
+            "save-btn"
+          ],
+          "id": "container-save",
+          "type": "container",
+          "props": {
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; align-items: center;",
+            "slot": "cell-6"
+          }
+        },
+        {
+          "id": "save-btn",
+          "type": "button",
+          "props": {
+            "actionType": "save",
+            "entities": [
+              "Customers"
+            ],
+            "className": "button",
+            "label": "Save"
+          }
+        }
+      ],
+      "rootId": "root",
+      "name": "CustomerRegistration",
+      "metaVersion": 1,
+      "id": "customerregistration"
+    },
+    {
+      "path": "/orders",
+      "nodes": [
+        {
+          "id": "root",
+          "type": "table",
+          "props": {
+            "fields": [
+              {
+                "name": "Customer",
+                "label": "Which customer placed the order",
+                "type": "reference"
+              },
+              {
+                "name": "Spices_Ordered",
+                "label": "List of spices ordered",
+                "type": "reference"
+              },
+              {
+                "name": "Total_Amount",
+                "label": "Total amount charged",
+                "type": "decimal"
+              },
+              {
+                "name": "Order_Status",
+                "label": "Order status",
+                "type": "status"
+              }
+            ],
+            "entity": "Orders"
+          }
+        }
+      ],
+      "rootId": "root",
+      "name": "OrderOverview",
+      "id": "orderoverview"
+    },
+    {
+      "path": "/cart",
+      "nodes": [
+        {
+          "children": [
+            "container-2",
+            "container-3",
+            "container-4",
+            "container-5",
+            "container-save"
+          ],
+          "id": "root",
+          "type": "app-grid",
+          "props": {
+            "gap": "0",
+            "className": "grid",
+            "minCellHeight": "auto",
+            "marginBottom": "0",
+            "rows": 3,
+            "cols": 3
+          }
+        },
+        {
+          "children": [
+            "input-2"
+          ],
+          "id": "container-2",
+          "type": "container",
+          "props": {
+            "data-cell-index": "2",
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
+            "slot": "cell-2"
+          }
+        },
+        {
+          "id": "input-2",
+          "type": "input",
+          "props": {
+            "field": "Customer",
+            "name": "Customer",
+            "inputType": "reference",
+            "className": "input",
+            "marginBottom": "0",
+            "label": "Which customer placed the order",
+            "entity": "Orders"
+          }
+        },
+        {
+          "children": [
+            "input-3"
+          ],
+          "id": "container-3",
+          "type": "container",
+          "props": {
+            "data-cell-index": "3",
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
+            "slot": "cell-3"
+          }
+        },
+        {
+          "id": "input-3",
+          "type": "input",
+          "props": {
+            "field": "Spices_Ordered",
+            "name": "Spices_Ordered",
+            "inputType": "reference",
+            "className": "input",
+            "marginBottom": "0",
+            "label": "List of spices ordered",
+            "entity": "Orders"
+          }
+        },
+        {
+          "children": [
+            "input-4"
+          ],
+          "id": "container-4",
+          "type": "container",
+          "props": {
+            "data-cell-index": "4",
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
+            "slot": "cell-4"
+          }
+        },
+        {
+          "id": "input-4",
+          "type": "input",
+          "props": {
+            "field": "Total_Amount",
+            "name": "Total_Amount",
+            "inputType": "input",
+            "className": "input",
+            "marginBottom": "0",
+            "label": "Total amount charged",
+            "placeholder": "Enter total amount charged...",
+            "entity": "Orders"
+          }
+        },
+        {
+          "children": [
+            "input-5"
+          ],
+          "id": "container-5",
+          "type": "container",
+          "props": {
+            "data-cell-index": "5",
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;",
+            "slot": "cell-5"
+          }
+        },
+        {
+          "id": "input-5",
+          "type": "input",
+          "props": {
+            "field": "Order_Status",
+            "name": "Order_Status",
+            "inputType": "select",
+            "className": "input",
+            "marginBottom": "0",
+            "label": "Order status",
+            "placeholder": "Enter order status...",
+            "entity": "Orders"
+          }
+        },
+        {
+          "children": [
+            "save-btn"
+          ],
+          "id": "container-save",
+          "type": "container",
+          "props": {
+            "className": "grid-cell",
+            "style": "min-height: 100px; padding: 0.5rem; display: flex; align-items: center;",
+            "slot": "cell-6"
+          }
+        },
+        {
+          "id": "save-btn",
+          "type": "button",
+          "props": {
+            "actionType": "save",
+            "entities": [
+              "Orders"
+            ],
+            "className": "button",
+            "label": "Save"
+          }
+        }
+      ],
+      "rootId": "root",
+      "name": "ShoppingCart",
+      "metaVersion": 1,
+      "id": "shoppingcart"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Spices",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "ID",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Created At",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Updated At",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Name of the spice",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Description",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Description of the spice",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Price_Per_Unit",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Price per unit",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Stock_Quantity",
+          "type": "int",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Stock quantity available",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Category",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Category of spice",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        }
+      ],
+      "datasourceName": "default",
+      "modelKind": null,
+      "appId": "e9f58057-d181-4e1b-b13f-54773f0644e0",
+      "tenantId": "t-cfe77e13"
+    },
+    {
+      "name": "Customers",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "ID",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Created At",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Updated At",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Full_Name",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Full name",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Contact_Details",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Contact details (phone, email)",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Shipping_Address",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Shipping address",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Purchase_History",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Purchase history",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        }
+      ],
+      "datasourceName": "default",
+      "modelKind": null,
+      "appId": "e9f58057-d181-4e1b-b13f-54773f0644e0",
+      "tenantId": "t-cfe77e13"
+    },
+    {
+      "name": "Orders",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "ID",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Created At",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": false,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Updated At",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Customer",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Which customer placed the order",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Spices_Ordered",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "List of spices ordered",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Total_Amount",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Total amount charged",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        },
+        {
+          "name": "Order_Status",
+          "type": "string",
+          "primaryKey": false,
+          "autoIncrement": false,
+          "length": 255,
+          "required": true,
+          "min": 0,
+          "max": 0,
+          "pattern": "null",
+          "label": "Order status",
+          "placeholder": null,
+          "order": null,
+          "existingName": null
+        }
+      ],
+      "datasourceName": "default",
+      "modelKind": null,
+      "appId": "e9f58057-d181-4e1b-b13f-54773f0644e0",
+      "tenantId": "t-cfe77e13"
+    }
+  ],
+  "schemas": [
+    "Spices",
+    "Customers",
+    "Orders"
+  ]
+}

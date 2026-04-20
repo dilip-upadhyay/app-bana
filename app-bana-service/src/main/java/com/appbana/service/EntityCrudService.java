@@ -186,6 +186,20 @@ public class EntityCrudService {
             String fieldName = field.getName();
             Object raw = data.get(fieldName);
 
+            // Fuzzy matching: if field is missing, try matching by label or with spaces instead of underscores
+            if (raw == null) {
+                String label = field.getLabel();
+                if (label != null && data.containsKey(label)) {
+                    raw = data.get(label);
+                } else {
+                    // try common variations: replace underscores with spaces
+                    String withSpaces = fieldName.replace('_', ' ');
+                    if (data.containsKey(withSpaces)) {
+                        raw = data.get(withSpaces);
+                    }
+                }
+            }
+
             // Audit field auto-injection
             if (raw == null || (raw instanceof String s && s.isBlank())) {
                 if ("created_at".equalsIgnoreCase(fieldName) || "updated_at".equalsIgnoreCase(fieldName)) {
@@ -711,12 +725,25 @@ public class EntityCrudService {
                         yield new Timestamp(((Number) raw).longValue());
                     }
                     String rs = raw.toString();
+                    if (rs.isBlank()) yield null;
                     try {
-                        Instant inst = Instant.parse(rs);
-                        yield Timestamp.from(inst);
+                        yield Instant.parse(rs);
                     } catch (Exception ex) {
-                        long millis = Long.parseLong(rs);
-                        yield new Timestamp(millis);
+                        try {
+                            // Try yyyy/MM/dd or yyyy-MM-dd
+                            String clean = rs.replace("/", "-");
+                            if (clean.length() == 10) {
+                                yield java.sql.Date.valueOf(clean);
+                            }
+                            yield Timestamp.valueOf(clean.replace("T", " "));
+                        } catch (Exception ex2) {
+                            try {
+                                long millis = Long.parseLong(rs);
+                                yield new Timestamp(millis);
+                            } catch (NumberFormatException nfe) {
+                                throw new IllegalArgumentException("field '" + f.getName() + "' invalid format");
+                            }
+                        }
                     }
                 }
                 case "text", "string" -> {
