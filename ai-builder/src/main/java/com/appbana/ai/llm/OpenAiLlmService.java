@@ -234,8 +234,5 @@ public class OpenAiLlmService implements LlmService, AutoCloseable {
         log.info("Closing OpenAI LLM Service");
     }
 
-    public static class LlmException extends Exception {
-        public LlmException(String message) { super(message); }
-        public LlmException(String message, Throwable cause) { super(message, cause); }
-    }
 }
+

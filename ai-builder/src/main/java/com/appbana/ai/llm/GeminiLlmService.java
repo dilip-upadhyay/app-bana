@@ -144,18 +144,19 @@ public class GeminiLlmService implements LlmService {
             }
 
             if (response.statusCode() == 429) {
-                if (i == maxRetries) throw new Exception("Gemini rate limit exceeded after retries");
+                if (i == maxRetries) throw new LlmService.LlmException("Gemini rate limit exceeded after retries");
                 log.warn("[Gemini] Rate limit (429). Retrying in {}ms...", backoff);
                 Thread.sleep(backoff);
                 backoff *= 2;
                 continue;
             }
 
-            throw new Exception("Gemini API error (" + response.statusCode() + "): " + response.body());
+            throw new LlmService.LlmException("Gemini API error (" + response.statusCode() + "): " + response.body());
         }
 
-        throw new Exception("Gemini API call failed");
+        throw new LlmService.LlmException("Gemini API call failed");
     }
+
 
     @SuppressWarnings("unchecked")
     private String parseGeminiResponse(String responseBody) throws Exception {

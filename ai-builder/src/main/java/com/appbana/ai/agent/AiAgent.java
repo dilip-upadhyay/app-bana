@@ -218,12 +218,13 @@ public class AiAgent {
             promptBuilder.append(buildSystemPrompt(context)).append("\n\n");
             
             promptBuilder.append("### AVAILABLE TOOLS ###\n");
-            promptBuilder.append(toolRegistry.getToolsDescription()).append("\n\n");
+            promptBuilder.append(toolRegistry.getToolDescriptions()).append("\n\n");
+
             
             if (!previousSteps.isEmpty()) {
                 promptBuilder.append("### CONVERSATION HISTORY ###\n");
                 for (AgentResponse.AgentStep step : previousSteps) {
-                    promptBuilder.append("Thought: ").append(step.getThought()).append("\n");
+                    promptBuilder.append("Thought: ").append(step.getThinking()).append("\n");
                     for (ToolResult result : step.getToolResults()) {
                         promptBuilder.append("Tool [").append(result.getToolName()).append("] Output: ")
                                      .append(result.getSummary()).append("\n");
@@ -355,12 +356,10 @@ public class AiAgent {
     }
 
     /**
-     * Build the prompt for the LLM with agent instructions
+     * Build the core system instructions for the LLM
      */
-    private String buildAgentPrompt(String userMessage, List<AgentResponse.AgentStep> history, AgentContext context) {
+    private String buildSystemPrompt(AgentContext context) {
         StringBuilder prompt = new StringBuilder();
-
-        // AppBana-specific system instructions
         prompt.append(
                 """
                         You are an AppBana AI assistant (Expert Architect & Data Modeler).
@@ -484,6 +483,17 @@ public class AiAgent {
                         1. **MODIFICATION / UPDATE**: If an `appId` was already present in the "CURRENT EXECUTION CONTEXT" below, you are MODifying an existing app. You MUST use words like "updated", "enhanced", or "modified". NEVER say "built and deployed" for an existing app.
                         2. **NEW BUILD**: If the `appId` was "(none selected)" or you just created a brand new app, you MUST use words like "built and deployed" or "created".
                         """);
+        return prompt.toString();
+    }
+
+    /**
+     * Build the prompt for the LLM with agent instructions
+     */
+    private String buildAgentPrompt(String userMessage, List<AgentResponse.AgentStep> history, AgentContext context) {
+        StringBuilder prompt = new StringBuilder();
+
+        // AppBana-specific system instructions
+        prompt.append(buildSystemPrompt(context)).append("\n\n");
 
         // Available tools — filtered by conversation state to prevent the LLM from
         // calling build tools (scaffold_app, deploy_app, etc.) before the user has

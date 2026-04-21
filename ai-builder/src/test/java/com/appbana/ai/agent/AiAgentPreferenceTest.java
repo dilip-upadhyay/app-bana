@@ -1,7 +1,8 @@
 package com.appbana.ai.agent;
 
 import com.appbana.ai.agent.tool.ToolRegistry;
-import com.appbana.ai.llm.OpenAiLlmService;
+import com.appbana.ai.llm.LlmRegistry;
+import com.appbana.ai.llm.LlmService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -21,7 +22,10 @@ import static org.mockito.Mockito.*;
 class AiAgentPreferenceTest {
 
     @Mock
-    private OpenAiLlmService llmService;
+    private LlmService llmService;
+
+    @Mock
+    private LlmRegistry llmRegistry;
 
     private ToolRegistry toolRegistry;
     private AgentConfig config;
@@ -33,7 +37,10 @@ class AiAgentPreferenceTest {
         toolRegistry = new ToolRegistry();
         config = AgentConfig.defaults();
         config.setDebugMode(false);
-        agent = new AiAgent(llmService, toolRegistry, config);
+        
+        when(llmRegistry.getService(anyString())).thenReturn(llmService);
+
+        agent = new AiAgent(llmRegistry, toolRegistry, config);
     }
 
     @Test
@@ -50,14 +57,14 @@ class AiAgentPreferenceTest {
                 .withVariable("user_preferences", prefs);
 
         String llmResponse = "{\"thinking\": \"monologue\", \"final_answer\": \"done\"}";
-        when(llmService.chat(anyString())).thenReturn(llmResponse);
+        when(llmService.chatWithJsonMode(anyString())).thenReturn(llmResponse);
 
         // Act
         agent.process(userMessage, context);
 
         // Assert
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(llmService).chat(promptCaptor.capture());
+        verify(llmService).chatWithJsonMode(promptCaptor.capture());
 
         String capturedPrompt = promptCaptor.getValue();
 
@@ -79,14 +86,14 @@ class AiAgentPreferenceTest {
         AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
 
         String llmResponse = "{\"thinking\": \"monologue\", \"final_answer\": \"done\"}";
-        when(llmService.chat(anyString())).thenReturn(llmResponse);
+        when(llmService.chatWithJsonMode(anyString())).thenReturn(llmResponse);
 
         // Act
         agent.process(userMessage, context);
 
         // Assert
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(llmService).chat(promptCaptor.capture());
+        verify(llmService).chatWithJsonMode(promptCaptor.capture());
 
         String capturedPrompt = promptCaptor.getValue();
 
@@ -95,3 +102,4 @@ class AiAgentPreferenceTest {
                 "Prompt should NOT contain preferences header when no preferences exist");
     }
 }
+

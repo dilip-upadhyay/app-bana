@@ -48,4 +48,13 @@ public interface LlmService {
      * Chat with strict JSON schema enforcement.
      */
     String chatStructured(String prompt, String schemaName, String schema) throws Exception;
+
+    /**
+     * Specialized exception for LLM-related failures
+     */
+    class LlmException extends Exception {
+        public LlmException(String message) { super(message); }
+        public LlmException(String message, Throwable cause) { super(message, cause); }
+    }
 }
+

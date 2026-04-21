@@ -1,6 +1,8 @@
 package com.appbana.ai.agent;
 
 import com.appbana.ai.agent.tool.*;
+import com.appbana.ai.llm.LlmRegistry;
+import com.appbana.ai.llm.LlmService;
 import com.appbana.ai.llm.OpenAiLlmService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +24,10 @@ import static org.mockito.Mockito.*;
 class AiAgentTest {
 
     @Mock
-    private OpenAiLlmService llmService;
+    private LlmService llmService;
+
+    @Mock
+    private LlmRegistry llmRegistry;
 
     private ToolRegistry toolRegistry;
     private AgentConfig config;
@@ -34,8 +39,13 @@ class AiAgentTest {
         toolRegistry = new ToolRegistry();
         config = AgentConfig.defaults();
         config.setDebugMode(false);
-        agent = new AiAgent(llmService, toolRegistry, config);
+        
+        // Mock the registry to return our mocked LLM service
+        when(llmRegistry.getService(anyString())).thenReturn(llmService);
+        
+        agent = new AiAgent(llmRegistry, toolRegistry, config);
     }
+
 
     @Test
     void testAgentLoop_FinalAnswerImmediately() throws Exception {
@@ -50,7 +60,7 @@ class AiAgentTest {
                 }
                 """;
 
-        when(llmService.chat(anyString())).thenReturn(llmResponse);
+        when(llmService.chatWithJsonMode(anyString())).thenReturn(llmResponse);
 
         // Act
         AgentResponse response = agent.process(userMessage, context);
@@ -59,7 +69,7 @@ class AiAgentTest {
         assertTrue(response.isSuccess());
         assertEquals("Hello! How can I help you build an application?", response.getFinalAnswer());
         assertEquals(1, response.getIterationCount());
-        verify(llmService, times(1)).chat(anyString());
+        verify(llmService, times(1)).chatWithJsonMode(anyString());
     }
 
     @Test
@@ -110,7 +120,7 @@ class AiAgentTest {
                 }
                 """;
 
-        when(llmService.chat(anyString()))
+        when(llmService.chatWithJsonMode(anyString()))
                 .thenReturn(llmResponse1)
                 .thenReturn(llmResponse2);
 
@@ -128,7 +138,7 @@ class AiAgentTest {
         assertEquals(1, firstStep.getToolResults().size());
         assertTrue(firstStep.getToolResults().get(0).isSuccess());
 
-        verify(llmService, times(2)).chat(anyString());
+        verify(llmService, times(2)).chatWithJsonMode(anyString());
     }
 
     @Test
@@ -139,7 +149,7 @@ class AiAgentTest {
         config.setMaxIterations(3);
 
         // Create a new agent with updated config
-        agent = new AiAgent(llmService, toolRegistry, config);
+        agent = new AiAgent(llmRegistry, toolRegistry, config);
 
         // Always return tool calls, never final answer
         String llmResponse = """
@@ -149,7 +159,7 @@ class AiAgentTest {
                 }
                 """;
 
-        when(llmService.chat(anyString())).thenReturn(llmResponse);
+        when(llmService.chatWithJsonMode(anyString())).thenReturn(llmResponse);
 
         // Act
         AgentResponse response = agent.process(userMessage, context);
@@ -159,7 +169,7 @@ class AiAgentTest {
         // tool_calls
         assertTrue(response.isSuccess());
         assertEquals(1, response.getIterationCount());
-        verify(llmService, times(1)).chat(anyString());
+        verify(llmService, times(1)).chatWithJsonMode(anyString());
     }
 
     @Test
@@ -186,7 +196,7 @@ class AiAgentTest {
                 }
                 """;
 
-        when(llmService.chat(anyString()))
+        when(llmService.chatWithJsonMode(anyString()))
                 .thenReturn(llmResponse1)
                 .thenReturn(llmResponse2);
 
@@ -210,7 +220,7 @@ class AiAgentTest {
         AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
         config.setRetryOnError(false);
 
-        when(llmService.chat(anyString())).thenThrow(new RuntimeException("LLM API error"));
+        when(llmService.chatWithJsonMode(anyString())).thenThrow(new RuntimeException("LLM API error"));
 
         // Act
         AgentResponse response = agent.process(userMessage, context);
@@ -227,7 +237,7 @@ class AiAgentTest {
         AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
         config.setRetryOnError(false);
 
-        when(llmService.chat(anyString())).thenReturn("This is not JSON");
+        when(llmService.chatWithJsonMode(anyString())).thenReturn("This is not JSON");
 
         // Act
         AgentResponse response = agent.process(userMessage, context);
@@ -286,3 +296,4 @@ class AiAgentTest {
         };
     }
 }
+

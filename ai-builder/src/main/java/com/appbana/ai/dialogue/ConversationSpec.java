@@ -93,6 +93,9 @@ public class ConversationSpec {
                 "yes", "build it", "proceed", "go ahead", "let's build",
                 "sounds good", "looks good", "approved", "confirm", "correct");
 
+        boolean modification  = containsAny(text,
+                "update", "change", "modify", "add feature", "enhance", "tweak", "fix", "correct");
+
         // Discovery of existing app context from history (look for IDs and Names)
         String foundAppName = null;
         String foundAppId = null;
@@ -124,6 +127,7 @@ public class ConversationSpec {
         }
 
         return new ConversationSpec(entities, relationships, userRoles, reporting, confirmed, modification, foundAppName, foundAppId);
+
     }
 
     /**

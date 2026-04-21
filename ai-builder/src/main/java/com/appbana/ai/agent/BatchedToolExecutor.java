@@ -27,7 +27,7 @@ public class BatchedToolExecutor {
      * Reduces 8-12 API calls to 1-2
      */
     public Map<String, Object> batchCreateApp(String appName, String appDescription, List<String> entityNames)
-            throws OpenAiLlmService.LlmException {
+            throws LlmService.LlmException {
         log.info("[BatchedExecutor] Creating app '{}' with {} entities in single LLM call",
                 appName, entityNames.size());
 
@@ -44,9 +44,10 @@ public class BatchedToolExecutor {
             return result;
         } catch (Exception e) {
             log.error("[BatchedExecutor] Failed to parse batched response", e);
-            throw new OpenAiLlmService.LlmException("Failed to execute batched app creation", e);
+            throw new LlmService.LlmException("Failed to execute batched app creation", e);
         }
     }
+
 
     /**
      * Build prompt for batched app creation
