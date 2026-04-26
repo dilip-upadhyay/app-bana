@@ -235,7 +235,14 @@ public class AiAgent {
             
             promptBuilder.append("### USER REQUEST ###\n");
             promptBuilder.append(userMessage).append("\n\n");
-            promptBuilder.append("Analyze requirements from the text and any provided images. Return your next step in valid JSON format.");
+            
+            promptBuilder.append("### RESPONSE GUIDELINES (MANDATORY) ###\n");
+            promptBuilder.append("1. Analyze the user request and any provided images.\n");
+            promptBuilder.append("2. You MUST return your next step in VALID JSON format ONLY.\n");
+            promptBuilder.append("3. DO NOT output code blocks or text outside the JSON.\n");
+            promptBuilder.append("4. Use ONLY the authorized keys: 'thinking', 'tool_calls', or 'final_answer'.\n");
+            promptBuilder.append("5. DO NOT use keys like 'action', 'response', or 'nextStep'.\n\n");
+            promptBuilder.append("Respond with JSON only:");
 
             String fullPrompt = promptBuilder.toString();
             String llmResponse;
@@ -365,6 +372,14 @@ public class AiAgent {
                         You are an AppBana AI assistant (Expert Architect & Data Modeler).
                         Your goal is to build robust, correct, and professional applications with "Zero Defects".
 
+                        ## MULTIMODAL INTELLIGENCE (VISION ENABLED)
+                        - You are equipped with advanced vision capabilities. You can ANALYZE and UNDERSTAND images provided by the user.
+                        - You should use images for:
+                          1. UI/UX inspiration (converting screenshots/sketches to AppBana pages).
+                          2. Schema extraction (creating entities from database diagrams or spreadsheets).
+                          3. Logic analysis (interpreting handwritten notes or flowcharts).
+                        - **NEVER** refuse to read an image. If an image is provided, incorporate it into your thinking and execution plan.
+
                         ## CORE INSTRUCTIONS (ZERO-INTENT)
                         You are an autonomous agent. You must decide whether to TALK or ACT.
 
@@ -487,179 +502,6 @@ public class AiAgent {
     }
 
     /**
-     * Build the prompt for the LLM with agent instructions
-     */
-    private String buildAgentPrompt(String userMessage, List<AgentResponse.AgentStep> history, AgentContext context) {
-        StringBuilder prompt = new StringBuilder();
-
-        // AppBana-specific system instructions
-        prompt.append(buildSystemPrompt(context)).append("\n\n");
-
-        // Available tools — filtered by conversation state to prevent the LLM from
-        // calling build tools (scaffold_app, deploy_app, etc.) before the user has
-        // confirmed.  If no state is stored in context, we fall back to all tools.
-        prompt.append("## Available Tools\n\n");
-
-        Set<String> allowedTools = resolveAllowedTools(context);
-        if (allowedTools != null) {
-            prompt.append(toolRegistry.getToolDescriptions(allowedTools));
-            log.debug("[AGENT] Tool filter active — state={}, exposed={}",
-                    context.getVariable("conversation_state"), allowedTools);
-        } else {
-            prompt.append(toolRegistry.getToolDescriptions());
-        }
-        prompt.append("\n\n");
-
-        // Response format
-        prompt.append("## Response Format\n\n");
-        prompt.append("You must respond with valid JSON in one of two formats:\n\n");
-        prompt.append("**Format 1: Call Tools (ACT)**\n");
-        prompt.append("```json\n");
-        prompt.append("{\n");
-        prompt.append("  \"thinking\": \"Your reasoning about what to do next...\",\n");
-        prompt.append("  \"tool_calls\": [\n");
-        prompt.append("    {\"name\": \"tool_name\", \"arguments\": {\"arg1\": \"value1\"}}\n");
-        prompt.append("  ]\n");
-        prompt.append("}\n");
-        prompt.append("```\n\n");
-        prompt.append("**Format 2: Final Answer (TALK)**\n");
-        prompt.append("```json\n");
-        prompt.append("{\n");
-        prompt.append("  \"thinking\": \"Internal monologue...\",\n");
-        prompt.append("  \"final_answer\": \"The actual message to show to the user. MUST BE PRESENT.\"\n");
-        prompt.append("}\n");
-        prompt.append("```\n\n");
-        prompt.append(
-                "IMPORTANT: Do NOT output raw text. ALWAYS use JSON. Verification step: Did you include `tool_calls` OR `final_answer`? One is REQUIRED.\n\n");
-
-        // Story 3.2: Iteration Threshold Warnings
-        if (history != null && history.size() >= 7) {
-            prompt.append("ALERT: Budget Warning\n");
-            prompt.append("You are on step ").append(history.size() + 1).append(" of ").append(config.getMaxIterations()).append(". ");
-            prompt.append("You MUST either complete the request in the next few steps OR ask the user for missing info. ");
-            prompt.append("Do NOT enter a repetition loop.\n\n");
-        }
-
-        // 0. Current Context (CRITICAL for Context-Aware Rules)
-        prompt.append("## CURRENT EXECUTION CONTEXT\n");
-        prompt.append(String.format("- **Tenant ID**: %s\n", context.tenantId()));
-        prompt.append(
-                String.format("- **App ID**: %s\n", context.appId() != null ? context.appId() : "(none selected)"));
-        prompt.append(String.format("- **User ID**: %s\n", context.userId()));
-        prompt.append("\n");
-
-        // 0b. Spec Coverage Tracker — dynamic checklist of what's been discussed
-        if (context.hasVariable("chat_history")) {
-            try {
-                @SuppressWarnings("unchecked")
-                List<ConversationMemory.Conversation> specHistory =
-                        (List<ConversationMemory.Conversation>) context.getVariable("chat_history");
-                ConversationSpec spec = ConversationSpec.analyse(specHistory, userMessage);
-                String snippet = spec.toPromptSnippet();
-                if (!snippet.isEmpty()) {
-                    prompt.append(snippet);
-                }
-            } catch (Exception e) {
-                log.warn("[AGENT] Failed to build spec coverage tracker: {}", e.getMessage());
-            }
-        }
-
-        // 0c. Domain Examples — RAG-retrieved few-shot templates (Phase 4)
-        if (knowledgeBase != null) {
-            try {
-                List<SchemaDefinition> domainExamples = knowledgeBase.getDomainExamples(userMessage, 2);
-                if (!domainExamples.isEmpty()) {
-                    prompt.append("## DOMAIN EXAMPLES (similar apps built before)\n");
-                    prompt.append("Use these as reference for correct field types. Do NOT copy them verbatim — adapt to the user's request.\n\n");
-                    for (SchemaDefinition example : domainExamples) {
-                        prompt.append("**").append(example.getDescription()).append("**\n");
-                        if (example.getMetadata() != null && example.getMetadata().containsKey("entities")) {
-                            @SuppressWarnings("unchecked")
-                            Map<String, String> entities = (Map<String, String>) example.getMetadata().get("entities");
-                            entities.forEach((entityName, fields) ->
-                                    prompt.append("  ").append(entityName).append(": ").append(fields).append("\n"));
-                        }
-                        prompt.append("\n");
-                    }
-                }
-            } catch (Exception e) {
-                log.debug("[AGENT] Domain examples unavailable: {}", e.getMessage());
-            }
-        }
-
-        // 1. User Request (The Goal)
-        prompt.append("## ORIGINAL USER REQUEST\n\n");
-        prompt.append(userMessage);
-        prompt.append("\n\n");
-
-        // 2. Conversation History (Context) - Limited to last 5 messages for token
-        // efficiency
-        if (context.hasVariable("chat_history")) {
-            try {
-                @SuppressWarnings("unchecked")
-                List<ConversationMemory.Conversation> chatHistory = (List<ConversationMemory.Conversation>) context
-                        .getVariable("chat_history");
-
-                if (chatHistory != null && !chatHistory.isEmpty()) {
-                    // Limit to last 5 messages to reduce token usage
-                    int startIdx = Math.max(0, chatHistory.size() - 5);
-                    List<ConversationMemory.Conversation> recentHistory = chatHistory.subList(startIdx,
-                            chatHistory.size());
-
-                    prompt.append("## Conversation Context\n\n");
-                    for (ConversationMemory.Conversation conv : recentHistory) {
-                        prompt.append(String.format("User: %s\n", conv.getMessage()));
-                        prompt.append(String.format("Assistant: %s\n\n", conv.getResponse()));
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to format chat history", e);
-            }
-        }
-
-        // 3. Execution Progress (What has been done so far)
-        if (!history.isEmpty()) {
-            prompt.append("## EXECUTION PROGRESS (Current Task)\n\n");
-            for (AgentResponse.AgentStep step : history) {
-                prompt.append(String.format("**Iteration %d:**\n", step.getIteration()));
-                prompt.append(String.format("Thinking: %s\n", step.getThinking()));
-
-                if (!step.getToolResults().isEmpty()) {
-                    prompt.append("Tool Results:\n");
-                    for (ToolResult result : step.getToolResults()) {
-                        if (result.isSuccess()) {
-                            prompt.append(
-                                    String.format("- %s: Success - %s\n", result.getToolName(), result.getData()));
-                        } else {
-                            prompt.append(String.format("- %s: Error - %s\n", result.getToolName(), result.getError()));
-                        }
-                    }
-                }
-                prompt.append("\n");
-            }
-
-            prompt.append("## INSTRUCTION: \n");
-            prompt.append("Review the EXECUTION PROGRESS and the latest USER message. IMPORTANT: If the user's latest message is a question, a request for a prototype/demo, or feedback, you MUST prioritize answering them naturally. Do NOT just repeat the proposal or push for a build if the user is still asking questions. Only continue with the build if the user clearly says 'go ahead' or 'yes'.\n\n");
-        }
-
-        // 4. User Preferences (Learning)
-        if (context.hasVariable("user_preferences")) {
-            @SuppressWarnings("unchecked")
-            Map<String, String> prefs = (Map<String, String>) context.getVariable("user_preferences");
-            if (prefs != null && !prefs.isEmpty()) {
-                prompt.append("## USER PREFERENCES & STYLE\n");
-                prompt.append("You MUST respect the following user preferences:\n");
-                prefs.forEach((k, v) -> prompt.append(String.format("- **%s**: %s\n", k, v)));
-                prompt.append("\n");
-            }
-        }
-
-        prompt.append("Respond with JSON only:");
-
-        return prompt.toString();
-    }
-
-    /**
      * Resolve the set of tool names allowed for the current conversation state.
      * Returns {@code null} when no state is set (backwards-compatible: show all).
      */
@@ -683,61 +525,76 @@ public class AiAgent {
     /**
      * Parse LLM response into AgentThought
      */
-    private AgentThought parseAgentThought(String llmResponse) throws Exception {
-        // Try to extract JSON from response (LLM might wrap it in markdown)
-        String json = extractJson(llmResponse);
-
-        // Parse JSON
-        Map<String, Object> response = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {
-        });
-
-        String thinking = (String) response.get("thinking");
-        String finalAnswer = (String) response.get("final_answer");
-
-        // Robustness: Check for alternative keys if final_answer is missing
-        if (finalAnswer == null)
-            finalAnswer = (String) response.get("message");
-        if (finalAnswer == null)
-            finalAnswer = (String) response.get("answer");
-        if (finalAnswer == null)
-            finalAnswer = (String) response.get("text");
-
-        // DO NOT use thinking as finalAnswer. It contains internal monologue (3rd
-        // person) which confuses the user.
-
-        // Parse tool calls first (Prioritize Action over Talk)
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> toolCallsRaw = (List<Map<String, Object>>) response.get("tool_calls");
-
-        if (toolCallsRaw != null && !toolCallsRaw.isEmpty()) {
-            List<ToolCall> toolCalls = new ArrayList<>();
-            for (Map<String, Object> callRaw : toolCallsRaw) {
-                String name = (String) callRaw.get("name");
-                @SuppressWarnings("unchecked")
-                Map<String, Object> arguments = (Map<String, Object>) callRaw.get("arguments");
-
-                toolCalls.add(new ToolCall(name, arguments));
-            }
-
-            if (finalAnswer != null) {
-                log.warn(
-                        "[AGENT] LLM provided both tool_calls and final_answer. Ignoring final_answer to execute tools.");
-            }
-
-            return AgentThought.toolCalls(thinking, toolCalls);
+    private AgentThought parseAgentThought(String llmResponse) {
+        if (llmResponse == null || llmResponse.isBlank()) {
+            return AgentThought.finalAnswer("I received an empty response from the LLM.", "Sorry, I encountered an empty response.");
         }
 
-        // Check for final answer
-        if (finalAnswer != null && !finalAnswer.isEmpty()) {
-            return AgentThought.finalAnswer(thinking, finalAnswer);
+        try {
+            // Try to extract JSON from response (LLM might wrap it in markdown)
+            String json = extractJson(llmResponse);
+
+            // Parse JSON
+            Map<String, Object> response = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {
+            });
+
+            String thinking = (String) response.get("thinking");
+            if (thinking == null) thinking = (String) response.get("action"); // Hallucination support
+            
+            String finalAnswer = (String) response.get("final_answer");
+
+            // Robustness: Check for alternative keys if final_answer is missing
+            if (finalAnswer == null) finalAnswer = (String) response.get("response"); // common hallucination
+            if (finalAnswer == null) finalAnswer = (String) response.get("nextStep"); // common hallucination
+            if (finalAnswer == null) finalAnswer = (String) response.get("message");
+            if (finalAnswer == null) finalAnswer = (String) response.get("answer");
+            if (finalAnswer == null) finalAnswer = (String) response.get("text");
+
+            // Parse tool calls first (Prioritize Action over Talk)
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> toolCallsRaw = (List<Map<String, Object>>) response.get("tool_calls");
+
+            if (toolCallsRaw != null && !toolCallsRaw.isEmpty()) {
+                List<ToolCall> toolCalls = new ArrayList<>();
+                for (Map<String, Object> callRaw : toolCallsRaw) {
+                    String name = (String) callRaw.get("name");
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> arguments = (Map<String, Object>) callRaw.get("arguments");
+
+                    toolCalls.add(new ToolCall(name, arguments));
+                }
+
+                if (finalAnswer != null) {
+                    log.warn("[AGENT] LLM provided both tool_calls and final_answer. Ignoring final_answer to execute tools.");
+                }
+
+                return AgentThought.toolCalls(thinking != null ? thinking : "Executing tools...", toolCalls);
+            }
+
+            // Check for final answer
+            if (finalAnswer != null && !finalAnswer.isEmpty()) {
+                return AgentThought.finalAnswer(thinking != null ? thinking : "Providing final answer...", finalAnswer);
+            }
+
+            // Fallback 1: If we have thinking but no explicit final_answer, use thinking as the answer.
+            if (thinking != null && !thinking.isEmpty()) {
+                log.warn("[AGENT] No final_answer in JSON. Falling back to 'thinking' text.");
+                return AgentThought.finalAnswer(thinking, thinking);
+            }
+
+        } catch (Exception e) {
+            log.warn("[AGENT] Failed to parse response as JSON: {}. Falling back to raw text extraction.", e.getMessage());
         }
 
-        log.warn("[AGENT] No tool_calls or final_answer in response. JSON: " + json);
-        // Fallback: If we have thinking but no explicit final_answer, use thinking as
-        // the answer.
-        // This prevents "Internal Error" when the LLM forgets the final_answer field
-        // but explains itself in thinking.
-        return AgentThought.finalAnswer(thinking, thinking);
+        // Fallback 2: Last resort - extract any non-JSON text or use the raw response
+        // This handles cases where the LLM talks before/after the JSON or forgets JSON entirely
+        String fallbackAnswer = llmResponse.replaceAll("```json[\\s\\S]*?```", "").replaceAll("```[\\s\\S]*?```", "").trim();
+        if (fallbackAnswer.isEmpty()) {
+            fallbackAnswer = llmResponse.trim();
+        }
+
+        log.info("[AGENT] Using raw response as final_answer (Length: {})", fallbackAnswer.length());
+        return AgentThought.finalAnswer("Extracted from raw response", fallbackAnswer);
     }
 
     /**
@@ -764,107 +621,7 @@ public class AiAgent {
      * Process create-app workflow using batched execution
      * Combines app + entities + pages into single LLM call
      */
-//     private AgentResponse processBatchedCreateApp(String userMessage, AgentContext context, long startTime) {
-//         List<AgentResponse.AgentStep> steps = new ArrayList<>();
-// 
-//         try {
-//             // Extract app name from user message (simple heuristic)
-//             String appName = extractAppName(userMessage);
-//             String appDescription = null;
-//             List<String> entityNames = List.of(); // Let LLM decide default entities
-// 
-//             log.info("[AGENT-BATCHED] Creating app '{}' using batched execution", appName);
-// 
-//             // Execute batched workflow
-//             Map<String, Object> batchedResult = batchedExecutor.batchCreateApp(appName, appDescription, entityNames);
-// 
-//             // Execute create_app tool with batched result
-//             Tool createAppTool = toolRegistry.getTool("create_app");
-//             if (createAppTool == null) {
-//                 return AgentResponse.error("create_app tool not found", steps,
-//                         System.currentTimeMillis() - startTime);
-//             }
-// 
-//             Map<String, Object> appData = (Map<String, Object>) batchedResult.get("app");
-//             Map<String, Object> createAppArgs = Map.of(
-//                     "name", appData.get("name"),
-//                     "description", appData.getOrDefault("description", ""),
-//                     "version", appData.getOrDefault("version", "1.0.0"));
-// 
-//             ToolResult createAppResult = createAppTool.execute(createAppArgs, context);
-// 
-//             if (!createAppResult.isSuccess()) {
-//                 return AgentResponse.error("Failed to create app: " + createAppResult.getError(),
-//                         steps, System.currentTimeMillis() - startTime);
-//             }
-// 
-//             // Extract appId for subsequent steps
-//             Map<String, Object> resultData = (Map<String, Object>) createAppResult.getData();
-//             String appId = (String) resultData.get("id");
-// 
-//             log.info("[AGENT-BATCHED] App '{}' created successfully (ID: {})", appName, appId);
-// 
-//             // Execute create_entity tools for each entity
-//             List<Map<String, Object>> entities = (List<Map<String, Object>>) batchedResult.get("entities");
-//             Tool createEntityTool = toolRegistry.getTool("create_entity");
-// 
-//             if (createEntityTool != null && entities != null) {
-//                 for (Map<String, Object> entity : entities) {
-//                     ToolResult entityResult = createEntityTool.execute(entity, context);
-//                     if (!entityResult.isSuccess()) {
-//                         log.warn("[AGENT-BATCHED] Failed to create entity: {}", entity.get("name"));
-//                     }
-//                 }
-//                 log.info("[AGENT-BATCHED] Created {} entities", entities.size());
-//             }
-// 
-//             // Execute create_page tools for each page
-//             List<Map<String, Object>> pages = (List<Map<String, Object>>) batchedResult.get("pages");
-//             Tool createPageTool = toolRegistry.getTool("create_page");
-// 
-//             if (createPageTool != null && pages != null) {
-//                 for (Map<String, Object> page : pages) {
-//                     Map<String, Object> pageArgs = new HashMap<>(page);
-//                     pageArgs.put("appId", appId); // Explicitly pass appId
-//                     ToolResult pageResult = createPageTool.execute(pageArgs, context);
-//                     if (!pageResult.isSuccess()) {
-//                         log.warn("[AGENT-BATCHED] Failed to create page: {}", page.get("name"));
-//                     }
-//                 }
-//                 log.info("[AGENT-BATCHED] Created {} pages", pages.size());
-//             }
-// 
-//             // NEW: Execute deploy_app tool
-//             log.info("[AGENT-BATCHED] Deploying app '{}'...", appName);
-//             Tool deployTool = toolRegistry.getTool("deploy_app");
-//             String testUrl = " (link pending) ";
-//             if (deployTool != null) {
-//                 ToolResult deployResult = deployTool.execute(Map.of("appId", appId), context);
-//                 if (deployResult.isSuccess() && deployResult.getData() instanceof Map) {
-//                     Map<String, Object> deployData = (Map<String, Object>) deployResult.getData();
-//                     testUrl = (String) deployData.getOrDefault("testUrl", " (link pending) ");
-//                     log.info("[AGENT-BATCHED] App deployed successfully. URL: {}", testUrl);
-//                 } else {
-//                     log.warn("[AGENT-BATCHED] Deployment failed: {}", deployResult.getError());
-//                 }
-//             }
-// 
-//             long elapsed = System.currentTimeMillis() - startTime;
-//             String finalAnswer = String.format(
-//                     "✅ Successfully created and deployed app '%s' with %d entities and %d pages!\\n\\n" +
-//                             "🔗 **Test your app here**: %s\\n\\n" +
-//                             "You can now add, edit, and view records in your new application.",
-//                     appName, entities != null ? entities.size() : 0, pages != null ? pages.size() : 0,
-//                     testUrl);
-// 
-//             return AgentResponse.success(finalAnswer, steps, elapsed);
-// 
-//         } catch (Exception e) {
-//             log.error("[AGENT-BATCHED] Failed to execute batched create-app", e);
-//             return AgentResponse.error("Batched execution failed: " + e.getMessage(),
-//                     steps, System.currentTimeMillis() - startTime);
-//         }
-//     }
+
 
     /**
      * Extract app name from user message (simple heuristic)

@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -41,9 +41,10 @@ class AiAgentTest {
         config.setDebugMode(false);
         
         // Mock the registry to return our mocked LLM service
-        when(llmRegistry.getService(anyString())).thenReturn(llmService);
+        when(llmRegistry.getService(nullable(String.class))).thenReturn(llmService);
         
         agent = new AiAgent(llmRegistry, toolRegistry, config);
+        agent.setPatternMatchingEnabled(false);
     }
 
 
@@ -231,6 +232,32 @@ class AiAgentTest {
     }
 
     @Test
+    void testAgentLoop_HandlesHallucinatedSchema() throws Exception {
+        // Arrange
+        String userMessage = "Tell me something";
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
+
+        // Hallucinated schema with 'action' and 'response'
+        String llmResponse = """
+                {
+                  "action": "THINKING_INTERNALLY",
+                  "response": "Here is your hallucinated answer"
+                }
+                """;
+
+        when(llmService.chatWithJsonMode(anyString())).thenReturn(llmResponse);
+
+        // Act
+        AgentResponse response = agent.process(userMessage, context);
+
+        // Assert
+        assertTrue(response.isSuccess());
+        assertEquals("Here is your hallucinated answer", response.getFinalAnswer());
+        // Since action maps to thinking, check if thinking is captured
+        assertEquals("THINKING_INTERNALLY", response.getSteps().get(0).getThinking());
+    }
+
+    @Test
     void testAgentLoop_InvalidJson() throws Exception {
         // Arrange
         String userMessage = "Test invalid JSON";
@@ -243,7 +270,8 @@ class AiAgentTest {
         AgentResponse response = agent.process(userMessage, context);
 
         // Assert
-        assertFalse(response.isSuccess());
+        assertTrue(response.isSuccess());
+        assertEquals("This is not JSON", response.getFinalAnswer());
     }
 
     @Test
