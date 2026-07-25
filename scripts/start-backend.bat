@@ -10,6 +10,9 @@ REM   4. Launches the service on port 8080
 REM =====================================================================
 setlocal EnableDelayedExpansion
 
+REM Always run from repo root, regardless of where the script is invoked
+cd /d "%~dp0.."
+
 set "BE_PORT=8080"
 set "PG_PORT=5432"
 

@@ -13,6 +13,8 @@ set -euo pipefail
 BE_PORT="${BE_PORT:-8080}"
 PG_PORT="${PG_PORT:-5432}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT_DIR"
 
 echo "=========================================="
 echo "[backend] Restarting on port $BE_PORT"
@@ -55,7 +57,7 @@ echo "   PostgreSQL: running on port $PG_PORT"
 
 # --- Step 3: build the module ----------------------------------------
 echo "[3/4] Building app-bana-service module..."
-cd "$SCRIPT_DIR"
+cd "$ROOT_DIR"
 if ! mvn -q -pl app-bana-service -am -DskipTests install; then
     if [ ! -f "app-bana-service/target/app-bana-1.0-SNAPSHOT-fat.jar" ]; then
         echo "   ERROR: Build failed and no existing jar found."

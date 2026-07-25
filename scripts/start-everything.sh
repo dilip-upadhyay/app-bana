@@ -24,14 +24,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT_DIR"
 
 if [ ! -f pom.xml ]; then
-    echo "ERROR: run this script from the project root."
+    echo "ERROR: could not locate repo root (pom.xml missing)."
     exit 1
 fi
 
-LOG_DIR="$SCRIPT_DIR/dev-logs"
+LOG_DIR="$ROOT_DIR/dev-logs"
 mkdir -p "$LOG_DIR"
 
 echo "=========================================="

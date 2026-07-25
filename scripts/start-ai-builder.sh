@@ -16,6 +16,8 @@ QDRANT_HTTP_PORT="${QDRANT_HTTP_PORT:-6333}"
 QDRANT_GRPC_PORT="${QDRANT_GRPC_PORT:-6334}"
 PG_PORT="${PG_PORT:-5432}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT_DIR"
 
 echo "=========================================="
 echo "[ai-builder] Restarting on port $AI_PORT"
@@ -33,9 +35,9 @@ fi
 
 # --- Step 2: ensure OPENAI_API_KEY is set ----------------------------
 echo "[2/5] Checking OPENAI_API_KEY..."
-if [ -z "${OPENAI_API_KEY:-}" ] && [ -f "$SCRIPT_DIR/ai-builder/.env" ]; then
+if [ -z "${OPENAI_API_KEY:-}" ] && [ -f "$ROOT_DIR/ai-builder/.env" ]; then
     # shellcheck disable=SC2046
-    export $(grep -E '^OPENAI_API_KEY=' "$SCRIPT_DIR/ai-builder/.env" | xargs)
+    export $(grep -E '^OPENAI_API_KEY=' "$ROOT_DIR/ai-builder/.env" | xargs)
 fi
 if [ -z "${OPENAI_API_KEY:-}" ]; then
     echo "   ERROR: OPENAI_API_KEY is not set."
@@ -81,13 +83,13 @@ ensure_container qdrant docker run -d \
     --name qdrant \
     -p "$QDRANT_HTTP_PORT:6333" \
     -p "$QDRANT_GRPC_PORT:6334" \
-    -v "$SCRIPT_DIR/qdrant_storage:/qdrant/storage" \
+    -v "$ROOT_DIR/qdrant_storage:/qdrant/storage" \
     qdrant/qdrant >/dev/null
 echo "   Qdrant: running on port $QDRANT_HTTP_PORT"
 
 # --- Step 4: build the module ----------------------------------------
 echo "[4/5] Building ai-builder module..."
-cd "$SCRIPT_DIR"
+cd "$ROOT_DIR"
 if ! mvn -q -pl ai-builder -am -DskipTests install; then
     if [ ! -f "ai-builder/target/ai-builder-1.0-SNAPSHOT-fat.jar" ]; then
         echo "   ERROR: Build failed and no existing jar found."

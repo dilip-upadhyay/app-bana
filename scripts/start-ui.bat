@@ -9,6 +9,9 @@ REM   3. Launches the Vite dev server
 REM =====================================================================
 setlocal EnableDelayedExpansion
 
+REM Always run from repo root, regardless of where the script is invoked
+cd /d "%~dp0.."
+
 set "UI_PORT=5173"
 set "UI_DIR=app-bana-ui"
 

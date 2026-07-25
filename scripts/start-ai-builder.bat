@@ -11,6 +11,9 @@ REM   5. Launches the service on port 8081
 REM =====================================================================
 setlocal EnableDelayedExpansion
 
+REM Always run from repo root, regardless of where the script is invoked
+cd /d "%~dp0.."
+
 set "AI_PORT=8081"
 set "QDRANT_HTTP_PORT=6333"
 set "QDRANT_GRPC_PORT=6334"

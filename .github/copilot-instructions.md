@@ -74,33 +74,34 @@ app-bana/
 â”‚   â”œâ”€â”€ ACTIVE_TASKS.md          â† Current sprint tasks
 â”‚   â””â”€â”€ session_summary.md       â† Latest session notes
 â”‚
-â”œâ”€â”€ config.json                  â† Database + OpenAI config (DO NOT commit secrets)
-â”œâ”€â”€ start-everything.{bat,sh}    â† Master orchestrator (starts all modules in order)
-â”œâ”€â”€ start-ai-builder.{bat,sh}    â† Restart AI Builder + Qdrant + Postgres
-â”œâ”€â”€ start-backend.{bat,sh}       â† Restart backend + Postgres
-â”œâ”€â”€ start-ui.{bat,sh}            â† Restart UI (Vite dev server)
-â””â”€â”€ .github/copilot-instructions.md  â† This file
+├── config.json                  ← Database + OpenAI config (DO NOT commit secrets)
+├── scripts/                     ← All launch scripts (.bat for Windows, .sh for macOS/Linux)
+│   ├── start-everything.{bat,sh}    ← Master orchestrator (starts all modules in order)
+│   ├── start-ai-builder.{bat,sh}    ← Restart AI Builder + Qdrant + Postgres
+│   ├── start-backend.{bat,sh}       ← Restart backend + Postgres
+│   └── start-ui.{bat,sh}            ← Restart UI (Vite dev server)
+└── .github/copilot-instructions.md  ← This file
 ```
 
 ---
 
 ## 3. How to Start the Application
 
-Every script has a **Windows (.bat)** and **macOS/Linux (.sh)** version. Each `start-*` script is idempotent - it stops any existing instance, ensures its dependencies, builds if needed, then launches.
+All launch scripts live in `scripts/`. Every script has a **Windows (`.bat`)** and **macOS/Linux (`.sh`)** version. Each `start-*` script is idempotent — it stops any existing instance, ensures its dependencies, builds if needed, then launches. Scripts are location-aware, so they work regardless of the current directory.
 
 ### Start everything (recommended):
 
 | Windows | macOS / Linux |
 |---------|---------------|
-| `.\start-everything.bat` | `./start-everything.sh` |
+| `.\scripts\start-everything.bat` | `./scripts/start-everything.sh` |
 
 ### Restart a single module:
 
 | Module | Windows | macOS / Linux | Port |
 |--------|---------|---------------|------|
-| AI Builder | `.\start-ai-builder.bat` | `./start-ai-builder.sh` | 8081 |
-| Backend | `.\start-backend.bat` | `./start-backend.sh` | 8080 |
-| UI | `.\start-ui.bat` | `./start-ui.sh` | 5173 |
+| AI Builder | `.\scripts\start-ai-builder.bat` | `./scripts/start-ai-builder.sh` | 8081 |
+| Backend | `.\scripts\start-backend.bat` | `./scripts/start-backend.sh` | 8080 |
+| UI | `.\scripts\start-ui.bat` | `./scripts/start-ui.sh` | 5173 |
 
 ### What each module script does
 

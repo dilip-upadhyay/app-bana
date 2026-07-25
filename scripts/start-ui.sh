@@ -12,6 +12,8 @@ set -euo pipefail
 UI_PORT="${UI_PORT:-5173}"
 UI_DIR="${UI_DIR:-app-bana-ui}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT_DIR"
 
 echo "=========================================="
 echo "[ui] Restarting on port $UI_PORT"
@@ -33,7 +35,7 @@ if ! command -v npm >/dev/null 2>&1; then
     echo "   ERROR: npm is not installed or not on PATH."
     exit 1
 fi
-cd "$SCRIPT_DIR/$UI_DIR"
+cd "$ROOT_DIR/$UI_DIR"
 if [ ! -d node_modules ]; then
     echo "   Installing dependencies (this may take a minute)..."
     if [ -f package-lock.json ]; then

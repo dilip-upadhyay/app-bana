@@ -37,13 +37,13 @@ At the heart of AppBana lies a sophisticated AI Agent designed for precision and
 
 ## Quick Start
 
-Every script is available for **Windows (`.bat`)** and **macOS / Linux (`.sh`)**. Each `start-*` script does a full **restart** — it stops the existing instance, ensures its dependencies (Docker containers, `node_modules`, env vars, Maven build) are ready, and launches the service.
+All launch scripts live in [`scripts/`](scripts/). Every script is available for **Windows (`.bat`)** and **macOS / Linux (`.sh`)**. Each `start-*` script does a full **restart** — it stops the existing instance, ensures its dependencies (Docker containers, `node_modules`, env vars, Maven build) are ready, and launches the service. Scripts are location-aware, so they work regardless of the current directory.
 
 ### Start everything at once
 
 | Windows | macOS / Linux |
 |---------|---------------|
-| `.\start-everything.bat` | `./start-everything.sh` |
+| `.\scripts\start-everything.bat` | `./scripts/start-everything.sh` |
 
 Orchestrates all three modules in the correct order: **AI Builder → Backend → UI**, waiting for each to be reachable before starting the next.
 
@@ -51,9 +51,9 @@ Orchestrates all three modules in the correct order: **AI Builder → Backend �
 
 | Module | Windows | macOS / Linux | Port |
 |--------|---------|---------------|------|
-| AI Builder (Qdrant + Postgres deps) | `.\start-ai-builder.bat` | `./start-ai-builder.sh` | `8081` |
-| Backend API (Postgres dep) | `.\start-backend.bat` | `./start-backend.sh` | `8080` |
-| Studio UI (Vite dev server) | `.\start-ui.bat` | `./start-ui.sh` | `5173` |
+| AI Builder (Qdrant + Postgres deps) | `.\scripts\start-ai-builder.bat` | `./scripts/start-ai-builder.sh` | `8081` |
+| Backend API (Postgres dep) | `.\scripts\start-backend.bat` | `./scripts/start-backend.sh` | `8080` |
+| Studio UI (Vite dev server) | `.\scripts\start-ui.bat` | `./scripts/start-ui.sh` | `5173` |
 
 ### Service URLs
 
@@ -95,10 +95,7 @@ app-bana/
 ├── builder-database/    RAG knowledge base seed data
 ├── docs/                All documentation
 ├── config.json          Runtime configuration (DB, LLM keys)
-├── start-everything.*   Launch every module in order (.bat + .sh)
-├── start-ai-builder.*   Restart AI Builder + deps (.bat + .sh)
-├── start-backend.*      Restart backend + deps (.bat + .sh)
-└── start-ui.*           Restart UI + deps (.bat + .sh)
+└── scripts/             All launch scripts (.bat for Windows, .sh for macOS/Linux)
 ```
 
 For a deeper walkthrough of each subproject, see [docs/architecture/01-ARCHITECTURE.md](docs/architecture/01-ARCHITECTURE.md).
