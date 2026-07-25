@@ -55,11 +55,14 @@ if not exist "%UI_DIR%\node_modules" (
 echo    node_modules: present
 
 REM --- Step 3: launch --------------------------------------------------
+if not exist "logs" mkdir logs
+set "LOG_FILE=%CD%\logs\ui.log"
 echo [3/3] Launching Vite dev server on port %UI_PORT%...
 echo    URL: http://localhost:%UI_PORT%
+echo    Log: %LOG_FILE%
 echo    Press Ctrl+C to stop.
 echo ==========================================
 
 cd "%UI_DIR%"
-call npm run dev
+powershell -NoProfile -Command "& { & npm run dev 2>&1 | Tee-Object -FilePath '%LOG_FILE%' }"
 endlocal

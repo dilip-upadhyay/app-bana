@@ -71,10 +71,13 @@ if ! mvn -q -pl app-bana-service -am -DskipTests install; then
 fi
 
 # --- Step 4: launch --------------------------------------------------
+mkdir -p "$ROOT_DIR/logs"
+LOG_FILE="$ROOT_DIR/logs/backend.log"
 echo "[4/4] Launching Backend on port $BE_PORT..."
 echo "   Health: http://localhost:$BE_PORT/health"
+echo "   Log:    $LOG_FILE"
 echo "   Press Ctrl+C to stop."
 echo "=========================================="
 
 cd app-bana-service
-exec java -jar target/app-bana-1.0-SNAPSHOT-fat.jar
+java -jar target/app-bana-1.0-SNAPSHOT-fat.jar 2>&1 | tee "$LOG_FILE"

@@ -51,9 +51,12 @@ fi
 echo "   node_modules: present"
 
 # --- Step 3: launch --------------------------------------------------
+mkdir -p "$ROOT_DIR/logs"
+LOG_FILE="$ROOT_DIR/logs/ui.log"
 echo "[3/3] Launching Vite dev server on port $UI_PORT..."
 echo "   URL: http://localhost:$UI_PORT"
+echo "   Log: $LOG_FILE"
 echo "   Press Ctrl+C to stop."
 echo "=========================================="
 
-exec npm run dev
+npm run dev 2>&1 | tee "$LOG_FILE"

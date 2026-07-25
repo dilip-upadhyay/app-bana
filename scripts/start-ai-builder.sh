@@ -102,9 +102,12 @@ if ! mvn -q -pl ai-builder -am -DskipTests install; then
 fi
 
 # --- Step 5: launch --------------------------------------------------
+mkdir -p "$ROOT_DIR/logs"
+LOG_FILE="$ROOT_DIR/logs/ai-builder.log"
 echo "[5/5] Launching AI Builder on port $AI_PORT..."
 echo "   Health: http://localhost:$AI_PORT/health"
 echo "   Chat:   http://localhost:$AI_PORT/api/ai/chat"
+echo "   Log:    $LOG_FILE"
 echo "   Press Ctrl+C to stop."
 echo "=========================================="
 
@@ -113,4 +116,4 @@ export DATABASE_USER="appbana"
 export DATABASE_PASSWORD="appbana_dev_2026"
 
 cd ai-builder
-exec java -jar target/ai-builder-1.0-SNAPSHOT-fat.jar
+java -jar target/ai-builder-1.0-SNAPSHOT-fat.jar 2>&1 | tee "$LOG_FILE"

@@ -64,11 +64,14 @@ if !ERRORLEVEL! NEQ 0 (
 )
 
 REM --- Step 4: launch --------------------------------------------------
+if not exist "logs" mkdir logs
+set "LOG_FILE=%CD%\logs\backend.log"
 echo [4/4] Launching Backend on port %BE_PORT%...
 echo    Health: http://localhost:%BE_PORT%/health
+echo    Log:    %LOG_FILE%
 echo    Press Ctrl+C to stop.
 echo ==========================================
 
 cd app-bana-service
-java -jar target\app-bana-1.0-SNAPSHOT-fat.jar
+powershell -NoProfile -Command "& { & java -jar target\app-bana-1.0-SNAPSHOT-fat.jar 2>&1 | Tee-Object -FilePath '%LOG_FILE%' }"
 endlocal

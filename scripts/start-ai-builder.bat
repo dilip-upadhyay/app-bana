@@ -95,9 +95,12 @@ if !ERRORLEVEL! NEQ 0 (
 )
 
 REM --- Step 5: launch --------------------------------------------------
+if not exist "logs" mkdir logs
+set "LOG_FILE=%CD%\logs\ai-builder.log"
 echo [5/5] Launching AI Builder on port %AI_PORT%...
 echo    Health: http://localhost:%AI_PORT%/health
 echo    Chat:   http://localhost:%AI_PORT%/api/ai/chat
+echo    Log:    %LOG_FILE%
 echo    Press Ctrl+C to stop.
 echo ==========================================
 
@@ -106,5 +109,5 @@ set "DATABASE_USER=appbana"
 set "DATABASE_PASSWORD=appbana_dev_2026"
 
 cd ai-builder
-java -jar target\ai-builder-1.0-SNAPSHOT-fat.jar
+powershell -NoProfile -Command "& { & java -jar target\ai-builder-1.0-SNAPSHOT-fat.jar 2>&1 | Tee-Object -FilePath '%LOG_FILE%' }"
 endlocal
