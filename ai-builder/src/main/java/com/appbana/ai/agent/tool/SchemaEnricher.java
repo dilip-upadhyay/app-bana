@@ -149,6 +149,14 @@ public class SchemaEnricher {
             }
         }
 
+        // Step 1c — every field with type=status MUST have a non-empty options[].
+        // When the LLM omits options (common), inject a domain-neutral default so
+        // the generated form renders a real <select> instead of a free-text input.
+        // The runtime is defensive against missing options, but the UX defect
+        // ("status" as a text box) leaked through in early Customer Onboarding
+        // apps. Enforce at the metadata boundary so every future app benefits.
+        enforceStatusOptions(fields, entityName);
+
         // Step 2 — build set of existing field names (case-insensitive)
         Set<String> existingNames = new HashSet<>();
         for (Map<String, Object> field : fields) {
@@ -249,12 +257,35 @@ public class SchemaEnricher {
         }
     }
 
+    /** Default status pipeline used when the LLM omits options for a status field. */
+    static final List<String> DEFAULT_STATUS_OPTIONS = List.of(
+            "New", "In Progress", "Completed", "Cancelled");
+
+    /**
+     * Step 1c helper — every field with type=status must have a non-empty options[].
+     * Missing/empty options get {@link #DEFAULT_STATUS_OPTIONS} injected. This closes
+     * the "status renders as free-text input" UX defect at the metadata boundary so
+     * every downstream consumer (page generator, runtime) sees a well-formed status.
+     */
+    static void enforceStatusOptions(List<Map<String, Object>> fields, String entityName) {
+        for (Map<String, Object> field : fields) {
+            if (!"status".equals(field.get(F_TYPE))) continue;
+            Object opts = field.get("options");
+            boolean missing = opts == null;
+            boolean empty   = opts instanceof List<?> list && list.isEmpty();
+            if (missing || empty) {
+                field.put("options", new ArrayList<>(DEFAULT_STATUS_OPTIONS));
+                log.warn("[SchemaEnricher] Entity '{}': status field '{}' had no options — injected default {}",
+                        entityName, field.get(F_NAME), DEFAULT_STATUS_OPTIONS);
+            }
+        }
+    }
+
     /**
      * Step 0 helper — normalise every field name in the list to snake_case,
      * preserving the original human-readable form as the label when none exists.
      */
-    private void normaliseFieldNames(List<Map<String, Object>> fields, String entityName) {
-        for (Map<String, Object> field : fields) {
+    private void normaliseFieldNames(List<Map<String, Object>> fields, String entityName) {        for (Map<String, Object> field : fields) {
             Object rawName = field.get(F_NAME);
             if (rawName == null) continue;
             String originalName = String.valueOf(rawName);

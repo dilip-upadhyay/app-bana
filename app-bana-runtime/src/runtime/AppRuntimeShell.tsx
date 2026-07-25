@@ -14,6 +14,7 @@ import { resolveAppContext, getApp, login as apiLogin } from '@appbana/shared';
 import { renderPage } from './Renderer';
 import { RuntimeSidebar } from './RuntimeSidebar';
 import { LoginPage } from '../pages/LoginPage';
+import { Toaster } from './Toaster';
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
@@ -245,17 +246,16 @@ export function AppRuntimeShell() {
 
         {/* Main content — scrollable */}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
             {currentPage ? (
-              <section className="appbana-page-card">
-                {renderPage(currentPage)}
-              </section>
+              renderPage(currentPage)
             ) : (
-              <p className="text-gray-400 text-sm p-8 text-center">No pages in this app.</p>
+              <p className="text-slate-400 text-sm p-8 text-center">No pages in this app.</p>
             )}
           </div>
         </main>
       </div>
+      <Toaster />
     </div>
   );
 }

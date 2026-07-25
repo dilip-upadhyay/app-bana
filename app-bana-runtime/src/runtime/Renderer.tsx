@@ -14,16 +14,65 @@ import type { PageMeta, ComponentNode } from '@appbana/shared';
 import { fetchEntityRows, insertEntityRow } from '@appbana/shared';
 import { StudioTableLive } from './StudioTableLive';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
+import { FormActions } from './FormActions';
+import { toast } from './Toaster';
+import { humanizeHeader } from './cell-formatters';
+import { PageShell } from './PageShell';
 
 /** Turn "full_name" / "first-name" / "firstName" into "Full name". */
 function humanize(raw: string | undefined): string {
   if (!raw) return '';
-  return raw
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^./, (c) => c.toUpperCase());
+  return humanizeHeader(raw);
+}
+
+/**
+ * Classify a page's dominant purpose so we can pick the right shell width
+ * and background. Forms sit inside a centred, narrower card; lists fill the
+ * viewport with their own card chrome; everything else uses a plain body.
+ */
+function classifyPage(page: PageMeta): 'form' | 'list' | 'other' {
+  const nodes = page.nodes ?? [];
+  if (nodes.some((n) => n.type === 'form' || n.type === 'studio-form')) return 'form';
+  if (nodes.some((n) => n.type === 'table' || n.type === 'grid' || n.type === 'appbana-table-live')) return 'list';
+  return 'other';
+}
+
+function pageTitle(page: PageMeta): string {
+  const raw = page.name ?? page.id ?? 'Page';
+  return humanize(raw);
+}
+
+function pageSubtitle(page: PageMeta): string | undefined {
+  const kind = classifyPage(page);
+  if (kind === 'form')  return 'Fill in the details and save.';
+  if (kind === 'list')  return 'Browse and manage your records.';
+  return undefined;
+}
+
+export function renderPage(page: PageMeta): React.ReactElement {
+  const nodeMap = new Map(page.nodes.map((n) => [n.id, n]));
+  const root = nodeMap.get(page.rootId);
+  if (!root) {
+    return (
+      <PageShell title={pageTitle(page)}>
+        <div className="text-rose-600 text-sm p-4 border border-rose-200 rounded-lg bg-rose-50">
+          Root node not found: {page.rootId}
+        </div>
+      </PageShell>
+    );
+  }
+  const kind = classifyPage(page);
+  const inner = renderNode(root, nodeMap, page.id);
+  // Form pages sit in a centred, narrower card so the eye lands on the fields.
+  // List pages let their child table own the card chrome and fill the width.
+  const body = kind === 'form'
+    ? <div className="max-w-3xl w-full mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">{inner}</div>
+    : inner;
+  return (
+    <PageShell title={pageTitle(page)} subtitle={pageSubtitle(page)}>
+      {body}
+    </PageShell>
+  );
 }
 
 function fieldLabel(props: Record<string, unknown>): string {
@@ -34,13 +83,6 @@ function fieldLabel(props: Record<string, unknown>): string {
   const placeholder = props.placeholder as string | undefined;
   if (placeholder && String(placeholder).trim()) return String(placeholder);
   return '';
-}
-
-export function renderPage(page: PageMeta): React.ReactElement {
-  const nodeMap = new Map(page.nodes.map((n) => [n.id, n]));
-  const root = nodeMap.get(page.rootId);
-  if (!root) return <div className="text-red-500 p-4">Root node not found: {page.rootId}</div>;
-  return renderNode(root, nodeMap, page.id);
 }
 
 function renderNode(
@@ -79,6 +121,14 @@ function renderNode(
       );
 
     case 'button':
+      // The scaffolder emits a synthetic "Save" button with actionType=save-entity
+      // inside every form. As of Sprint 1 of the Runtime UX Overhaul, forms
+      // render their own sticky FormActions bar with Save + Save & Add-another,
+      // so we suppress the legacy button to avoid a duplicate. Any non-save
+      // button (e.g. user-authored) still renders normally.
+      if (props.actionType === 'save-entity') {
+        return <span key={node.id} hidden aria-hidden="true" {...dataAttrs} />;
+      }
       return (
         <button
           key={node.id}
@@ -443,16 +493,12 @@ interface EntityFormProps {
 function EntityForm(props: Readonly<EntityFormProps>) {
   const { className, styleObj, entity, dataAttrs, children } = props;
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [ok, setOk] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function submit(form: HTMLFormElement): Promise<boolean> {
     if (!entity) {
-      setError('This form has no entity bound.');
-      return;
+      toast.error('Save failed', { description: 'This form has no entity bound.' });
+      return false;
     }
-    const form = e.currentTarget;
     const fd = new FormData(form);
     const payload: Record<string, unknown> = {};
     for (const [k, v] of fd.entries()) {
@@ -461,20 +507,41 @@ function EntityForm(props: Readonly<EntityFormProps>) {
       payload[k] = s === '' ? null : s;
     }
     setSaving(true);
-    setError('');
-    setOk(false);
     try {
       const qualified = qualifyEntityKey(entity);
       await insertEntityRow(qualified, payload, getRuntimeToken());
-      form.reset();
-      setOk(true);
       window.dispatchEvent(
         new CustomEvent('appbana:row-inserted', { detail: { entity: qualified } })
       );
+      toast.success('Saved', { description: `New ${humanize(entity.split('_').pop())} added.` });
+      return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed');
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      toast.error('Save failed', { description: msg });
+      return false;
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const ok = await submit(form);
+    if (ok) form.reset();
+  }
+
+  // "Save & Add another" — same as Save but keeps the user on the form so they
+  // can quickly enter the next record. Reflected as a secondary button.
+  async function handleSaveAndNew() {
+    const form = document.querySelector<HTMLFormElement>(`form[data-entity="${entity}"]`);
+    if (!form) return;
+    if (!form.reportValidity()) return;
+    const ok = await submit(form);
+    if (ok) {
+      form.reset();
+      const first = form.querySelector<HTMLElement>('input, select, textarea');
+      first?.focus();
     }
   }
 
@@ -487,19 +554,12 @@ function EntityForm(props: Readonly<EntityFormProps>) {
       {...dataAttrs}
     >
       {children}
-      {error && (
-        <div className="mx-1 my-2 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
-      {ok && (
-        <div className="mx-1 my-2 p-3 bg-emerald-50 text-emerald-700 rounded-lg text-sm">
-          Saved.
-        </div>
-      )}
-      {saving && (
-        <div className="mx-1 my-2 text-xs text-gray-500">Saving…</div>
-      )}
+      <div className="appbana-form-save-cell">
+        <FormActions
+          saving={saving}
+          onSaveAndNew={entity ? handleSaveAndNew : undefined}
+        />
+      </div>
     </form>
   );
 }

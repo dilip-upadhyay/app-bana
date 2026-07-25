@@ -2,12 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------------- */
+/* Design tokens — single source of truth for color / spacing / radius / etc */
+/* Runtime UX Overhaul Plan §0.2 — see docs/planning/RUNTIME_UX_OVERHAUL_PLAN */
+/* ------------------------------------------------------------------------- */
 :root {
-  --color-brand: #6366f1;
-  --color-brand-hover: #4f46e5;
+  /* Brand */
+  --color-brand:        #6366f1;  /* violet-600 */
+  --color-brand-hover:  #4f46e5;
   --color-brand-active: #4338ca;
-  --color-brand-soft: #eef2ff;
-  --color-brand-on-soft: #4338ca;
+  --color-brand-soft:   #eef2ff;
+  --color-brand-on-soft:#4338ca;
+
+  /* Surface */
+  --color-surface:   #ffffff;
+  --color-surface-2: #f8fafc;   /* app background */
+  --color-surface-3: #f1f5f9;   /* subtle panel */
+
+  /* Border */
+  --color-border:        #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  /* Text */
+  --color-text-primary:   #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-tertiary:  #94a3b8;
+
+  /* Status */
+  --color-success-bg: #dcfce7; --color-success-fg: #166534;
+  --color-warning-bg: #fef3c7; --color-warning-fg: #92400e;
+  --color-danger-bg:  #fee2e2; --color-danger-fg:  #991b1b;
+  --color-info-bg:    #dbeafe; --color-info-fg:    #1e40af;
+  --color-neutral-bg: #f1f5f9; --color-neutral-fg: #475569;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -18,9 +50,10 @@
     height: 100%;
   }
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-slate-50 text-slate-900 antialiased;
     font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont,
                  'Segoe UI', 'Helvetica Neue', sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 }
 
@@ -214,5 +247,162 @@
   /* ---- Page card container -------------------------------------------- */
   .appbana-page-card {
     @apply bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8;
+  }
+
+  /* ---- Sprint 1: PageShell (title, subtitle, breadcrumb, actions) ----- */
+  .appbana-page-shell {
+    @apply flex flex-col gap-6;
+  }
+  .appbana-page-header {
+    @apply flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3
+           pb-4 border-b border-slate-200;
+  }
+  .appbana-page-crumbs {
+    @apply flex items-center gap-1.5 text-xs text-slate-500 mb-1;
+  }
+  .appbana-page-crumbs > .sep { @apply text-slate-300; }
+  .appbana-page-title {
+    @apply text-2xl font-semibold tracking-tight text-slate-900 leading-tight;
+  }
+  .appbana-page-subtitle {
+    @apply text-sm text-slate-500 mt-1;
+  }
+  .appbana-page-actions {
+    @apply flex items-center gap-2 shrink-0;
+  }
+  .appbana-page-body {
+    @apply flex flex-col gap-6;
+  }
+
+  /* ---- Sprint 1: Form cell + form-save-cell (replace inline styles) --- */
+  .appbana-form-cell {
+    @apply flex flex-col gap-1.5;
+  }
+  .appbana-form-save-cell {
+    /* Full-row cell that the sticky action bar renders inside. */
+    grid-column: 1 / -1;
+    @apply flex items-center justify-end mt-4 pt-4 border-t border-slate-200;
+  }
+
+  /* ---- Sprint 1: Sticky form action bar ------------------------------- */
+  .appbana-form-actions {
+    @apply flex flex-wrap items-center justify-end gap-3
+           w-full;
+  }
+  .appbana-form-actions .primary {
+    @apply appbana-button;
+  }
+  .appbana-form-actions .secondary {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2.5 rounded-lg text-sm font-medium
+           bg-transparent text-slate-700
+           border border-slate-300
+           hover:bg-slate-100 hover:border-slate-400
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .appbana-form-actions .tertiary {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2.5 rounded-lg text-sm font-medium
+           text-slate-600
+           hover:bg-slate-100 hover:text-slate-900
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* ---- Sprint 1: Status pill ------------------------------------------ */
+  .appbana-status-pill {
+    @apply inline-flex items-center gap-1
+           px-2.5 py-0.5 rounded-full
+           text-xs font-medium tracking-normal
+           whitespace-nowrap;
+  }
+  .appbana-status-pill.status-success { background: var(--color-success-bg); color: var(--color-success-fg); }
+  .appbana-status-pill.status-warning { background: var(--color-warning-bg); color: var(--color-warning-fg); }
+  .appbana-status-pill.status-danger  { background: var(--color-danger-bg);  color: var(--color-danger-fg);  }
+  .appbana-status-pill.status-info    { background: var(--color-info-bg);    color: var(--color-info-fg);    }
+  .appbana-status-pill.status-neutral { background: var(--color-neutral-bg); color: var(--color-neutral-fg); }
+
+  /* ---- Sprint 1: Table header — sentence case, non-uppercase in DOM --- */
+  .appbana-table-th {
+    @apply px-4 py-3
+           text-xs font-semibold uppercase tracking-wider
+           text-slate-500 text-left
+           bg-slate-50 border-b border-slate-200;
+  }
+  .appbana-table-td {
+    @apply px-4 py-3 text-sm text-slate-700 align-middle;
+  }
+  .appbana-table-row {
+    @apply border-b border-slate-100
+           transition-colors duration-100
+           hover:bg-slate-50;
+  }
+  .appbana-table-row-actions {
+    @apply relative w-10 px-2 text-right;
+  }
+  .appbana-row-actions-btn {
+    @apply inline-flex items-center justify-center
+           w-8 h-8 rounded-md
+           text-slate-400
+           opacity-0 group-hover:opacity-100
+           hover:bg-slate-100 hover:text-slate-700
+           focus:outline-none focus:opacity-100 focus:ring-2 focus:ring-indigo-500
+           transition-all duration-100;
+  }
+  .appbana-row-actions-menu {
+    @apply absolute right-2 top-9 z-10
+           min-w-[10rem]
+           bg-white border border-slate-200 rounded-lg shadow-lg
+           py-1;
+  }
+  .appbana-row-actions-menu button {
+    @apply w-full text-left px-3 py-1.5 text-sm text-slate-700
+           hover:bg-slate-100
+           focus:outline-none focus:bg-slate-100;
+  }
+  .appbana-row-actions-menu button.danger {
+    @apply text-rose-600 hover:bg-rose-50;
+  }
+
+  /* ---- Sprint 1: Empty state ------------------------------------------ */
+  .appbana-empty {
+    @apply flex flex-col items-center justify-center
+           gap-3 px-6 py-16 text-center;
+  }
+  .appbana-empty h3 {
+    @apply text-base font-semibold text-slate-700;
+  }
+  .appbana-empty p {
+    @apply text-sm text-slate-500 max-w-sm;
+  }
+
+  /* ---- Sprint 1: Toaster ---------------------------------------------- */
+  .appbana-toaster {
+    @apply fixed bottom-4 right-4 z-50
+           flex flex-col gap-2
+           pointer-events-none;
+  }
+  .appbana-toast {
+    @apply pointer-events-auto
+           flex items-start gap-3
+           min-w-[260px] max-w-sm
+           px-4 py-3 pr-8
+           bg-white border border-slate-200 rounded-lg shadow-lg
+           text-sm text-slate-800
+           animate-[toast-in_150ms_ease-out];
+  }
+  .appbana-toast.success { @apply border-emerald-200; }
+  .appbana-toast.error   { @apply border-rose-200; }
+  .appbana-toast .dot {
+    @apply mt-1 w-2 h-2 rounded-full shrink-0;
+  }
+  .appbana-toast.success .dot { @apply bg-emerald-500; }
+  .appbana-toast.error   .dot { @apply bg-rose-500;    }
+  .appbana-toast.info    .dot { @apply bg-indigo-500;  }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0);   }
   }
 }

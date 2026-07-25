@@ -1,36 +1,55 @@
 /**
  * StudioTableLive.tsx — React port of app-bana-ui's LitElement table.
  *
- * Fetches rows from /api/{entityKey}, supports pagination and a basic
- * "New" record dialog.  Emits data-appbana-* for Stage 6 selection.
+ * Fetches rows from /api/{entityKey}, supports pagination, and — as of the
+ * Runtime UX Overhaul (Sprint 1) — renders:
+ *   - human-formatted dates (§1.2)
+ *   - resolved FK labels via a background lookup (§1.3)
+ *   - sentence-case column headers, no ALL-CAPS in the DOM (§1.4)
+ *   - status pills for `type: "status"` columns (§1.5)
+ *   - hover-revealed row actions with a proper empty state (§1.9)
+ *   - viewport-filling shell (§1.10)
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { ComponentNode } from '@appbana/shared';
 import { fetchEntityRows } from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
+import { formatDate, humanizeHeader, pickReferenceLabel, classifyStatus } from './cell-formatters';
+import { RowActions } from './RowActions';
+import { toast } from './Toaster';
 
 interface Props {
-  node: ComponentNode;
-  pageId: string;
+  readonly node: ComponentNode;
+  readonly pageId: string;
+}
+
+interface FieldMeta {
+  readonly name: string;
+  readonly label?: string;
+  readonly type?: string;
+  readonly referenceEntity?: string;
 }
 
 const getToken = getRuntimeToken;
+const PAGE_SIZE = 25;
 
-export function StudioTableLive({ node, pageId }: Props) {
+export function StudioTableLive({ node, pageId }: Readonly<Props>) {
   const props = node.props ?? {};
-  // Strip trailing '=' chars (Lit attribute binding suffix not needed in React)
   const rawEntity = String(props.entity ?? '');
   let entityKey = rawEntity;
   while (entityKey.endsWith('=')) entityKey = entityKey.slice(0, -1);
-  const fields: Array<{ name: string; label?: string; type?: string }> =
-    Array.isArray(props.fields) ? props.fields : [];
+
+  const fields: FieldMeta[] = useMemo(
+    () => (Array.isArray(props.fields) ? (props.fields as FieldMeta[]) : []),
+    [props.fields],
+  );
 
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const pageSize = 25;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fkMaps, setFkMaps] = useState<Record<string, Map<string, string>>>({});
 
   const load = useCallback(async () => {
     if (!entityKey) return;
@@ -38,13 +57,14 @@ export function StudioTableLive({ node, pageId }: Props) {
     setError('');
     try {
       const result = await fetchEntityRows(qualifyEntityKey(entityKey), getToken(), {
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
       });
       setRows(result.rows);
       setTotal(result.total);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load data');
+      const msg = e instanceof Error ? e.message : 'Failed to load data';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -57,7 +77,6 @@ export function StudioTableLive({ node, pageId }: Props) {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ entity?: string }>).detail;
       if (!detail?.entity) return;
-      // Match either the bare name or the fully-qualified key.
       if (detail.entity === entityKey || detail.entity === qualifyEntityKey(entityKey)) {
         load();
       }
@@ -66,13 +85,53 @@ export function StudioTableLive({ node, pageId }: Props) {
     return () => window.removeEventListener('appbana:row-inserted', handler);
   }, [entityKey, load]);
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const label = String(node.label ?? props.label ?? (entityKey ? `${entityKey} List` : 'Data Table'));
+  // ─── FK label prefetch ────────────────────────────────────────────────
+  // For every reference column, load the target entity once so we can render
+  // the human label ("Alice Johnson") instead of the raw FK id (`1`).
+  useEffect(() => {
+    let cancelled = false;
+    const refFields = fields.filter((f) => f.type === 'reference');
+    if (refFields.length === 0) return;
+
+    Promise.all(
+      refFields.map(async (f) => {
+        const target = f.referenceEntity || f.name;
+        try {
+          const { rows: refRows } = await fetchEntityRows(
+            qualifyEntityKey(target),
+            getToken(),
+            { limit: 500 },
+          );
+          const map = new Map<string, string>();
+          for (const r of refRows) {
+            const rec = r as Record<string, unknown>;
+            const id = String(rec.id ?? rec.ID ?? '');
+            if (id) map.set(id, pickReferenceLabel(rec) || `#${id}`);
+          }
+          return [f.name, map] as const;
+        } catch {
+          return [f.name, new Map<string, string>()] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      const next: Record<string, Map<string, string>> = {};
+      for (const [k, v] of entries) next[k] = v;
+      setFkMaps(next);
+    });
+
+    return () => { cancelled = true; };
+  }, [fields, entityKey]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const label = String(
+    node.label ?? props.label ?? (entityKey ? `${humanizeHeader(entityKey.split('_').pop())} List` : 'Data Table'),
+  );
 
   if (!entityKey) {
     return (
       <div
-        className="p-4 text-gray-500 border border-dashed rounded-lg"
+        className="p-4 text-slate-500 border border-dashed rounded-lg"
         data-appbana-node={node.id}
         data-appbana-page={pageId}
       >
@@ -81,77 +140,139 @@ export function StudioTableLive({ node, pageId }: Props) {
     );
   }
 
+  // ─── Header / column resolution ───────────────────────────────────────
+  const displayFieldNames: string[] = fields.length > 0
+    ? fields.map((f) => f.name)
+    : (rows[0] ? Object.keys(rows[0]).filter((k) => k.toLowerCase() !== 'id') : []);
+
+  const fieldByName = new Map(fields.map((f) => [f.name, f]));
+
+  function renderCell(fieldName: string, row: Record<string, unknown>) {
+    const meta = fieldByName.get(fieldName);
+    const raw = row[fieldName];
+    const type = meta?.type ?? inferTypeFromName(fieldName);
+
+    // Foreign-key label
+    if (type === 'reference') {
+      const map = fkMaps[fieldName];
+      const idStr = raw == null ? '' : String(raw);
+      const resolved = map?.get(idStr);
+      if (resolved) return <span>{resolved}</span>;
+      return <span className="text-slate-400">{idStr ? `#${idStr}` : '—'}</span>;
+    }
+
+    // Status pill
+    if (type === 'status') {
+      const s = raw == null ? '' : String(raw);
+      if (!s) return <span className="text-slate-400">—</span>;
+      return <span className={`appbana-status-pill status-${classifyStatus(s)}`}>{s}</span>;
+    }
+
+    // Date / datetime
+    if (type === 'date' || type === 'datetime' || /_(at|on|date)$/i.test(fieldName)) {
+      const f = formatDate(raw, type);
+      if (!f.label) return <span className="text-slate-400">—</span>;
+      return <span title={f.title}>{f.label}</span>;
+    }
+
+    // Boolean
+    if (type === 'boolean') {
+      const truthy = raw === true || raw === 'true' || raw === 1 || raw === '1';
+      return (
+        <span className={`appbana-status-pill ${truthy ? 'status-success' : 'status-neutral'}`}>
+          {truthy ? 'Yes' : 'No'}
+        </span>
+      );
+    }
+
+    // Default
+    if (raw == null || raw === '') return <span className="text-slate-400">—</span>;
+    return <span>{String(raw)}</span>;
+  }
+
   return (
     <div
-      className="rounded-2xl shadow-md bg-white overflow-hidden my-6"
+      className="rounded-xl bg-white border border-slate-200 shadow-sm overflow-hidden flex flex-col"
       data-appbana-node={node.id}
       data-appbana-page={pageId}
       data-appbana-entity={entityKey}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <h2 className="text-lg font-bold text-gray-800">{label}</h2>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-slate-900 truncate">{label}</h2>
+          {!loading && total > 0 && (
+            <p className="text-xs text-slate-500 mt-0.5">{total} record{total !== 1 ? 's' : ''}</p>
+          )}
+        </div>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mx-5 my-3 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+        <div className="mx-5 my-3 p-3 bg-rose-50 text-rose-700 rounded-lg text-sm">
           {error}
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading skeleton */}
       {loading && (
-        <div className="px-5 py-8 text-center text-gray-400 text-sm">Loading…</div>
+        <div className="px-5 py-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={`skel-row-${i}`} className="flex gap-3 py-2 animate-pulse">
+              {Array.from({ length: Math.max(displayFieldNames.length, 3) }).map((__, j) => (
+                <div key={`skel-cell-${i}-${j}`} className="h-4 bg-slate-100 rounded flex-1" />
+              ))}
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Table */}
-      {!loading && (
+      {/* Table (populated) */}
+      {!loading && rows.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                {fields.map((f) => (
-                  <th key={f.name} className="px-4 py-3">{f.label ?? f.name}</th>
+              <tr>
+                {displayFieldNames.map((name) => (
+                  <th key={name} className="appbana-table-th" scope="col">
+                    {humanizeHeader(fieldByName.get(name)?.label ?? name)}
+                  </th>
                 ))}
-                {fields.length === 0 && rows.length > 0 &&
-                  Object.keys(rows[0]).filter((k) => k !== 'id').map((k) => (
-                    <th key={k} className="px-4 py-3">{k}</th>
-                  ))
-                }
+                {/* Row-actions column header — visually blank but accessible */}
+                <th className="appbana-table-th w-10" scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={Math.max(fields.length, 1)}
-                    className="px-4 py-8 text-center text-gray-400 italic"
-                  >
-                    No data available.
-                  </td>
-                </tr>
-              )}
               {rows.map((row, idx) => {
-                const displayFields = fields.length > 0
-                  ? fields.map((f) => f.name)
-                  : Object.keys(row).filter((k) => k !== 'id');
+                const rowId = String(row.id ?? idx);
                 return (
                   <tr
-                    key={String(row.id ?? idx)}
-                    className="border-t border-gray-100 hover:bg-gray-50 transition-colors"
+                    key={rowId}
+                    className="appbana-table-row group"
                     data-appbana-entity={entityKey}
                     data-appbana-node={node.id}
                   >
-                    {displayFields.map((key) => (
+                    {displayFieldNames.map((name) => (
                       <td
-                        key={key}
-                        className="px-4 py-3 text-gray-700"
-                        data-appbana-field={key}
+                        key={name}
+                        className="appbana-table-td"
+                        data-appbana-field={name}
                       >
-                        {String(row[key] ?? '')}
+                        {renderCell(name, row)}
                       </td>
                     ))}
+                    <RowActions
+                      rowId={rowId}
+                      onCopy={() => {
+                        if (navigator?.clipboard) {
+                          navigator.clipboard.writeText(rowId)
+                            .then(() => toast.success('Copied', { description: `Row ID ${rowId}` }))
+                            .catch(() => toast.error('Copy failed'));
+                        }
+                      }}
+                    />
                   </tr>
                 );
               })}
@@ -160,23 +281,39 @@ export function StudioTableLive({ node, pageId }: Props) {
         </div>
       )}
 
+      {/* Empty state */}
+      {!loading && rows.length === 0 && !error && (
+        <div className="appbana-empty">
+          <svg viewBox="0 0 64 64" width="56" height="56" fill="none"
+               stroke="currentColor" strokeWidth="1.5" className="text-slate-300" aria-hidden="true">
+            <rect x="10" y="14" width="44" height="36" rx="4" />
+            <line x1="10" y1="24" x2="54" y2="24" />
+            <line x1="20" y1="34" x2="44" y2="34" />
+            <line x1="20" y1="42" x2="36" y2="42" />
+          </svg>
+          <h3>No records yet</h3>
+          <p>Use the form or the AI builder to add your first row.</p>
+        </div>
+      )}
+
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 text-xs text-gray-500">
-          <span>{total} record{total !== 1 ? 's' : ''}</span>
+        <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 text-xs text-slate-500">
+          <span>Page {page} of {totalPages}</span>
           <div className="flex gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-gray-100"
+              className="px-2 py-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-100"
+              aria-label="Previous page"
             >
               ←
             </button>
-            <span>Page {page} / {totalPages}</span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-gray-100"
+              className="px-2 py-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-100"
+              aria-label="Next page"
             >
               →
             </button>
@@ -185,4 +322,12 @@ export function StudioTableLive({ node, pageId }: Props) {
       )}
     </div>
   );
+}
+
+/** Fallback type detection when the schema doesn't include a type hint. */
+function inferTypeFromName(name: string): string | undefined {
+  const n = name.toLowerCase();
+  if (n.endsWith('_at') || n.endsWith('_on') || n.endsWith('_date') || n === 'date') return 'datetime';
+  if (n.includes('status')) return 'status';
+  return undefined;
 }

@@ -157,4 +157,110 @@ class SchemaEnricherAndPageToolFixTest {
         assertFalse(inputProps.containsKey("referenceEntity"),
                 "When the field lacks referenceEntity, the input node must not carry a stale key");
     }
+
+    // ---------- Sprint 1: status field enforcement (Runtime UX Overhaul plan §1.5) ----------
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void enrich_injectsDefaultStatusOptionsWhenMissing() {
+        SchemaEnricher enricher = new SchemaEnricher();
+
+        Map<String, Object> statusField = new LinkedHashMap<>();
+        statusField.put("name", "onboarding_status");
+        statusField.put("type", "status");
+        // no options — LLM often forgets
+
+        Map<String, Object> entity = new LinkedHashMap<>();
+        entity.put("name", "OnboardingProcess");
+        entity.put("fields", new ArrayList<>(List.of(statusField)));
+
+        enricher.enrich(entity);
+
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) entity.get("fields");
+        Map<String, Object> injected = fields.stream()
+                .filter(f -> "onboarding_status".equals(f.get("name")))
+                .findFirst()
+                .orElseThrow();
+
+        Object opts = injected.get("options");
+        assertInstanceOf(List.class, opts, "options must be a List after enrichment");
+        List<Object> optList = (List<Object>) opts;
+        assertFalse(optList.isEmpty(), "options must be non-empty after enrichment");
+        assertTrue(optList.contains("New"),         "default options must include 'New'");
+        assertTrue(optList.contains("In Progress"), "default options must include 'In Progress'");
+        assertTrue(optList.contains("Completed"),   "default options must include 'Completed'");
+        assertTrue(optList.contains("Cancelled"),   "default options must include 'Cancelled'");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void enrich_preservesExplicitStatusOptions() {
+        SchemaEnricher enricher = new SchemaEnricher();
+
+        List<String> customOpts = List.of("Draft", "Approved", "Rejected");
+
+        Map<String, Object> statusField = new LinkedHashMap<>();
+        statusField.put("name", "approval_status");
+        statusField.put("type", "status");
+        statusField.put("options", new ArrayList<>(customOpts));
+
+        Map<String, Object> entity = new LinkedHashMap<>();
+        entity.put("name", "Document");
+        entity.put("fields", new ArrayList<>(List.of(statusField)));
+
+        enricher.enrich(entity);
+
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) entity.get("fields");
+        Map<String, Object> preserved = fields.stream()
+                .filter(f -> "approval_status".equals(f.get("name")))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(customOpts, preserved.get("options"),
+                "explicit status options must never be overwritten");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void buildFormPage_emitsSelectNodeForStatusFieldWithOptions() throws Exception {
+        GeneratePageTool tool = new GeneratePageTool(mock(MetadataValidator.class), "http://unused");
+
+        Map<String, Object> statusField = new LinkedHashMap<>();
+        statusField.put("name", "onboarding_status");
+        statusField.put("type", "status");
+        statusField.put("label", "Onboarding Status");
+        statusField.put("required", true);
+        statusField.put("options", new ArrayList<>(List.of("New", "In Progress", "Completed")));
+
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("name", "AddOnboarding");
+        args.put("path", "/onboarding/new");
+        args.put("entityName", "OnboardingProcess");
+        args.put("appId", "app-1");
+        args.put("entityFields", List.of(statusField));
+
+        Method m = GeneratePageTool.class.getDeclaredMethod("buildFormPage", Map.class);
+        m.setAccessible(true);
+        Map<String, Object> page = (Map<String, Object>) m.invoke(tool, args);
+
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) page.get("nodes");
+        Map<String, Object> statusNode = nodes.stream()
+                .filter(n -> "select".equals(n.get("type"))) // top-level select, NOT input+type=select
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "status field must produce a top-level 'select' node, "
+                                + "not a text <input> — otherwise the runtime renders a free-text box"));
+
+        Map<String, Object> props = (Map<String, Object>) statusNode.get("props");
+        assertEquals("onboarding_status", props.get("name"));
+        assertEquals(Boolean.TRUE, props.get("required"));
+        Object opts = props.get("options");
+        assertInstanceOf(List.class, opts, "select node must carry an options[] array");
+        List<Object> optList = (List<Object>) opts;
+        assertEquals(3, optList.size());
+        assertTrue(optList.contains("New"));
+        assertNull(props.get("placeholder"),
+                "select nodes must not carry a text placeholder — that's a text-input artefact");
+    }
 }
+
