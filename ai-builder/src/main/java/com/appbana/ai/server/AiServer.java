@@ -246,6 +246,9 @@ public class AiServer {
         // Chat history endpoints
         router.get("/api/ai/chat/history",  historyController.getHistory());
         router.get("/api/ai/chat/sessions", historyController.getSessions());
+        // Stage 3 — session picker: rename + soft-delete
+        router.put("/api/ai/chat/sessions/{sessionId}",    historyController.renameSession());
+        router.delete("/api/ai/chat/sessions/{sessionId}", historyController.deleteSession());
 
         log.info("Registered AI routes:");
         log.info("  GET  /health");
@@ -254,6 +257,8 @@ public class AiServer {
         log.info("  POST /api/ai/chat/agent/stream  (SSE)");
         log.info("  GET  /api/ai/chat/history");
         log.info("  GET  /api/ai/chat/sessions");
+        log.info("  PUT  /api/ai/chat/sessions/{sessionId}    (rename)");
+        log.info("  DELETE /api/ai/chat/sessions/{sessionId}  (soft-delete)");
     }
 
     public void start() {

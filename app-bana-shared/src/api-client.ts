@@ -135,6 +135,18 @@ export async function listEntities(tenantId: string, appId: string, token: strin
     .map((n: string) => ({ name: n.replace(`${schemaKey}_`, ''), tenantId, appId, fields: [] }));
 }
 
+/**
+ * Fetch a full entity schema by its fully-qualified key (`{tenantId}_{appId}_{entityName}`).
+ * Used by the studio Data Drawer to build the "Add row" form.
+ */
+export async function getEntitySchema(schemaKey: string, token: string): Promise<EntitySchema> {
+  const res = await fetch(`${BACKEND}/schema/${encodeURIComponent(schemaKey)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Failed to load schema ${schemaKey}: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchEntityRows(
   entityKey: string,
   token: string,
@@ -152,22 +164,94 @@ export async function fetchEntityRows(
   };
 }
 
+/** Insert a single row into a dynamic entity table. */
+export async function insertEntityRow(
+  entityKey: string,
+  row: Record<string, unknown>,
+  token: string
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${BACKEND}/api/${entityKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Insert failed: ${res.status} ${body}`);
+  }
+  return res.json();
+}
+
 // ── Chat sessions ─────────────────────────────────────────────────────────────
 
 export interface ChatSession {
   sessionId: string;
-  userId: string;
-  lastMessage?: string;
-  updatedAt?: string;
+  title?: string | null;
+  appId?: string | null;
+  lastActivity?: number;
+  turnCount?: number;
 }
 
-export async function listSessions(token: string): Promise<ChatSession[]> {
-  const res = await fetch(`${AI_BUILDER}/api/ai/chat/sessions`, {
+export interface ChatHistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number | null;
+}
+
+export async function listSessions(
+  userId: string,
+  token: string,
+  opts: { appId?: string; limit?: number } = {}
+): Promise<ChatSession[]> {
+  const qs = new URLSearchParams({ userId, limit: String(opts.limit ?? 20) });
+  if (opts.appId) qs.set('appId', opts.appId);
+  const res = await fetch(`${AI_BUILDER}/api/ai/chat/sessions?${qs}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data) ? data : (data.sessions ?? []);
+}
+
+export async function getSessionHistory(
+  userId: string,
+  sessionId: string,
+  token: string
+): Promise<ChatHistoryMessage[]> {
+  const qs = new URLSearchParams({ userId, sessionId });
+  const res = await fetch(`${AI_BUILDER}/api/ai/chat/history?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.messages ?? [];
+}
+
+export async function renameSession(
+  sessionId: string,
+  userId: string,
+  title: string,
+  token: string
+): Promise<void> {
+  const res = await fetch(`${AI_BUILDER}/api/ai/chat/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ userId, title }),
+  });
+  if (!res.ok) throw new Error(`Rename failed: ${res.status}`);
+}
+
+export async function deleteSession(
+  sessionId: string,
+  userId: string,
+  token: string
+): Promise<void> {
+  const qs = new URLSearchParams({ userId });
+  const res = await fetch(`${AI_BUILDER}/api/ai/chat/sessions/${encodeURIComponent(sessionId)}?${qs}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }
 
 // ── SSE streaming chat ────────────────────────────────────────────────────────

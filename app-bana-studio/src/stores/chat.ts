@@ -23,6 +23,8 @@ interface ChatState {
   conversationState: string;
   streaming: boolean;
   abortController: AbortController | null;
+  /** Base64 data URLs pasted/attached to the composer. Cleared on send. */
+  attachments: string[];
   addUserMessage: (text: string) => string;
   startAssistantMessage: () => string;
   applyEvent: (msgId: string, ev: SseEvent) => void;
@@ -31,6 +33,11 @@ interface ChatState {
   setSessionId: (id: string) => void;
   stopStreaming: () => void;
   clearMessages: () => void;
+  addAttachment: (dataUrl: string) => void;
+  removeAttachment: (idx: number) => void;
+  clearAttachments: () => void;
+  /** Hydrate the pane with a persisted session's history (from the session picker). */
+  loadHistory: (sessionId: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>) => void;
 }
 
 let seq = 0;
@@ -42,6 +49,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   conversationState: 'GREETING',
   streaming: false,
   abortController: null,
+  attachments: [],
 
   addUserMessage: (text) => {
     const id = uid();
@@ -102,5 +110,20 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }));
   },
 
-  clearMessages: () => set({ messages: [], sessionId: crypto.randomUUID() }),
+  clearMessages: () => set({ messages: [], sessionId: crypto.randomUUID(), attachments: [] }),
+
+  addAttachment: (dataUrl) => set((s) => ({ attachments: [...s.attachments, dataUrl] })),
+  removeAttachment: (idx) =>
+    set((s) => ({ attachments: s.attachments.filter((_, i) => i !== idx) })),
+  clearAttachments: () => set({ attachments: [] }),
+
+  loadHistory: (sessionId, historyMessages) => {
+    const hydrated: ChatMessage[] = historyMessages.map((m) => ({
+      id: uid(),
+      role: m.role,
+      content: m.content,
+    }));
+    set({ messages: hydrated, sessionId, attachments: [] });
+  },
 }));
+

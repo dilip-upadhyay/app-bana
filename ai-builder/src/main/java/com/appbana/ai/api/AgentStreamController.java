@@ -125,6 +125,7 @@ public class AgentStreamController {
                             ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
                             conv.setUserId(userId);
                             conv.setSessionId(UUID.fromString(sessionId));
+                            conv.setAppId(appId);
                             conv.setMessage(request.getMessage());
                             conv.setResponse(result.getFinalAnswer());
                             conv.setIntent("agent_stream");

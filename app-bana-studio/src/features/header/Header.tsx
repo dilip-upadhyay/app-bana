@@ -2,14 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { listApps, createApp, deployApp, fetchBranding } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
+import { useDrawerStore } from '../../stores/drawer';
+import { SessionPicker } from '../sessions/SessionPicker';
 
 export function Header() {
   const { token, tenantId, name, clearSession } = useSessionStore();
   const { apps, currentApp, branding, setApps, setCurrentApp, setBranding } = useWorkspaceStore();
+  const { toggleData, toggleSessions, sessionsOpen, closeAll } = useDrawerStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [appsOpen, setAppsOpen] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const sessionsBtnRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!token || !tenantId) return;
@@ -23,10 +27,13 @@ export function Header() {
         setMenuOpen(false);
         setAppsOpen(false);
       }
+      if (sessionsBtnRef.current && !sessionsBtnRef.current.contains(e.target as Node) && sessionsOpen) {
+        closeAll();
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  }, [sessionsOpen, closeAll]);
 
   async function handleNewApp() {
     if (!token || !tenantId) return;
@@ -105,6 +112,33 @@ export function Header() {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Data drawer toggle */}
+      {currentApp && (
+        <button
+          onClick={toggleData}
+          className="text-xs text-gray-300 hover:text-white px-2 py-1 rounded-md hover:bg-gray-800
+                     transition-colors flex items-center gap-1"
+          title="View data"
+        >
+          <span aria-hidden="true">▦</span>
+          <span className="hidden md:inline">Data</span>
+        </button>
+      )}
+
+      {/* Session picker */}
+      <div className="relative" ref={sessionsBtnRef}>
+        <button
+          onClick={() => { toggleSessions(); setMenuOpen(false); setAppsOpen(false); }}
+          className={`text-xs px-2 py-1 rounded-md transition-colors flex items-center gap-1
+            ${sessionsOpen ? 'bg-gray-800 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-800'}`}
+          title="Chat sessions"
+        >
+          <span aria-hidden="true">🕒</span>
+          <span className="hidden md:inline">Sessions</span>
+        </button>
+        <SessionPicker />
+      </div>
 
       {/* Deploy */}
       {currentApp && (

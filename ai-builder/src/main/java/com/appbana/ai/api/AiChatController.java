@@ -141,6 +141,7 @@ public class AiChatController {
             ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
             conv.setUserId("chat_user"); // or userId
             conv.setSessionId(UUID.fromString(sessionId));
+            conv.setAppId(appId);
             conv.setMessage(userMessage);
             conv.setResponse(result.getFinalAnswer());
             conv.setIntent("agent_processed");

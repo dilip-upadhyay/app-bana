@@ -2,6 +2,7 @@ import { Header } from './features/header/Header';
 import { ChatPane } from './features/chat/ChatPane';
 import { PreviewPane } from './features/preview/PreviewPane';
 import { AuthGate } from './features/auth/AuthGate';
+import { DataDrawer } from './features/data-drawer/DataDrawer';
 
 export function App() {
   return (
@@ -18,6 +19,8 @@ export function App() {
             <PreviewPane />
           </div>
         </div>
+        {/* Slide-in drawers */}
+        <DataDrawer />
       </div>
     </AuthGate>
   );
