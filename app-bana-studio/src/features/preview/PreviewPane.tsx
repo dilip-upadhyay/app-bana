@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AppBanaPostMessage, PageMeta } from '@appbana/shared';
+import type { AppBanaPostMessage } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 
@@ -11,14 +11,7 @@ export function PreviewPane() {
   const { token, tenantId, userId, email, name } = useSessionStore();
   const { currentApp, previewRefreshToken } = useWorkspaceStore();
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [activePage, setActivePage] = useState<string | null>(null);
   const [deviceWidth, setDeviceWidth] = useState<'full' | 'tablet' | 'mobile'>('full');
-
-  // Backend returns `pages` as a list of ID strings and `pagesData` as full
-  // PageMeta objects. Prefer `pagesData` so the tabs have `id`/`name`.
-  const pages: PageMeta[] = (currentApp?.pagesData
-    ?? (currentApp?.pages as PageMeta[] | undefined)
-    ?? []) as PageMeta[];
 
   // Build the iframe URL
   const runtimeUrl = currentApp
@@ -57,28 +50,12 @@ export function PreviewPane() {
 
   return (
     <div className="flex flex-col h-full bg-gray-900">
-      {/* Preview toolbar */}
+      {/* Preview toolbar — runtime owns page nav now (sidebar inside iframe),
+          so the toolbar keeps only device toggle + open-in-new-tab. */}
       <div className="h-10 flex items-center gap-2 px-3 border-b border-gray-800 shrink-0">
-        {/* Page tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0">
-          {pages.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => {
-                setActivePage(p.id);
-                iframeRef.current?.contentWindow?.postMessage(
-                  { type: 'setPage', pageId: p.id } as AppBanaPostMessage,
-                  RUNTIME_ORIGIN
-                );
-              }}
-              className={`text-xs px-3 py-1 rounded-md whitespace-nowrap transition-colors
-                ${activePage === p.id
-                  ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
+        <span className="text-xs text-gray-500 truncate flex-1 min-w-0">
+          {currentApp?.name ?? 'No app loaded'}
+        </span>
 
         {/* Device toggle */}
         <div className="flex gap-1">

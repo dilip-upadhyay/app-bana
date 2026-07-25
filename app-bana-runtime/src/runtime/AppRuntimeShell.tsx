@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import type { AppMeta, PageMeta, AppBanaPostMessage, RuntimeMode } from '@appbana/shared';
 import { resolveAppContext, getApp, login as apiLogin } from '@appbana/shared';
 import { renderPage } from './Renderer';
+import { RuntimeSidebar } from './RuntimeSidebar';
 import { LoginPage } from '../pages/LoginPage';
 
 const TOKEN_KEY   = 'appbana_token';
@@ -42,6 +43,7 @@ export function AppRuntimeShell() {
   const [currentPage, setCurrentPage] = useState<PageMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // Stage 2 contract fields — full Stage 6 wiring lands with select-and-instruct.
   // Stored in refs (not state) because the current render doesn't consume them yet;
   // Stage 6 will migrate these to state and drive the inspection overlay.
@@ -188,35 +190,72 @@ export function AppRuntimeShell() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* App header */}
-      <header className="h-14 flex items-center gap-4 px-6 border-b border-gray-200 bg-white shadow-sm sticky top-0 z-10">
-        <span className="font-semibold text-gray-900 text-base tracking-tight">{app.name}</span>
-        {/* Page tabs */}
-        <nav className="flex gap-1 ml-2" aria-label="Pages">
-          {(app.pages ?? []).map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setCurrentPage(p)}
-              className={`appbana-tab ${currentPage?.id === p.id ? 'appbana-tab-active' : ''}`}
-              aria-current={currentPage?.id === p.id ? 'page' : undefined}
-            >
-              {p.name}
-            </button>
-          ))}
-        </nav>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Top app bar — sticky, spans full width */}
+      <header className="appbana-appbar">
+        <button
+          type="button"
+          className="appbana-appbar-menu md:hidden"
+          onClick={() => setMobileNavOpen(true)}
+          aria-label="Open navigation"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
+               strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+            <line x1="4" y1="6"  x2="20" y2="6" />
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <line x1="4" y1="18" x2="20" y2="18" />
+          </svg>
+        </button>
+        <span className="appbana-appbar-brand">{app.name}</span>
+        <div className="flex-1" />
+        {/* Right slot — reserved for user menu / settings. Kept minimal for now. */}
       </header>
 
-      {/* Page content */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {currentPage ? (
-          <section className="appbana-page-card">
-            {renderPage(currentPage)}
-          </section>
-        ) : (
-          <p className="text-gray-400 text-sm p-8 text-center">No pages in this app.</p>
+      {/* Body — sidebar + main */}
+      <div className="flex flex-1 min-h-0">
+        {/* Desktop / tablet sidebar (permanent, hidden on mobile) */}
+        <aside className="hidden md:block appbana-sidebar-container">
+          <RuntimeSidebar
+            pages={app.pages ?? []}
+            currentPageId={currentPage?.id ?? null}
+            onSelect={setCurrentPage}
+          />
+        </aside>
+
+        {/* Mobile drawer — rendered outside <aside> to overlay content */}
+        {mobileNavOpen && (
+          <button
+            type="button"
+            className="appbana-drawer-backdrop md:hidden"
+            aria-label="Close navigation"
+            onClick={() => setMobileNavOpen(false)}
+          />
         )}
-      </main>
+        <aside
+          className={`appbana-drawer md:hidden ${mobileNavOpen ? 'appbana-drawer-open' : ''}`}
+          aria-hidden={!mobileNavOpen}
+        >
+          <RuntimeSidebar
+            pages={app.pages ?? []}
+            currentPageId={currentPage?.id ?? null}
+            onSelect={setCurrentPage}
+            onClose={() => setMobileNavOpen(false)}
+          />
+        </aside>
+
+        {/* Main content — scrollable */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+            {currentPage ? (
+              <section className="appbana-page-card">
+                {renderPage(currentPage)}
+              </section>
+            ) : (
+              <p className="text-gray-400 text-sm p-8 text-center">No pages in this app.</p>
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

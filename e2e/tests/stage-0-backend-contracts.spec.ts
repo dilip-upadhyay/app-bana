@@ -101,6 +101,45 @@ test('publish endpoint rejects requests without the ?env= query parameter', asyn
   // from missing required inputs, which is exactly what we want to guard.
   expect(String(body.error ?? '')).toMatch(/env|tenant/i);
 });
+
+// ── /api/{entityKey} (public for runtime apps) ───────────────────────────────
+// Regression guard for the "Failed to fetch rows: 401" bug.
+//
+// Entity URLs are SINGLE path segment (underscore-joined
+// "{tenantId}_{appId}_{entityName}") — not two slash segments. The original
+// SessionMiddleware regex `^/api/[^/]+/[^/]+/?$` required two segments, so
+// runtime data fetches always got 401 even with a valid Bearer token.
+//
+// Public here means "no session cookie required" (defense in depth still comes
+// from route-level admin/read tokens when configured in production).
+test('runtime entity API is public — no session token required, no 401', async ({ request }) => {
+  // Unknown entity is fine — we're proving the middleware doesn't 401 us.
+  // Backend should reply with 200/404/500 from the ROUTE handler, never 401
+  // from the session middleware.
+  const res = await request.get(
+    `${BACKEND_URL}/api/default_stage-0-nonexistent-app_DoesNotExist?limit=1`,
+  );
+  expect.soft(res.status(), 'entity API must not return 401 without a session').not.toBe(401);
+  expect(res.status()).toBeLessThan(500);
+});
+
+test('runtime entity API /{rowId} sub-path is public — no 401', async ({ request }) => {
+  const res = await request.get(
+    `${BACKEND_URL}/api/default_stage-0-nonexistent-app_DoesNotExist/some-row-id`,
+  );
+  expect.soft(res.status(), 'entity /{rowId} must not return 401 without a session').not.toBe(401);
+  expect(res.status()).toBeLessThan(500);
+});
+
+test('runtime entity API /batch sub-path is public — no 401', async ({ request }) => {
+  const res = await request.post(
+    `${BACKEND_URL}/api/default_stage-0-nonexistent-app_DoesNotExist/batch`,
+    { data: [] },
+  );
+  expect.soft(res.status(), 'entity /batch must not return 401 without a session').not.toBe(401);
+  expect(res.status()).toBeLessThan(500);
+});
+
 test('SSE endpoint returns text/event-stream with the 5-event contract and exactly one done', async () => {
   test.setTimeout(60_000);
 
