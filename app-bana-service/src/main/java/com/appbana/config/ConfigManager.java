@@ -51,7 +51,15 @@ public class ConfigManager {
      */
     private static AppConfig loadConfig() {
         File file = new File(CONFIG_FILE);
-        
+
+        // Fallback: look in parent dir (repo root) when running from a module subdir
+        if (!file.exists()) {
+            File parent = new File("..", CONFIG_FILE);
+            if (parent.exists()) {
+                file = parent;
+            }
+        }
+
         if (!file.exists()) {
             LOG.info("Config file {} not found, using defaults", CONFIG_FILE);
             return createDefaultConfig();
