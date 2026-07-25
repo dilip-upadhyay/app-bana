@@ -1,89 +1,39 @@
+﻿# ============================================================
+# AppBana .gitignore
+# ============================================================
+
+# --- Build outputs ---
 target/
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
-
-### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
-*.iws
-*.iml
-*.ipr
-
-### Eclipse ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
 build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
-.vscode/
-
-### Mac OS ###
-.DS_Store
-
-# Maven / build
-/target/
-/dist/
-/*.jar
-
-# Maven wrapper download dir
-/.mvn/
-/.mvn/apache-maven/
-/.mvn/tmp/
-
-# Generated sources
-/generated-sources/
-/generated-test-sources/
-
-# IDE / OS
-/.idea/
-*.iml
+dist/
+*.jar
 *.class
-.classpath
-.project
+
+# --- Generated sources ---
+generated-sources/
+generated-test-sources/
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.iml
 .DS_Store
+Thumbs.db
 
-# Logs
+# --- Logs & PIDs ---
 *.log
+*.pid
 
-# Database / runtime data
+# --- Local runtime data ---
 data/
 **/data/
-appbana.mv.db
 qdrant_storage/
-
-# Process IDs
-*.pid
-**/*.pid
-
-# AI Builder logs
-ai-builder.log
-**/*.log
-
-# Misc
-node_modules/
-.env
-/app-bana-ui/src/main/resources/ui/dist/
-/app-bana-ui/package-lock.json
-app-bana-service/.mvn/
-cookies.txt
-
-# Local dev-logs from start-everything.sh
 dev-logs/
 
+# --- Node / frontend ---
+node_modules/
+/app-bana-ui/src/main/resources/ui/dist/
+/app-bana-ui/package-lock.json
+
+# --- Secrets / env ---
+.env
