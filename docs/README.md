@@ -18,7 +18,6 @@ Top-level files:
 
 - [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — current sprint / in-flight work
 - [`session_summary.md`](./session_summary.md) — most recent working session notes
-- [`openapi-fls.yaml`](./openapi-fls.yaml) — OpenAPI specification for Field-Level Security endpoints
 
 ---
 
