@@ -39,6 +39,10 @@ public class RouteRegistry {
         SchemaRoutes.register(router);
         GenericEntityRoutes.register(router);
 
+        // Stage 0: AI-native UI rebuild — public endpoints (no auth required)
+        TenantBrandingRoutes.register(router);  // GET /api/tenants/{id}/branding
+        AppContextRoutes.register(router);      // GET /api/app-context
+
         // Health and monitoring
         HealthRoutes.register(router);
 

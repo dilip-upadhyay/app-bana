@@ -49,4 +49,8 @@
         <sqlFile path="db/migration/V11__app_versioning.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
+    <changeSet id="V12" author="appbana">
+        <sqlFile path="db/migration/V12__tenant_branding.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
 </databaseChangeLog>

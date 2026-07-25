@@ -433,7 +433,35 @@ AppBana uses **safe, non-destructive migrations**:
 
 ## 12. Active Work & Known Issues
 
-### ðŸš§ In Progress: DialogueManager Integration (Story 3.1)
+### 🚧 IN PROGRESS: AI-Native UI Rebuild (Primary Initiative)
+
+**Primary reference:** [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](../docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md)
+
+Rebuild AppBana Studio as an AI-native frontend. Chat drives everything — no canvas, no palette, no property inspector. Segregate the current monolithic [`app-bana-ui/`](../app-bana-ui) into three pnpm workspace packages:
+
+| Package | Purpose | Port |
+|---|---|---|
+| `app-bana-shared` | Types + api client + postMessage schema + app-context resolver | — |
+| `app-bana-studio` | AI-native builder (streaming chat + tool cards + preview iframe + data drawer) | 5174 |
+| `app-bana-runtime` | Standalone renderer for deployed apps (own login, tenant-branded) | 5175 |
+
+**Stages:** 0 (backend prep — SSE, branding, app-context) → 1 (workspace + Studio MVP) → 2 (standalone runtime) → 3 (studio v1.1) → 4 (retire old UI) → 5 (subdomain deploy) → 6 (select-and-instruct UX).
+
+**Locked stack (do not change without approval):**
+- Vite 5 + React 18 + TypeScript + Tailwind + shadcn/ui + Zustand
+- pnpm workspaces
+- Native `fetch` + `ReadableStream` for streaming (Vercel AI SDK is **not** used — custom event shape)
+- `postMessage` handshake for studio→runtime token (NOT URL hash — security)
+
+**Backend additions in Stage 0 (in scope, do not treat as "no backend changes"):**
+- New endpoint `POST /api/ai/chat/agent/stream` (SSE with events `token`, `tool_call_start`, `tool_call_end`, `state`, `done`)
+- New endpoint `GET /api/tenants/{tenantId}/branding` (public, pre-login)
+- New endpoint `GET /api/app-context` (subdomain-ready)
+- Liquibase changeset for `tenants` branding columns
+
+**When working on this initiative, always consult the plan doc first.** Sections 2 (Monorepo Structure) and 3 (How to Start) of this instructions file describe the **pre-rebuild** layout and will be rewritten at the end of Stage 1. Until then, treat the plan doc as authoritative for the new package structure.
+
+### 🚧 In Progress: DialogueManager Integration (Story 3.1)
 **File**: `ai-builder/src/main/java/com/appbana/ai/dialogue/DialogueManager.java`
 
 **Goal**: Enforce strict conversation state transitions in `AiChatController` using a Java-level state machine instead of relying solely on LLM prompt engineering.

@@ -199,13 +199,17 @@ public class AiServer {
                     patternExecutor,
                     dialogueManager);
 
+            // SSE streaming controller (Stage 0 — AI-native UI rebuild)
+            com.appbana.ai.api.AgentStreamController streamController =
+                    new com.appbana.ai.api.AgentStreamController(agent, conversationMemory, dialogueManager);
+
             // Chat History Controller
             ChatHistoryController historyController = new ChatHistoryController(conversationMemory);
 
             log.info("AI services initialized successfully");
 
             // Register routes
-            registerRoutes(router, chatController, historyController);
+            registerRoutes(router, chatController, streamController, historyController);
 
         } catch (Exception e) {
             log.error("Failed to initialize AI services", e);
@@ -219,6 +223,7 @@ public class AiServer {
      * Register all AI endpoints
      */
     private void registerRoutes(Router router, AiChatController chatController,
+                                com.appbana.ai.api.AgentStreamController streamController,
                                 ChatHistoryController historyController) {
         // Health check
         router.get("/health", (req, res) -> {
@@ -232,8 +237,11 @@ public class AiServer {
         // Regular chat endpoint
         router.post("/api/ai/chat", chatController.chat());
 
-        // Agent-based chat endpoint
+        // Agent-based chat endpoint (sync — kept for backward compat)
         router.post("/api/ai/chat/agent", chatController.chatAgent());
+
+        // SSE streaming agent endpoint (Stage 0 — AI-native UI rebuild)
+        router.post("/api/ai/chat/agent/stream", streamController.stream());
 
         // Chat history endpoints
         router.get("/api/ai/chat/history",  historyController.getHistory());
@@ -243,6 +251,7 @@ public class AiServer {
         log.info("  GET  /health");
         log.info("  POST /api/ai/chat");
         log.info("  POST /api/ai/chat/agent");
+        log.info("  POST /api/ai/chat/agent/stream  (SSE)");
         log.info("  GET  /api/ai/chat/history");
         log.info("  GET  /api/ai/chat/sessions");
     }

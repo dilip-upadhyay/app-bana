@@ -1,5 +1,27 @@
 # AppBana AI Builder - Active Tasks
 
+## 🚧 In Progress: AI-Native UI Rebuild
+
+**Primary reference:** [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md)
+
+Rebuild the AppBana Studio as an AI-native frontend (chat drives everything — no canvas, no palette, no inspector) and segregate the current monolithic `app-bana-ui/` into three pnpm workspace packages: `app-bana-shared`, `app-bana-studio` (port 5174), `app-bana-runtime` (port 5175). Backend gains SSE streaming for the agent, tenant branding, and an app-context resolver.
+
+| Stage | Summary | Status |
+|-------|---------|--------|
+| Stage 0 — Backend prep | SSE streaming (`/api/ai/chat/agent/stream`), tenant branding endpoint, app-context resolver, verify `ComponentNode.id` stability | ⏳ Not started |
+| Stage 1 — Workspace + Studio MVP | pnpm workspace, `app-bana-shared`, `app-bana-studio` MVP with streaming chat + tool cards + preview iframe of old runtime, `data-appbana-*` attrs on old runtime | ⏳ Not started |
+| Stage 2 — Standalone runtime | `app-bana-runtime` (React port with tenant-branded login), studio iframe repointed 5173 → 5175 | ⏳ Not started |
+| Stage 3 — Studio v1.1 | Data drawer, session picker upgrade, image paste in chat | ⏳ Not started |
+| Stage 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2 & 3 | ⏳ Not started |
+| Stage 5 — Subdomain deploy | DNS + reverse proxy + `Host`-based app resolution | ⏳ Not started |
+| Stage 6 — Select-and-instruct | Runtime overlay, selection chips in composer, undo/history drawer | ⏳ Not started |
+
+**Locked decisions** (do not renegotiate without approval): pnpm workspaces · SSE streaming (backend work in-scope) · `postMessage` handshake for token (no URL hash) · Runtime own login with tenant branding · React + Vite + Tailwind + shadcn + Zustand · Native `fetch`/`EventSource` (no Vercel AI SDK) · Feature parity NOT required — bar is "AI-native flow fully functional".
+
+See the [full plan](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) for stage-by-stage exit criteria and file-level change lists.
+
+---
+
 ## ✅ Completed: AI Schema Quality Stack (feature/ai-schema-quality)
 
 **Branch**: `feature/ai-schema-quality` — 4 commits, ready to review/merge into `main`

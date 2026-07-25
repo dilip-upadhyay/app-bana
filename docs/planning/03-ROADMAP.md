@@ -43,6 +43,34 @@
 
 ---
 
+## 🚧 Active Initiative: AI-Native UI Rebuild (2026)
+
+**Primary reference:** [`AI_NATIVE_UI_REBUILD_PLAN.md`](./AI_NATIVE_UI_REBUILD_PLAN.md)
+
+The Q4 2025 phases below describe the **canvas-era Studio**. That direction has been superseded. AppBana is being rebuilt as an **AI-native frontend** — chat drives everything, no canvas / palette / property inspector. The current monolithic `app-bana-ui/` is being segregated into three pnpm workspace packages (`app-bana-shared`, `app-bana-studio` on port 5174, `app-bana-runtime` on port 5175) with a stable `PageMeta`/`ComponentNode` metadata contract as the boundary between studio and runtime.
+
+### Rebuild Stages
+
+| Stage | Focus | Blocking For |
+|-------|-------|--------------|
+| 0 — Backend Prep | SSE streaming endpoint (`/api/ai/chat/agent/stream`), tenant branding, app-context resolver, `ComponentNode.id` stability fix | All frontend work |
+| 1 — Workspace + Studio MVP | pnpm workspace, `app-bana-shared`, `app-bana-studio` (streaming chat + tool cards + iframe preview) | 2, 3 |
+| 2 — Standalone Runtime | `app-bana-runtime` React port with tenant-branded login; studio iframe repoints 5173 → 5175 | 4, 5 |
+| 3 — Studio v1.1 | Data drawer, session picker upgrade, image paste in chat | 4 |
+| 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2 & 3 | — |
+| 5 — Subdomain Deployment | DNS + reverse proxy + Host-based `resolveAppContext()` | — |
+| 6 — Select-and-Instruct | Runtime overlay, selection chips in composer, undo/history drawer | — |
+
+### What's dropped from the previous roadmap
+
+- Canvas + component palette + property inspector + workflow-designer
+- Any Phase C/D/E work premised on the drag-and-drop Studio
+- Feature parity with old `app-bana-ui/` is **NOT** a success criterion; the bar is "AI-native flow fully functional"
+
+See the plan doc for locked decisions, cross-cutting concerns, file-level change lists, and exit criteria per stage.
+
+---
+
 ## Q4 2025 Delivery Phases
 
 ### Timeline Overview

@@ -60,6 +60,7 @@ Top-level files:
 ## Planning
 
 - [`03-ROADMAP.md`](./planning/03-ROADMAP.md) — product roadmap
+- [`AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) — **🚧 IN PROGRESS** — AI-native UI rebuild (chat-driven studio + standalone runtime, 3-package pnpm workspace)
 - [`AI_AGENT_IMPLEMENTATION_PLAN.md`](./planning/AI_AGENT_IMPLEMENTATION_PLAN.md) — AI agent implementation plan
 - [`AI_AGENT_STORIES.md`](./planning/AI_AGENT_STORIES.md) — AI agent user stories
 - [`AI_SCHEMA_QUALITY_PLAN.md`](./planning/AI_SCHEMA_QUALITY_PLAN.md) — schema quality improvement plan

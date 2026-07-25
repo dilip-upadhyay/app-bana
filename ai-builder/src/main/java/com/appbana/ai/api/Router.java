@@ -220,6 +220,11 @@ public class Router {
             this.query = query;
         }
 
+        /** Expose the raw HttpExchange — needed for SSE streaming. May be null in servlet mode. */
+        public HttpExchange exchange() {
+            return ex;
+        }
+
         public String method() {
             return ex.getRequestMethod();
         }

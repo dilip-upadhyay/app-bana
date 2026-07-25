@@ -37,6 +37,8 @@ public class SessionMiddleware {
             "/api/apps/", // Public runtime APIs for end users
             "/api/ai/", // AI endpoints (development mode - for Magic Data Seed, AI generation)
             "/appbana-studio/", // Studio Builder APIs (development mode - TODO: enable auth in production)
+            "/api/tenants/", // Stage 0: tenant branding is public (needed pre-login by runtime)
+            "/api/app-context", // Stage 0: app-context resolver is public
             "/*.html", // All HTML files are public (studio.html, index.html, etc.)
             "/*.js", // JavaScript files from Vite build
             "/*.css", // CSS files from Vite build

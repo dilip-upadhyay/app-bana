@@ -110,6 +110,235 @@ public class AiAgent {
     }
 
     /**
+     * Process a user message through the agent loop, emitting SSE events to the supplied emitter.
+     * The agent loop runs synchronously on the calling (virtual) thread while events are pushed
+     * to the client in real time.
+     */
+    public AgentResponse processWithStream(String userMessage, AgentContext context,
+                                           String provider, List<String> images,
+                                           StreamEmitter emitter) {
+        LlmService llmService = llmRegistry.getService(provider);
+        long startTime = System.currentTimeMillis();
+        List<AgentResponse.AgentStep> steps = new ArrayList<>();
+
+        // Emit the current dialogue state as the first event so the UI can react
+        String conversationState = (String) context.getVariable("conversation_state");
+        if (conversationState != null) {
+            emitter.state(conversationState);
+        }
+
+        try {
+            log.info("[AGENT-STREAM] Starting stream processing for user: {}", context.userId());
+
+            // Pattern matching (cost optimisation, no LLM call)
+            if (patternMatchingEnabled) {
+                java.util.Optional<AgentResponse> patternResult = patternExecutor.tryExecute(userMessage, context);
+                if (patternResult.isPresent()) {
+                    AgentResponse resp = patternResult.get();
+                    emitter.token(resp.getFinalAnswer());
+                    emitter.done(context.sessionId(), resp.getFinalAnswer());
+                    return resp;
+                }
+            }
+
+            int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
+            int consecutiveFailures = 0;
+            Set<String> failedSignatures = new HashSet<>();
+
+            for (int iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
+                log.info("[AGENT-STREAM] === Iteration {} / {} ===", iteration, effectiveMaxIterations);
+
+                long elapsed = System.currentTimeMillis() - startTime;
+                if (elapsed > config.getTimeoutSeconds() * 1000L) {
+                    log.warn("[AGENT-STREAM] Timeout reached after {}ms", elapsed);
+                    return AgentResponse.error("Agent timeout after " + elapsed + "ms", steps, elapsed);
+                }
+
+                AgentThought thought = think(userMessage, steps, context, llmService, images);
+                if (thought == null) {
+                    return AgentResponse.error("Failed to get response from LLM", steps,
+                            System.currentTimeMillis() - startTime);
+                }
+
+                AgentResponse.AgentStep step = new AgentResponse.AgentStep(iteration, thought.getThinking());
+
+                if (thought.isFinalAnswer()) {
+                    steps.add(step);
+                    String finalAnswer = thought.getFinalAnswer();
+                    emitter.token(finalAnswer);
+                    emitter.done(context.sessionId(), finalAnswer);
+                    return AgentResponse.success(finalAnswer, steps, System.currentTimeMillis() - startTime);
+                }
+
+                if (thought.hasToolCalls()) {
+                    List<ToolResult> results = executeToolsWithStream(thought.getToolCalls(), context, emitter);
+                    boolean allToolsFailed = true;
+
+                    for (ToolResult result : results) {
+                        String signature = result.getToolName() + ":" + result.getArguments();
+                        if (!result.isSuccess()) {
+                            if (failedSignatures.contains(signature)) {
+                                result.setError("CRITICAL: Repeated failure. " + result.getError());
+                            }
+                            failedSignatures.add(signature);
+                        } else {
+                            failedSignatures.remove(signature);
+                            allToolsFailed = false;
+                        }
+                        step.addToolResult(result);
+                    }
+
+                    if (allToolsFailed) {
+                        consecutiveFailures++;
+                        if (consecutiveFailures >= 3) {
+                            steps.add(step);
+                            return AgentResponse.error("Stuck after 3 failures: " + results.get(0).getError(),
+                                    steps, System.currentTimeMillis() - startTime);
+                        }
+                    } else {
+                        consecutiveFailures = 0;
+
+                        boolean scaffoldSucceeded = results.stream()
+                                .anyMatch(r -> "scaffold_app".equals(r.getToolName()) && r.isSuccess());
+                        if (scaffoldSucceeded) {
+                            steps.add(step);
+                            ToolResult scaffoldResult = results.stream()
+                                    .filter(r -> "scaffold_app".equals(r.getToolName()) && r.isSuccess())
+                                    .findFirst().get();
+
+                            String finalMsg = buildScaffoldFinalMessage(scaffoldResult, context);
+                            emitter.token(finalMsg);
+                            emitter.done(context.sessionId(), finalMsg);
+                            return AgentResponse.success(finalMsg, steps, System.currentTimeMillis() - startTime);
+                        }
+                    }
+                }
+
+                steps.add(step);
+            }
+
+            String errMsg = "Max iterations reached";
+            emitter.done(context.sessionId(), errMsg);
+            return AgentResponse.error(errMsg, steps, System.currentTimeMillis() - startTime);
+
+        } catch (Exception e) {
+            log.error("[AGENT-STREAM] Error in streaming processing", e);
+            return AgentResponse.error("Agent error: " + e.getMessage(), steps,
+                    System.currentTimeMillis() - startTime);
+        }
+    }
+
+    /**
+     * Execute tools and emit tool_call_start / tool_call_end events for each one.
+     */
+    private List<ToolResult> executeToolsWithStream(List<ToolCall> toolCalls, AgentContext context,
+                                                     StreamEmitter emitter) {
+        if (toolCalls.isEmpty()) return Collections.emptyList();
+
+        boolean requiresSequential = toolCalls.stream()
+                .anyMatch(call -> call.getName().equals("create_entity") ||
+                        call.getName().equals("generate_page") ||
+                        call.getName().equals("create_app"));
+
+        List<ToolResult> results = new ArrayList<>();
+
+        if (requiresSequential) {
+            for (ToolCall call : toolCalls) {
+                String id = call.getName() + "-" + System.nanoTime();
+                emitter.toolCallStart(id, call.getName(), call.getArguments());
+                long t = System.currentTimeMillis();
+                ToolResult result;
+                try {
+                    Tool tool = toolRegistry.getTool(call.getName());
+                    if (tool == null) {
+                        result = ToolResult.error(call.getName(), "Tool not found: " + call.getName());
+                    } else {
+                        result = tool.execute(call.getArguments(), context);
+                        result.setExecutionTimeMs(System.currentTimeMillis() - t);
+                        result.setToolName(call.getName());
+                    }
+                } catch (Exception e) {
+                    log.error("[AGENT-STREAM] Tool execution failed: {}", call.getName(), e);
+                    result = ToolResult.error(call.getName(), "Execution error: " + e.getMessage());
+                }
+                emitter.toolCallEnd(id, result.isSuccess() ? "ok" : "error",
+                        result.isSuccess() ? result.getData() : result.getError());
+                results.add(result);
+            }
+        } else {
+            try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+                List<Callable<ToolResult>> tasks = new ArrayList<>();
+                List<String> ids = new ArrayList<>();
+                for (ToolCall call : toolCalls) {
+                    String id = call.getName() + "-" + System.nanoTime();
+                    ids.add(id);
+                    emitter.toolCallStart(id, call.getName(), call.getArguments());
+                    tasks.add(() -> {
+                        long t = System.currentTimeMillis();
+                        try {
+                            Tool tool = toolRegistry.getTool(call.getName());
+                            if (tool == null) return ToolResult.error(call.getName(), "Tool not found: " + call.getName());
+                            ToolResult res = tool.execute(call.getArguments(), context);
+                            res.setExecutionTimeMs(System.currentTimeMillis() - t);
+                            res.setToolName(call.getName());
+                            try { res.setArguments(objectMapper.writeValueAsString(call.getArguments())); } catch (Exception ignored) {}
+                            return res;
+                        } catch (Exception e) {
+                            return ToolResult.error(call.getName(), "Execution error: " + e.getMessage());
+                        }
+                    });
+                }
+                List<Future<ToolResult>> futures = executor.invokeAll(tasks);
+                for (int i = 0; i < futures.size(); i++) {
+                    ToolResult res;
+                    try { res = futures.get(i).get(); } catch (Exception e) {
+                        res = ToolResult.error("unknown", "Future failed: " + e.getMessage());
+                    }
+                    emitter.toolCallEnd(ids.get(i), res.isSuccess() ? "ok" : "error",
+                            res.isSuccess() ? res.getData() : res.getError());
+                    results.add(res);
+                }
+            } catch (Exception e) {
+                log.error("[AGENT-STREAM] Critical error in parallel streaming execution", e);
+                results.add(ToolResult.error("agent_system", "Parallel execution failed: " + e.getMessage()));
+            }
+        }
+        return results;
+    }
+
+    /** Reusable scaffold success message builder (used by both sync and stream paths). */
+    private String buildScaffoldFinalMessage(ToolResult scaffoldResult, AgentContext context) {
+        String finalMsg = "Your app has been built and deployed successfully! You can now find it in the Apps section.";
+        Object data = scaffoldResult.getData();
+        if (data instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> dataMap = (Map<String, Object>) data;
+            String appName = (String) dataMap.get("appName");
+            @SuppressWarnings("unchecked")
+            List<?> pages = (List<?>) dataMap.get("pagesCreated");
+            @SuppressWarnings("unchecked")
+            List<?> entities = (List<?>) dataMap.get("entitiesCreated");
+            String appId = (String) dataMap.get("appId");
+            String tenantId = context.tenantId() != null ? context.tenantId() : "default";
+            if (appName != null) {
+                String appUrl = appId != null ? String.format("/run/%s/%s", tenantId, appId) : null;
+                String urlLine = appUrl != null
+                        ? String.format("\n\n🌐 **Open your app:** [Click here to launch it](%s)", appUrl)
+                        : "\n\nYou can open it via 📂 Open App in the top toolbar.";
+                finalMsg = String.format(
+                        "🎉 **%s** has been built and deployed successfully!\n\n" +
+                        "- **%d entities** created: %s\n" +
+                        "- **%d pages** created: %s%s",
+                        appName,
+                        entities != null ? entities.size() : 0, entities,
+                        pages != null ? pages.size() : 0, pages,
+                        urlLine);
+            }
+        }
+        return finalMsg;
+    }
+
+    /**
      * Process a user message through the agent loop using a specific provider and optional images
      */
     public AgentResponse process(String userMessage, AgentContext context, String provider, List<String> images) {
