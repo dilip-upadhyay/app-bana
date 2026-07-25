@@ -1,1 +1,0 @@
-UI_PORT=5190 ./run-ui.sh dev
