@@ -18,6 +18,7 @@ import java.util.*;
 public class SchemaEnricher {
 
     // --- Field key constants ---
+    private static final String F_ID            = "id";
     private static final String F_NAME          = "name";
     private static final String F_LABEL         = "label";
     private static final String F_TYPE          = "type";
@@ -110,6 +111,15 @@ public class SchemaEnricher {
             fields = new ArrayList<>();
             entity.put("fields", fields);
         }
+
+        // Step 0 — normalise field NAMES to snake_case (identifier discipline).
+        // The AI prompt asks the LLM to emit snake_case, but nothing downstream
+        // enforces it. If the LLM emits "Full Name" or "firstName", it propagates
+        // all the way to the DB as a quoted identifier with spaces/casing, which
+        // sets up drift bugs the moment the schema is renamed. Normalise once here
+        // so every downstream consumer (backend, page metadata, runtime) sees the
+        // same canonical name. The original label is preserved for display.
+        normaliseFieldNames(fields, entityName);
 
         // Step 1 — normalise types
         for (Map<String, Object> field : fields) {
@@ -240,6 +250,31 @@ public class SchemaEnricher {
     }
 
     /**
+     * Step 0 helper — normalise every field name in the list to snake_case,
+     * preserving the original human-readable form as the label when none exists.
+     */
+    private void normaliseFieldNames(List<Map<String, Object>> fields, String entityName) {
+        for (Map<String, Object> field : fields) {
+            Object rawName = field.get(F_NAME);
+            if (rawName == null) continue;
+            String originalName = String.valueOf(rawName);
+            String normalised = toSnakeCase(originalName);
+            if (!normalised.equals(originalName)) {
+                log.warn("[SchemaEnricher] Entity '{}': field name '{}' \u2192 '{}' (normalised to snake_case)",
+                        entityName, originalName, normalised);
+                field.put(F_NAME, normalised);
+                Object lbl = field.get(F_LABEL);
+                if (lbl == null || String.valueOf(lbl).isBlank()) {
+                    field.put(F_LABEL, originalName);
+                }
+            }
+            if (field.containsKey(F_ID)) {
+                field.put(F_ID, normalised);
+            }
+        }
+    }
+
+    /**
      * Resolves a raw LLM-produced type string to a valid AppBana type.
      * Priority: exact match → alias lookup → fallback to "text".
      */
@@ -251,5 +286,32 @@ public class SchemaEnricher {
         if (aliased != null) return aliased;
         log.warn("[SchemaEnricher] Unknown type '{}' — falling back to '{}'", raw, DEFAULT_TYPE);
         return DEFAULT_TYPE;
+    }
+
+    /**
+     * Converts any human-friendly identifier to canonical snake_case.
+     * Rules (applied in order):
+     *   1. Insert underscore at camelCase boundaries: firstName → first_Name
+     *   2. Replace whitespace / hyphens with underscores: "Full Name" → Full_Name
+     *   3. Strip characters that are not letters, digits, or underscores
+     *   4. Collapse runs of underscores
+     *   5. Trim leading/trailing underscores
+     *   6. Lower-case the result
+     * If normalisation strips everything, the trimmed original is returned so
+     * we never silently produce an empty identifier.
+     */
+    static String toSnakeCase(String input) {
+        if (input == null) return null;
+        String trimmed = input.trim();
+        if (trimmed.isEmpty()) return trimmed;
+        String out = trimmed
+                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .replaceAll("[\\s\\-]+", "_")
+                .replaceAll("\\W", "")
+                .replaceAll("_+", "_")
+                .toLowerCase();
+        while (out.startsWith("_")) out = out.substring(1);
+        while (out.endsWith("_")) out = out.substring(0, out.length() - 1);
+        return out.isEmpty() ? trimmed : out;
     }
 }

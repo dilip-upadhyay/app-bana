@@ -324,6 +324,16 @@ public class GeneratePageTool implements Tool {
             inputProps.put("marginBottom", "0");
             if (!"reference".equals(fieldType)) {
                 inputProps.put("placeholder", "Enter " + fieldLabel.toLowerCase() + "...");
+            } else {
+                // Propagate the referenced entity name so the runtime ReferenceField
+                // knows which table to query. Without this, the runtime falls back to
+                // the field name, which only works when the FK column happens to share
+                // its name with the referenced entity (e.g. "customer" → Customer entity).
+                // Aliased FKs like "owner" → User or "assignee" → Employee would break.
+                Object refEntity = field.get("referenceEntity");
+                if (refEntity != null) {
+                    inputProps.put("referenceEntity", refEntity);
+                }
             }
             input.put("props", inputProps);
 
