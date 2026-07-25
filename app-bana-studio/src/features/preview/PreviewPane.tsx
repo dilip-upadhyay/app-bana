@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AppBanaPostMessage } from '@appbana/shared';
+import type { AppBanaPostMessage, PageMeta } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 
@@ -14,7 +14,11 @@ export function PreviewPane() {
   const [activePage, setActivePage] = useState<string | null>(null);
   const [deviceWidth, setDeviceWidth] = useState<'full' | 'tablet' | 'mobile'>('full');
 
-  const pages = currentApp?.pages ?? [];
+  // Backend returns `pages` as a list of ID strings and `pagesData` as full
+  // PageMeta objects. Prefer `pagesData` so the tabs have `id`/`name`.
+  const pages: PageMeta[] = (currentApp?.pagesData
+    ?? (currentApp?.pages as PageMeta[] | undefined)
+    ?? []) as PageMeta[];
 
   // Build the iframe URL
   const runtimeUrl = currentApp

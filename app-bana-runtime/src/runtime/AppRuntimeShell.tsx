@@ -54,6 +54,11 @@ export function AppRuntimeShell() {
 
   // --- postMessage bridge ---
   useEffect(() => {
+    // React 18 StrictMode invokes effects twice with a cleanup between them,
+    // which flips isMounted.current to false. Reset it on every (re)mount so
+    // in-flight `loadApp` promises can still settle their state.
+    isMounted.current = true;
+
     // Signal to studio parent that we are ready.
     postToStudio({ type: 'ready' });
 
@@ -114,8 +119,16 @@ export function AppRuntimeShell() {
     try {
       const appData = await getApp(ctx.tenantId, ctx.appId, tk);
       if (!isMounted.current) return;
-      setApp(appData);
-      const firstPage = appData.pages?.[0] ?? null;
+      // Backend returns two shapes for pages:
+      //   pages:     string[] of page IDs (legacy)
+      //   pagesData: full PageMeta objects
+      // Prefer pagesData when present so tabs/renderer receive real objects.
+      const normalized: AppMeta = {
+        ...appData,
+        pages: (appData.pagesData ?? appData.pages ?? []) as PageMeta[],
+      };
+      setApp(normalized);
+      const firstPage = normalized.pages?.[0] ?? null;
       setCurrentPage(firstPage);
     } catch (e) {
       if (!isMounted.current) return;

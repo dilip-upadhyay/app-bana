@@ -144,6 +144,9 @@ public class AiAgent {
             int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
             int consecutiveFailures = 0;
             Set<String> failedSignatures = new HashSet<>();
+            // Track successful tool signatures per request to break repeat-success loops
+            // (e.g. LLM calling list_apps 6 times in a row with identical arguments).
+            java.util.Map<String, Integer> successCounts = new java.util.HashMap<>();
 
             for (int iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
                 log.info("[AGENT-STREAM] === Iteration {} / {} ===", iteration, effectiveMaxIterations);
@@ -173,6 +176,7 @@ public class AiAgent {
                 if (thought.hasToolCalls()) {
                     List<ToolResult> results = executeToolsWithStream(thought.getToolCalls(), context, emitter);
                     boolean allToolsFailed = true;
+                    boolean loopDetected = false;
 
                     for (ToolResult result : results) {
                         String signature = result.getToolName() + ":" + result.getArguments();
@@ -184,8 +188,27 @@ public class AiAgent {
                         } else {
                             failedSignatures.remove(signature);
                             allToolsFailed = false;
+                            int count = successCounts.merge(signature, 1, Integer::sum);
+                            if (count >= 2) {
+                                // Same tool + same args already succeeded this request. Do not
+                                // let the LLM keep re-issuing it — abort the loop and hand back
+                                // whatever answer we have so far.
+                                log.warn("[AGENT-STREAM] Aborting loop: tool '{}' already succeeded with identical args {} time(s)",
+                                        result.getToolName(), count);
+                                loopDetected = true;
+                            }
                         }
                         step.addToolResult(result);
+                    }
+
+                    if (loopDetected) {
+                        steps.add(step);
+                        String finalMsg =
+                                "I already gathered that information above. Please tell me which app you'd like to work on " +
+                                "(by name) and what you'd like to do with it.";
+                        emitter.token(finalMsg);
+                        emitter.done(context.sessionId(), finalMsg);
+                        return AgentResponse.success(finalMsg, steps, System.currentTimeMillis() - startTime);
                     }
 
                     if (allToolsFailed) {

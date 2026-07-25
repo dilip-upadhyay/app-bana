@@ -99,15 +99,21 @@ export async function deployApp(
   token: string,
   environment = 'DEV'
 ): Promise<{ status: string; summary?: string; testUrl?: string }> {
-  const res = await fetch(
-    `${BACKEND}/api/${encodeURIComponent(tenantId)}/apps/${encodeURIComponent(appId)}/publish`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ environment }),
-    }
-  );
-  if (!res.ok) throw new Error(`Deploy failed: ${res.status}`);
+  // Backend expects `env` as a **query parameter**, not a body field.
+  // See AppRoutes.java:  router.post("/api/{tenantId}/apps/{id}/publish") -> req.query("env").
+  const url =
+    `${BACKEND}/api/${encodeURIComponent(tenantId)}/apps/${encodeURIComponent(appId)}/publish` +
+    `?env=${encodeURIComponent(environment)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: '{}',
+  });
+  if (!res.ok) {
+    let detail = '';
+    try { detail = ' — ' + (await res.text()); } catch { /* ignore */ }
+    throw new Error(`Deploy failed: ${res.status}${detail}`);
+  }
   return res.json();
 }
 

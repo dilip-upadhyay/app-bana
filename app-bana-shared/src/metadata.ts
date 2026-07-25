@@ -71,7 +71,14 @@ export interface AppMeta {
   createdAt?: string;
   updatedAt?: string;
   entities?: EntitySchema[];
-  pages?: PageMeta[];
+  /**
+   * Legacy field: either an array of page ID strings (as returned by the
+   * backend today) or full PageMeta objects. Consumers should prefer
+   * `pagesData` when they need the full metadata.
+   */
+  pages?: PageMeta[] | string[];
+  /** Full page metadata objects (backend `pagesData` field). */
+  pagesData?: PageMeta[];
 }
 
 export interface TenantBranding {
