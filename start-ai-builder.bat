@@ -1,141 +1,110 @@
 @echo off
+REM =====================================================================
+REM start-ai-builder.bat  -  Restart the AI Builder service on port 8081
+REM
+REM What it does:
+REM   1. Stops any AI Builder / Qdrant process already running
+REM   2. Ensures Docker dependencies (Qdrant, PostgreSQL) are up
+REM   3. Ensures OPENAI_API_KEY is set
+REM   4. Builds the ai-builder module (with its parent deps)
+REM   5. Launches the service on port 8081
+REM =====================================================================
 setlocal EnableDelayedExpansion
 
-echo ======================================================
-echo Starting AI Builder Service...
-echo ======================================================
+set "AI_PORT=8081"
+set "QDRANT_HTTP_PORT=6333"
+set "QDRANT_GRPC_PORT=6334"
+set "PG_PORT=5432"
 
-:: Load environment variables from .env if it exists
-if exist "ai-builder\.env" (
-    echo Loading environment from ai-builder\.env
-    for /f "tokens=* delims=" %%A in (ai-builder\.env) do (
-        set "line=%%A"
-        if not "!line:~0,1!"=="#" (
-            set "!line!"
-        )
-    )
-)
+echo ==========================================
+echo [ai-builder] Restarting on port %AI_PORT%
+echo ==========================================
 
-:: Check if OPENAI_API_KEY is set (fetch from local/system registry if missing in short-lived cmd session)
-if "%OPENAI_API_KEY%"=="" (
-    for /f "tokens=2*" %%A in ('reg query HKEY_CURRENT_USER\Environment /v OPENAI_API_KEY 2^>nul') do set "OPENAI_API_KEY=%%B"
-)
-if "%OPENAI_API_KEY%"=="" (
-    for /f "tokens=2*" %%A in ('reg query "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" /v OPENAI_API_KEY 2^>nul') do set "OPENAI_API_KEY=%%B"
-)
-
-:: Fallback if user named variable 'OPEN_API_KEY' instead of 'OPENAI_API_KEY'
-if "%OPENAI_API_KEY%"=="" (
-    if not "%OPEN_API_KEY%"=="" set "OPENAI_API_KEY=%OPEN_API_KEY%"
-)
-if "%OPENAI_API_KEY%"=="" (
-    for /f "tokens=2*" %%A in ('reg query HKEY_CURRENT_USER\Environment /v OPEN_API_KEY 2^>nul') do set "OPENAI_API_KEY=%%B"
-)
-if "%OPENAI_API_KEY%"=="" (
-    for /f "tokens=2*" %%A in ('reg query "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" /v OPEN_API_KEY 2^>nul') do set "OPENAI_API_KEY=%%B"
-)
-
-if "%OPENAI_API_KEY%"=="" (
-    echo ERROR: OPENAI_API_KEY environment variable is not set
-    echo Please set it globally or in ai-builder\.env
-    exit /b 1
-)
-
-:: Define port
-if "%AI_PORT%"=="" set AI_PORT=8081
-
-:: Check if port is in use and kill process
-echo Checking if port %AI_PORT% is in use...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%AI_PORT% "') do (
-    echo Found process %%a running on port %AI_PORT%. Stopping it...
+REM --- Step 1: stop any existing AI Builder process on port 8081 -------
+echo [1/5] Stopping any existing AI Builder process on port %AI_PORT%...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%AI_PORT% " ^| findstr "LISTENING"') do (
+    echo    Killing PID %%a
     taskkill /F /PID %%a >nul 2>&1
 )
 
-:: Check if Qdrant is running
-echo Checking Qdrant status...
-if "%QDRANT_HOST%"=="" set "QDRANT_HOST=localhost"
-if "%QDRANT_HTTP_PORT%"=="" set "QDRANT_HTTP_PORT=6333"
-if "%QDRANT_PORT%"=="" set "QDRANT_PORT=6334"
-
-curl -s "http://%QDRANT_HOST%:%QDRANT_HTTP_PORT%/health" >nul 2>&1
-if !ERRORLEVEL! EQU 0 (
-    echo Qdrant is already running on %QDRANT_HOST%:%QDRANT_HTTP_PORT%
-) else (
-    echo Qdrant is not running. Starting Qdrant container...
-    
-    :: Check if Docker is installed
-    docker --version >nul 2>&1
-    if !ERRORLEVEL! NEQ 0 (
-        echo ERROR: Docker is not installed. Please install Docker first.
-        exit /b 1
-    )
-    
-    :: Check if Qdrant container already exists
-    docker ps -a --format "{{.Names}}" | findstr "^qdrant$" >nul 2>&1
-    if !ERRORLEVEL! EQU 0 (
-        echo Qdrant container exists. Starting it...
-        docker start qdrant
-    ) else (
-        echo Creating and starting new Qdrant container...
-        docker run -d --name qdrant -p %QDRANT_HTTP_PORT%:6333 -p %QDRANT_PORT%:6334 -v "%CD%\qdrant_storage:/qdrant/storage" qdrant/qdrant
-    )
-    
-    :: Wait for Qdrant to be ready
-    echo Waiting for Qdrant to be ready...
-    set ready=0
-    for /l %%i in (1, 1, 30) do (
-        curl -s "http://%QDRANT_HOST%:%QDRANT_HTTP_PORT%/health" >nul 2>&1
-        if !ERRORLEVEL! EQU 0 (
-            echo Qdrant is ready!
-            set ready=1
-            goto break_loop
-        )
-        timeout /t 1 /nobreak >nul
-    )
-    :break_loop
-    if !ready! EQU 0 (
-        echo ERROR: Qdrant failed to start after 30 seconds
-        exit /b 1
+REM --- Step 2: ensure OPENAI_API_KEY is set ----------------------------
+echo [2/5] Checking OPENAI_API_KEY...
+if "%OPENAI_API_KEY%"=="" (
+    for /f "tokens=2*" %%A in ('reg query HKEY_CURRENT_USER\Environment /v OPENAI_API_KEY 2^>nul') do set "OPENAI_API_KEY=%%B"
+)
+if "!OPENAI_API_KEY!"=="" (
+    if exist "ai-builder\.env" (
+        for /f "tokens=1* delims==" %%A in ('findstr /I "^OPENAI_API_KEY" ai-builder\.env') do set "OPENAI_API_KEY=%%B"
     )
 )
+if "!OPENAI_API_KEY!"=="" (
+    echo    ERROR: OPENAI_API_KEY is not set.
+    echo    Set it with:  setx OPENAI_API_KEY "sk-your-key-here"
+    echo    Or create ai-builder\.env with: OPENAI_API_KEY=sk-your-key-here
+    exit /b 1
+)
+echo    OPENAI_API_KEY found (starts with !OPENAI_API_KEY:~0,7!...)
 
-echo [1/3] Killing any potentially locking processes...
-powershell -Command "Stop-Process -Name java -Force -ErrorAction SilentlyContinue; Stop-Process -Name mvn -Force -ErrorAction SilentlyContinue"
-ping 127.0.0.1 -n 3 > nul
-
-echo [2/3] Building all modules (resilient mode)...
-REM We build from root to ensure both app-bana-service and ai-builder are updated correctly
-call mvn install -DskipTests
+REM --- Step 3: ensure Docker dependencies (PostgreSQL + Qdrant) --------
+echo [3/5] Ensuring Docker dependencies are running...
+docker --version >nul 2>&1
 if !ERRORLEVEL! NEQ 0 (
-    echo.
-    echo WARNING: Full build failed, checking for existing artifacts...
-    if not exist "ai-builder\target\ai-builder-1.0-SNAPSHOT-fat.jar" (
-        echo ERROR: Critical artifacts missing. Please close any programs using the target folder and try again.
-        exit /b 1
-    )
+    echo    ERROR: Docker is not installed or not on PATH.
+    exit /b 1
 )
 
-echo [3/3] Build successful or artifacts verified!
+REM PostgreSQL
+docker ps --format "{{.Names}}" | findstr /X "appbana-postgres" >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    docker ps -a --format "{{.Names}}" | findstr /X "appbana-postgres" >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo    Starting existing PostgreSQL container...
+        docker start appbana-postgres >nul
+    ) else (
+        echo    Creating PostgreSQL container...
+        docker run -d --name appbana-postgres -e POSTGRES_DB=appbana -e POSTGRES_USER=appbana -e POSTGRES_PASSWORD=appbana_dev_2026 -p %PG_PORT%:5432 -v appbana-postgres-data:/var/lib/postgresql/data postgres:16-alpine >nul
+    )
+    timeout /t 3 /nobreak >nul
+)
+echo    PostgreSQL: running on port %PG_PORT%
 
-:: Database configuration
-set "DATABASE_URL=jdbc:postgresql://localhost:5432/appbana"
+REM Qdrant
+docker ps --format "{{.Names}}" | findstr /X "qdrant" >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    docker ps -a --format "{{.Names}}" | findstr /X "qdrant" >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo    Starting existing Qdrant container...
+        docker start qdrant >nul
+    ) else (
+        echo    Creating Qdrant container...
+        docker run -d --name qdrant -p %QDRANT_HTTP_PORT%:6333 -p %QDRANT_GRPC_PORT%:6334 -v "%CD%\qdrant_storage:/qdrant/storage" qdrant/qdrant >nul
+    )
+    timeout /t 3 /nobreak >nul
+)
+echo    Qdrant: running on port %QDRANT_HTTP_PORT%
+
+REM --- Step 4: build the module ----------------------------------------
+echo [4/5] Building ai-builder module...
+call mvn -q -pl ai-builder -am -DskipTests install
+if !ERRORLEVEL! NEQ 0 (
+    if not exist "ai-builder\target\ai-builder-1.0-SNAPSHOT-fat.jar" (
+        echo    ERROR: Build failed and no existing jar found.
+        exit /b 1
+    )
+    echo    WARNING: Build failed, using existing jar.
+)
+
+REM --- Step 5: launch --------------------------------------------------
+echo [5/5] Launching AI Builder on port %AI_PORT%...
+echo    Health: http://localhost:%AI_PORT%/health
+echo    Chat:   http://localhost:%AI_PORT%/api/ai/chat
+echo    Press Ctrl+C to stop.
+echo ==========================================
+
+set "DATABASE_URL=jdbc:postgresql://localhost:%PG_PORT%/appbana"
 set "DATABASE_USER=appbana"
 set "DATABASE_PASSWORD=appbana_dev_2026"
 
-:: Run the service
-echo Starting AI Builder server on port %AI_PORT%...
-echo Health check: http://localhost:%AI_PORT%/health
-echo Chat API: http://localhost:%AI_PORT%/api/ai/chat
-echo Database: %DATABASE_URL% (user: %DATABASE_USER%)
-echo.
-echo Press Ctrl+C to stop the service
-echo ======================================================
-
-set "DATABASE_URL=%DATABASE_URL%"
-set "DATABASE_USER=%DATABASE_USER%"
-set "DATABASE_PASSWORD=%DATABASE_PASSWORD%"
-
 cd ai-builder
 java -jar target\ai-builder-1.0-SNAPSHOT-fat.jar
-
 endlocal

@@ -83,3 +83,7 @@ node_modules/
 /app-bana-ui/package-lock.json
 app-bana-service/.mvn/
 cookies.txt
+
+# Local dev-logs from start-everything.sh
+dev-logs/
+

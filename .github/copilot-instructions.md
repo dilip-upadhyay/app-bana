@@ -75,8 +75,10 @@ app-bana/
 â”‚   â””â”€â”€ session_summary.md       â† Latest session notes
 â”‚
 â”œâ”€â”€ config.json                  â† Database + OpenAI config (DO NOT commit secrets)
-â”œâ”€â”€ start-everything.bat         â† Master startup script (Windows)
-â”œâ”€â”€ start-ai-builder.bat         â† AI Builder startup (Maven compile + run)
+â”œâ”€â”€ start-everything.{bat,sh}    â† Master orchestrator (starts all modules in order)
+â”œâ”€â”€ start-ai-builder.{bat,sh}    â† Restart AI Builder + Qdrant + Postgres
+â”œâ”€â”€ start-backend.{bat,sh}       â† Restart backend + Postgres
+â”œâ”€â”€ start-ui.{bat,sh}            â† Restart UI (Vite dev server)
 â””â”€â”€ .github/copilot-instructions.md  â† This file
 ```
 
@@ -84,25 +86,38 @@ app-bana/
 
 ## 3. How to Start the Application
 
-### âœ… The ONLY correct way to start locally (Windows):
+Every script has a **Windows (.bat)** and **macOS/Linux (.sh)** version. Each `start-*` script is idempotent - it stops any existing instance, ensures its dependencies, builds if needed, then launches.
 
-```powershell
-.\start-everything.bat
-```
+### Start everything (recommended):
 
-### What this script does (step-by-step):
+| Windows | macOS / Linux |
+|---------|---------------|
+| `.\start-everything.bat` | `./start-everything.sh` |
 
-| Step | Action | Why |
-|------|--------|-----|
-| `[0/3]` | `Stop-Process -Name java -Force` AND `Stop-Process -Name node -Force` | **Kills ALL old Java + Node processes.** Without this, stale processes occupy ports 8080 and 8081 causing race conditions. |
-| `[1/3]` | Launches `start-ai-builder.bat` in a new window | Compiles `ai-builder` with Maven, connects to Qdrant on ports 6333/6334, binds port **8081** |
-| `[wait]` | Polls `netstat` for port 8081 in a loop | **Only when 8081 is confirmed open** does it proceed. This prevents the backend from starting before the AI engine is ready. |
-| `[2/3]` | Launches `app-bana-service` jar in a new window | Starts the core API on port **8080** |
-| `[3/3]` | Launches `npm run dev` in `app-bana-ui/` | Starts the Vite frontend on port **5173** |
+### Restart a single module:
 
-> [!CAUTION]
-> **NEVER** start services individually unless debugging a single module in isolation. Always use `.\start-everything.bat` to ensure correct port sequencing.
+| Module | Windows | macOS / Linux | Port |
+|--------|---------|---------------|------|
+| AI Builder | `.\start-ai-builder.bat` | `./start-ai-builder.sh` | 8081 |
+| Backend | `.\start-backend.bat` | `./start-backend.sh` | 8080 |
+| UI | `.\start-ui.bat` | `./start-ui.sh` | 5173 |
 
+### What each module script does
+
+Every `start-*` script self-contains these steps:
+1. **Stop** any process already bound to its port.
+2. **Ensure dependencies** are up - Docker containers (Postgres, Qdrant), Node modules, `OPENAI_API_KEY`.
+3. **Build** its Maven module (or `npm install`) if artifacts / `node_modules` are missing.
+4. **Launch** the service in the foreground.
+
+### What `start-everything` does
+
+Delegates to the three module scripts in the correct order and waits for each port to open before proceeding:
+1. AI Builder (port 8081) - also brings up Qdrant + Postgres.
+2. Backend (port 8080).
+3. UI (port 5173).
+
+On Windows each service opens in a new terminal window. On macOS/Linux each service is backgrounded with logs written to `dev-logs/*.log` (folder is gitignored).
 ### Service Ports Summary
 
 | Service | Port | URL |

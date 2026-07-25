@@ -35,19 +35,27 @@ At the heart of AppBana lies a sophisticated AI Agent designed for precision and
 
 ---
 
-## Quick Start (Windows)
+## Quick Start
 
-The only supported way to start every service in the correct order:
+Every script is available for **Windows (`.bat`)** and **macOS / Linux (`.sh`)**. Each `start-*` script does a full **restart** — it stops the existing instance, ensures its dependencies (Docker containers, `node_modules`, env vars, Maven build) are ready, and launches the service.
 
-```powershell
-.\start-everything.bat
-```
+### Start everything at once
 
-This script:
-1. Kills any stale Java / Node processes.
-2. Starts the **AI Builder** (port `8081`) and waits for it to be ready.
-3. Starts the **core API** (port `8080`).
-4. Starts the **Studio UI** (port `5173`) via Vite.
+| Windows | macOS / Linux |
+|---------|---------------|
+| `.\start-everything.bat` | `./start-everything.sh` |
+
+Orchestrates all three modules in the correct order: **AI Builder → Backend → UI**, waiting for each to be reachable before starting the next.
+
+### Restart a single module
+
+| Module | Windows | macOS / Linux | Port |
+|--------|---------|---------------|------|
+| AI Builder (Qdrant + Postgres deps) | `.\start-ai-builder.bat` | `./start-ai-builder.sh` | `8081` |
+| Backend API (Postgres dep) | `.\start-backend.bat` | `./start-backend.sh` | `8080` |
+| Studio UI (Vite dev server) | `.\start-ui.bat` | `./start-ui.sh` | `5173` |
+
+### Service URLs
 
 | Service | URL |
 |---------|-----|
@@ -87,7 +95,10 @@ app-bana/
 ├── builder-database/    RAG knowledge base seed data
 ├── docs/                All documentation
 ├── config.json          Runtime configuration (DB, LLM keys)
-└── start-everything.bat One-shot launcher
+├── start-everything.*   Launch every module in order (.bat + .sh)
+├── start-ai-builder.*   Restart AI Builder + deps (.bat + .sh)
+├── start-backend.*      Restart backend + deps (.bat + .sh)
+└── start-ui.*           Restart UI + deps (.bat + .sh)
 ```
 
 For a deeper walkthrough of each subproject, see [docs/architecture/01-ARCHITECTURE.md](docs/architecture/01-ARCHITECTURE.md).
