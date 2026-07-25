@@ -60,6 +60,31 @@ public class SemanticCache {
     }
 
     /**
+     * Returns true for messages that are context-dependent confirmations.
+     * These must NEVER be cached — the correct response depends entirely on the
+     * conversation history, not on the message text alone.
+     */
+    private boolean isContextDependentMessage(String prompt) {
+        if (prompt == null) return false;
+        String p = prompt.trim().toLowerCase();
+        // Short messages (< 15 chars) are almost always confirmations or follow-ups
+        if (p.length() < 15) return true;
+        // Common confirmation phrases
+        String[] confirmations = {
+            "yes", "yes,", "yes!", "yeah", "yep", "sure", "ok", "okay",
+            "build it", "let's build", "proceed", "go ahead", "confirm",
+            "approved", "sounds good", "looks good", "correct", "that's right",
+            "make it", "make the app", "create it", "do it", "start building",
+            "run the app", "open the app", "launch it", "show me",
+            "i approve", "i agree", "please build"
+        };
+        for (String c : confirmations) {
+            if (p.startsWith(c) || p.equals(c)) return true;
+        }
+        return false;
+    }
+
+    /**
      * Get cached response for a prompt
      * 
      * @param prompt User prompt
@@ -68,6 +93,12 @@ public class SemanticCache {
      */
     public Optional<CachedResponse> get(String prompt, String taskType) {
         if (prompt == null || prompt.isBlank()) {
+            return Optional.empty();
+        }
+
+        // NEVER serve cached responses for context-dependent messages
+        if (isContextDependentMessage(prompt)) {
+            log.debug("[SemanticCache] Skipping cache for context-dependent message: {}", truncate(prompt, 50));
             return Optional.empty();
         }
 

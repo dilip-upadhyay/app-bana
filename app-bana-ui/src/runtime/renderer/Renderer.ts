@@ -231,6 +231,17 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
         </a>
       `;
 
+    case 'iframe':
+      return html`
+        <iframe
+          src="${props?.src || ''}"
+          title="${props?.title || 'Embedded content'}"
+          style="border:none;width:100%;height:calc(100vh - 60px);display:block;${style}"
+          class="${className}"
+          allowfullscreen
+        ></iframe>
+      `;
+
     case 'container':
     case 'section':
     case 'div':

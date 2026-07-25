@@ -180,13 +180,20 @@ public class SchemaEnricher {
             if (field.get("referenceEntity") != null) continue; // already set
 
             // Try to match field name/label against known entity names
-            String fieldName  = String.valueOf(field.getOrDefault(F_NAME,  "")).toLowerCase();
-            String fieldLabel = String.valueOf(field.getOrDefault(F_LABEL, "")).toLowerCase();
+            // Normalize: strip underscores/hyphens/spaces so "celestial_body" matches "CelestialBody"
+            String fieldName       = String.valueOf(field.getOrDefault(F_NAME,  "")).toLowerCase();
+            String fieldLabel      = String.valueOf(field.getOrDefault(F_LABEL, "")).toLowerCase();
+            String fieldNameNorm   = fieldName.replaceAll("[_\\-\\s]", "");
+            String fieldLabelNorm  = fieldLabel.replaceAll("[_\\-\\s]", "");
 
             String matched = null;
             for (String candidate : knownEntities) {
                 String candidateLower = candidate.toLowerCase();
-                if (fieldName.contains(candidateLower) || fieldLabel.contains(candidateLower)) {
+                String candidateNorm  = candidateLower.replaceAll("[_\\-\\s]", "");
+                if (fieldName.contains(candidateLower)
+                        || fieldLabel.contains(candidateLower)
+                        || fieldNameNorm.contains(candidateNorm)
+                        || fieldLabelNorm.contains(candidateNorm)) {
                     matched = candidate; // keep original casing
                     break;
                 }

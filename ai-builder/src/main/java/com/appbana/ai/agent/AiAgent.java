@@ -192,6 +192,54 @@ public class AiAgent {
                         }
                     } else {
                         consecutiveFailures = 0;
+
+                        // SHORT-CIRCUIT: If scaffold_app succeeded, return immediately.
+                        // Do NOT loop back to LLM — it will call scaffold_app again and create duplicate apps.
+                        boolean scaffoldSucceeded = results.stream()
+                                .anyMatch(r -> "scaffold_app".equals(r.getToolName()) && r.isSuccess());
+                        if (scaffoldSucceeded) {
+                            steps.add(step);
+                            ToolResult scaffoldResult = results.stream()
+                                    .filter(r -> "scaffold_app".equals(r.getToolName()) && r.isSuccess())
+                                    .findFirst().get();
+
+                            // Build a friendly final message from the scaffold result data
+                            String finalMsg = "Your app has been built and deployed successfully! You can now find it in the Apps section.";
+                            Object data = scaffoldResult.getData();
+                            if (data instanceof java.util.Map) {
+                                @SuppressWarnings("unchecked")
+                                java.util.Map<String, Object> dataMap = (java.util.Map<String, Object>) data;
+                                String summaryFromData = (String) dataMap.get("summary");
+                                String appName = (String) dataMap.get("appName");
+                                @SuppressWarnings("unchecked")
+                                java.util.List<?> pages = (java.util.List<?>) dataMap.get("pagesCreated");
+                                @SuppressWarnings("unchecked")
+                                java.util.List<?> entities = (java.util.List<?>) dataMap.get("entitiesCreated");
+
+                                if (appName != null) {
+                                    int pageCount = pages != null ? pages.size() : 0;
+                                    int entityCount = entities != null ? entities.size() : 0;
+                                    String appId = (String) dataMap.get("appId");
+                                    String tenantId = context.tenantId() != null ? context.tenantId() : "default";
+                                    String appUrl = (appId != null)
+                                        ? String.format("/run/%s/%s", tenantId, appId)
+                                        : null;
+                                    String urlLine = (appUrl != null)
+                                        ? String.format("\n\n🌐 **Open your app:** [Click here to launch it](%s)", appUrl)
+                                        : "\n\nYou can open it via 📂 Open App in the top toolbar.";
+                                    finalMsg = String.format(
+                                        "🎉 **%s** has been built and deployed successfully!\n\n" +
+                                        "- **%d entities** created: %s\n" +
+                                        "- **%d pages** created: %s%s",
+                                        appName, entityCount, entities, pageCount, pages, urlLine);
+                                } else if (summaryFromData != null) {
+                                    finalMsg = summaryFromData;
+                                }
+                            }
+
+                            log.info("[AGENT] scaffold_app succeeded — returning final answer immediately (skipping further iterations)");
+                            return AgentResponse.success(finalMsg, steps, System.currentTimeMillis() - startTime);
+                        }
                     }
                 }
                 
@@ -241,7 +289,10 @@ public class AiAgent {
             promptBuilder.append("2. You MUST return your next step in VALID JSON format ONLY.\n");
             promptBuilder.append("3. DO NOT output code blocks or text outside the JSON.\n");
             promptBuilder.append("4. Use ONLY the authorized keys: 'thinking', 'tool_calls', or 'final_answer'.\n");
-            promptBuilder.append("5. DO NOT use keys like 'action', 'response', or 'nextStep'.\n\n");
+            promptBuilder.append("5. DO NOT use keys like 'action', 'response', or 'nextStep'.\n");
+            promptBuilder.append("6. 'tool_calls' MUST be a JSON ARRAY. Each element must have 'name' (string) and 'arguments' (object).\n");
+            promptBuilder.append("   CORRECT:   {\"thinking\": \"...\", \"tool_calls\": [{\"name\": \"scaffold_app\", \"arguments\": {...}}]}\n");
+            promptBuilder.append("   INCORRECT: {\"tool_calls\": {\"scaffold_app\": {...}}}  <-- object format is FORBIDDEN\n\n");
             promptBuilder.append("Respond with JSON only:");
 
             String fullPrompt = promptBuilder.toString();
@@ -402,8 +453,19 @@ public class AiAgent {
                         **CRITICAL**: When the user asks to create a new application or significantly modify an existing one, YOU MUST follow this two-phase process:
 
                         ### PHASE 1: Specification (TALK) - BUSINESS FRIENDLY
-                        1. Listen to the user describe their app or feature (e.g., "Build a Salon Booking App" or "Add an Inventory feature to this app").
-                        2. IF presenting a NEW design/proposal for the first time, output a `final_answer` written entirely in **plain business English**. NO technical jargon. Format it as follows:
+                        **GOLDEN RULE**: The moment the user names ANY business domain or app idea (e.g. "grocery store", "salon", "school", "skymap", "hospital"), you MUST **immediately** produce a full spec proposal in your `final_answer`. Do NOT ask clarifying questions first. Do NOT say "I will gather information". Do NOT acknowledge and wait.
+
+                        You have expert domain knowledge. Use it:
+                        - "grocery store" → Products (name, price, stock, category), Customers, Orders, Suppliers
+                        - "salon" → Appointments, Services, Customers, Stylists
+                        - "school" → Students, Teachers, Classes, Grades, Attendance
+                        - "restaurant" → Menu Items, Tables, Orders, Reservations
+                        - "skymap / celestial / astronomy" → Celestial Bodies (name, type, coordinates, magnitude), Observations, User Favorites
+                        - Any other domain → apply your own knowledge to propose the most useful and complete set of entities
+
+                        **NEVER** reply with: "I will gather information", "I understand you want to build", or any pure acknowledgement. Always respond with CONTENT — a full spec or a direct answer.
+
+                        1. When the user describes their app, IMMEDIATELY output a `final_answer` written entirely in **plain business English**. NO technical jargon. Format it as follows:
 
                         ---
                         ## 🚀 [Friendly App/Feature Name]
@@ -493,6 +555,13 @@ public class AiAgent {
                         - During Phase 2 Execution: Precise, expert, and efficient. You are a senior engineer.
                         - Always be encouraging. Make the user feel confident about what they're building.
 
+                        ## POST-BUILD BEHAVIOR (CRITICAL)
+                        After an app has been successfully built (tool results show scaffold_app succeeded):
+                        1. **DO NOT build another app** if the user says "make the app", "create it", "build it now" — the app is ALREADY BUILT. Tell them so.
+                        2. **If the user asks "how to open the app"**: Tell them to click the 📂 Open App button in the top toolbar, select their app, and the live preview will appear on the right. They can also click the ↗ Open button in the Live App panel to open it full-screen.
+                        3. **If the user asks "what is my app URL"**: The URL format is `/run/{tenantId}/{appId}` where both values appear in the context or success message.
+                        4. **NEVER reset the conversation** with "Hello! How can I assist you?" — always maintain context from the current session.
+
                         ## SUCCESS MESSAGE PHRASING (CRITICAL)
                         When providing your `final_answer` after successful tool execution:
                         1. **MODIFICATION / UPDATE**: If an `appId` was already present in the "CURRENT EXECUTION CONTEXT" below, you are MODifying an existing app. You MUST use words like "updated", "enhanced", or "modified". NEVER say "built and deployed" for an existing app.
@@ -551,8 +620,26 @@ public class AiAgent {
             if (finalAnswer == null) finalAnswer = (String) response.get("text");
 
             // Parse tool calls first (Prioritize Action over Talk)
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> toolCallsRaw = (List<Map<String, Object>>) response.get("tool_calls");
+            // Handle both array format [{name, arguments}] and object format {toolName: {args}}
+            List<Map<String, Object>> toolCallsRaw = null;
+            Object rawToolCalls = response.get("tool_calls");
+            if (rawToolCalls instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> asList = (List<Map<String, Object>>) rawToolCalls;
+                toolCallsRaw = asList;
+            } else if (rawToolCalls instanceof Map) {
+                // LLM used object format {"toolName": {arguments}} — convert to array format
+                log.warn("[AGENT] LLM returned tool_calls as object instead of array — converting automatically");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> asMap = (Map<String, Object>) rawToolCalls;
+                toolCallsRaw = new ArrayList<>();
+                for (Map.Entry<String, Object> entry : asMap.entrySet()) {
+                    Map<String, Object> call = new java.util.LinkedHashMap<>();
+                    call.put("name", entry.getKey());
+                    call.put("arguments", entry.getValue());
+                    toolCallsRaw.add(call);
+                }
+            }
 
             if (toolCallsRaw != null && !toolCallsRaw.isEmpty()) {
                 List<ToolCall> toolCalls = new ArrayList<>();
