@@ -127,6 +127,35 @@ function renderNode(
       const required = Boolean(props.required);
       const inputId = `appbana-in-${node.id}`;
       const helpText = String(props.help ?? props.description ?? '');
+      const nestedType = String(props.type ?? props.inputType ?? 'text');
+      // Scaffold emits reference FK fields as {type:'input', props:{type:'reference', field:'Customer'}}.
+      // Route those to the live-loaded <select> instead of a plain text input.
+      if (nestedType === 'reference') {
+        const refEntity = String(
+          props.referenceEntity ?? props.field ?? props.name ?? ''
+        );
+        return (
+          <div key={node.id} className="appbana-field" {...dataAttrs}>
+            {label && (
+              <label htmlFor={inputId} className="appbana-field-label">
+                {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
+              </label>
+            )}
+            <ReferenceField
+              id={inputId}
+              name={String(props.name ?? props.field ?? refEntity)}
+              refEntity={refEntity}
+              required={required}
+              defaultValue={String(props.value ?? '')}
+              className={className}
+              styleObj={styleObj}
+              entityAttr={entityAttr}
+              fieldAttr={fieldAttr}
+            />
+            {helpText && <p className="appbana-field-help">{helpText}</p>}
+          </div>
+        );
+      }
       return (
         <div key={node.id} className="appbana-field" {...dataAttrs}>
           {label && (
@@ -138,7 +167,7 @@ function renderNode(
             id={inputId}
             className={`appbana-input ${className}`}
             style={styleObj}
-            type={String(props.type ?? props.inputType ?? 'text')}
+            type={nestedType}
             placeholder={String(props.placeholder ?? '')}
             defaultValue={String(props.value ?? '')}
             name={String(props.name ?? '')}
@@ -323,9 +352,23 @@ interface ReferenceFieldProps {
 }
 
 function optionLabelFor(row: RefRow): string {
-  const candidate = row.name ?? row.title ?? row.label ?? row.email ?? row.code;
-  if (candidate != null && String(candidate).trim()) return String(candidate);
-  return `#${String(row.id ?? '')}`;
+  // Candidate field names (case-insensitive) in priority order.
+  const preferred = [
+    'name', 'full_name', 'fullname',
+    'title',
+    'label',
+    'email', 'email_address',
+    'code',
+  ];
+  const lookup: Record<string, unknown> = {};
+  for (const key of Object.keys(row)) {
+    lookup[key.toLowerCase()] = (row as Record<string, unknown>)[key];
+  }
+  for (const key of preferred) {
+    const v = lookup[key];
+    if (v != null && String(v).trim()) return String(v);
+  }
+  return `#${String(row.id ?? lookup['id'] ?? '')}`;
 }
 
 function ReferenceField(props: Readonly<ReferenceFieldProps>) {
@@ -379,7 +422,8 @@ function ReferenceField(props: Readonly<ReferenceFieldProps>) {
     >
       <option value="">— Select {refEntity} —</option>
       {rows.map((row) => {
-        const val = String(row.id ?? '');
+        const rowRec = row as Record<string, unknown>;
+        const val = String(row.id ?? rowRec.ID ?? rowRec.id ?? '');
         return <option key={val} value={val}>{optionLabelFor(row)}</option>;
       })}
     </select>
