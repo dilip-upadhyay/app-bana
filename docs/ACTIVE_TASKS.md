@@ -12,7 +12,8 @@ Rebuild the AppBana Studio as an AI-native frontend (chat drives everything — 
 | Stage 1 — Workspace + Studio MVP | pnpm workspace, `app-bana-shared`, `app-bana-studio` MVP with streaming chat + tool cards + preview iframe of old runtime, `data-appbana-*` attrs on old runtime | ✅ Done + fixes applied (auth response shape, localStorage key, deploy btn, page-nav postMessage, SSE regex) |
 | Stage 2 — Standalone runtime | `app-bana-runtime` (React port with tenant-branded login), studio iframe repointed 5173 → 5175 | ✅ Done — runtime live at port 5175, E2E passes |
 | Stage 3 — Studio v1.1 | Data drawer, session picker upgrade, image paste in chat | ✅ Done — commit `c9eb4fc`, see notes below |
-| Stage 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2 & 3 | ⏳ Not started |
+| Stage 3.5 — Runtime UX Overhaul (gate) | Design-system foundations + Sprint 1 fixes (page titles, formatted dates, resolved FK labels, status pills, sticky action bar, toasts). See [Runtime UX Overhaul Plan](./planning/RUNTIME_UX_OVERHAUL_PLAN.md). **Blocks Stage 4.** | 📝 Plan drafted 2026-07-26, awaiting approval |
+| Stage 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2 & 3 | ⏳ Blocked on Stage 3.5 Sprint 1 |
 | Stage 5 — Subdomain deploy | DNS + reverse proxy + `Host`-based app resolution | ⏳ Not started |
 | Stage 6 — Select-and-instruct | Runtime overlay, selection chips in composer, undo/history drawer | ⏳ Not started |
 

@@ -408,7 +408,7 @@ Studio matches the full desired v1 feature list (see [Locked decisions](#locked-
 
 ## Stage 4 — Retire `app-bana-ui/`
 
-Repo cleanup. Blocked by Stages 2 & 3.
+Repo cleanup. Blocked by Stages 2 & 3 **and** by Sprint 1 of the [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md). Deleting the old UI is only safe once the new runtime clears the "client-ready" bar defined there.
 
 - Verify studio + runtime cover every user-facing capability that matters
 - Remove `app-bana-ui/` from `pnpm-workspace.yaml`
