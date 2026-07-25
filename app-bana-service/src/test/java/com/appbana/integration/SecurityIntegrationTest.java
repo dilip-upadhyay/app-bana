@@ -95,19 +95,20 @@ public class SecurityIntegrationTest {
         when(mockRequest.method()).thenReturn("POST");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.100");
         
-        // Make 100 requests (at limit)
+        // Make 100 requests (at limit — pinned via explicit maxAttempts so the
+        // assertion is independent of RateLimitService.DEFAULT_MAX_ATTEMPTS).
         for (int i = 0; i < 100; i++) {
-            RateLimitService.checkRateLimit("192.168.1.100", "/api/users");
+            RateLimitService.checkRateLimit("192.168.1.100", "/api/users", 100, 15);
         }
         
         // 101st request should be blocked by rate limiter
-        var result = RateLimitService.checkRateLimit("192.168.1.100", "/api/users");
+        var result = RateLimitService.checkRateLimit("192.168.1.100", "/api/users", 100, 15);
         boolean blocked = !result.allowed();
         
         assertTrue(blocked, "Rate limiter should block 101st request");
         
         // When rate limit middleware runs
-        RateLimitMiddleware.create().accept(mockRequest, mockResponse);
+        RateLimitMiddleware.create(100, 15).accept(mockRequest, mockResponse);
         
         // Should return 429 before session middleware even runs
         verify(mockResponse).json(eq(429), any(Map.class));
@@ -227,11 +228,11 @@ public class SecurityIntegrationTest {
         // Verify rate limit still applies
         verify(mockResponse, never()).json(eq(429), any()); // Not hit yet
         
-        // But rate limiting IS enforced for auth endpoints
+        // But rate limiting IS enforced for auth endpoints (pinned to explicit 100/15).
         for (int i = 0; i < 100; i++) {
-            RateLimitService.checkRateLimit("192.168.1.204", "/api/auth/login");
+            RateLimitService.checkRateLimit("192.168.1.204", "/api/auth/login", 100, 15);
         }
-        var result = RateLimitService.checkRateLimit("192.168.1.204", "/api/auth/login");
+        var result = RateLimitService.checkRateLimit("192.168.1.204", "/api/auth/login", 100, 15);
         assertTrue(!result.allowed(), "Auth endpoints should still be rate limited");
     }
     
@@ -360,13 +361,13 @@ public class SecurityIntegrationTest {
         when(mockRequest.method()).thenReturn("POST");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.208");
         
-        // Exceed rate limit
+        // Exceed rate limit (explicit 100/15 to be independent of default).
         for (int i = 0; i < 100; i++) {
-            RateLimitService.checkRateLimit("192.168.1.208", "/api/users");
+            RateLimitService.checkRateLimit("192.168.1.208", "/api/users", 100, 15);
         }
         
         // Run middleware pipeline
-        RateLimitMiddleware.create().accept(mockRequest, mockResponse);
+        RateLimitMiddleware.create(100, 15).accept(mockRequest, mockResponse);
         
         // Verify 429 response sent
         verify(mockResponse).json(eq(429), any(Map.class));
@@ -451,7 +452,7 @@ public class SecurityIntegrationTest {
             threads[i] = new Thread(() -> {
                 for (int j = 0; j < requestsPerThread; j++) {
                     synchronized (blockedCount) {
-                        var result = RateLimitService.checkRateLimit(ip, endpoint);
+                        var result = RateLimitService.checkRateLimit(ip, endpoint, 100, 15);
                         if (!result.allowed()) {
                             blockedCount[0]++;
                         }
