@@ -109,39 +109,54 @@ public class AgentStreamController {
                 return;
             }
 
+            StreamEmitter emitter;
             try (OutputStream out = exchange.getResponseBody()) {
-                StreamEmitter emitter = buildEmitter(out, sessionId);
+                emitter = buildEmitter(out, sessionId);
+                AgentResponse result = null;
+                try {
+                    result = agent.processWithStream(
+                            request.getMessage(), agentContext,
+                            request.getProvider(), request.getImages(),
+                            emitter);
 
-                AgentResponse result = agent.processWithStream(
-                        request.getMessage(), agentContext,
-                        request.getProvider(), request.getImages(),
-                        emitter);
-
-                // Store conversation history on success (same as sync endpoint)
-                if (result.isSuccess() && conversationMemory != null) {
-                    ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
-                    conv.setUserId(userId);
-                    conv.setSessionId(UUID.fromString(sessionId));
-                    conv.setMessage(request.getMessage());
-                    conv.setResponse(result.getFinalAnswer());
-                    conv.setIntent("agent_stream");
-                    conversationMemory.store(conv);
-                }
-
-                // Advance dialogue state
-                if (result.isSuccess()) {
-                    String lower = result.getFinalAnswer() != null ? result.getFinalAnswer().toLowerCase() : "";
-                    if (lower.contains("scaffold") || lower.contains("app created") || lower.contains("successfully created")) {
-                        dialogueManager.notifyScaffolding(sessionId);
+                    // Store conversation history (non-fatal if it fails)
+                    if (result.isSuccess() && conversationMemory != null) {
+                        try {
+                            ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
+                            conv.setUserId(userId);
+                            conv.setSessionId(UUID.fromString(sessionId));
+                            conv.setMessage(request.getMessage());
+                            conv.setResponse(result.getFinalAnswer());
+                            conv.setIntent("agent_stream");
+                            conversationMemory.store(conv);
+                        } catch (Exception storeEx) {
+                            log.warn("[STREAM] Failed to store conversation history: {}", storeEx.getMessage());
+                        }
                     }
-                }
 
-                // Ensure the done event is always sent even if processWithStream returned without it
-                emitter.complete();
+                    // Advance dialogue state (non-fatal)
+                    if (result.isSuccess()) {
+                        try {
+                            String lower = result.getFinalAnswer() != null
+                                    ? result.getFinalAnswer().toLowerCase() : "";
+                            if (lower.contains("scaffold") || lower.contains("app created")
+                                    || lower.contains("successfully created")) {
+                                dialogueManager.notifyScaffolding(sessionId);
+                            }
+                        } catch (Exception dlgEx) {
+                            log.warn("[STREAM] Dialogue state update failed: {}", dlgEx.getMessage());
+                        }
+                    }
+
+                } catch (Exception agentEx) {
+                    log.error("[STREAM] Agent execution failed", agentEx);
+                } finally {
+                    // Always send done — client EventSource must not hang waiting
+                    emitter.complete();
+                }
 
             } catch (Exception e) {
-                log.error("[STREAM] Error during streaming agent execution", e);
-                // Cannot send error as JSON at this point (headers + SSE already open), just close
+                log.error("[STREAM] Fatal streaming error (SSE stream may already be open)", e);
             }
         };
     }

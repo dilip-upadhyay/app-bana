@@ -8,13 +8,19 @@ Rebuild the AppBana Studio as an AI-native frontend (chat drives everything — 
 
 | Stage | Summary | Status |
 |-------|---------|--------|
-| Stage 0 — Backend prep | SSE streaming (`/api/ai/chat/agent/stream`), tenant branding endpoint, app-context resolver, verify `ComponentNode.id` stability | ⏳ Not started |
-| Stage 1 — Workspace + Studio MVP | pnpm workspace, `app-bana-shared`, `app-bana-studio` MVP with streaming chat + tool cards + preview iframe of old runtime, `data-appbana-*` attrs on old runtime | ⏳ Not started |
+| Stage 0 — Backend prep | SSE streaming (`/api/ai/chat/agent/stream`), tenant branding endpoint, app-context resolver, verify `ComponentNode.id` stability | ✅ Done — see notes below |
+| Stage 1 — Workspace + Studio MVP | pnpm workspace, `app-bana-shared`, `app-bana-studio` MVP with streaming chat + tool cards + preview iframe of old runtime, `data-appbana-*` attrs on old runtime | 🚧 In progress |
 | Stage 2 — Standalone runtime | `app-bana-runtime` (React port with tenant-branded login), studio iframe repointed 5173 → 5175 | ⏳ Not started |
 | Stage 3 — Studio v1.1 | Data drawer, session picker upgrade, image paste in chat | ⏳ Not started |
 | Stage 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2 & 3 | ⏳ Not started |
 | Stage 5 — Subdomain deploy | DNS + reverse proxy + `Host`-based app resolution | ⏳ Not started |
 | Stage 6 — Select-and-instruct | Runtime overlay, selection chips in composer, undo/history drawer | ⏳ Not started |
+
+**Stage 0 notes:**
+- `ComponentNode.id` is stable — page IDs derived from page name, node IDs are deterministic counter strings. No fix needed.
+- `tenants` table did not exist; created as `appbana_tenants` in V12 Liquibase migration.
+- `token` SSE event fires **once at the end** with the full assistant message (not incremental chunks). True LLM token streaming requires adding `stream: true` to `OpenAiLlmService` — deferred to Stage 1.5 (isolated change). Tool call events (`tool_call_start`, `tool_call_end`) do fire in real time as each tool runs.
+- `emitter.complete()` is in a `finally` block — client `EventSource` always receives the terminal `done` event even if history storage or dialogue state update fails.
 
 **Locked decisions** (do not renegotiate without approval): pnpm workspaces · SSE streaming (backend work in-scope) · `postMessage` handshake for token (no URL hash) · Runtime own login with tenant branding · React + Vite + Tailwind + shadcn + Zustand · Native `fetch`/`EventSource` (no Vercel AI SDK) · Feature parity NOT required — bar is "AI-native flow fully functional".
 
