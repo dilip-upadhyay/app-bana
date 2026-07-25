@@ -23,6 +23,10 @@ echo ==========================================
 echo [ai-builder] Restarting on port %AI_PORT%
 echo ==========================================
 
+REM --- Pre-flight: required tools -------------------------------------
+where java >nul 2>&1 || (echo ERROR: Java JDK not found on PATH. Install JDK 21+ and retry. & exit /b 1)
+where mvn  >nul 2>&1 || (echo ERROR: Maven not found on PATH. Install Apache Maven 3.9+ and retry. & exit /b 1)
+
 REM --- Step 1: stop any existing AI Builder process on port 8081 -------
 echo [1/5] Stopping any existing AI Builder process on port %AI_PORT%...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%AI_PORT% " ^| findstr "LISTENING"') do (
@@ -53,6 +57,11 @@ echo [3/5] Ensuring Docker dependencies are running...
 docker --version >nul 2>&1
 if !ERRORLEVEL! NEQ 0 (
     echo    ERROR: Docker is not installed or not on PATH.
+    exit /b 1
+)
+docker info >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    echo    ERROR: Docker daemon is not running. Start Docker Desktop and retry.
     exit /b 1
 )
 

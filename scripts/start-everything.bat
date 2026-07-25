@@ -23,6 +23,26 @@ if not exist "pom.xml" (
     exit /b 1
 )
 
+REM --- Pre-flight: verify all required tools before spawning windows --
+echo Checking required tools...
+set "MISSING="
+where java   >nul 2>&1 || set "MISSING=!MISSING! java"
+where mvn    >nul 2>&1 || set "MISSING=!MISSING! mvn"
+where docker >nul 2>&1 || set "MISSING=!MISSING! docker"
+where node   >nul 2>&1 || set "MISSING=!MISSING! node"
+where npm    >nul 2>&1 || set "MISSING=!MISSING! npm"
+if not "!MISSING!"=="" (
+    echo ERROR: missing required tools on PATH:!MISSING!
+    echo Install them and retry. See docs/guides/02-DEVELOPMENT_GUIDE.md.
+    exit /b 1
+)
+docker info >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    echo ERROR: Docker daemon is not running. Start Docker Desktop and retry.
+    exit /b 1
+)
+echo    All required tools present. Docker daemon is running.
+
 echo ==========================================
 echo Starting All AppBana Services
 echo ==========================================

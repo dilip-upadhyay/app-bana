@@ -31,6 +31,10 @@ fi
 
 # --- Step 2: ensure node dependencies --------------------------------
 echo "[2/3] Ensuring Node dependencies are installed..."
+if ! command -v node >/dev/null 2>&1; then
+    echo "   ERROR: Node.js is not installed or not on PATH."
+    exit 1
+fi
 if ! command -v npm >/dev/null 2>&1; then
     echo "   ERROR: npm is not installed or not on PATH."
     exit 1

@@ -28,6 +28,11 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%UI_PORT% " ^| findstr "LIS
 
 REM --- Step 2: ensure node dependencies --------------------------------
 echo [2/3] Ensuring Node dependencies are installed...
+where node >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    echo    ERROR: Node.js is not installed or not on PATH.
+    exit /b 1
+)
 where npm >nul 2>&1
 if !ERRORLEVEL! NEQ 0 (
     echo    ERROR: npm is not installed or not on PATH.

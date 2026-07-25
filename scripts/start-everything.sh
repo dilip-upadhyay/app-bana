@@ -32,6 +32,23 @@ if [ ! -f pom.xml ]; then
     exit 1
 fi
 
+# --- Pre-flight: verify all required tools before backgrounding -----
+echo "Checking required tools..."
+MISSING=""
+for tool in java mvn docker node npm; do
+    command -v "$tool" >/dev/null 2>&1 || MISSING="$MISSING $tool"
+done
+if [ -n "$MISSING" ]; then
+    echo "ERROR: missing required tools on PATH:$MISSING"
+    echo "Install them and retry. See docs/guides/02-DEVELOPMENT_GUIDE.md."
+    exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: Docker daemon is not running. Start Docker Desktop and retry."
+    exit 1
+fi
+echo "   All required tools present. Docker daemon is running."
+
 LOG_DIR="$ROOT_DIR/dev-logs"
 mkdir -p "$LOG_DIR"
 

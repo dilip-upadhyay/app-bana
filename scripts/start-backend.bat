@@ -20,6 +20,10 @@ echo ==========================================
 echo [backend] Restarting on port %BE_PORT%
 echo ==========================================
 
+REM --- Pre-flight: required tools -------------------------------------
+where java >nul 2>&1 || (echo ERROR: Java JDK not found on PATH. Install JDK 21+ and retry. & exit /b 1)
+where mvn  >nul 2>&1 || (echo ERROR: Maven not found on PATH. Install Apache Maven 3.9+ and retry. & exit /b 1)
+
 REM --- Step 1: stop any existing backend process on port 8080 ----------
 echo [1/4] Stopping any existing backend process on port %BE_PORT%...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%BE_PORT% " ^| findstr "LISTENING"') do (
@@ -32,6 +36,11 @@ echo [2/4] Ensuring PostgreSQL is running...
 docker --version >nul 2>&1
 if !ERRORLEVEL! NEQ 0 (
     echo    ERROR: Docker is not installed or not on PATH.
+    exit /b 1
+)
+docker info >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    echo    ERROR: Docker daemon is not running. Start Docker Desktop and retry.
     exit /b 1
 )
 docker ps --format "{{.Names}}" | findstr /X "appbana-postgres" >nul 2>&1
