@@ -1,4 +1,4 @@
-# AppBana — AI Copilot Master Instructions
+﻿# AppBana â€” AI Copilot Master Instructions
 
 > **Read this entire document before touching any code.** It is specifically written so that any AI Agent, Copilot, or Developer joining this project can get up to speed in under 10 minutes and never break the environment.
 
@@ -12,7 +12,7 @@
 5. [Architecture Deep Dive](#5-architecture-deep-dive)
 6. [The AI Builder Engine (ai-builder/)](#6-the-ai-builder-engine-ai-builder)
 7. [Agent Tool System](#7-agent-tool-system)
-8. [Critical Rules — Multi-Tenant Entity Endpoints](#8-critical-rules--multi-tenant-entity-endpoints)
+8. [Critical Rules â€” Multi-Tenant Entity Endpoints](#8-critical-rules--multi-tenant-entity-endpoints)
 9. [Backend API Reference](#9-backend-api-reference)
 10. [Frontend Architecture](#10-frontend-architecture)
 11. [Database & Schema Management](#11-database--schema-management)
@@ -30,7 +30,7 @@ AppBana is a **metadata-driven, AI-powered application builder**. Non-technical 
 3. Generates REST CRUD APIs (automatically)
 4. Renders UI pages (via LitElement web components)
 
-**Core Principle:** A single schema definition drives the entire stack — database, API, and UI are all metadata-driven.
+**Core Principle:** A single schema definition drives the entire stack â€” database, API, and UI are all metadata-driven.
 
 ---
 
@@ -38,53 +38,53 @@ AppBana is a **metadata-driven, AI-powered application builder**. Non-technical 
 
 ```
 app-bana/
-├── ai-builder/                  ← AI LLM engine (port 8081)
-│   └── src/main/java/com/appbana/ai/
-│       ├── agent/               ← AiAgent.java — the Think/Act/Observe loop
-│       │   └── tool/            ← All agent tools (scaffold, mock data, etc.)
-│       ├── api/                 ← REST endpoints (AiChatController.java)
-│       ├── dialogue/            ← DialogueManager.java — conversation state machine
-│       ├── llm/                 ← AdvancedPromptEngine.java, OpenAiLlmService.java
-│       ├── rag/                 ← ConversationMemory.java, Qdrant vector store
-│       ├── learning/            ← UserPreferenceEngine.java
-│       ├── optimization/        ← DirectAnswerService.java, SemanticCache.java
-│       └── server/              ← AiServer.java, ToolRegistry.java
-│
-├── app-bana-service/            ← Core backend API (port 8080)
-│   └── src/main/java/com/appbana/
-│       ├── ApiServer.java       ← HTTP server entry point
-│       ├── SchemaManager.java   ← CREATE TABLE, migrations, multi-tenant isolation
-│       ├── JdbcManager.java     ← Database connection pools (HikariCP)
-│       ├── AppManager.java      ← App/entity lifecycle management
-│       └── server/routes/
-│           ├── GenericEntityRoutes.java  ← /api/{entity}/* CRUD
-│           ├── AppRoutes.java            ← /appbana-studio/* app management
-│           └── SchemaRoutes.java         ← /schema/* management
-│
-├── app-bana-ui/                 ← Frontend Studio (port 5173, Vite + LitElement)
-│   └── src/
-│       ├── builder/             ← Visual app builder (AppManager, PageManager)
-│       ├── runtime/             ← Live renderers (StudioTableLive.ts is key)
-│       ├── services/            ← API clients
-│       └── main/                ← AI chat UI (AiChatBuilder.ts)
-│
-├── docs/                        ← Architecture & story documentation
-│   ├── 01-ARCHITECTURE.md       ← Full system architecture reference
-│   ├── AI_AGENT_ARCHITECTURE.md ← Agent design details
-│   ├── ACTIVE_TASKS.md          ← Current sprint tasks
-│   └── session_summary.md       ← Latest session notes
-│
-├── config.json                  ← Database + OpenAI config (DO NOT commit secrets)
-├── start-everything.bat         ← Master startup script (Windows)
-├── start-ai-builder.bat         ← AI Builder startup (Maven compile + run)
-└── .github/copilot-instructions.md  ← This file
+â”œâ”€â”€ ai-builder/                  â† AI LLM engine (port 8081)
+â”‚   â””â”€â”€ src/main/java/com/appbana/ai/
+â”‚       â”œâ”€â”€ agent/               â† AiAgent.java â€” the Think/Act/Observe loop
+â”‚       â”‚   â””â”€â”€ tool/            â† All agent tools (scaffold, mock data, etc.)
+â”‚       â”œâ”€â”€ api/                 â† REST endpoints (AiChatController.java)
+â”‚       â”œâ”€â”€ dialogue/            â† DialogueManager.java â€” conversation state machine
+â”‚       â”œâ”€â”€ llm/                 â† AdvancedPromptEngine.java, OpenAiLlmService.java
+â”‚       â”œâ”€â”€ rag/                 â† ConversationMemory.java, Qdrant vector store
+â”‚       â”œâ”€â”€ learning/            â† UserPreferenceEngine.java
+â”‚       â”œâ”€â”€ optimization/        â† DirectAnswerService.java, SemanticCache.java
+â”‚       â””â”€â”€ server/              â† AiServer.java, ToolRegistry.java
+â”‚
+â”œâ”€â”€ app-bana-service/            â† Core backend API (port 8080)
+â”‚   â””â”€â”€ src/main/java/com/appbana/
+â”‚       â”œâ”€â”€ ApiServer.java       â† HTTP server entry point
+â”‚       â”œâ”€â”€ SchemaManager.java   â† CREATE TABLE, migrations, multi-tenant isolation
+â”‚       â”œâ”€â”€ JdbcManager.java     â† Database connection pools (HikariCP)
+â”‚       â”œâ”€â”€ AppManager.java      â† App/entity lifecycle management
+â”‚       â””â”€â”€ server/routes/
+â”‚           â”œâ”€â”€ GenericEntityRoutes.java  â† /api/{entity}/* CRUD
+â”‚           â”œâ”€â”€ AppRoutes.java            â† /appbana-studio/* app management
+â”‚           â””â”€â”€ SchemaRoutes.java         â† /schema/* management
+â”‚
+â”œâ”€â”€ app-bana-ui/                 â† Frontend Studio (port 5173, Vite + LitElement)
+â”‚   â””â”€â”€ src/
+â”‚       â”œâ”€â”€ builder/             â† Visual app builder (AppManager, PageManager)
+â”‚       â”œâ”€â”€ runtime/             â† Live renderers (StudioTableLive.ts is key)
+â”‚       â”œâ”€â”€ services/            â† API clients
+â”‚       â””â”€â”€ main/                â† AI chat UI (AiChatBuilder.ts)
+â”‚
+â”œâ”€â”€ docs/                        â† Architecture & story documentation
+â”‚   â”œâ”€â”€ 01-ARCHITECTURE.md       â† Full system architecture reference
+â”‚   â”œâ”€â”€ AI_AGENT_ARCHITECTURE.md â† Agent design details
+â”‚   â”œâ”€â”€ ACTIVE_TASKS.md          â† Current sprint tasks
+â”‚   â””â”€â”€ session_summary.md       â† Latest session notes
+â”‚
+â”œâ”€â”€ config.json                  â† Database + OpenAI config (DO NOT commit secrets)
+â”œâ”€â”€ start-everything.bat         â† Master startup script (Windows)
+â”œâ”€â”€ start-ai-builder.bat         â† AI Builder startup (Maven compile + run)
+â””â”€â”€ .github/copilot-instructions.md  â† This file
 ```
 
 ---
 
 ## 3. How to Start the Application
 
-### ✅ The ONLY correct way to start locally (Windows):
+### âœ… The ONLY correct way to start locally (Windows):
 
 ```powershell
 .\start-everything.bat
@@ -147,7 +147,7 @@ The single source of truth for all runtime configuration:
 - **PostgreSQL 16** running locally
 - DB name: `appbana`
 - User: `appbana` / Password: `appbana_dev_2026`
-- Schema migrations managed by **Liquibase** (not Flyway) — changesets live in `app-bana-service/src/main/resources/db/changelog/`
+- Schema migrations managed by **Liquibase** (not Flyway) â€” changesets live in `app-bana-service/src/main/resources/db/changelog/`
 
 ---
 
@@ -157,14 +157,14 @@ The single source of truth for all runtime configuration:
 
 ```
 User (natural language)
-        ↓
+        â†“
   ai-builder (port 8081)
-  [AiAgent → Tools → scaffold_app]
-        ↓
+  [AiAgent â†’ Tools â†’ scaffold_app]
+        â†“
   app-bana-service (port 8080)
   [SchemaManager creates table]
   [GenericEntityRoutes auto-generates CRUD API]
-        ↓
+        â†“
   app-bana-ui (port 5173)
   [StudioTableLive renders table from schema metadata]
 ```
@@ -193,7 +193,7 @@ schema key = {tenantId}_{appId}_{entityName}
 
 ### The Agent Loop (`AiAgent.java`)
 
-The agent implements a **Think → Act → Observe** loop:
+The agent implements a **Think â†’ Act â†’ Observe** loop:
 
 1. **THINK**: `buildAgentPrompt()` constructs a rich prompt including:
    - System instructions (`AdvancedPromptEngine.java`)
@@ -210,12 +210,12 @@ The agent implements a **Think → Act → Observe** loop:
 
 The agent enforces a mandatory two-phase app creation process:
 
-**Phase 1 — Specification (TALK, no tools):**
+**Phase 1 â€” Specification (TALK, no tools):**
 - User describes what they want ("I want a spice selling app")
 - Agent responds with plain English business description (NO technical terms)
 - Asks: "Does this match? Say **Yes, let's build it!** when ready"
 
-**Phase 2 — Execution (ACT, tools):**
+**Phase 2 â€” Execution (ACT, tools):**
 - User says "yes" / "build it" / "proceed"
 - Agent calls `scaffold_app` ONCE with the complete specification
 - **NEVER** use `create_entity` or `generate_page` individually for new apps
@@ -243,7 +243,7 @@ All tools live in `ai-builder/src/main/java/com/appbana/ai/agent/tool/` and impl
 
 | Tool Name | Class | Purpose |
 |-----------|-------|---------|
-| `scaffold_app` | `ScaffoldAppTool` | **Primary tool** — Creates entire app (App + Entities + Pages) in one shot |
+| `scaffold_app` | `ScaffoldAppTool` | **Primary tool** â€” Creates entire app (App + Entities + Pages) in one shot |
 | `create_app` | `CreateAppTool` | Creates just the app shell |
 | `create_entity` | `CreateEntityTool` | Creates a single entity/table |
 | `generate_page` | `GeneratePageTool` | Generates a UI page for an entity |
@@ -261,24 +261,24 @@ All tools live in `ai-builder/src/main/java/com/appbana/ai/agent/tool/` and impl
 
 1. Implement `Tool` interface with `getName()`, `getDescription()`, `getParameterSchema()`, `execute()`
 2. Register it in `AiServer.java` inside `toolRegistry.register(new MyTool(backendBaseUrl))`
-3. Add clear JSON schema for parameters — the LLM reads this to know how to call the tool
-4. Always handle `ConnectException` — the ai-builder and app-bana-service are separate processes
-5. Return `ToolResult.error(name, message)` on failure — never throw exceptions silently
+3. Add clear JSON schema for parameters â€” the LLM reads this to know how to call the tool
+4. Always handle `ConnectException` â€” the ai-builder and app-bana-service are separate processes
+5. Return `ToolResult.error(name, message)` on failure â€” never throw exceptions silently
 
 ---
 
-## 8. Critical Rules — Multi-Tenant Entity Endpoints
+## 8. Critical Rules â€” Multi-Tenant Entity Endpoints
 
 > [!CAUTION]
 > This is the #1 source of bugs. Read carefully.
 
-### ❌ WRONG (will return 404):
+### âŒ WRONG (will return 404):
 ```java
 String url = baseUrl + "/api/Customer/batch";
 String url = baseUrl + "/api/Spice/batch";
 ```
 
-### ✅ CORRECT (how `GenerateMockDataTool` does it):
+### âœ… CORRECT (how `GenerateMockDataTool` does it):
 ```java
 String appId = context.appId();
 String tenantId = context.tenantId();
@@ -299,50 +299,50 @@ String url = String.format("%s/api/%s/batch", baseUrl, targetSchemaId);
 
 ### Studio (App Management)
 ```
-GET    /appbana-studio/{tenantId}/apps              → List all apps
-GET    /appbana-studio/{tenantId}/apps/{appId}      → Get app with entities and pages
-POST   /appbana-studio/{tenantId}/apps              → Create new app
-PUT    /appbana-studio/{tenantId}/apps/{appId}      → Update app
-DELETE /appbana-studio/{tenantId}/apps/{appId}      → Delete app
+GET    /appbana-studio/{tenantId}/apps              â†’ List all apps
+GET    /appbana-studio/{tenantId}/apps/{appId}      â†’ Get app with entities and pages
+POST   /appbana-studio/{tenantId}/apps              â†’ Create new app
+PUT    /appbana-studio/{tenantId}/apps/{appId}      â†’ Update app
+DELETE /appbana-studio/{tenantId}/apps/{appId}      â†’ Delete app
 ```
 
 ### Schema Management
 ```
-GET    /schema                  → List schema names
-GET    /schema/{name}           → Get schema definition
-POST   /schema                  → Create/update schema (or preview with ?preview=true)
-DELETE /schema/{name}           → Delete schema
+GET    /schema                  â†’ List schema names
+GET    /schema/{name}           â†’ Get schema definition
+POST   /schema                  â†’ Create/update schema (or preview with ?preview=true)
+DELETE /schema/{name}           â†’ Delete schema
 ```
 
 ### Dynamic Entity CRUD (auto-generated per schema)
 ```
-GET    /api/{entity}            → Query (pagination, search, filters, projection, sort)
-GET    /api/{entity}/{id}       → Get single record
-POST   /api/{entity}            → Insert record
-POST   /api/{entity}/batch      → Insert multiple records (JSON array)
-PUT    /api/{entity}/{id}       → Update record
-DELETE /api/{entity}/{id}       → Delete record
+GET    /api/{entity}            â†’ Query (pagination, search, filters, projection, sort)
+GET    /api/{entity}/{id}       â†’ Get single record
+POST   /api/{entity}            â†’ Insert record
+POST   /api/{entity}/batch      â†’ Insert multiple records (JSON array)
+PUT    /api/{entity}/{id}       â†’ Update record
+DELETE /api/{entity}/{id}       â†’ Delete record
 ```
 
 **Remember:** `{entity}` must follow the multi-tenant format: `{tenantId}_{appId}_{entityName}`
 
 ### Query Parameters
 ```
-?limit=50&offset=0             → Pagination
-?search=John                   → Full-text search
-?name=John&status=active       → Field-level filters (AND logic)
-?name:like=%oh%                → Advanced filters (:like, :>, :<, :in)
-?_fields=name,email            → Column projection
-?_sort=name:asc,age:desc       → Sorting
-?_count=true                   → Count only
+?limit=50&offset=0             â†’ Pagination
+?search=John                   â†’ Full-text search
+?name=John&status=active       â†’ Field-level filters (AND logic)
+?name:like=%oh%                â†’ Advanced filters (:like, :>, :<, :in)
+?_fields=name,email            â†’ Column projection
+?_sort=name:asc,age:desc       â†’ Sorting
+?_count=true                   â†’ Count only
 ```
 
 ### AI Endpoints
 ```
-POST   /api/ai/chat             → General chat
-POST   /api/ai/chat/agent       → Agent loop (full tool execution)
-GET    /api/ai/chat/history     → Conversation history
-GET    /api/ai/chat/sessions    → Past sessions
+POST   /api/ai/chat             â†’ General chat
+POST   /api/ai/chat/agent       â†’ Agent loop (full tool execution)
+GET    /api/ai/chat/history     â†’ Conversation history
+GET    /api/ai/chat/sessions    â†’ Past sessions
 ```
 
 ---
@@ -365,7 +365,7 @@ GET    /api/ai/chat/sessions    → Past sessions
 | `src/main/AiChatBuilder.ts` | AI chat interface component |
 | `src/services/` | API client services |
 
-### StudioTableLive.ts — Critical Knowledge
+### StudioTableLive.ts â€” Critical Knowledge
 This is the live data table rendered in deployed apps. It relies on:
 ```typescript
 // node.props.fields - comes from backend entity schema
@@ -385,17 +385,17 @@ This is the live data table rendered in deployed apps. It relies on:
 
 ### EntitySchema Field Types (valid values)
 ```
-text        → VARCHAR(255)
-longtext    → TEXT
-number      → INTEGER
-decimal     → NUMERIC(19,4)     ← Use for money/prices, NOT "currency" or "float"
-boolean     → BOOLEAN
-date        → TIMESTAMP (date only)
-datetime    → TIMESTAMP
-email       → VARCHAR(255) with email validation
-phone       → VARCHAR(50)
-status      → VARCHAR(100) with options[]
-reference   → VARCHAR(255) referencing another entity
+text        â†’ VARCHAR(255)
+longtext    â†’ TEXT
+number      â†’ INTEGER
+decimal     â†’ NUMERIC(19,4)     â† Use for money/prices, NOT "currency" or "float"
+boolean     â†’ BOOLEAN
+date        â†’ TIMESTAMP (date only)
+datetime    â†’ TIMESTAMP
+email       â†’ VARCHAR(255) with email validation
+phone       â†’ VARCHAR(50)
+status      â†’ VARCHAR(100) with options[]
+reference   â†’ VARCHAR(255) referencing another entity
 ```
 
 > [!WARNING]
@@ -409,40 +409,40 @@ reference   → VARCHAR(255) referencing another entity
 
 ### Migration Strategy
 AppBana uses **safe, non-destructive migrations**:
-- New fields → `ALTER TABLE ADD COLUMN`
-- Renamed fields → `ALTER TABLE RENAME COLUMN` (tracked via `existingName` property)
-- No production drops — data is preserved
+- New fields â†’ `ALTER TABLE ADD COLUMN`
+- Renamed fields â†’ `ALTER TABLE RENAME COLUMN` (tracked via `existingName` property)
+- No production drops â€” data is preserved
 
 ---
 
 ## 12. Active Work & Known Issues
 
-### 🚧 In Progress: DialogueManager Integration (Story 3.1)
+### ðŸš§ In Progress: DialogueManager Integration (Story 3.1)
 **File**: `ai-builder/src/main/java/com/appbana/ai/dialogue/DialogueManager.java`
 
 **Goal**: Enforce strict conversation state transitions in `AiChatController` using a Java-level state machine instead of relying solely on LLM prompt engineering.
 
 **Planned States**:
 ```java
-INITIAL → GATHERING_INFO → CONFIRMING_DETAILS → CREATING → COMPLETED
+INITIAL â†’ GATHERING_INFO â†’ CONFIRMING_DETAILS â†’ CREATING â†’ COMPLETED
 ```
 
 **Impact**: The `AiAgent.buildAgentPrompt()` will dynamically expose different tools based on the active `ConversationState` (e.g., only show `scaffold_app` when in `CREATING` state).
 
 **Files to modify**:
-- `DialogueManager.java` — implement LLM-based intent classification
-- `AiChatController.java` — integrate state checks before delegating to `AiAgent`
-- `AiAgent.java` — inject state into `buildAgentPrompt()`
+- `DialogueManager.java` â€” implement LLM-based intent classification
+- `AiChatController.java` â€” integrate state checks before delegating to `AiAgent`
+- `AiAgent.java` â€” inject state into `buildAgentPrompt()`
 
-### ✅ Recently Fixed
+### âœ… Recently Fixed
 - **Mock data 404 bug**: `GenerateMockDataTool` now correctly prefixes entity URLs with `tenantId_appId_`
 - **Boot race condition**: `start-everything.bat` now kills all stale Java/Node processes before starting
 - **Scaffold entity fields**: `ScaffoldAppTool` now propagates `entityFields` to `GeneratePageTool` for `tableProps`
 
-### ⚠️ Known Limitations
+### âš ï¸ Known Limitations
 - **Agent iteration limit**: Capped at 5 iterations per request. Complex multi-entity scaffolding may hit this limit.
 - **Semantic cache**: Enabled by default (`SemanticCache.java`). If you see stale LLM responses, disable it temporarily for debugging.
-- **Schema pluralization**: Entity names must be used exactly as saved — no auto-pluralization is applied.
+- **Schema pluralization**: Entity names must be used exactly as saved â€” no auto-pluralization is applied.
 
 ---
 
@@ -450,9 +450,9 @@ INITIAL → GATHERING_INFO → CONFIRMING_DETAILS → CREATING → COMPLETED
 
 ### Java Code Style
 - **Java 21**: Use virtual threads, records, sealed classes, and switch expressions where appropriate
-- **Logging**: Always use `@Slf4j` (Lombok) — never `System.out.println`
+- **Logging**: Always use `@Slf4j` (Lombok) â€” never `System.out.println`
 - **Error handling**: Catch specific exceptions, not bare `Exception`, except at controller boundaries
-- **Cross-service calls**: Always wrap HTTP calls in try-catch for `ConnectException` — the two Java services are on different ports
+- **Cross-service calls**: Always wrap HTTP calls in try-catch for `ConnectException` â€” the two Java services are on different ports
 
 ### When Adding a Backend Feature
 1. Add route in appropriate `*Routes.java` file
@@ -463,7 +463,7 @@ INITIAL → GATHERING_INFO → CONFIRMING_DETAILS → CREATING → COMPLETED
 ### When Adding an AI Tool
 1. Create `MyTool.java` in `ai-builder/.../agent/tool/`
 2. Register in `AiServer.java`: `toolRegistry.register(new MyTool(backendBaseUrl))`
-3. Keep tool descriptions concise — they go into the LLM context window
+3. Keep tool descriptions concise â€” they go into the LLM context window
 4. Limit batch operations to **10-20 records max** (see `GenerateMockDataTool` for reference)
 
 ### Commit Message Convention
@@ -482,13 +482,14 @@ chore: update copilot instructions with DialogueManager plans
 | Starting services individually | Port conflicts, wrong startup order | Always use `.\start-everything.bat` |
 | Using raw entity name in API URL | `404 {"error":"unknown entity"}` | Prefix with `{tenantId}_{appId}_` |
 | Using wrong field type in schema | Silent type mismatch / VARCHAR fallback | Only use types in the approved list (Section 11) |
-| Modifying `ApiServer.java` directly | Boot failures | It's a thin wrapper — delegate logic to `*Routes.java` |
+| Modifying `ApiServer.java` directly | Boot failures | It's a thin wrapper â€” delegate logic to `*Routes.java` |
 | Not restarting after Java changes | Old code runs silently | Always restart with `.\start-everything.bat` |
 | Adding `regex` pattern to name fields | Validation failures for normal names | Set `pattern: null` for human-readable name fields |
-| Calling `create_entity` for new apps | Mismatched entities without pages | Use `scaffold_app` — it creates App + Entities + Pages atomically |
+| Calling `create_entity` for new apps | Mismatched entities without pages | Use `scaffold_app` â€” it creates App + Entities + Pages atomically |
 | LLM returns old cached response | Debugging frustration | Disable `SemanticCache` or call `semanticCache.clear()` |
 
 ---
 
 *Last updated: April 2026 | Maintained by: AppBana Development Team*
 *For session history and task tracking, see `docs/ACTIVE_TASKS.md` and `docs/session_summary.md`*
+
