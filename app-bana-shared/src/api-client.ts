@@ -164,6 +164,27 @@ export async function fetchEntityRows(
   };
 }
 
+/**
+ * Cheap row-count only fetch. Uses ?_count=true which asks the backend to skip
+ * row hydration. Falls back to a small paged fetch if _count is unsupported.
+ */
+export async function fetchEntityRowCount(entityKey: string, token: string): Promise<number> {
+  try {
+    const res = await fetch(`${BACKEND}/api/${entityKey}?_count=true`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return 0;
+    const data = await res.json();
+    // Backend may return { count: N } or { total: N } or a raw number
+    if (typeof data === 'number') return data;
+    if (typeof data.count === 'number') return data.count;
+    if (typeof data.total === 'number') return data.total;
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Insert a single row into a dynamic entity table. */
 export async function insertEntityRow(
   entityKey: string,

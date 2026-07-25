@@ -39,6 +39,17 @@ Rebuild the AppBana Studio as an AI-native frontend (chat drives everything — 
 - Smoke tests confirmed: 400 on missing userId / bad UUID, list/rename/soft-delete round-trip works end-to-end against the dev DB.
 - **Known caveats** (not blockers): Data drawer doesn't auto-refresh entity list when chat scaffolds new entities (user must close/reopen or switch apps). Renaming a session that has zero conversations creates an orphan meta row (harmless, won't appear in list). Backend agent doesn't yet consume `images[]` — visual grounding is a follow-up beyond Stage 3.
 
+**Stage 0-3 audit fixes (post-`51a4418`):**
+- **Bug: duplicate `done` SSE event** — `AgentStreamController.buildEmitter().complete()` fired a second empty `done` after the agent's own terminal `done`, causing `setSessionId('')` to race the real value on the client. Fixed by tracking whether `done` was already emitted inside `emit()` and making `complete()` a no-op in that case. Confirmed via smoke test: `1` done event per SSE response (was `2`).
+- **Bug: unguarded `window.parent.postMessage` in runtime error path** — `AppRuntimeShell.tsx`'s `loadApp` catch block called `window.parent.postMessage(..., STUDIO_ORIGIN)` unconditionally, causing a benign self-post + console spam when the runtime ran standalone. Extracted `postToStudio()` helper with `isEmbedded()` guard; all three send sites now use it.
+- **Stage 2 contract gap: missing `setMode`/`highlight` handlers** — runtime's postMessage switch only handled `token`/`setPage`/`reload`. Plan requires acknowledging `setMode` (browse↔inspect) and `highlight` (nodeId) even though Stage 6 will drive them. Added handler cases that store values in refs so Stage 6 can promote them to state.
+- **Stage 3 deviation: entity list missing row counts** — plan says "entity list with row counts", implementation showed names only. Added new `fetchEntityRowCount(entityKey, token)` in `@appbana/shared` (uses `?_count=true`), DataDrawer now issues parallel count fetches after listing entities and shows a pill next to each name.
+- **Stage 3 deviation: table not sortable** — plan says "first N rows paged sortable", implementation was paged only. Added click-to-sort headers with a 3-state cycle (asc → desc → cleared), passes `_sort=col:dir` to `fetchEntityRows`, resets to page 0 on sort change, and shows an ↑/↓ indicator on the active column.
+- **Non-fixes / intentional deviations from plan wording:**
+  - Plan says `AppContext` response should have keys `tenantBranding` + `appMeta`; implementation uses `branding` (no `appMeta`). Frontend + backend + shared type are internally consistent, no consumer needs `appMeta` yet, so renaming is churn without benefit. Left as-is with this note.
+  - Plan mentions `getSnapshot` as a studio→runtime postMessage. Not needed until Stage 6; not implemented to avoid speculative contract.
+  - `token` SSE event still fires once at the end (not per-chunk streaming from OpenAI). Documented under Stage 0 notes above — remains deferred to a future opt-in change.
+
 **Locked decisions** (do not renegotiate without approval): pnpm workspaces · SSE streaming (backend work in-scope) · `postMessage` handshake for token (no URL hash) · Runtime own login with tenant branding · React + Vite + Tailwind + shadcn + Zustand · Native `fetch`/`EventSource` (no Vercel AI SDK) · Feature parity NOT required — bar is "AI-native flow fully functional".
 
 See the [full plan](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) for stage-by-stage exit criteria and file-level change lists.

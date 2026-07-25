@@ -9,13 +9,28 @@
  * - Emit ready/selection/error to parent via postMessage
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { AppMeta, PageMeta, AppBanaPostMessage } from '@appbana/shared';
+import type { AppMeta, PageMeta, AppBanaPostMessage, RuntimeMode } from '@appbana/shared';
 import { resolveAppContext, getApp, login as apiLogin } from '@appbana/shared';
 import { renderPage } from './Renderer';
 import { LoginPage } from '../pages/LoginPage';
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
+
+/** True when this runtime is embedded in the studio iframe (has a real cross-frame parent). */
+function isEmbedded(): boolean {
+  return typeof window !== 'undefined' && window.parent && window.parent !== window;
+}
+
+/** Post a message to the studio parent iff we are actually embedded. */
+function postToStudio(msg: AppBanaPostMessage) {
+  if (!isEmbedded()) return;
+  try {
+    window.parent.postMessage(msg, STUDIO_ORIGIN);
+  } catch {
+    // Cross-origin errors are non-fatal — runtime works standalone too.
+  }
+}
 
 function storedToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -27,6 +42,11 @@ export function AppRuntimeShell() {
   const [currentPage, setCurrentPage] = useState<PageMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Stage 2 contract fields — full Stage 6 wiring lands with select-and-instruct.
+  // Stored in refs (not state) because the current render doesn't consume them yet;
+  // Stage 6 will migrate these to state and drive the inspection overlay.
+  const modeRef = useRef<RuntimeMode>('browse');
+  const highlightedNodeRef = useRef<string | null>(null);
   const isMounted = useRef(true);
 
   // --- Resolve context from URL path ---
@@ -35,19 +55,7 @@ export function AppRuntimeShell() {
   // --- postMessage bridge ---
   useEffect(() => {
     // Signal to studio parent that we are ready.
-    // Only post if we are actually embedded (parent !== window). Target the
-    // known studio origin rather than '*' so a hostile parent cannot silently
-    // observe our lifecycle signals.
-    if (window.parent && window.parent !== window) {
-      try {
-        window.parent.postMessage(
-          { type: 'ready' } satisfies AppBanaPostMessage,
-          STUDIO_ORIGIN
-        );
-      } catch {
-        // Cross-origin errors are non-fatal — runtime works standalone too.
-      }
-    }
+    postToStudio({ type: 'ready' });
 
     const handler = (ev: MessageEvent) => {
       if (ev.origin !== STUDIO_ORIGIN) return;
@@ -65,11 +73,21 @@ export function AppRuntimeShell() {
           }
           setTokenState(msg.jwt);
           break;
+        case 'setMode':
+          // Stage 2 contract: acknowledge mode changes (browse vs inspect).
+          // Stage 6 will use `inspect` to emit selection events on click.
+          modeRef.current = msg.mode;
+          break;
         case 'setPage':
           if (app) {
             const p = app.pages?.find((pg) => pg.id === msg.pageId);
             if (p) setCurrentPage(p);
           }
+          break;
+        case 'highlight':
+          // Stage 2 contract: studio asked us to highlight a node.
+          // Stage 6 will render an outline overlay for the target element.
+          highlightedNodeRef.current = msg.nodeId;
           break;
         case 'reload':
           window.location.reload();
@@ -102,10 +120,7 @@ export function AppRuntimeShell() {
     } catch (e) {
       if (!isMounted.current) return;
       setError(e instanceof Error ? e.message : 'Failed to load app');
-      window.parent.postMessage(
-        { type: 'error', message: String(e) } satisfies AppBanaPostMessage,
-        STUDIO_ORIGIN
-      );
+      postToStudio({ type: 'error', message: String(e) });
     } finally {
       if (isMounted.current) setLoading(false);
     }

@@ -3,6 +3,7 @@ import {
   listEntities,
   getEntitySchema,
   fetchEntityRows,
+  fetchEntityRowCount,
   insertEntityRow,
   type EntitySchema,
   type EntityField,
@@ -10,14 +11,17 @@ import {
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useDrawerStore } from '../../stores/drawer';
-import { useChatStore } from '../../stores/chat';
 
 const PAGE_SIZE = 25;
 
+type SortDir = 'asc' | 'desc';
+interface SortState { col: string; dir: SortDir; }
+
 /**
- * Slide-in data drawer — lists all entities in the current app on the left,
- * shows the first N rows of the selected entity on the right, and lets the
- * user insert a row via a schema-driven form or ask the AI to seed data.
+ * Slide-in data drawer — lists all entities in the current app on the left
+ * (each with its row count), shows the first N rows of the selected entity
+ * on the right in a sortable, paged table, and lets the user insert a row
+ * via a schema-driven form or ask the AI to seed data.
  */
 export function DataDrawer() {
   const { token, tenantId } = useSessionStore();
@@ -25,23 +29,35 @@ export function DataDrawer() {
   const { dataOpen, closeAll } = useDrawerStore();
 
   const [entities, setEntities] = useState<EntitySchema[]>([]);
+  const [entityCounts, setEntityCounts] = useState<Record<string, number>>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [schema, setSchema] = useState<EntitySchema | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState<SortState | null>(null);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
   const canWork = !!(token && tenantId && currentApp);
 
-  // Load entity list when the drawer opens or the app changes
+  // Load entity list AND row counts when the drawer opens or the app changes
   useEffect(() => {
     if (!dataOpen || !canWork) return;
     setLoading(true);
     listEntities(tenantId!, currentApp!.id, token!)
       .then((list) => {
         setEntities(list);
+        // Fetch counts in parallel; keep name unaffected if any single call fails
+        Promise.all(
+          list.map(async (e) => {
+            const key = `${tenantId}_${currentApp!.id}_${e.name}`;
+            const count = await fetchEntityRowCount(key, token!);
+            return [e.name, count] as const;
+          })
+        ).then((pairs) => {
+          setEntityCounts(Object.fromEntries(pairs));
+        });
         // Auto-select the first entity if none picked yet or previous is gone
         if (list.length > 0) {
           const key = `${tenantId}_${currentApp!.id}_${list[0].name}`;
@@ -52,16 +68,20 @@ export function DataDrawer() {
           setRows([]);
         }
       })
-      .catch(() => setEntities([]))
+      .catch(() => {
+        setEntities([]);
+        setEntityCounts({});
+      })
       .finally(() => setLoading(false));
     // Only refetch when the drawer opens or the app changes
   }, [dataOpen, currentApp?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load schema + rows for the selected entity
+  // Load schema + rows for the selected entity (resets sort + page)
   useEffect(() => {
     if (!selectedKey || !token) return;
     setLoading(true);
     setPage(0);
+    setSort(null);
     Promise.all([
       getEntitySchema(selectedKey, token).catch(() => null),
       fetchEntityRows(selectedKey, token, { limit: PAGE_SIZE, offset: 0 }),
@@ -79,17 +99,36 @@ export function DataDrawer() {
       .finally(() => setLoading(false));
   }, [selectedKey, token]);
 
-  // Refetch rows on page change
+  // Refetch rows when page OR sort changes (skip initial mount handled above)
   useEffect(() => {
-    if (!selectedKey || !token || page === 0) return;
+    if (!selectedKey || !token) return;
+    // Skip the very first render — schema-load effect above already fetched page 0
+    if (page === 0 && sort === null) return;
     setLoading(true);
-    fetchEntityRows(selectedKey, token, { limit: PAGE_SIZE, offset: page * PAGE_SIZE })
+    const params: Record<string, string | number> = {
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    };
+    if (sort) params._sort = `${sort.col}:${sort.dir}`;
+    fetchEntityRows(selectedKey, token, params)
       .then((res) => {
         setRows(res.rows);
         setTotal(res.total);
       })
+      .catch(() => {
+        // Keep previous data on transient failure
+      })
       .finally(() => setLoading(false));
-  }, [page, selectedKey, token]);
+  }, [page, sort, selectedKey, token]);
+
+  function toggleSort(col: string) {
+    setPage(0);
+    setSort((cur) => {
+      if (!cur || cur.col !== col) return { col, dir: 'asc' };
+      if (cur.dir === 'asc') return { col, dir: 'desc' };
+      return null; // asc → desc → cleared
+    });
+  }
 
   const columns = useMemo<EntityField[]>(() => {
     if (schema?.fields?.length) return schema.fields;
@@ -170,16 +209,23 @@ export function DataDrawer() {
               {entities.map((e) => {
                 const key = `${tenantId}_${currentApp!.id}_${e.name}`;
                 const active = key === selectedKey;
+                const count = entityCounts[e.name];
                 return (
                   <button
                     key={e.name}
                     onClick={() => setSelectedKey(key)}
-                    className={`w-full text-left px-3 py-2 text-xs truncate border-l-2 transition-colors
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs border-l-2 transition-colors
                       ${active
                         ? 'bg-gray-800 border-indigo-500 text-white'
                         : 'border-transparent text-gray-300 hover:bg-gray-800/60 hover:text-white'}`}
                   >
-                    {e.name}
+                    <span className="truncate flex-1 text-left">{e.name}</span>
+                    {count !== undefined && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0
+                        ${active ? 'bg-indigo-500/30 text-indigo-100' : 'bg-gray-800 text-gray-500'}`}>
+                        {count}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -223,11 +269,23 @@ export function DataDrawer() {
                   <table className="w-full text-xs">
                     <thead className="bg-gray-800 text-gray-400 sticky top-0">
                       <tr>
-                        {columns.map((c) => (
-                          <th key={c.name} className="text-left px-3 py-2 font-medium border-b border-gray-700">
-                            {c.label ?? c.name}
-                          </th>
-                        ))}
+                        {columns.map((c) => {
+                          const isSorted = sort?.col === c.name;
+                          let arrow = '';
+                          if (isSorted) arrow = sort.dir === 'asc' ? ' ↑' : ' ↓';
+                          return (
+                            <th
+                              key={c.name}
+                              onClick={() => toggleSort(c.name)}
+                              className={`text-left px-3 py-2 font-medium border-b border-gray-700
+                                cursor-pointer select-none hover:text-white
+                                ${isSorted ? 'text-indigo-300' : ''}`}
+                              title={`Sort by ${c.label ?? c.name}`}
+                            >
+                              {(c.label ?? c.name) + arrow}
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>

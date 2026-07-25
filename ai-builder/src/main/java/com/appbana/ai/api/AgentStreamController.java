@@ -169,7 +169,7 @@ public class AgentStreamController {
     private StreamEmitter buildEmitter(OutputStream out, String sessionId) {
         final Object writeLock = new Object();
         return new StreamEmitter() {
-            private boolean completedSent = false;
+            private volatile boolean doneEmitted = false;
 
             @Override
             public void emit(String eventName, Object payload) {
@@ -181,6 +181,10 @@ public class AgentStreamController {
                         out.write(bytes);
                         out.flush();
                     }
+                    // Track terminal event so complete() doesn't fire a duplicate
+                    if ("done".equals(eventName)) {
+                        doneEmitted = true;
+                    }
                 } catch (IOException e) {
                     // Client disconnected — log quietly, don't throw
                     log.debug("[STREAM] Client disconnected while emitting '{}': {}", eventName, e.getMessage());
@@ -191,9 +195,9 @@ public class AgentStreamController {
 
             @Override
             public void complete() {
-                if (completedSent) return;
-                completedSent = true;
-                // Emit a terminal done event if not already sent by the agent loop
+                if (doneEmitted) return;
+                // Fallback done — only emitted when the agent loop never sent one
+                // (e.g. exception path). Client EventSource must not hang open.
                 emit("done", Map.of("conversationId", sessionId, "finalMessage", ""));
             }
         };
