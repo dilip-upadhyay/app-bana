@@ -291,12 +291,13 @@ public class SchemaEnricher {
     /**
      * Converts any human-friendly identifier to canonical snake_case.
      * Rules (applied in order):
-     *   1. Insert underscore at camelCase boundaries: firstName → first_Name
-     *   2. Replace whitespace / hyphens with underscores: "Full Name" → Full_Name
-     *   3. Strip characters that are not letters, digits, or underscores
-     *   4. Collapse runs of underscores
-     *   5. Trim leading/trailing underscores
-     *   6. Lower-case the result
+     *   1. Split acronym\u2192Word boundaries: "HTTPResponse" \u2192 "HTTP_Response"
+     *   2. Split camelCase boundaries: "firstName" \u2192 "first_Name"
+     *   3. Replace whitespace / hyphens with underscores: "Full Name" \u2192 "Full_Name"
+     *   4. Strip characters that are not letters, digits, or underscores
+     *   5. Collapse runs of underscores
+     *   6. Trim leading/trailing underscores
+     *   7. Lower-case the result
      * If normalisation strips everything, the trimmed original is returned so
      * we never silently produce an empty identifier.
      */
@@ -305,7 +306,8 @@ public class SchemaEnricher {
         String trimmed = input.trim();
         if (trimmed.isEmpty()) return trimmed;
         String out = trimmed
-                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .replaceAll("(?<=[A-Z])(?=[A-Z][a-z])", "_")
+                .replaceAll("(?<=[a-z0-9])(?=[A-Z])",   "_")
                 .replaceAll("[\\s\\-]+", "_")
                 .replaceAll("\\W", "")
                 .replaceAll("_+", "_")
