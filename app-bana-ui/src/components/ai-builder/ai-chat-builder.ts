@@ -611,6 +611,14 @@ export class AiChatBuilder extends LitElement {
       const tenantId = user.tenantId;
       const userId = user.email || user.id.toString();
 
+      // Lazily initialize the sessionId. `connectedCallback` may have run
+      // before the user was authenticated (auth-guard and builder-shell mount
+      // together), in which case `sessionId` is still empty. The backend
+      // requires a valid UUID or it rejects the request.
+      if (!this.sessionId) {
+        this.sessionId = this.getOrCreateSessionId(userId);
+      }
+
       // Get current app ID from store
       const currentApp = appStore.getCurrentApp();
       const appId = currentApp ? currentApp.id : undefined;

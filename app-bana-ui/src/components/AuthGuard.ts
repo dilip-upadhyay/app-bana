@@ -378,6 +378,11 @@ export class AuthGuard extends LitElement {
         if (sessionId) {
           localStorage.setItem('appbana_token', sessionId);
         }
+        // Also persist the user object so downstream consumers (AiChatBuilder,
+        // AppStore, etc.) can call AuthService.getUser() without a null result.
+        if (data.user) {
+          localStorage.setItem('appbana_user', JSON.stringify(data.user));
+        }
 
         this.successMessage = this.mode === 'login' 
           ? 'Login successful! Loading Studio...'
