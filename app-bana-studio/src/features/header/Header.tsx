@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { listApps, createApp, fetchBranding } from '@appbana/shared';
+import { listApps, createApp, deployApp, fetchBranding } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 
@@ -8,6 +8,7 @@ export function Header() {
   const { apps, currentApp, branding, setApps, setCurrentApp, setBranding } = useWorkspaceStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [appsOpen, setAppsOpen] = useState(false);
+  const [deploying, setDeploying] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,6 +40,19 @@ export function Header() {
       alert('Failed to create app');
     }
     setAppsOpen(false);
+  }
+
+  async function handleDeploy() {
+    if (!token || !tenantId || !currentApp || deploying) return;
+    setDeploying(true);
+    try {
+      await deployApp(tenantId, currentApp.id, token);
+      alert(`✅ App "${currentApp.name}" deployed successfully!`);
+    } catch (err) {
+      alert(`❌ Deploy failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setDeploying(false);
+    }
   }
 
   const brandColor = branding?.primaryColor ?? '#6366f1';
@@ -94,9 +108,13 @@ export function Header() {
 
       {/* Deploy */}
       {currentApp && (
-        <button className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg
-                           transition-colors font-medium">
-          Deploy
+        <button
+          onClick={handleDeploy}
+          disabled={deploying}
+          className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed
+                     text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
+        >
+          {deploying ? 'Deploying…' : 'Deploy'}
         </button>
       )}
 

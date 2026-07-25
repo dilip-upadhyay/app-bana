@@ -3,10 +3,12 @@ import type { AppBanaPostMessage } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 
-const RUNTIME_BASE = 'http://localhost:5173'; // old runtime during Stage 1
+const RUNTIME_ORIGIN = 'http://localhost:5175';
+
+const RUNTIME_BASE = RUNTIME_ORIGIN; // new React runtime on port 5175 (Stage 2)
 
 export function PreviewPane() {
-  const { token, tenantId } = useSessionStore();
+  const { token, tenantId, userId, email, name } = useSessionStore();
   const { currentApp, previewRefreshToken } = useWorkspaceStore();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [activePage, setActivePage] = useState<string | null>(null);
@@ -29,22 +31,22 @@ export function PreviewPane() {
   // postMessage bridge: token handshake
   useEffect(() => {
     const handler = (ev: MessageEvent) => {
-      if (ev.origin !== RUNTIME_BASE) return;
+      if (ev.origin !== RUNTIME_ORIGIN) return;
       const msg = ev.data as AppBanaPostMessage;
       if (msg.type === 'ready' && token) {
         iframeRef.current?.contentWindow?.postMessage(
-          { type: 'token', jwt: token } satisfies AppBanaPostMessage,
-          RUNTIME_BASE
+          { type: 'token', jwt: token, userId: userId ?? undefined, email: email ?? undefined, name: name ?? undefined, tenantId: tenantId ?? 'default' } satisfies AppBanaPostMessage,
+          RUNTIME_ORIGIN
         );
         iframeRef.current?.contentWindow?.postMessage(
           { type: 'setMode', mode: 'browse' } satisfies AppBanaPostMessage,
-          RUNTIME_BASE
+          RUNTIME_ORIGIN
         );
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [token]);
+  }, [token, userId, email, name, tenantId]);
 
   const widthClass = deviceWidth === 'mobile'
     ? 'w-[375px]' : deviceWidth === 'tablet' ? 'w-[768px]' : 'w-full';
@@ -58,7 +60,13 @@ export function PreviewPane() {
           {pages.map((p) => (
             <button
               key={p.id}
-              onClick={() => setActivePage(p.id)}
+              onClick={() => {
+                setActivePage(p.id);
+                iframeRef.current?.contentWindow?.postMessage(
+                  { type: 'setPage', pageId: p.id } as AppBanaPostMessage,
+                  RUNTIME_ORIGIN
+                );
+              }}
               className={`text-xs px-3 py-1 rounded-md whitespace-nowrap transition-colors
                 ${activePage === p.id
                   ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}

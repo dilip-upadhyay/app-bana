@@ -71,13 +71,28 @@ if !ERRORLEVEL! NEQ 0 (
 )
 echo    Backend is up.
 
-echo [3/3] Launching UI in a new window...
+echo [3/4] Launching UI in a new window...
 start "AppBana UI" cmd /c ""%SCRIPT_DIR%start-ui.bat""
+
+echo    Waiting for UI to be ready on port 5173...
+:waitUiPort
+netstat -ano | findstr ":5173 " | findstr "LISTENING" >nul
+if !ERRORLEVEL! NEQ 0 (
+    ping 127.0.0.1 -n 3 >nul
+    goto waitUiPort
+)
+echo    UI is up.
+
+echo [4/4] Launching Studio + Runtime...
+start "AppBana Studio" cmd /c ""%SCRIPT_DIR%start-studio.bat""
+start "AppBana Runtime" cmd /c ""%SCRIPT_DIR%start-runtime.bat""
 
 echo ==========================================
 echo All services launched:
 echo    AI Builder: http://localhost:8081/health
 echo    Backend:    http://localhost:8080/health
-echo    UI:         http://localhost:5173
+echo    UI (legacy):  http://localhost:5173
+echo    Runtime:    http://localhost:5175
+echo    Studio:     http://localhost:5174
 echo ==========================================
 endlocal

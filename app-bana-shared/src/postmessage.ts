@@ -8,8 +8,9 @@ export type AppBanaPostMessage =
   | { type: 'hover'; nodeId: string; pageId: string; entity?: string; field?: string }
   | { type: 'error'; message: string }
   // Studio → Runtime
-  | { type: 'token'; jwt: string }
+  | { type: 'token'; jwt: string; userId?: string; email?: string; name?: string; tenantId?: string }
   | { type: 'setMode'; mode: 'browse' | 'inspect' }
+  | { type: 'setPage'; pageId: string }
   | { type: 'highlight'; nodeId: string }
   | { type: 'reload' };
 

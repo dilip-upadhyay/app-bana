@@ -699,7 +699,12 @@ export class StudioTableLive extends LitElement {
     const showHeader = Boolean(this.node?.label || this.entityName);
     const canCreate = true; // TODO: Check permissions or props
 
-    return html`<div class="${themeClass}" style="${customStyle}">
+    return html`<div
+      class="${themeClass}"
+      style="${customStyle}"
+      data-appbana-node="${this.node?.id || ''}"
+      data-appbana-entity="${this.entityName || ''}"
+    >
       ${showHeader ? html`
         <div class="table-header-bar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
            <h2 style="margin:0;font-size:1.5rem;font-weight:700;color:var(--color-text,#1e293b);">${this.node?.label || (this.entityName ? this.entityName + ' List' : 'Data Table')}</h2>

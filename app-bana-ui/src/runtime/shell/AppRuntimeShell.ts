@@ -67,12 +67,23 @@ export class AppRuntimeShell extends LitElement {
 
     // Stage 1: postMessage bridge — tell the studio we're ready, then accept token
     window.parent.postMessage({ type: 'ready' }, '*');
+    // Accept the STUDIO_ORIGIN only; '*' is rejected to prevent token theft
+    const STUDIO_ORIGIN = 'http://localhost:5174';
     window.addEventListener('message', (ev: MessageEvent) => {
+      if (ev.origin !== STUDIO_ORIGIN) return;
       const msg = ev.data;
       if (!msg || typeof msg !== 'object') return;
       if (msg.type === 'token' && typeof msg.jwt === 'string') {
-        // Store the JWT so runtime API calls can pick it up
-        localStorage.setItem('appbana-token', msg.jwt);
+        // Store using the same keys as auth-service.ts so the runtime picks them up
+        localStorage.setItem('appbana_token', msg.jwt);
+        if (msg.userId !== undefined || msg.email !== undefined) {
+          localStorage.setItem('appbana_user', JSON.stringify({
+            id: msg.userId ?? '',
+            email: msg.email ?? '',
+            name: msg.name ?? '',
+            tenantId: msg.tenantId ?? 'default',
+          }));
+        }
       }
     });
 

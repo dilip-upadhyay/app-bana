@@ -20,7 +20,15 @@ export async function login(email: string, password: string): Promise<AuthResult
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) throw new Error(`Login failed: ${res.status}`);
-  return res.json();
+  // Backend returns { token, sessionId, user: { id, email, name, tenantId, ... }, message }
+  const body = await res.json();
+  return {
+    token: body.token ?? body.sessionId,
+    userId: String(body.user?.id ?? ''),
+    email: body.user?.email ?? email,
+    name: body.user?.name ?? '',
+    tenantId: body.user?.tenantId ?? 'default',
+  };
 }
 
 export async function register(name: string, email: string, password: string): Promise<AuthResult> {
@@ -30,7 +38,15 @@ export async function register(name: string, email: string, password: string): P
     body: JSON.stringify({ name, email, password }),
   });
   if (!res.ok) throw new Error(`Registration failed: ${res.status}`);
-  return res.json();
+  // Backend returns { token, sessionId, user: { id, email, name, tenantId, ... }, message }
+  const body = await res.json();
+  return {
+    token: body.token ?? body.sessionId,
+    userId: String(body.user?.id ?? ''),
+    email: body.user?.email ?? email,
+    name: body.user?.name ?? name,
+    tenantId: body.user?.tenantId ?? 'default',
+  };
 }
 
 // ── Branding & Context ────────────────────────────────────────────────────────
@@ -74,6 +90,24 @@ export async function createApp(tenantId: string, name: string, token: string): 
     body: JSON.stringify({ name }),
   });
   if (!res.ok) throw new Error(`Failed to create app: ${res.status}`);
+  return res.json();
+}
+
+export async function deployApp(
+  tenantId: string,
+  appId: string,
+  token: string,
+  environment = 'DEV'
+): Promise<{ status: string; summary?: string; testUrl?: string }> {
+  const res = await fetch(
+    `${BACKEND}/api/${encodeURIComponent(tenantId)}/apps/${encodeURIComponent(appId)}/publish`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ environment }),
+    }
+  );
+  if (!res.ok) throw new Error(`Deploy failed: ${res.status}`);
   return res.json();
 }
 
@@ -196,8 +230,8 @@ export async function* streamAgentChat(
     buffer = frames.pop() ?? '';
 
     for (const frame of frames) {
-      const eventLine = frame.match(/^event:\s*(.+)$/m)?.[1]?.trim();
-      const dataLine  = frame.match(/^data:\s*(.+)$/m)?.[1]?.trim();
+      const eventLine = /^event:\s*([^\n\r]+)/m.exec(frame)?.[1]?.trim();
+      const dataLine  = /^data:\s*([^\n\r]+)/m.exec(frame)?.[1]?.trim();
       if (!eventLine || !dataLine) continue;
       try {
         const data = JSON.parse(dataLine);

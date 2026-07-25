@@ -23,10 +23,10 @@ export function renderPageTemplate(page: PageMeta, context: any = {}): TemplateR
   const nodeMap = new Map(page.nodes.map(n => [n.id, n]));
   const root = nodeMap.get(page.rootId);
   if (!root) return html`< div class="error" > Root node not found: ${page.rootId} </div>`;
-  return renderNodeTemplate(root, nodeMap, context);
+  return renderNodeTemplate(root, nodeMap, context, page.id);
 }
 
-function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentNode>, context: any): TemplateResult {
+function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentNode>, context: any, pageId = ''): TemplateResult {
   // Interpolate props
   const props = { ...node.props };
   for (const [key, value] of Object.entries(props)) {
@@ -60,7 +60,7 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
   // Compose children recursively
   const children = (node.children ?? []).map(childId => {
     const child = nodeMap.get(childId);
-    return child ? renderNodeTemplate(child, nodeMap, context) : null;
+    return child ? renderNodeTemplate(child, nodeMap, context, pageId) : null;
   });
 
   // Handle each component type with proper attribute binding (like LivePreview)
@@ -104,6 +104,10 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           entity="${props?.entity || ''}"
           field="${props?.field || ''}"
           ?required=${props?.required}
+          data-appbana-node="${node.id}"
+          data-appbana-page="${pageId}"
+          data-appbana-entity="${props?.entity || ''}"
+          data-appbana-field="${props?.field || props?.name || ''}"
         ></appbana-input>
       `;
 
@@ -120,6 +124,10 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           options="${typeof props?.options === 'string' ? props.options : JSON.stringify(props?.options || [])}"
           placeholder="${props?.placeholder || ''}"
           ?required=${props?.required}
+          data-appbana-node="${node.id}"
+          data-appbana-page="${pageId}"
+          data-appbana-entity="${props?.entity || ''}"
+          data-appbana-field="${props?.field || props?.name || ''}"
         ></appbana-select>
       `;
 
@@ -136,6 +144,10 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           field="${props?.field || ''}"
           rows="${props?.rows || 4}"
           ?required=${props?.required}
+          data-appbana-node="${node.id}"
+          data-appbana-page="${pageId}"
+          data-appbana-entity="${props?.entity || ''}"
+          data-appbana-field="${props?.field || props?.name || ''}"
         ></appbana-textarea>
       `;
 
@@ -180,6 +192,9 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           entity="${props?.entity || ''}"
           view-mode="${props?.viewMode || 'dynamic'}"
           theme="${props?.theme || 'default'}"
+          data-appbana-node="${node.id}"
+          data-appbana-page="${pageId}"
+          data-appbana-entity="${props?.entity || ''}"
         ></appbana-table-live>
       `;
 
@@ -255,6 +270,8 @@ function renderNodeTemplate(node: ComponentNode, nodeMap: Map<string, ComponentN
           class="${className}"
           style="${style}"
           slot="${slot}"
+          data-appbana-node="${node.id}"
+          data-appbana-page="${pageId}"
         >
           ${children}
         </div>
