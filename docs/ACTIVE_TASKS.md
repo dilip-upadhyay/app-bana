@@ -11,7 +11,7 @@ Rebuild the AppBana Studio as an AI-native frontend (chat drives everything — 
 | Stage 0 — Backend prep | SSE streaming (`/api/ai/chat/agent/stream`), tenant branding endpoint, app-context resolver, verify `ComponentNode.id` stability | ✅ Done — see notes below |
 | Stage 1 — Workspace + Studio MVP | pnpm workspace, `app-bana-shared`, `app-bana-studio` MVP with streaming chat + tool cards + preview iframe of old runtime, `data-appbana-*` attrs on old runtime | ✅ Done + fixes applied (auth response shape, localStorage key, deploy btn, page-nav postMessage, SSE regex) |
 | Stage 2 — Standalone runtime | `app-bana-runtime` (React port with tenant-branded login), studio iframe repointed 5173 → 5175 | ✅ Done — runtime live at port 5175, E2E passes |
-| Stage 3 — Studio v1.1 | Data drawer, session picker upgrade, image paste in chat | ⏳ Not started |
+| Stage 3 — Studio v1.1 | Data drawer, session picker upgrade, image paste in chat | ✅ Done — commit `c9eb4fc`, see notes below |
 | Stage 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2 & 3 | ⏳ Not started |
 | Stage 5 — Subdomain deploy | DNS + reverse proxy + `Host`-based app resolution | ⏳ Not started |
 | Stage 6 — Select-and-instruct | Runtime overlay, selection chips in composer, undo/history drawer | ⏳ Not started |
@@ -21,6 +21,23 @@ Rebuild the AppBana Studio as an AI-native frontend (chat drives everything — 
 - `tenants` table did not exist; created as `appbana_tenants` in V12 Liquibase migration.
 - `token` SSE event fires **once at the end** with the full assistant message (not incremental chunks). True LLM token streaming requires adding `stream: true` to `OpenAiLlmService` — deferred to Stage 1.5 (isolated change). Tool call events (`tool_call_start`, `tool_call_end`) do fire in real time as each tool runs.
 - `emitter.complete()` is in a `finally` block — client `EventSource` always receives the terminal `done` event even if history storage or dialogue state update fails.
+
+**Stage 3 notes:**
+- Flyway V005 migration: `app_id` column on `ai_conversations` + new `ai_chat_session_meta` table (title, is_deleted, updated_at). Backward compatible — `mapResultSetToConversation` handles pre-V005 rows.
+- New endpoints on ai-builder (port 8081):
+  - `GET /api/ai/chat/sessions?userId=X&appId=Y&limit=N` — returns `{sessionId, title, appId, lastActivity, turnCount}` per session. Filters out soft-deleted rows. Falls back to truncated first message when no explicit title.
+  - `PUT /api/ai/chat/sessions/{sessionId}` (body `{userId, title}`) — UPSERT into meta.
+  - `DELETE /api/ai/chat/sessions/{sessionId}?userId=X` — soft-delete via `is_deleted=TRUE`.
+- Frontend `app-bana-studio`:
+  - `features/data-drawer/DataDrawer.tsx` — slide-in from right, entity list, first 25 rows paged, schema-driven Add-row form, "Ask AI to seed" bridges back to composer via `studio:composer:set` custom event. (Folder is `data-drawer/` not `data/` because `.gitignore` has a global `**/data/**` rule.)
+  - `features/sessions/SessionPicker.tsx` — header dropdown with search, click-to-hydrate, hover-to-reveal rename/delete.
+  - `stores/drawer.ts` — `useDrawerStore` for UI-only drawer state.
+  - `stores/chat.ts` extended with `loadHistory`, `attachments[]`, `addAttachment/removeAttachment/clearAttachments`.
+  - `ChatPane.tsx` — `onPaste` extracts image blobs to base64 (max 5 MB), thumbnails render above textarea, sent as `ChatPayload.images[]` (SSE endpoint already accepts this shape).
+  - `Header.tsx` mounts new Data + Sessions buttons; `App.tsx` mounts `DataDrawer`.
+- Shared: `listSessions(userId, token, {appId, limit})` (breaking signature change), plus new `getSessionHistory`, `renameSession`, `deleteSession`, `getEntitySchema`, `insertEntityRow`.
+- Smoke tests confirmed: 400 on missing userId / bad UUID, list/rename/soft-delete round-trip works end-to-end against the dev DB.
+- **Known caveats** (not blockers): Data drawer doesn't auto-refresh entity list when chat scaffolds new entities (user must close/reopen or switch apps). Renaming a session that has zero conversations creates an orphan meta row (harmless, won't appear in list). Backend agent doesn't yet consume `images[]` — visual grounding is a follow-up beyond Stage 3.
 
 **Locked decisions** (do not renegotiate without approval): pnpm workspaces · SSE streaming (backend work in-scope) · `postMessage` handshake for token (no URL hash) · Runtime own login with tenant branding · React + Vite + Tailwind + shadcn + Zustand · Native `fetch`/`EventSource` (no Vercel AI SDK) · Feature parity NOT required — bar is "AI-native flow fully functional".
 
