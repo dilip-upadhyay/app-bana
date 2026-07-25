@@ -33,7 +33,7 @@ public class GenerateMockDataTool implements Tool {
 
     @Override
     public String getDescription() {
-        return "Inserts mock data records into an existing entity. Use this when the user asks to seed or create test data. Provide an array of realistic mock JSON objects (up to 10-20 max). Do NOT use fake field names; use exact field names defined in the entity.";
+        return "Inserts mock data records into an existing entity. Use this when the user asks to seed or create test data. Provide an array of realistic mock JSON objects (up to 10-20 max). Do NOT use fake field names; use exact field names defined in the entity. IMPORTANT: When seeding data for an app you just scaffolded, always pass the 'appId' returned from scaffold_app — otherwise the request will 404.";
     }
 
     @Override
@@ -44,7 +44,11 @@ public class GenerateMockDataTool implements Tool {
                   "properties": {
                     "entityName": {
                       "type": "string",
-                      "description": "Entity name (e.g., 'Customer', 'Product')"
+                      "description": "Entity name (e.g., 'Customer', 'Product'). Do NOT include the tenant/app prefix — that is added automatically."
+                    },
+                    "appId": {
+                      "type": "string",
+                      "description": "Target App ID (the appId returned from scaffold_app / create_app). If omitted, falls back to the current session's active app. Required when seeding into an app that was just created in the same turn."
                     },
                     "records": {
                       "type": "array",
@@ -84,9 +88,16 @@ public class GenerateMockDataTool implements Tool {
         try {
             log.info("[GenerateMockDataTool] Inserting {} mock records into entity: {}", records.size(), entityName);
 
-            String appId = context.appId();
+            // Prefer explicit appId from the LLM's tool arguments (works even for
+            // apps created earlier in the same conversation turn, before the
+            // per-session AgentContext has been re-hydrated). Fall back to the
+            // session's active app when the LLM did not pass one.
+            String appId = (String) arguments.get("appId");
+            if (appId == null || appId.isBlank()) {
+                appId = context.appId();
+            }
             String tenantId = context.tenantId();
-            
+
             String targetSchemaId = entityName;
             if (appId != null && !appId.equals("default") && !appId.isEmpty()) {
                 String tenantPart = (tenantId != null && !tenantId.isEmpty()) ? tenantId : "default";

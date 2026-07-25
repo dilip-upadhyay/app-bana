@@ -206,6 +206,40 @@ class MetadataValidatorTest {
     }
 
     @Test
+    void testValidatePage_AcceptsRuntimeRendererComponentTypes() {
+        // Regression: MetadataValidator's VALID_COMPONENT_TYPES must stay in sync
+        // with the switch in app-bana-runtime/src/runtime/Renderer.tsx. In particular,
+        // GeneratePageTool emits top-level "select" nodes for status fields so the
+        // runtime's dropdown renderer can consume options[] directly. If any of these
+        // node types are rejected, scaffold_app fails with "Page validation failed:
+        // Unknown component type: '...'" and no app can be created for schemas that
+        // include a status field, a longtext field, or a reference field.
+        String[] typesEmittedByAgentTools = { "select", "reference", "textarea" };
+
+        for (String componentType : typesEmittedByAgentTools) {
+            Map<String, Object> page = createBasicPage();
+            List<Map<String, Object>> nodes = new ArrayList<>();
+            Map<String, Object> node = new HashMap<>();
+            node.put("id", "node-" + componentType);
+            node.put("type", componentType);
+            Map<String, Object> props = new HashMap<>();
+            props.put("entity", "Employee");
+            props.put("field", "onboarding_status");
+            props.put("referenceEntity", "Employee");
+            node.put("props", props);
+            nodes.add(node);
+            page.put("nodes", nodes);
+
+            ValidationResult result = validator.validatePage(page);
+
+            assertFalse(
+                    result.getDetailedErrors().contains("Unknown component type: '" + componentType + "'"),
+                    "Runtime renders <" + componentType + "> nodes; validator must not reject them. Errors: "
+                            + result.getDetailedErrors());
+        }
+    }
+
+    @Test
     void testValidatePage_InputMissingBindingProps() {
         // Arrange
         Map<String, Object> page = createBasicPage();

@@ -25,9 +25,14 @@ public class MetadataValidator {
     // Valid field types (from AppBanaSchemaLoader)
     private final Set<String> validFieldTypes;
 
-    // Valid component types
+    // Valid component types. Must stay in sync with the switch in
+    // app-bana-runtime/src/runtime/Renderer.tsx — every node type the runtime can
+    // render is legal metadata. Note: GeneratePageTool emits top-level select nodes
+    // for status fields (options[] dropdowns), and reference/textarea are also
+    // renderer cases we should not reject.
     private static final Set<String> VALID_COMPONENT_TYPES = Set.of(
-            "input", "button", "table", "app-grid", "container", "form", "studio-form");
+            "input", "select", "reference", "textarea",
+            "button", "table", "app-grid", "container", "form", "studio-form");
 
     public MetadataValidator(AppBanaSchemaLoader schemaLoader) {
         this.schemaLoader = schemaLoader;
