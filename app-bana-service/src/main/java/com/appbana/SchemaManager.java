@@ -208,6 +208,16 @@ public class SchemaManager {
                             if (schema.getAppId() == null || schema.getAppId().isBlank()) {
                                 schema.setAppId(rs.getString(3));
                             }
+                            // One-shot self-heal: ensure DB columns match schema on first load per JVM.
+                            // Handles drift where legacy tables have differently-cased/spaced columns.
+                            if (ENSURED_ONCE.add(name)) {
+                                try {
+                                    ensureTable(schema, c, ds);
+                                } catch (SQLException healEx) {
+                                    LOG.warn("[LOAD-SCHEMA] Self-heal ensureTable failed for {}: {}",
+                                            name, healEx.getMessage());
+                                }
+                            }
                             return schema;
                         }
                     }
@@ -218,6 +228,9 @@ public class SchemaManager {
         }
         return null;
     }
+
+    /** Schema keys already ensured this JVM lifetime; keeps loadSchema cheap after first access. */
+    private static final java.util.Set<String> ENSURED_ONCE = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private static void ensureTable(EntitySchema schema, Connection c, DatasourceConfig dsCfg) throws SQLException {
         String table = getPhysicalTableName(schema);
@@ -236,24 +249,43 @@ public class SchemaManager {
                         String colName = cols.getString("COLUMN_NAME");
                         String typeName = cols.getString("TYPE_NAME");
                         int size = cols.getInt("COLUMN_SIZE");
-                        existing.put(colName.toLowerCase(), new ColumnInfo(colName, typeName, size));
+                        existing.put(colKey(colName), new ColumnInfo(colName, typeName, size));
                     }
                 }
 
                 // Handle schema evolution for user-defined fields
                 for (EntitySchema.Field f : schema.getFields()) {
                     String target = f.getName();
-                    String targetLower = target.toLowerCase();
+                    String targetLower = colKey(target);
                     if (f.getExistingName() != null && !f.getExistingName().isEmpty()) {
                         String old = f.getExistingName();
-                        if (existing.containsKey(old.toLowerCase()) && !existing.containsKey(targetLower)) {
+                        if (existing.containsKey(colKey(old)) && !existing.containsKey(targetLower)) {
                             String renameSql = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(old)
                                     + " RENAME TO " + quote(target);
                             try (Statement s = c.createStatement()) {
                                 s.execute(renameSql);
                                 recordMigration(c, schema.getName(), renameSql);
-                                ColumnInfo info = existing.remove(old.toLowerCase());
+                                ColumnInfo info = existing.remove(colKey(old));
                                 existing.put(targetLower, new ColumnInfo(target, info.typeName, info.size));
+                            }
+                        }
+                    }
+                    // Self-healing rename: DB column matches case/space-insensitively but its
+                    // actual name differs from the schema field (e.g. legacy "START DATE" vs
+                    // current "START_DATE"). Rename so quoted SELECTs resolve in Postgres.
+                    if (existing.containsKey(targetLower)) {
+                        ColumnInfo info = existing.get(targetLower);
+                        if (!info.name.equals(target)) {
+                            String renameCaseSql = "ALTER TABLE " + quote(table) + " RENAME COLUMN "
+                                    + quote(info.name) + " TO " + quote(target);
+                            try (Statement s = c.createStatement()) {
+                                s.execute(renameCaseSql);
+                                recordMigration(c, schema.getName(), renameCaseSql);
+                                existing.put(targetLower, new ColumnInfo(target, info.typeName, info.size));
+                                LOG.info("[ENSURE-TABLE] Renamed column for casing: {} -> {}", info.name, target);
+                            } catch (SQLException caseEx) {
+                                LOG.warn("[ENSURE-TABLE] Casing rename failed for {}.{} -> {}: {}",
+                                        table, info.name, target, caseEx.getMessage());
                             }
                         }
                     }
@@ -295,8 +327,17 @@ public class SchemaManager {
         }
     }
 
-    private static void recordMigration(Connection c, String schemaName, String sql) {
-        try (PreparedStatement ps = c
+    /**
+     * Normalize a column name for matching between DB and schema metadata:
+     * lowercase and collapse spaces/dashes to underscores. Handles legacy DB
+     * columns like "START DATE" mapping to schema field "START_DATE".
+     */
+    private static String colKey(String s) {
+        if (s == null) return "";
+        return s.toLowerCase(java.util.Locale.ROOT).replace(' ', '_').replace('-', '_');
+    }
+
+    private static void recordMigration(Connection c, String schemaName, String sql) {        try (PreparedStatement ps = c
                 .prepareStatement("INSERT INTO appbana_migrations (schema_name, sql) VALUES (?, ?)")) {
             ps.setString(1, schemaName);
             ps.setString(2, sql);
@@ -408,9 +449,21 @@ public class SchemaManager {
                 // If TenantContext not set, use default table naming
             }
 
-            return ("app_" + envPrefix + safeTenantId + "_" + safeAppId + "_" + schema.getName()).toUpperCase(Locale.ROOT);
+            return truncateIdentifier(
+                    ("app_" + envPrefix + safeTenantId + "_" + safeAppId + "_" + schema.getName()).toUpperCase(Locale.ROOT));
         }
         return schema.getName();
+    }
+
+    /**
+     * Postgres silently truncates unquoted identifiers to 63 chars (NAMEDATALEN-1).
+     * Match that behavior explicitly so DatabaseMetaData.getTables() lookups agree
+     * with actual pg_class.relname. Truncating here also keeps existing tables
+     * (created before this check existed) reachable.
+     */
+    private static String truncateIdentifier(String name) {
+        if (name == null || name.length() <= 63) return name;
+        return name.substring(0, 63);
     }
 
     private static void validateSchema(EntitySchema schema) {
@@ -612,19 +665,29 @@ public class SchemaManager {
                     String colName = cols.getString("COLUMN_NAME");
                     String typeName = cols.getString("TYPE_NAME");
                     int size = cols.getInt("COLUMN_SIZE");
-                    existing.put(colName.toLowerCase(), new ColumnInfo(colName, typeName, size));
+                    existing.put(colKey(colName), new ColumnInfo(colName, typeName, size));
                 }
             }
             for (EntitySchema.Field f : schema.getFields()) {
                 String target = f.getName();
-                String targetLower = target.toLowerCase();
+                String targetLower = colKey(target);
                 if (f.getExistingName() != null && !f.getExistingName().isEmpty()) {
                     String old = f.getExistingName();
-                    if (existing.containsKey(old.toLowerCase()) && !existing.containsKey(targetLower)) {
+                    if (existing.containsKey(colKey(old)) && !existing.containsKey(targetLower)) {
                         String renameSql = "ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(old) + " RENAME TO "
                                 + quote(target);
                         plan.add(renameSql);
-                        ColumnInfo info = existing.remove(old.toLowerCase());
+                        ColumnInfo info = existing.remove(colKey(old));
+                        existing.put(targetLower, new ColumnInfo(target, info.typeName, info.size));
+                    }
+                }
+                // Preview self-healing casing rename (see ensureTable for the executed counterpart).
+                if (existing.containsKey(targetLower)) {
+                    ColumnInfo info = existing.get(targetLower);
+                    if (!info.name.equals(target)) {
+                        String renameCaseSql = "ALTER TABLE " + quote(table) + " RENAME COLUMN "
+                                + quote(info.name) + " TO " + quote(target);
+                        plan.add(renameCaseSql);
                         existing.put(targetLower, new ColumnInfo(target, info.typeName, info.size));
                     }
                 }

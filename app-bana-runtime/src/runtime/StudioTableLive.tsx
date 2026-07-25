@@ -6,37 +6,15 @@
  */
 import { useEffect, useState, useCallback } from 'react';
 import type { ComponentNode } from '@appbana/shared';
-import { fetchEntityRows, resolveAppContext } from '@appbana/shared';
+import { fetchEntityRows } from '@appbana/shared';
+import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 
 interface Props {
   node: ComponentNode;
   pageId: string;
 }
 
-const TOKEN_KEY = 'appbana_token';
-
-function getToken(): string {
-  return localStorage.getItem(TOKEN_KEY) ?? '';
-}
-
-/**
- * Qualify a bare entity name (e.g. "Customer") into the fully-qualified
- * multi-tenant key ("{tenantId}_{appId}_Customer") that the backend expects.
- *
- * Per copilot-instructions.md Section 8, entity URLs MUST be a single path
- * segment shaped like `{tenantId}_{appId}_{entityName}`. Page metadata often
- * only stores the bare name, so we resolve tenant+app from the URL and
- * prepend the prefix at fetch time. If the caller already passed a qualified
- * key, we detect the prefix and leave it alone.
- */
-function qualifyEntityKey(entityKey: string): string {
-  if (!entityKey) return entityKey;
-  const ctx = resolveAppContext(window.location);
-  if (!ctx) return entityKey;
-  const prefix = `${ctx.tenantId}_${ctx.appId}_`;
-  if (entityKey.startsWith(prefix)) return entityKey;
-  return `${prefix}${entityKey}`;
-}
+const getToken = getRuntimeToken;
 
 export function StudioTableLive({ node, pageId }: Props) {
   const props = node.props ?? {};
@@ -73,6 +51,20 @@ export function StudioTableLive({ node, pageId }: Props) {
   }, [entityKey, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Refresh when any form on the page inserts a row for this entity.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ entity?: string }>).detail;
+      if (!detail?.entity) return;
+      // Match either the bare name or the fully-qualified key.
+      if (detail.entity === entityKey || detail.entity === qualifyEntityKey(entityKey)) {
+        load();
+      }
+    };
+    window.addEventListener('appbana:row-inserted', handler);
+    return () => window.removeEventListener('appbana:row-inserted', handler);
+  }, [entityKey, load]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const label = String(node.label ?? props.label ?? (entityKey ? `${entityKey} List` : 'Data Table'));
