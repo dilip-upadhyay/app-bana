@@ -19,7 +19,7 @@ set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%.."
 
 if not exist "pom.xml" (
-    echo ERROR: could not locate repo root (pom.xml missing).
+    echo ERROR: could not locate repo root -- pom.xml missing.
     exit /b 1
 )
 

@@ -62,37 +62,32 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-ensure_container() {
-    local name="$1"; shift
-    if docker ps --format '{{.Names}}' | grep -qx "$name"; then
-        return 0
-    fi
-    if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
-        echo "   Starting existing $name container..."
-        docker start "$name" >/dev/null
-    else
-        echo "   Creating $name container..."
-        "$@"
-    fi
+# PostgreSQL -- try to start; if container missing, create it
+if ! docker start appbana-postgres >/dev/null 2>&1; then
+    echo "   Creating PostgreSQL container..."
+    docker run -d \
+        --name appbana-postgres \
+        -e POSTGRES_DB=appbana \
+        -e POSTGRES_USER=appbana \
+        -e POSTGRES_PASSWORD=appbana_dev_2026 \
+        -p "$PG_PORT:5432" \
+        -v appbana-postgres-data:/var/lib/postgresql/data \
+        postgres:16-alpine >/dev/null
     sleep 3
-}
-
-ensure_container appbana-postgres docker run -d \
-    --name appbana-postgres \
-    -e POSTGRES_DB=appbana \
-    -e POSTGRES_USER=appbana \
-    -e POSTGRES_PASSWORD=appbana_dev_2026 \
-    -p "$PG_PORT:5432" \
-    -v appbana-postgres-data:/var/lib/postgresql/data \
-    postgres:16-alpine >/dev/null
+fi
 echo "   PostgreSQL: running on port $PG_PORT"
 
-ensure_container qdrant docker run -d \
-    --name qdrant \
-    -p "$QDRANT_HTTP_PORT:6333" \
-    -p "$QDRANT_GRPC_PORT:6334" \
-    -v "$ROOT_DIR/qdrant_storage:/qdrant/storage" \
-    qdrant/qdrant >/dev/null
+# Qdrant -- try to start; if container missing, create it
+if ! docker start qdrant >/dev/null 2>&1; then
+    echo "   Creating Qdrant container..."
+    docker run -d \
+        --name qdrant \
+        -p "$QDRANT_HTTP_PORT:6333" \
+        -p "$QDRANT_GRPC_PORT:6334" \
+        -v "$ROOT_DIR/qdrant_storage:/qdrant/storage" \
+        qdrant/qdrant >/dev/null
+    sleep 3
+fi
 echo "   Qdrant: running on port $QDRANT_HTTP_PORT"
 
 # --- Step 4: build the module ----------------------------------------

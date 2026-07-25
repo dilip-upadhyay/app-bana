@@ -39,7 +39,7 @@ if !ERRORLEVEL! NEQ 0 (
     exit /b 1
 )
 if not exist "%UI_DIR%\node_modules" (
-    echo    Installing dependencies (this may take a minute)...
+    echo    Installing dependencies -- this may take a minute...
     pushd "%UI_DIR%"
     if exist package-lock.json (
         call npm ci

@@ -43,16 +43,11 @@ if !ERRORLEVEL! NEQ 0 (
     echo    ERROR: Docker daemon is not running. Start Docker Desktop and retry.
     exit /b 1
 )
-docker ps --format "{{.Names}}" | findstr /X "appbana-postgres" >nul 2>&1
+REM PostgreSQL -- try to start; if container missing, create it
+docker start appbana-postgres >nul 2>&1
 if !ERRORLEVEL! NEQ 0 (
-    docker ps -a --format "{{.Names}}" | findstr /X "appbana-postgres" >nul 2>&1
-    if !ERRORLEVEL! EQU 0 (
-        echo    Starting existing PostgreSQL container...
-        docker start appbana-postgres >nul
-    ) else (
-        echo    Creating PostgreSQL container...
-        docker run -d --name appbana-postgres -e POSTGRES_DB=appbana -e POSTGRES_USER=appbana -e POSTGRES_PASSWORD=appbana_dev_2026 -p %PG_PORT%:5432 -v appbana-postgres-data:/var/lib/postgresql/data postgres:16-alpine >nul
-    )
+    echo    Creating PostgreSQL container...
+    docker run -d --name appbana-postgres -e POSTGRES_DB=appbana -e POSTGRES_USER=appbana -e POSTGRES_PASSWORD=appbana_dev_2026 -p %PG_PORT%:5432 -v appbana-postgres-data:/var/lib/postgresql/data postgres:16-alpine >nul
     timeout /t 3 /nobreak >nul
 )
 echo    PostgreSQL: running on port %PG_PORT%
