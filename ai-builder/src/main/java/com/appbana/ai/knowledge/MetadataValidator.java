@@ -294,6 +294,7 @@ public class MetadataValidator {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> fields = (List<Map<String, Object>>) fixed.get("fields");
 
+                int fIdx = 0;
                 for (Map<String, Object> field : fields) {
                     if (field.get("type") instanceof String) {
                         String fieldType = (String) field.get("type");
@@ -306,10 +307,14 @@ public class MetadataValidator {
                         }
                     }
 
-                    // Generate missing IDs
+                    // Generate missing IDs (deterministic — stable across regenerations)
+                    // Plan Stage 0.1: node/field ids must survive regeneration so future
+                    // select-and-instruct references don't decay. We derive the id from
+                    // stable content (field name) rather than UUID.randomUUID().
                     if (!field.containsKey("id")) {
-                        field.put("id", UUID.randomUUID().toString());
-                        log.info("Generated missing field ID");
+                        String fid = deterministicFieldId(field, fIdx);
+                        field.put("id", fid);
+                        log.warn("[MetadataValidator] Field {} missing id, assigned deterministic fallback '{}'. LLM should emit ids explicitly.", fIdx, fid);
                     }
 
                     // Generate missing labels from name
@@ -318,6 +323,7 @@ public class MetadataValidator {
                         field.put("label", generateLabel(name));
                         log.info("Generated label from name: {}", name);
                     }
+                    fIdx++;
                 }
             }
 
@@ -326,12 +332,16 @@ public class MetadataValidator {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> nodes = (List<Map<String, Object>>) fixed.get("nodes");
 
+                int nIdx = 0;
                 for (Map<String, Object> node : nodes) {
-                    // Generate missing IDs
+                    // Generate missing IDs (deterministic — stable across regenerations)
+                    // See rationale on the field-id block above.
                     if (!node.containsKey("id")) {
-                        node.put("id", UUID.randomUUID().toString());
-                        log.info("Generated missing node ID");
+                        String nid = deterministicNodeId(node, nIdx);
+                        node.put("id", nid);
+                        log.warn("[MetadataValidator] Node {} missing id, assigned deterministic fallback '{}'. LLM should emit ids explicitly.", nIdx, nid);
                     }
+                    nIdx++;
                 }
             }
 
@@ -343,6 +353,39 @@ public class MetadataValidator {
         }
 
         return fixed;
+    }
+
+    /**
+     * Derive a stable, deterministic node id from its content and position.
+     * Same node structure → same id → survives regeneration (unlike UUID.randomUUID).
+     * Format: n_<sanitised-type>_<8-char-hex-hash>
+     */
+    static String deterministicNodeId(Map<String, Object> node, int index) {
+        String type = String.valueOf(node.getOrDefault("type", "node"));
+        Object name = node.getOrDefault("name", node.getOrDefault("key", ""));
+        // Include type + index + optional name so structurally-identical nodes at the
+        // same tree position produce identical ids across regenerations.
+        String seed = type + "|" + index + "|" + name;
+        String cleanType = type.toLowerCase().replaceAll("[^a-z0-9]", "");
+        if (cleanType.isEmpty()) cleanType = "node";
+        String hash = Integer.toHexString(seed.hashCode() & 0x7fffffff);
+        // Pad/truncate to 8 chars for consistency
+        if (hash.length() < 8) hash = String.format("%8s", hash).replace(' ', '0');
+        else if (hash.length() > 8) hash = hash.substring(0, 8);
+        return "n_" + cleanType + "_" + hash;
+    }
+
+    /**
+     * Derive a stable, deterministic field id — prefer the field name (already stable
+     * across regenerations when the LLM keeps the same schema), fall back to an index.
+     */
+    static String deterministicFieldId(Map<String, Object> field, int index) {
+        Object name = field.get("name");
+        if (name instanceof String && !((String) name).isBlank()) {
+            String clean = ((String) name).toLowerCase().replaceAll("[^a-z0-9_]", "_");
+            return "f_" + clean;
+        }
+        return "f_field_" + index;
     }
 
     /**

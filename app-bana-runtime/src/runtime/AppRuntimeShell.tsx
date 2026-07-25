@@ -34,8 +34,20 @@ export function AppRuntimeShell() {
 
   // --- postMessage bridge ---
   useEffect(() => {
-    // Signal to studio parent that we are ready
-    window.parent.postMessage({ type: 'ready' } satisfies AppBanaPostMessage, '*');
+    // Signal to studio parent that we are ready.
+    // Only post if we are actually embedded (parent !== window). Target the
+    // known studio origin rather than '*' so a hostile parent cannot silently
+    // observe our lifecycle signals.
+    if (window.parent && window.parent !== window) {
+      try {
+        window.parent.postMessage(
+          { type: 'ready' } satisfies AppBanaPostMessage,
+          STUDIO_ORIGIN
+        );
+      } catch {
+        // Cross-origin errors are non-fatal — runtime works standalone too.
+      }
+    }
 
     const handler = (ev: MessageEvent) => {
       if (ev.origin !== STUDIO_ORIGIN) return;
