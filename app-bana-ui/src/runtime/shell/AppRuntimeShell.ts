@@ -65,6 +65,17 @@ export class AppRuntimeShell extends LitElement {
     super.connectedCallback();
     await ensureCoreRegistered();
 
+    // Stage 1: postMessage bridge — tell the studio we're ready, then accept token
+    window.parent.postMessage({ type: 'ready' }, '*');
+    window.addEventListener('message', (ev: MessageEvent) => {
+      const msg = ev.data;
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.type === 'token' && typeof msg.jwt === 'string') {
+        // Store the JWT so runtime API calls can pick it up
+        localStorage.setItem('appbana-token', msg.jwt);
+      }
+    });
+
     // Listen for custom navigation events from components (e.g. FormContainer)
     this.addEventListener('navigate', ((e: CustomEvent) => {
       const fullPath = e.detail.path;
