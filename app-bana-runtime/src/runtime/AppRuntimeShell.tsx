@@ -188,33 +188,34 @@ export function AppRuntimeShell() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       {/* App header */}
-      <header className="h-12 flex items-center gap-3 px-4 border-b border-gray-200 bg-white shadow-sm">
-        <span className="font-bold text-gray-800">{app.name}</span>
+      <header className="h-14 flex items-center gap-4 px-6 border-b border-gray-200 bg-white shadow-sm sticky top-0 z-10">
+        <span className="font-semibold text-gray-900 text-base tracking-tight">{app.name}</span>
         {/* Page tabs */}
-        <div className="flex gap-1 ml-4">
+        <nav className="flex gap-1 ml-2" aria-label="Pages">
           {(app.pages ?? []).map((p) => (
             <button
               key={p.id}
               onClick={() => setCurrentPage(p)}
-              className={`text-xs px-3 py-1 rounded transition-colors
-                ${currentPage?.id === p.id
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+              className={`appbana-tab ${currentPage?.id === p.id ? 'appbana-tab-active' : ''}`}
+              aria-current={currentPage?.id === p.id ? 'page' : undefined}
             >
               {p.name}
             </button>
           ))}
-        </div>
+        </nav>
       </header>
 
       {/* Page content */}
-      <main className="p-4">
-        {currentPage
-          ? renderPage(currentPage)
-          : <p className="text-gray-400 text-sm p-8 text-center">No pages in this app.</p>
-        }
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        {currentPage ? (
+          <section className="appbana-page-card">
+            {renderPage(currentPage)}
+          </section>
+        ) : (
+          <p className="text-gray-400 text-sm p-8 text-center">No pages in this app.</p>
+        )}
       </main>
     </div>
   );

@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { listApps, createApp, deployApp, fetchBranding } from '@appbana/shared';
+import { listApps, createApp, deployApp, fetchBranding, type DeployResult } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useDrawerStore } from '../../stores/drawer';
 import { SessionPicker } from '../sessions/SessionPicker';
+import { DeployResultModal } from './DeployResultModal';
+
+type Env = 'DEV' | 'SIT' | 'PROD';
+const ENVIRONMENTS: Env[] = ['DEV', 'SIT', 'PROD'];
+const ENV_BADGE: Record<Env, { text: string; className: string }> = {
+  DEV:  { text: 'test', className: 'bg-emerald-900/60 text-emerald-300' },
+  SIT:  { text: 'test', className: 'bg-amber-900/60 text-amber-300'   },
+  PROD: { text: 'live', className: 'bg-rose-900/60 text-rose-300'     },
+};
 
 export function Header() {
   const { token, tenantId, name, clearSession } = useSessionStore();
@@ -11,9 +20,13 @@ export function Header() {
   const { toggleData, toggleSessions, sessionsOpen, closeAll } = useDrawerStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [appsOpen, setAppsOpen] = useState(false);
-  const [deploying, setDeploying] = useState(false);
+  const [deploying, setDeploying] = useState<Env | null>(null);
+  const [deployOpen, setDeployOpen] = useState(false);
+  const [deployResult, setDeployResult] = useState<{ result: DeployResult; url: string } | null>(null);
+  const [deployError, setDeployError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const sessionsBtnRef = useRef<HTMLDivElement>(null);
+  const deployRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!token || !tenantId) return;
@@ -26,6 +39,9 @@ export function Header() {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
         setAppsOpen(false);
+      }
+      if (deployRef.current && !deployRef.current.contains(e.target as Node)) {
+        setDeployOpen(false);
       }
       if (sessionsBtnRef.current && !sessionsBtnRef.current.contains(e.target as Node) && sessionsOpen) {
         closeAll();
@@ -49,16 +65,23 @@ export function Header() {
     setAppsOpen(false);
   }
 
-  async function handleDeploy() {
+  // Runtime origin — Stage 5 will replace with tenant subdomains.
+  const RUNTIME_ORIGIN = 'http://localhost:5175';
+
+  async function handleDeploy(env: Env) {
     if (!token || !tenantId || !currentApp || deploying) return;
-    setDeploying(true);
+    setDeployOpen(false);
+    setDeployError(null);
+    setDeploying(env);
     try {
-      await deployApp(tenantId, currentApp.id, token);
-      alert(`✅ App "${currentApp.name}" deployed successfully!`);
+      const result = await deployApp(tenantId, currentApp.id, token, env);
+      // Deployed app URL for this env. Same path today; subdomains land in Stage 5.
+      const url = `${RUNTIME_ORIGIN}/run/${encodeURIComponent(tenantId)}/${encodeURIComponent(currentApp.id)}?env=${env}`;
+      setDeployResult({ result, url });
     } catch (err) {
-      alert(`❌ Deploy failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setDeployError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setDeploying(false);
+      setDeploying(null);
     }
   }
 
@@ -140,16 +163,71 @@ export function Header() {
         <SessionPicker />
       </div>
 
-      {/* Deploy */}
+      {/* Deploy — env picker dropdown */}
       {currentApp && (
-        <button
-          onClick={handleDeploy}
-          disabled={deploying}
-          className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed
-                     text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
-        >
-          {deploying ? 'Deploying…' : 'Deploy'}
-        </button>
+        <div className="relative" ref={deployRef}>
+          <button
+            onClick={() => { setDeployOpen((v) => !v); setMenuOpen(false); setAppsOpen(false); }}
+            disabled={deploying !== null}
+            className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed
+                       text-white pl-3 pr-2 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1"
+            title="Deploy to an environment"
+          >
+            {deploying ? `Deploying ${deploying}…` : 'Deploy'}
+            <span className="text-indigo-200">▾</span>
+          </button>
+          {deployOpen && !deploying && (
+            <div className="absolute top-full right-0 mt-1 w-40 bg-gray-800 border border-gray-700 rounded-lg
+                            shadow-xl z-50 py-1 text-sm">
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-500">Environment</div>
+              {ENVIRONMENTS.map((env) => {
+                const badge = ENV_BADGE[env];
+                return (
+                  <button
+                    key={env}
+                    onClick={() => handleDeploy(env)}
+                    className="w-full text-left px-3 py-2 text-gray-200 hover:bg-gray-700 transition-colors
+                               flex items-center justify-between"
+                  >
+                    <span>{env}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${badge.className}`}>
+                      {badge.text}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Deploy result modal (success) */}
+      {deployResult && (
+        <DeployResultModal
+          appName={currentApp?.name ?? 'App'}
+          url={deployResult.url}
+          result={deployResult.result}
+          onClose={() => setDeployResult(null)}
+        />
+      )}
+
+      {/* Deploy error toast (failure) */}
+      {deployError && (
+        <div className="fixed top-16 right-4 z-50 max-w-md bg-red-900/95 border border-red-700 text-red-100
+                        rounded-lg shadow-xl p-4 text-sm">
+          <div className="flex items-start gap-3">
+            <span aria-hidden="true" className="text-lg leading-none">⚠️</span>
+            <div className="flex-1">
+              <div className="font-semibold mb-1">Deploy failed</div>
+              <div className="text-red-200 text-xs break-words">{deployError}</div>
+            </div>
+            <button
+              onClick={() => setDeployError(null)}
+              className="text-red-300 hover:text-white text-lg leading-none"
+              aria-label="Dismiss"
+            >×</button>
+          </div>
+        </div>
       )}
 
       {/* User menu */}

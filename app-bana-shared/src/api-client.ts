@@ -93,12 +93,22 @@ export async function createApp(tenantId: string, name: string, token: string): 
   return res.json();
 }
 
+export interface DeployResult {
+  success: boolean;
+  environment: string;
+  version: number;
+  versionId: number;
+  durationMs: number;
+  summary: string;
+  tablesCreated: string[];
+}
+
 export async function deployApp(
   tenantId: string,
   appId: string,
   token: string,
   environment = 'DEV'
-): Promise<{ status: string; summary?: string; testUrl?: string }> {
+): Promise<DeployResult> {
   // Backend expects `env` as a **query parameter**, not a body field.
   // See AppRoutes.java:  router.post("/api/{tenantId}/apps/{id}/publish") -> req.query("env").
   const url =
