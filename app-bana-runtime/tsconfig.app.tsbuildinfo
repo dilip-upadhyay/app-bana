@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/pages/loginpage.tsx","./src/runtime/appruntimeshell.tsx","./src/runtime/renderer.tsx","./src/runtime/runtimesidebar.tsx","./src/runtime/studiotablelive.tsx","./src/runtime/qualifyentitykey.ts"],"errors":true,"version":"5.9.3"}
