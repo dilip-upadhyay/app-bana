@@ -3,9 +3,35 @@
  *
  * Converts a PageMeta node tree into JSX, emitting data-appbana-* attrs on
  * every element so Stage 6 (select-and-instruct) can identify them.
+ *
+ * Form controls (input / select / textarea) are always wrapped in an
+ * `.appbana-field` block with a persistent `<label>` derived from
+ * props.label / name / placeholder — so the field's meaning stays visible
+ * after the user starts typing.
  */
 import type { PageMeta, ComponentNode } from '@appbana/shared';
 import { StudioTableLive } from './StudioTableLive';
+
+/** Turn "full_name" / "first-name" / "firstName" into "Full name". */
+function humanize(raw: string | undefined): string {
+  if (!raw) return '';
+  return raw
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+function fieldLabel(props: Record<string, unknown>): string {
+  const label = props.label as string | undefined;
+  if (label && String(label).trim()) return String(label);
+  const name = props.name as string | undefined;
+  if (name && String(name).trim()) return humanize(String(name));
+  const placeholder = props.placeholder as string | undefined;
+  if (placeholder && String(placeholder).trim()) return String(placeholder);
+  return '';
+}
 
 export function renderPage(page: PageMeta): React.ReactElement {
   const nodeMap = new Map(page.nodes.map((n) => [n.id, n]));
@@ -62,58 +88,94 @@ function renderNode(
         </button>
       );
 
-    case 'input':
+    case 'input': {
+      const label = fieldLabel(props);
+      const required = Boolean(props.required);
+      const inputId = `appbana-in-${node.id}`;
+      const helpText = String(props.help ?? props.description ?? '');
       return (
-        <input
-          key={node.id}
-          className={`appbana-input ${className}`}
-          style={styleObj}
-          type={String(props.type ?? props.inputType ?? 'text')}
-          placeholder={String(props.placeholder ?? '')}
-          defaultValue={String(props.value ?? '')}
-          name={String(props.name ?? '')}
-          required={Boolean(props.required)}
-          {...dataAttrs}
-          {...entityAttr}
-          {...fieldAttr}
-        />
+        <div key={node.id} className="appbana-field" {...dataAttrs}>
+          {label && (
+            <label htmlFor={inputId} className="appbana-field-label">
+              {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
+            </label>
+          )}
+          <input
+            id={inputId}
+            className={`appbana-input ${className}`}
+            style={styleObj}
+            type={String(props.type ?? props.inputType ?? 'text')}
+            placeholder={String(props.placeholder ?? '')}
+            defaultValue={String(props.value ?? '')}
+            name={String(props.name ?? '')}
+            required={required}
+            {...entityAttr}
+            {...fieldAttr}
+          />
+          {helpText && <p className="appbana-field-help">{helpText}</p>}
+        </div>
       );
+    }
 
-    case 'select':
+    case 'select': {
+      const label = fieldLabel(props);
+      const required = Boolean(props.required);
+      const inputId = `appbana-sel-${node.id}`;
+      const helpText = String(props.help ?? props.description ?? '');
       return (
-        <select
-          key={node.id}
-          className={`appbana-select ${className}`}
-          style={styleObj}
-          name={String(props.name ?? '')}
-          defaultValue={String(props.value ?? '')}
-          required={Boolean(props.required)}
-          {...dataAttrs}
-          {...entityAttr}
-          {...fieldAttr}
-        >
-          {((props.options as string[]) ?? []).map((opt: string) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
+        <div key={node.id} className="appbana-field" {...dataAttrs}>
+          {label && (
+            <label htmlFor={inputId} className="appbana-field-label">
+              {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
+            </label>
+          )}
+          <select
+            id={inputId}
+            className={`appbana-select ${className}`}
+            style={styleObj}
+            name={String(props.name ?? '')}
+            defaultValue={String(props.value ?? '')}
+            required={required}
+            {...entityAttr}
+            {...fieldAttr}
+          >
+            {((props.options as string[]) ?? []).map((opt: string) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+          {helpText && <p className="appbana-field-help">{helpText}</p>}
+        </div>
       );
+    }
 
-    case 'textarea':
+    case 'textarea': {
+      const label = fieldLabel(props);
+      const required = Boolean(props.required);
+      const inputId = `appbana-ta-${node.id}`;
+      const helpText = String(props.help ?? props.description ?? '');
       return (
-        <textarea
-          key={node.id}
-          className={`appbana-textarea ${className}`}
-          style={styleObj}
-          name={String(props.name ?? '')}
-          placeholder={String(props.placeholder ?? '')}
-          defaultValue={String(props.value ?? '')}
-          rows={Number(props.rows ?? 4)}
-          required={Boolean(props.required)}
-          {...dataAttrs}
-          {...entityAttr}
-          {...fieldAttr}
-        />
+        <div key={node.id} className="appbana-field appbana-field-full" {...dataAttrs}>
+          {label && (
+            <label htmlFor={inputId} className="appbana-field-label">
+              {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
+            </label>
+          )}
+          <textarea
+            id={inputId}
+            className={`appbana-textarea ${className}`}
+            style={styleObj}
+            name={String(props.name ?? '')}
+            placeholder={String(props.placeholder ?? '')}
+            defaultValue={String(props.value ?? '')}
+            rows={Number(props.rows ?? 4)}
+            required={required}
+            {...entityAttr}
+            {...fieldAttr}
+          />
+          {helpText && <p className="appbana-field-help">{helpText}</p>}
+        </div>
       );
+    }
 
     case 'table':
     case 'grid':
@@ -131,7 +193,7 @@ function renderNode(
       return (
         <form
           key={node.id}
-          className={className}
+          className={`appbana-form ${className}`}
           style={styleObj}
           data-entity={String(props.entity ?? '')}
           {...dataAttrs}

@@ -22,11 +22,6 @@
     font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont,
                  'Segoe UI', 'Helvetica Neue', sans-serif;
   }
-  /* Standalone <label> tags rendered by the AI-generated tree get a
-     restrained Material-style caption. */
-  label {
-    @apply block text-xs font-medium text-gray-600 mb-1 tracking-wide;
-  }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -39,7 +34,7 @@
   .appbana-input,
   .appbana-select,
   .appbana-textarea {
-    @apply w-full max-w-md
+    @apply w-full
            px-3.5 py-2.5
            rounded-lg
            border border-gray-300
@@ -70,10 +65,51 @@
     @apply resize-y min-h-[96px] leading-relaxed;
   }
 
+  /* ---- Field wrapper (persistent label + input + optional help) ------- */
+  .appbana-field {
+    @apply flex flex-col gap-1.5 min-w-0;
+  }
+  .appbana-field-label {
+    @apply text-xs font-semibold text-gray-700 tracking-wide;
+    /* Override the base `label` rule so wrapped labels don't get double margin */
+    margin-bottom: 0;
+  }
+  .appbana-field-required {
+    @apply text-rose-500 ml-0.5;
+  }
+  .appbana-field-help {
+    @apply text-xs text-gray-500 mt-0.5;
+  }
+  /* Force full-width fields (textarea, table) to span the whole grid row */
+  .appbana-field-full,
+  .appbana-form .appbana-form-full {
+    grid-column: 1 / -1;
+  }
+
+  /* ---- Form layout — responsive 2-col grid that collapses to 1-col ---- */
+  .appbana-form {
+    @apply grid gap-x-6 gap-y-5;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  /* Direct <button> children (like a Save button) span the whole row and
+     get top spacing so they don't sit flush to the last field. */
+  .appbana-form > button,
+  .appbana-form > .appbana-button {
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin-top: 0.25rem;
+  }
+  /* Standalone <p> / helper text spans the whole row so it doesn't break
+     the two-column rhythm. */
+  .appbana-form > p {
+    grid-column: 1 / -1;
+    @apply text-sm text-gray-600;
+  }
+
   /* ---- Buttons — MD3 filled tonal ------------------------------------- */
   .appbana-button {
     @apply inline-flex items-center justify-center gap-2
-           px-5 py-2.5
+           px-6 py-2.5
            rounded-lg
            text-white text-sm font-medium tracking-wide
            bg-indigo-600
@@ -114,10 +150,5 @@
   /* ---- Page card container -------------------------------------------- */
   .appbana-page-card {
     @apply bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8;
-  }
-
-  /* Form spacing so stacked fields get consistent vertical rhythm */
-  form {
-    @apply space-y-5;
   }
 }
