@@ -16,23 +16,18 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * RoleRoutes — Sub-phase C1.6 & C1.7 (Tech Lead Review updates)
+ * RoleRoutes — Sub-phase C1.6, C1.7 & C1.9
  *
- * REST API for user role management with tenant scoping and authorization guards:
+ * Strict tenant-bound REST API for user role management:
  * GET    /api/tenants/{tenantId}/apps/{appId}/roles?entityName=Y&userId=Z
  * POST   /api/tenants/{tenantId}/apps/{appId}/roles (body: { entityName, userId, role })
  * DELETE /api/tenants/{tenantId}/apps/{appId}/roles?entityName=Y&userId=Z
- *
- * Backwards-compatible legacy fallbacks:
- * GET/POST/DELETE /api/apps/{appId}/roles (defaults tenantId="default")
  */
 public class RoleRoutes {
     private static final Logger LOG = LoggerFactory.getLogger(RoleRoutes.class);
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 
     public static void register(Router router) {
-
-        // --- Standard multi-tenant endpoints ---
 
         // GET /api/tenants/{tenantId}/apps/{appId}/roles
         router.get("/api/tenants/{tenantId}/apps/{appId}/roles", (req, res) -> {
@@ -53,24 +48,6 @@ public class RoleRoutes {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             handleDeleteRole(req, res, tenantId, appId);
-        });
-
-        // --- Backwards compatibility fallbacks ---
-        router.get("/api/apps/{appId}/roles", (req, res) -> {
-            String tenantId = req.query("tenantId");
-            if (tenantId == null || tenantId.isBlank()) tenantId = "default";
-            handleGetRoles(req, res, tenantId, req.pathParam("appId"));
-        });
-
-        router.post("/api/apps/{appId}/roles", (req, res) -> {
-            String tenantId = "default";
-            handlePostRole(req, res, tenantId, req.pathParam("appId"));
-        });
-
-        router.delete("/api/apps/{appId}/roles", (req, res) -> {
-            String tenantId = req.query("tenantId");
-            if (tenantId == null || tenantId.isBlank()) tenantId = "default";
-            handleDeleteRole(req, res, tenantId, req.pathParam("appId"));
         });
     }
 
@@ -115,8 +92,8 @@ public class RoleRoutes {
 
         try {
             Map<String, String> body = req.readJson(new TypeReference<>() {});
-            String bodyTenantId = body.get("tenantId");
-            String effectiveTenantId = (bodyTenantId != null && !bodyTenantId.isBlank()) ? bodyTenantId : tenantId;
+            // CRITICAL FIX (C1.9): Ignore any body.tenantId to prevent cross-tenant override attacks.
+            // Always enforce tenantId from URL path.
             String entityName = body.get("entityName");
             String targetUserId = body.get("userId");
             String roleStr = body.get("role");
@@ -126,24 +103,25 @@ public class RoleRoutes {
                 return;
             }
 
-            EntitySchema schema = SchemaManager.loadSchema(appId, entityName, effectiveTenantId);
+            EntitySchema schema = SchemaManager.loadSchema(appId, entityName, tenantId);
             if (schema == null) {
                 res.json(404, Map.of("error", "Entity not found: " + entityName));
                 return;
             }
 
-            // Blocker 1: Authorization check — caller must be creator or existing checker/both on entity
-            if (!isAuthorizedToManageRoles(effectiveTenantId, appId, entityName, callerUserId)) {
+            // CRITICAL FIX (C1.9): Authorization check — ONLY app creator or system can manage roles.
+            // CHECKER role is a workflow role, NOT an admin role, and CANNOT manage roles.
+            if (!isAuthorizedToManageRoles(tenantId, appId, entityName, callerUserId)) {
                 res.json(403, Map.of("error", "Forbidden: caller cannot manage roles for entity " + entityName));
                 return;
             }
 
             UserRoleService.Role role = UserRoleService.Role.fromValue(roleStr);
-            UserRoleService.grantRole(effectiveTenantId, appId, entityName, targetUserId, role, callerUserId);
+            UserRoleService.grantRole(tenantId, appId, entityName, targetUserId, role, callerUserId);
 
             res.json(200, Map.of(
                     "status", "granted",
-                    "tenantId", effectiveTenantId,
+                    "tenantId", tenantId,
                     "appId", appId,
                     "entityName", entityName,
                     "userId", targetUserId,
@@ -176,7 +154,7 @@ public class RoleRoutes {
                 return;
             }
 
-            // Blocker 1: Authorization check
+            // CRITICAL FIX (C1.9): Authorization check — ONLY app creator or system can manage roles.
             if (!isAuthorizedToManageRoles(tenantId, appId, entityName, callerUserId)) {
                 res.json(403, Map.of("error", "Forbidden: caller cannot manage roles for entity " + entityName));
                 return;
@@ -202,9 +180,10 @@ public class RoleRoutes {
      * Authorized if:
      * 1. caller is "system"
      * 2. caller is the author/creator of the app
-     * 3. caller already has CHECKER or BOTH role on the entity
+     *
+     * Note: CHECKER is a workflow role, NOT an admin role. Workflow checkers cannot grant roles to themselves or others.
      */
-    public static boolean isAuthorizedToManageRoles(String tenantId, String appId, String entityName, String callerUserId) {
+    static boolean isAuthorizedToManageRoles(String tenantId, String appId, String entityName, String callerUserId) {
         if ("system".equalsIgnoreCase(callerUserId)) {
             return true;
         }
@@ -218,6 +197,6 @@ public class RoleRoutes {
         } catch (Exception e) {
             LOG.warn("[RoleRoutes] Authorization check failed to retrieve app metadata: {}", e.getMessage());
         }
-        return UserRoleService.isChecker(tenantId, appId, entityName, callerUserId);
+        return false;
     }
 }

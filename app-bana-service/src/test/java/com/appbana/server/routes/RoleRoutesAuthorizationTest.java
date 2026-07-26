@@ -76,8 +76,8 @@ public class RoleRoutesAuthorizationTest {
         // Grant 'checker' role to charlie_checker
         UserRoleService.grantRole(tenantId, appId, entityName, checker, UserRoleService.Role.CHECKER, creator);
 
-        // User with 'checker' role IS authorized
-        assertTrue(RoleRoutes.isAuthorizedToManageRoles(tenantId, appId, entityName, checker));
+        // User with ONLY 'checker' role is NOT authorized to manage roles (C1.9 fix)
+        assertFalse(RoleRoutes.isAuthorizedToManageRoles(tenantId, appId, entityName, checker));
     }
 
     @Test

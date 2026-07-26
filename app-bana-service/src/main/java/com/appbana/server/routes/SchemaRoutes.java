@@ -155,14 +155,27 @@ public class SchemaRoutes {
                     return;
                 }
 
-                SchemaManager.saveSchema(schema);
+                // Task C1.9 Fix: Reject schemas missing tenantId or appId (no phantom default fallbacks)
+                if (schema.getTenantId() == null || schema.getTenantId().isBlank() ||
+                    schema.getAppId() == null || schema.getAppId().isBlank()) {
+                    res.json(400, Map.of("error", "tenantId and appId are required in schema payload"));
+                    return;
+                }
 
-                // Task C1.8 — Bootstrap creator role when entity schema is created/saved via POST /schema
+                String tenantId = schema.getTenantId();
+                String appId = schema.getAppId();
                 String userId = AuthService.extractUserId(req, cfg);
                 if (userId == null || userId.isBlank()) userId = "system";
-                String tenantId = (schema.getTenantId() != null && !schema.getTenantId().isBlank()) ? schema.getTenantId() : "default";
-                String appId = (schema.getAppId() != null && !schema.getAppId().isBlank()) ? schema.getAppId() : "default";
-                com.appbana.approval.UserRoleService.grantRole(tenantId, appId, schema.getName(), userId, com.appbana.approval.UserRoleService.Role.BOTH, userId);
+
+                // Check if this entity schema is NEW before saving (upsert)
+                boolean isNewEntity = SchemaManager.loadSchema(appId, schema.getName(), tenantId) == null;
+
+                SchemaManager.saveSchema(schema);
+
+                // Task C1.9 Fix: ONLY bootstrap creator role on INSERT (new entity creation), NOT on updates.
+                if (isNewEntity) {
+                    com.appbana.approval.UserRoleService.grantRole(tenantId, appId, schema.getName(), userId, com.appbana.approval.UserRoleService.Role.BOTH, userId);
+                }
 
                 res.json(200, Map.of("status", "saved", "name", schema.getName()));
             } catch (Exception e) {

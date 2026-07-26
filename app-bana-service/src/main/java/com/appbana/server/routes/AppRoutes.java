@@ -506,16 +506,15 @@ public class AppRoutes {
                     res.json(400, Map.of("error", "App name is required"));
                     return;
                 }
-                if (app.getId() == null || app.getId().isEmpty()) {
-                    res.json(400, Map.of("error", "App ID is required"));
-                    return;
-                }
+                String creatorUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
+                if (creatorUserId == null || creatorUserId.isBlank()) creatorUserId = "system";
+
+                // Enforce author field to authenticated creator (cannot be spoofed by client payload)
+                app.setAuthor(creatorUserId);
 
                 AppMetadata created = AppManager.createApp(tenantId, app);
 
                 // Task C1.5 — Bootstrap: app creator automatically gets 'both' (maker + checker) role on all entities in app
-                String creatorUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
-                if (creatorUserId == null) creatorUserId = "system";
                 if (created.getEntities() != null) {
                     java.util.Set<String> entityNames = new java.util.HashSet<>();
                     for (Object obj : created.getEntities()) {
