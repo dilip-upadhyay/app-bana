@@ -177,6 +177,7 @@ public class AiServer {
             toolRegistry.register(new BatchUpdateEntitiesTool(metadataValidator, backendUrl));
             toolRegistry.register(new GenerateMockDataTool(backendUrl));
             toolRegistry.register(new RollbackAppTool(backendUrl));
+            toolRegistry.register(new UpdateAppTool(backendUrl));
 
             log.info("Registered {} tools", toolRegistry.getToolCount());
 

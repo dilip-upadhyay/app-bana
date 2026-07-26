@@ -138,6 +138,16 @@ public class BatchUpdateEntitiesTool implements Tool {
                 log.info("[BatchUpdateEntities] Processing {}/{}: {} on '{}'",
                         i + 1, updates.size(), operation, entityName);
 
+                // Guard: "App" is not an entity — LLMs sometimes try to use this tool
+                // to rename the app itself. Redirect them to update_app.
+                if ("App".equalsIgnoreCase(entityName)) {
+                    failedUpdates.add(entityName + ":" + operation
+                            + " - 'App' is not an entity. To rename or update the app itself, "
+                            + "call the update_app tool instead (arguments: name, description, defaultPage).");
+                    log.warn("[BatchUpdateEntities] ❌ Rejected entityName='App' — should use update_app tool");
+                    continue;
+                }
+
                 try {
                     boolean success = executeUpdate(tenantId, appId, entityName, operation, update, token);
 
