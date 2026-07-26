@@ -13,9 +13,9 @@ Every document under `docs/` is **current** and describes the system as it ships
 | See the current session's work | [`session_summary.md`](./session_summary.md) |
 | Understand the AI-Native rebuild plan | [`planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) |
 | Work on Runtime UX (Phase A) | [`planning/RUNTIME_UX_OVERHAUL_PLAN.md`](./planning/RUNTIME_UX_OVERHAUL_PLAN.md) |
-| Build the Enterprise Capabilities epic (Phase D) | [`planning/ENTERPRISE_CAPABILITIES_PLAN.md`](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) |
 | Build the Complex UI epic (Phase B) | [`planning/COMPLEX_UI_PLAN.md`](./planning/COMPLEX_UI_PLAN.md) |
 | Build the Maker-Checker epic (Phase C) | [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) |
+| Build the Enterprise Capabilities epic (Phase D) | [`planning/ENTERPRISE_CAPABILITIES_PLAN.md`](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) |
 | Understand the AI Builder microservice | [`features/ai-builder-service.md`](./features/ai-builder-service.md) |
 | Understand security (auth / CSRF / RBAC / rate limit) | [`features/SECURITY_FEATURES.md`](./features/SECURITY_FEATURES.md) + [`specs/AUTH.md`](./specs/AUTH.md) |
 | Understand the datasource adapter model | [`architecture/datasource-adapters.md`](./architecture/datasource-adapters.md) |
@@ -31,9 +31,9 @@ Every document under `docs/` is **current** and describes the system as it ships
 
 **Forward plan** (single source: [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md))
 - **Phase A** — Runtime UX Sprint 2 (~10 hr) — customer-demo-ready UI.
-- **Phase D** — Enterprise Capabilities Epic (~125 hr) — SSO, dashboards, notifications, enterprise shell.
 - **Phase B** — Complex UI Epic (~29 hr) — wizards, conditional fields, upload, master-detail, list views.
 - **Phase C** — Maker-Checker Epic (~30 hr) — approvals with state machine, roles, audit trail.
+- **Phase D** — Enterprise Capabilities Epic (~125 hr) — SSO, dashboards, notifications, enterprise shell.
 - **Stage 5** — Subdomain deploy (parallel ops track).
 
 ---
@@ -45,12 +45,12 @@ docs/
 ├── README.md                       ← this file (navigation)
 ├── ACTIVE_TASKS.md                 ← status of every workstream
 ├── session_summary.md              ← what shipped this session
-├── planning/                       ← the five active epic plans
+├── planning/                       ← the five active epic plans (execution order A → B → C → D)
 │   ├── AI_NATIVE_UI_REBUILD_PLAN.md
 │   ├── RUNTIME_UX_OVERHAUL_PLAN.md
-│   ├── ENTERPRISE_CAPABILITIES_PLAN.md
 │   ├── COMPLEX_UI_PLAN.md
-│   └── MAKER_CHECKER_PLAN.md
+│   ├── MAKER_CHECKER_PLAN.md
+│   └── ENTERPRISE_CAPABILITIES_PLAN.md
 ├── architecture/
 │   └── datasource-adapters.md      ← universal datasource adapter model
 ├── features/

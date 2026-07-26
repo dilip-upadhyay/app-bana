@@ -2,13 +2,15 @@
 
 **Status:** 📝 Spec approved 2026-07-26 · ⏳ Execution not started
 **Owner:** AppBana core team
-**Position in master roadmap:** Phase D of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) completing. Runs before Phase B (Complex UI) — enterprise gates like SSO block *procurement*, not just *usability*.
-**Trigger:** A comparative review against a live enterprise SaaS (a global shipping / logistics platform) exposed the categorical gap between AppBana today and what a mid-market B2B customer actually procures. Complex UI (Phase B) and Maker-Checker (Phase C) are necessary but not sufficient — without enterprise SSO, dashboards, notifications, and a professional-feeling shell, no enterprise IT department signs the contract. This epic closes the four highest-leverage gaps.
+**Position in master roadmap:** Phase D of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). **Last** epic — depends on Phase A (Runtime UX Sprint 2), Phase B (Complex UI Epic), and Phase C (Maker-Checker Epic) all completing. D is the *packaging* on top of a differentiated product; the product itself (differentiator + fundamentals) lands in A + B + C.
+**Trigger:** A comparative review against a live enterprise SaaS (a global shipping / logistics platform) exposed the categorical gap between AppBana today and what a mid-market B2B customer actually procures. Complex UI (Phase B) and Maker-Checker (Phase C) deliver a differentiated product — but without enterprise SSO, dashboards, notifications, and a professional-feeling shell, no enterprise IT department signs the contract without a fight. This epic closes the four highest-leverage packaging gaps.
+
+**Why D goes after C (not before):** approvals are what AppBana *sells*, D is how it's *packaged*. Ship the product first, package it second. Prospects will PoC with local auth; they won't PoC with broken approvals. Additionally, D benefits from delay — which OIDC provider, group→role mapping, and branding are all better co-designed with a real prospect's identity team than guessed. Delaying D means D1 lands against real requirements from a real customer.
 
 **Related active plans:**
-- [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — **Phase A**, prerequisite. Sprint 2 must complete before D starts (D depends on a professional-looking baseline).
-- [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B**, follows this epic. B4 master-detail benefits from D2 dashboards (drill-down from KPI → list → detail).
-- [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C**, follows Phase B. C5 notifications will re-use the D3 notifications infrastructure.
+- [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — **Phase A**, prerequisite.
+- [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B**, prerequisite. B4 master-detail benefits later from D2 dashboards (drill-down from KPI → list → detail).
+- [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C**, prerequisite. C5 ships inside C with a simple polling badge; when D3 lands, C5 gets swapped for the durable rule-driven notification substrate (2–3 hr of throwaway code paid back).
 - [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan; this epic is a post-Stage-4 extension.
 - Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 
@@ -41,9 +43,9 @@ Four independently shippable sub-phases upgrade AppBana from "polished CRUD buil
 | **D3** | Notifications | `appbana_notifications` table, notification-trigger rules (insert/update/state-change), SSE push, mark-as-read endpoint | Header bell with unread badge, notifications flyout, "only unread" filter, mark-all-as-read | AI can attach notification rules to entities and state transitions | ~30 hr |
 | **D4** | Enterprise shell | Tenant branding endpoint gains hero image + secondary buttons | Multi-level sidebar with groups + icons + counts, header action-slots with badge counts, user-account dropdown, fully branded login | Sidebar structure derives from app metadata (`navigation.groups[]`) | ~20 hr |
 
-**Total scope:** ~125 hours of focused work. D1 and D4 can ship independently and in parallel. D2 depends on nothing. D3 depends on D2 only for the "notifications count" widget (optional). D3 is a prerequisite for Phase C's C5 (notifications on maker-checker transitions).
+**Total scope:** ~125 hours of focused work. D1 and D4 can ship independently and in parallel. D2 depends on nothing. D3 depends on D2 only for the "notifications count" widget (optional). D3 also *replaces* Phase C's C5 polling-badge implementation with a durable rule-driven substrate (2–3 hr swap-out).
 
-**Execution order:** A → D (any sub-phase order; D1 + D4 parallelizable, D2 standalone, D3 after D2) → B → C. Alternative fast-path: D4 → D2 → D1 → D3 (visual wins first, hard security work last).
+**Execution order:** A → B → C → D (any D sub-phase order; D1 + D4 parallelizable, D2 standalone, D3 after D2). Alternative fast-path once D starts: D4 → D2 → D1 → D3 (visual wins first, hard security work last).
 
 ---
 
@@ -53,7 +55,7 @@ The reference comparison — a live global-shipping-industry SaaS with ~10,000 c
 
 1. **Enterprise SSO.** Every mid-market and enterprise buyer has Azure AD / Okta / Google Workspace / Ping. Local email/password auth is a categorical no. This is a gate, not a nice-to-have.
 2. **Dashboards.** Every executive-facing screen in enterprise SaaS is a KPI dashboard. Ops teams use lists; leadership uses widgets. Without them, the first stakeholder demo lands flat regardless of how good the CRUD is.
-3. **Notifications.** Async workflows across teams need a durable notification system: `#TICKET-1234 has been updated` in a bell menu, mark-as-read, unread counts. Every enterprise app has one. Phase C (maker-checker) can't ship its notification requirement (C5) without this substrate.
+3. **Notifications.** Async workflows across teams need a durable notification system: `#TICKET-1234 has been updated` in a bell menu, mark-as-read, unread counts. Every enterprise app has one. Phase C (maker-checker) ships its notification requirement (C5) with a simple polling badge; D3 upgrades it to a durable rule-driven substrate.
 4. **Enterprise shell.** Multi-level nav with groups + icons + user account dropdown + header badges is what makes an app feel "real" to a stakeholder in the first 5 seconds. Phase A polishes the *content* area; D4 polishes the *chrome*.
 
 The AI Builder currently generates none of these. The runtime cannot render any of them. Fixing all four at the platform level means every future app the agent scaffolds inherits enterprise-grade capabilities for free.

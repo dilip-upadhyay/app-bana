@@ -2,21 +2,29 @@
 
 ## 🎯 Forward Plan (post-Stage-4) — Path to First Customer
 
-**Approved 2026-07-26 · Revised 2026-07-26 to insert Phase D after enterprise-app comparison.** The AI-Native UI Rebuild is complete through Stage 4 (`app-bana-ui/` retired). Four phases now stand between us and the first paying enterprise customer. Stage 5 (subdomain deploy) runs in parallel with Phase B/C/D, gated on ops rather than code.
+**Approved 2026-07-26 · Revised 2026-07-26 three times: (1) Phase D inserted after enterprise-app comparison, (2) reordered to A → B → D → C to put fundamentals before enterprise polish, (3) reordered again to A → B → C → D — product before packaging.** The AI-Native UI Rebuild is complete through Stage 4 (`app-bana-ui/` retired). Four phases now stand between us and the first paying customer. Stage 5 (subdomain deploy) runs in parallel, gated on ops rather than code.
 
 | Phase | Goal | Plan doc | Status |
 |-------|------|----------|--------|
 | **A — Quality Sprint** | Runtime UX Sprint 2: real date picker, sidebar redesign, empty states, loading skeletons, inline validation, status pills, user menu, page actions, WCAG AA, responsive breakpoints | [RUNTIME_UX_OVERHAUL_PLAN.md §Sprint 2](./planning/RUNTIME_UX_OVERHAUL_PLAN.md#sprint-2--make-it-feel-professional) | ⏳ Not started — plan already specced |
-| **D — Enterprise Capabilities** | 4 sub-phases (D1..D4): enterprise SSO (OIDC/Azure B2C) · dashboards + 6 widget primitives · notifications system · multi-level sidebar + header actions + branded login | [ENTERPRISE_CAPABILITIES_PLAN.md](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) | 📝 Plan drafted 2026-07-26 |
 | **B — Complex UI Epic** | 5 sub-phases (B1..B5): wizards · conditional fields · file upload · master-detail · list views (filter/group/saved views) | [COMPLEX_UI_PLAN.md](./planning/COMPLEX_UI_PLAN.md) | 📝 Plan drafted 2026-07-26 |
-| **C — Maker-Checker Epic** | 5 sub-phases (C1..C5): DB + role model · state machine + guard · approval UI + audit · AI Builder integration · notifications (re-uses D3 substrate) | [MAKER_CHECKER_PLAN.md](./planning/MAKER_CHECKER_PLAN.md) | 📝 Plan drafted 2026-07-26 |
+| **C — Maker-Checker Epic** | 5 sub-phases (C1..C5): DB + role model · state machine + guard · approval UI + audit · AI Builder integration · notifications (C5 is v1.1-optional — ships in D3 if deferred) | [MAKER_CHECKER_PLAN.md](./planning/MAKER_CHECKER_PLAN.md) | 📝 Plan drafted 2026-07-26 |
+| **D — Enterprise Capabilities** | 4 sub-phases (D1..D4): enterprise SSO (OIDC/Azure B2C) · dashboards + 6 widget primitives · notifications system · multi-level sidebar + header actions + branded login | [ENTERPRISE_CAPABILITIES_PLAN.md](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) | 📝 Plan drafted 2026-07-26 |
 | **Stage 5 — Subdomain deploy** | Parallel ops track — DNS, reverse proxy, HTTPS, `Host`-based app resolution | [AI_NATIVE_UI_REBUILD_PLAN.md §Stage 5](./planning/AI_NATIVE_UI_REBUILD_PLAN.md#stage-5--subdomain-deployment) | ⏳ Ops-heavy, tiny code footprint |
 
-**Execution order:** A → D (D1 + D4 parallelizable, D2 standalone, D3 after D2) → B (B1..B5 serial) → C (C1..C5 mostly serial, C4 parallel with C2). C5 is v1.1-optional and re-uses D3's notification infrastructure.
+**Execution order:** A → B (B1..B5 serial) → C (C1..C5 mostly serial, C4 parallel with C2 — C1+C2 can start in the background while B is landing if we need to compress schedule) → D (D1 + D4 parallelizable, D2 standalone, D3 after D2).
 
-**Total code effort (plan-authored):** ~10 hr (A) + ~125 hr (D) + ~29 hr (B) + ~30 hr (C, minus optional C5 ≈ 25 hr) = **~189–194 hours of focused engineering** to first-enterprise-customer-ready.
+**Total code effort (plan-authored):** ~10 hr (A) + ~29 hr (B) + ~30 hr (C, minus optional C5 ≈ 25 hr) + ~125 hr (D) = **~189–194 hours of focused engineering** to first-enterprise-customer-ready. To *differentiated demo-able product* (A + B + C without D) it's **~64–69 hours**.
 
-**Why Phase D was inserted:** a screenshot-by-screenshot comparison with a live enterprise SaaS on 2026-07-26 showed that Phase B + C alone deliver a solid CRUD builder, not a product an enterprise buyer procures. Enterprise SSO is a categorical gate; dashboards are the first screen executives see; notifications underpin every async workflow (and Phase C's C5 depends on them); a multi-level sidebar + branded login is what makes an app feel "real" in the first 5 seconds. See the Phase D plan doc for the detailed gap analysis that drove this.
+**Why C goes before D:** approvals are the *product* (AppBana's differentiator — AI-generated regulated-industry workflows). SSO, dashboards, and enterprise shell are *packaging*. Ship the product first, then package it. Concrete reasoning: (a) every SaaS has SSO, few have AI-generated maker-checker — C is why a customer picks us over the incumbent; (b) C is ~30 hr, D is ~125 hr — C-first means a differentiator lands in ~1 week vs. 4–5 weeks of D infrastructure with nothing new user-visible; (c) prospects will PoC with local auth, they won't PoC with broken approvals; (d) D's specifics (which OIDC provider, group→role mapping, branding) are better co-designed with a real prospect than guessed — delaying D means D1 lands against real requirements.
+
+**Why B goes before C:** B is the foundation approvals stand on. Real approval workflows have file attachments (B3), conditional fields (B2), parent-child records (B4), and a checker inbox that is a list view with filter/group/saved views (B5). C shipped before B would approve a single row of text fields — approval theatre, not the real thing.
+
+**C5 notification tradeoff:** C5 is v1.1-optional. If shipped inside C, it uses a simple polling badge (2–3 hr of throwaway code). Once D3 lands, C5 gets replaced with the durable rule-driven notification substrate. Total cost of the throwaway: negligible.
+
+**Optional schedule compression:** C1 (DB + role model) and C2 (state machine + guard) are pure backend work and could run in parallel with B if we want to shave ~1 week. C3 onward genuinely wants B done first. Not doing this by default — keeping the phases clean — but flagging the option.
+
+**Why Phase D was ever added:** a screenshot-by-screenshot comparison with a live enterprise SaaS on 2026-07-26 showed that A + B + C alone deliver a solid CRUD builder with a differentiated approval workflow, but not a product an enterprise IT department procures without a fight. Enterprise SSO is a categorical gate; dashboards are the first screen executives see; a branded login + multi-level sidebar is what makes an app feel "real" in the first 5 seconds. D is now positioned as the final polish before first-enterprise-customer close, not as a prerequisite for the differentiator.
 
 ---
 

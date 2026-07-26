@@ -2,15 +2,15 @@
 
 **Status:** 📝 Spec approved 2026-07-26 · ⏳ Execution not started
 **Owner:** AppBana core team
-**Position in master roadmap:** Phase C of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) and Phase B (Complex UI Epic) completing. Last epic before first-customer launch.
+**Position in master roadmap:** Phase C of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) and Phase B (Complex UI Epic) completing. Runs *before* Phase D — approvals are AppBana's differentiator (the *product*), while D is enterprise packaging.
 **Trigger:** Every regulated customer-facing workflow — KYC, loan origination, account opening, policy issuance, claims processing — has a mandatory two-person integrity control: a **maker** creates or edits a record and a **checker** approves it before it becomes live. AppBana today has no concept of `submitted`, `pending approval`, `approved`, or `rejected`. Without maker-checker, we cannot ship into any regulated vertical, which is the majority of the customer-onboarding market.
 
 **Supersedes:** [`docs/specs/WORKFLOW.md`](../specs/WORKFLOW.md) for the approval-flow use case. The original workflow-engine spec is retained as historical context.
 
 **Related active plans:**
 - [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — **Phase A**, prerequisite.
-- [Enterprise Capabilities Plan](./ENTERPRISE_CAPABILITIES_PLAN.md) — **Phase D**, prerequisite. C5 notifications are implemented on top of the D3 notifications substrate.
-- [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B**, prerequisite. Master-detail and file-upload from B4/B3 underpin many maker-checker screens.
+- [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B**, prerequisite. Master-detail and file-upload from B4/B3 underpin many maker-checker screens; B5 list views power the checker's inbox.
+- [Enterprise Capabilities Plan](./ENTERPRISE_CAPABILITIES_PLAN.md) — **Phase D**, follows this epic. C5 notifications ship with a simple polling badge inside C; once D3 lands, C5 gets swapped for the durable rule-driven notification substrate. Throwaway cost: negligible (2–3 hr).
 - [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan; this epic is a post-Stage-4 extension.
 - Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 

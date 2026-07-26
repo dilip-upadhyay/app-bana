@@ -7,8 +7,8 @@
 
 **Related active plans:**
 - [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — **Phase A**, prerequisite. Sprint 2 must complete before B1 starts.
-- [Enterprise Capabilities Plan](./ENTERPRISE_CAPABILITIES_PLAN.md) — **Phase D**, runs before this epic. D3 notifications infrastructure is a prerequisite for any B feature that emits a user-visible notification.
-- [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C**, follows this epic.
+- [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C**, follows this epic. Approval workflows are built on top of B3 (file upload), B4 (master-detail), and B5 (list views — the checker's inbox).
+- [Enterprise Capabilities Plan](./ENTERPRISE_CAPABILITIES_PLAN.md) — **Phase D**, runs *after* Phase C. D is packaging on top of the differentiated product built in A + B + C.
 - [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan; this epic is a post-Stage-4 extension.
 - Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 

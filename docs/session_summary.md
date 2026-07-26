@@ -23,40 +23,50 @@ Intermediate consolidation pass. Superseded by the next commit.
 ### Commit `5455c9a` — docs: purge all stale/historical documentation
 Deleted 19 stale files (canvas-era architecture, features, guides, plans, specs). Fixed the last stale port/folder/framework references in the 3 kept reference docs. Every doc under `docs/` is now current.
 
-### Pending commit — docs(plan): add Enterprise Capabilities epic (Phase D)
+### Commit `c3793ff` — docs(plan): add Enterprise Capabilities epic (Phase D)
 **Trigger:** Screenshot-by-screenshot comparison with a live enterprise SaaS (global shipping/logistics platform, ~10k concurrent users) exposed the categorical gap between AppBana today and what an enterprise IT department procures.
 
-**Verdict:** Phase A + B + C alone deliver a polished CRUD builder, not a product an enterprise buyer signs a contract for. Four blockers stand between the current stack and enterprise-customer credibility:
+**Deliverable:** [`planning/ENTERPRISE_CAPABILITIES_PLAN.md`](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) — 4 sub-phases (D1 SSO ~35 hr · D2 dashboards + widgets ~40 hr · D3 notifications ~30 hr · D4 enterprise shell ~20 hr) totalling ~125 hr. Original ordering committed as A → D → B → C.
 
-1. **Enterprise SSO** — Azure B2C / OIDC / SAML. Local email/password auth is a categorical no for enterprise procurement.
-2. **Dashboards + widgets** — every executive-facing screen is a KPI dashboard. Missing this makes stakeholder demos land flat.
-3. **Notifications** — durable per-user notification system with bell + unread badge + flyout. Phase C's C5 depends on this substrate.
-4. **Enterprise shell** — multi-level sidebar with groups + icons + user dropdown + header action-slots + fully branded login.
+### Pending commit — docs(plan): re-order forward plan to A → B → C → D
+**Decision (2026-07-26):** After frank discussion with the product owner, the forward plan re-ordered twice more:
 
-**Deliverable:** [`planning/ENTERPRISE_CAPABILITIES_PLAN.md`](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) — full plan with metadata contract additions, per-sub-phase file-level change maps, security notes, backwards-compat guarantees, and exit criteria. Total scope ~125 hr / 4 sub-phases.
+1. First revision (same day): A → **B** → **D** → C. Reasoning: B is table-stakes (conditional fields, file upload, master-detail, list views). No amount of enterprise SSO saves a product that can't build a working onboarding form. Fundamentals compound; enterprise polish doesn't compound backwards onto broken fundamentals.
 
-Also updated:
-- [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — forward-plan table now A → **D** → B → C. Total effort revised: ~64 hr → ~189 hr.
-- [`README.md`](./README.md) — Phase D added to navigation, folder-layout diagram, and current-state summary.
-- [`COMPLEX_UI_PLAN.md`](./planning/COMPLEX_UI_PLAN.md) + [`MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) — cross-plan headers now list Phase D as prerequisite (C5 notifications reuse D3 substrate).
+2. **Final revision (same day)**: A → B → **C** → **D**. Reasoning: approvals are the *product* (AppBana's AI-generated regulated-industry workflow differentiator), D is *packaging*. Ship the product first, package it second. Concrete points:
+    - Every SaaS has SSO; few have AI-generated maker-checker. C is why customers pick us over the incumbent.
+    - C is ~30 hr, D is ~125 hr. C-first means a differentiator lands in ~1 week vs. 4–5 weeks of D infrastructure before anything new is user-visible.
+    - Prospects will PoC with local auth; they won't PoC with broken approvals.
+    - D's specifics (which OIDC provider, group→role mapping, branding) are better co-designed with a real prospect than guessed. Delaying D means D1 lands against real requirements.
+
+**Tradeoff:** C5 (notifications on maker-checker transitions) ships inside C with a simple polling badge (~2–3 hr of throwaway code). Once D3 lands, C5's substrate is replaced with the durable rule-driven notification system. Negligible cost.
+
+**Files updated for the re-order:**
+- [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — forward-plan table rows re-ordered A → B → C → D; execution-order and rationale paragraphs rewritten.
+- [`README.md`](./README.md) — persona-table row order + forward-plan bullets + folder-layout tree all reflect A → B → C → D.
+- [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) — header now says "runs before Phase D"; C5 substrate story updated to "ships with polling badge, D3 swaps in later."
+- [`planning/ENTERPRISE_CAPABILITIES_PLAN.md`](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) — header now says "**Last** epic — depends on A + B + C"; explicit "Why D goes after C (not before)" paragraph added; execution-order + C5 dependency mentions corrected.
+- [`planning/COMPLEX_UI_PLAN.md`](./planning/COMPLEX_UI_PLAN.md) — cross-plan header now says D "runs *after* Phase C".
 
 ---
 
 ## Current forward plan
 
 ```
-Phase A — Runtime UX Sprint 2         (~10 hr)  — customer-demo-ready UI
+Phase A — Runtime UX Sprint 2        (~10 hr)   — customer-demo-ready UI
      ↓
-Phase D — Enterprise Capabilities     (~125 hr) — SSO · dashboards · notifications · enterprise shell
+Phase B — Complex UI Epic            (~29 hr)   — wizards · conditional fields · upload · master-detail · list views
      ↓
-Phase B — Complex UI Epic             (~29 hr)  — wizards · upload · master-detail · list views
+Phase C — Maker-Checker Epic         (~30 hr)   — approvals + audit (the differentiator)
      ↓
-Phase C — Maker-Checker Epic          (~30 hr)  — approvals + audit (C5 reuses D3)
+🚀 Demo-able differentiated product  (~69 hr total, ~2 weeks of focused work)
      ↓
-🚀 First enterprise customer live   (Stage 5 subdomain deploy runs in parallel)
+Phase D — Enterprise Capabilities    (~125 hr)  — SSO · dashboards · notifications · enterprise shell
+     ↓
+🚀 First enterprise customer live    (~194 hr total; Stage 5 subdomain deploy runs in parallel)
 ```
 
-**Total: ~194 hr / ~5–6 focused weeks.** Single source of truth: [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md).
+**Single source of truth:** [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md).
 
 ---
 
@@ -64,7 +74,7 @@ Phase C — Maker-Checker Epic          (~30 hr)  — approvals + audit (C5 reus
 
 **Start Phase A, Task 2.1** — replace the runtime's native `<input type="date">` with `react-day-picker` in a popover. Format via `date-fns`, emit ISO 8601 on submit. See [`planning/RUNTIME_UX_OVERHAUL_PLAN.md`](./planning/RUNTIME_UX_OVERHAUL_PLAN.md) Sprint 2 §2.1.
 
-After A ships, D1 (SSO) and D4 (enterprise shell) can start in parallel. D2 (dashboards) is the highest-visibility win — recommend leading with D2 for the next customer demo.
+After A ships: begin B1 (wizards). C1+C2 (backend-only) can optionally start in parallel with B if we want to compress schedule; C3 onward genuinely wants B done first.
 
 ---
 
