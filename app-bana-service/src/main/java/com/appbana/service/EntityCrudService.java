@@ -636,7 +636,30 @@ public class EntityCrudService {
         return list;
     }
 
+    /**
+     * Sprint 3 post-review fix — the outer coerceAndValidate() wraps the raw
+     * validator so every downstream {@code IllegalArgumentException("field
+     * 'X' <reason>")} surfaces as a typed {@link FieldValidationException}.
+     *
+     * <p>Structured errors let {@link ErrorHandler#fieldValidationError} skip
+     * its brittle regex parser. The inner {@link #coerceAndValidateRaw} keeps
+     * the historic messages verbatim so any legacy caller unaware of the
+     * typed contract still sees the same string.
+     */
     private static Object coerceAndValidate(EntitySchema.Field f, Object raw) {
+        try {
+            return coerceAndValidateRaw(f, raw);
+        } catch (FieldValidationException fve) {
+            throw fve;
+        } catch (IllegalArgumentException iae) {
+            String msg = iae.getMessage() != null ? iae.getMessage() : "";
+            String prefix = "field '" + f.getName() + "' ";
+            String reason = msg.startsWith(prefix) ? msg.substring(prefix.length()) : msg;
+            throw new FieldValidationException(f.getName(), reason);
+        }
+    }
+
+    private static Object coerceAndValidateRaw(EntitySchema.Field f, Object raw) {
         String t = f.getType().toLowerCase(Locale.ROOT);
         // required
         if (raw == null || (raw instanceof String s && s.isBlank() && !t.equals("string") && !t.equals("text"))) {

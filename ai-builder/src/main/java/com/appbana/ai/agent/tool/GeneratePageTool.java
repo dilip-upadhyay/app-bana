@@ -105,6 +105,25 @@ public class GeneratePageTool implements Tool {
                 default -> throw new IllegalArgumentException("Unknown page type: " + pageType);
             };
 
+            // Sprint 3 post-review fix — inject `kind` and `entityKey` on every
+            // generated page so the runtime DetailPage / classifier can trust
+            // metadata over name-sniffing. Without these, DetailPage.tsx sees
+            // page.entityKey === '' and silently short-circuits into an empty
+            // overlay on every AI-generated app.
+            String tenantForKey = context.tenantId();
+            if (tenantForKey == null || tenantForKey.isEmpty()) {
+                tenantForKey = "default";
+            }
+            String appIdForKey = (String) arguments.get("appId");
+            if (appIdForKey == null || appIdForKey.isEmpty()) {
+                appIdForKey = context.appId();
+            }
+            Object entityForKey = arguments.get("entityName");
+            pageMetadata.put("kind", pageType);
+            if (entityForKey != null && appIdForKey != null && !appIdForKey.isEmpty()) {
+                pageMetadata.put("entityKey", tenantForKey + "_" + appIdForKey + "_" + entityForKey);
+            }
+
             // 2. Validate metadata
             ValidationResult validation = validator.validatePage(pageMetadata);
 

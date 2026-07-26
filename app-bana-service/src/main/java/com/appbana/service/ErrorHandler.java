@@ -54,6 +54,15 @@ public class ErrorHandler {
         String msg = ce.getMessage() != null ? ce.getMessage() : ce.getClass().getSimpleName();
         body.put("error", msg);
 
+        // Sprint 3 post-review fix — prefer typed field errors from
+        // FieldValidationException. Falls through to the regex parser only for
+        // legacy callers that still throw plain IllegalArgumentException with
+        // a "field 'X' <reason>" message.
+        if (ce instanceof FieldValidationException fve && !fve.getFieldErrors().isEmpty()) {
+            body.put("errors", new LinkedHashMap<>(fve.getFieldErrors()));
+            return body;
+        }
+
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         Matcher m = FIELD_MSG.matcher(msg);
         if (m.find()) {
