@@ -23,4 +23,5 @@ if not exist "node_modules" (
 )
 
 echo [start-runtime] Launching Vite dev server on port %PORT%...
-npx vite --port %PORT%
+cd /d "%ROOT_DIR%"
+call pnpm -C app-bana-runtime exec vite --port %PORT%
