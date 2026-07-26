@@ -36,13 +36,13 @@
 
 ## 🧹 Sprint 3 post-review follow-ups (deferred, not blocking Phase B)
 
-The 2026-07-27 architect review of Sprint 3 caught five real issues; all five were fixed in the same day (see §A2 row above). The following items were consciously deferred:
+The 2026-07-27 architect review of Sprint 3 caught five real issues; all five were fixed the same day (see §A2 row above). A sixth issue — pre-existing decimal-type coercion — was found while writing the CRUD round-trip e2e spec and fixed 2026-07-27 in a follow-up commit (`0a49de7` + e2e regression coverage in `8083945`). The following items remain consciously deferred:
 
 - **Real soft-delete backend.** The current Delete-then-"Recreate" flow re-inserts the row with a new PK, losing inbound FK relationships. A proper implementation adds a `deleted_at` column + `POST /api/{entity}/{id}/restore` endpoint + a `?includeDeleted=true` query flag. Estimated 4–6 hours. Candidate for Sprint 3.2 or fold into Phase B4 (Master-Detail) which needs cascade semantics anyway.
-- **Decimal type coercion in `EntityCrudService`.** Discovered while writing the e2e CRUD round-trip spec: `coerceAndValidate` has no `case "decimal"` — decimal values fall through the default branch, get `.toString()`'d, and Postgres rejects the resulting VARCHAR against a NUMERIC column. Every AI-generated app with a `price` / `amount` / `total` field hits this silently. Estimated 30 min (add the case + one unit test). Priority: high (customer-visible bug), but not a Sprint 3 regression.
 - **Direct unit tests for `useEntityRows` + `ReferenceCombobox` keyboard nav.** Runtime tests avoid jsdom by convention (see `app-bana-runtime/vitest.config.ts`); testing a React hook or a focus-managing combobox without jsdom requires extracting the pure logic first. Currently covered indirectly by the e2e CRUD spec. Estimated 2 hours to extract + test.
 - **`StudioTableLive.tsx` under 200 lines.** Missed at 328 lines. The FK-prefetch effect and cell-render helpers are irreducibly table-specific; extracting them into passthrough modules would worsen cohesion. Recommend updating the exit criterion instead when a second table consumer appears and can share `useFkLabels`.
 - **Runtime-state screenshot archive** under `docs/design/runtime-states/`. Pure documentation task, needs a running backend + Playwright driver. Deferred pending Phase B4 (Master-Detail) which changes the shape of half these screenshots anyway.
+- **23 pre-existing `AdvancedQueryTest` + `SecurityIntegrationTest` failures.** All are "unknown entity" 404s from tests that use raw entity names (`/api/customer`) without the tenant/app prefix. Predates Sprint 3 by many months. Non-blocking; the test infra needs to be updated to prime schemas with the qualified key.
 
 ---
 
