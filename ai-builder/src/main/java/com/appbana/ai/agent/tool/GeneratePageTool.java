@@ -401,6 +401,13 @@ public class GeneratePageTool implements Tool {
                     inputProps.put("referenceEntity", refEntity);
                 }
             }
+            // Phase B2 — propagate optional conditional-visibility metadata onto
+            // the runtime node.props so <ConditionalField> can honor showWhen /
+            // requiredWhen / disabledWhen expressions at render time.
+            Object conditions = field.get("conditions");
+            if (conditions instanceof Map<?, ?> conditionsMap && !conditionsMap.isEmpty()) {
+                inputProps.put("conditions", conditionsMap);
+            }
             input.put("props", inputProps);
 
             gridChildren.add(containerId);

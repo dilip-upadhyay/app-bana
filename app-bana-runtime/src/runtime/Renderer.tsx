@@ -9,8 +9,8 @@
  * props.label / name / placeholder — so the field's meaning stays visible
  * after the user starts typing.
  */
-import { useEffect, useState } from 'react';
-import type { PageMeta, ComponentNode } from '@appbana/shared';
+import { useEffect, useRef, useState } from 'react';
+import type { PageMeta, ComponentNode, FieldCondition } from '@appbana/shared';
 import { fetchEntityRows, insertEntityRow, ApiFieldError } from '@appbana/shared';
 import { StudioTableLive } from './StudioTableLive';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
@@ -26,6 +26,8 @@ import { EntityFormErrorProvider } from './entity-form-context';
 import { FormField, ValidatedInput, ValidatedSelect, ValidatedTextarea } from './FormField';
 import { ReferenceCombobox } from './ReferenceCombobox';
 import { WizardShell } from './WizardShell';
+import { FormValuesProvider } from './form-values-context';
+import { ConditionalField } from './ConditionalField';
 
 // Sprint 3 task 3.7 — anything larger than this switches from native <select>
 // to the search-driven combobox. Kept small so real-world lookup tables that
@@ -182,6 +184,25 @@ function fieldLabel(props: Record<string, unknown>): string {
   return '';
 }
 
+/**
+ * Phase B2 — Optional per-field condition metadata rides on `node.props`.
+ * The scaffolder / AI Builder writes it as a plain object matching the
+ * FieldCondition type from @appbana/shared.
+ */
+function readConditions(props: Record<string, unknown>): FieldCondition | undefined {
+  const c = props.conditions;
+  if (!c || typeof c !== 'object') return undefined;
+  return c as FieldCondition;
+}
+
+/** Wrap a field's rendered JSX with a ConditionalField only when the field
+ *  actually has conditions — avoids the extra provider read on every input. */
+function maybeConditional(props: Record<string, unknown>, jsx: React.ReactElement): React.ReactElement {
+  const conditions = readConditions(props);
+  if (!conditions) return jsx;
+  return <ConditionalField conditions={conditions}>{jsx}</ConditionalField>;
+}
+
 function renderNode(
   node: ComponentNode,
   nodeMap: Map<string, ComponentNode>,
@@ -247,7 +268,7 @@ function renderNode(
       );
       const helpText = String(props.help ?? props.description ?? '');
       const fieldName = String(props.name ?? refEntity);
-      return (
+      return maybeConditional(props,
         <FormField
           key={node.id}
           name={fieldName}
@@ -286,7 +307,7 @@ function renderNode(
           props.referenceEntity ?? props.field ?? props.name ?? ''
         );
         const refFieldName = String(props.name ?? props.field ?? refEntity);
-        return (
+        return maybeConditional(props,
           <FormField
             key={node.id}
             name={refFieldName}
@@ -310,7 +331,7 @@ function renderNode(
           </FormField>
         );
       }
-      return (
+      return maybeConditional(props,
         <FormField
           key={node.id}
           name={fieldName}
@@ -363,7 +384,7 @@ function renderNode(
       );
       if (refEntity) {
         const refFieldName = String(props.name ?? refEntity);
-        return (
+        return maybeConditional(props,
           <FormField
             key={node.id}
             name={refFieldName}
@@ -387,7 +408,7 @@ function renderNode(
           </FormField>
         );
       }
-      return (
+      return maybeConditional(props,
         <FormField
           key={node.id}
           name={fieldName}
@@ -421,7 +442,7 @@ function renderNode(
       const inputId = `appbana-ta-${node.id}`;
       const helpText = String(props.help ?? props.description ?? '');
       const fieldName = String(props.name ?? '');
-      return (
+      return maybeConditional(props,
         <FormField
           key={node.id}
           name={fieldName}
@@ -655,6 +676,8 @@ function EntityForm(props: Readonly<EntityFormProps>) {
   const { className, styleObj, entity, dataAttrs, children } = props;
   const [saving, setSaving] = useState(false);
   const { errors, validate, clearError, resetErrors, setExternalErrors } = useEntityFormValidation();
+  // Phase B2 — publish live form values to descendant ConditionalField instances.
+  const formElRef = useRef<HTMLFormElement | null>(null);
 
   async function submit(form: HTMLFormElement): Promise<boolean> {
     if (!entity) {
@@ -738,6 +761,7 @@ function EntityForm(props: Readonly<EntityFormProps>) {
   return (
     <EntityFormErrorProvider errors={errors} clearError={clearError}>
       <form
+        ref={formElRef}
         className={className}
         style={styleObj}
         data-entity={entity}
@@ -745,13 +769,15 @@ function EntityForm(props: Readonly<EntityFormProps>) {
         noValidate
         {...dataAttrs}
       >
-        {children}
-        <div className="appbana-form-save-cell">
-          <FormActions
-            saving={saving}
-            onSaveAndNew={entity ? handleSaveAndNew : undefined}
-          />
-        </div>
+        <FormValuesProvider formRef={formElRef}>
+          {children}
+          <div className="appbana-form-save-cell">
+            <FormActions
+              saving={saving}
+              onSaveAndNew={entity ? handleSaveAndNew : undefined}
+            />
+          </div>
+        </FormValuesProvider>
       </form>
     </EntityFormErrorProvider>
   );

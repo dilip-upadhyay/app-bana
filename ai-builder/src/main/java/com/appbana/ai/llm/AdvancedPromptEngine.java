@@ -162,6 +162,9 @@ public class AdvancedPromptEngine {
         // Phase B1 — Wizard layout hint
         prompt.append("WIZARD LAYOUT (Phase B1): When the user's request implies a long or multi-step form — words like 'onboarding', 'signup flow', 'multi-step', 'wizard', 'KYC', 'application form', 'checkout', 'registration' — call `generate_page` with `type='form'` PLUS `layout='wizard'` and a `steps[]` array that groups the entity's fields into logical steps (e.g. Personal Info → Address → Documents → Consent). Each step object needs `id`, `title`, and `fields[]` (field names from the entity). The runtime auto-appends a Review & Submit step; do NOT add one yourself. Prefer wizards for any form with more than ~6 fields.\n\n");
 
+        // Phase B2 — Conditional-fields hint
+        prompt.append("CONDITIONAL FIELDS (Phase B2): When the user says things like 'only show X when Y', 'require X if Y', 'hide X unless Y', or 'disable X when Y', attach a `conditions` object to that field in `create_entity` / `batch_update_entities`. Shape: `conditions: { showWhen?: Expression, requiredWhen?: Expression, disabledWhen?: Expression }`. An Expression is EITHER a leaf `{ field: '<name>', op: '<op>', value: <any> }` where op is one of `equals | notEquals | in | notIn | gt | lt | gte | lte | contains | isEmpty | isNotEmpty`, OR a combinator `{ and: [Expression, ...] }`, `{ or: [Expression, ...] }`, or `{ not: Expression }`. Example — show `spouse_name` only when `marital_status === 'married'`: `\"conditions\": { \"showWhen\": { \"field\": \"marital_status\", \"op\": \"equals\", \"value\": \"married\" } }`. Hidden fields are excluded from validation automatically.\n\n");
+
         // Available tools
         prompt.append("## Available Tools\n\n");
         prompt.append(toolDescriptions);

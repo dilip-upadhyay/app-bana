@@ -64,7 +64,11 @@ public class CreateEntityTool implements Tool {
                   "name": {"type": "string"},
                   "type": {"type": "string", "description": "Field type: text, email, number, date, etc."},
                   "required": {"type": "boolean"},
-                  "label": {"type": "string"}
+                  "label": {"type": "string"},
+                  "conditions": {
+                    "type": "object",
+                    "description": "Phase B2 — optional conditional visibility. Contains showWhen / requiredWhen / disabledWhen expressions. Each expression is either a leaf {field, op, value} where op is one of equals|notEquals|in|notIn|gt|lt|gte|lte|contains|isEmpty|isNotEmpty, or a combinator {and:[...]}, {or:[...]}, {not:{...}}."
+                  }
                 },
                 "required": ["name", "type", "required"]
               }

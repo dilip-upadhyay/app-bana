@@ -28,6 +28,7 @@ import { toast } from './Toaster';
 import { humanizeHeader } from './cell-formatters';
 import { Button } from './Button';
 import { useWizardDraft, type WizardDraftValues } from './useWizardDraft';
+import { FormValuesProvider } from './form-values-context';
 
 export interface WizardShellProps {
   /** Qualified entity key `{tenantId}_{appId}_{Entity}` for the row insert. */
@@ -266,6 +267,7 @@ export function WizardShell(props: Readonly<WizardShellProps>): ReactElement {
         noValidate
         data-appbana-wizard={entity}
       >
+        <FormValuesProvider formRef={formRef}>
         {/* Progress bar + step chips */}
         <div className="mb-6">
           <div className="flex items-center justify-between text-xs text-slate-600 mb-2">
@@ -417,6 +419,7 @@ export function WizardShell(props: Readonly<WizardShellProps>): ReactElement {
             )}
           </div>
         </div>
+        </FormValuesProvider>
       </form>
     </EntityFormErrorProvider>
   );
