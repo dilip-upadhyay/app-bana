@@ -47,8 +47,7 @@ Backend: 220/220 tests pass · Runtime Vitest: 147/147 · E2E Playwright: 8/8 di
 [✅ Done]     Phase A2 — Runtime Foundations (Sprint 3)
 [✅ Done]     Phase B  — Complex UI Epic (B1–B5)
 [✅ Done]     Phase B.H — Hardening Sprint (H1–H8)
-     ↓
-[⏳ Next]    Phase C  — Maker-Checker Epic         (~30 hr)
+[🟡 In Prog] Phase C  — Maker-Checker Epic (C1 signed off; C2 state machine & backend routes shipped)
      ↓
 🎯 Demo-able differentiated product
      ↓
