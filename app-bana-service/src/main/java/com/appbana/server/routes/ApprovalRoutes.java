@@ -135,7 +135,7 @@ public class ApprovalRoutes {
             }
 
             try {
-                List<Map<String, Object>> pending = ApprovalService.getPendingQueue(tenantId, appId, entityName);
+                List<Map<String, Object>> pending = ApprovalService.getPendingQueue(tenantId, appId, entityName, callerUserId);
                 res.json(200, Map.of(
                         "tenantId", tenantId,
                         "appId", appId,
@@ -143,6 +143,8 @@ public class ApprovalRoutes {
                         "count", pending.size(),
                         "records", pending
                 ));
+            } catch (IllegalStateException e) {
+                res.json(403, Map.of("error", e.getMessage()));
             } catch (Exception e) {
                 LOG.error("[ApprovalRoutes] Failed to fetch pending queue", e);
                 res.json(500, Map.of("error", e.getMessage()));
@@ -163,7 +165,7 @@ public class ApprovalRoutes {
             }
 
             try {
-                List<Map<String, Object>> auditTrail = ApprovalService.getAuditTrail(tenantId, appId, entityName, rowId);
+                List<Map<String, Object>> auditTrail = ApprovalService.getAuditTrail(tenantId, appId, entityName, rowId, callerUserId);
                 res.json(200, Map.of(
                         "tenantId", tenantId,
                         "appId", appId,
@@ -172,6 +174,8 @@ public class ApprovalRoutes {
                         "count", auditTrail.size(),
                         "history", auditTrail
                 ));
+            } catch (IllegalStateException e) {
+                res.json(403, Map.of("error", e.getMessage()));
             } catch (Exception e) {
                 LOG.error("[ApprovalRoutes] Failed to fetch audit trail", e);
                 res.json(500, Map.of("error", e.getMessage()));

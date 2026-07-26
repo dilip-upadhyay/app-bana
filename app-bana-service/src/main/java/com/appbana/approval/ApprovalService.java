@@ -1,6 +1,10 @@
 package com.appbana.approval;
 
 import com.appbana.JdbcManager;
+import com.appbana.SchemaManager;
+import com.appbana.model.EntitySchema;
+import com.appbana.security.AppAuthorization;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,18 +14,22 @@ import java.sql.ResultSet;
 import java.util.*;
 
 /**
- * ApprovalService — Phase C2.1
+ * ApprovalService — Phase C2.1 & C2.5-C2.9
  *
  * Core state machine service for Maker-Checker approval workflows:
  * State transitions: DRAFT -> PENDING -> APPROVED / REJECTED
  *
  * Enforces:
- * 1. Role Authorization (Submitter must be MAKER or BOTH; Approver/Rejecter must be CHECKER or BOTH).
- * 2. Separation of Duties (Approver/Rejecter CANNOT be the submitter of the record).
- * 3. Audit trail logging into `appbana_approvals`.
+ * 1. Physical Table Name Unification (delegates to SchemaManager).
+ * 2. Role Authorization (Submitter must be MAKER; Approver/Rejecter must be CHECKER).
+ * 3. Separation of Duties (Approver/Rejecter CANNOT be the submitter of the record).
+ * 4. Role-scoped Pending Queue and Audit Trail queries.
+ * 5. Pessimistic SELECT FOR UPDATE locking & revision bump on resubmit.
+ * 6. Diff snapshot creation for audit trail logging into `appbana_approvals`.
  */
 public class ApprovalService {
     private static final Logger LOG = LoggerFactory.getLogger(ApprovalService.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public enum Status {
         DRAFT("DRAFT"),
@@ -49,17 +57,27 @@ public class ApprovalService {
     }
 
     /**
-     * Derives per-tenant dynamic physical table name: "APP_{tenantId}_{appId}_{entityName}" (uppercase).
+     * Derives per-tenant dynamic physical table name using canonical SchemaManager.
+     * Prevents table name mismatches caused by UUID appIds, hyphens, env prefixes, or length truncation.
      */
     public static String getTableName(String tenantId, String appId, String entityName) {
-        return ("APP_" + tenantId + "_" + appId + "_" + entityName).toUpperCase(Locale.ROOT);
+        String key = (tenantId != null ? tenantId : "default") + "_" + (appId != null ? appId : "default") + "_" + entityName;
+        EntitySchema schema = SchemaManager.loadSchema(key);
+        if (schema != null) {
+            return SchemaManager.getPhysicalTableName(schema);
+        }
+        EntitySchema fallback = new EntitySchema();
+        fallback.setTenantId(tenantId);
+        fallback.setAppId(appId);
+        fallback.setName(entityName);
+        return SchemaManager.getPhysicalTableName(fallback);
     }
 
     /**
      * Submits a DRAFT or REJECTED record for approval (DRAFT/REJECTED -> PENDING).
      */
     public static Map<String, Object> submitForApproval(String tenantId, String appId, String entityName, String rowId, String submitterUserId, String comments) throws Exception {
-        if (!UserRoleService.isMaker(tenantId, appId, entityName, submitterUserId)) {
+        if (!UserRoleService.isMaker(tenantId, appId, entityName, submitterUserId) && !AppAuthorization.isAppOwnerOrSystem(tenantId, appId, submitterUserId)) {
             throw new IllegalStateException("Forbidden: User '" + submitterUserId + "' does not have MAKER role on entity " + entityName);
         }
 
@@ -68,8 +86,8 @@ public class ApprovalService {
         try (Connection conn = JdbcManager.getConnection(tenantId)) {
             conn.setAutoCommit(false);
             try {
-                // Fetch current record
-                String selectSql = "SELECT \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\" FROM \"" + tableName + "\" WHERE \"ID\" = ?";
+                // Fetch current record with SELECT ... FOR UPDATE
+                String selectSql = "SELECT \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\" FROM \"" + tableName + "\" WHERE \"ID\" = ? FOR UPDATE";
                 String currentStateStr = "DRAFT";
                 int currentRevision = 1;
 
@@ -91,16 +109,27 @@ public class ApprovalService {
                     throw new IllegalStateException("Record " + rowId + " is already in PENDING approval state");
                 }
 
+                // Increment revision on resubmit after rejection or state update
+                int targetRevision = "REJECTED".equalsIgnoreCase(currentStateStr) ? currentRevision + 1 : currentRevision;
+
                 // Update record status to PENDING
-                String updateSql = "UPDATE \"" + tableName + "\" SET \"APPROVAL_STATUS\" = 'PENDING', \"SUBMITTED_BY\" = ?, \"SUBMITTED_AT\" = NOW(), \"REJECTION_REASON\" = NULL WHERE \"ID\" = ?";
+                String updateSql = "UPDATE \"" + tableName + "\" SET \"APPROVAL_STATUS\" = 'PENDING', \"APPROVAL_REVISION\" = ?, \"SUBMITTED_BY\" = ?, \"SUBMITTED_AT\" = NOW(), \"REJECTION_REASON\" = NULL WHERE \"ID\" = ?";
                 try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
-                    ps.setString(1, submitterUserId);
-                    ps.setObject(2, parseRowId(rowId));
+                    ps.setInt(1, targetRevision);
+                    ps.setString(2, submitterUserId);
+                    ps.setObject(3, parseRowId(rowId));
                     ps.executeUpdate();
                 }
 
+                String diffJson = MAPPER.writeValueAsString(Map.of(
+                        "rowId", rowId,
+                        "fromState", currentStateStr,
+                        "toState", "PENDING",
+                        "revision", targetRevision
+                ));
+
                 // Audit log entry
-                logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, currentStateStr, "PENDING", submitterUserId, "MAKER", comments, null);
+                logAuditEntry(conn, tenantId, appId, entityName, rowId, targetRevision, currentStateStr, "PENDING", submitterUserId, "MAKER", comments, diffJson);
 
                 conn.commit();
                 LOG.info("[ApprovalService] Submitted record {} in {} for approval by {}", rowId, tableName, submitterUserId);
@@ -111,7 +140,8 @@ public class ApprovalService {
                         "entityName", entityName,
                         "rowId", rowId,
                         "status", "PENDING",
-                        "submittedBy", submitterUserId
+                        "submittedBy", submitterUserId,
+                        "revision", targetRevision
                 );
             } catch (Exception e) {
                 conn.rollback();
@@ -124,7 +154,7 @@ public class ApprovalService {
      * Approves a PENDING record (PENDING -> APPROVED).
      */
     public static Map<String, Object> approveRecord(String tenantId, String appId, String entityName, String rowId, String checkerUserId, String comments) throws Exception {
-        if (!UserRoleService.isChecker(tenantId, appId, entityName, checkerUserId)) {
+        if (!UserRoleService.isChecker(tenantId, appId, entityName, checkerUserId) && !AppAuthorization.isAppOwnerOrSystem(tenantId, appId, checkerUserId)) {
             throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER role on entity " + entityName);
         }
 
@@ -137,7 +167,7 @@ public class ApprovalService {
                 int currentRevision = 1;
                 String submittedBy = null;
 
-                String selectSql = "SELECT \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\" FROM \"" + tableName + "\" WHERE \"ID\" = ?";
+                String selectSql = "SELECT \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\" FROM \"" + tableName + "\" WHERE \"ID\" = ? FOR UPDATE";
                 try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
                     ps.setObject(1, parseRowId(rowId));
                     try (ResultSet rs = ps.executeQuery()) {
@@ -169,8 +199,16 @@ public class ApprovalService {
                     ps.executeUpdate();
                 }
 
+                String diffJson = MAPPER.writeValueAsString(Map.of(
+                        "rowId", rowId,
+                        "fromState", "PENDING",
+                        "toState", "APPROVED",
+                        "submittedBy", submittedBy != null ? submittedBy : "",
+                        "approvedBy", checkerUserId
+                ));
+
                 // Audit log entry
-                logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, "PENDING", "APPROVED", checkerUserId, "CHECKER", comments, null);
+                logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, "PENDING", "APPROVED", checkerUserId, "CHECKER", comments, diffJson);
 
                 conn.commit();
                 LOG.info("[ApprovalService] Approved record {} in {} by checker {}", rowId, tableName, checkerUserId);
@@ -194,7 +232,7 @@ public class ApprovalService {
      * Rejects a PENDING record (PENDING -> REJECTED).
      */
     public static Map<String, Object> rejectRecord(String tenantId, String appId, String entityName, String rowId, String checkerUserId, String reason) throws Exception {
-        if (!UserRoleService.isChecker(tenantId, appId, entityName, checkerUserId)) {
+        if (!UserRoleService.isChecker(tenantId, appId, entityName, checkerUserId) && !AppAuthorization.isAppOwnerOrSystem(tenantId, appId, checkerUserId)) {
             throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER role on entity " + entityName);
         }
 
@@ -211,7 +249,7 @@ public class ApprovalService {
                 int currentRevision = 1;
                 String submittedBy = null;
 
-                String selectSql = "SELECT \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\" FROM \"" + tableName + "\" WHERE \"ID\" = ?";
+                String selectSql = "SELECT \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\" FROM \"" + tableName + "\" WHERE \"ID\" = ? FOR UPDATE";
                 try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
                     ps.setObject(1, parseRowId(rowId));
                     try (ResultSet rs = ps.executeQuery()) {
@@ -243,8 +281,17 @@ public class ApprovalService {
                     ps.executeUpdate();
                 }
 
+                String diffJson = MAPPER.writeValueAsString(Map.of(
+                        "rowId", rowId,
+                        "fromState", "PENDING",
+                        "toState", "REJECTED",
+                        "submittedBy", submittedBy != null ? submittedBy : "",
+                        "rejectedBy", checkerUserId,
+                        "reason", reason
+                ));
+
                 // Audit log entry
-                logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, "PENDING", "REJECTED", checkerUserId, "CHECKER", reason, null);
+                logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, "PENDING", "REJECTED", checkerUserId, "CHECKER", reason, diffJson);
 
                 conn.commit();
                 LOG.info("[ApprovalService] Rejected record {} in {} by checker {} with reason: {}", rowId, tableName, checkerUserId, reason);
@@ -267,12 +314,20 @@ public class ApprovalService {
 
     /**
      * Gets all pending records across an entity table for the Checker Queue.
+     * Enforces role authorization (callerUserId must be CHECKER or App Owner/System).
      */
-    public static List<Map<String, Object>> getPendingQueue(String tenantId, String appId, String entityName) throws Exception {
+    public static List<Map<String, Object>> getPendingQueue(String tenantId, String appId, String entityName, String callerUserId) throws Exception {
+        if (callerUserId == null || callerUserId.isBlank()) {
+            throw new IllegalStateException("Unauthorized: Caller user ID required");
+        }
+        if (!UserRoleService.isChecker(tenantId, appId, entityName, callerUserId) && !AppAuthorization.isAppOwnerOrSystem(tenantId, appId, callerUserId)) {
+            throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have CHECKER or owner rights on entity " + entityName);
+        }
+
         String tableName = getTableName(tenantId, appId, entityName);
         List<Map<String, Object>> results = new ArrayList<>();
 
-        String sql = "SELECT * FROM \"" + tableName + "\" WHERE \"APPROVAL_STATUS\" = 'PENDING' ORDER BY \"SUBMITTED_AT\" DESC";
+        String sql = "SELECT * FROM \"" + tableName + "\" WHERE \"APPROVAL_STATUS\" = 'PENDING' ORDER BY \"SUBMITTED_AT\" DESC LIMIT 500";
 
         try (Connection conn = JdbcManager.getConnection(tenantId);
              PreparedStatement ps = conn.prepareStatement(sql);
@@ -292,8 +347,20 @@ public class ApprovalService {
 
     /**
      * Gets audit history entries for a given record.
+     * Enforces role authorization (callerUserId must be MAKER, CHECKER, or App Owner/System).
      */
-    public static List<Map<String, Object>> getAuditTrail(String tenantId, String appId, String entityName, String rowId) throws Exception {
+    public static List<Map<String, Object>> getAuditTrail(String tenantId, String appId, String entityName, String rowId, String callerUserId) throws Exception {
+        if (callerUserId == null || callerUserId.isBlank()) {
+            throw new IllegalStateException("Unauthorized: Caller user ID required");
+        }
+        boolean isMaker = UserRoleService.isMaker(tenantId, appId, entityName, callerUserId);
+        boolean isChecker = UserRoleService.isChecker(tenantId, appId, entityName, callerUserId);
+        boolean isOwner = AppAuthorization.isAppOwnerOrSystem(tenantId, appId, callerUserId);
+
+        if (!isMaker && !isChecker && !isOwner) {
+            throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have permission to view approval audit history for " + entityName);
+        }
+
         List<Map<String, Object>> trail = new ArrayList<>();
         String sql = "SELECT * FROM appbana_approvals WHERE tenant_id = ? AND app_id = ? AND entity_name = ? AND row_id = ? ORDER BY created_at ASC";
 
@@ -340,6 +407,7 @@ public class ApprovalService {
     }
 
     private static Object parseRowId(String rowId) {
+        if (rowId == null) return "";
         try {
             return Long.parseLong(rowId);
         } catch (NumberFormatException e) {
@@ -347,3 +415,4 @@ public class ApprovalService {
         }
     }
 }
+

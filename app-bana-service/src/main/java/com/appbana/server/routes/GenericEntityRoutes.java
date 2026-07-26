@@ -453,16 +453,13 @@ public class GenericEntityRoutes {
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
 
-            // Task C2.3 — Inject approval metadata when approval is required
+            // Task C2.7 — Unconditionally strip client-supplied approval columns on POST
             if (schema.isApprovalRequired()) {
-                if (!data.containsKey("approval_status") || data.get("approval_status") == null) {
-                    data.put("approval_status", "DRAFT");
-                }
-                if (!data.containsKey("approval_revision") || data.get("approval_revision") == null) {
-                    data.put("approval_revision", 1);
-                }
+                stripApprovalColumns(data);
+                data.put("approval_status", "DRAFT");
+                data.put("approval_revision", 1);
                 String userId = AuthService.extractUserId(req, cfg);
-                if (userId != null && !userId.isBlank() && !data.containsKey("submitted_by")) {
+                if (userId != null && !userId.isBlank()) {
                     data.put("submitted_by", userId);
                 }
             }
@@ -772,6 +769,40 @@ public class GenericEntityRoutes {
 
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
+
+            if (schema.isApprovalRequired()) {
+                stripApprovalColumns(data);
+                try {
+                    Map<String, Object> existing = crud.getById(schema, idStr);
+                    if (existing != null) {
+                        Object statusObj = existing.get("approval_status");
+                        if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
+                        String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
+
+                        if ("PENDING".equalsIgnoreCase(currentStatus)) {
+                            res.json(400, Map.of("error", "Cannot update record while approval is PENDING"));
+                            return;
+                        }
+
+                        if ("APPROVED".equalsIgnoreCase(currentStatus) || "REJECTED".equalsIgnoreCase(currentStatus)) {
+                            Object revObj = existing.get("approval_revision");
+                            if (revObj == null) revObj = existing.get("APPROVAL_REVISION");
+                            int rev = 1;
+                            if (revObj instanceof Number n) rev = n.intValue();
+                            data.put("approval_status", "DRAFT");
+                            data.put("approval_revision", rev + 1);
+                            String userId = AuthService.extractUserId(req, cfg);
+                            if (userId != null && !userId.isBlank()) {
+                                data.put("submitted_by", userId);
+                            }
+                        }
+                    }
+                } catch (SQLException e) {
+                    LOG.error("Failed to check approval status on PUT for entity {} id {}", entity, idStr, e);
+                    res.json(500, ErrorHandler.errorDetails(e));
+                    return;
+                }
+            }
 
             try {
                 if (permissionService != null && AuthService.authEnabled(cfg)) {
@@ -1541,5 +1572,22 @@ public class GenericEntityRoutes {
                 res.json(500, ErrorHandler.errorDetails(e));
             }
         });
+    }
+
+    private static final List<String> APPROVAL_COLUMNS = List.of(
+            "approval_status", "APPROVAL_STATUS",
+            "approval_revision", "APPROVAL_REVISION",
+            "submitted_by", "SUBMITTED_BY",
+            "submitted_at", "SUBMITTED_AT",
+            "approved_by", "APPROVED_BY",
+            "approved_at", "APPROVED_AT",
+            "rejection_reason", "REJECTION_REASON"
+    );
+
+    private static void stripApprovalColumns(Map<String, Object> data) {
+        if (data == null) return;
+        for (String col : APPROVAL_COLUMNS) {
+            data.remove(col);
+        }
     }
 }

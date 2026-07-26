@@ -27,7 +27,10 @@ public class AuthService {
      * Checks X-AppBana-Token header first, then Authorization Bearer token
      */
     public static String extractToken(Router.HttpRequest req) {
-        String tok = req.header("X-AppBana-Token");
+        String tok = req.header("X-Session-Token");
+        if (tok == null || tok.isBlank()) {
+            tok = req.header("X-AppBana-Token");
+        }
         if (tok == null || tok.isBlank()) {
             String auth = req.header("Authorization");
             if (auth != null && auth.toLowerCase(Locale.ROOT).startsWith("bearer "))

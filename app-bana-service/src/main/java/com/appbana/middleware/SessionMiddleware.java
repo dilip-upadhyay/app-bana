@@ -128,8 +128,8 @@ public class SessionMiddleware {
             return false;
         }
 
-        // CRITICAL (C1.12): Role management and schema APIs MUST ALWAYS require session authentication
-        if (path.contains("/roles") || path.equals("/schema")) {
+        // CRITICAL (C1.12 & C2.6): Role management, schema APIs, and approval routes MUST ALWAYS require session authentication
+        if (path.contains("/roles") || path.equals("/schema") || path.contains("/approvals") || path.endsWith("/submit") || path.endsWith("/approve") || path.endsWith("/reject")) {
             return false;
         }
 

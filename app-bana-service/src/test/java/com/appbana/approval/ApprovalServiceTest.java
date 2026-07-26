@@ -110,8 +110,9 @@ public class ApprovalServiceTest {
         assertThrows(IllegalStateException.class, () ->
                 ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "101", maker, "Re-submit"));
 
-        // Verify Pending Queue returns record
-        List<Map<String, Object>> queue = ApprovalService.getPendingQueue(TENANT_ID, APP_ID, ENTITY_NAME);
+        // Grant CHECKER role to checker_bob and verify Pending Queue returns record
+        UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, "checker_bob", UserRoleService.Role.CHECKER, "system");
+        List<Map<String, Object>> queue = ApprovalService.getPendingQueue(TENANT_ID, APP_ID, ENTITY_NAME, "checker_bob");
         assertEquals(1, queue.size());
         assertEquals("101", queue.get(0).get("id").toString());
     }
@@ -158,7 +159,7 @@ public class ApprovalServiceTest {
         assertEquals("APPROVED", approveRes.get("status"));
 
         // Verify Audit Trail has 4 state transition log entries
-        List<Map<String, Object>> audit = ApprovalService.getAuditTrail(TENANT_ID, APP_ID, ENTITY_NAME, "101");
+        List<Map<String, Object>> audit = ApprovalService.getAuditTrail(TENANT_ID, APP_ID, ENTITY_NAME, "101", maker);
         assertEquals(4, audit.size(), "Audit trail must record all 4 state transitions");
 
         assertEquals("DRAFT", audit.get(0).get("from_state"));
@@ -172,5 +173,17 @@ public class ApprovalServiceTest {
 
         assertEquals("PENDING", audit.get(3).get("from_state"));
         assertEquals("APPROVED", audit.get(3).get("to_state"));
+    }
+
+    @Test
+    public void testTableNameResolutionWithUUIDAndHyphens() {
+        String uuidAppId = "7495460a-bc30-40e9-8235-9ddb08720b2a";
+        String hyphenTenantId = "t-81919f7d";
+        String entity = "PurchaseOrder";
+
+        String derivedTable = ApprovalService.getTableName(hyphenTenantId, uuidAppId, entity);
+
+        // Must convert hyphens to underscores, UPPERCASE, and truncate to 63 chars via SchemaManager
+        assertEquals("APP_T_81919F7D_7495460A_BC30_40E9_8235_9DDB08720B2A_PURCHASEORD", derivedTable);
     }
 }
