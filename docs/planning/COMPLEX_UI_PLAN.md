@@ -7,6 +7,7 @@
 
 **Related active plans:**
 - [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — **Phase A**, prerequisite. Sprint 2 must complete before B1 starts.
+- [Enterprise Capabilities Plan](./ENTERPRISE_CAPABILITIES_PLAN.md) — **Phase D**, runs before this epic. D3 notifications infrastructure is a prerequisite for any B feature that emits a user-visible notification.
 - [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C**, follows this epic.
 - [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan; this epic is a post-Stage-4 extension.
 - Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).

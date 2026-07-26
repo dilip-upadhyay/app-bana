@@ -9,6 +9,7 @@
 
 **Related active plans:**
 - [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — **Phase A**, prerequisite.
+- [Enterprise Capabilities Plan](./ENTERPRISE_CAPABILITIES_PLAN.md) — **Phase D**, prerequisite. C5 notifications are implemented on top of the D3 notifications substrate.
 - [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B**, prerequisite. Master-detail and file-upload from B4/B3 underpin many maker-checker screens.
 - [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan; this epic is a post-Stage-4 extension.
 - Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).

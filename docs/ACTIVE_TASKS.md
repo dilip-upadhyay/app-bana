@@ -2,18 +2,21 @@
 
 ## 🎯 Forward Plan (post-Stage-4) — Path to First Customer
 
-**Approved 2026-07-26.** The AI-Native UI Rebuild is complete through Stage 4 (`app-bana-ui/` retired). Three phases now stand between us and the first paying customer. Stage 5 (subdomain deploy) runs in parallel with Phase B/C, gated on ops rather than code.
+**Approved 2026-07-26 · Revised 2026-07-26 to insert Phase D after enterprise-app comparison.** The AI-Native UI Rebuild is complete through Stage 4 (`app-bana-ui/` retired). Four phases now stand between us and the first paying enterprise customer. Stage 5 (subdomain deploy) runs in parallel with Phase B/C/D, gated on ops rather than code.
 
 | Phase | Goal | Plan doc | Status |
 |-------|------|----------|--------|
 | **A — Quality Sprint** | Runtime UX Sprint 2: real date picker, sidebar redesign, empty states, loading skeletons, inline validation, status pills, user menu, page actions, WCAG AA, responsive breakpoints | [RUNTIME_UX_OVERHAUL_PLAN.md §Sprint 2](./planning/RUNTIME_UX_OVERHAUL_PLAN.md#sprint-2--make-it-feel-professional) | ⏳ Not started — plan already specced |
+| **D — Enterprise Capabilities** | 4 sub-phases (D1..D4): enterprise SSO (OIDC/Azure B2C) · dashboards + 6 widget primitives · notifications system · multi-level sidebar + header actions + branded login | [ENTERPRISE_CAPABILITIES_PLAN.md](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) | 📝 Plan drafted 2026-07-26 |
 | **B — Complex UI Epic** | 5 sub-phases (B1..B5): wizards · conditional fields · file upload · master-detail · list views (filter/group/saved views) | [COMPLEX_UI_PLAN.md](./planning/COMPLEX_UI_PLAN.md) | 📝 Plan drafted 2026-07-26 |
-| **C — Maker-Checker Epic** | 5 sub-phases (C1..C5): DB + role model · state machine + guard · approval UI + audit · AI Builder integration · notifications | [MAKER_CHECKER_PLAN.md](./planning/MAKER_CHECKER_PLAN.md) | 📝 Plan drafted 2026-07-26 |
+| **C — Maker-Checker Epic** | 5 sub-phases (C1..C5): DB + role model · state machine + guard · approval UI + audit · AI Builder integration · notifications (re-uses D3 substrate) | [MAKER_CHECKER_PLAN.md](./planning/MAKER_CHECKER_PLAN.md) | 📝 Plan drafted 2026-07-26 |
 | **Stage 5 — Subdomain deploy** | Parallel ops track — DNS, reverse proxy, HTTPS, `Host`-based app resolution | [AI_NATIVE_UI_REBUILD_PLAN.md §Stage 5](./planning/AI_NATIVE_UI_REBUILD_PLAN.md#stage-5--subdomain-deployment) | ⏳ Ops-heavy, tiny code footprint |
 
-**Execution order:** A → B (B1..B5 serial) → C (C1..C5 mostly serial, C4 parallel with C2). C5 is v1.1-optional.
+**Execution order:** A → D (D1 + D4 parallelizable, D2 standalone, D3 after D2) → B (B1..B5 serial) → C (C1..C5 mostly serial, C4 parallel with C2). C5 is v1.1-optional and re-uses D3's notification infrastructure.
 
-**Total code effort (plan-authored):** ~10 hr (A) + ~29 hr (B) + ~30 hr (C, minus optional C5 ≈ 25 hr) = **~64–69 hours of focused engineering** to first-customer-ready.
+**Total code effort (plan-authored):** ~10 hr (A) + ~125 hr (D) + ~29 hr (B) + ~30 hr (C, minus optional C5 ≈ 25 hr) = **~189–194 hours of focused engineering** to first-enterprise-customer-ready.
+
+**Why Phase D was inserted:** a screenshot-by-screenshot comparison with a live enterprise SaaS on 2026-07-26 showed that Phase B + C alone deliver a solid CRUD builder, not a product an enterprise buyer procures. Enterprise SSO is a categorical gate; dashboards are the first screen executives see; notifications underpin every async workflow (and Phase C's C5 depends on them); a multi-level sidebar + branded login is what makes an app feel "real" in the first 5 seconds. See the Phase D plan doc for the detailed gap analysis that drove this.
 
 ---
 
