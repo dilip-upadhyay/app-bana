@@ -243,6 +243,59 @@
            focus:outline-none focus:ring-2 focus:ring-indigo-500;
   }
 
+  /* ---- Sprint 2 Task 2.7: User menu (top-right) ----------------------- */
+  .appbana-user-menu-trigger {
+    @apply inline-flex items-center justify-center
+           w-9 h-9 rounded-full
+           transition-shadow duration-150
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1
+           hover:ring-2 hover:ring-indigo-200;
+  }
+  .appbana-user-avatar {
+    @apply inline-flex items-center justify-center
+           w-9 h-9 rounded-full
+           bg-indigo-600 text-white
+           text-xs font-semibold tracking-wide
+           select-none;
+  }
+  .appbana-user-menu-panel {
+    @apply absolute right-0 top-full mt-2 z-30
+           w-64 rounded-lg border border-slate-200
+           bg-white shadow-lg
+           overflow-hidden
+           origin-top-right;
+  }
+  .appbana-user-menu-header {
+    @apply px-4 py-3 flex flex-col gap-1;
+  }
+  .appbana-user-menu-name {
+    @apply text-sm font-semibold text-slate-900 truncate;
+  }
+  .appbana-user-menu-email {
+    @apply text-xs text-slate-500 truncate;
+  }
+  .appbana-user-menu-tenant {
+    @apply flex items-center justify-between gap-2 mt-1;
+  }
+  .appbana-user-menu-tenant-label {
+    @apply text-[0.65rem] uppercase tracking-wider font-semibold text-slate-400;
+  }
+  .appbana-user-menu-tenant-value {
+    @apply text-xs font-medium text-slate-700 truncate;
+  }
+  .appbana-user-menu-divider {
+    @apply border-0 border-t border-slate-200 m-0;
+  }
+  .appbana-user-menu-item {
+    @apply w-full flex items-center gap-2
+           px-4 py-2.5
+           text-sm text-slate-700
+           text-left
+           transition-colors duration-100
+           hover:bg-slate-50 hover:text-slate-900
+           focus:outline-none focus:bg-slate-100;
+  }
+
   /* ---- Left navigation sidebar ---------------------------------------- */
   .appbana-sidebar-container {
     @apply w-64 shrink-0 border-r border-gray-200 bg-white;

@@ -9,14 +9,15 @@
  * - Emit ready/selection/error to parent via postMessage
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { AppMeta, PageMeta, AppBanaPostMessage, RuntimeMode } from '@appbana/shared';
-import { resolveAppContext, getApp, login as apiLogin } from '@appbana/shared';
+import type { AppMeta, PageMeta, AppBanaPostMessage, RuntimeMode, TenantBranding } from '@appbana/shared';
+import { resolveAppContext, getApp, login as apiLogin, fetchBranding } from '@appbana/shared';
 import { renderPage } from './Renderer';
 import { RuntimeSidebar } from './RuntimeSidebar';
 import { RuntimeNavigationProvider } from './runtime-navigation';
 import { AppLoadingSkeleton } from './Skeleton';
 import { LoginPage } from '../pages/LoginPage';
 import { Toaster } from './Toaster';
+import { UserMenu } from './UserMenu';
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
@@ -47,6 +48,7 @@ export function AppRuntimeShell() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [branding, setBranding] = useState<TenantBranding | null>(null);
   // Stage 2 contract fields — full Stage 6 wiring lands with select-and-instruct.
   // Stored in refs (not state) because the current render doesn't consume them yet;
   // Stage 6 will migrate these to state and drive the inspection overlay.
@@ -150,6 +152,16 @@ export function AppRuntimeShell() {
     else setLoading(false);
   }, [token, loadApp]);
 
+  // --- Fetch tenant branding once we know the context (for user menu label) ---
+  useEffect(() => {
+    if (!token || !ctx?.tenantId) return;
+    let cancelled = false;
+    fetchBranding(ctx.tenantId)
+      .then((b) => { if (!cancelled) setBranding(b); })
+      .catch(() => { /* branding is best-effort; fall back to tenantId */ });
+    return () => { cancelled = true; };
+  }, [token, ctx?.tenantId]);
+
   // --- Login handler (when not embedded in studio) ---
   async function handleLogin(email: string, password: string): Promise<string> {
     const result = await apiLogin(email, password);
@@ -208,7 +220,11 @@ export function AppRuntimeShell() {
         </button>
         <span className="appbana-appbar-brand">{app.name}</span>
         <div className="flex-1" />
-        {/* Right slot — reserved for user menu / settings. Kept minimal for now. */}
+        {/* Right slot — user menu (avatar + dropdown with tenant + Sign out) */}
+        <UserMenu
+          tenantId={ctx?.tenantId ?? 'default'}
+          tenantDisplayName={branding?.displayName}
+        />
       </header>
 
       {/* Body — sidebar + main */}
