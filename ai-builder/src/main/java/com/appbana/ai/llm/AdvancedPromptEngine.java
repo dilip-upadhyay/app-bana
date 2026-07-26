@@ -168,6 +168,9 @@ public class AdvancedPromptEngine {
         // Phase B3 — File-upload hint
         prompt.append("FILE UPLOADS (Phase B3): When the user asks for uploads / attachments / documents / photos / receipts / resumes / signatures / logos, define the field with `type: 'file'` and include a `fileConstraints` object: `{ maxSizeBytes: <n>, acceptedMimeTypes: [<mime>...] }`. Sensible defaults: 10 MB (10485760) for docs and images; use `image/*` for photos/logos, `application/pdf` for documents/resumes, or a mixed list `['image/*','application/pdf']`. The runtime renders a drag-and-drop dropzone, base64-encodes the file, POSTs it to `/api/files/upload`, and stores the returned `fileId` in a VARCHAR(64) column. Never ask the user for storage paths — just describe the file and the runtime handles the rest.\n\n");
 
+        // Phase B4 — Master–detail hint
+        prompt.append("MASTER–DETAIL (Phase B4): When the user describes a 1-to-many relationship — 'a Customer has many Orders', 'each Invoice has line items', 'a Project has tasks' — model it as TWO entities where the child has a `type: 'reference'` field pointing at the parent (set `referenceEntity: '<ParentEntity>'` and optionally `onDelete: 'cascade' | 'restrict' | 'setNull'`, default restrict). Then generate a detail page for the parent that includes one `child_table` node per child relationship. `child_table` node shape: `{ type: 'child_table', props: { entityName: '<ChildEntity>', fkField: '<child_fk_column>', parentId: '<parent-row-id>', displayFields?: [...], emptyLabel?: '...' } }`. The runtime auto-fetches child rows filtered by fkField and refreshes on row events. For simple 1:N apps, prefer this over separate list pages.\n\n");
+
         // Available tools
         prompt.append("## Available Tools\n\n");
         prompt.append(toolDescriptions);

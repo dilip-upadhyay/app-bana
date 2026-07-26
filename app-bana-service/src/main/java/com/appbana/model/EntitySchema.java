@@ -43,6 +43,22 @@ public class EntitySchema {
         private Integer order;
         private String existingName; // optional: used for rename mapping
 
+        // Phase B4 — master–detail metadata.
+        // For type == "reference" fields, names the parent entity's key
+        // (e.g. "Customer") that this FK column points at. Not enforced
+        // at the DB level today (dynamic tables have no formal FK
+        // constraints); consumed by the runtime + delete cascade logic.
+        private String referenceEntity;
+        /**
+         * Cascade policy for reference fields when the referenced parent row
+         * is deleted. Recognised values (case-insensitive):
+         *   - "cascade"  → delete this child row too
+         *   - "setNull"  → null out this FK column
+         *   - "restrict" → block the parent delete if children exist (default)
+         * Enforced by GenericEntityRoutes.delete when set.
+         */
+        private String onDelete;
+
         public Field() {
         }
 

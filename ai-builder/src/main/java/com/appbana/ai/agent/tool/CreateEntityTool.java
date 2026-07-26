@@ -72,6 +72,15 @@ public class CreateEntityTool implements Tool {
                   "fileConstraints": {
                     "type": "object",
                     "description": "Phase B3 — required when type='file'. Shape: {maxSizeBytes:number, acceptedMimeTypes:string[]}. Example: {maxSizeBytes: 10485760, acceptedMimeTypes: [image/*, application/pdf]}."
+                  },
+                  "referenceEntity": {
+                    "type": "string",
+                    "description": "Phase B4 — for type='reference' fields, names the parent entity (e.g. 'Customer'). Required for 1:N relationships."
+                  },
+                  "onDelete": {
+                    "type": "string",
+                    "enum": ["cascade", "restrict", "setNull"],
+                    "description": "Phase B4 — cascade policy for reference fields when the parent row is deleted. Defaults to 'restrict'."
                   }
                 },
                 "required": ["name", "type", "required"]

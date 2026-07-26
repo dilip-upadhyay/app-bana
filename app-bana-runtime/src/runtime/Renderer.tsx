@@ -29,7 +29,7 @@ import { WizardShell } from './WizardShell';
 import { FormValuesProvider } from './form-values-context';
 import { ConditionalField } from './ConditionalField';
 import { FileUploadField } from './FileUploadField';
-
+import { ChildTable } from './ChildTable';
 // Sprint 3 task 3.7 — anything larger than this switches from native <select>
 // to the search-driven combobox. Kept small so real-world lookup tables that
 // grow past a couple screens of rows stay usable.
@@ -507,6 +507,25 @@ function renderNode(
           pageId={pageId}
         />
       );
+
+    case 'child_table': {
+      // Phase B4 — master–detail: renders rows of the child entity that
+      // reference the current parent row via `fkField`.
+      const entityName = String(props.entityName ?? props.entity ?? '');
+      const fkField = String(props.fkField ?? '');
+      const parentId = String(props.parentId ?? '');
+      const displayFields = Array.isArray(props.displayFields) ? (props.displayFields as string[]) : undefined;
+      return (
+        <ChildTable
+          key={node.id}
+          entityName={entityName}
+          fkField={fkField}
+          parentId={parentId}
+          displayFields={displayFields}
+          emptyLabel={props.emptyLabel ? String(props.emptyLabel) : undefined}
+        />
+      );
+    }
 
     case 'form':
     case 'studio-form':
