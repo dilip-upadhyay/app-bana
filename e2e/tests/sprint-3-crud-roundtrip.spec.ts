@@ -101,13 +101,11 @@ async function setup(): Promise<Fixture | null> {
   // Create the entity schema — send the RAW entity name; SchemaManager
   // auto-prefixes with tenantId + appId when building the storage key.
   //
-  // Note: we deliberately avoid `decimal` fields. `EntityCrudService.
-  // coerceAndValidate` has no case for `decimal` — the default branch
-  // treats the value as a String, which Postgres then rejects with
-  // "column X is of type numeric but expression is of type character
-  // varying". That is a pre-existing bug (not introduced by Sprint 3)
-  // that will surface for every AI-generated app using money/price
-  // fields — worth a follow-up issue.
+  // We deliberately include a `decimal` field: this test's original
+  // failure surfaced the pre-existing bug that
+  // `EntityCrudService.coerceAndValidate` had no `case "decimal"`.
+  // Fixed in the accompanying backend commit — keeping the decimal
+  // field here locks in wire-level regression coverage.
   const entityName = 'Widget';
   const entityKey = `${tenantId}_${appId}_${entityName}`;
   const schema = {
@@ -117,7 +115,7 @@ async function setup(): Promise<Fixture | null> {
     fields: [
       { name: 'id',    type: 'long',    primaryKey: true, autoIncrement: true },
       { name: 'name',  type: 'text',    required: true },
-      { name: 'sku',   type: 'text' },
+      { name: 'price', type: 'decimal' },
     ],
   };
   const saveSchema = await api.post(`${BACKEND_URL}/schema`, {
@@ -168,7 +166,7 @@ test.describe('Sprint 3 CRUD round-trip', () => {
       // ── CREATE ────────────────────────────────────────────────
       const createRes = await fx.api.post(base, {
         headers: { 'Content-Type': 'application/json' },
-        data: { name: 'Sprocket', sku: 'SKU-001' },
+        data: { name: 'Sprocket', price: 9.99 },
       });
       expect(createRes.status(), await createRes.text()).toBeLessThan(300);
       const created = await createRes.json();
@@ -186,11 +184,16 @@ test.describe('Sprint 3 CRUD round-trip', () => {
       // the current SchemaManager that means UPPERCASE. Accept either shape
       // so the test doesn't need to know about SchemaManager's casing rules.
       expect(record.name ?? record.NAME).toBe('Sprocket');
+      // Decimal round-trip proves the coerceAndValidate `case "decimal"`
+      // fix — pre-fix this insert would 500 with a Postgres NUMERIC/VARCHAR
+      // type mismatch.
+      const priceOut = record.price ?? record.PRICE;
+      expect(Number(priceOut)).toBeCloseTo(9.99, 2);
 
       // ── UPDATE ────────────────────────────────────────────────
       const updateRes = await fx.api.put(`${base}/${rowId}`, {
         headers: { 'Content-Type': 'application/json' },
-        data: { name: 'Widget-Pro', sku: 'SKU-002' },
+        data: { name: 'Widget-Pro', price: 19.99 },
       });
       expect(updateRes.status(), await updateRes.text()).toBeLessThan(300);
 
@@ -198,6 +201,7 @@ test.describe('Sprint 3 CRUD round-trip', () => {
       const reReadBody = await reReadRes.json();
       const reRead = reReadBody.record ?? reReadBody;
       expect(reRead.name ?? reRead.NAME).toBe('Widget-Pro');
+      expect(Number(reRead.price ?? reRead.PRICE)).toBeCloseTo(19.99, 2);
 
       // ── DELETE ────────────────────────────────────────────────
       const deleteRes = await fx.api.delete(`${base}/${rowId}`);
@@ -225,7 +229,7 @@ test.describe('Sprint 3 CRUD round-trip', () => {
       // Omit the required `name` field on purpose.
       const res = await fx.api.post(`${BACKEND_URL}/api/${fx.entityKey}`, {
         headers: { 'Content-Type': 'application/json' },
-        data: { sku: 'SKU-BROKEN' },
+        data: { price: 1.0 },
       });
       expect(res.status()).toBe(400);
       const body = await res.json();
