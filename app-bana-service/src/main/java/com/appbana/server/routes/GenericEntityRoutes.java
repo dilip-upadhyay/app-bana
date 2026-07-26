@@ -565,6 +565,9 @@ public class GenericEntityRoutes {
             String sortParam = req.query("sort");
             String filterParam = req.query("filter");
             String countFlag = req.query("count");
+            // Phase B5 — group by a single column. When set, we fetch the
+            // filtered rows (respecting limit) and bucket them in Java.
+            String groupByParam = req.query("groupBy");
 
             Map<String, Object> filters = crud.parseFilters(filterParam, schema);
             boolean countOnly = "true".equalsIgnoreCase(countFlag) || (countFlag != null && countFlag.equals("1"));
@@ -639,6 +642,33 @@ public class GenericEntityRoutes {
                                     }
                                 }
                                 out.put("rows", filtered);
+                            }
+                        }
+
+                        // Phase B5 — bucket the returned rows by a single column
+                        // when the caller asked for it. Kept in Java so we don't
+                        // have to teach every JDBC dialect a new GROUP BY path.
+                        if (groupByParam != null && !groupByParam.isBlank()) {
+                            Object rowsObj = out.get("rows");
+                            if (rowsObj instanceof List<?> rowsList) {
+                                Map<String, List<Object>> buckets = new LinkedHashMap<>();
+                                for (Object item : rowsList) {
+                                    if (item instanceof Map<?, ?> row) {
+                                        Object key = row.get(groupByParam);
+                                        String keyStr = key == null ? "" : String.valueOf(key);
+                                        buckets.computeIfAbsent(keyStr, k -> new ArrayList<>()).add(item);
+                                    }
+                                }
+                                List<Map<String, Object>> groups = new ArrayList<>(buckets.size());
+                                for (Map.Entry<String, List<Object>> entry : buckets.entrySet()) {
+                                    Map<String, Object> g = new LinkedHashMap<>();
+                                    g.put("key", entry.getKey());
+                                    g.put("count", entry.getValue().size());
+                                    g.put("rows", entry.getValue());
+                                    groups.add(g);
+                                }
+                                out.put("groups", groups);
+                                out.put("groupBy", groupByParam);
                             }
                         }
 

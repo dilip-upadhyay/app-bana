@@ -272,7 +272,9 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
         </div>
       )}
 
-      {/* Table (populated) */}
+      {/* Phase B5 — client-side group-by. When the page metadata says
+          `groupBy`, we bucket the already-fetched rows by that column and
+          render one <tbody> per bucket with a sticky header row. */}
       {!loading && rows.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -280,6 +282,51 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
               columns={displayFieldNames}
               labelFor={(name) => fieldByName.get(name)?.label}
             />
+            {(() => {
+              const groupByField = typeof props.groupBy === 'string' ? props.groupBy : '';
+              if (!groupByField) return null;
+              const buckets = new Map<string, typeof rows>();
+              for (const row of rows) {
+                const key = row[groupByField];
+                const keyStr = key == null || key === '' ? '—' : String(key);
+                const list = buckets.get(keyStr) ?? [];
+                list.push(row);
+                buckets.set(keyStr, list);
+              }
+              return Array.from(buckets.entries()).map(([key, groupRows]) => (
+                <tbody key={`grp-${key}`} data-appbana-group={key}>
+                  <tr className="bg-slate-50">
+                    <td
+                      colSpan={displayFieldNames.length + 1}
+                      className="px-5 py-2 text-xs font-semibold text-slate-600 uppercase tracking-wide"
+                    >
+                      {humanizeHeader(groupByField)}: {key}
+                      <span className="ml-2 text-slate-400 normal-case">
+                        {groupRows.length} record{groupRows.length !== 1 ? 's' : ''}
+                      </span>
+                    </td>
+                  </tr>
+                  {groupRows.map((row, idx) => {
+                    const rowId = String(row.id ?? `${key}-${idx}`);
+                    return (
+                      <tr
+                        key={rowId}
+                        className="appbana-table-row group"
+                        data-appbana-entity={entityKey}
+                      >
+                        {displayFieldNames.map((name) => (
+                          <td key={name} className="appbana-table-td" data-appbana-field={name}>
+                            {renderCell(name, row)}
+                          </td>
+                        ))}
+                        <td className="appbana-table-td" />
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              ));
+            })()}
+            {typeof props.groupBy === 'string' && props.groupBy ? null : (
             <tbody>
               {rows.map((row, idx) => {
                 const rowId = String(row.id ?? idx);
@@ -323,6 +370,7 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
                 );
               })}
             </tbody>
+            )}
           </table>
         </div>
       )}

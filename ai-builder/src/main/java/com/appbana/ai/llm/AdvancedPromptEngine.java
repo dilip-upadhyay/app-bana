@@ -171,6 +171,14 @@ public class AdvancedPromptEngine {
         // Phase B4 — Master–detail hint
         prompt.append("MASTER–DETAIL (Phase B4): When the user describes a 1-to-many relationship — 'a Customer has many Orders', 'each Invoice has line items', 'a Project has tasks' — model it as TWO entities where the child has a `type: 'reference'` field pointing at the parent (set `referenceEntity: '<ParentEntity>'` and optionally `onDelete: 'cascade' | 'restrict' | 'setNull'`, default restrict). Then generate a detail page for the parent that includes one `child_table` node per child relationship. `child_table` node shape: `{ type: 'child_table', props: { entityName: '<ChildEntity>', fkField: '<child_fk_column>', parentId: '<parent-row-id>', displayFields?: [...], emptyLabel?: '...' } }`. The runtime auto-fetches child rows filtered by fkField and refreshes on row events. For simple 1:N apps, prefer this over separate list pages.\n\n");
 
+        // Phase B5 — List views hint
+        prompt.append("LIST VIEWS (Phase B5): When generating a list page, enrich it with the metadata the runtime knows how to consume:\n" +
+                "  • `filters: [{ field, op, label }]` — one entry per meaningful slice ('status', 'owner', 'date range'). Ops: equals | in | range | contains | dateRange. The runtime renders these as FilterBar chips.\n" +
+                "  • `groupBy: '<field>'` — set when the user asks for a kanban-style or grouped view ('group tasks by status', 'orders by customer'). The runtime buckets rows client-side and renders group headers.\n" +
+                "  • `defaultSort: { field, direction }` — set when the user wants a natural ordering ('most recent first', 'highest revenue first').\n" +
+                "  • `aggregates: [{ field, agg, label? }]` — set when the user asks for totals or averages ('show total revenue', 'average order value'). Aggs: sum | avg | count | min | max.\n" +
+                "Saved views themselves (per-user favourites like 'My open tasks') are not baked into page metadata — the runtime exposes a SavedViewsBar backed by `/api/saved-views` and users create them at runtime. You only produce the raw filter/groupBy scaffolding.\n\n");
+
         // Available tools
         prompt.append("## Available Tools\n\n");
         prompt.append(toolDescriptions);

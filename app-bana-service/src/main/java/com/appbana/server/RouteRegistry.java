@@ -44,6 +44,7 @@ public class RouteRegistry {
         TenantBrandingRoutes.register(router);  // GET /api/tenants/{id}/branding
         AppContextRoutes.register(router);      // GET /api/app-context
         FileRoutes.register(router);            // Phase B3: POST /api/files/upload + GET /api/files/{id}
+        SavedViewRoutes.register(router);       // Phase B5: GET/POST/DELETE /api/saved-views
 
         GenericEntityRoutes.register(router);
 

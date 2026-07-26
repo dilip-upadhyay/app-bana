@@ -443,6 +443,67 @@ export type SseEvent =
   | { event: 'tool_call_end';   data: { id: string; status: 'ok' | 'error'; result: unknown } }
   | { event: 'done';            data: { conversationId: string; finalMessage: string } };
 
+// ─── Phase B5 — Saved views ────────────────────────────────────────────────
+
+export interface SavedViewRecord {
+  viewId: string;
+  name: string;
+  view: {
+    filters?: Record<string, unknown>;
+    groupBy?: string;
+    sort?: { field: string; direction: 'asc' | 'desc' };
+    [k: string]: unknown;
+  };
+  isDefault?: boolean;
+  ownerUserId?: string | null;
+}
+
+export async function listSavedViews(
+  tenantId: string,
+  appId: string,
+  entityKey: string,
+  token: string
+): Promise<SavedViewRecord[]> {
+  const qs = new URLSearchParams({ tenantId, appId, entityKey }).toString();
+  const res = await authedFetch(`${BACKEND}/api/saved-views?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Failed to list saved views: ${res.status}`);
+  const body = (await res.json()) as { views?: SavedViewRecord[] };
+  return body.views ?? [];
+}
+
+export async function saveView(
+  input: {
+    tenantId: string;
+    appId: string;
+    entityKey: string;
+    name: string;
+    view: SavedViewRecord['view'];
+    isDefault?: boolean;
+    ownerUserId?: string | null;
+  },
+  token: string
+): Promise<{ viewId: string }> {
+  const res = await authedFetch(`${BACKEND}/api/saved-views`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`Failed to save view: ${res.status}`);
+  return (await res.json()) as { viewId: string };
+}
+
+export async function deleteSavedView(viewId: string, token: string): Promise<void> {
+  const res = await authedFetch(`${BACKEND}/api/saved-views/${encodeURIComponent(viewId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Failed to delete view: ${res.status}`);
+  }
+}
+
 /**
  * Open an SSE stream to the agent and yield typed events.
  * The caller can signal abort via the AbortController signal.
