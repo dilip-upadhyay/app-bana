@@ -1,9 +1,27 @@
-import type { AppMeta, PageMeta, TenantBranding, AppContext, EntitySchema } from './metadata';
+﻿import type { AppMeta, PageMeta, TenantBranding, AppContext, EntitySchema } from './metadata';
 
 const BACKEND = 'http://localhost:8080';
 const AI_BUILDER = 'http://localhost:8081';
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+/**
+ * Wrapped fetch that broadcasts a `appbana:auth:expired` browser event whenever
+ * the backend returns 401. Listeners (e.g. AuthGate in the studio) can then
+ * clear the persisted session and force the user to re-login instead of
+ * silently swallowing the failure and showing an empty UI.
+ *
+ * Use this in place of `fetch()` for any authed backend call so we get one
+ * consistent recovery path for expired / invalidated tokens (common after
+ * the ai-builder or app-bana-service is restarted).
+ */
+export async function authedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init);
+  if (res.status === 401 && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('appbana:auth:expired'));
+  }
+  return res;
+}
+
+// â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface AuthResult {
   token: string;
@@ -14,7 +32,7 @@ export interface AuthResult {
 }
 
 export async function login(email: string, password: string): Promise<AuthResult> {
-  const res = await fetch(`${BACKEND}/api/auth/login`, {
+  const res = await authedFetch(`${BACKEND}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -32,7 +50,7 @@ export async function login(email: string, password: string): Promise<AuthResult
 }
 
 export async function register(name: string, email: string, password: string): Promise<AuthResult> {
-  const res = await fetch(`${BACKEND}/api/auth/register`, {
+  const res = await authedFetch(`${BACKEND}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, email, password }),
@@ -49,25 +67,25 @@ export async function register(name: string, email: string, password: string): P
   };
 }
 
-// ── Branding & Context ────────────────────────────────────────────────────────
+// â”€â”€ Branding & Context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function fetchBranding(tenantId: string): Promise<TenantBranding> {
-  const res = await fetch(`${BACKEND}/api/tenants/${encodeURIComponent(tenantId)}/branding`);
+  const res = await authedFetch(`${BACKEND}/api/tenants/${encodeURIComponent(tenantId)}/branding`);
   if (!res.ok) return { tenantId, displayName: 'AppBana', logoUrl: null, primaryColor: '#6366f1' };
   return res.json();
 }
 
 export async function fetchAppContext(tenantId: string, appId: string): Promise<AppContext> {
   const params = new URLSearchParams({ tenantId, appId });
-  const res = await fetch(`${BACKEND}/api/app-context?${params}`);
+  const res = await authedFetch(`${BACKEND}/api/app-context?${params}`);
   if (!res.ok) throw new Error(`Failed to fetch app context: ${res.status}`);
   return res.json();
 }
 
-// ── Apps ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Apps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function listApps(tenantId: string, token: string): Promise<AppMeta[]> {
-  const res = await fetch(`${BACKEND}/appbana-studio/${tenantId}/apps`, {
+  const res = await authedFetch(`${BACKEND}/appbana-studio/${tenantId}/apps`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Failed to list apps: ${res.status}`);
@@ -76,7 +94,7 @@ export async function listApps(tenantId: string, token: string): Promise<AppMeta
 }
 
 export async function getApp(tenantId: string, appId: string, token: string): Promise<AppMeta> {
-  const res = await fetch(`${BACKEND}/appbana-studio/${tenantId}/apps/${appId}`, {
+  const res = await authedFetch(`${BACKEND}/appbana-studio/${tenantId}/apps/${appId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Failed to get app: ${res.status}`);
@@ -84,7 +102,7 @@ export async function getApp(tenantId: string, appId: string, token: string): Pr
 }
 
 export async function createApp(tenantId: string, name: string, token: string): Promise<AppMeta> {
-  const res = await fetch(`${BACKEND}/appbana-studio/${tenantId}/apps`, {
+  const res = await authedFetch(`${BACKEND}/appbana-studio/${tenantId}/apps`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ name }),
@@ -114,34 +132,34 @@ export async function deployApp(
   const url =
     `${BACKEND}/api/${encodeURIComponent(tenantId)}/apps/${encodeURIComponent(appId)}/publish` +
     `?env=${encodeURIComponent(environment)}`;
-  const res = await fetch(url, {
+  const res = await authedFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: '{}',
   });
   if (!res.ok) {
     let detail = '';
-    try { detail = ' — ' + (await res.text()); } catch { /* ignore */ }
+    try { detail = ' â€” ' + (await res.text()); } catch { /* ignore */ }
     throw new Error(`Deploy failed: ${res.status}${detail}`);
   }
   return res.json();
 }
 
-// ── Pages ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function getPage(tenantId: string, appId: string, pageId: string, token: string): Promise<PageMeta> {
-  const res = await fetch(`${BACKEND}/appbana-studio/${tenantId}/apps/${appId}/pages/${pageId}`, {
+  const res = await authedFetch(`${BACKEND}/appbana-studio/${tenantId}/apps/${appId}/pages/${pageId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Failed to get page: ${res.status}`);
   return res.json();
 }
 
-// ── Entities ─────────────────────────────────────────────────────────────────
+// â”€â”€ Entities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function listEntities(tenantId: string, appId: string, token: string): Promise<EntitySchema[]> {
   const schemaKey = `${tenantId}_${appId}`;
-  const res = await fetch(`${BACKEND}/schema`, {
+  const res = await authedFetch(`${BACKEND}/schema`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Failed to list schemas: ${res.status}`);
@@ -156,7 +174,7 @@ export async function listEntities(tenantId: string, appId: string, token: strin
  * Used by the studio Data Drawer to build the "Add row" form.
  */
 export async function getEntitySchema(schemaKey: string, token: string): Promise<EntitySchema> {
-  const res = await fetch(`${BACKEND}/schema/${encodeURIComponent(schemaKey)}`, {
+  const res = await authedFetch(`${BACKEND}/schema/${encodeURIComponent(schemaKey)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Failed to load schema ${schemaKey}: ${res.status}`);
@@ -169,7 +187,7 @@ export async function fetchEntityRows(
   params: Record<string, string | number> = {}
 ): Promise<{ rows: any[]; total: number }> {
   const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
-  const res = await fetch(`${BACKEND}/api/${entityKey}?${qs}`, {
+  const res = await authedFetch(`${BACKEND}/api/${entityKey}?${qs}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Failed to fetch rows: ${res.status}`);
@@ -186,7 +204,7 @@ export async function fetchEntityRows(
  */
 export async function fetchEntityRowCount(entityKey: string, token: string): Promise<number> {
   try {
-    const res = await fetch(`${BACKEND}/api/${entityKey}?_count=true`, {
+    const res = await authedFetch(`${BACKEND}/api/${entityKey}?_count=true`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return 0;
@@ -207,7 +225,7 @@ export async function insertEntityRow(
   row: Record<string, unknown>,
   token: string
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${BACKEND}/api/${entityKey}`, {
+  const res = await authedFetch(`${BACKEND}/api/${entityKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(row),
@@ -219,7 +237,7 @@ export async function insertEntityRow(
   return res.json();
 }
 
-// ── Chat sessions ─────────────────────────────────────────────────────────────
+// â”€â”€ Chat sessions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface ChatSession {
   sessionId: string;
@@ -242,7 +260,7 @@ export async function listSessions(
 ): Promise<ChatSession[]> {
   const qs = new URLSearchParams({ userId, limit: String(opts.limit ?? 20) });
   if (opts.appId) qs.set('appId', opts.appId);
-  const res = await fetch(`${AI_BUILDER}/api/ai/chat/sessions?${qs}`, {
+  const res = await authedFetch(`${AI_BUILDER}/api/ai/chat/sessions?${qs}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return [];
@@ -256,7 +274,7 @@ export async function getSessionHistory(
   token: string
 ): Promise<ChatHistoryMessage[]> {
   const qs = new URLSearchParams({ userId, sessionId });
-  const res = await fetch(`${AI_BUILDER}/api/ai/chat/history?${qs}`, {
+  const res = await authedFetch(`${AI_BUILDER}/api/ai/chat/history?${qs}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return [];
@@ -270,7 +288,7 @@ export async function renameSession(
   title: string,
   token: string
 ): Promise<void> {
-  const res = await fetch(`${AI_BUILDER}/api/ai/chat/sessions/${encodeURIComponent(sessionId)}`, {
+  const res = await authedFetch(`${AI_BUILDER}/api/ai/chat/sessions/${encodeURIComponent(sessionId)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ userId, title }),
@@ -284,14 +302,14 @@ export async function deleteSession(
   token: string
 ): Promise<void> {
   const qs = new URLSearchParams({ userId });
-  const res = await fetch(`${AI_BUILDER}/api/ai/chat/sessions/${encodeURIComponent(sessionId)}?${qs}`, {
+  const res = await authedFetch(`${AI_BUILDER}/api/ai/chat/sessions/${encodeURIComponent(sessionId)}?${qs}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }
 
-// ── SSE streaming chat ────────────────────────────────────────────────────────
+// â”€â”€ SSE streaming chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface ChatPayload {
   message: string;
@@ -329,7 +347,7 @@ export async function* streamAgentChat(
   payload: ChatPayload,
   signal: AbortSignal
 ): AsyncGenerator<SseEvent> {
-  const res = await fetch(`${AI_BUILDER}/api/ai/chat/agent/stream`, {
+  const res = await authedFetch(`${AI_BUILDER}/api/ai/chat/agent/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -359,7 +377,7 @@ export async function* streamAgentChat(
         const data = JSON.parse(dataLine);
         yield { event: eventLine, data } as SseEvent;
       } catch {
-        // malformed frame — skip
+        // malformed frame â€” skip
       }
     }
   }

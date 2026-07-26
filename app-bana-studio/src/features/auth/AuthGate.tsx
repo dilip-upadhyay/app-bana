@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { login, register, fetchBranding } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { token, setSession } = useSessionStore();
+  const { token, setSession, clearSession } = useSessionStore();
   const { setBranding } = useWorkspaceStore();
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -12,6 +12,23 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // Global 401 recovery: api-client's authedFetch broadcasts this event whenever
+  // the backend returns 401 (typical after the backend or ai-builder restarts —
+  // the persisted token becomes invalid). Instead of silently returning empty
+  // data in every consumer, we clear the session and show the login form with
+  // a friendly banner so the user knows to sign back in.
+  useEffect(() => {
+    const handler = () => {
+      if (useSessionStore.getState().token) {
+        setSessionExpired(true);
+        clearSession();
+      }
+    };
+    window.addEventListener('appbana:auth:expired', handler);
+    return () => window.removeEventListener('appbana:auth:expired', handler);
+  }, [clearSession]);
 
   if (token) return <>{children}</>;
 
@@ -46,6 +63,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <span className="text-3xl">🍌</span>
           <span className="text-xl font-bold text-white">AppBana Studio</span>
         </div>
+
+        {sessionExpired && (
+          <div className="mb-4 rounded-lg border border-amber-700/60 bg-amber-950/40 px-3 py-2
+                          text-xs text-amber-200">
+            Your session expired. Please sign in again to continue.
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-gray-800 rounded-lg p-1">
