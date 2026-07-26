@@ -25,6 +25,7 @@ export function Header() {
   const [deployResult, setDeployResult] = useState<{ result: DeployResult; url: string } | null>(null);
   const [deployError, setDeployError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const sessionsBtnRef = useRef<HTMLDivElement>(null);
   const deployRef = useRef<HTMLDivElement>(null);
 
@@ -37,8 +38,10 @@ export function Header() {
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
         setAppsOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
       }
       if (deployRef.current && !deployRef.current.contains(e.target as Node)) {
         setDeployOpen(false);
@@ -231,7 +234,7 @@ export function Header() {
       )}
 
       {/* User menu */}
-      <div className="relative">
+      <div className="relative" ref={userMenuRef}>
         <button
           onClick={() => { setMenuOpen((v) => !v); setAppsOpen(false); }}
           className="w-7 h-7 rounded-full bg-indigo-700 flex items-center justify-center text-xs font-bold
@@ -246,7 +249,17 @@ export function Header() {
             <div className="px-3 py-2 text-gray-400 truncate">{name}</div>
             <div className="border-t border-gray-700 my-1" />
             <button
-              onClick={() => { clearSession(); setMenuOpen(false); }}
+              onClick={() => {
+                setMenuOpen(false);
+                clearSession();
+                // Defensive: nuke persisted session and hard-reload so we always
+                // land on the AuthGate login screen even if a downstream component
+                // still holds a stale reference to the previous session/app.
+                try {
+                  localStorage.removeItem('appbana-session');
+                } catch { /* ignore */ }
+                window.location.href = '/';
+              }}
               className="w-full text-left px-3 py-2 text-red-400 hover:bg-gray-700 transition-colors"
             >
               Sign out
