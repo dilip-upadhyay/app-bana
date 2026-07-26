@@ -648,6 +648,14 @@ public class GenericEntityRoutes {
                         // Phase B5 — bucket the returned rows by a single column
                         // when the caller asked for it. Kept in Java so we don't
                         // have to teach every JDBC dialect a new GROUP BY path.
+                        //
+                        // H6 hardening: also compute TRUE per-group counts across
+                        // the whole filtered dataset (not just the current page)
+                        // via a real SQL GROUP BY. The `groups` field remains a
+                        // per-page bucketing for backwards compat; the new
+                        // `groupCounts` map is what UIs should show for accurate
+                        // totals ("Active (127)", "Pending (43)", ...) even when
+                        // there are more rows than the page size.
                         if (groupByParam != null && !groupByParam.isBlank()) {
                             Object rowsObj = out.get("rows");
                             if (rowsObj instanceof List<?> rowsList) {
@@ -669,6 +677,16 @@ public class GenericEntityRoutes {
                                 }
                                 out.put("groups", groups);
                                 out.put("groupBy", groupByParam);
+                                // H6 — true, whole-dataset counts. Silently skipped
+                                // (empty map) if the column doesn't exist on the
+                                // schema, matching the guard in countByGroup.
+                                try {
+                                    Map<String, Long> trueCounts = crud.countByGroup(schema, groupByParam, q, filters);
+                                    out.put("groupCounts", trueCounts);
+                                } catch (SQLException groupErr) {
+                                    LOG.warn("[GROUP-BY] countByGroup failed for {}.{}: {}",
+                                            entity, groupByParam, groupErr.getMessage());
+                                }
                             }
                         }
 

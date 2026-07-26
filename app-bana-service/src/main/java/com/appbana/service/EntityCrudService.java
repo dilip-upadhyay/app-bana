@@ -400,6 +400,67 @@ public class EntityCrudService {
         }
     }
 
+    /**
+     * H6 hardening — return TRUE COUNT(*) per distinct value of {@code groupBy}
+     * across the whole filtered result set (not just the current page).
+     * Before H6 the /api/{entity} listing only bucketed the returned page in
+     * Java, so counts were wrong the moment the data exceeded {@code limit}.
+     *
+     * Guards:
+     *   - {@code groupBy} MUST match a real field on the schema (case-insensitive)
+     *     — otherwise this returns an empty map, refusing to interpolate an
+     *     unknown identifier into SQL. This is our SQL-injection guard.
+     *   - Uses the same WHERE clause as the paged list, so counts are
+     *     consistent with what the caller sees on page 1.
+     *
+     * Keys: the column value stringified; NULL becomes empty string "".
+     * Returns a linked map preserving natural COUNT DESC order.
+     */
+    public Map<String, Long> countByGroup(EntitySchema schema,
+                                          String groupBy,
+                                          String q,
+                                          Map<String, Object> filters) throws SQLException {
+        if (groupBy == null || groupBy.isBlank()) return Map.of();
+        // Resolve to the canonical field name from the schema — the whole
+        // point of this lookup is to refuse to trust the raw query-string.
+        String canonical = null;
+        for (EntitySchema.Field f : schema.getFields()) {
+            if (f.getName().equalsIgnoreCase(groupBy)) {
+                canonical = f.getName();
+                break;
+            }
+        }
+        if (canonical == null) {
+            LOG.warn("[GROUP-BY] Rejecting unknown groupBy column '{}' for entity {}", groupBy, schema.getName());
+            return Map.of();
+        }
+
+        StringBuilder where = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        buildWhere(schema, q, filters, where, params);
+        String col = quote(canonical);
+        String sql = "SELECT " + col + " AS grp_key, COUNT(*) AS grp_count"
+                + " FROM " + quote(SchemaManager.getPhysicalTableName(schema))
+                + where
+                + " GROUP BY " + col
+                + " ORDER BY grp_count DESC";
+        Map<String, Long> out = new LinkedHashMap<>();
+        try (Connection c = schemaConnection(schema);
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Object key = rs.getObject(1);
+                    String keyStr = key == null ? "" : String.valueOf(key);
+                    out.put(keyStr, rs.getLong(2));
+                }
+            }
+        }
+        return out;
+    }
+
     public Map<String, Object> listAdvanced(EntitySchema schema,
             int limit,
             int offset,
