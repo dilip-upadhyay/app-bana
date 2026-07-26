@@ -126,6 +126,9 @@ public class BatchUpdateEntitiesTool implements Tool {
 
             log.info("[BatchUpdateEntities] App: {}, Updates: {}", appId, updates.size());
 
+            String tenantId = context.tenantId() != null ? context.tenantId() : "default";
+            String token = context.token();
+
             // Process each update
             for (int i = 0; i < updates.size(); i++) {
                 Map<String, Object> update = updates.get(i);
@@ -136,7 +139,7 @@ public class BatchUpdateEntitiesTool implements Tool {
                         i + 1, updates.size(), operation, entityName);
 
                 try {
-                    boolean success = executeUpdate(appId, entityName, operation, update);
+                    boolean success = executeUpdate(tenantId, appId, entityName, operation, update, token);
 
                     if (success) {
                         successfulUpdates.add(entityName + ":" + operation);
@@ -186,18 +189,18 @@ public class BatchUpdateEntitiesTool implements Tool {
     /**
      * Execute a single entity update
      */
-    private boolean executeUpdate(String appId, String entityName, String operation,
-            Map<String, Object> update) throws Exception {
+    private boolean executeUpdate(String tenantId, String appId, String entityName, String operation,
+            Map<String, Object> update, String token) throws Exception {
 
         switch (operation.toLowerCase()) {
             case "add_fields":
-                return addFields(appId, entityName, update);
+                return addFields(tenantId, appId, entityName, update, token);
             case "remove_fields":
-                return removeFields(appId, entityName, update);
+                return removeFields(tenantId, appId, entityName, update, token);
             case "update_fields":
-                return updateFields(appId, entityName, update);
+                return updateFields(tenantId, appId, entityName, update, token);
             case "rename_entity":
-                return renameEntity(appId, entityName, update);
+                return renameEntity(tenantId, appId, entityName, update, token);
             default:
                 log.warn("[BatchUpdateEntities] Unknown operation: {}", operation);
                 return false;
@@ -208,7 +211,8 @@ public class BatchUpdateEntitiesTool implements Tool {
      * Add fields to an entity
      */
     @SuppressWarnings("unchecked")
-    private boolean addFields(String appId, String entityName, Map<String, Object> update) throws Exception {
+    private boolean addFields(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
         List<Map<String, Object>> newFields = (List<Map<String, Object>>) update.get("fields");
         if (newFields == null || newFields.isEmpty()) {
             log.warn("[BatchUpdateEntities] No fields specified for add_fields operation");
@@ -216,7 +220,7 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         // Get current entity
-        Map<String, Object> entity = fetchEntity(appId, entityName);
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
         if (entity == null) {
             log.error("[BatchUpdateEntities] Entity '{}' not found in app '{}'", entityName, appId);
             return false;
@@ -250,14 +254,15 @@ public class BatchUpdateEntitiesTool implements Tool {
         entity.put("fields", existingFields);
 
         // Save updated entity
-        return saveEntity(appId, entityName, entity);
+        return saveEntity(entity, token);
     }
 
     /**
      * Remove fields from an entity
      */
     @SuppressWarnings("unchecked")
-    private boolean removeFields(String appId, String entityName, Map<String, Object> update) throws Exception {
+    private boolean removeFields(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
         List<Map<String, Object>> fieldsToRemove = (List<Map<String, Object>>) update.get("fields");
         if (fieldsToRemove == null || fieldsToRemove.isEmpty()) {
             log.warn("[BatchUpdateEntities] No fields specified for remove_fields operation");
@@ -271,7 +276,7 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         // Get current entity
-        Map<String, Object> entity = fetchEntity(appId, entityName);
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
         if (entity == null) {
             return false;
         }
@@ -290,14 +295,15 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         entity.put("fields", remainingFields);
-        return saveEntity(appId, entityName, entity);
+        return saveEntity(entity, token);
     }
 
     /**
      * Update existing fields in an entity
      */
     @SuppressWarnings("unchecked")
-    private boolean updateFields(String appId, String entityName, Map<String, Object> update) throws Exception {
+    private boolean updateFields(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
         List<Map<String, Object>> fieldUpdates = (List<Map<String, Object>>) update.get("fields");
         if (fieldUpdates == null || fieldUpdates.isEmpty()) {
             return false;
@@ -310,7 +316,7 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         // Get current entity
-        Map<String, Object> entity = fetchEntity(appId, entityName);
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
         if (entity == null) {
             return false;
         }
@@ -332,13 +338,14 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         entity.put("fields", existingFields);
-        return saveEntity(appId, entityName, entity);
+        return saveEntity(entity, token);
     }
 
     /**
      * Rename an entity
      */
-    private boolean renameEntity(String appId, String entityName, Map<String, Object> update) throws Exception {
+    private boolean renameEntity(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
         String newName = (String) update.get("newName");
         if (newName == null || newName.isBlank()) {
             log.warn("[BatchUpdateEntities] No newName specified for rename_entity operation");
@@ -346,99 +353,99 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         // Get current entity
-        Map<String, Object> entity = fetchEntity(appId, entityName);
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
         if (entity == null) {
             return false;
         }
 
-        // Update name and displayName
-        entity.put("name", newName);
+        // Update name and displayName. The schema key must be rebuilt for the new entity.
+        String newFullName = buildSchemaKey(tenantId, appId, newName);
+        entity.put("name", newFullName);
         entity.put("displayName", newName);
 
         // Delete old and create new
-        deleteEntity(appId, entityName);
-        return createEntity(appId, entity);
+        deleteEntity(tenantId, appId, entityName, token);
+        return saveEntity(entity, token);
     }
 
     /**
-     * Fetch entity from backend
+     * Build the multi-tenant schema key expected by SchemaManager.
      */
-    private Map<String, Object> fetchEntity(String appId, String entityName) throws Exception {
-        String url = String.format("%s/api/apps/%s/entities/%s", baseUrl, appId, entityName);
+    private static String buildSchemaKey(String tenantId, String appId, String entityName) {
+        String tp = (tenantId == null || tenantId.isBlank()) ? "default" : tenantId;
+        return tp + "_" + appId + "_" + entityName;
+    }
 
-        HttpRequest request = HttpRequest.newBuilder()
+    /**
+     * Fetch entity from backend via GET /schema/{tenantId}_{appId}_{entityName}.
+     */
+    private Map<String, Object> fetchEntity(String tenantId, String appId, String entityName, String token)
+            throws Exception {
+        String key = buildSchemaKey(tenantId, appId, entityName);
+        String url = String.format("%s/schema/%s", baseUrl, key);
+
+        HttpRequest.Builder rb = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .GET()
-                .timeout(Duration.ofSeconds(30))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                .header("Accept", "application/json")
+                .timeout(Duration.ofSeconds(30));
+        if (token != null && !token.isEmpty()) {
+            rb.header("Authorization", "Bearer " + token);
+        }
+        HttpResponse<String> response = httpClient.send(rb.GET().build(), HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() == 200) {
             return objectMapper.readValue(response.body(), Map.class);
         } else if (response.statusCode() == 404) {
+            log.warn("[BatchUpdateEntities] Entity schema not found at {}", url);
             return null;
         } else {
-            log.error("[BatchUpdateEntities] Failed to fetch entity: {} - {}", response.statusCode(), response.body());
+            log.error("[BatchUpdateEntities] Failed to fetch entity {}: {} - {}", url, response.statusCode(),
+                    response.body());
             return null;
         }
     }
 
     /**
-     * Save entity to backend
+     * Save (upsert) entity via POST /schema. The entity map must contain its full multi-tenant
+     * name (as returned by GET /schema/{key}); SchemaManager.saveSchema keys on it.
      */
-    private boolean saveEntity(String appId, String entityName, Map<String, Object> entity) throws Exception {
-        String url = String.format("%s/api/apps/%s/entities/%s", baseUrl, appId, entityName);
+    private boolean saveEntity(Map<String, Object> entity, String token) throws Exception {
+        String url = String.format("%s/schema", baseUrl);
         String json = objectMapper.writeValueAsString(entity);
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder rb = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .PUT(HttpRequest.BodyPublishers.ofString(json))
                 .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(30))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                .timeout(Duration.ofSeconds(30));
+        if (token != null && !token.isEmpty()) {
+            rb.header("Authorization", "Bearer " + token);
+        }
+        HttpResponse<String> response = httpClient.send(
+                rb.POST(HttpRequest.BodyPublishers.ofString(json)).build(),
+                HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() >= 200 && response.statusCode() < 300) {
             return true;
-        } else {
-            log.error("[BatchUpdateEntities] Failed to save entity: {} - {}", response.statusCode(), response.body());
-            return false;
         }
+        log.error("[BatchUpdateEntities] Failed to save entity {}: {} - {}", entity.get("name"),
+                response.statusCode(), response.body());
+        return false;
     }
 
     /**
-     * Delete entity from backend
+     * Delete entity via DELETE /schema/{key}.
      */
-    private boolean deleteEntity(String appId, String entityName) throws Exception {
-        String url = String.format("%s/api/apps/%s/entities/%s", baseUrl, appId, entityName);
+    private boolean deleteEntity(String tenantId, String appId, String entityName, String token) throws Exception {
+        String key = buildSchemaKey(tenantId, appId, entityName);
+        String url = String.format("%s/schema/%s", baseUrl, key);
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder rb = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .DELETE()
-                .timeout(Duration.ofSeconds(30))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        return response.statusCode() >= 200 && response.statusCode() < 300;
-    }
-
-    /**
-     * Create entity in backend
-     */
-    private boolean createEntity(String appId, Map<String, Object> entity) throws Exception {
-        String url = String.format("%s/api/apps/%s/entities", baseUrl, appId);
-        String json = objectMapper.writeValueAsString(entity);
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(30))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                .timeout(Duration.ofSeconds(30));
+        if (token != null && !token.isEmpty()) {
+            rb.header("Authorization", "Bearer " + token);
+        }
+        HttpResponse<String> response = httpClient.send(rb.DELETE().build(), HttpResponse.BodyHandlers.ofString());
         return response.statusCode() >= 200 && response.statusCode() < 300;
     }
 }

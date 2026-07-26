@@ -65,6 +65,18 @@ public class SchemaManager {
                     return ds;
             }
         }
+        // Legacy single-datasource fallback: config.json may declare a top-level `name`
+        // + connection fields (with `datasources: []`). Match that too instead of throwing —
+        // otherwise schemas saved with datasourceName="default" can never be re-saved.
+        if (target.equals(cfg.getName())) {
+            DatasourceConfig ds = new DatasourceConfig();
+            ds.setName(cfg.getName());
+            ds.setJdbcUrl(cfg.getJdbcUrl());
+            ds.setUsername(cfg.getUsername());
+            ds.setPassword(cfg.getPassword());
+            ds.setDriver(cfg.getDriver());
+            return ds;
+        }
         throw new IllegalArgumentException("datasource not found: " + target);
     }
 

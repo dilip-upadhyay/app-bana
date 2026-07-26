@@ -216,9 +216,21 @@ public class AiAgent {
 
                     if (loopDetected) {
                         steps.add(step);
-                        String finalMsg =
-                                "I already gathered that information above. Please tell me which app you'd like to work on " +
-                                "(by name) and what you'd like to do with it.";
+                        // Operation-aware fallback: if a mutation tool (e.g. batch_update_entities)
+                        // succeeded, tell the user the change went through instead of the old
+                        // "please tell me which app" message which made successful edits look failed.
+                        String finalMsg;
+                        ToolResult batchOk = results.stream()
+                                .filter(r -> "batch_update_entities".equals(r.getToolName()) && r.isSuccess())
+                                .findFirst().orElse(null);
+                        if (batchOk != null) {
+                            finalMsg = buildBatchUpdateFinalMessage(batchOk);
+                        } else if (results.stream().anyMatch(r -> r.isSuccess() && isMutationTool(r.getToolName()))) {
+                            finalMsg = "I've made the requested changes. Refresh the preview if you don't see them yet.";
+                        } else {
+                            finalMsg = "I already gathered that information above. Please tell me which app you'd like to work on " +
+                                    "(by name) and what you'd like to do with it.";
+                        }
                         emitter.token(finalMsg);
                         emitter.done(context.sessionId(), finalMsg);
                         return AgentResponse.success(finalMsg, steps, System.currentTimeMillis() - startTime);
@@ -246,6 +258,20 @@ public class AiAgent {
                                     .findFirst().get();
 
                             String finalMsg = buildScaffoldFinalMessage(scaffoldResult, context);
+                            emitter.token(finalMsg);
+                            emitter.done(context.sessionId(), finalMsg);
+                            return AgentResponse.success(finalMsg, steps, System.currentTimeMillis() - startTime);
+                        }
+
+                        // Same shortcut for batch entity edits — once the mutation succeeds we
+                        // don't need to hand control back to the LLM (which tends to loop and
+                        // re-issue the identical call, wasting tokens and confusing the user).
+                        ToolResult batchOk = results.stream()
+                                .filter(r -> "batch_update_entities".equals(r.getToolName()) && r.isSuccess())
+                                .findFirst().orElse(null);
+                        if (batchOk != null) {
+                            steps.add(step);
+                            String finalMsg = buildBatchUpdateFinalMessage(batchOk);
                             emitter.token(finalMsg);
                             emitter.done(context.sessionId(), finalMsg);
                             return AgentResponse.success(finalMsg, steps, System.currentTimeMillis() - startTime);
@@ -383,6 +409,29 @@ public class AiAgent {
             }
         }
         return finalMsg;
+    }
+
+    /**
+     * Reusable batch-update success message builder. Turns the tool result into a
+     * user-facing "done" message that names the entities/operations touched, so the
+     * user isn't left wondering whether their add_fields / remove_fields / rename
+     * request actually landed.
+     */
+    private String buildBatchUpdateFinalMessage(ToolResult batchResult) {
+        Object data = batchResult.getData();
+        if (data instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> dataMap = (Map<String, Object>) data;
+            @SuppressWarnings("unchecked")
+            List<String> successful = (List<String>) dataMap.get("successfulUpdates");
+            if (successful != null && !successful.isEmpty()) {
+                // successful entries look like "Employee:add_fields"
+                String detail = String.join(", ", successful);
+                return "✅ Done — I applied the requested changes: " + detail
+                        + ". Refresh the preview if you don't see them yet.";
+            }
+        }
+        return "✅ Done — I applied the requested changes. Refresh the preview if you don't see them yet.";
     }
 
     /**
