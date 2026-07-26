@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="AppBana">
+  <title>AppBana</title>
+  <defs>
+    <linearGradient id="ab-a-grad" x1="0.15" y1="0.1" x2="0.85" y2="0.95">
+      <stop offset="0%"   stop-color="#7C3AED"/>
+      <stop offset="55%"  stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="ab-eye-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#7DD3FC"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- THINK / ACT / OBSERVE arcs (three gapped segments around the mark) -->
+  <g fill="none" stroke="url(#ab-a-grad)" stroke-width="3" stroke-linecap="round" opacity="0.55">
+    <path d="M 30 92  A 80 80 0 0 1 90 25"/>
+    <path d="M 110 25 A 80 80 0 0 1 170 92"/>
+    <path d="M 60 165 A 80 80 0 0 0 140 165"/>
+  </g>
+  <g fill="url(#ab-a-grad)" opacity="0.75">
+    <polygon points="90,25 82,22 87,32"/>
+    <polygon points="170,92 167,84 176,88"/>
+    <polygon points="140,165 148,161 146,171"/>
+  </g>
+
+  <!-- The stylised A -->
+  <path d="M 55 158 L 100 42 L 145 158"
+        fill="none"
+        stroke="url(#ab-a-grad)"
+        stroke-width="30"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+  <!-- Bot face embedded where the A's crossbar would sit -->
+  <g>
+    <rect x="76" y="108" width="48" height="32" rx="12" fill="#0F172A"/>
+    <circle cx="91"  cy="124" r="5.5" fill="url(#ab-eye-grad)"/>
+    <circle cx="109" cy="124" r="5.5" fill="url(#ab-eye-grad)"/>
+    <circle cx="91"  cy="122" r="1.5" fill="#F8FAFC"/>
+    <circle cx="109" cy="122" r="1.5" fill="#F8FAFC"/>
+  </g>
+</svg>

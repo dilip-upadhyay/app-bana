@@ -9,12 +9,18 @@
  * - Emit ready/selection/error to parent via postMessage
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { AppMeta, PageMeta, AppBanaPostMessage, RuntimeMode } from '@appbana/shared';
-import { resolveAppContext, getApp, login as apiLogin } from '@appbana/shared';
+import type { AppMeta, PageMeta, AppBanaPostMessage, RuntimeMode, TenantBranding } from '@appbana/shared';
+import { resolveAppContext, getApp, login as apiLogin, fetchBranding } from '@appbana/shared';
 import { renderPage } from './Renderer';
 import { RuntimeSidebar } from './RuntimeSidebar';
+import { RuntimeNavigationProvider } from './runtime-navigation';
+import { AppLoadingSkeleton } from './Skeleton';
 import { LoginPage } from '../pages/LoginPage';
 import { Toaster } from './Toaster';
+import { UserMenu } from './UserMenu';
+import { DetailPage } from './DetailPage';
+import { ConfirmDialogHost } from './ConfirmDialog';
+import { applyBrandRamp } from './applyBrandRamp';
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
@@ -45,6 +51,11 @@ export function AppRuntimeShell() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [branding, setBranding] = useState<TenantBranding | null>(null);
+  // Sprint 3 task 3.3 — selected record id for detail-view overlay.
+  const [selectedRecord, setSelectedRecord] = useState<
+    { page: PageMeta; recordId: string } | null
+  >(null);
   // Stage 2 contract fields — full Stage 6 wiring lands with select-and-instruct.
   // Stored in refs (not state) because the current render doesn't consume them yet;
   // Stage 6 will migrate these to state and drive the inspection overlay.
@@ -88,7 +99,8 @@ export function AppRuntimeShell() {
           break;
         case 'setPage':
           if (app) {
-            const p = app.pages?.find((pg) => pg.id === msg.pageId);
+            const pgs = (app.pages ?? []) as PageMeta[];
+            const p = pgs.find((pg) => pg.id === msg.pageId);
             if (p) setCurrentPage(p);
           }
           break;
@@ -131,7 +143,7 @@ export function AppRuntimeShell() {
         pages: (appData.pagesData ?? appData.pages ?? []) as PageMeta[],
       };
       setApp(normalized);
-      const firstPage = normalized.pages?.[0] ?? null;
+      const firstPage = ((normalized.pages ?? []) as PageMeta[])[0] ?? null;
       setCurrentPage(firstPage);
     } catch (e) {
       if (!isMounted.current) return;
@@ -146,6 +158,24 @@ export function AppRuntimeShell() {
     if (token) loadApp(token);
     else setLoading(false);
   }, [token, loadApp]);
+
+  // --- Fetch tenant branding once we know the context (for user menu label) ---
+  useEffect(() => {
+    if (!token || !ctx?.tenantId) return;
+    let cancelled = false;
+    fetchBranding(ctx.tenantId)
+      .then((b) => { if (!cancelled) setBranding(b); })
+      .catch(() => { /* branding is best-effort; fall back to tenantId */ });
+    return () => { cancelled = true; };
+  }, [token, ctx?.tenantId]);
+
+  // Sprint 3 task 3.9 (post-review: extracted to applyBrandRamp helper) —
+  // propagate tenant primaryColor into the shared CSS token stack so every
+  // brand-coloured surface (buttons, active nav, tabs, tooltips…) re-tints
+  // in unison. Runs at document scope so preview iframes inherit too.
+  useEffect(() => {
+    applyBrandRamp(branding?.primaryColor);
+  }, [branding?.primaryColor]);
 
   // --- Login handler (when not embedded in studio) ---
   async function handleLogin(email: string, password: string): Promise<string> {
@@ -166,11 +196,7 @@ export function AppRuntimeShell() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 text-gray-400 text-sm">
-        Loading app…
-      </div>
-    );
+    return <AppLoadingSkeleton />;
   }
 
   if (error) {
@@ -192,11 +218,13 @@ export function AppRuntimeShell() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* WCAG 2.4.1 — Skip to main content. Hidden until focused. */}
+      <a href="#appbana-main" className="appbana-skip-link">Skip to main content</a>
       {/* Top app bar — sticky, spans full width */}
       <header className="appbana-appbar">
         <button
           type="button"
-          className="appbana-appbar-menu md:hidden"
+          className="appbana-appbar-menu sm:hidden"
           onClick={() => setMobileNavOpen(true)}
           aria-label="Open navigation"
         >
@@ -209,15 +237,21 @@ export function AppRuntimeShell() {
         </button>
         <span className="appbana-appbar-brand">{app.name}</span>
         <div className="flex-1" />
-        {/* Right slot — reserved for user menu / settings. Kept minimal for now. */}
+        {/* Right slot — user menu (avatar + dropdown with tenant + Sign out) */}
+        <UserMenu
+          tenantId={ctx?.tenantId ?? 'default'}
+          tenantDisplayName={branding?.displayName}
+        />
       </header>
 
       {/* Body — sidebar + main */}
       <div className="flex flex-1 min-h-0">
-        {/* Desktop / tablet sidebar (permanent, hidden on mobile) */}
-        <aside className="hidden md:block appbana-sidebar-container">
+        {/* Sidebar: full at md+, icon-rail at sm-to-md, hidden below sm.
+            The visual collapse is CSS-driven — see .appbana-sidebar-container
+            @media (max-width: 767.98px) in globals.css. */}
+        <aside className="hidden sm:block appbana-sidebar-container">
           <RuntimeSidebar
-            pages={app.pages ?? []}
+            pages={(app.pages ?? []) as PageMeta[]}
             currentPageId={currentPage?.id ?? null}
             onSelect={setCurrentPage}
           />
@@ -227,17 +261,17 @@ export function AppRuntimeShell() {
         {mobileNavOpen && (
           <button
             type="button"
-            className="appbana-drawer-backdrop md:hidden"
+            className="appbana-drawer-backdrop sm:hidden"
             aria-label="Close navigation"
             onClick={() => setMobileNavOpen(false)}
           />
         )}
         <aside
-          className={`appbana-drawer md:hidden ${mobileNavOpen ? 'appbana-drawer-open' : ''}`}
+          className={`appbana-drawer sm:hidden ${mobileNavOpen ? 'appbana-drawer-open' : ''}`}
           aria-hidden={!mobileNavOpen}
         >
           <RuntimeSidebar
-            pages={app.pages ?? []}
+            pages={(app.pages ?? []) as PageMeta[]}
             currentPageId={currentPage?.id ?? null}
             onSelect={setCurrentPage}
             onClose={() => setMobileNavOpen(false)}
@@ -245,10 +279,29 @@ export function AppRuntimeShell() {
         </aside>
 
         {/* Main content — scrollable */}
-        <main className="flex-1 overflow-y-auto">
+        <main id="appbana-main" tabIndex={-1} className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
             {currentPage ? (
-              renderPage(currentPage)
+              <RuntimeNavigationProvider
+                pages={(app.pages ?? []) as PageMeta[]}
+                navigateToPage={(p) => { setSelectedRecord(null); setCurrentPage(p); }}
+                navigateToRecord={(page, recordId) => {
+                  // Route: switch to the detail page and stash the record id.
+                  setCurrentPage(page);
+                  setSelectedRecord({ page, recordId });
+                }}
+                selectedRecordId={selectedRecord?.recordId ?? null}
+              >
+                {selectedRecord && selectedRecord.page.id === currentPage.id ? (
+                  <DetailPage
+                    page={selectedRecord.page}
+                    recordId={selectedRecord.recordId}
+                    onDismiss={() => setSelectedRecord(null)}
+                  />
+                ) : (
+                  renderPage(currentPage)
+                )}
+              </RuntimeNavigationProvider>
             ) : (
               <p className="text-slate-400 text-sm p-8 text-center">No pages in this app.</p>
             )}
@@ -256,6 +309,7 @@ export function AppRuntimeShell() {
         </main>
       </div>
       <Toaster />
+      <ConfirmDialogHost />
     </div>
   );
 }

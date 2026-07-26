@@ -37,23 +37,29 @@ public class SchemaEnricher {
     /** Field types approved by AppBana SchemaManager. Used for type coercion. */
     private static final Set<String> VALID_TYPES = Set.of(
             T_TEXT, "longtext", T_NUMBER, T_DECIMAL, T_BOOLEAN,
-            "date", T_DATETIME, "email", "phone", "status", "reference");
+            "date", T_DATETIME, "email", "phone", "status", "reference", "file");
 
     /** Fallback when LLM produces an invalid type (e.g. "currency", "float", "string"). */
     private static final String DEFAULT_TYPE = T_TEXT;
 
     /** Type aliases — common LLM hallucinations mapped to valid AppBana types. */
-    private static final Map<String, String> TYPE_ALIASES = Map.of(
-            "string",    T_TEXT,
-            "varchar",   T_TEXT,
-            "integer",   T_NUMBER,
-            "int",       T_NUMBER,
-            "float",     T_DECIMAL,
-            "double",    T_DECIMAL,
-            "money",     T_DECIMAL,
-            "currency",  T_DECIMAL,
-            "timestamp", T_DATETIME,
-            "bool",      T_BOOLEAN);
+    private static final Map<String, String> TYPE_ALIASES = Map.ofEntries(
+            Map.entry("string",     T_TEXT),
+            Map.entry("varchar",    T_TEXT),
+            Map.entry("integer",    T_NUMBER),
+            Map.entry("int",        T_NUMBER),
+            Map.entry("float",      T_DECIMAL),
+            Map.entry("double",     T_DECIMAL),
+            Map.entry("money",      T_DECIMAL),
+            Map.entry("currency",   T_DECIMAL),
+            Map.entry("timestamp",  T_DATETIME),
+            Map.entry("bool",       T_BOOLEAN),
+            // Phase B3 — common file-ish aliases → file
+            Map.entry("document",   "file"),
+            Map.entry("attachment", "file"),
+            Map.entry("upload",     "file"),
+            Map.entry("image",      "file"),
+            Map.entry("photo",      "file"));
 
     /**
      * Baseline fields injected at the front of every entity's field list.

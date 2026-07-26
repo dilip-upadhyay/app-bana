@@ -1,13 +1,28 @@
 /**
  * RuntimeSidebar.tsx — Left navigation rail for the deployed runtime.
  *
- * Standard business-app layout convention (Material 3 Navigation Rail /
- * MUI Dashboard / Retool / Airtable). Renders one link per page with an
- * inferred icon so users can distinguish "list" vs "add" vs "dashboard"
- * pages at a glance without depending on an icon library.
+ * Sprint 2 Task 2.2 rewrite:
+ *   - Width bumped to w-64 (was w-60) so page labels rarely truncate.
+ *   - Pages are auto-grouped by inferred entity: "Add Customer",
+ *     "Customer List", "Customer Detail" all cluster under a single
+ *     "Customers" section header.
+ *   - Pages that don't cluster (Dashboard, Settings, standalone reports)
+ *     go under an "Other" section at the bottom.
+ *   - Every truncatable label carries a native `title` tooltip so users
+ *     can hover to reveal the full name.
+ *   - Icons follow the plan: List → list-lines, Add → plus, Detail → eye,
+ *     with home / chart / gear / doc fallbacks. Zero external icon
+ *     dependency — inline SVGs matching Lucide's stroke conventions.
  */
 import type { PageMeta } from '@appbana/shared';
 import type { ReactNode } from 'react';
+import {
+  classifyKind,
+  extractEntity,
+  pluralize,
+  singularize,
+  type PageKind,
+} from './page-classifier';
 
 interface RuntimeSidebarProps {
   readonly pages: PageMeta[];
@@ -17,7 +32,7 @@ interface RuntimeSidebarProps {
   readonly onClose?: () => void;
 }
 
-/** Zero-dep icons. All 24×24, currentColor stroke, matches Tailwind sizing. */
+/** Zero-dep icons. 24×24 viewbox, currentColor stroke, Lucide conventions. */
 const ICONS = {
   list: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
@@ -36,6 +51,13 @@ const ICONS = {
       <circle cx="12" cy="12" r="9" />
       <line x1="12" y1="8"  x2="12" y2="16" />
       <line x1="8"  y1="12" x2="16" y2="12" />
+    </svg>
+  ),
+  eye: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   ),
   home: (
@@ -72,14 +94,56 @@ const ICONS = {
   ),
 } as const;
 
-function iconForPage(name: string | undefined): ReactNode {
-  const n = (name ?? '').toLowerCase();
-  if (/\b(list|table|browse|all)\b/.test(n)) return ICONS.list;
-  if (/\b(add|new|create|register|onboard)\b/.test(n)) return ICONS.plus;
-  if (/\b(dashboard|home|overview)\b/.test(n)) return ICONS.home;
-  if (/\b(report|analytics|chart|metric|stat)\b/.test(n)) return ICONS.chart;
-  if (/\b(setting|config|admin|preference)\b/.test(n)) return ICONS.gear;
-  return ICONS.doc;
+function iconForKind(kind: PageKind): ReactNode {
+  switch (kind) {
+    case 'list':      return ICONS.list;
+    case 'add':       return ICONS.plus;
+    case 'detail':    return ICONS.eye;
+    case 'dashboard': return ICONS.home;
+    case 'chart':     return ICONS.chart;
+    case 'settings':  return ICONS.gear;
+    default:          return ICONS.doc;
+  }
+}
+
+interface PageGroup {
+  entity: string | null; // null == "Other"
+  label: string;
+  pages: PageMeta[];
+}
+
+/** Cluster pages into entity groups, preserving first-appearance order. */
+function groupPages(pages: PageMeta[]): PageGroup[] {
+  const byKey = new Map<string, PageGroup>();
+  const others: PageMeta[] = [];
+  const orderedKeys: string[] = [];
+
+  for (const p of pages) {
+    const kind = classifyKind(p.name);
+    const raw = extractEntity(p.name, kind);
+    if (!raw) {
+      others.push(p);
+      continue;
+    }
+    const key = singularize(raw);
+    if (!byKey.has(key)) {
+      byKey.set(key, { entity: key, label: pluralize(key), pages: [] });
+      orderedKeys.push(key);
+    }
+    byKey.get(key)!.pages.push(p);
+  }
+
+  // Prefer list → add → detail ordering inside each group.
+  const kindRank: Record<PageKind, number> = {
+    list: 0, add: 1, detail: 2, dashboard: 3, chart: 4, settings: 5, other: 6,
+  };
+  for (const g of byKey.values()) {
+    g.pages.sort((a, b) => kindRank[classifyKind(a.name)] - kindRank[classifyKind(b.name)]);
+  }
+
+  const groups: PageGroup[] = orderedKeys.map((k) => byKey.get(k)!);
+  if (others.length) groups.push({ entity: null, label: 'Other', pages: others });
+  return groups;
 }
 
 export function RuntimeSidebar({
@@ -88,32 +152,68 @@ export function RuntimeSidebar({
   onSelect,
   onClose,
 }: RuntimeSidebarProps) {
+  const groups = groupPages(pages);
+  const showHeaders = groups.length > 1 || (groups.length === 1 && groups[0].entity !== null);
+
   return (
     <nav className="appbana-sidebar" aria-label="App pages">
-      <ul className="flex flex-col gap-0.5 p-3">
-        {pages.map((p) => {
-          const active = p.id === currentPageId;
-          return (
-            <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  onSelect(p);
-                  onClose?.();
-                }}
-                className={`appbana-sidebar-link ${active ? 'appbana-sidebar-link-active' : ''}`}
-                aria-current={active ? 'page' : undefined}
-              >
-                <span className="appbana-sidebar-icon">{iconForPage(p.name)}</span>
-                <span className="truncate">{p.name}</span>
-              </button>
-            </li>
-          );
-        })}
-        {pages.length === 0 && (
-          <li className="px-3 py-2 text-xs text-gray-400">No pages yet.</li>
+      <div className="flex flex-col gap-4 p-3">
+        {groups.length === 0 && (
+          <p className="px-3 py-2 text-xs text-gray-400">No pages yet.</p>
         )}
-      </ul>
+        {groups.map((group) => (
+          <section
+            key={group.entity ?? '__other__'}
+            className="flex flex-col gap-0.5"
+            aria-label={group.label}
+          >
+            {showHeaders && (
+              <h3 className="appbana-sidebar-section" title={group.label}>
+                {group.label}
+              </h3>
+            )}
+            <ul className="flex flex-col gap-0.5">
+              {group.pages.map((p) => {
+                const active = p.id === currentPageId;
+                const kind = classifyKind(p.name);
+                const label = p.name ?? p.id;
+                return (
+                  <li key={p.id}>
+                    {/* Sprint 3 task 3.11(b) — aria-label lets AT announce
+                        the destination; native title kept as a secondary
+                        hover-only hint. In collapsed icon-rail mode the CSS
+                        hides the label span, and screen readers still get
+                        the aria-label. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelect(p);
+                        onClose?.();
+                      }}
+                      className={`appbana-sidebar-link ${active ? 'appbana-sidebar-link-active' : ''}`}
+                      aria-current={active ? 'page' : undefined}
+                      aria-label={label}
+                      title={label}
+                    >
+                      <span className="appbana-sidebar-icon">{iconForKind(kind)}</span>
+                      <span className="truncate">{label}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
     </nav>
   );
 }
+
+// Exported for unit tests; not part of the component's public API.
+export const __test__ = {
+  classifyKind,
+  extractEntity,
+  pluralize,
+  singularize,
+  groupPages,
+};

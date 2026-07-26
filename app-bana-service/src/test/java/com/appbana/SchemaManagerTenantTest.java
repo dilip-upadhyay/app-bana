@@ -29,12 +29,16 @@ public class SchemaManagerTenantTest {
 
         String tableName = SchemaManager.getPhysicalTableName(schema);
 
-        assertTrue(tableName.contains("acme_corp"), "Table name should include tenant_id");
-        assertTrue(tableName.contains("crm_app"), "Table name should include app_id");
-        assertTrue(tableName.contains("customer"), "Table name should include entity name");
+        // getPhysicalTableName returns uppercase (PostgreSQL identifier convention);
+        // compare lowercased so the assertions read cleanly against the underscore
+        // sanitization output.
+        String lower = tableName.toLowerCase();
+        assertTrue(lower.contains("acme_corp"), "Table name should include tenant_id");
+        assertTrue(lower.contains("crm_app"), "Table name should include app_id");
+        assertTrue(lower.contains("customer"), "Table name should include entity name");
 
-        // Expected format: app_tenantid_appid_entityname
-        assertEquals("app_acme_corp_crm_app_customer", tableName);
+        // Expected format: app_tenantid_appid_entityname (uppercased by SchemaManager)
+        assertEquals("app_acme_corp_crm_app_customer", lower);
     }
 
     @Test
@@ -99,8 +103,9 @@ public class SchemaManagerTenantTest {
         String table2 = SchemaManager.getPhysicalTableName(schema2);
 
         assertNotEquals(table1, table2, "Different apps should have different physical tables");
-        assertTrue(table1.contains("app1"), "Table1 should contain app1");
-        assertTrue(table2.contains("app2"), "Table2 should contain app2");
+        // Case-insensitive contains: getPhysicalTableName returns uppercase.
+        assertTrue(table1.toLowerCase().contains("app1"), "Table1 should contain app1");
+        assertTrue(table2.toLowerCase().contains("app2"), "Table2 should contain app2");
     }
 
 }

@@ -21,4 +21,5 @@ if [ ! -d "node_modules" ]; then
 fi
 
 echo "[start-runtime] Launching Vite dev server on port $PORT..."
-npx vite --port "$PORT"
+cd "$ROOT_DIR"
+pnpm -C app-bana-runtime exec vite --port "$PORT"

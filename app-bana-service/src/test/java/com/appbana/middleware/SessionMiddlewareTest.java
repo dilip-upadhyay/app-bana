@@ -138,9 +138,9 @@ class SessionMiddlewareTest {
     // ========================================
 
     @Test
-    @DisplayName("Should reject /api/users without session")
+    @DisplayName("Should reject a session-required path when no session provided")
     void testProtectedPathRejectsNoSession() {
-        when(req.path()).thenReturn("/api/users");
+        when(req.path()).thenReturn("/dashboard");
         when(req.header("X-Session-Token")).thenReturn(null);
 
         SessionMiddleware.create().accept(req, res);
@@ -197,7 +197,7 @@ class SessionMiddlewareTest {
     @DisplayName("Should extract token from X-Session-Token header")
     void testExtractFromHeader() {
         SessionData session = SessionService.createSession("user123");
-        when(req.path()).thenReturn("/api/users");
+        when(req.path()).thenReturn("/dashboard");
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
         SessionMiddleware.create().accept(req, res);
@@ -210,7 +210,7 @@ class SessionMiddlewareTest {
     @DisplayName("Should extract token from Cookie")
     void testExtractFromCookie() {
         SessionData session = SessionService.createSession("user123");
-        when(req.path()).thenReturn("/api/users");
+        when(req.path()).thenReturn("/dashboard");
         when(req.header("X-Session-Token")).thenReturn(null);
         when(req.header("Cookie")).thenReturn("session_id=" + session.sessionId());
 
@@ -224,7 +224,7 @@ class SessionMiddlewareTest {
     @DisplayName("Should extract token from Authorization Bearer")
     void testExtractFromAuthBearer() {
         SessionData session = SessionService.createSession("user123");
-        when(req.path()).thenReturn("/api/users");
+        when(req.path()).thenReturn("/dashboard");
         when(req.header("X-Session-Token")).thenReturn(null);
         when(req.header("Cookie")).thenReturn(null);
         when(req.header("Authorization")).thenReturn("Bearer " + session.sessionId());
@@ -243,7 +243,7 @@ class SessionMiddlewareTest {
     @DisplayName("Should validate valid session")
     void testValidatesValidSession() {
         SessionData session = SessionService.createSession("user123");
-        when(req.path()).thenReturn("/api/users");
+        when(req.path()).thenReturn("/dashboard");
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
         SessionMiddleware.create().accept(req, res);
@@ -256,7 +256,7 @@ class SessionMiddlewareTest {
     @Test
     @DisplayName("Should reject invalid session token")
     void testRejectsInvalidSession() {
-        when(req.path()).thenReturn("/api/users");
+        when(req.path()).thenReturn("/dashboard");
         when(req.header("X-Session-Token")).thenReturn("invalid-session-id");
 
         SessionMiddleware.create().accept(req, res);
@@ -276,7 +276,7 @@ class SessionMiddlewareTest {
 
         Thread.sleep(100);
 
-        when(req.path()).thenReturn("/api/users");
+        when(req.path()).thenReturn("/dashboard");
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
         SessionMiddleware.create().accept(req, res);
@@ -296,7 +296,7 @@ class SessionMiddlewareTest {
     @DisplayName("Should attach userId and sessionId to request")
     void testAttachesUserContext() {
         SessionData session = SessionService.createSession("user123");
-        when(req.path()).thenReturn("/api/users");
+        when(req.path()).thenReturn("/dashboard");
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
         SessionMiddleware.create().accept(req, res);

@@ -30,4 +30,4 @@ if [ ! -d "node_modules" ]; then
 fi
 
 echo "Starting AppBana Studio at http://localhost:$STUDIO_PORT"
-cd app-bana-studio && npx vite --port $STUDIO_PORT
+pnpm -C app-bana-studio exec vite --port $STUDIO_PORT

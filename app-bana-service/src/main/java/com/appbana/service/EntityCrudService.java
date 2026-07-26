@@ -400,6 +400,67 @@ public class EntityCrudService {
         }
     }
 
+    /**
+     * H6 hardening — return TRUE COUNT(*) per distinct value of {@code groupBy}
+     * across the whole filtered result set (not just the current page).
+     * Before H6 the /api/{entity} listing only bucketed the returned page in
+     * Java, so counts were wrong the moment the data exceeded {@code limit}.
+     *
+     * Guards:
+     *   - {@code groupBy} MUST match a real field on the schema (case-insensitive)
+     *     — otherwise this returns an empty map, refusing to interpolate an
+     *     unknown identifier into SQL. This is our SQL-injection guard.
+     *   - Uses the same WHERE clause as the paged list, so counts are
+     *     consistent with what the caller sees on page 1.
+     *
+     * Keys: the column value stringified; NULL becomes empty string "".
+     * Returns a linked map preserving natural COUNT DESC order.
+     */
+    public Map<String, Long> countByGroup(EntitySchema schema,
+                                          String groupBy,
+                                          String q,
+                                          Map<String, Object> filters) throws SQLException {
+        if (groupBy == null || groupBy.isBlank()) return Map.of();
+        // Resolve to the canonical field name from the schema — the whole
+        // point of this lookup is to refuse to trust the raw query-string.
+        String canonical = null;
+        for (EntitySchema.Field f : schema.getFields()) {
+            if (f.getName().equalsIgnoreCase(groupBy)) {
+                canonical = f.getName();
+                break;
+            }
+        }
+        if (canonical == null) {
+            LOG.warn("[GROUP-BY] Rejecting unknown groupBy column '{}' for entity {}", groupBy, schema.getName());
+            return Map.of();
+        }
+
+        StringBuilder where = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        buildWhere(schema, q, filters, where, params);
+        String col = quote(canonical);
+        String sql = "SELECT " + col + " AS grp_key, COUNT(*) AS grp_count"
+                + " FROM " + quote(SchemaManager.getPhysicalTableName(schema))
+                + where
+                + " GROUP BY " + col
+                + " ORDER BY grp_count DESC";
+        Map<String, Long> out = new LinkedHashMap<>();
+        try (Connection c = schemaConnection(schema);
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Object key = rs.getObject(1);
+                    String keyStr = key == null ? "" : String.valueOf(key);
+                    out.put(keyStr, rs.getLong(2));
+                }
+            }
+        }
+        return out;
+    }
+
     public Map<String, Object> listAdvanced(EntitySchema schema,
             int limit,
             int offset,
@@ -636,7 +697,30 @@ public class EntityCrudService {
         return list;
     }
 
+    /**
+     * Sprint 3 post-review fix — the outer coerceAndValidate() wraps the raw
+     * validator so every downstream {@code IllegalArgumentException("field
+     * 'X' <reason>")} surfaces as a typed {@link FieldValidationException}.
+     *
+     * <p>Structured errors let {@link ErrorHandler#fieldValidationError} skip
+     * its brittle regex parser. The inner {@link #coerceAndValidateRaw} keeps
+     * the historic messages verbatim so any legacy caller unaware of the
+     * typed contract still sees the same string.
+     */
     private static Object coerceAndValidate(EntitySchema.Field f, Object raw) {
+        try {
+            return coerceAndValidateRaw(f, raw);
+        } catch (FieldValidationException fve) {
+            throw fve;
+        } catch (IllegalArgumentException iae) {
+            String msg = iae.getMessage() != null ? iae.getMessage() : "";
+            String prefix = "field '" + f.getName() + "' ";
+            String reason = msg.startsWith(prefix) ? msg.substring(prefix.length()) : msg;
+            throw new FieldValidationException(f.getName(), reason);
+        }
+    }
+
+    private static Object coerceAndValidateRaw(EntitySchema.Field f, Object raw) {
         String t = f.getType().toLowerCase(Locale.ROOT);
         // required
         if (raw == null || (raw instanceof String s && s.isBlank() && !t.equals("string") && !t.equals("text"))) {
@@ -702,6 +786,31 @@ public class EntityCrudService {
                     if (f.getMax() != null && lv > f.getMax())
                         throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                     yield lv;
+                }
+                case "decimal", "numeric", "money", "float", "double" -> {
+                    // Coerce to BigDecimal so Postgres NUMERIC columns accept
+                    // the bind. Accepts Number (JSON number literal) and String
+                    // (form input or JSON string). min/max are compared as
+                    // Long -> BigDecimal.
+                    java.math.BigDecimal bd;
+                    if (raw instanceof java.math.BigDecimal existing) {
+                        bd = existing;
+                    } else if (raw instanceof Number n) {
+                        // Use String constructor via toString() to avoid the
+                        // double-precision noise of BigDecimal.valueOf(double).
+                        bd = new java.math.BigDecimal(n.toString());
+                    } else {
+                        String rs = raw.toString().trim();
+                        if (rs.isEmpty()) yield null;
+                        bd = new java.math.BigDecimal(rs);
+                    }
+                    if (f.getMin() != null
+                            && bd.compareTo(java.math.BigDecimal.valueOf(f.getMin())) < 0)
+                        throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                    if (f.getMax() != null
+                            && bd.compareTo(java.math.BigDecimal.valueOf(f.getMax())) > 0)
+                        throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    yield bd;
                 }
                 case "boolean" -> {
                     if (raw instanceof Boolean) {

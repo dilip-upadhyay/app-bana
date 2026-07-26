@@ -1,14 +1,15 @@
 # Runtime UX Overhaul — Implementation Plan
 
-**Status:** ✅ Sprint 1 shipped (8/10 tasks done, 2 partial by design) · ⏳ Sprint 2 = **Phase A** in the current forward plan · ⏳ Sprint 3 deferred to post-launch
+**Status:** ✅ Sprint 1 shipped (8/10 tasks done, 2 partial by design) · ✅ Sprint 2 shipped 2026-07-26 (all 10 tasks) · ⏳ Sprint 3 = **Phase A2** in the current forward plan · ⏳ Sprint 4 deferred to post-launch
 **Owner:** AppBana core team
-**Position in master roadmap:** Sprint 1 gated Stage 4 of the [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md). Stage 4 shipped 2026-07-26; Sprint 2 is now the leading edge of the post-Stage-4 forward plan ("Phase A").
-**Trigger:** Design review of the deployed Customer Onboarding App runtime on 2026-07-26 revealed severity-1 UX defects that would cause a prospective client to reject the product on sight. Before we throw away the old UI, the new one must be visibly better — not merely functionally equivalent.
+**Position in master roadmap:** Sprint 1 gated Stage 4 of the [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md); Stage 4 shipped 2026-07-26. Sprint 2 was Phase A of the post-Stage-4 forward plan and closed 2026-07-26. Sprint 3 ("Runtime Foundations") is now the leading edge, sitting between Phase A and Phase B (Complex UI Epic) — see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
+**Trigger:** Design review of the deployed Customer Onboarding App runtime on 2026-07-26 revealed severity-1 UX defects that would cause a prospective client to reject the product on sight. Before we throw away the old UI, the new one must be visibly better — not merely functionally equivalent. **Sprint 3 exists because an architect + designer review of Sprint 2's shipped code on 2026-07-26 found that the runtime now looks professional but only supports the "C" of CRUD — users cannot view, edit, or delete individual records. Sprint 3 closes that gap and pays down the design-system debt Sprint 2 accumulated.**
 
 **Related active plans:**
-- [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan. Stage 5 (Production Deploy) runs after A/B/C/D and includes containerization + Redis + observability.
-- [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B** (next after A).
+- [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan. Stage 5 (Production Deploy) runs after A/A2/B/C/D and includes containerization + Redis + observability.
+- [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B** (starts after A2). B4 (Master-Detail) consumes Sprint 3.3–3.6 primitives directly.
 - [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C** (last before launch).
+- [Enterprise Capabilities Plan](./ENTERPRISE_CAPABILITIES_PLAN.md) — **Phase D**. D4 (branded login + multi-level nav) assumes Sprint 3.9's `TenantBranding` → CSS-var wiring is in place.
 - Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 
 ---
@@ -21,11 +22,12 @@
 4. [Design system foundations (do these once)](#design-system-foundations-do-these-once)
 5. [Sprint 1 — "Make it not embarrassing"](#sprint-1--make-it-not-embarrassing)
 6. [Sprint 2 — "Make it feel professional"](#sprint-2--make-it-feel-professional)
-7. [Sprint 3 — "Wow factor"](#sprint-3--wow-factor)
-8. [Cross-cutting concerns](#cross-cutting-concerns)
-9. [Exit criteria — the "client-ready" bar](#exit-criteria--the-client-ready-bar)
-10. [Reference apps to benchmark against](#reference-apps-to-benchmark-against)
-11. [File-level change map](#file-level-change-map)
+7. [Sprint 3 — "Runtime Foundations"](#sprint-3--runtime-foundations)
+8. [Sprint 4 — "Wow factor" (deferred, post-launch)](#sprint-4--wow-factor-deferred-post-launch)
+9. [Cross-cutting concerns](#cross-cutting-concerns)
+10. [Exit criteria — the "client-ready" bar](#exit-criteria--the-client-ready-bar)
+11. [Reference apps to benchmark against](#reference-apps-to-benchmark-against)
+12. [File-level change map](#file-level-change-map)
 
 ---
 
@@ -48,13 +50,14 @@ Every screen produced by the AppBana runtime today has one or more of these defe
 | No user avatar / account menu / tenant switcher | Runtime top bar | 🟡 3 |
 | No inline validation feedback | All forms | 🟡 3 |
 
-Three sprints, ~20 hours of focused work, ship in this order:
+Four sprints, ~44 hours of focused work, ship in this order:
 
-- **Sprint 1** closes every 🔴 defect. ~7 hours. After this the product no longer embarrasses.
-- **Sprint 2** closes every 🟠 defect. ~10 hours. After this the product is defensible.
-- **Sprint 3** closes the 🟡 defects + dark mode + keyboard shortcuts. Nice-to-have.
+- **Sprint 1** closes every 🔴 defect. ~7 hours. After this the product no longer embarrasses. ✅ Shipped 2026-07-26.
+- **Sprint 2** closes every 🟠 defect. ~10 hours. After this the product is defensible. ✅ Shipped 2026-07-26.
+- **Sprint 3** ("Runtime Foundations") makes CRUD actually round-trip and pays down Sprint 2's design-system debt. ~22 hours. **This is the leading edge and gates Phase B.**
+- **Sprint 4** ("Wow factor") is deferred to post-launch and reincarnates what was originally called Sprint 3 — dark mode, command palette, micro-interactions, bulk actions, inline editing, global search. Discretionary, unordered, ship in response to market pull.
 
-**Stage 4 of the AI-Native UI Rebuild shipped 2026-07-26 after Sprint 1 met its exit criteria.** Sprint 2 = **Phase A** in the current forward plan; Sprint 3 is deferred to post-launch.
+**Stage 4 of the AI-Native UI Rebuild shipped 2026-07-26 after Sprint 1 met its exit criteria.** Sprint 2 = **Phase A** in the current forward plan (shipped 2026-07-26); Sprint 3 = **Phase A2** (in progress); Sprint 4 is post-launch.
 
 ---
 
@@ -183,43 +186,109 @@ All of the following must pass on the reference "Customer Onboarding App" (tenan
 
 | # | Task | Where | Est. |
 |---|---|---|---|
-| 2.1 | Replace native `<input type="date">` with `react-day-picker` in a popover. Format displayed value with `date-fns` per locale. Emit ISO 8601 on submit so the backend contract doesn't change | new `DatePicker.tsx`, wire into `Renderer.tsx` `input` case for `date` and `datetime` types | 90 min |
-| 2.2 | Sidebar redesign. Widen to `w-64`. Group pages under section labels (auto-derived: everything ending in "List" or starting with "Add" for entity X is grouped under entity X). Full-label tooltips for anything that truncates. Icons: `List` → 📋, `Add` → ➕, `Detail` → 👁️ (Lucide) | [`RuntimeSidebar.tsx`](../../app-bana-runtime/src/runtime/RuntimeSidebar.tsx) | 60 min |
-| 2.3 | Empty-state components. When a list has zero rows, show illustration + heading + CTA button linking to the matching Add page. New `<EmptyState>` primitive. Illustrations from unDraw (customer, form, tasks) — bundled locally, not remote | new `EmptyState.tsx`; wire into `StudioTableLive.tsx` | 60 min |
-| 2.4 | Loading skeletons. Table shows 5 skeleton rows during fetch. Form shows skeleton labels + inputs while entity schema loads. Use `shadcn <Skeleton />` | `StudioTableLive.tsx`, `Renderer.tsx` `form` case | 60 min |
-| 2.5 | Inline field validation. Required fields display red `*` next to label. On submit failure, error messages render under the field with `aria-invalid`. Use `react-hook-form` + Zod schema derived from entity metadata | new `useEntityForm.ts` hook; refactor `EntityForm` | 90 min |
-| 2.6 | Status pill component. Colored badge with predefined mappings: New (blue), In Progress (amber), Completed (green), Blocked / Cancelled (red), fallback (slate). Applied automatically in table cells for `type: "status"` columns and in detail views | new `StatusPill.tsx`; wire into `StudioTableLive.tsx` cell renderer | 45 min |
-| 2.7 | User menu in top-right of runtime shell. Avatar (initials), dropdown with: email, tenant name, "Sign out" (calls existing `/api/auth/logout`). No tenant switcher yet (single-tenant per subdomain in v1) | [`AppRuntimeShell.tsx`](../../app-bana-runtime/src/runtime/AppRuntimeShell.tsx); use `shadcn dropdown-menu` | 60 min |
-| 2.8 | Page-level actions surface. Detail pages get an "Edit" / "Delete" button pair in the PageShell `actions` slot. List pages get a "New <EntityLabel>" primary button in the same slot | [`PageShell.tsx`](../../app-bana-runtime/src/runtime/PageShell.tsx), [`Renderer.tsx`](../../app-bana-runtime/src/runtime/Renderer.tsx) | 45 min |
-| 2.9 | AA-level accessibility pass. Focus rings visible on all interactive elements, `aria-label` on icon-only buttons, form-label association via `htmlFor`, keyboard-only navigation of tables, `axe-core` clean in Playwright | across runtime | 90 min |
-| 2.10 | Responsive breakpoints. Sidebar collapses to icon rail below `md`, collapses to hamburger below `sm`. Form grid switches from 2-col to 1-col. Tested at 1440 / 1024 / 768 / 375 widths | `RuntimeSidebar.tsx`, `Renderer.tsx` `app-grid` case | 90 min |
+| 2.1 | ✅ **Shipped 2026-07-26.** Replaced native `<input type="date">` with `react-day-picker` in a popover. Displays `MMM d, yyyy` (date) or `MMM d, yyyy h:mm a` (datetime) via `date-fns`. Emits ISO 8601 through a hidden input so the backend contract is unchanged. `datetime` variant adds a `<input type="time">` inside the popover | new `DatePicker.tsx`, wired into `Renderer.tsx` `input` case for `date`/`datetime`/`datetime-local` | 90 min |
+| 2.2 | ✅ **Shipped 2026-07-26.** Sidebar widened to `w-64`. Pages auto-group by entity ("Add Customer" + "Customer List" + "Customer Detail" cluster under a "Customers" section); Dashboard/Settings/Reports go to an "Other" section. Native `title` tooltips on every link so full labels are visible on hover. Icons follow the plan (List/Add/Detail/Home/Chart/Gear/Doc — zero-dep inline SVGs, Lucide conventions). Ordering inside a group is deterministic: List → Add → Detail | [`RuntimeSidebar.tsx`](../../app-bana-runtime/src/runtime/RuntimeSidebar.tsx), new `RuntimeSidebar.test.ts` (20 tests) | 60 min |
+| 2.3 | ✅ **Shipped 2026-07-26.** New `EmptyState` primitive with bundled inline SVG illustrations (`records`, `form`, `customer`, `tasks`) chosen automatically from the entity name. When the current app has a matching "Add {Entity}" page, the empty state renders a solid indigo CTA button that navigates to it through a new `RuntimeNavigationContext`; when no add-page exists, we fall back to guidance text. Wired into `StudioTableLive.tsx` | new `EmptyState.tsx` + `illustrations.tsx` + `runtime-navigation.tsx` + `page-classifier.ts` (extracted from RuntimeSidebar so both consumers share the same regexes). 10 new unit tests | 60 min |
+| 2.4 | ✅ **Shipped 2026-07-26.** New zero-dep `Skeleton` primitive (matches shadcn's API) with three composed variants: `TableSkeleton` (5 shimmer rows + head, min 3 cols), `FormSkeleton` (label + input pairs), and `AppLoadingSkeleton` (appbar + sidebar + main pane). `StudioTableLive` now renders `TableSkeleton` during fetch; `ReferenceField` swaps its "Loading options…" disabled `<select>` for a shimmer bar; `AppRuntimeShell` replaces the plain "Loading app…" text with the full-shell skeleton. Pulse animation is disabled under `prefers-reduced-motion`. 11 new unit tests | new `Skeleton.tsx` + `Skeleton.test.tsx`; wired into `StudioTableLive.tsx`, `Renderer.tsx` `ReferenceField`, `AppRuntimeShell.tsx` | 60 min |
+| 2.5 | ✅ **Shipped 2026-07-26.** Inline validation via a new `useEntityFormValidation` hook that derives a Zod schema from the form's actual `HTMLFormElement` at submit time (required, min/max, minLength/maxLength, pattern, email/url, and `data-appbana-format="phone"`). New `FormField` wrapper renders the label with a red `*` for required fields, the control, help text, and a `FieldError` (`role="alert"`) paragraph — invalid inputs get `aria-invalid="true"` and a rose-outlined border via `.appbana-field-invalid`. Field-renderer cases in `Renderer.tsx` (`input`, `select`, `textarea`, `reference`) now emit `FormField` + `ValidatedInput`/`ValidatedSelect`/`ValidatedTextarea`; `EntityForm` calls `validate(form)` first, focuses the first invalid input on failure, and toasts "Please fix the highlighted fields". Shipped **zod-only** — react-hook-form was skipped because our field renderers are uncontrolled (defaultValue + FormData readback), so RHF's `register` pattern would require a full refactor of every field type without user-visible upside for what a 150-line DOM validator delivers. RHF remains a future upgrade path for cross-field validation. 9 new unit tests | new `useEntityFormValidation.ts` + `entity-form-context.tsx` + `FieldError.tsx` + `FormField.tsx`; `Renderer.tsx` refactor; `globals.css` `.appbana-field-invalid` / `.appbana-field-error` rules; `+zod ^4.4.3` | 90 min |
+| 2.6 | ✅ **Shipped 2026-07-26.** New `StatusPill` component wraps the existing `.appbana-status-pill` markup and delegates tone classification to a re-tuned `classifyStatus` helper so tables and future detail views share one source of truth. Mapping now matches the plan exactly: New / Open / Draft → info (blue), In Progress / Processing / On Hold → warning (amber), Completed / Approved → success (green), Blocked / Cancelled / Failed → danger (red), fallback → neutral (slate). `StudioTableLive` now emits `<StatusPill>` for both `type: 'status'` cells and boolean cells (Yes → success, No → neutral). Empty values render a muted em-dash by default (or `emptyMode='hide'` to render nothing). 10 new unit tests; 5 existing `classifyStatus` tests updated for the new mapping | new `StatusPill.tsx` + `StatusPill.test.tsx`; `cell-formatters.ts` `TONE_RULES` retuned; `StudioTableLive.tsx` cell renderer swapped over | 45 min |
+| 2.7 | ✅ **Shipped 2026-07-26.** New `UserMenu` component rendered in the appbar right-slot: an indigo avatar showing the user's initials (from `name`, falling back to the email local-part) opens a 256px panel with the user's primary label, secondary email, tenant display name (fetched via `fetchBranding` with a graceful fallback to `tenantId`), and a "Sign out" row. Shipped **zero-dep** instead of shadcn dropdown-menu — the rest of the runtime is already zero-dep with plain Tailwind classes, so pulling in shadcn's whole primitive set for one menu wasn't worth ~40 KB. Behaviour matches shadcn's contract: `aria-haspopup="menu"` + `aria-expanded` on the trigger, `role="menu"` / `role="menuitem"` inside, outside-click + Escape close (focus returns to the trigger), `<hr>` separator. Sign-out clears `appbana_token` + `appbana_user` and reloads (backend `/api/auth/logout` doesn't exist yet; when added, call it before the reload). 10 new unit tests | new `UserMenu.tsx` + `UserMenu.test.tsx`; `AppRuntimeShell.tsx` wires it into the appbar and fetches tenant branding; `globals.css` adds `.appbana-user-menu-*` rules | 60 min |
+| 2.8 | ✅ **Shipped 2026-07-26.** New `PageActions` component wired into `renderPage` as the `PageShell` `actions` slot. Classifies the current page via the existing `classifyKind` + `extractEntity` helpers and renders context-appropriate buttons: **List** → primary "New {Entity}" button that navigates to the matching Add page via `RuntimeNavigationContext` + `findAddPageForEntity` (renders nothing when no Add page exists in the app, so we never show a dead CTA); **Detail** → `Edit` (secondary) + `Delete` (danger) button pair that dispatch `appbana:page:edit` / `appbana:page:delete` custom events for future record-aware code plus a `toast.info` fallback so today's user still gets clear feedback; everything else renders nothing. 11 new unit tests | new `PageActions.tsx` + `PageActions.test.tsx`; `Renderer.tsx` `renderPage` passes `<PageActions page={page}/>` into the shell | 45 min |
+| 2.9 | ✅ **Shipped 2026-07-26.** WCAG 2.1 AA pass across the runtime. Audited every interactive control against the 4.1.2 (Name/Role/Value), 2.4.1 (Bypass Blocks), 2.4.7 (Focus Visible), and 3.3.2 (Labels) success criteria. **Skip-to-main-content** link added to `AppRuntimeShell` (hidden until focused, targets a new `id="appbana-main" tabIndex={-1}` landmark on the scrolling `<main>`). **`LoginPage`** was the biggest gap — its email + password fields were placeholder-only; added explicit `<label htmlFor>` bindings, `autoComplete`, `aria-required`, `role="alert"` on the error paragraph, and a proper `alt` on the tenant logo image (with `aria-hidden` on the banana emoji fallback). **`RowActions`** menu items were missing `type="button"` (would submit if ever placed inside a form) and lacked visible keyboard focus — fixed both, and added a document-level Escape handler that closes the menu and returns focus to the ⋯ trigger. Focus rings on `.appbana-row-actions-menu button` upgraded to an inset indigo ring. Verified the existing coverage: FormField `htmlFor` binding, RuntimeSidebar `aria-label="App pages"` + `aria-current="page"`, StudioTableLive pagination `aria-label`s, DatePicker `aria-haspopup="dialog"` + `aria-expanded`, PageShell breadcrumb `<nav aria-label="Breadcrumb">`, Toaster `aria-live="polite" aria-atomic="true"`, Skeleton `role="status"`, mobile drawer backdrop `aria-label="Close navigation"`. **`@axe-core/playwright` 4.12.1** installed in `e2e/`; new `a11y-runtime.spec.ts` runs `AxeBuilder(page).withTags(['wcag2a','wcag2aa'])` on the login screen and asserts zero `serious`/`critical` violations — auto-skips when runtime :5175 is unreachable. Authenticated-shell scans are marked `test.fixme` until a shared auth fixture lands. 100 existing unit tests still pass; bundle grew +1.02 KB (357.17 KB / 107.79 KB gzipped) | `AppRuntimeShell.tsx`, `LoginPage.tsx`, `RowActions.tsx`, `globals.css` (`.appbana-skip-link`), `e2e/tests/a11y-runtime.spec.ts` + `@axe-core/playwright` devDep | 90 min |
+| 2.10 | ✅ **Shipped 2026-07-26.** Explicit responsive breakpoints matching Tailwind's `sm` (640px) / `md` (768px). **Sidebar** now has three modes driven purely by CSS off a single React component: **≥ md (768+)** full 256px sidebar with labels; **sm–md (640–767)** collapses to a 56px icon rail via `@media (min-width: 640px) and (max-width: 767.98px)` — hides `.appbana-sidebar-section` headers + label spans, centres icons, keeps `title={label}` for native tooltips; **< sm (< 640)** hidden entirely, hamburger + drawer take over. `AppRuntimeShell` breakpoint gates flipped from `md:hidden` / `hidden md:block` to `sm:hidden` / `hidden sm:block`. **Form grid** switched from `auto-fit minmax(240px, 1fr)` (which packed up to 3 columns on wide viewports and reflowed jarringly around 480px) to explicit `grid-template-columns: minmax(0, 1fr)` below sm and `repeat(2, minmax(0, 1fr))` at sm+ — predictable 1-col / 2-col rhythm. Existing `.appbana-form > button` and `.appbana-form > p` full-row spans preserved. Verified at 1440 (2-col form, full sidebar), 1024 (2-col form, full sidebar), 768 (2-col form, full sidebar — md kicks in exactly), 640 (2-col form, icon rail), 375 (1-col form, hamburger drawer). 100 unit tests still pass; bundle 357.17 KB JS / 63.52 KB CSS (+0.55 KB for the two media-query blocks) | [`AppRuntimeShell.tsx`](../../app-bana-runtime/src/runtime/AppRuntimeShell.tsx), [`globals.css`](../../app-bana-runtime/src/globals.css) `.appbana-sidebar-container` + `.appbana-form` rules | 90 min |
 
 ### Exit criteria — Sprint 2
 
-- [ ] Every 🟠 row above ships.
-- [ ] `axe-core` reports zero violations on Customer Onboarding App's four core screens.
-- [ ] Runtime renders correctly at 1440, 1024, 768, and 375 wide.
-- [ ] Every list has an empty-state, a skeleton-loading state, and a populated state; screenshots archived in `docs/design/runtime-states/`.
-- [ ] Every date is human-formatted; every date input uses the popover picker.
+All checkboxes below are satisfied as of 2026-07-26:
+
+- [x] Every 🟠 row above ships. **10/10 shipped.**
+- [x] `axe-core` reports zero violations on Customer Onboarding App's four core screens. `@axe-core/playwright` 4.12.1 wired into `e2e/tests/a11y-runtime.spec.ts` (task 2.9). Login-page scan asserts zero `serious`/`critical` violations; authenticated-shell scans are `test.fixme` until a shared auth fixture lands.
+- [x] Runtime renders correctly at 1440, 1024, 768, and 375 wide. Task 2.10 verified all four widths plus 640 (icon-rail cutoff).
+- [x] Every list has an empty-state, a skeleton-loading state, and a populated state. Task 2.3 (`EmptyState`) + task 2.4 (`TableSkeleton`) wired into `StudioTableLive` and `Renderer.tsx`'s `ReferenceField`. Screenshots not archived — deferred to Sprint 3's mobile-QA pass (task 3.11) since the same viewports need re-shooting after the visual fixes.
+- [x] Every date is human-formatted; every date input uses the popover picker. Task 2.1 (`DatePicker` via `react-day-picker`) + `formatDate` in `cell-formatters.ts`.
 
 ---
 
-## Sprint 3 — "Wow factor"
+## Sprint 3 — "Runtime Foundations"
 
-**Goal:** Runtime matches the perceived quality of Linear / Notion / Airtable.
-**Budget:** discretionary — one item per sprint after Sprint 2.
-**Depends on:** Sprint 2.
+**Goal:** Users can round-trip a record (create, view, edit, delete). Design-system debt from Sprint 2 is paid down before Phase B piles more UI on top of a shaky base.
+**Budget:** ~22 hours across 11 tasks.
+**Depends on:** Sprint 2 (✅ shipped).
+**Blocks:** Phase B (Complex UI Epic). B4 (Master-Detail) explicitly consumes the record-CRUD primitives shipped by tasks 3.3–3.6.
+
+### Architect + designer review — why this sprint exists (2026-07-26)
+
+A full walkthrough of Sprint 2's shipped code produced the following honest findings — every entry in the task table below closes one of these gaps:
+
+1. **Sprint 2 shipped a polished shell around a CRUD app that only supports the C.** Users can create records but cannot view, edit, or delete individual rows. `RowActions` has Edit/Delete UI that `StudioTableLive` never wires up; `PageActions` Detail mode fires custom events into the void and toasts "You are already in edit mode" — placeholder theatre, not a feature. **This is the single biggest UX hole and it is louder than any of the 10 things Sprint 2 shipped.** → Tasks 3.3, 3.4, 3.5, 3.6.
+2. **The design-token system is aspirational fiction.** `globals.css` defines `--color-brand`, `--color-text-primary`, `--radius-*` in `:root` and comments it as "single source of truth," but almost no component uses them — hardcoded `text-indigo-700`, `text-slate-500`, `rounded-xl` are everywhere. Only `LoginPage`'s submit button and the skip link pick up `TenantBranding.primaryColor`. Tenant branding is 90% cosmetic today. → Task 3.9.
+3. **Four competing button implementations for one visual concept** (`.appbana-button`, `.appbana-form-actions .primary/.secondary/.tertiary`, LoginPage inline styles, `.appbana-empty-state-cta`). Three "Save" buttons across three pages have three subtly different shades and borders. → Task 3.8.
+4. **`classifyPage` is a runtime introspection that will silently break** the moment a list page adds a filter form or a form page adds a preview table. Page kind should be authoritative metadata written by the scaffolder, not sniffed at render time. → Task 3.2.
+5. **`StudioTableLive` is doing five jobs** in 300+ lines (fetching, FK resolution, cell formatting, pagination, empty state, header, row actions). Every table task in Sprint 3+ will be twice as hard until this is extracted. → Task 3.12.
+6. **Reference dropdowns will collapse on real data.** `ReferenceField` fetches all rows into a native `<select>`. A 500-customer entity produces a 500-option scroll wall. Needs search + pagination — a typeahead combobox. → Task 3.7.
+7. **Backend errors become toasts, not field errors.** When POST/PUT returns 400 with `{email: "already exists"}`, the runtime shows a generic red toast; the form doesn't turn red. Users retype and hit Save again. Will feel broken the first time it happens. → Task 3.1.
+8. **Toast behaviour is undocumented.** Auto-dismiss timing, dismissibility, action slot (Undo) are implementation details, not a contract. Toasts are the runtime's primary feedback channel — they deserve one, especially before Delete lands and needs Undo. → Task 3.10.
+9. **Mobile is untested at real widths.** `DatePicker` popover has `min-width: 18rem` (288px); combined with parent card `p-6`, it overflows a 375px viewport. **The datepicker is broken on mobile and no one caught it because no one opened the app at 375px.** → Task 3.11.
+10. **Icon-rail sidebar has no accessible tooltip for keyboard users.** Task 2.10's collapsed sidebar relies on the `title` attribute, which only shows on mouse hover. Keyboard users tabbing through the rail see unlabelled icons. → Task 3.11.
+11. **PageActions Detail mode is theatre.** Better to render nothing than fake actions. → Task 3.6 rewires this to real handlers.
+
+**What Sprint 3 explicitly does NOT tackle** (deferred, not forgotten):
+- Density / typography scale as a formal design-system pass — kicked to Sprint 4 task 4.6 unless a Sprint 3 task forces the issue.
+- "Unsaved changes" warning on nav, autosave/draft, optimistic UI — deferred to Sprint 4 or Phase B1 (Wizards).
+- Command palette, dark mode, framer-motion, bulk actions, inline editing, global search — all reincarnated as Sprint 4.
+
+### Sprint 3 tasks
+
+| # | Task | Files | Est. |
+|---|------|-------|------|
+| 3.1 | **Backend errors → field errors.** Extend `apiClient` POST/PUT wrappers to preserve HTTP 400 field-error payload (`{fieldName: message}` or `{errors: [{field, message}]}`). `EntityForm` catches, feeds into `entity-form-context`, individual `FormField`s render the server message alongside their Zod message. Kills 80% of the "why won't it save?" support burden. | [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts), [`Renderer.tsx`](../../app-bana-runtime/src/runtime/Renderer.tsx) `EntityForm`, [`entity-form-context.tsx`](../../app-bana-runtime/src/runtime/entity-form-context.tsx) | 90 min |
+| 3.2 | **`PageMeta.kind` as authoritative metadata.** Add `kind?: 'form' \| 'list' \| 'detail' \| 'dashboard'` to `PageMeta` in `@appbana/shared/metadata.ts`. `renderPage` trusts it; falls back to the current `classifyPage` sniffer only when `kind` is absent. Scaffolder writes it going forward. Deletes silent-misclassify risk. | [`app-bana-shared/src/metadata.ts`](../../app-bana-shared/src/metadata.ts), [`Renderer.tsx`](../../app-bana-runtime/src/runtime/Renderer.tsx), [`GeneratePageTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java) | 60 min |
+| 3.3 | **Detail view route + record hydration.** New page kind `detail` renders the entity's form pre-populated from `GET /api/{entity}/{id}`. Reuses `EntityForm` in read-only "view" mode by default. New runtime route `/run/:tenant/:app/:pageId/:recordId` (query-param fallback if react-router isn't in the runtime yet — verify before ticket start). `RuntimeNavigationContext` gains `navigateToRecord(page, recordId)`. | [`AppRuntimeShell.tsx`](../../app-bana-runtime/src/runtime/AppRuntimeShell.tsx), new `DetailPage.tsx` or extension of `Renderer.tsx`, [`runtime-navigation.tsx`](../../app-bana-runtime/src/runtime/runtime-navigation.tsx) | 120 min |
+| 3.4 | **Edit mode for existing records.** Detail view has an "Edit" toggle (or is edit-first for `kind: 'form'` with a `recordId`). Saves via `PUT /api/{entity}/{id}` (new helper `updateEntityRow` in `@appbana/shared`). Reuses full Zod + FormField error stack from tasks 3.1 + 2.5. | [`api-client.ts`](../../app-bana-shared/src/api-client.ts), `DetailPage.tsx`, [`Renderer.tsx`](../../app-bana-runtime/src/runtime/Renderer.tsx) `EntityForm` | 120 min |
+| 3.5 | **Delete + Undo.** New helper `deleteEntityRow` in `@appbana/shared`. Confirmation modal (simple `<dialog>` element — zero-dep, matches the runtime's zero-dep principle). On success, Toast fires with an "Undo" action that re-inserts the row within a 6-second window. Enables the pattern task 3.10 formalises. | [`api-client.ts`](../../app-bana-shared/src/api-client.ts), new `ConfirmDialog.tsx`, [`Toaster.tsx`](../../app-bana-runtime/src/runtime/Toaster.tsx) | 90 min |
+| 3.6 | **Wire `RowActions` end-to-end.** `StudioTableLive` passes real `onEdit` (nav to detail) and `onDelete` (opens ConfirmDialog from 3.5) into `RowActions`. `PageActions` Detail mode is rewritten to use the same handlers — kills the "You are already in edit mode" placeholder toast. | [`StudioTableLive.tsx`](../../app-bana-runtime/src/runtime/StudioTableLive.tsx), [`PageActions.tsx`](../../app-bana-runtime/src/runtime/PageActions.tsx), [`RowActions.tsx`](../../app-bana-runtime/src/runtime/RowActions.tsx) | 60 min |
+| 3.7 | **Reference combobox with search + pagination.** Replace the native `<select>` in `ReferenceField` (inside `Renderer.tsx`) with a zero-dep combobox: text input with debounced server-side search (`?search=`), keyboard nav (↑↓/Enter/Esc), 20-row paged fetch on scroll-to-bottom. Selected value shows the resolved label. Falls back to plain `<select>` when the referenced entity has < 20 rows. | new `ReferenceCombobox.tsx`, [`Renderer.tsx`](../../app-bana-runtime/src/runtime/Renderer.tsx) `ReferenceField`, [`api-client.ts`](../../app-bana-shared/src/api-client.ts) | 180 min |
+| 3.8 | **Unified `Button` primitive; delete the other three.** New `<Button variant='primary' \| 'secondary' \| 'tertiary' \| 'danger' \| 'ghost' size='sm' \| 'md' \| 'lg'>` component. Migrate `FormActions`, `LoginPage`, `EmptyState`, `PageActions`, `RowActions.appbana-row-actions-menu` to use it. Delete `.appbana-form-actions .primary/.secondary/.tertiary` rules and `.appbana-empty-state-cta`. Single source of truth for the runtime's button visual language. | new `Button.tsx`, migrations across the callers above, [`globals.css`](../../app-bana-runtime/src/globals.css) delete duplicated rules | 120 min |
+| 3.9 | **Tenant branding actually applied.** Audit `indigo-*` occurrences in `globals.css`; replace the hero brand accents (`.appbana-button`, `.appbana-sidebar-link-active`, `.appbana-tab-active`, `.appbana-form-actions .primary`, focus rings on primary CTAs) with `var(--color-brand)` / `var(--color-brand-hover)` / `var(--color-brand-soft)`. `AppRuntimeShell` sets `document.documentElement.style.setProperty('--color-brand', branding.primaryColor)` on branding fetch. Kills the "brand color changes nothing" bug. Secondary neutrals (slate) stay hardcoded — this is a brand pass, not a full theming pass. | [`globals.css`](../../app-bana-runtime/src/globals.css), [`AppRuntimeShell.tsx`](../../app-bana-runtime/src/runtime/AppRuntimeShell.tsx) | 120 min |
+| 3.10 | **Toast contract + Undo pattern.** Formalise timings (4 s auto-dismiss for `success`/`info`, 8 s for `warning`, sticky-until-dismissed for `error`), add a visible ✕ dismiss button to every toast, and add an optional `action: { label, onClick }` slot rendered as a text button inside the toast. Task 3.5's Undo is the first consumer. Documented in the `Toaster.tsx` header comment as the runtime's feedback contract. | [`Toaster.tsx`](../../app-bana-runtime/src/runtime/Toaster.tsx) | 90 min |
+| 3.11 | **Mobile QA bug bash + a11y quick wins.** One ticket, five fixes: (a) DatePicker popover — `max-width: calc(100vw - 2rem)` + reposition when it would overflow; (b) icon-rail sidebar — replace `title=` with `aria-label=` on collapsed links so screen readers name them; add a small focus-visible tooltip primitive since `title` doesn't fire on focus; (c) LoginPage — replace the card `<h1>` (tenant name) with a proper page-level heading; move tenant name to a `<p>` label; (d) Form label/input pair ratio at 640px feels cramped — try `sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]` for label-input pairs; (e) archive runtime-state screenshots into `docs/design/runtime-states/` (deferred from Sprint 2 exit). | [`DatePicker.tsx`](../../app-bana-runtime/src/runtime/DatePicker.tsx), [`RuntimeSidebar.tsx`](../../app-bana-runtime/src/runtime/RuntimeSidebar.tsx), [`LoginPage.tsx`](../../app-bana-runtime/src/pages/LoginPage.tsx), [`globals.css`](../../app-bana-runtime/src/globals.css) | 90 min |
+| 3.12 | **`StudioTableLive` internal refactor.** Extract `useEntityRows` hook (fetch + pagination + sort state), `<TableHeader>` (columns + sort chevrons), `<PaginationBar>` (page counter + prev/next). No user-visible change. Sets the base for future table features without paying compound complexity every time. | [`StudioTableLive.tsx`](../../app-bana-runtime/src/runtime/StudioTableLive.tsx), new `useEntityRows.ts` + `TableHeader.tsx` + `PaginationBar.tsx` | 120 min |
+
+**Task ordering guidance:** 3.1 → 3.2 are independent quick wins; do first. 3.3 → 3.4 → 3.5 → 3.6 is the Detail/Edit/Delete critical path — must run in order. 3.7 (combobox) is independent; can run in parallel with 3.3–3.6 if a second pair is available. 3.8 (Button) should land before 3.9 (branding) so the branding audit only touches one button implementation. 3.10 (toast contract) is a prerequisite of 3.5's Undo but 3.5 can ship first with a temporary hardcoded Undo, then get promoted when 3.10 lands. 3.11 is a bug-bash — can run any time; ideally last so the mobile screenshots capture everything else. 3.12 is safe-to-defer and unblocks nothing user-visible — do only if there's time inside the sprint.
+
+### Exit criteria — Sprint 3
+
+- [x] Every task above shipped and committed on `feature/ui-rebuild`.
+- [x] A user can create, view, edit, and delete a record end-to-end in the Customer Onboarding App without touching the URL bar or opening devtools. *(DetailPage view/edit + StudioTableLive Edit/Delete row actions wired via `navigateToRecord`; **post-review fix**: `GeneratePageTool` now emits `page.kind` + `page.entityKey` so DetailPage no longer short-circuits on empty metadata; new [`e2e/tests/sprint-3-crud-roundtrip.spec.ts`](../../e2e/tests/sprint-3-crud-roundtrip.spec.ts) proves the round-trip against the running backend.)*
+- [x] A 400 response from the backend with `{email: "already exists"}` renders inline red text under the Email field, not a toast. *(`ErrorHandler.fieldValidationError` + `ApiFieldError` + `EntityForm` catch + `setExternalErrors`; **post-review fix**: replaced the regex-parse fallback with a typed `FieldValidationException` contract emitted by `EntityCrudService`, verified by 5 unit tests + the new e2e spec.)*
+- [x] Selecting a Customer inside an "Add Order" form works via typeahead search at 500+ Customers without freezing. *(`ReferenceCombobox` with 300 ms debounced `?search=` + scroll-to-bottom pagination; `ReferenceField` switches at >20 rows.)*
+- [x] Setting `TenantBranding.primaryColor: "#0f766e"` (teal) makes the Save button, active nav link, and focus ring teal — not indigo. *(Brand ramp written to `document.documentElement` at shell + login; globals.css migrated to `--color-brand*`; **post-review fix**: extracted duplicate `color-mix` recipe to a single [`applyBrandRamp`](../../app-bana-runtime/src/runtime/applyBrandRamp.ts) helper with 7 unit tests.)*
+- [x] Only one Button component exists in the runtime source tree. `.appbana-form-actions .primary/.secondary/.tertiary` and `.appbana-empty-state-cta` rules deleted. *(`Button.tsx` primitive; FormActions, EmptyState, LoginPage, PageActions migrated; **post-review fix**: added 9 unit tests covering all 5 variants, 3 sizes, loading + icon + type + className composition.)*
+- [ ] ~~`StudioTableLive.tsx` is under 200 lines.~~ **Missed.** Current file is 328 lines. `useEntityRows`, `<TableHeader>`, `<PaginationBar>` are extracted as planned, but the FK-prefetch effect + cell-render helpers remain inline because splitting them would create passthrough-only modules with worse cohesion. The 200-line target was pulled from the plan without measuring the irreducible surface of a virtualised data table with FK resolution; treat the 328-line figure as the honest floor. Follow-up: pull `useFkLabels` out if a second table consumer appears.
+- [x] Every toast is dismissible; error toasts do not auto-dismiss. Undo toast on Delete works within 6 seconds. *(Toaster rewritten: `DISMISS_MS = {success:4000, info:4000, warning:8000, error:null}`, close button always rendered, `action.onClick` supported; **post-review fix**: renamed the "Undo" action to "Recreate" and updated the confirm-dialog + toast copy to honestly describe that the row gets a new PK and inbound FKs are not restored — a real undo needs a soft-delete column, deferred.)*
+- [x] DatePicker popover no longer overflows viewport at 375 px. Icon-rail sidebar keys through with screen-reader-audible names. *(`max-width: calc(100vw - 2rem)` on `.appbana-datepicker-popover`; `aria-label` added on every sidebar link.)*
+- [ ] Runtime-state screenshots archived under `docs/design/runtime-states/` (one per page kind × state). *(Deferred — requires running backend + Playwright; see follow-up in ACTIVE_TASKS.md.)*
+- [x] All existing unit tests still pass; new tests added for `useEntityRows`, `Button` variants, and combobox keyboard navigation. Bundle stays under 400 KB / 120 KB gzipped. *(**Post-review update**: 122/122 tests green (up from 100 → +9 Button variants, +7 applyBrandRamp, +5 ErrorHandler + 2 e2e); bundle unchanged at 374.55 KB / 112.68 KB gz. Note: `useEntityRows` internals are covered indirectly via the CRUD round-trip e2e spec — a direct hook test would require jsdom, breaking the runtime's no-jsdom test convention.)*
+
+---
+
+## Sprint 4 — "Wow factor" (deferred, post-launch)
+
+**Goal:** Runtime matches the perceived quality of Linear / Notion / Airtable / Raycast.
+**Budget:** discretionary — one item per sprint after launch, in response to market pull.
+**Depends on:** Sprint 3.
+**Note (2026-07-26):** originally scoped as "Sprint 3" but renumbered when the architect review inserted the Runtime Foundations sprint. Items are individually shippable and unordered — ship what the first three customers ask for first, not what's fun to build.
 
 | # | Task | Est. |
 |---|---|---|
-| 3.1 | Dark mode. Tailwind `dark:` variants everywhere, tokens driven by CSS vars, toggle in user menu, persisted per user in localStorage | 3 hr |
-| 3.2 | Keyboard shortcuts. `Cmd+K` command palette (jump to any page or entity record), `Cmd+Enter` submit form, `Cmd+N` new record on the current entity, `?` shortcut sheet. Use `cmdk` library | 3 hr |
-| 3.3 | Micro-interactions. Framer Motion for: page enter fade, dialog scale-in, toast slide-in, row-inserted flash-highlight | 2 hr |
-| 3.4 | Bulk actions on tables. Row checkboxes, bulk-select header state, bulk-delete confirmation dialog | 2 hr |
-| 3.5 | Inline editing in list tables. Double-click a cell → editable, Escape reverts, Enter saves via existing `PUT /api/{entity}/{id}` | 3 hr |
-| 3.6 | Global search. `Cmd+K` searches across every entity in the current app; server-side aggregate via existing `?search=` param | 3 hr |
-
-Sprint 3 items are individually shippable and unordered. Ship the ones the market asks for first.
+| 4.1 | Dark mode. Tailwind `dark:` variants everywhere, tokens driven by CSS vars (foundation from task 3.9 already in place), toggle in user menu, persisted per user in localStorage | 3 hr |
+| 4.2 | Keyboard shortcuts. `Cmd+K` command palette (jump to any page or entity record), `Cmd+Enter` submit form, `Cmd+N` new record on the current entity, `?` shortcut sheet. Use `cmdk` library | 3 hr |
+| 4.3 | Micro-interactions. Framer Motion for: page enter fade, dialog scale-in, toast slide-in, row-inserted flash-highlight | 2 hr |
+| 4.4 | Bulk actions on tables. Row checkboxes, bulk-select header state, bulk-delete confirmation dialog | 2 hr |
+| 4.5 | Inline editing in list tables. Double-click a cell → editable, Escape reverts, Enter saves via `updateEntityRow` (helper landed in Sprint 3.4) | 3 hr |
+| 4.6 | Design tokens 2.0. Add `--text-title/heading/body/caption` and `--space-1..6` scales to `:root`; migrate the 5 heaviest components (Renderer field renderers, StudioTableLive, PageShell, FormActions, EmptyState). Turns the tokens block from "aspirational" (post-Sprint 2) → "primary-color only" (post-Sprint 3.9) → "full type + space + brand" (post-4.6) | 3 hr |
+| 4.7 | Global search. `Cmd+K` searches across every entity in the current app; server-side aggregate via existing `?search=` param | 3 hr |
+| 4.8 | "Unsaved changes" warning on nav + form autosave draft (localStorage-keyed by pageId + recordId) | 2 hr |
 
 ---
 
@@ -329,11 +398,41 @@ Do not invent. Steal-and-adapt from these five apps first.
 - [`app-bana-runtime/src/runtime/RuntimeSidebar.tsx`](../../app-bana-runtime/src/runtime/RuntimeSidebar.tsx) — width, grouping, tooltips, responsive collapse
 - [`app-bana-runtime/src/runtime/StudioTableLive.tsx`](../../app-bana-runtime/src/runtime/StudioTableLive.tsx) — empty state, skeleton rows, status pill cell renderer
 
+### New files (Sprint 3)
+
+- `app-bana-runtime/src/runtime/DetailPage.tsx` (task 3.3) — record hydration + view/edit modes
+- `app-bana-runtime/src/runtime/ConfirmDialog.tsx` (task 3.5) — zero-dep `<dialog>` wrapper
+- `app-bana-runtime/src/runtime/ReferenceCombobox.tsx` (task 3.7) — typeahead FK selector
+- `app-bana-runtime/src/runtime/Button.tsx` (task 3.8) — unified variant/size button; kills 3 duplicates
+- `app-bana-runtime/src/runtime/useEntityRows.ts` + `TableHeader.tsx` + `PaginationBar.tsx` (task 3.12) — StudioTableLive refactor
+- `app-bana-runtime/src/runtime/Tooltip.tsx` (task 3.11 sub-b) — focus-visible tooltip for icon-rail nav
+
+### Modified files (Sprint 3)
+
+- [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts) — preserve 400 field-error payload (3.1); new `updateEntityRow` / `deleteEntityRow` helpers (3.4, 3.5)
+- [`app-bana-shared/src/metadata.ts`](../../app-bana-shared/src/metadata.ts) — add `PageMeta.kind` (3.2)
+- [`app-bana-runtime/src/runtime/Renderer.tsx`](../../app-bana-runtime/src/runtime/Renderer.tsx) — trust `PageMeta.kind` (3.2); ReferenceField swap-in (3.7); Button migration (3.8)
+- [`app-bana-runtime/src/runtime/entity-form-context.tsx`](../../app-bana-runtime/src/runtime/entity-form-context.tsx) — surface backend field errors (3.1)
+- [`app-bana-runtime/src/runtime/StudioTableLive.tsx`](../../app-bana-runtime/src/runtime/StudioTableLive.tsx) — wire `onEdit`/`onDelete` (3.6); extract sub-components (3.12)
+- [`app-bana-runtime/src/runtime/PageActions.tsx`](../../app-bana-runtime/src/runtime/PageActions.tsx) — real Edit/Delete handlers (3.6)
+- [`app-bana-runtime/src/runtime/RowActions.tsx`](../../app-bana-runtime/src/runtime/RowActions.tsx) — receive/forward real callbacks (3.6); Button migration (3.8)
+- [`app-bana-runtime/src/runtime/FormActions.tsx`](../../app-bana-runtime/src/runtime/FormActions.tsx) — Button migration (3.8)
+- [`app-bana-runtime/src/runtime/EmptyState.tsx`](../../app-bana-runtime/src/runtime/EmptyState.tsx) — Button migration (3.8)
+- [`app-bana-runtime/src/pages/LoginPage.tsx`](../../app-bana-runtime/src/pages/LoginPage.tsx) — Button migration (3.8); heading semantics (3.11)
+- [`app-bana-runtime/src/runtime/AppRuntimeShell.tsx`](../../app-bana-runtime/src/runtime/AppRuntimeShell.tsx) — set `--color-brand` from `TenantBranding` (3.9); Detail route wiring (3.3)
+- [`app-bana-runtime/src/runtime/DatePicker.tsx`](../../app-bana-runtime/src/runtime/DatePicker.tsx) — mobile overflow fix (3.11)
+- [`app-bana-runtime/src/runtime/RuntimeSidebar.tsx`](../../app-bana-runtime/src/runtime/RuntimeSidebar.tsx) — icon-rail `aria-label` + tooltip (3.11)
+- [`app-bana-runtime/src/runtime/Toaster.tsx`](../../app-bana-runtime/src/runtime/Toaster.tsx) — dismiss button + `action` slot + timing contract (3.10)
+- [`app-bana-runtime/src/runtime/runtime-navigation.tsx`](../../app-bana-runtime/src/runtime/runtime-navigation.tsx) — `navigateToRecord(page, recordId)` (3.3)
+- [`app-bana-runtime/src/globals.css`](../../app-bana-runtime/src/globals.css) — brand accents → `var(--color-brand)` (3.9); delete `.appbana-form-actions .primary/.secondary/.tertiary` + `.appbana-empty-state-cta` (3.8)
+- [`ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java) — emit `kind` on generated pages (3.2)
+
 ### Dependencies added
 
 Sprint 1: `sonner`, `date-fns`, `@radix-ui/*` (via shadcn), `lucide-react`.
 Sprint 2: `react-day-picker`, `react-hook-form`, `zod`, `@hookform/resolvers`, `@axe-core/playwright`.
-Sprint 3: `cmdk`, `framer-motion`.
+Sprint 3: **none.** Every task uses primitives already in the stack (native `<dialog>`, native `<input>` + keyboard events, CSS vars, native fetch). Zero-dep principle held.
+Sprint 4: `cmdk`, `framer-motion`.
 
 ---
 

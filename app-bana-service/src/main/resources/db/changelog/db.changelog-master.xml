@@ -53,4 +53,12 @@
         <sqlFile path="db/migration/V12__tenant_branding.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
+    <changeSet id="V13" author="appbana">
+        <sqlFile path="db/migration/V13__file_storage.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V14" author="appbana">
+        <sqlFile path="db/migration/V14__saved_views.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
 </databaseChangeLog>

@@ -159,6 +159,26 @@ public class AdvancedPromptEngine {
         prompt.append("CRITICAL: When generating entities via tools, YOU MUST INCLUDE ALL COMMONLY EXPECTED FIELDS (e.g., name, description, price, status, created_at, etc.). NEVER generate an entity with only an ID field.\n");
         prompt.append("DATA GENERATION: If the user asks to 'create some data', 'seed data', or 'test data', do NOT use CreateEntityTool. You MUST use the `generate_mock_data` tool to insert realistic JSON records (up to 10-20 max per call).\n\n");
 
+        // Phase B1 — Wizard layout hint
+        prompt.append("WIZARD LAYOUT (Phase B1): When the user's request implies a long or multi-step form — words like 'onboarding', 'signup flow', 'multi-step', 'wizard', 'KYC', 'application form', 'checkout', 'registration' — call `generate_page` with `type='form'` PLUS `layout='wizard'` and a `steps[]` array that groups the entity's fields into logical steps (e.g. Personal Info → Address → Documents → Consent). Each step object needs `id`, `title`, and `fields[]` (field names from the entity). The runtime auto-appends a Review & Submit step; do NOT add one yourself. Prefer wizards for any form with more than ~6 fields.\n\n");
+
+        // Phase B2 — Conditional-fields hint
+        prompt.append("CONDITIONAL FIELDS (Phase B2): When the user says things like 'only show X when Y', 'require X if Y', 'hide X unless Y', or 'disable X when Y', attach a `conditions` object to that field in `create_entity` / `batch_update_entities`. Shape: `conditions: { showWhen?: Expression, requiredWhen?: Expression, disabledWhen?: Expression }`. An Expression is EITHER a leaf `{ field: '<name>', op: '<op>', value: <any> }` where op is one of `equals | notEquals | in | notIn | gt | lt | gte | lte | contains | isEmpty | isNotEmpty`, OR a combinator `{ and: [Expression, ...] }`, `{ or: [Expression, ...] }`, or `{ not: Expression }`. Example — show `spouse_name` only when `marital_status === 'married'`: `\"conditions\": { \"showWhen\": { \"field\": \"marital_status\", \"op\": \"equals\", \"value\": \"married\" } }`. Hidden fields are excluded from validation automatically.\n\n");
+
+        // Phase B3 — File-upload hint
+        prompt.append("FILE UPLOADS (Phase B3): When the user asks for uploads / attachments / documents / photos / receipts / resumes / signatures / logos, define the field with `type: 'file'` and include a `fileConstraints` object: `{ maxSizeBytes: <n>, acceptedMimeTypes: [<mime>...] }`. Sensible defaults: 10 MB (10485760) for docs and images; use `image/*` for photos/logos, `application/pdf` for documents/resumes, or a mixed list `['image/*','application/pdf']`. The runtime renders a drag-and-drop dropzone, base64-encodes the file, POSTs it to `/api/files/upload`, and stores the returned `fileId` in a VARCHAR(64) column. Never ask the user for storage paths — just describe the file and the runtime handles the rest.\n\n");
+
+        // Phase B4 — Master–detail hint
+        prompt.append("MASTER–DETAIL (Phase B4): When the user describes a 1-to-many relationship — 'a Customer has many Orders', 'each Invoice has line items', 'a Project has tasks' — model it as TWO entities where the child has a `type: 'reference'` field pointing at the parent (set `referenceEntity: '<ParentEntity>'` and optionally `onDelete: 'cascade' | 'restrict' | 'setNull'`, default restrict). Then generate a detail page for the parent that includes one `child_table` node per child relationship. `child_table` node shape: `{ type: 'child_table', props: { entityName: '<ChildEntity>', fkField: '<child_fk_column>', parentId: '<parent-row-id>', displayFields?: [...], emptyLabel?: '...' } }`. The runtime auto-fetches child rows filtered by fkField and refreshes on row events. For simple 1:N apps, prefer this over separate list pages.\n\n");
+
+        // Phase B5 — List views hint
+        prompt.append("LIST VIEWS (Phase B5): When generating a list page, enrich it with the metadata the runtime knows how to consume:\n" +
+                "  • `filters: [{ field, op, label }]` — one entry per meaningful slice ('status', 'owner', 'date range'). Ops: equals | in | range | contains | dateRange. The runtime renders these as FilterBar chips.\n" +
+                "  • `groupBy: '<field>'` — set when the user asks for a kanban-style or grouped view ('group tasks by status', 'orders by customer'). The runtime buckets rows client-side and renders group headers.\n" +
+                "  • `defaultSort: { field, direction }` — set when the user wants a natural ordering ('most recent first', 'highest revenue first').\n" +
+                "  • `aggregates: [{ field, agg, label? }]` — set when the user asks for totals or averages ('show total revenue', 'average order value'). Aggs: sum | avg | count | min | max.\n" +
+                "Saved views themselves (per-user favourites like 'My open tasks') are not baked into page metadata — the runtime exposes a SavedViewsBar backed by `/api/saved-views` and users create them at runtime. You only produce the raw filter/groupBy scaffolding.\n\n");
+
         // Available tools
         prompt.append("## Available Tools\n\n");
         prompt.append(toolDescriptions);

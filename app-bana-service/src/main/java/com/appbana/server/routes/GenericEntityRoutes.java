@@ -471,6 +471,12 @@ public class GenericEntityRoutes {
                 Map<String, Object> response = new LinkedHashMap<>();
                 response.put("id", idObj);
                 res.json(201, response);
+            } catch (IllegalArgumentException e) {
+                // Sprint 3 task 3.1 — validation errors surface as 400 with
+                // a structured {errors: {fieldName: reason}} payload so the
+                // runtime can render them inline under the offending input.
+                LOG.warn("Insert validation failed for entity={}: {}", entity, e.getMessage());
+                res.json(400, ErrorHandler.fieldValidationError(e));
             } catch (Exception e) {
                 LOG.error("Insert failed for entity={}", entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
@@ -559,6 +565,9 @@ public class GenericEntityRoutes {
             String sortParam = req.query("sort");
             String filterParam = req.query("filter");
             String countFlag = req.query("count");
+            // Phase B5 — group by a single column. When set, we fetch the
+            // filtered rows (respecting limit) and bucket them in Java.
+            String groupByParam = req.query("groupBy");
 
             Map<String, Object> filters = crud.parseFilters(filterParam, schema);
             boolean countOnly = "true".equalsIgnoreCase(countFlag) || (countFlag != null && countFlag.equals("1"));
@@ -633,6 +642,51 @@ public class GenericEntityRoutes {
                                     }
                                 }
                                 out.put("rows", filtered);
+                            }
+                        }
+
+                        // Phase B5 — bucket the returned rows by a single column
+                        // when the caller asked for it. Kept in Java so we don't
+                        // have to teach every JDBC dialect a new GROUP BY path.
+                        //
+                        // H6 hardening: also compute TRUE per-group counts across
+                        // the whole filtered dataset (not just the current page)
+                        // via a real SQL GROUP BY. The `groups` field remains a
+                        // per-page bucketing for backwards compat; the new
+                        // `groupCounts` map is what UIs should show for accurate
+                        // totals ("Active (127)", "Pending (43)", ...) even when
+                        // there are more rows than the page size.
+                        if (groupByParam != null && !groupByParam.isBlank()) {
+                            Object rowsObj = out.get("rows");
+                            if (rowsObj instanceof List<?> rowsList) {
+                                Map<String, List<Object>> buckets = new LinkedHashMap<>();
+                                for (Object item : rowsList) {
+                                    if (item instanceof Map<?, ?> row) {
+                                        Object key = row.get(groupByParam);
+                                        String keyStr = key == null ? "" : String.valueOf(key);
+                                        buckets.computeIfAbsent(keyStr, k -> new ArrayList<>()).add(item);
+                                    }
+                                }
+                                List<Map<String, Object>> groups = new ArrayList<>(buckets.size());
+                                for (Map.Entry<String, List<Object>> entry : buckets.entrySet()) {
+                                    Map<String, Object> g = new LinkedHashMap<>();
+                                    g.put("key", entry.getKey());
+                                    g.put("count", entry.getValue().size());
+                                    g.put("rows", entry.getValue());
+                                    groups.add(g);
+                                }
+                                out.put("groups", groups);
+                                out.put("groupBy", groupByParam);
+                                // H6 — true, whole-dataset counts. Silently skipped
+                                // (empty map) if the column doesn't exist on the
+                                // schema, matching the guard in countByGroup.
+                                try {
+                                    Map<String, Long> trueCounts = crud.countByGroup(schema, groupByParam, q, filters);
+                                    out.put("groupCounts", trueCounts);
+                                } catch (SQLException groupErr) {
+                                    LOG.warn("[GROUP-BY] countByGroup failed for {}.{}: {}",
+                                            entity, groupByParam, groupErr.getMessage());
+                                }
                             }
                         }
 
@@ -732,6 +786,10 @@ public class GenericEntityRoutes {
                     }
                 }
                 res.json(200, Map.of("updated", updated));
+            } catch (IllegalArgumentException e) {
+                // Sprint 3 task 3.1 — same structured 400 shape as POST.
+                LOG.warn("Update validation failed for entity {} id {}: {}", entity, idStr, e.getMessage());
+                res.json(400, ErrorHandler.fieldValidationError(e));
             } catch (SQLException e) {
                 LOG.error("Update failed for entity {} id {}", entity, idStr, e);
                 res.json(500, ErrorHandler.errorDetails(e));

@@ -83,7 +83,15 @@ public class BatchUpdateEntitiesTool implements Tool {
                                 "name": {"type": "string"},
                                 "type": {"type": "string"},
                                 "required": {"type": "boolean"},
-                                "label": {"type": "string"}
+                                "label": {"type": "string"},
+                                "conditions": {
+                                  "type": "object",
+                                  "description": "Phase B2 — optional conditional visibility (showWhen/requiredWhen/disabledWhen expression tree)."
+                                },
+                                "fileConstraints": {
+                                  "type": "object",
+                                  "description": "Phase B3 — required when type='file'. Shape: {maxSizeBytes, acceptedMimeTypes}."
+                                }
                               }
                             }
                           },

@@ -17,19 +17,31 @@ export interface RowActionsProps {
 export function RowActions({ rowId, onCopy, onDelete, onEdit }: RowActionsProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLTableCellElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
 
   return (
     <td className="appbana-table-row-actions" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         aria-label={`Actions for row ${rowId}`}
         aria-haspopup="menu"
@@ -46,9 +58,16 @@ export function RowActions({ rowId, onCopy, onDelete, onEdit }: RowActionsProps)
       {open && (
         <div className="appbana-row-actions-menu" role="menu">
           {onEdit && (
-            <button role="menuitem" onClick={() => { setOpen(false); onEdit(); }}>Edit</button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { setOpen(false); onEdit(); }}
+            >
+              Edit
+            </button>
           )}
           <button
+            type="button"
             role="menuitem"
             onClick={() => {
               setOpen(false);
@@ -60,6 +79,7 @@ export function RowActions({ rowId, onCopy, onDelete, onEdit }: RowActionsProps)
           </button>
           {onDelete && (
             <button
+              type="button"
               role="menuitem"
               className="danger"
               onClick={() => { setOpen(false); onDelete(); }}

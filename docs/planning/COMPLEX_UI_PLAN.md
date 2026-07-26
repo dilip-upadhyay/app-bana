@@ -1,14 +1,14 @@
 # Complex UI Epic — Implementation Plan
 
-**Status:** 📝 Spec approved 2026-07-26 · ⏳ Execution not started
+**Status:** 📝 Spec approved 2026-07-26 · ⏳ Execution not started (blocked on Phase A2)
 **Owner:** AppBana core team
-**Position in master roadmap:** Phase B of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) completing. Blocks Phase C (Maker-Checker) and the first-customer launch.
+**Position in master roadmap:** Phase B of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2 — ✅ shipped 2026-07-26) **and Phase A2 (Runtime UX Sprint 3 — "Runtime Foundations")** completing. A2 delivers the record-level R/U/D primitives (`DetailPage`, edit mode, `ConfirmDialog` + Undo toast, wired `RowActions`, `ReferenceCombobox`, unified `Button`) that B4 (Master-Detail) consumes directly and B5 (List Views) leans on. Blocks Phase C (Maker-Checker) and the first-customer launch.
 **Trigger:** The current runtime renders exactly one page shape per entity: a flat form or a flat list. Real customer-onboarding, KYC, loan-origination, or claims-processing apps require compound page types (wizards, master-detail, conditional fields, document upload, saved filter views). Without these, the AI Builder can scaffold "an app" but not the app a real customer actually needs.
 
 **Related active plans:**
-- [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — **Phase A**, prerequisite. Sprint 2 must complete before B1 starts.
+- [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — **Phase A** (Sprint 2, ✅ shipped) + **Phase A2** (Sprint 3 — "Runtime Foundations"). A2 is the immediate prerequisite; see §Sprint 3 tasks 3.3–3.8 for the primitives B4 and B5 reuse.
 - [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C**, follows this epic. Approval workflows are built on top of B3 (file upload), B4 (master-detail), and B5 (list views — the checker's inbox).
-- [Enterprise Capabilities Plan](./ENTERPRISE_CAPABILITIES_PLAN.md) — **Phase D**, runs *after* Phase C. D is packaging on top of the differentiated product built in A + B + C.
+- [Enterprise Capabilities Plan](./ENTERPRISE_CAPABILITIES_PLAN.md) — **Phase D**, runs *after* Phase C. D is packaging on top of the differentiated product built in A + A2 + B + C.
 - [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan; this epic is a post-Stage-4 extension.
 - Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 
@@ -254,11 +254,21 @@ These types land in `app-bana-shared` **before** any sub-phase begins so runtime
 
 **Goal:** A parent entity's detail page shows related child entities inline — either as embedded tables or tabs.
 
+**Reuses from Phase A2 (Runtime Foundations, [Sprint 3](./RUNTIME_UX_OVERHAUL_PLAN.md#sprint-3--runtime-foundations)):** B4 does **not** invent record-level R/U/D — it layers child-table framing on top of A2's primitives. Specifically:
+- Task 3.3 `DetailPage` supplies the parent's detail page shell that B4.3's `DetailTabs` layout extends.
+- Task 3.4 edit mode + `updateEntityRow` helper is what B4.1's inline "edit" action reuses per child row.
+- Task 3.5 `ConfirmDialog` + Undo toast is what B4.1's inline "delete" action reuses per child row.
+- Task 3.6 wired `RowActions` is the row-action pattern B4.1 clones for child rows.
+- Task 3.8 unified `<Button>` is the button primitive B4's "Add child" and toolbar buttons use.
+- Task 3.12 `useEntityRows` hook is what B4.1's child fetch reuses (with `?fk_field={parentId}` as the filter).
+
+If any of these primitives is not shipped when B4 starts, B4 is blocked, not degraded — do not fork.
+
 ### Runtime work
 
 | # | Task | Where | Est. |
 |---|---|---|---|
-| B4.1 | `ChildTable.tsx` — inline table rendered inside a parent form/detail. Fetches child rows via `?fk_field={parentId}`, supports add / edit / delete inline, shares `StudioTableLive` cell renderers | new component | 90 min |
+| B4.1 | `ChildTable.tsx` — inline table rendered inside a parent form/detail. Fetches child rows via `?fk_field={parentId}` (via A2's `useEntityRows`), supports add / edit / delete inline reusing A2's `RowActions` + `DetailPage` + `ConfirmDialog` + Undo toast, shares `StudioTableLive` cell renderers | new component | 90 min |
 | B4.2 | `Renderer.tsx` — new node type `child_table` with `entityName`, `fkField`, `displayFields`. Renders `ChildTable` | [`Renderer.tsx`](../../app-bana-runtime/src/runtime/Renderer.tsx) | 45 min |
 | B4.3 | Tabbed detail layout — new `layout: "detail_tabs"` on PageMeta. First tab shows parent fields; subsequent tabs show one `ChildTable` each | new `DetailTabs.tsx` + `Renderer.tsx` wiring | 60 min |
 | B4.4 | New-parent form → child tables disabled until parent saved (child rows need parent `id`). Show a friendly banner "Save the customer first, then add documents" | `ChildTable.tsx` | 30 min |

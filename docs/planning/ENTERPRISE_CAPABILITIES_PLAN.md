@@ -438,8 +438,10 @@ DELETE /admin/apps/{appId}/notification-rules/{ruleId}
 
 **Est: ~20 hr · Owner: runtime + shared package · Ships: single PR.**
 
+**Prerequisite (added 2026-07-26):** D4 assumes the `TenantBranding.primaryColor` → CSS-variable wiring is already in place from [Phase A2 Sprint 3.9](./RUNTIME_UX_OVERHAUL_PLAN.md#sprint-3--runtime-foundations) — i.e. the primary-color audit is complete and `.appbana-button` / active-nav / focus rings already switch color when a tenant's `primaryColor` changes. D4 does **not** re-do that plumbing; D4 adds the hero image, secondary buttons, multi-level navigation shell, and header action slots *on top of* that foundation. If Sprint 3.9 is not shipped when D4 starts, D4 is blocked — do not duplicate the branding-variable wiring in D4.
+
 ### What it does
-Upgrades the runtime chrome from "flat sidebar + no header" to "grouped multi-level sidebar with icons + user dropdown + configurable header action slots". Also finishes the branded login screen introduced in Stage 0 but never fully wired.
+Upgrades the runtime chrome from "flat sidebar + no header" to "grouped multi-level sidebar with icons + user dropdown + configurable header action slots". Also finishes the branded login screen introduced in Stage 0 but never fully wired (adds hero image + secondary-CTA buttons; A2 §3.9 already delivered the tenant `primaryColor` on the primary CTA).
 
 ### Frontend
 

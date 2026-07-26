@@ -64,7 +64,24 @@ public class CreateEntityTool implements Tool {
                   "name": {"type": "string"},
                   "type": {"type": "string", "description": "Field type: text, email, number, date, etc."},
                   "required": {"type": "boolean"},
-                  "label": {"type": "string"}
+                  "label": {"type": "string"},
+                  "conditions": {
+                    "type": "object",
+                    "description": "Phase B2 — optional conditional visibility. Contains showWhen / requiredWhen / disabledWhen expressions. Each expression is either a leaf {field, op, value} where op is one of equals|notEquals|in|notIn|gt|lt|gte|lte|contains|isEmpty|isNotEmpty, or a combinator {and:[...]}, {or:[...]}, {not:{...}}."
+                  },
+                  "fileConstraints": {
+                    "type": "object",
+                    "description": "Phase B3 — required when type='file'. Shape: {maxSizeBytes:number, acceptedMimeTypes:string[]}. Example: {maxSizeBytes: 10485760, acceptedMimeTypes: [image/*, application/pdf]}."
+                  },
+                  "referenceEntity": {
+                    "type": "string",
+                    "description": "Phase B4 — for type='reference' fields, names the parent entity (e.g. 'Customer'). Required for 1:N relationships."
+                  },
+                  "onDelete": {
+                    "type": "string",
+                    "enum": ["cascade", "restrict", "setNull"],
+                    "description": "Phase B4 — cascade policy for reference fields when the parent row is deleted. Defaults to 'restrict'."
+                  }
                 },
                 "required": ["name", "type", "required"]
               }

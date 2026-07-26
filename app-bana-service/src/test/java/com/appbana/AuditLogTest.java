@@ -99,14 +99,14 @@ public class AuditLogTest {
     @Order(1)
     void createUpdateDeleteGeneratesAudit() throws Exception {
         // create
-        JsonNode created = post("/api/audit_demo", "{\"name\":\"Alpha\"}");
+        JsonNode created = post("/api/default_default_audit_demo", "{\"name\":\"Alpha\"}");
         createdId = created.get("id").asLong();
         assertTrue(createdId > 0);
         // update
-        JsonNode upd = put("/api/audit_demo/" + createdId, "{\"name\":\"Beta\"}");
+        JsonNode upd = put("/api/default_default_audit_demo/" + createdId, "{\"name\":\"Beta\"}");
         assertEquals(1, upd.get("updated").asInt());
         // delete
-        JsonNode del = delete("/api/audit_demo/" + createdId);
+        JsonNode del = delete("/api/default_default_audit_demo/" + createdId);
         assertEquals(1, del.get("deleted").asInt());
         // fetch audit
         JsonNode audit = get("/audit?entity=audit_demo&pk=" + createdId + "&limit=10");

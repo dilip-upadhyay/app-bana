@@ -11,12 +11,27 @@
  *   - viewport-filling shell (§1.10)
  */
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import type { ComponentNode } from '@appbana/shared';
-import { fetchEntityRows } from '@appbana/shared';
+import type { ComponentNode, FilterDef, SavedViewRecord } from '@appbana/shared';
+import { fetchEntityRows, deleteEntityRow, insertEntityRow, resolveAppContext } from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
-import { formatDate, humanizeHeader, pickReferenceLabel, classifyStatus } from './cell-formatters';
+import { formatDate, humanizeHeader, pickReferenceLabel } from './cell-formatters';
+import { StatusPill } from './StatusPill';
 import { RowActions } from './RowActions';
 import { toast } from './Toaster';
+import { EmptyState } from './EmptyState';
+import { TableSkeleton } from './Skeleton';
+import { useRuntimeNavigation } from './runtime-navigation';
+import { useConfirm } from './ConfirmDialog';
+import { useEntityRows } from './useEntityRows';
+import { TableHeader } from './TableHeader';
+import { PaginationBar } from './PaginationBar';
+import { FilterBar } from './FilterBar';
+import { SavedViewsBar } from './SavedViewsBar';
+import {
+  entityNameFromKey,
+  findAddPageForEntity,
+  findDetailPageForEntity,
+} from './page-classifier';
 
 interface Props {
   readonly node: ComponentNode;
@@ -44,46 +59,103 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     [props.fields],
   );
 
-  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [fkMaps, setFkMaps] = useState<Record<string, Map<string, string>>>({});
-
-  const load = useCallback(async () => {
-    if (!entityKey) return;
-    setLoading(true);
-    setError('');
-    try {
-      const result = await fetchEntityRows(qualifyEntityKey(entityKey), getToken(), {
-        limit: PAGE_SIZE,
-        offset: (page - 1) * PAGE_SIZE,
-      });
-      setRows(result.rows);
-      setTotal(result.total);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to load data';
-      setError(msg);
-    } finally {
-      setLoading(false);
+  // H3 hardening — filter chips + saved views.
+  // `props.filters` is the FilterDef[] the scaffolder attaches to list-page
+  // table nodes (see ai-builder GeneratePageTool line ~325). When empty the
+  // FilterBar renders nothing, so this is safe on tables that never opted in.
+  const filterDefs: FilterDef[] = useMemo(
+    () => (Array.isArray(props.filters) ? (props.filters as FilterDef[]) : []),
+    [props.filters],
+  );
+  const [filterValues, setFilterValues] = useState<Record<string, unknown>>(() => {
+    // Seed with any `default` on each FilterDef so the initial fetch is scoped.
+    const seed: Record<string, unknown> = {};
+    for (const f of filterDefs) {
+      if (f.default !== undefined) seed[f.field] = f.default;
     }
-  }, [entityKey, page]);
+    return seed;
+  });
 
-  useEffect(() => { load(); }, [load]);
+  // Convert filterValues → query params for the row fetcher. Skip empty
+  // strings / null so we don't send `?status=` (which would filter to rows
+  // whose status is literally empty).
+  const fetchParams = useMemo<Record<string, string | number>>(() => {
+    const out: Record<string, string | number> = {};
+    for (const [k, v] of Object.entries(filterValues)) {
+      if (v == null || v === '') continue;
+      if (typeof v === 'number' || typeof v === 'string') out[k] = v;
+      else out[k] = JSON.stringify(v);
+    }
+    return out;
+  }, [filterValues]);
 
-  // Refresh when any form on the page inserts a row for this entity.
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ entity?: string }>).detail;
-      if (!detail?.entity) return;
-      if (detail.entity === entityKey || detail.entity === qualifyEntityKey(entityKey)) {
-        load();
-      }
-    };
-    window.addEventListener('appbana:row-inserted', handler);
-    return () => window.removeEventListener('appbana:row-inserted', handler);
-  }, [entityKey, load]);
+  // Sprint 3 task 3.12 — pagination + lifecycle refresh live in a hook now.
+  const {
+    rows,
+    total,
+    page,
+    totalPages,
+    loading,
+    error,
+    setPage,
+  } = useEntityRows(entityKey, PAGE_SIZE, fetchParams);
+
+  const [fkMaps, setFkMaps] = useState<Record<string, Map<string, string>>>({});
+  // Sprint 3 task 3.6 — RowActions navigation + destructive confirm.
+  const nav = useRuntimeNavigation();
+  const confirm = useConfirm();
+
+  // Sprint 3 task 3.6 — delete a single row with confirm dialog + recreate toast.
+  //
+  // Post-review note: the "Undo" action re-inserts the row payload, which
+  // means the restored record gets a *new* primary key. Any foreign keys
+  // that pointed at the original row stay orphaned. The copy below is
+  // careful not to promise a true undo — call it out as "Recreate" and warn
+  // that links won't come back. A real undo needs a soft-delete column and
+  // a POST /restore endpoint (deferred, tracked in the follow-up backlog).
+  const handleDelete = useCallback(async (row: Record<string, unknown>, rowId: string) => {
+    const entityName = entityNameFromKey(entityKey) || 'record';
+    const ok = await confirm({
+      title: `Delete ${entityName}?`,
+      message: 'This cannot be truly undone — the notification lets you recreate the row with the same fields, but any links to other records will not be restored.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    const token = getToken();
+    try {
+      await deleteEntityRow(qualifyEntityKey(entityKey), rowId, token);
+      window.dispatchEvent(new CustomEvent('appbana:row-deleted', {
+        detail: { entity: qualifyEntityKey(entityKey), id: rowId },
+      }));
+      toast.success(`${entityName} deleted`, {
+        description: 'Use Recreate to insert the same fields back as a new record (with a new id).',
+        // Sprint 3 task 3.10 — action slot re-inserts the row as a fresh record.
+        action: {
+          label: 'Recreate',
+          onClick: () => {
+            insertEntityRow(qualifyEntityKey(entityKey), row, token)
+              .then(() => {
+                window.dispatchEvent(new CustomEvent('appbana:row-inserted', {
+                  detail: { entity: qualifyEntityKey(entityKey) },
+                }));
+                toast.info(`${entityName} recreated as a new record`);
+              })
+              .catch((err) => {
+                toast.error('Recreate failed', {
+                  description: err instanceof Error ? err.message : String(err),
+                });
+              });
+          },
+        },
+      });
+    } catch (err) {
+      toast.error('Delete failed', {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, [entityKey, confirm]);
+
 
   // ─── FK label prefetch ────────────────────────────────────────────────
   // For every reference column, load the target entity once so we can render
@@ -123,7 +195,6 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     return () => { cancelled = true; };
   }, [fields, entityKey]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const label = String(
     node.label ?? props.label ?? (entityKey ? `${humanizeHeader(entityKey.split('_').pop())} List` : 'Data Table'),
   );
@@ -164,8 +235,7 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     // Status pill
     if (type === 'status') {
       const s = raw == null ? '' : String(raw);
-      if (!s) return <span className="text-slate-400">—</span>;
-      return <span className={`appbana-status-pill status-${classifyStatus(s)}`}>{s}</span>;
+      return <StatusPill value={s} />;
     }
 
     // Date / datetime
@@ -178,10 +248,32 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     // Boolean
     if (type === 'boolean') {
       const truthy = raw === true || raw === 'true' || raw === 1 || raw === '1';
+      return <StatusPill value={truthy ? 'Yes' : 'No'} tone={truthy ? 'success' : 'neutral'} />;
+    }
+
+    // Phase B3 — file link. H1 hardening: URL includes tenant + app so the
+    // backend can enforce the (tenant, app, fileId) triple and refuse
+    // cross-tenant reads. We resolve tenant/app from the same context the
+    // entity fetch uses, so both are always in sync.
+    if (type === 'file') {
+      const fileId = raw == null ? '' : String(raw);
+      if (!fileId) return <span className="text-slate-400">—</span>;
+      const ctx = resolveAppContext(window.location);
+      const tenantId = ctx?.tenantId ?? 'default';
+      const appId = ctx?.appId ?? '';
+      const href = appId
+        ? `/api/files/${tenantId}/${appId}/${fileId}`
+        : `/api/files/${fileId}`; // legacy fallback — will 404 on the new backend
       return (
-        <span className={`appbana-status-pill ${truthy ? 'status-success' : 'status-neutral'}`}>
-          {truthy ? 'Yes' : 'No'}
-        </span>
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-indigo-600 hover:underline"
+          title={fileId}
+        >
+          Download
+        </a>
       );
     }
 
@@ -207,6 +299,36 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
         </div>
       </div>
 
+      {/* H3 hardening — saved views chips (fetched from /api/saved-views).
+          Only rendered when we can resolve the tenant + app context; on
+          runtimes where that's missing the bar quietly hides. */}
+      {(() => {
+        const ctx = resolveAppContext(window.location);
+        if (!ctx) return null;
+        const currentView = Object.keys(filterValues).length > 0
+          ? { filters: filterValues }
+          : undefined;
+        return (
+          <SavedViewsBar
+            tenantId={ctx.tenantId}
+            appId={ctx.appId}
+            entityKey={qualifyEntityKey(entityKey)}
+            currentView={currentView}
+            onSelect={(v) => {
+              setFilterValues(v.view.filters ?? {});
+            }}
+          />
+        );
+      })()}
+
+      {/* H3 hardening — filter chips row. Renders nothing when the page
+          meta didn't declare any filters (see FilterBar guard). */}
+      <FilterBar
+        filters={filterDefs}
+        values={filterValues}
+        onChange={setFilterValues}
+      />
+
       {/* Error */}
       {error && (
         <div className="mx-5 my-3 p-3 bg-rose-50 text-rose-700 rounded-lg text-sm">
@@ -216,37 +338,74 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
 
       {/* Loading skeleton */}
       {loading && (
-        <div className="px-5 py-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={`skel-row-${i}`} className="flex gap-3 py-2 animate-pulse">
-              {Array.from({ length: Math.max(displayFieldNames.length, 3) }).map((__, j) => (
-                <div key={`skel-cell-${i}-${j}`} className="h-4 bg-slate-100 rounded flex-1" />
-              ))}
-            </div>
-          ))}
+        <div className="px-5 py-4">
+          <TableSkeleton columns={displayFieldNames.length} rows={5} />
         </div>
       )}
 
-      {/* Table (populated) */}
+      {/* Phase B5 — client-side group-by. When the page metadata says
+          `groupBy`, we bucket the already-fetched rows by that column and
+          render one <tbody> per bucket with a sticky header row. */}
       {!loading && rows.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr>
-                {displayFieldNames.map((name) => (
-                  <th key={name} className="appbana-table-th" scope="col">
-                    {humanizeHeader(fieldByName.get(name)?.label ?? name)}
-                  </th>
-                ))}
-                {/* Row-actions column header — visually blank but accessible */}
-                <th className="appbana-table-th w-10" scope="col">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
+            <TableHeader
+              columns={displayFieldNames}
+              labelFor={(name) => fieldByName.get(name)?.label}
+            />
+            {(() => {
+              const groupByField = typeof props.groupBy === 'string' ? props.groupBy : '';
+              if (!groupByField) return null;
+              const buckets = new Map<string, typeof rows>();
+              for (const row of rows) {
+                const key = row[groupByField];
+                const keyStr = key == null || key === '' ? '—' : String(key);
+                const list = buckets.get(keyStr) ?? [];
+                list.push(row);
+                buckets.set(keyStr, list);
+              }
+              return Array.from(buckets.entries()).map(([key, groupRows]) => (
+                <tbody key={`grp-${key}`} data-appbana-group={key}>
+                  <tr className="bg-slate-50">
+                    <td
+                      colSpan={displayFieldNames.length + 1}
+                      className="px-5 py-2 text-xs font-semibold text-slate-600 uppercase tracking-wide"
+                    >
+                      {humanizeHeader(groupByField)}: {key}
+                      <span className="ml-2 text-slate-400 normal-case">
+                        {groupRows.length} record{groupRows.length !== 1 ? 's' : ''}
+                      </span>
+                    </td>
+                  </tr>
+                  {groupRows.map((row, idx) => {
+                    const rowId = String(row.id ?? `${key}-${idx}`);
+                    return (
+                      <tr
+                        key={rowId}
+                        className="appbana-table-row group"
+                        data-appbana-entity={entityKey}
+                      >
+                        {displayFieldNames.map((name) => (
+                          <td key={name} className="appbana-table-td" data-appbana-field={name}>
+                            {renderCell(name, row)}
+                          </td>
+                        ))}
+                        <td className="appbana-table-td" />
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              ));
+            })()}
+            {typeof props.groupBy === 'string' && props.groupBy ? null : (
             <tbody>
               {rows.map((row, idx) => {
                 const rowId = String(row.id ?? idx);
+                // Sprint 3 task 3.6 — resolve the destination detail page
+                // for Edit; when no detail page exists we fall back to
+                // omitting `onEdit` so the menu item is hidden.
+                const entityName = entityNameFromKey(entityKey);
+                const detailPage = nav ? findDetailPageForEntity(entityName, nav.pages) : null;
                 return (
                   <tr
                     key={rowId}
@@ -272,54 +431,32 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
                             .catch(() => toast.error('Copy failed'));
                         }
                       }}
+                      onEdit={detailPage && nav
+                        ? () => nav.navigateToRecord(detailPage, rowId)
+                        : undefined
+                      }
+                      onDelete={() => { handleDelete(row, rowId).catch(() => {}); }}
                     />
                   </tr>
                 );
               })}
             </tbody>
+            )}
           </table>
         </div>
       )}
 
       {/* Empty state */}
       {!loading && rows.length === 0 && !error && (
-        <div className="appbana-empty">
-          <svg viewBox="0 0 64 64" width="56" height="56" fill="none"
-               stroke="currentColor" strokeWidth="1.5" className="text-slate-300" aria-hidden="true">
-            <rect x="10" y="14" width="44" height="36" rx="4" />
-            <line x1="10" y1="24" x2="54" y2="24" />
-            <line x1="20" y1="34" x2="44" y2="34" />
-            <line x1="20" y1="42" x2="36" y2="42" />
-          </svg>
-          <h3>No records yet</h3>
-          <p>Use the form or the AI builder to add your first row.</p>
-        </div>
+        <EmptyStateBlock entityKey={entityKey} />
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 text-xs text-slate-500">
-          <span>Page {page} of {totalPages}</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-2 py-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-100"
-              aria-label="Previous page"
-            >
-              ←
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="px-2 py-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-100"
-              aria-label="Next page"
-            >
-              →
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationBar
+        page={page}
+        totalPages={totalPages}
+        onPrev={() => setPage(Math.max(1, page - 1))}
+        onNext={() => setPage(Math.min(totalPages, page + 1))}
+      />
     </div>
   );
 }
@@ -330,4 +467,36 @@ function inferTypeFromName(name: string): string | undefined {
   if (n.endsWith('_at') || n.endsWith('_on') || n.endsWith('_date') || n === 'date') return 'datetime';
   if (n.includes('status')) return 'status';
   return undefined;
+}
+
+/**
+ * EmptyStateBlock — renders the illustrated empty state, wiring in the
+ * "Add {Entity}" CTA when a matching Add page exists in the current app.
+ * Split out so the main component stays readable and so we don't call
+ * `useRuntimeNavigation` conditionally inside the JSX tree.
+ */
+function EmptyStateBlock({ entityKey }: Readonly<{ entityKey: string }>) {
+  const nav = useRuntimeNavigation();
+  const entityName = entityNameFromKey(entityKey);
+  const humanEntity = entityName || 'record';
+  const addPage = nav ? findAddPageForEntity(entityName, nav.pages) : null;
+  return (
+    <EmptyState
+      entityName={entityName}
+      title={`No ${humanEntity.toLowerCase()} records yet`}
+      description={
+        addPage
+          ? `Add your first ${humanEntity.toLowerCase()} to get started, or ask the AI builder to seed some data.`
+          : `Use the form on this app or ask the AI builder to add your first ${humanEntity.toLowerCase()}.`
+      }
+      action={
+        addPage && nav
+          ? {
+              label: `Add ${humanEntity}`,
+              onClick: () => nav.navigateToPage(addPage),
+            }
+          : undefined
+      }
+    />
+  );
 }

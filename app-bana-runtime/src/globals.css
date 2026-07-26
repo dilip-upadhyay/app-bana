@@ -63,6 +63,20 @@
 /* ------------------------------------------------------------------------- */
 @layer components {
 
+  /* ---- Skip link (WCAG 2.4.1 Bypass Blocks) --------------------------- */
+  .appbana-skip-link {
+    @apply absolute left-3 top-3 z-50
+           -translate-y-16 opacity-0 pointer-events-none
+           inline-flex items-center px-4 py-2
+           bg-indigo-600 text-white text-sm font-medium
+           rounded-md shadow-lg
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+           transition-transform;
+  }
+  .appbana-skip-link:focus {
+    @apply translate-y-0 opacity-100 pointer-events-auto;
+  }
+
   /* ---- Inputs (text / date / email / number / password) --------------- */
   .appbana-input,
   .appbana-select,
@@ -119,10 +133,68 @@
     grid-column: 1 / -1;
   }
 
-  /* ---- Form layout — responsive 2-col grid that collapses to 1-col ---- */
+  /* ---- Sprint 2 Task 2.5: inline validation --------------------------- */
+  .appbana-field-error {
+    @apply text-xs font-medium text-rose-600 mt-1;
+  }
+  /* Any input/select/textarea inside an invalid field gets a red outline. */
+  .appbana-field-invalid > .appbana-input,
+  .appbana-field-invalid > .appbana-select,
+  .appbana-field-invalid > .appbana-textarea,
+  .appbana-field-invalid .appbana-input,
+  .appbana-field-invalid .appbana-select,
+  .appbana-field-invalid .appbana-textarea,
+  .appbana-field-invalid [aria-invalid='true'] {
+    @apply border-rose-500 ring-1 ring-rose-300;
+  }
+
+  /* ---- Date picker popover (react-day-picker) ------------------------- */
+  .appbana-datepicker {
+    @apply w-full;
+  }
+  .appbana-datepicker-popover {
+    @apply absolute z-40 mt-1 left-0
+           rounded-lg border border-gray-200 bg-white shadow-lg
+           p-2;
+    min-width: 18rem;
+    /* Sprint 3 task 3.11(a) — never overflow a 375-px viewport. */
+    max-width: calc(100vw - 2rem);
+  }
+  .appbana-datepicker-time {
+    @apply flex items-center justify-end gap-2 mt-2 pt-2
+           border-t border-gray-100;
+  }
+  .appbana-datepicker-done {
+    @apply px-3 py-1 rounded-md text-sm font-medium
+           bg-indigo-600 text-white
+           hover:bg-indigo-700
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1;
+  }
+  /* react-day-picker's default caption uses a font-size the browser gives up on;
+     tighten it to match the runtime's type scale. */
+  .appbana-datepicker-popover .rdp {
+    --rdp-cell-size: 2.25rem;
+    --rdp-accent-color: theme('colors.indigo.600');
+    --rdp-background-color: theme('colors.indigo.100');
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  /* ---- Form layout — responsive 2-col grid that collapses to 1-col ----
+     Sprint 2 Task 2.10: explicit breakpoints.
+       < 640px (mobile / < sm)  → 1 column
+       ≥ 640px (sm and up)      → 2 columns
+     Previously we used `auto-fit minmax(240px, 1fr)`, which could pack up
+     to 3 columns on wide viewports and produced a jarring reflow between
+     390px and 480px. Explicit media queries give a predictable rhythm. */
   .appbana-form {
     @apply grid gap-x-6 gap-y-5;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 640px) {
+    .appbana-form {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
   /* Direct <button> children (like a Save button) span the whole row and
      get top spacing so they don't sit flush to the last field. */
@@ -140,33 +212,45 @@
   }
 
   /* ---- Buttons — MD3 filled tonal ------------------------------------- */
+  /* Sprint 3 task 3.9 — brand-colour tokens replace the hardcoded indigo
+     on the primary variant so tenant branding takes effect. New callers
+     should prefer the unified <Button variant="primary"> primitive; this
+     class survives for scaffolder-emitted plain <button className="appbana-button">
+     markup until GeneratePageTool is updated to emit Button too. */
   .appbana-button {
     @apply inline-flex items-center justify-center gap-2
            px-6 py-2.5
            rounded-lg
            text-white text-sm font-medium tracking-wide
-           bg-indigo-600
            shadow-sm
            transition-all duration-150 ease-out
-           hover:bg-indigo-700 hover:shadow
-           active:bg-indigo-800 active:shadow-none active:translate-y-px
-           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-white
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 disabled:hover:shadow-sm;
+           hover:shadow
+           active:shadow-none active:translate-y-px
+           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--color-brand);
+    --tw-ring-color: var(--color-brand);
   }
+  .appbana-button:hover:not(:disabled) { background-color: var(--color-brand-hover); }
+  .appbana-button:active:not(:disabled) { background-color: var(--color-brand-active); }
   /* Optional variants toggled by className the renderer passes through */
   .appbana-button.secondary {
-    @apply bg-indigo-50 text-indigo-700 shadow-none
-           hover:bg-indigo-100 hover:shadow-none
-           active:bg-indigo-200;
+    color: var(--color-brand-on-soft);
+    background-color: var(--color-brand-soft);
+    @apply shadow-none;
   }
+  .appbana-button.secondary:hover:not(:disabled) { filter: brightness(0.96); }
   .appbana-button.danger {
     @apply bg-red-600 hover:bg-red-700 active:bg-red-800
            focus:ring-red-500;
+    background-color: #dc2626;
   }
   .appbana-button.ghost {
-    @apply bg-transparent text-indigo-600 shadow-none
-           hover:bg-indigo-50 hover:shadow-none active:bg-indigo-100;
+    background-color: transparent;
+    color: var(--color-brand);
+    @apply shadow-none;
   }
+  .appbana-button.ghost:hover:not(:disabled) { background-color: var(--color-brand-soft); }
 
   /* ---- Runtime page tabs (legacy — retained for backwards compat) ------ */
   .appbana-tab {
@@ -177,8 +261,10 @@
            focus:outline-none focus:ring-2 focus:ring-indigo-500;
   }
   .appbana-tab-active {
-    @apply bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-700;
+    color: var(--color-brand-on-soft);
+    background-color: var(--color-brand-soft);
   }
+  .appbana-tab-active:hover { filter: brightness(0.96); }
 
   /* ---- Top app bar (sticky, spans full viewport width) ---------------- */
   .appbana-appbar {
@@ -198,12 +284,70 @@
            focus:outline-none focus:ring-2 focus:ring-indigo-500;
   }
 
+  /* ---- Sprint 2 Task 2.7: User menu (top-right) ----------------------- */
+  .appbana-user-menu-trigger {
+    @apply inline-flex items-center justify-center
+           w-9 h-9 rounded-full
+           transition-shadow duration-150
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1
+           hover:ring-2 hover:ring-indigo-200;
+  }
+  .appbana-user-avatar {
+    @apply inline-flex items-center justify-center
+           w-9 h-9 rounded-full
+           bg-indigo-600 text-white
+           text-xs font-semibold tracking-wide
+           select-none;
+  }
+  .appbana-user-menu-panel {
+    @apply absolute right-0 top-full mt-2 z-30
+           w-64 rounded-lg border border-slate-200
+           bg-white shadow-lg
+           overflow-hidden
+           origin-top-right;
+  }
+  .appbana-user-menu-header {
+    @apply px-4 py-3 flex flex-col gap-1;
+  }
+  .appbana-user-menu-name {
+    @apply text-sm font-semibold text-slate-900 truncate;
+  }
+  .appbana-user-menu-email {
+    @apply text-xs text-slate-500 truncate;
+  }
+  .appbana-user-menu-tenant {
+    @apply flex items-center justify-between gap-2 mt-1;
+  }
+  .appbana-user-menu-tenant-label {
+    @apply text-[0.65rem] uppercase tracking-wider font-semibold text-slate-400;
+  }
+  .appbana-user-menu-tenant-value {
+    @apply text-xs font-medium text-slate-700 truncate;
+  }
+  .appbana-user-menu-divider {
+    @apply border-0 border-t border-slate-200 m-0;
+  }
+  .appbana-user-menu-item {
+    @apply w-full flex items-center gap-2
+           px-4 py-2.5
+           text-sm text-slate-700
+           text-left
+           transition-colors duration-100
+           hover:bg-slate-50 hover:text-slate-900
+           focus:outline-none focus:bg-slate-100;
+  }
+
   /* ---- Left navigation sidebar ---------------------------------------- */
   .appbana-sidebar-container {
-    @apply w-60 shrink-0 border-r border-gray-200 bg-white;
+    @apply w-64 shrink-0 border-r border-gray-200 bg-white;
   }
   .appbana-sidebar {
     @apply h-full;
+  }
+  .appbana-sidebar-section {
+    @apply px-3 pt-1 pb-1
+           text-[0.65rem] font-semibold tracking-wider uppercase
+           text-gray-400 truncate;
   }
   .appbana-sidebar-link {
     @apply w-full flex items-center gap-3
@@ -217,14 +361,45 @@
            focus:outline-none focus:ring-2 focus:ring-indigo-500;
   }
   .appbana-sidebar-link-active {
-    @apply bg-indigo-50 text-indigo-700 border-indigo-600
-           hover:bg-indigo-100 hover:text-indigo-700;
+    color: var(--color-brand-on-soft);
+    background-color: var(--color-brand-soft);
+    border-color: var(--color-brand);
+  }
+  .appbana-sidebar-link-active:hover {
+    filter: brightness(0.96);
   }
   .appbana-sidebar-icon {
     @apply w-4 h-4 shrink-0 text-current;
   }
   .appbana-sidebar-icon > svg {
     @apply w-full h-full;
+  }
+
+  /* Sprint 2 Task 2.10 — collapsed icon-rail between sm and md.
+     Full sidebar (w-64) at md+; icon-only rail (w-14) between sm and md;
+     hidden below sm (mobile drawer takes over). The React component is
+     identical in all modes — the label spans hide via CSS. */
+  @media (min-width: 640px) and (max-width: 767.98px) {
+    .appbana-sidebar-container {
+      width: 3.5rem;
+    }
+    .appbana-sidebar-container .appbana-sidebar > div {
+      padding: 0.5rem;
+    }
+    .appbana-sidebar-container .appbana-sidebar-section {
+      display: none;
+    }
+    .appbana-sidebar-container .appbana-sidebar-link {
+      justify-content: center;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+      gap: 0;
+    }
+    /* Hide the label span; the icon span stays. `title={label}` on the
+       button gives a native tooltip on hover for orientation. */
+    .appbana-sidebar-container .appbana-sidebar-link > span:not(.appbana-sidebar-icon) {
+      display: none;
+    }
   }
 
   /* ---- Mobile drawer (below md: breakpoint) --------------------------- */
@@ -289,26 +464,10 @@
     @apply flex flex-wrap items-center justify-end gap-3
            w-full;
   }
-  .appbana-form-actions .primary {
-    @apply appbana-button;
-  }
-  .appbana-form-actions .secondary {
-    @apply inline-flex items-center justify-center gap-2
-           px-4 py-2.5 rounded-lg text-sm font-medium
-           bg-transparent text-slate-700
-           border border-slate-300
-           hover:bg-slate-100 hover:border-slate-400
-           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
-           disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-  .appbana-form-actions .tertiary {
-    @apply inline-flex items-center justify-center gap-2
-           px-4 py-2.5 rounded-lg text-sm font-medium
-           text-slate-600
-           hover:bg-slate-100 hover:text-slate-900
-           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
-           disabled:opacity-50 disabled:cursor-not-allowed;
-  }
+  /* Sprint 3 task 3.8 — the old `.appbana-form-actions .primary/.secondary
+     /.tertiary` chrome rules were removed. Every caller now emits
+     <Button variant="…"> and picks up the unified `.appbana-btn*` styles
+     defined below. */
 
   /* ---- Sprint 1: Status pill ------------------------------------------ */
   .appbana-status-pill {
@@ -359,7 +518,7 @@
   .appbana-row-actions-menu button {
     @apply w-full text-left px-3 py-1.5 text-sm text-slate-700
            hover:bg-slate-100
-           focus:outline-none focus:bg-slate-100;
+           focus:outline-none focus:bg-slate-100 focus:ring-2 focus:ring-inset focus:ring-indigo-500;
   }
   .appbana-row-actions-menu button.danger {
     @apply text-rose-600 hover:bg-rose-50;
@@ -377,6 +536,79 @@
     @apply text-sm text-slate-500 max-w-sm;
   }
 
+  /* ---- Sprint 2 Task 2.3: illustrated empty state --------------------- */
+  .appbana-empty-state {
+    @apply flex flex-col items-center justify-center
+           gap-4 px-6 py-14 text-center text-slate-500;
+  }
+  .appbana-empty-state-art {
+    @apply w-56 h-auto max-w-full text-slate-300;
+  }
+  .appbana-empty-state-title {
+    @apply text-lg font-semibold text-slate-800;
+  }
+  .appbana-empty-state-body {
+    @apply text-sm text-slate-500 max-w-md leading-relaxed;
+  }
+  /* Sprint 3 task 3.8 — CTA now emits <Button variant="primary">, so the
+     bespoke `.appbana-empty-state-cta` chrome was removed. */
+  .appbana-empty-state-cta-icon {
+    @apply inline-flex items-center justify-center;
+  }
+
+  /* ---- Sprint 2 Task 2.4: skeleton loaders --------------------------- */
+  .appbana-skeleton {
+    @apply inline-block bg-slate-200 rounded;
+    animation: appbana-skeleton-pulse 1.4s ease-in-out infinite;
+  }
+  .appbana-table-skeleton {
+    @apply flex flex-col gap-3 py-2;
+  }
+  .appbana-table-skeleton-row {
+    @apply flex items-center gap-4 py-2 border-b border-slate-100 last:border-b-0;
+  }
+  .appbana-table-skeleton-row .appbana-skeleton {
+    @apply flex-1;
+  }
+  .appbana-table-skeleton-head .appbana-skeleton {
+    @apply bg-slate-300;
+  }
+  .appbana-form-skeleton {
+    @apply flex flex-col gap-5;
+  }
+  .appbana-form-skeleton-field {
+    @apply flex flex-col gap-2;
+  }
+  .appbana-reference-loading {
+    @apply w-full;
+  }
+  .appbana-app-skeleton {
+    @apply flex flex-col min-h-screen bg-slate-50;
+  }
+  .appbana-app-skeleton-bar {
+    @apply flex items-center gap-4 h-14 px-5 border-b border-slate-200 bg-white;
+  }
+  .appbana-app-skeleton-body {
+    @apply flex flex-1 min-h-0;
+  }
+  .appbana-app-skeleton-side {
+    @apply hidden md:flex flex-col gap-2 w-64 shrink-0 p-4 border-r border-slate-200 bg-white;
+  }
+  .appbana-app-skeleton-main {
+    @apply flex-1 overflow-hidden p-6 sm:p-8;
+  }
+  .appbana-app-skeleton-card {
+    @apply mt-6 p-4 rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+  @keyframes appbana-skeleton-pulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.55; }
+    100% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .appbana-skeleton { animation: none; opacity: 0.65; }
+  }
+
   /* ---- Sprint 1: Toaster ---------------------------------------------- */
   .appbana-toaster {
     @apply fixed bottom-4 right-4 z-50
@@ -384,7 +616,7 @@
            pointer-events-none;
   }
   .appbana-toast {
-    @apply pointer-events-auto
+    @apply pointer-events-auto relative
            flex items-start gap-3
            min-w-[260px] max-w-sm
            px-4 py-3 pr-8
@@ -400,9 +632,210 @@
   .appbana-toast.success .dot { @apply bg-emerald-500; }
   .appbana-toast.error   .dot { @apply bg-rose-500;    }
   .appbana-toast.info    .dot { @apply bg-indigo-500;  }
+  /* Sprint 3 task 3.10 — warning + action + dismiss slot chrome */
+  .appbana-toast.warning { @apply border-amber-200; }
+  .appbana-toast.warning .dot { @apply bg-amber-500; }
+  .appbana-toast-action {
+    @apply shrink-0 self-center
+           text-xs font-semibold uppercase tracking-wide
+           text-indigo-600 hover:text-indigo-800
+           px-2 py-1 rounded
+           focus:outline-none focus:ring-2 focus:ring-indigo-500;
+    color: var(--color-brand);
+  }
+  .appbana-toast-action:hover { color: var(--color-brand-active); }
+  .appbana-toast-close {
+    @apply absolute top-2 right-2
+           inline-flex items-center justify-center
+           w-5 h-5 rounded
+           text-slate-400 hover:text-slate-700 hover:bg-slate-100
+           focus:outline-none focus:ring-2 focus:ring-indigo-500;
+  }
 
   @keyframes toast-in {
     from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0);   }
+  }
+
+  /* ---- Sprint 3 task 3.8: Unified <Button> primitive ----------------- */
+  /* Base — every variant inherits layout + focus behaviour from here.   */
+  .appbana-btn {
+    @apply inline-flex items-center justify-center gap-2
+           rounded-lg font-medium tracking-wide
+           transition-all duration-150 ease-out
+           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    /* Ring colour follows the brand token so branded tenants get branded focus. */
+    --tw-ring-color: var(--color-brand);
+  }
+  .appbana-btn-sm { @apply px-3 py-1.5 text-xs; }
+  .appbana-btn-md { @apply px-4 py-2 text-sm; }
+  .appbana-btn-lg { @apply px-6 py-2.5 text-sm; }
+
+  /* Primary — the hero brand-coloured CTA (task 3.9 wires --color-brand). */
+  .appbana-btn-primary {
+    color: #fff;
+    background-color: var(--color-brand);
+    @apply shadow-sm hover:shadow;
+  }
+  .appbana-btn-primary:hover:not(:disabled) { background-color: var(--color-brand-hover); }
+  .appbana-btn-primary:active:not(:disabled) { background-color: var(--color-brand-active); }
+
+  /* Secondary — outlined neutral button (Cancel, Copy ID). */
+  .appbana-btn-secondary {
+    @apply bg-white text-slate-700 border border-slate-300
+           hover:bg-slate-50 hover:border-slate-400
+           active:bg-slate-100;
+  }
+
+  /* Tertiary — quiet text button used inside crowded action bars. */
+  .appbana-btn-tertiary {
+    @apply bg-transparent text-slate-600
+           hover:bg-slate-100 hover:text-slate-900
+           active:bg-slate-200;
+  }
+
+  /* Danger — destructive action (Delete, Remove). */
+  .appbana-btn-danger {
+    @apply text-white bg-rose-600 shadow-sm
+           hover:bg-rose-700 active:bg-rose-800
+           focus:ring-rose-500;
+  }
+
+  /* Ghost — tinted brand hover, used inside dense toolbars. */
+  .appbana-btn-ghost {
+    background-color: transparent;
+    color: var(--color-brand);
+  }
+  .appbana-btn-ghost:hover:not(:disabled) { background-color: var(--color-brand-soft); }
+
+  /* ---- Sprint 3 task 3.11: Tooltip primitive -------------------------- */
+  /* Wraps the trigger inline; the tooltip appears on hover AND focus so
+     keyboard users benefit too (WCAG 2.1.1). */
+  .appbana-tooltip-wrap {
+    @apply relative inline-flex;
+  }
+  .appbana-tooltip {
+    @apply pointer-events-none
+           absolute left-full top-1/2 -translate-y-1/2 ml-2
+           z-40
+           px-2 py-1 rounded-md
+           bg-slate-900 text-white text-xs font-medium whitespace-nowrap
+           opacity-0 scale-95
+           transition-all duration-100 ease-out
+           shadow-md;
+  }
+  .appbana-tooltip-wrap:hover > .appbana-tooltip,
+  .appbana-tooltip-wrap:focus-within > .appbana-tooltip {
+    @apply opacity-100 scale-100;
+  }
+
+  /* ---- Sprint 3 task 3.5: ConfirmDialog ------------------------------- */
+  /* Native <dialog> backed. Centred modal card, brand-agnostic. */
+  .appbana-confirm[open] {
+    @apply block border-0 p-0 rounded-xl shadow-2xl
+           bg-white text-slate-800
+           max-w-md w-[90vw];
+  }
+  .appbana-confirm::backdrop {
+    background: rgba(15, 23, 42, 0.5);
+  }
+  .appbana-confirm-body {
+    @apply flex flex-col gap-3 p-6;
+  }
+  .appbana-confirm-title { @apply text-lg font-semibold text-slate-900; }
+  .appbana-confirm-message { @apply text-sm text-slate-600; }
+  .appbana-confirm-actions {
+    @apply flex items-center justify-end gap-2 mt-2 pt-3 border-t border-slate-100;
+  }
+
+  /* ---- Sprint 3 task 3.7: ReferenceCombobox --------------------------- */
+  .appbana-combobox { @apply relative w-full; }
+
+  /* Input matches .appbana-input so User/Property look identical to Start Date etc.
+     Right padding leaves room for the chevron caret (and the × clear button). */
+  .appbana-combobox-input {
+    @apply w-full
+           px-3.5 py-2.5 pr-10
+           rounded-lg
+           border border-gray-300
+           bg-white text-gray-900 text-sm
+           placeholder-gray-400
+           shadow-sm
+           transition-all duration-150 ease-out
+           focus:outline-none
+           focus:border-indigo-500
+           focus:ring-2 focus:ring-indigo-500/25
+           hover:border-gray-400;
+    /* Dropdown chevron on the right — same SVG as .appbana-select */
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.65rem center;
+    background-size: 1.15rem;
+  }
+  .appbana-combobox-input:disabled {
+    @apply bg-gray-100 text-gray-500 cursor-not-allowed;
+  }
+  /* When a value is picked, hide the chevron so the × clear button can sit there. */
+  .appbana-combobox:has(.appbana-combobox-clear) .appbana-combobox-input {
+    background-image: none;
+  }
+
+  /* Small circular × button, absolutely positioned inside the input's right pad. */
+  .appbana-combobox-clear {
+    @apply absolute top-1/2 right-2 -translate-y-1/2
+           inline-flex items-center justify-center
+           w-6 h-6 rounded-full
+           text-gray-400 hover:text-gray-700
+           hover:bg-gray-100
+           text-lg leading-none
+           transition-colors duration-100
+           focus:outline-none focus:ring-2 focus:ring-indigo-500/40;
+  }
+
+  .appbana-combobox-listbox {
+    @apply absolute left-0 right-0 top-full mt-1 z-30
+           max-h-64 overflow-y-auto
+           bg-white border border-slate-200 rounded-lg shadow-lg
+           py-1;
+  }
+  .appbana-combobox-option {
+    @apply flex items-center justify-between gap-2
+           w-full text-left
+           px-3 py-2 mx-1 rounded-md
+           text-sm text-slate-700
+           cursor-pointer
+           transition-colors duration-75;
+  }
+  .appbana-combobox-option:hover,
+  .appbana-combobox-option.active {
+    @apply bg-indigo-50 text-indigo-900;
+  }
+  .appbana-combobox-option.selected,
+  .appbana-combobox-option[aria-selected='true'] {
+    @apply bg-indigo-100 text-indigo-900 font-medium;
+  }
+  /* Checkmark for the currently-selected option */
+  .appbana-combobox-option.selected::after,
+  .appbana-combobox-option[aria-selected='true']::after {
+    content: '✓';
+    @apply text-indigo-600 text-base font-semibold;
+  }
+  .appbana-combobox-empty {
+    @apply px-3 py-3 text-xs text-slate-500 italic text-center;
+  }
+
+  /* ---- Sprint 3 task 3.3: DetailPage view/edit toggle ---------------- */
+  .appbana-detail-field {
+    @apply flex flex-col gap-1 mb-4;
+  }
+  .appbana-detail-label {
+    @apply text-xs font-semibold text-slate-500 uppercase tracking-wide;
+  }
+  .appbana-detail-value {
+    @apply text-sm text-slate-800 break-words;
+  }
+  .appbana-detail-value.empty {
+    @apply text-slate-400 italic;
   }
 }

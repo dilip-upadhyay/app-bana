@@ -81,6 +81,65 @@ public class GeneratePageTool implements Tool {
                     "fixedFields": {
                       "type": "object",
                       "description": "Static field values to merge into the save request (e.g. { 'Cart': { 'qty': 1 } })"
+                    },
+                    "layout": {
+                      "type": "string",
+                      "enum": ["form", "list", "detail", "wizard"],
+                      "description": "Phase B1 — Optional compound layout. Use 'wizard' with `steps[]` for multi-step forms (onboarding, KYC, long signups). Omit for a flat single-page form."
+                    },
+                    "steps": {
+                      "type": "array",
+                      "description": "Phase B1 — Wizard step definitions. Required when layout='wizard'. Each step lists the field names to render in that step; the runtime auto-appends a Review & Submit step.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id":       { "type": "string", "description": "Stable step id, e.g. 'personal-info'" },
+                          "title":    { "type": "string", "description": "Short step title shown in the progress bar" },
+                          "subtitle": { "type": "string", "description": "Optional one-line subtitle under the title" },
+                          "fields":   { "type": "array", "items": { "type": "string" }, "description": "Field names (from the entity schema) rendered in this step" }
+                        },
+                        "required": ["id", "title", "fields"]
+                      }
+                    },
+                    "filters": {
+                      "type": "array",
+                      "description": "Phase B5 — Filter chip definitions for list pages. Each entry becomes a FilterBar chip. Use for lists with multi-dimension slicing (status, owner, date range).",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field":   { "type": "string" },
+                          "op":      { "type": "string", "enum": ["equals", "in", "range", "contains", "dateRange"] },
+                          "label":   { "type": "string" },
+                          "default": {}
+                        },
+                        "required": ["field", "op", "label"]
+                      }
+                    },
+                    "groupBy": {
+                      "type": "string",
+                      "description": "Phase B5 — When set, the list page renders rows grouped by this field (client-side bucketing). Use for kanban-style views (group orders by status, tasks by assignee)."
+                    },
+                    "defaultSort": {
+                      "type": "object",
+                      "description": "Phase B5 — Default ORDER BY for the list. { field, direction: 'asc'|'desc' }",
+                      "properties": {
+                        "field":     { "type": "string" },
+                        "direction": { "type": "string", "enum": ["asc", "desc"] }
+                      },
+                      "required": ["field", "direction"]
+                    },
+                    "aggregates": {
+                      "type": "array",
+                      "description": "Phase B5 — Footer aggregates (sum/avg/count/min/max) rendered below the table. Use when the user asks for totals ('show total revenue').",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": { "type": "string" },
+                          "agg":   { "type": "string", "enum": ["sum", "avg", "count", "min", "max"] },
+                          "label": { "type": "string" }
+                        },
+                        "required": ["field", "agg"]
+                      }
                     }
                   },
                   "required": ["name", "path", "type", "entityName"]
@@ -104,6 +163,42 @@ public class GeneratePageTool implements Tool {
                 case "detail" -> buildDetailPage(arguments);
                 default -> throw new IllegalArgumentException("Unknown page type: " + pageType);
             };
+
+            // Sprint 3 post-review fix — inject `kind` and `entityKey` on every
+            // generated page so the runtime DetailPage / classifier can trust
+            // metadata over name-sniffing. Without these, DetailPage.tsx sees
+            // page.entityKey === '' and silently short-circuits into an empty
+            // overlay on every AI-generated app.
+            String tenantForKey = context.tenantId();
+            if (tenantForKey == null || tenantForKey.isEmpty()) {
+                tenantForKey = "default";
+            }
+            String appIdForKey = (String) arguments.get("appId");
+            if (appIdForKey == null || appIdForKey.isEmpty()) {
+                appIdForKey = context.appId();
+            }
+            Object entityForKey = arguments.get("entityName");
+            pageMetadata.put("kind", pageType);
+            if (entityForKey != null && appIdForKey != null && !appIdForKey.isEmpty()) {
+                pageMetadata.put("entityKey", tenantForKey + "_" + appIdForKey + "_" + entityForKey);
+            }
+
+            // Phase B1 — Wizard layout. When the caller specifies
+            // layout='wizard' + steps[], stamp them onto the PageMeta so the
+            // runtime WizardShell takes over rendering. Requires the underlying
+            // form page to have been built (so form-field nodes exist that the
+            // wizard can then partition by step).
+            Object layoutArg = arguments.get("layout");
+            Object stepsArg  = arguments.get("steps");
+            if ("wizard".equals(layoutArg) && stepsArg instanceof List<?> stepsList && !stepsList.isEmpty()) {
+                if (!"form".equals(pageType)) {
+                    log.warn("[GeneratePageTool] layout='wizard' requires type='form'; ignoring wizard on {} page", pageType);
+                } else {
+                    pageMetadata.put("layout", "wizard");
+                    pageMetadata.put("steps", stepsList);
+                    log.info("[GeneratePageTool] Wizard layout applied with {} steps", stepsList.size());
+                }
+            }
 
             // 2. Validate metadata
             ValidationResult validation = validator.validatePage(pageMetadata);
@@ -222,6 +317,31 @@ public class GeneratePageTool implements Tool {
 
         nodes.add(tableNode);
         page.put("nodes", nodes);
+
+        // Phase B5 — propagate list-page metadata (filters / groupBy /
+        // defaultSort / aggregates / savedViews). These are declarative
+        // extras the runtime primitives (FilterBar, SavedViewsBar,
+        // StudioTableLive group rendering) know how to consume.
+        Object filters = arguments.get("filters");
+        if (filters instanceof List<?> fl && !fl.isEmpty()) {
+            tableProps.put("filters", fl);
+            page.put("filters", fl);
+        }
+        Object groupBy = arguments.get("groupBy");
+        if (groupBy instanceof String gb && !gb.isBlank()) {
+            tableProps.put("groupBy", gb);
+            page.put("groupBy", gb);
+        }
+        Object defaultSort = arguments.get("defaultSort");
+        if (defaultSort instanceof Map<?, ?> ds && !ds.isEmpty()) {
+            tableProps.put("defaultSort", ds);
+            page.put("defaultSort", ds);
+        }
+        Object aggregates = arguments.get("aggregates");
+        if (aggregates instanceof List<?> al && !al.isEmpty()) {
+            tableProps.put("aggregates", al);
+            page.put("aggregates", al);
+        }
 
         return page;
     }
@@ -346,6 +466,19 @@ public class GeneratePageTool implements Tool {
                     inputProps.put("referenceEntity", refEntity);
                 }
             }
+            // Phase B2 — propagate optional conditional-visibility metadata onto
+            // the runtime node.props so <ConditionalField> can honor showWhen /
+            // requiredWhen / disabledWhen expressions at render time.
+            Object conditions = field.get("conditions");
+            if (conditions instanceof Map<?, ?> conditionsMap && !conditionsMap.isEmpty()) {
+                inputProps.put("conditions", conditionsMap);
+            }
+            // Phase B3 — propagate per-field file constraints (maxSizeBytes,
+            // acceptedMimeTypes) so FileUploadField can enforce them client-side.
+            Object fileConstraints = field.get("fileConstraints");
+            if (fileConstraints instanceof Map<?, ?> fcMap && !fcMap.isEmpty()) {
+                inputProps.put("fileConstraints", fcMap);
+            }
             input.put("props", inputProps);
 
             gridChildren.add(containerId);
@@ -415,6 +548,7 @@ public class GeneratePageTool implements Tool {
             case "status" -> "select";
             case "boolean" -> "checkbox";
             case "longtext" -> "textarea";
+            case "file" -> "file";
             default -> "input";
         };
     }
