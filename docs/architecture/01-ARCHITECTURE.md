@@ -1,3 +1,13 @@
+> **📚 HISTORICAL DOCUMENT (Oct 2025).** This describes the **canvas-era** AppBana architecture. The UI section (5173, LitElement, drag-and-drop builder) is superseded by the AI-Native rebuild. Core primitives — metadata-driven flow, multi-tenant table isolation, schema-driven CRUD — remain accurate.
+>
+> **For the current system model, read:** [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md) §2 (Monorepo), §3 (How to Start), §5 (Metadata-Driven Flow).
+>
+> **For the current UI architecture, read:** [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](../planning/AI_NATIVE_UI_REBUILD_PLAN.md).
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # 1. ARCHITECTURE & SYSTEM DESIGN
 
 **Last Updated:** December 28, 2025 (Template Preview Enhancement)  

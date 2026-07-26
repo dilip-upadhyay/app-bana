@@ -1,3 +1,9 @@
+> **⚠️ PARTIAL — concepts current, file paths stale.** Auth, RBAC, FLS, CSRF, rate limiting all still ship exactly as described. File-path references to `app-bana-ui/src/components/*` refer to the retired LitElement studio; the equivalent code today lives in [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts) (interceptors) and [`app-bana-studio/src/features/auth/AuthGate.tsx`](../../app-bana-studio/src/features/auth/AuthGate.tsx) (auth UI). Backend security modules are unchanged.
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # AppBana Security Features - Complete Guide
 
 **Last Updated:** December 30, 2025  

@@ -1,3 +1,11 @@
+> **📚 HISTORICAL DOCUMENT (Dec 2025).** Diagrams predate the AI-Native UI rebuild. Backend + agent + multi-tenant diagrams remain accurate; UI diagrams (5173, canvas builder) are superseded.
+>
+> **For current UI diagrams, read:** [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md) §5 (Metadata-Driven Flow).
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # Multi-Tenant Architecture - Visual Summary
 ## Quick Reference Guide with ASCII Diagrams
 

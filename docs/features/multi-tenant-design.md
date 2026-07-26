@@ -1,3 +1,9 @@
+> **✅ CURRENT concepts · ⚠️ Some diagrams show port 5173.** The multi-tenant physical-isolation model (`app_{tenant}_{app}_{entity}` table naming, schema key format) is accurate and unchanged. Diagrams that reference the old `app-bana-ui/` frontend should be read as `app-bana-studio/` (5174) + `app-bana-runtime/` (5175).
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # AppBana Comprehensive Multi-Tenant Architecture
 ## The Complete Blueprint for Builder & Runtime Isolation
 

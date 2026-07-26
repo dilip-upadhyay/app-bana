@@ -1,9 +1,15 @@
 # Runtime UX Overhaul — Implementation Plan
 
-**Status:** DRAFT — pending approval
+**Status:** ✅ Sprint 1 shipped (8/10 tasks done, 2 partial by design) · ⏳ Sprint 2 = **Phase A** in the current forward plan · ⏳ Sprint 3 deferred to post-launch
 **Owner:** AppBana core team
-**Position in master roadmap:** Pre-Stage-4 quality gate on the [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md). Retiring the old `app-bana-ui/` (Stage 4) is contingent on the new runtime meeting the "client-ready" bar defined here.
+**Position in master roadmap:** Sprint 1 gated Stage 4 of the [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md). Stage 4 shipped 2026-07-26; Sprint 2 is now the leading edge of the post-Stage-4 forward plan ("Phase A").
 **Trigger:** Design review of the deployed Customer Onboarding App runtime on 2026-07-26 revealed severity-1 UX defects that would cause a prospective client to reject the product on sight. Before we throw away the old UI, the new one must be visibly better — not merely functionally equivalent.
+
+**Related active plans:**
+- [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan. Stage 5 (deploy) runs in parallel with Phase B/C.
+- [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B** (next after A).
+- [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C** (last before launch).
+- Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 
 ---
 

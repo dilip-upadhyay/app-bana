@@ -1,3 +1,9 @@
+> **📚 HISTORICAL SPEC (Dec 2025).** Describes the original workflow-engine design. Superseded for the approval-flow use case by [`docs/planning/MAKER_CHECKER_PLAN.md`](../planning/MAKER_CHECKER_PLAN.md) (Phase C in the current forward plan). Retained because the state-machine / audit-trail patterns here informed the maker-checker design.
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # AppBana Workflow Automation - Architecture & Implementation Plan
 
 **Version 2.0** | Last Updated: December 6, 2025

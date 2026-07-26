@@ -1,3 +1,9 @@
+> **✅ CURRENT concepts · ⚠️ One port reference is stale.** The `ai-builder` microservice (port 8081) is accurately described. The line `Frontend (5173) → AI Builder (8081) → AppBana Service (8080)` should be read as `Frontend (5174 Studio) → AI Builder (8081) → AppBana Service (8080)`.
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # AI Builder Service
 
 AI-powered application builder microservice using GPT-4, RAG (Retrieval Augmented Generation), and an agent-based architecture with tool execution capabilities.

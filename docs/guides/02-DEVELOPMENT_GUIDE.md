@@ -1,3 +1,11 @@
+> **⚠️ PARTIAL — concepts current, build commands + ports stale.** Java 21, Maven, PostgreSQL, Liquibase setup is still accurate. Frontend build commands (`cd app-bana-ui`) are superseded — the current setup is pnpm workspaces (`app-bana-shared` + `app-bana-studio` on 5174 + `app-bana-runtime` on 5175).
+>
+> **For the current start-everything flow, read:** [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md) §3 (How to Start).
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # 2. DEVELOPMENT SETUP & GUIDE
 
 **Last Updated:** October 30, 2025  

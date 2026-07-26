@@ -1,3 +1,11 @@
+> **📚 HISTORICAL DOCUMENT (Dec 2025).** Describes how canvas-era LitElement forms bound to entities. The runtime today (React, `app-bana-runtime`) binds via `Renderer.tsx` + `StudioTableLive.tsx` directly against the schema metadata. The core binding **concepts** (schema-driven form generation, entity CRUD via `/api/{tenantId}_{appId}_{entity}`) remain accurate; file paths and component names are superseded.
+>
+> **A refreshed binding doc will land during [Phase B (Complex UI Plan)](../planning/COMPLEX_UI_PLAN.md).**
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # Entity Form Binding Architecture - Implementation Guide
 
 **Created:** December 30, 2025  

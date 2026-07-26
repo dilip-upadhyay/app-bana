@@ -1,3 +1,11 @@
+> **📚 HISTORICAL DOCUMENT (Dec 2025).** Describes the canvas-era Studio drag-and-drop builder. In the AI-Native rebuild, users interact with the Studio via chat only — no canvas, no palette, no property inspector. This manual is retained as UX-history reference.
+>
+> **A new user manual for the AI-Native Studio will be authored after [Phase A (Runtime UX Sprint 2)](../planning/RUNTIME_UX_OVERHAUL_PLAN.md) ships.**
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # 4. USER MANUAL — Studio Builder
 
 **Last Updated:** December 28, 2025  

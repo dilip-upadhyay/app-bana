@@ -1,97 +1,89 @@
-# Session Summary: Story 3.1 — DialogueManager Implementation
+# Session Summary — 2026-07-26
 
-## What Was Built
-
-### Core State Machine (`DialogueManager.java` — full rewrite)
-- **Per-session state** stored in `ConcurrentHashMap<String, ConversationState>` — true isolation per tab/user
-- **`resolveState(sessionId, history, message)`** — auto-transitions via `ConversationSpec` keyword analysis
-- **State ladder**: `GREETING` → `GATHERING_REQUIREMENTS` → `CONFIRMING` → `GENERATING` → `COMPLETED`
-- **`notifyScaffolding()`** / **`notifyCompleted()`** — controller-driven hooks for post-tool transitions
-- `GENERATING` and `COMPLETED` are locked — `resolveState()` cannot auto-regress them
-
-### Hard Tool Filtering (`ToolRegistry.java` + `AiAgent.java`)
-- Added `getToolDescriptions(Set<String> allowedTools)` overload to `ToolRegistry`
-- `AiAgent.buildAgentPrompt()` now reads `conversation_state` from `AgentContext` and calls the filtered overload
-- **In `GREETING` / `GATHERING_REQUIREMENTS`**: `scaffold_app`, `create_app`, `deploy_app`, `generate_mock_data`, etc. are **completely hidden from the LLM** — not just a prompt hint, a hard filter
-- **In `CONFIRMING` and beyond**: all tools unlocked
-
-### Controller Integration (`AiChatController.java`)
-- `DialogueManager` injected as a constructor parameter
-- Before every agent call: `resolveState()` → stored in `AgentContext` as `"conversation_state"`
-- After success: checks response text for build keywords → triggers `notifyScaffolding()` / `notifyCompleted()`
-- API response now includes `"conversationState": "GATHERING_REQUIREMENTS"` etc.
-
-### Tests (`DialogueManagerTest.java` — 16 tests, all green)
-- GREETING → GATHERING_REQUIREMENTS on entity keywords
-- GATHERING_REQUIREMENTS → CONFIRMING on confirmation keywords
-- `notifyScaffolding/notifyCompleted` explicit hooks
-- State locking (GENERATING/COMPLETED don't auto-regress)
-- Tool-set gating per state (build tools hidden/exposed correctly)
-- Session isolation (different UUIDs are fully independent)
-
-## Next Session Goal
-- **Backlog**: Merge `feature/ai-schema-quality` → `main`
-- **Next Epic 3 Story**: LLM Error Recovery loops (preventing max iteration starvation on failed API calls)
-- **Enhancement**: Visual Feedback — Vite UI typing indicator while `AiAgent` executes
+**Working branch:** `feature/ui-rebuild` (pushed through commit `eca9f3a`, then documentation-consolidation commit on top)
 
 ---
 
-# Session Summary: AI-Native UI Rebuild — Planning Phase (2026-07-25)
+## What shipped this session
 
-## What Was Decided
+### Commit `723a193` — fix(studio): show login screen (not empty UI) when session expires
+- `AuthGate.tsx` gained a global `appbana:auth:expired` listener; on 401 from any request, session storage clears and the login screen returns with a "your session expired" banner. Previously the studio froze on an empty shell.
 
-Approved and locked the implementation plan for a full **AI-native UI rebuild** of the AppBana Studio. Primary reference document: [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md).
+### Commit `6edd19a` — chore(stage-4): retire `app-bana-ui/` (LitElement studio + runtime)
+- Deleted the entire `app-bana-ui/` folder (Maven module + LitElement source + build output + `pom.xml` dependency).
+- Removed from root [`pom.xml`](../pom.xml), [`pnpm-workspace.yaml`](../pnpm-workspace.yaml), [`app-bana-service/pom.xml`](../app-bana-service/pom.xml) dependency, and the `dev:ui` script in root [`package.json`](../package.json).
+- Deleted [`scripts/start-ui.bat`](../scripts/start-ui.bat) + [`scripts/start-ui.sh`](../scripts/start-ui.sh). Rewrote [`scripts/start-everything.bat`](../scripts/start-everything.bat) + [`scripts/start-everything.sh`](../scripts/start-everything.sh) to a 4-stage flow (AI Builder → Backend → Studio → Runtime).
+- Updated [`e2e/playwright.config.ts`](../e2e/playwright.config.ts) `baseURL` → Studio 5174. Rewrote [`e2e/README.md`](../e2e/README.md). Deleted the obsolete shadow-DOM AuthGuard spec `e2e/tests/ai-builder-chat.spec.ts`.
+- Rewrote [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) §2 (Monorepo Structure), §3 (How to Start), and §5 (Metadata-Driven Flow diagram) to the four-service topology.
+- Verified: `mvn compile`, `mvn -pl app-bana-service package -DskipTests`, and `tsc --noEmit` across `@appbana/shared` + `app-bana-studio` + `@appbana/runtime` all pass.
 
-### Direction
-- Rebuild the Studio as an AI-native frontend — chat drives everything, no canvas / palette / property inspector.
-- Segregate the current monolithic `app-bana-ui/` into three pnpm workspace packages:
-  - `app-bana-shared` — types + api client + postMessage schema + app-context resolver
-  - `app-bana-studio` (port **5174**) — the AI-native builder (streaming chat + tool cards + preview iframe + data drawer)
-  - `app-bana-runtime` (port **5175**) — standalone renderer for deployed apps (own login, tenant-branded)
-- `PageMeta` / `ComponentNode` schema is the boundary contract; studio and runtime communicate only via URL + `postMessage`, never direct imports.
+### Commit `eca9f3a` — docs(plan): add Complex UI and Maker-Checker epic plans
+- Created [`docs/planning/COMPLEX_UI_PLAN.md`](./planning/COMPLEX_UI_PLAN.md) — Phase B, 5 sub-phases (wizards, conditional fields, file upload, master-detail, list views), ~29 hr scoped, full file-level change map.
+- Created [`docs/planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) — Phase C, 5 sub-phases (DB+roles, state machine, approval UI, AI Builder integration, notifications), ~30 hr scoped (C5 optional for v1). State machine drawn, security notes, backward-compat guarantees.
+- Updated [`docs/ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — new forward-plan table at top (Phase A / B / C / Stage 5); Stage 3.5 and Stage 4 statuses corrected to `Done`.
 
-### Locked Stack
-- Vite 5 + React 18 + TypeScript + Tailwind + shadcn/ui + Zustand
-- Native `fetch` + `ReadableStream` for streaming (Vercel AI SDK dropped — custom event shape)
-- pnpm workspaces
+### Documentation consolidation commit (this session's final commit)
+- Rewrote [`docs/README.md`](./README.md) as the **single navigation source of truth** — every doc labelled ✅ Current / ⚠️ Partial / 📚 Historical with links to the current authoritative source.
+- Updated headers of the four active plan docs to cross-link to each other and to `ACTIVE_TASKS.md` and to reflect current status (not "DRAFT").
+- Added HISTORICAL / PARTIAL banners to 13 stale docs pointing readers to the current source:
+  - `docs/architecture/01-ARCHITECTURE.md`
+  - `docs/architecture/ARCHITECTURE_VISUAL_SUMMARY.md`
+  - `docs/architecture/ENTITY_FORM_BINDING_ARCHITECTURE.md`
+  - `docs/features/ai-agent.md`
+  - `docs/features/ai-builder-service.md`
+  - `docs/features/multi-tenant-design.md`
+  - `docs/features/page-templates.md`
+  - `docs/features/SECURITY_FEATURES.md`
+  - `docs/guides/02-DEVELOPMENT_GUIDE.md`
+  - `docs/guides/SESSION_RESUME_GUIDE.md`
+  - `docs/guides/04-USER_MANUAL.md`
+  - `docs/planning/03-ROADMAP.md`
+  - `docs/planning/IMPLEMENTATION_STORIES.md`
+  - `docs/specs/WORKFLOW.md`
+- Refreshed this `session_summary.md` (was still tracking Story 3.1 + 2026-07-25 planning session).
 
-### Backend Additions (in scope, Stage 0)
-1. **SSE streaming** — `POST /api/ai/chat/agent/stream` on ai-builder with events: `token`, `tool_call_start`, `tool_call_end`, `state`, `done`
-2. **Tenant branding** — Liquibase changeset + public `GET /api/tenants/{id}/branding`
-3. **App-context resolver** — `GET /api/app-context` (subdomain-ready)
-4. **Verify `ComponentNode.id` stability** across `generate_page` re-runs
+---
 
-### Delivery Stages (see plan doc for full detail)
-| Stage | Summary |
-|-------|---------|
-| 0 | Backend prep — SSE, branding, app-context, node-id verification |
-| 1 | Workspace skeleton + Studio MVP (embeds old runtime via iframe) |
-| 2 | Standalone runtime package (React port with tenant-branded login) |
-| 3 | Studio v1.1 — data drawer, session picker upgrade, image paste |
-| 4 | Retire `app-bana-ui/` entirely |
-| 5 | Subdomain deployment |
-| 6 | Select-and-instruct UX (click element in preview → attach to chat) |
+## Current forward plan (single source: [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md))
 
-### Cross-cutting Decisions
-- Runtime has **its own login screen** with tenant branding loaded pre-login (`GET /api/tenants/{id}/branding` is public).
-- Studio → Runtime token passing via **postMessage handshake**, NOT URL hash (security).
-- Foundations for future "select and instruct" baked into Stages 1–2 (`data-appbana-node|entity|field|page` attrs + postMessage bridge).
-- Feature parity with old UI is **NOT** required — bar is "AI-native flow fully functional".
-- Old `app-bana-ui/` runs unchanged through Stages 1–3, retired in Stage 4.
-- Ports: studio 5174, runtime 5175, old ui 5173, backend 8080, ai 8081.
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Phase A — Quality Sprint  (Runtime UX Sprint 2)                 │
+│  Goal: customer-demo-ready UI                                    │
+│  Duration: ~10 focused hours                                     │
+│  Deliverable: existing apps look defensible                      │
+└──────────────────────────────────────────────────────────────────┘
+                            ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Phase B — Complex UI Epic (~29 hr)                              │
+│    B1 Wizards · B2 Conditional fields · B3 File upload           │
+│    B4 Master-detail · B5 List views (filter/group/saved views)   │
+└──────────────────────────────────────────────────────────────────┘
+                            ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Phase C — Maker-Checker Epic (~30 hr, C5 optional for v1)       │
+│    C1 DB+roles · C2 State machine · C3 Approval UI               │
+│    C4 AI Builder integration · C5 Notifications                  │
+└──────────────────────────────────────────────────────────────────┘
+                            ▼
+                    🚀 First customer live
+                    (Stage 5 subdomain deploy runs in parallel)
+```
 
-## Documentation Updated
-- **NEW** [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) — primary reference (comprehensive, phase-wise)
-- **UPDATED** [`docs/ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — added "🚧 In Progress" section pointing to the plan
-- **UPDATED** [`docs/README.md`](./README.md) — added link in Planning section
-- **UPDATED** [`docs/planning/03-ROADMAP.md`](./planning/03-ROADMAP.md) — added AI-Native UI Rebuild phase reference
-- **UPDATED** [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) — pointer note in Section 12 (Active Work). Full rewrite of Sections 2 & 3 deferred to end of Stage 1 (workspace layout won't exist until then).
+---
 
-## Next Session Goal
-**Begin Stage 0 (Backend prep):**
-1. Read `AiAgent.java` and `AiChatController.java` to understand current tool-call emission shape.
-2. Read `metadata.ts` and `GeneratePageTool.java` to verify `ComponentNode.id` stability.
-3. Check if a `tenants` table exists (decides Liquibase strategy).
-4. Implement `AgentStreamController` (SSE) with the 5-event schema.
-5. Add tenant branding columns + `TenantBrandingRoutes`.
-6. Add `AppContextRoutes` for path + Host resolution.
+## Next session goal
+
+**Start Phase A: [Runtime UX Sprint 2](./planning/RUNTIME_UX_OVERHAUL_PLAN.md#sprint-2--make-it-feel-professional), Task 2.1** — replace native `<input type="date">` with `react-day-picker` in a popover. Format displayed value with `date-fns` per locale. Emit ISO 8601 on submit so the backend contract doesn't change.
+
+Then serially through 2.2–2.10 as batch-shippable PRs.
+
+---
+
+## Documentation consistency rules established this session
+
+1. **[`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) is the single source for status.** Plans track their own exit criteria; status labels live in one place.
+2. **[`docs/README.md`](./README.md) is the single source for navigation.** New docs must be added there or they don't exist.
+3. **[`.github/copilot-instructions.md`](../.github/copilot-instructions.md) §2 + §3 + §5 is the single source for "how the system runs today".** Detailed dives live in `features/` and `architecture/` (with currency banners).
+
+When these rules are broken, fix by editing `docs/README.md` + `ACTIVE_TASKS.md` first, then propagate to individual docs. Never the reverse.

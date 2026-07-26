@@ -1,8 +1,15 @@
 # AI-Native UI Rebuild — Implementation Plan
 
-**Status:** LOCKED — approved 2026-07-25
+**Status:** ✅ Stages 0-4 shipped · ⏳ Stage 5 (subdomain deploy) awaiting ops · ⏳ Stage 6 (select-and-instruct) deferred to post-launch
+**Approved:** 2026-07-25 · **Stage 4 shipped:** 2026-07-26 (commit `6edd19a`)
 **Owner:** AppBana core team
 **Primary reference:** This document is the single source of truth for the AI-native UI rebuild. All other docs (ACTIVE_TASKS, session summaries, roadmap, `.github/copilot-instructions.md`) link back here.
+
+**Related active plans:**
+- [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — Sprint 1 gated Stage 4 (✅ done). Sprint 2 = **Phase A** in the current forward plan.
+- [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B**: wizards, conditional fields, file upload, master-detail, list views.
+- [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C**: approval workflows.
+- Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 
 ---
 

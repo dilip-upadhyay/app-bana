@@ -1,3 +1,17 @@
+> **📚 HISTORICAL ROADMAP (Oct 2025).** The Q4 2025 canvas-era phases below are superseded by the AI-Native rebuild. The "Active Initiative" section further down (AI-Native UI Rebuild) is now historical too — Stages 0-4 shipped 2026-07-26.
+>
+> **For the current live roadmap, read:** [`docs/ACTIVE_TASKS.md`](../ACTIVE_TASKS.md) — the forward-plan table at the top.
+>
+> **Current active plans:**
+> - [`AI_NATIVE_UI_REBUILD_PLAN.md`](./AI_NATIVE_UI_REBUILD_PLAN.md) — master rebuild plan
+> - [`RUNTIME_UX_OVERHAUL_PLAN.md`](./RUNTIME_UX_OVERHAUL_PLAN.md) — Sprint 2 = **Phase A**
+> - [`COMPLEX_UI_PLAN.md`](./COMPLEX_UI_PLAN.md) — **Phase B**
+> - [`MAKER_CHECKER_PLAN.md`](./MAKER_CHECKER_PLAN.md) — **Phase C**
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # 3. PRODUCT ROADMAP & DELIVERY PLAN
 
 **Last Updated:** October 30, 2025  

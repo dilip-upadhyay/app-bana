@@ -1,9 +1,15 @@
 # Complex UI Epic — Implementation Plan
 
-**Status:** DRAFT — pending approval
+**Status:** 📝 Spec approved 2026-07-26 · ⏳ Execution not started
 **Owner:** AppBana core team
 **Position in master roadmap:** Phase B of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) completing. Blocks Phase C (Maker-Checker) and the first-customer launch.
 **Trigger:** The current runtime renders exactly one page shape per entity: a flat form or a flat list. Real customer-onboarding, KYC, loan-origination, or claims-processing apps require compound page types (wizards, master-detail, conditional fields, document upload, saved filter views). Without these, the AI Builder can scaffold "an app" but not the app a real customer actually needs.
+
+**Related active plans:**
+- [Runtime UX Overhaul Plan](./RUNTIME_UX_OVERHAUL_PLAN.md) — **Phase A**, prerequisite. Sprint 2 must complete before B1 starts.
+- [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C**, follows this epic.
+- [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan; this epic is a post-Stage-4 extension.
+- Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 
 ---
 

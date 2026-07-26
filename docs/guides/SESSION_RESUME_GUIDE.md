@@ -1,3 +1,11 @@
+> **⚠️ PARTIAL — references retired `app-bana-ui/` file paths.** Session-resume mechanics (git status check, dev-server verification, port checks) remain useful. File existence checks against `app-bana-ui/src/components/*.ts` will always fail today — that folder was retired 2026-07-26 (commit `6edd19a`).
+>
+> **For the current session-resume flow, use:** [`docs/ACTIVE_TASKS.md`](../ACTIVE_TASKS.md) + [`docs/session_summary.md`](../session_summary.md).
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # Session Resume Guide - Entity Form Binding Implementation
 
 **Purpose:** Always check current implementation status before starting work (even in new sessions)  

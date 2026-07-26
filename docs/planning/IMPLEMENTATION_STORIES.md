@@ -1,3 +1,14 @@
+> **📚 HISTORICAL BACKLOG (Dec 2025).** Canvas-era multi-tenant migration stories. Superseded by the four active plans:
+> - [`AI_NATIVE_UI_REBUILD_PLAN.md`](./AI_NATIVE_UI_REBUILD_PLAN.md)
+> - [`RUNTIME_UX_OVERHAUL_PLAN.md`](./RUNTIME_UX_OVERHAUL_PLAN.md)
+> - [`COMPLEX_UI_PLAN.md`](./COMPLEX_UI_PLAN.md)
+> - [`MAKER_CHECKER_PLAN.md`](./MAKER_CHECKER_PLAN.md)
+>
+> **For live status, see:** [`docs/ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # Multi-Tenant Architecture - Implementation Stories
 
 **Project**: AppBana Multi-Tenant Migration  

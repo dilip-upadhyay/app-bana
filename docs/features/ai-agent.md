@@ -1,3 +1,9 @@
+> **✅ CURRENT concepts · ⚠️ Some diagrams show port 5173.** The AI Agent design (Think/Act/Observe loop, tool system, dialogue state machine) is accurate to today. Diagrams that reference the old `app-bana-ui/` on port 5173 should be read as "studio frontend" (which today is `app-bana-studio/` on port 5174).
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # AI Agent Architecture for AppBana
 
 **Created**: January 9, 2026  

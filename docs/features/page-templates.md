@@ -1,3 +1,11 @@
+> **📚 HISTORICAL DOCUMENT.** Describes the canvas-era Studio's page-template picker. In the AI-Native rebuild, pages are generated on demand by [`GeneratePageTool`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java) in the AI Builder — the user describes what they want in chat, no template picker required.
+>
+> **New compound page types (wizard, master-detail, list-with-filters) are being added in [Phase B (Complex UI Plan)](../planning/COMPLEX_UI_PLAN.md).**
+>
+> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
+
+---
+
 # AppBana Page Templates
 
 This directory contains **system templates** - pre-built page layouts that users can select when creating new pages in the AppBana Studio Builder.
