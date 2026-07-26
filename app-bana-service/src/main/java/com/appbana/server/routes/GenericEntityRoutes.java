@@ -452,6 +452,20 @@ public class GenericEntityRoutes {
 
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
+
+            // Task C2.3 — Inject approval metadata when approval is required
+            if (schema.isApprovalRequired()) {
+                if (!data.containsKey("approval_status") || data.get("approval_status") == null) {
+                    data.put("approval_status", "DRAFT");
+                }
+                if (!data.containsKey("approval_revision") || data.get("approval_revision") == null) {
+                    data.put("approval_revision", 1);
+                }
+                String userId = AuthService.extractUserId(req, cfg);
+                if (userId != null && !userId.isBlank() && !data.containsKey("submitted_by")) {
+                    data.put("submitted_by", userId);
+                }
+            }
             try {
                 Object idObj = crud.insertRecord(schema, data);
                 Map<String, Object> after = crud.getById(schema, idObj);
