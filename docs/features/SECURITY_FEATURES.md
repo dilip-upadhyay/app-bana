@@ -1,9 +1,3 @@
-> **⚠️ PARTIAL — concepts current, file paths stale.** Auth, RBAC, FLS, CSRF, rate limiting all still ship exactly as described. File-path references to `app-bana-ui/src/components/*` refer to the retired LitElement studio; the equivalent code today lives in [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts) (interceptors) and [`app-bana-studio/src/features/auth/AuthGate.tsx`](../../app-bana-studio/src/features/auth/AuthGate.tsx) (auth UI). Backend security modules are unchanged.
->
-> **See:** [`docs/README.md`](../README.md) for the full documentation currency table.
-
----
-
 # AppBana Security Features - Complete Guide
 
 **Last Updated:** December 30, 2025  
@@ -327,12 +321,12 @@ router.use(CsrfMiddleware.validate());
 
 ## Frontend Integration
 
-### Automatic Security (FormContainer.ts)
+### Automatic Security (shared api-client)
 
-**File:** `app-bana-ui/src/components/FormContainer.ts` (400+ lines)  
-**Demo:** `form-security-demo.html`
+**File:** [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts)  
+**Auth UI:** [`app-bana-studio/src/features/auth/AuthGate.tsx`](../../app-bana-studio/src/features/auth/AuthGate.tsx)
 
-All forms automatically include security features:
+All authed calls flow through `authedFetch()` which broadcasts a browser event on 401 so the auth gate can force re-login. CSRF tokens and session headers are injected consistently:
 
 #### 1. CSRF Token Fetching
 
@@ -661,15 +655,13 @@ A: SessionMiddleware automatically renews valid sessions on each request (slidin
   - `com.appbana.middleware.CsrfMiddleware`
   - `com.appbana.middleware.SessionMiddleware`
   - `com.appbana.middleware.RateLimitMiddleware`
-  - `app-bana-ui/src/components/FormContainer.ts`
+  - [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts)
+  - [`app-bana-studio/src/features/auth/AuthGate.tsx`](../../app-bana-studio/src/features/auth/AuthGate.tsx)
 
 - **Test Files:**
   - All test files in `src/test/java/com/appbana/service/`
   - All test files in `src/test/java/com/appbana/middleware/`
   - `src/test/java/com/appbana/integration/SecurityIntegrationTest.java`
-
-- **Demos:**
-  - `app-bana-ui/form-security-demo.html`
 
 - **Builder Database:**
   - `builder-database/09-authentication.json` (v1.2.0)

@@ -1,89 +1,90 @@
 # Session Summary — 2026-07-26
 
-**Working branch:** `feature/ui-rebuild` (pushed through commit `eca9f3a`, then documentation-consolidation commit on top)
+**Working branch:** `feature/ui-rebuild`
 
 ---
 
 ## What shipped this session
 
-### Commit `723a193` — fix(studio): show login screen (not empty UI) when session expires
-- `AuthGate.tsx` gained a global `appbana:auth:expired` listener; on 401 from any request, session storage clears and the login screen returns with a "your session expired" banner. Previously the studio froze on an empty shell.
+### Commit `723a193` — fix(studio): show login screen when session expires
+`AuthGate.tsx` now listens for `appbana:auth:expired` and re-shows the login screen instead of freezing the studio on an empty shell.
 
-### Commit `6edd19a` — chore(stage-4): retire `app-bana-ui/` (LitElement studio + runtime)
-- Deleted the entire `app-bana-ui/` folder (Maven module + LitElement source + build output + `pom.xml` dependency).
-- Removed from root [`pom.xml`](../pom.xml), [`pnpm-workspace.yaml`](../pnpm-workspace.yaml), [`app-bana-service/pom.xml`](../app-bana-service/pom.xml) dependency, and the `dev:ui` script in root [`package.json`](../package.json).
-- Deleted [`scripts/start-ui.bat`](../scripts/start-ui.bat) + [`scripts/start-ui.sh`](../scripts/start-ui.sh). Rewrote [`scripts/start-everything.bat`](../scripts/start-everything.bat) + [`scripts/start-everything.sh`](../scripts/start-everything.sh) to a 4-stage flow (AI Builder → Backend → Studio → Runtime).
-- Updated [`e2e/playwright.config.ts`](../e2e/playwright.config.ts) `baseURL` → Studio 5174. Rewrote [`e2e/README.md`](../e2e/README.md). Deleted the obsolete shadow-DOM AuthGuard spec `e2e/tests/ai-builder-chat.spec.ts`.
-- Rewrote [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) §2 (Monorepo Structure), §3 (How to Start), and §5 (Metadata-Driven Flow diagram) to the four-service topology.
-- Verified: `mvn compile`, `mvn -pl app-bana-service package -DskipTests`, and `tsc --noEmit` across `@appbana/shared` + `app-bana-studio` + `@appbana/runtime` all pass.
+### Commit `6edd19a` — chore(stage-4): retire `app-bana-ui/`
+- Deleted the LitElement studio + runtime (Maven module, pnpm workspace entry, `pom.xml` dependency, `scripts/start-ui.*`, obsolete e2e spec).
+- Rewrote [`scripts/start-everything.bat`](../scripts/start-everything.bat) + [`scripts/start-everything.sh`](../scripts/start-everything.sh) to a 4-stage flow (AI Builder → Backend → Studio → Runtime).
+- Rewrote [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) §2, §3, §5 to reflect the four-service topology.
+- Verified: `mvn compile`, `mvn -pl app-bana-service package -DskipTests`, and `tsc --noEmit` across shared + studio + runtime all pass.
 
 ### Commit `eca9f3a` — docs(plan): add Complex UI and Maker-Checker epic plans
-- Created [`docs/planning/COMPLEX_UI_PLAN.md`](./planning/COMPLEX_UI_PLAN.md) — Phase B, 5 sub-phases (wizards, conditional fields, file upload, master-detail, list views), ~29 hr scoped, full file-level change map.
-- Created [`docs/planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) — Phase C, 5 sub-phases (DB+roles, state machine, approval UI, AI Builder integration, notifications), ~30 hr scoped (C5 optional for v1). State machine drawn, security notes, backward-compat guarantees.
-- Updated [`docs/ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — new forward-plan table at top (Phase A / B / C / Stage 5); Stage 3.5 and Stage 4 statuses corrected to `Done`.
+- [`planning/COMPLEX_UI_PLAN.md`](./planning/COMPLEX_UI_PLAN.md) — Phase B (5 sub-phases, ~29 hr).
+- [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) — Phase C (5 sub-phases, ~30 hr, C5 optional for v1).
+- Added Phase A/B/C forward-plan table to top of [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md).
 
-### Documentation consolidation commit (this session's final commit)
-- Rewrote [`docs/README.md`](./README.md) as the **single navigation source of truth** — every doc labelled ✅ Current / ⚠️ Partial / 📚 Historical with links to the current authoritative source.
-- Updated headers of the four active plan docs to cross-link to each other and to `ACTIVE_TASKS.md` and to reflect current status (not "DRAFT").
-- Added HISTORICAL / PARTIAL banners to 13 stale docs pointing readers to the current source:
-  - `docs/architecture/01-ARCHITECTURE.md`
-  - `docs/architecture/ARCHITECTURE_VISUAL_SUMMARY.md`
-  - `docs/architecture/ENTITY_FORM_BINDING_ARCHITECTURE.md`
-  - `docs/features/ai-agent.md`
-  - `docs/features/ai-builder-service.md`
-  - `docs/features/multi-tenant-design.md`
-  - `docs/features/page-templates.md`
-  - `docs/features/SECURITY_FEATURES.md`
-  - `docs/guides/02-DEVELOPMENT_GUIDE.md`
-  - `docs/guides/SESSION_RESUME_GUIDE.md`
-  - `docs/guides/04-USER_MANUAL.md`
-  - `docs/planning/03-ROADMAP.md`
-  - `docs/planning/IMPLEMENTATION_STORIES.md`
-  - `docs/specs/WORKFLOW.md`
-- Refreshed this `session_summary.md` (was still tracking Story 3.1 + 2026-07-25 planning session).
+### Commit `e6efc47` — docs: consolidate documentation, add currency banners
+Intermediate pass that labelled every doc ✅ / ⚠️ / 📚 and cross-linked the active plans. Superseded by the next commit which removed all stale docs entirely.
+
+### Pending commit — docs: purge all stale/historical documentation
+- **Deleted 19 stale files** (list below). Nothing under `docs/` is stale anymore.
+- Fixed the last stale port / folder / framework references in the 3 kept reference docs.
+- Rewrote [`README.md`](./README.md) — no more currency labels needed; every remaining doc is current.
+
+**Files deleted this pass:**
+
+| Folder | File | Why removed |
+|---|---|---|
+| architecture/ | `01-ARCHITECTURE.md` | Canvas-era architecture; current model lives in copilot-instructions §5 |
+| architecture/ | `ARCHITECTURE_VISUAL_SUMMARY.md` | Canvas-era diagrams |
+| architecture/ | `ENTITY_FORM_BINDING_ARCHITECTURE.md` | Canvas-era LitElement forms |
+| features/ | `ai-agent.md` | Redundant with copilot-instructions §6/§7 + stale ports |
+| features/ | `multi-tenant-design.md` | Model covered in copilot-instructions §5 + heavy stale content |
+| features/ | `page-templates.md` | Canvas-era template picker (replaced by `GeneratePageTool`) |
+| guides/ | `02-DEVELOPMENT_GUIDE.md` | Redundant with copilot-instructions §3 |
+| guides/ | `04-USER_MANUAL.md` | Canvas-era drag-drop manual |
+| guides/ | `SESSION_RESUME_GUIDE.md` | Referenced retired `app-bana-ui/` file paths |
+| guides/ | `api-client.md` | Described a retired multi-file api client |
+| guides/ | `API_VERIFICATION.md` | Historical verification report |
+| guides/ | `automation-testing.md` | Historical test artifact folder |
+| guides/ | `JAVA21_QUICK_REFERENCE.md` | Historical "what we implemented" progress note |
+| planning/ | `03-ROADMAP.md` | Canvas-era roadmap |
+| planning/ | `IMPLEMENTATION_STORIES.md` | Canvas-era multi-tenant migration backlog |
+| planning/ | `AI_AGENT_IMPLEMENTATION_PLAN.md` | Jan 2026 plan referencing LitElement stack |
+| planning/ | `AI_AGENT_STORIES.md` | Same |
+| planning/ | `AI_SCHEMA_QUALITY_PLAN.md` | April 2026 plan superseded by current 4-plan structure |
+| specs/ | `WORKFLOW.md` | Superseded by [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) |
+
+The empty `docs/guides/` folder was also removed.
+
+**Surgical fixes in kept files:**
+- `features/ai-builder-service.md` — banner stripped, diagram now reads `Studio (5174) → AI Builder (8081) → AppBana Service (8080)`.
+- `features/SECURITY_FEATURES.md` — banner stripped, frontend section rewritten to point at `app-bana-shared/src/api-client.ts` + `app-bana-studio/src/features/auth/AuthGate.tsx`.
+- `specs/AUTH.md` — stale "Frontend Components" section (LitElement + MobX example) replaced with a pointer to the current React `AuthGate.tsx`. Implementation checklist updated too.
 
 ---
 
-## Current forward plan (single source: [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md))
+## Current forward plan
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  Phase A — Quality Sprint  (Runtime UX Sprint 2)                 │
-│  Goal: customer-demo-ready UI                                    │
-│  Duration: ~10 focused hours                                     │
-│  Deliverable: existing apps look defensible                      │
-└──────────────────────────────────────────────────────────────────┘
-                            ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Phase B — Complex UI Epic (~29 hr)                              │
-│    B1 Wizards · B2 Conditional fields · B3 File upload           │
-│    B4 Master-detail · B5 List views (filter/group/saved views)   │
-└──────────────────────────────────────────────────────────────────┘
-                            ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Phase C — Maker-Checker Epic (~30 hr, C5 optional for v1)       │
-│    C1 DB+roles · C2 State machine · C3 Approval UI               │
-│    C4 AI Builder integration · C5 Notifications                  │
-└──────────────────────────────────────────────────────────────────┘
-                            ▼
-                    🚀 First customer live
-                    (Stage 5 subdomain deploy runs in parallel)
+Phase A — Runtime UX Sprint 2  (~10 hr) — customer-demo-ready UI
+     ↓
+Phase B — Complex UI Epic       (~29 hr) — wizards, upload, master-detail, list views
+     ↓
+Phase C — Maker-Checker Epic    (~30 hr, C5 optional) — approvals + audit
+     ↓
+🚀 First customer live   (Stage 5 subdomain deploy runs in parallel)
 ```
+
+Single source: [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md).
 
 ---
 
 ## Next session goal
 
-**Start Phase A: [Runtime UX Sprint 2](./planning/RUNTIME_UX_OVERHAUL_PLAN.md#sprint-2--make-it-feel-professional), Task 2.1** — replace native `<input type="date">` with `react-day-picker` in a popover. Format displayed value with `date-fns` per locale. Emit ISO 8601 on submit so the backend contract doesn't change.
-
-Then serially through 2.2–2.10 as batch-shippable PRs.
+**Start Phase A, Task 2.1** — replace the runtime's native `<input type="date">` with `react-day-picker` in a popover. Format via `date-fns`, emit ISO 8601 on submit. See [`planning/RUNTIME_UX_OVERHAUL_PLAN.md`](./planning/RUNTIME_UX_OVERHAUL_PLAN.md) Sprint 2 §2.1.
 
 ---
 
-## Documentation consistency rules established this session
+## Consistency rules (unchanged)
 
-1. **[`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) is the single source for status.** Plans track their own exit criteria; status labels live in one place.
-2. **[`docs/README.md`](./README.md) is the single source for navigation.** New docs must be added there or they don't exist.
-3. **[`.github/copilot-instructions.md`](../.github/copilot-instructions.md) §2 + §3 + §5 is the single source for "how the system runs today".** Detailed dives live in `features/` and `architecture/` (with currency banners).
-
-When these rules are broken, fix by editing `docs/README.md` + `ACTIVE_TASKS.md` first, then propagate to individual docs. Never the reverse.
+1. [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — single source for status.
+2. [`README.md`](./README.md) — single source for navigation.
+3. [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) §2 + §3 + §5 — single source for "how the system runs today".
