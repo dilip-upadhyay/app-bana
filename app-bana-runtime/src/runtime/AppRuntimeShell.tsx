@@ -13,6 +13,7 @@ import type { AppMeta, PageMeta, AppBanaPostMessage, RuntimeMode } from '@appban
 import { resolveAppContext, getApp, login as apiLogin } from '@appbana/shared';
 import { renderPage } from './Renderer';
 import { RuntimeSidebar } from './RuntimeSidebar';
+import { RuntimeNavigationProvider } from './runtime-navigation';
 import { LoginPage } from '../pages/LoginPage';
 import { Toaster } from './Toaster';
 
@@ -249,7 +250,12 @@ export function AppRuntimeShell() {
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
             {currentPage ? (
-              renderPage(currentPage)
+              <RuntimeNavigationProvider
+                pages={(app.pages ?? []) as PageMeta[]}
+                navigateToPage={setCurrentPage}
+              >
+                {renderPage(currentPage)}
+              </RuntimeNavigationProvider>
             ) : (
               <p className="text-slate-400 text-sm p-8 text-center">No pages in this app.</p>
             )}

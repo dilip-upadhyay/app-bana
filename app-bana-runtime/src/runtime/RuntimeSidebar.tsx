@@ -16,6 +16,13 @@
  */
 import type { PageMeta } from '@appbana/shared';
 import type { ReactNode } from 'react';
+import {
+  classifyKind,
+  extractEntity,
+  pluralize,
+  singularize,
+  type PageKind,
+} from './page-classifier';
 
 interface RuntimeSidebarProps {
   readonly pages: PageMeta[];
@@ -87,20 +94,6 @@ const ICONS = {
   ),
 } as const;
 
-type PageKind = 'list' | 'add' | 'detail' | 'dashboard' | 'chart' | 'settings' | 'other';
-
-/** Classify a page's action verb from its name. */
-function classifyKind(name: string | undefined): PageKind {
-  const n = (name ?? '').toLowerCase();
-  if (/\b(list|table|browse|index)s?\b|\ball\b/.test(n)) return 'list';
-  if (/\b(add|new|create|register|onboard|start)\b/.test(n)) return 'add';
-  if (/\b(detail|view|edit|profile|inspect|show)s?\b/.test(n)) return 'detail';
-  if (/\b(dashboard|home|overview)s?\b/.test(n)) return 'dashboard';
-  if (/\b(report|analytic|chart|metric|stat)s?\b/.test(n)) return 'chart';
-  if (/\b(setting|config|admin|preference)s?\b/.test(n)) return 'settings';
-  return 'other';
-}
-
 function iconForKind(kind: PageKind): ReactNode {
   switch (kind) {
     case 'list':      return ICONS.list;
@@ -111,66 +104,6 @@ function iconForKind(kind: PageKind): ReactNode {
     case 'settings':  return ICONS.gear;
     default:          return ICONS.doc;
   }
-}
-
-/** Simple English pluraliser — good enough for auto-generated app titles. */
-function pluralize(word: string): string {
-  if (!word) return word;
-  const lower = word.toLowerCase();
-  if (lower.endsWith('s') || lower.endsWith('x') || lower.endsWith('z') ||
-      lower.endsWith('ch') || lower.endsWith('sh')) return `${word}es`;
-  if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}ies`;
-  return `${word}s`;
-}
-
-function titleCase(raw: string): string {
-  return raw
-    .split(/\s+/)
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w))
-    .join(' ')
-    .trim();
-}
-
-/**
- * Extract the entity token a page belongs to, by stripping the leading
- * verb ("Add", "New") or the trailing kind noun ("List", "Detail").
- * Returns `null` for pages that don't obviously belong to an entity
- * (Dashboard, Settings, Reports, ad-hoc pages).
- */
-function extractEntity(name: string | undefined, kind: PageKind): string | null {
-  if (!name) return null;
-  if (kind === 'dashboard' || kind === 'chart' || kind === 'settings') return null;
-
-  const trimmed = name.trim();
-
-  // "Add Customer" / "New Order" / "Register User"
-  const addMatch = /^(add|new|create|register|onboard|start)\s+(.+)$/i.exec(trimmed);
-  if (addMatch) return titleCase(addMatch[2]);
-
-  // "Customer List" / "Order Table" / "User Browse"
-  const listMatch = /^(.+?)\s+(list|table|index|browse|all)$/i.exec(trimmed);
-  if (listMatch) return titleCase(listMatch[1]);
-
-  // "Customer Detail" / "Order Details" / "User Profile"
-  const detailMatch = /^(.+?)\s+(detail|details|view|edit|profile|show)$/i.exec(trimmed);
-  if (detailMatch) return titleCase(detailMatch[1]);
-
-  // "Customers" (bare plural / bare entity) — treat name as entity itself.
-  if (kind === 'other' && /^[A-Za-z][A-Za-z\s]*$/.test(trimmed) && trimmed.split(/\s+/).length <= 3) {
-    return titleCase(trimmed);
-  }
-
-  return null;
-}
-
-/** Depluralize simple English plurals so "Customers" and "Customer" cluster. */
-function singularize(word: string): string {
-  const lower = word.toLowerCase();
-  if (lower.endsWith('ies') && word.length > 3) return `${word.slice(0, -3)}y`;
-  if (lower.endsWith('ches') || lower.endsWith('shes')) return word.slice(0, -2);
-  if (lower.endsWith('ses')) return word.slice(0, -2);
-  if (lower.endsWith('s') && !lower.endsWith('ss') && word.length > 1) return word.slice(0, -1);
-  return word;
 }
 
 interface PageGroup {

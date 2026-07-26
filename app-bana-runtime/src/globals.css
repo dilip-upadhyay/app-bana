@@ -412,6 +412,33 @@
     @apply text-sm text-slate-500 max-w-sm;
   }
 
+  /* ---- Sprint 2 Task 2.3: illustrated empty state --------------------- */
+  .appbana-empty-state {
+    @apply flex flex-col items-center justify-center
+           gap-4 px-6 py-14 text-center text-slate-500;
+  }
+  .appbana-empty-state-art {
+    @apply w-56 h-auto max-w-full text-slate-300;
+  }
+  .appbana-empty-state-title {
+    @apply text-lg font-semibold text-slate-800;
+  }
+  .appbana-empty-state-body {
+    @apply text-sm text-slate-500 max-w-md leading-relaxed;
+  }
+  .appbana-empty-state-cta {
+    @apply inline-flex items-center gap-2
+           px-4 py-2 mt-2
+           text-sm font-medium text-white
+           bg-indigo-600 hover:bg-indigo-700
+           rounded-lg shadow-sm
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400
+           transition-colors;
+  }
+  .appbana-empty-state-cta-icon {
+    @apply inline-flex items-center justify-center;
+  }
+
   /* ---- Sprint 1: Toaster ---------------------------------------------- */
   .appbana-toaster {
     @apply fixed bottom-4 right-4 z-50

@@ -17,6 +17,9 @@ import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { formatDate, humanizeHeader, pickReferenceLabel, classifyStatus } from './cell-formatters';
 import { RowActions } from './RowActions';
 import { toast } from './Toaster';
+import { EmptyState } from './EmptyState';
+import { useRuntimeNavigation } from './runtime-navigation';
+import { entityNameFromKey, findAddPageForEntity } from './page-classifier';
 
 interface Props {
   readonly node: ComponentNode;
@@ -283,17 +286,7 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
 
       {/* Empty state */}
       {!loading && rows.length === 0 && !error && (
-        <div className="appbana-empty">
-          <svg viewBox="0 0 64 64" width="56" height="56" fill="none"
-               stroke="currentColor" strokeWidth="1.5" className="text-slate-300" aria-hidden="true">
-            <rect x="10" y="14" width="44" height="36" rx="4" />
-            <line x1="10" y1="24" x2="54" y2="24" />
-            <line x1="20" y1="34" x2="44" y2="34" />
-            <line x1="20" y1="42" x2="36" y2="42" />
-          </svg>
-          <h3>No records yet</h3>
-          <p>Use the form or the AI builder to add your first row.</p>
-        </div>
+        <EmptyStateBlock entityKey={entityKey} />
       )}
 
       {/* Pagination */}
@@ -330,4 +323,36 @@ function inferTypeFromName(name: string): string | undefined {
   if (n.endsWith('_at') || n.endsWith('_on') || n.endsWith('_date') || n === 'date') return 'datetime';
   if (n.includes('status')) return 'status';
   return undefined;
+}
+
+/**
+ * EmptyStateBlock — renders the illustrated empty state, wiring in the
+ * "Add {Entity}" CTA when a matching Add page exists in the current app.
+ * Split out so the main component stays readable and so we don't call
+ * `useRuntimeNavigation` conditionally inside the JSX tree.
+ */
+function EmptyStateBlock({ entityKey }: Readonly<{ entityKey: string }>) {
+  const nav = useRuntimeNavigation();
+  const entityName = entityNameFromKey(entityKey);
+  const humanEntity = entityName || 'record';
+  const addPage = nav ? findAddPageForEntity(entityName, nav.pages) : null;
+  return (
+    <EmptyState
+      entityName={entityName}
+      title={`No ${humanEntity.toLowerCase()} records yet`}
+      description={
+        addPage
+          ? `Add your first ${humanEntity.toLowerCase()} to get started, or ask the AI builder to seed some data.`
+          : `Use the form on this app or ask the AI builder to add your first ${humanEntity.toLowerCase()}.`
+      }
+      action={
+        addPage && nav
+          ? {
+              label: `Add ${humanEntity}`,
+              onClick: () => nav.navigateToPage(addPage),
+            }
+          : undefined
+      }
+    />
+  );
 }
