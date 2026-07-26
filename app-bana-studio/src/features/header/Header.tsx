@@ -96,7 +96,12 @@ export function Header() {
       style={{ '--color-brand': brandColor } as React.CSSProperties}
     >
       {/* Logo */}
-      <span className="text-xl select-none">🍌</span>
+      <img
+        src="/logo.svg"
+        alt="AppBana"
+        className="h-7 w-7 object-contain select-none"
+        draggable={false}
+      />
       <span className="font-bold text-white text-sm hidden sm:block">AppBana</span>
 
       <div className="w-px h-5 bg-gray-700 mx-1" />

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" role="img" aria-label="AppBana — The Autonomous Engine for Agentic Software Generation">
+  <title>AppBana</title>
+  <defs>
+    <linearGradient id="abf-a-grad" x1="0.15" y1="0.1" x2="0.85" y2="0.95">
+      <stop offset="0%"   stop-color="#7C3AED"/>
+      <stop offset="55%"  stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="abf-eye-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#7DD3FC"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+    <linearGradient id="abf-word-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#7C3AED"/>
+      <stop offset="60%"  stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+
+    <!-- Invisible arc paths for the curved ring labels -->
+    <path id="abf-think-arc"   d="M 130 40 A 90 90 0 0 0 60 130"   fill="none"/>
+    <path id="abf-act-arc"     d="M 270 40 A 90 90 0 0 1 340 130"  fill="none"/>
+    <path id="abf-observe-arc" d="M 120 260 A 90 90 0 0 0 280 260" fill="none"/>
+  </defs>
+
+  <!-- ===== Mark (icon) — centred at x=200, radius ~90 ===== -->
+  <g transform="translate(100 20)">
+    <!-- Arcs -->
+    <g fill="none" stroke="url(#abf-a-grad)" stroke-width="3" stroke-linecap="round" opacity="0.55">
+      <path d="M 30 92  A 80 80 0 0 1 90 25"/>
+      <path d="M 110 25 A 80 80 0 0 1 170 92"/>
+      <path d="M 60 165 A 80 80 0 0 0 140 165"/>
+    </g>
+    <g fill="url(#abf-a-grad)" opacity="0.75">
+      <polygon points="90,25 82,22 87,32"/>
+      <polygon points="170,92 167,84 176,88"/>
+      <polygon points="140,165 148,161 146,171"/>
+    </g>
+
+    <!-- The A -->
+    <path d="M 55 158 L 100 42 L 145 158"
+          fill="none"
+          stroke="url(#abf-a-grad)"
+          stroke-width="30"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+
+    <!-- Bot face -->
+    <g>
+      <rect x="76" y="108" width="48" height="32" rx="12" fill="#0F172A"/>
+      <circle cx="91"  cy="124" r="5.5" fill="url(#abf-eye-grad)"/>
+      <circle cx="109" cy="124" r="5.5" fill="url(#abf-eye-grad)"/>
+      <circle cx="91"  cy="122" r="1.5" fill="#F8FAFC"/>
+      <circle cx="109" cy="122" r="1.5" fill="#F8FAFC"/>
+    </g>
+  </g>
+
+  <!-- ===== Curved THINK / ACT / OBSERVE labels ===== -->
+  <g font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="12" letter-spacing="3">
+    <text fill="#7C3AED"><textPath href="#abf-think-arc"   startOffset="10%">THINK</textPath></text>
+    <text fill="#3B82F6"><textPath href="#abf-act-arc"     startOffset="10%">ACT</textPath></text>
+    <text fill="#0EA5E9"><textPath href="#abf-observe-arc" startOffset="25%">OBSERVE</textPath></text>
+  </g>
+
+  <!-- ===== Wordmark: "App" (navy) + "Bana" (gradient) ===== -->
+  <g font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="72" text-anchor="middle">
+    <text x="200" y="360">
+      <tspan fill="#0F172A">App</tspan><tspan fill="url(#abf-word-grad)">Bana</tspan>
+    </text>
+  </g>
+
+  <!-- Divider: two short lines with a dot -->
+  <g stroke="#6366F1" stroke-width="2" stroke-linecap="round">
+    <line x1="120" y1="382" x2="185" y2="382"/>
+    <line x1="215" y1="382" x2="280" y2="382"/>
+  </g>
+  <circle cx="200" cy="382" r="2.5" fill="#6366F1"/>
+
+  <!-- ===== Tagline ===== -->
+  <g font-family="Inter, system-ui, sans-serif" font-size="18" fill="#334155" text-anchor="middle">
+    <text x="200" y="418">The Autonomous Engine for</text>
+    <text x="200" y="442">Agentic Software Generation</text>
+  </g>
+</svg>

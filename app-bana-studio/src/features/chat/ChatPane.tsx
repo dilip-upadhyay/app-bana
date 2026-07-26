@@ -146,7 +146,7 @@ export function ChatPane() {
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
-            <span className="text-5xl">🍌</span>
+            <img src="/logo.svg" alt="AppBana" className="h-20 w-20 object-contain" draggable={false} />
             <h2 className="text-xl font-semibold text-white">AppBana AI Builder</h2>
             <p className="text-gray-400 text-sm max-w-xs">
               Describe your app in plain language and I'll build it for you — database, API, and UI.

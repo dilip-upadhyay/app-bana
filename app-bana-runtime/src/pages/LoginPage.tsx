@@ -67,10 +67,15 @@ export function LoginPage({ tenantId, onLogin }: Props) {
             <img
               src={branding.logoUrl}
               alt={`${displayName} logo`}
-              className="h-10 object-contain"
+              className="h-16 object-contain"
             />
           ) : (
-            <span className="text-3xl" aria-hidden="true">🍌</span>
+            <img
+              src="/logo.svg"
+              alt="AppBana"
+              className="h-16 object-contain"
+              draggable={false}
+            />
           )}
           <p className="text-sm font-medium text-gray-500" aria-label="Signing in to">
             {displayName}
