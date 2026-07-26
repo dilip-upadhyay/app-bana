@@ -751,6 +751,48 @@
 
   /* ---- Sprint 3 task 3.7: ReferenceCombobox --------------------------- */
   .appbana-combobox { @apply relative w-full; }
+
+  /* Input matches .appbana-input so User/Property look identical to Start Date etc.
+     Right padding leaves room for the chevron caret (and the × clear button). */
+  .appbana-combobox-input {
+    @apply w-full
+           px-3.5 py-2.5 pr-10
+           rounded-lg
+           border border-gray-300
+           bg-white text-gray-900 text-sm
+           placeholder-gray-400
+           shadow-sm
+           transition-all duration-150 ease-out
+           focus:outline-none
+           focus:border-indigo-500
+           focus:ring-2 focus:ring-indigo-500/25
+           hover:border-gray-400;
+    /* Dropdown chevron on the right — same SVG as .appbana-select */
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.65rem center;
+    background-size: 1.15rem;
+  }
+  .appbana-combobox-input:disabled {
+    @apply bg-gray-100 text-gray-500 cursor-not-allowed;
+  }
+  /* When a value is picked, hide the chevron so the × clear button can sit there. */
+  .appbana-combobox:has(.appbana-combobox-clear) .appbana-combobox-input {
+    background-image: none;
+  }
+
+  /* Small circular × button, absolutely positioned inside the input's right pad. */
+  .appbana-combobox-clear {
+    @apply absolute top-1/2 right-2 -translate-y-1/2
+           inline-flex items-center justify-center
+           w-6 h-6 rounded-full
+           text-gray-400 hover:text-gray-700
+           hover:bg-gray-100
+           text-lg leading-none
+           transition-colors duration-100
+           focus:outline-none focus:ring-2 focus:ring-indigo-500/40;
+  }
+
   .appbana-combobox-listbox {
     @apply absolute left-0 right-0 top-full mt-1 z-30
            max-h-64 overflow-y-auto
@@ -760,13 +802,27 @@
   .appbana-combobox-option {
     @apply flex items-center justify-between gap-2
            w-full text-left
-           px-3 py-2 text-sm text-slate-700
-           cursor-pointer;
+           px-3 py-2 mx-1 rounded-md
+           text-sm text-slate-700
+           cursor-pointer
+           transition-colors duration-75;
   }
-  .appbana-combobox-option[aria-selected='true'] { background-color: var(--color-brand-soft); color: var(--color-brand-on-soft); }
-  .appbana-combobox-option:hover { @apply bg-slate-100; }
+  .appbana-combobox-option:hover,
+  .appbana-combobox-option.active {
+    @apply bg-indigo-50 text-indigo-900;
+  }
+  .appbana-combobox-option.selected,
+  .appbana-combobox-option[aria-selected='true'] {
+    @apply bg-indigo-100 text-indigo-900 font-medium;
+  }
+  /* Checkmark for the currently-selected option */
+  .appbana-combobox-option.selected::after,
+  .appbana-combobox-option[aria-selected='true']::after {
+    content: '✓';
+    @apply text-indigo-600 text-base font-semibold;
+  }
   .appbana-combobox-empty {
-    @apply px-3 py-2 text-xs text-slate-500 italic;
+    @apply px-3 py-3 text-xs text-slate-500 italic text-center;
   }
 
   /* ---- Sprint 3 task 3.3: DetailPage view/edit toggle ---------------- */
