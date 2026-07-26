@@ -219,6 +219,23 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
       return <StatusPill value={truthy ? 'Yes' : 'No'} tone={truthy ? 'success' : 'neutral'} />;
     }
 
+    // Phase B3 — file link
+    if (type === 'file') {
+      const fileId = raw == null ? '' : String(raw);
+      if (!fileId) return <span className="text-slate-400">—</span>;
+      return (
+        <a
+          href={`/api/files/${fileId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-indigo-600 hover:underline"
+          title={fileId}
+        >
+          Download
+        </a>
+      );
+    }
+
     // Default
     if (raw == null || raw === '') return <span className="text-slate-400">—</span>;
     return <span>{String(raw)}</span>;

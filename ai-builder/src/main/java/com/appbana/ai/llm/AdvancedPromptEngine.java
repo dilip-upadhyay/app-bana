@@ -165,6 +165,9 @@ public class AdvancedPromptEngine {
         // Phase B2 — Conditional-fields hint
         prompt.append("CONDITIONAL FIELDS (Phase B2): When the user says things like 'only show X when Y', 'require X if Y', 'hide X unless Y', or 'disable X when Y', attach a `conditions` object to that field in `create_entity` / `batch_update_entities`. Shape: `conditions: { showWhen?: Expression, requiredWhen?: Expression, disabledWhen?: Expression }`. An Expression is EITHER a leaf `{ field: '<name>', op: '<op>', value: <any> }` where op is one of `equals | notEquals | in | notIn | gt | lt | gte | lte | contains | isEmpty | isNotEmpty`, OR a combinator `{ and: [Expression, ...] }`, `{ or: [Expression, ...] }`, or `{ not: Expression }`. Example — show `spouse_name` only when `marital_status === 'married'`: `\"conditions\": { \"showWhen\": { \"field\": \"marital_status\", \"op\": \"equals\", \"value\": \"married\" } }`. Hidden fields are excluded from validation automatically.\n\n");
 
+        // Phase B3 — File-upload hint
+        prompt.append("FILE UPLOADS (Phase B3): When the user asks for uploads / attachments / documents / photos / receipts / resumes / signatures / logos, define the field with `type: 'file'` and include a `fileConstraints` object: `{ maxSizeBytes: <n>, acceptedMimeTypes: [<mime>...] }`. Sensible defaults: 10 MB (10485760) for docs and images; use `image/*` for photos/logos, `application/pdf` for documents/resumes, or a mixed list `['image/*','application/pdf']`. The runtime renders a drag-and-drop dropzone, base64-encodes the file, POSTs it to `/api/files/upload`, and stores the returned `fileId` in a VARCHAR(64) column. Never ask the user for storage paths — just describe the file and the runtime handles the rest.\n\n");
+
         // Available tools
         prompt.append("## Available Tools\n\n");
         prompt.append(toolDescriptions);

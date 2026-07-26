@@ -408,6 +408,12 @@ public class GeneratePageTool implements Tool {
             if (conditions instanceof Map<?, ?> conditionsMap && !conditionsMap.isEmpty()) {
                 inputProps.put("conditions", conditionsMap);
             }
+            // Phase B3 — propagate per-field file constraints (maxSizeBytes,
+            // acceptedMimeTypes) so FileUploadField can enforce them client-side.
+            Object fileConstraints = field.get("fileConstraints");
+            if (fileConstraints instanceof Map<?, ?> fcMap && !fcMap.isEmpty()) {
+                inputProps.put("fileConstraints", fcMap);
+            }
             input.put("props", inputProps);
 
             gridChildren.add(containerId);
@@ -477,6 +483,7 @@ public class GeneratePageTool implements Tool {
             case "status" -> "select";
             case "boolean" -> "checkbox";
             case "longtext" -> "textarea";
+            case "file" -> "file";
             default -> "input";
         };
     }

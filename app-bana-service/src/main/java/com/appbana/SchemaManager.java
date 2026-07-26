@@ -551,6 +551,9 @@ public class SchemaManager {
                 case "text":
                 case "longtext":
                     return "TEXT";
+                case "file":
+                    // Phase B3 — stores the fileId issued by /api/files/upload (UUID w/o dashes = 32 chars).
+                    return "VARCHAR(64)";
                 default:
                     return "VARCHAR(255)";
             }
@@ -581,6 +584,8 @@ public class SchemaManager {
             case "text":
             case "longtext":
                 return "CLOB";
+            case "file":
+                return "VARCHAR(64)";
             default:
                 return "VARCHAR(255)";
         }

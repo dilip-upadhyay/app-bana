@@ -43,6 +43,7 @@ public class RouteRegistry {
         // /api/tenants/{id}/branding are not swallowed by the /api/{entity} wildcard.
         TenantBrandingRoutes.register(router);  // GET /api/tenants/{id}/branding
         AppContextRoutes.register(router);      // GET /api/app-context
+        FileRoutes.register(router);            // Phase B3: POST /api/files/upload + GET /api/files/{id}
 
         GenericEntityRoutes.register(router);
 

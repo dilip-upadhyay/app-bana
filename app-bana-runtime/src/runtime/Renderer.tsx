@@ -28,6 +28,7 @@ import { ReferenceCombobox } from './ReferenceCombobox';
 import { WizardShell } from './WizardShell';
 import { FormValuesProvider } from './form-values-context';
 import { ConditionalField } from './ConditionalField';
+import { FileUploadField } from './FileUploadField';
 
 // Sprint 3 task 3.7 — anything larger than this switches from native <select>
 // to the search-driven combobox. Kept small so real-world lookup tables that
@@ -300,6 +301,33 @@ function renderNode(
       const helpText = String(props.help ?? props.description ?? '');
       const nestedType = String(props.type ?? props.inputType ?? 'text');
       const fieldName = String(props.name ?? '');
+      // Phase B3 — file upload dropzone.
+      if (nestedType === 'file') {
+        const constraints = (props.fileConstraints as { maxSizeBytes?: number; acceptedMimeTypes?: string[] } | undefined) ?? {};
+        return maybeConditional(props,
+          <FormField
+            key={node.id}
+            name={fieldName}
+            label={label}
+            htmlFor={inputId}
+            required={required}
+            helpText={helpText}
+            dataAttrs={dataAttrs}
+          >
+            <FileUploadField
+              id={inputId}
+              name={fieldName}
+              required={required}
+              defaultValue={String(props.value ?? '')}
+              entityKey={String(props.entity ?? '')}
+              fieldName={fieldName}
+              maxSizeBytes={constraints.maxSizeBytes}
+              acceptedMimeTypes={constraints.acceptedMimeTypes}
+              className={className}
+            />
+          </FormField>
+        );
+      }
       // Scaffold emits reference FK fields as {type:'input', props:{type:'reference', field:'Customer'}}.
       // Route those to the live-loaded <select> instead of a plain text input.
       if (nestedType === 'reference') {
