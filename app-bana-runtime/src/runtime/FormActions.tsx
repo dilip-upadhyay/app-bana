@@ -6,8 +6,12 @@
  *
  * Layout: Cancel (tertiary) · Save & New (secondary, optional) · Save (primary)
  * right-aligned inside `.appbana-form-save-cell`, which spans the full grid row.
+ *
+ * Sprint 3 task 3.8 — every button here is now the unified <Button> primitive
+ * so branding + focus rings + disabled state stay uniform across the runtime.
  */
 import type { ReactNode } from 'react';
+import { Button } from './Button';
 
 interface FormActionsProps {
   readonly saving: boolean;
@@ -27,34 +31,23 @@ export function FormActions({
   cancelLabel = 'Cancel',
   saveAndNewLabel = 'Save & Add another',
   children,
-}: FormActionsProps) {
+}: Readonly<FormActionsProps>) {
   return (
     <div className="appbana-form-actions" aria-label="Form actions">
       {children}
       {onCancel && (
-        <button type="button" className="tertiary" onClick={onCancel} disabled={saving}>
+        <Button variant="tertiary" onClick={onCancel} disabled={saving}>
           {cancelLabel}
-        </button>
+        </Button>
       )}
       {onSaveAndNew && (
-        <button type="button" className="secondary" onClick={onSaveAndNew} disabled={saving}>
+        <Button variant="secondary" onClick={onSaveAndNew} disabled={saving}>
           {saveAndNewLabel}
-        </button>
+        </Button>
       )}
-      <button type="submit" className="primary" disabled={saving} aria-busy={saving}>
-        {saving && (
-          <svg
-            className="animate-spin -ml-0.5 mr-1 h-4 w-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden="true"
-          >
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
-            <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          </svg>
-        )}
+      <Button type="submit" variant="primary" loading={saving}>
         {saving ? 'Saving…' : saveLabel}
-      </button>
+      </Button>
     </div>
   );
 }

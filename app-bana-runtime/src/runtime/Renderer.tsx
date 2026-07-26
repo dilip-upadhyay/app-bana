@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import type { PageMeta, ComponentNode } from '@appbana/shared';
-import { fetchEntityRows, insertEntityRow } from '@appbana/shared';
+import { fetchEntityRows, insertEntityRow, ApiFieldError } from '@appbana/shared';
 import { StudioTableLive } from './StudioTableLive';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { FormActions } from './FormActions';
@@ -24,6 +24,12 @@ import { Skeleton } from './Skeleton';
 import { useEntityFormValidation } from './useEntityFormValidation';
 import { EntityFormErrorProvider } from './entity-form-context';
 import { FormField, ValidatedInput, ValidatedSelect, ValidatedTextarea } from './FormField';
+import { ReferenceCombobox } from './ReferenceCombobox';
+
+// Sprint 3 task 3.7 — anything larger than this switches from native <select>
+// to the search-driven combobox. Kept small so real-world lookup tables that
+// grow past a couple screens of rows stay usable.
+const COMBOBOX_THRESHOLD = 20;
 
 /** Turn "full_name" / "first-name" / "firstName" into "Full name". */
 function humanize(raw: string | undefined): string {
@@ -35,8 +41,16 @@ function humanize(raw: string | undefined): string {
  * Classify a page's dominant purpose so we can pick the right shell width
  * and background. Forms sit inside a centred, narrower card; lists fill the
  * viewport with their own card chrome; everything else uses a plain body.
+ *
+ * Sprint 3 task 3.2 — When the scaffolder wrote an authoritative
+ * `PageMeta.kind`, we trust it. Otherwise fall back to the legacy node-tree
+ * sniff so pre-3.2 apps keep working. `dashboard` collapses to `other`
+ * for shell purposes.
  */
 function classifyPage(page: PageMeta): 'form' | 'list' | 'other' {
+  if (page.kind === 'form' || page.kind === 'detail') return 'form';
+  if (page.kind === 'list') return 'list';
+  if (page.kind === 'dashboard') return 'other';
   const nodes = page.nodes ?? [];
   if (nodes.some((n) => n.type === 'form' || n.type === 'studio-form')) return 'form';
   if (nodes.some((n) => n.type === 'table' || n.type === 'grid' || n.type === 'appbana-table-live')) return 'list';
@@ -468,6 +482,7 @@ function optionLabelFor(row: RefRow): string {
 function ReferenceField(props: Readonly<ReferenceFieldProps>) {
   const { id, name, refEntity, required, defaultValue, className, styleObj, entityAttr, fieldAttr } = props;
   const [rows, setRows] = useState<RefRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -479,8 +494,15 @@ function ReferenceField(props: Readonly<ReferenceFieldProps>) {
     }
     setLoading(true);
     setError('');
-    fetchEntityRows(qualifyEntityKey(refEntity), getRuntimeToken(), { limit: 500 })
-      .then((result) => { if (!cancelled) setRows(result.rows as RefRow[]); })
+    // Sprint 3 task 3.7 — probe with just enough rows to render the native
+    // <select> AND detect the "too many options" case. The combobox path
+    // does its own paginated fetches so we don't need to keep loading here.
+    fetchEntityRows(qualifyEntityKey(refEntity), getRuntimeToken(), { limit: COMBOBOX_THRESHOLD + 1 })
+      .then((result) => {
+        if (cancelled) return;
+        setRows(result.rows as RefRow[]);
+        setTotal(result.total);
+      })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : `Failed to load ${refEntity}`); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -506,6 +528,25 @@ function ReferenceField(props: Readonly<ReferenceFieldProps>) {
       </div>
     );
   }
+
+  // Sprint 3 task 3.7 — swap to combobox when the target table has more
+  // rows than a user can reasonably scan in a dropdown.
+  if (total > COMBOBOX_THRESHOLD) {
+    return (
+      <ReferenceCombobox
+        id={id}
+        name={name}
+        refEntity={refEntity}
+        required={required}
+        defaultValue={defaultValue}
+        className={className}
+        style={styleObj}
+        entityAttr={entityAttr}
+        fieldAttr={fieldAttr}
+      />
+    );
+  }
+
   return (
     <ValidatedSelect
       id={id}
@@ -540,7 +581,7 @@ interface EntityFormProps {
 function EntityForm(props: Readonly<EntityFormProps>) {
   const { className, styleObj, entity, dataAttrs, children } = props;
   const [saving, setSaving] = useState(false);
-  const { errors, validate, clearError, resetErrors } = useEntityFormValidation();
+  const { errors, validate, clearError, resetErrors, setExternalErrors } = useEntityFormValidation();
 
   async function submit(form: HTMLFormElement): Promise<boolean> {
     if (!entity) {
@@ -572,8 +613,25 @@ function EntityForm(props: Readonly<EntityFormProps>) {
       toast.success('Saved', { description: `New ${humanize(entity.split('_').pop())} added.` });
       return true;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Save failed';
-      toast.error('Save failed', { description: msg });
+      // Sprint 3 task 3.1 — Backend 400s with a structured field-error
+      // payload get merged into the form's error state so each bad input
+      // gets a red outline + inline message, matching the client-side
+      // Zod flow. Non-field errors (network, 5xx, generic) still surface
+      // as a toast.
+      if (err instanceof ApiFieldError && Object.keys(err.fieldErrors).length > 0) {
+        setExternalErrors(err.fieldErrors);
+        const firstBad = Object.keys(err.fieldErrors)[0];
+        if (firstBad && firstBad !== '_form') {
+          const el = form.querySelector<HTMLElement>(`[name="${CSS.escape(firstBad)}"]`);
+          el?.focus();
+        }
+        toast.error('Please fix the highlighted fields', {
+          description: err.fieldErrors._form ?? undefined,
+        });
+      } else {
+        const msg = err instanceof Error ? err.message : 'Save failed';
+        toast.error('Save failed', { description: msg });
+      }
       return false;
     } finally {
       setSaving(false);

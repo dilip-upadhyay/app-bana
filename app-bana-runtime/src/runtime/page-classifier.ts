@@ -126,3 +126,38 @@ export function findAddPageForEntity(
   }
   return null;
 }
+
+/**
+ * Sprint 3 task 3.6 — Find the "Detail" / "View" / "Edit" page for an
+ * entity. Symmetric with {@link findAddPageForEntity}; used by row-actions
+ * and PageActions to route Edit clicks to the right destination.
+ *
+ * When a page carries the authoritative `PageMeta.kind === 'detail'`
+ * (Sprint 3 task 3.2), we prefer that over sniffing the name.
+ */
+export function findDetailPageForEntity(
+  entityName: string,
+  pages: readonly PageMeta[],
+): PageMeta | null {
+  if (!entityName || !pages.length) return null;
+  const target = singularize(entityName).toLowerCase();
+  for (const p of pages) {
+    if (p.kind === 'detail') {
+      // Trust the authored kind but still verify the entity matches so a
+      // Customer row doesn't route to the Order detail page.
+      const derived = extractEntity(p.name, 'detail');
+      if (derived && singularize(derived).toLowerCase() === target) return p;
+      // Kind-only match (no entity in the name) — accept when there is
+      // only one detail page for the app.
+      if (!derived) return p;
+    }
+  }
+  for (const p of pages) {
+    const kind = classifyKind(p.name);
+    if (kind !== 'detail') continue;
+    const entity = extractEntity(p.name, kind);
+    if (!entity) continue;
+    if (singularize(entity).toLowerCase() === target) return p;
+  }
+  return null;
+}

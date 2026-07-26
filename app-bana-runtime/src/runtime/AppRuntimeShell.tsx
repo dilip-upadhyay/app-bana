@@ -18,6 +18,8 @@ import { AppLoadingSkeleton } from './Skeleton';
 import { LoginPage } from '../pages/LoginPage';
 import { Toaster } from './Toaster';
 import { UserMenu } from './UserMenu';
+import { DetailPage } from './DetailPage';
+import { ConfirmDialogHost } from './ConfirmDialog';
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
@@ -49,6 +51,10 @@ export function AppRuntimeShell() {
   const [loading, setLoading] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [branding, setBranding] = useState<TenantBranding | null>(null);
+  // Sprint 3 task 3.3 — selected record id for detail-view overlay.
+  const [selectedRecord, setSelectedRecord] = useState<
+    { page: PageMeta; recordId: string } | null
+  >(null);
   // Stage 2 contract fields — full Stage 6 wiring lands with select-and-instruct.
   // Stored in refs (not state) because the current render doesn't consume them yet;
   // Stage 6 will migrate these to state and drive the inspection overlay.
@@ -162,6 +168,31 @@ export function AppRuntimeShell() {
     return () => { cancelled = true; };
   }, [token, ctx?.tenantId]);
 
+  // --- Sprint 3 task 3.9: propagate primaryColor into the CSS token stack ---
+  // Every brand-coloured surface (buttons, active nav, tabs, tooltips…) reads
+  // `--color-brand` off :root. We compute matching hover / active / soft
+  // variants via `color-mix` so a single tenant colour drives the whole tint
+  // ramp. Runs at document scope so preview iframes inherit the tint too.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const brand = branding?.primaryColor?.trim();
+    if (!brand) {
+      // Reset to the defaults defined in globals.css :root
+      ['--color-brand', '--color-brand-hover', '--color-brand-active',
+       '--color-brand-soft', '--color-brand-on-soft']
+        .forEach((v) => root.style.removeProperty(v));
+      return;
+    }
+    root.style.setProperty('--color-brand', brand);
+    // Darker shades for hover/active — 12% and 24% blended toward black.
+    root.style.setProperty('--color-brand-hover',  `color-mix(in srgb, ${brand} 88%, black)`);
+    root.style.setProperty('--color-brand-active', `color-mix(in srgb, ${brand} 76%, black)`);
+    // Softer tinted background for filled-tonal / soft variants (~10% brand + white).
+    root.style.setProperty('--color-brand-soft',    `color-mix(in srgb, ${brand} 12%, white)`);
+    root.style.setProperty('--color-brand-on-soft', `color-mix(in srgb, ${brand} 76%, black)`);
+  }, [branding?.primaryColor]);
+
   // --- Login handler (when not embedded in studio) ---
   async function handleLogin(email: string, password: string): Promise<string> {
     const result = await apiLogin(email, password);
@@ -269,9 +300,23 @@ export function AppRuntimeShell() {
             {currentPage ? (
               <RuntimeNavigationProvider
                 pages={(app.pages ?? []) as PageMeta[]}
-                navigateToPage={setCurrentPage}
+                navigateToPage={(p) => { setSelectedRecord(null); setCurrentPage(p); }}
+                navigateToRecord={(page, recordId) => {
+                  // Route: switch to the detail page and stash the record id.
+                  setCurrentPage(page);
+                  setSelectedRecord({ page, recordId });
+                }}
+                selectedRecordId={selectedRecord?.recordId ?? null}
               >
-                {renderPage(currentPage)}
+                {selectedRecord && selectedRecord.page.id === currentPage.id ? (
+                  <DetailPage
+                    page={selectedRecord.page}
+                    recordId={selectedRecord.recordId}
+                    onDismiss={() => setSelectedRecord(null)}
+                  />
+                ) : (
+                  renderPage(currentPage)
+                )}
               </RuntimeNavigationProvider>
             ) : (
               <p className="text-slate-400 text-sm p-8 text-center">No pages in this app.</p>
@@ -280,6 +325,7 @@ export function AppRuntimeShell() {
         </main>
       </div>
       <Toaster />
+      <ConfirmDialogHost />
     </div>
   );
 }

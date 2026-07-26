@@ -12,7 +12,7 @@
  */
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { ComponentNode } from '@appbana/shared';
-import { fetchEntityRows } from '@appbana/shared';
+import { fetchEntityRows, deleteEntityRow, insertEntityRow } from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { formatDate, humanizeHeader, pickReferenceLabel } from './cell-formatters';
 import { StatusPill } from './StatusPill';
@@ -21,7 +21,15 @@ import { toast } from './Toaster';
 import { EmptyState } from './EmptyState';
 import { TableSkeleton } from './Skeleton';
 import { useRuntimeNavigation } from './runtime-navigation';
-import { entityNameFromKey, findAddPageForEntity } from './page-classifier';
+import { useConfirm } from './ConfirmDialog';
+import { useEntityRows } from './useEntityRows';
+import { TableHeader } from './TableHeader';
+import { PaginationBar } from './PaginationBar';
+import {
+  entityNameFromKey,
+  findAddPageForEntity,
+  findDetailPageForEntity,
+} from './page-classifier';
 
 interface Props {
   readonly node: ComponentNode;
@@ -49,46 +57,65 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     [props.fields],
   );
 
-  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  // Sprint 3 task 3.12 — pagination + lifecycle refresh live in a hook now.
+  const {
+    rows,
+    total,
+    page,
+    totalPages,
+    loading,
+    error,
+    setPage,
+  } = useEntityRows(entityKey, PAGE_SIZE);
+
   const [fkMaps, setFkMaps] = useState<Record<string, Map<string, string>>>({});
+  // Sprint 3 task 3.6 — RowActions navigation + destructive confirm.
+  const nav = useRuntimeNavigation();
+  const confirm = useConfirm();
 
-  const load = useCallback(async () => {
-    if (!entityKey) return;
-    setLoading(true);
-    setError('');
+  // Sprint 3 task 3.6 — delete a single row with confirm dialog + undo toast.
+  const handleDelete = useCallback(async (row: Record<string, unknown>, rowId: string) => {
+    const entityName = entityNameFromKey(entityKey) || 'record';
+    const ok = await confirm({
+      title: `Delete ${entityName}?`,
+      message: 'This can be undone from the notification for a few seconds.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    const token = getToken();
     try {
-      const result = await fetchEntityRows(qualifyEntityKey(entityKey), getToken(), {
-        limit: PAGE_SIZE,
-        offset: (page - 1) * PAGE_SIZE,
+      await deleteEntityRow(qualifyEntityKey(entityKey), rowId, token);
+      window.dispatchEvent(new CustomEvent('appbana:row-deleted', {
+        detail: { entity: qualifyEntityKey(entityKey), id: rowId },
+      }));
+      toast.success(`${entityName} deleted`, {
+        // Sprint 3 task 3.10 — action slot restores the row.
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            insertEntityRow(qualifyEntityKey(entityKey), row, token)
+              .then(() => {
+                window.dispatchEvent(new CustomEvent('appbana:row-inserted', {
+                  detail: { entity: qualifyEntityKey(entityKey) },
+                }));
+                toast.info(`${entityName} restored`);
+              })
+              .catch((err) => {
+                toast.error('Restore failed', {
+                  description: err instanceof Error ? err.message : String(err),
+                });
+              });
+          },
+        },
       });
-      setRows(result.rows);
-      setTotal(result.total);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to load data';
-      setError(msg);
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      toast.error('Delete failed', {
+        description: err instanceof Error ? err.message : String(err),
+      });
     }
-  }, [entityKey, page]);
+  }, [entityKey, confirm]);
 
-  useEffect(() => { load(); }, [load]);
-
-  // Refresh when any form on the page inserts a row for this entity.
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ entity?: string }>).detail;
-      if (!detail?.entity) return;
-      if (detail.entity === entityKey || detail.entity === qualifyEntityKey(entityKey)) {
-        load();
-      }
-    };
-    window.addEventListener('appbana:row-inserted', handler);
-    return () => window.removeEventListener('appbana:row-inserted', handler);
-  }, [entityKey, load]);
 
   // ─── FK label prefetch ────────────────────────────────────────────────
   // For every reference column, load the target entity once so we can render
@@ -128,7 +155,6 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     return () => { cancelled = true; };
   }, [fields, entityKey]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const label = String(
     node.label ?? props.label ?? (entityKey ? `${humanizeHeader(entityKey.split('_').pop())} List` : 'Data Table'),
   );
@@ -225,22 +251,18 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
       {!loading && rows.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr>
-                {displayFieldNames.map((name) => (
-                  <th key={name} className="appbana-table-th" scope="col">
-                    {humanizeHeader(fieldByName.get(name)?.label ?? name)}
-                  </th>
-                ))}
-                {/* Row-actions column header — visually blank but accessible */}
-                <th className="appbana-table-th w-10" scope="col">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
+            <TableHeader
+              columns={displayFieldNames}
+              labelFor={(name) => fieldByName.get(name)?.label}
+            />
             <tbody>
               {rows.map((row, idx) => {
                 const rowId = String(row.id ?? idx);
+                // Sprint 3 task 3.6 — resolve the destination detail page
+                // for Edit; when no detail page exists we fall back to
+                // omitting `onEdit` so the menu item is hidden.
+                const entityName = entityNameFromKey(entityKey);
+                const detailPage = nav ? findDetailPageForEntity(entityName, nav.pages) : null;
                 return (
                   <tr
                     key={rowId}
@@ -266,6 +288,11 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
                             .catch(() => toast.error('Copy failed'));
                         }
                       }}
+                      onEdit={detailPage && nav
+                        ? () => nav.navigateToRecord(detailPage, rowId)
+                        : undefined
+                      }
+                      onDelete={() => { handleDelete(row, rowId).catch(() => {}); }}
                     />
                   </tr>
                 );
@@ -280,30 +307,12 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
         <EmptyStateBlock entityKey={entityKey} />
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 text-xs text-slate-500">
-          <span>Page {page} of {totalPages}</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-2 py-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-100"
-              aria-label="Previous page"
-            >
-              ←
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="px-2 py-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-100"
-              aria-label="Next page"
-            >
-              →
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationBar
+        page={page}
+        totalPages={totalPages}
+        onPrev={() => setPage(Math.max(1, page - 1))}
+        onNext={() => setPage(Math.min(totalPages, page + 1))}
+      />
     </div>
   );
 }

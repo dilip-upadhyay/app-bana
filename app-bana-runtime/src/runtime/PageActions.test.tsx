@@ -55,9 +55,11 @@ describe('PageActions (list branch)', () => {
         <PageActions page={listPage} />
       </RuntimeNavigationProvider>,
     );
-    expect(html).toContain('appbana-button');
+    // Sprint 3 task 3.8 — unified Button primitive emits `.appbana-btn`
+    // + variant class; the old `.appbana-button` chrome is gone.
+    expect(html).toContain('appbana-btn-primary');
     expect(html).toContain('New Customer');
-    expect(html).not.toContain('appbana-button danger');
+    expect(html).not.toContain('appbana-btn-danger');
   });
 
   it('renders nothing when the app has no matching Add page', () => {
@@ -81,8 +83,9 @@ describe('PageActions (detail branch)', () => {
   it('renders an Edit + Delete pair for detail pages', () => {
     const detailPage = page('p1', 'Customer Detail');
     const html = renderToStaticMarkup(<PageActions page={detailPage} />);
-    expect(html).toContain('appbana-button secondary');
-    expect(html).toContain('appbana-button danger');
+    // Sprint 3 task 3.8 — Edit = secondary variant, Delete = danger.
+    expect(html).toContain('appbana-btn-secondary');
+    expect(html).toContain('appbana-btn-danger');
     expect(html).toContain('>Edit<');
     expect(html).toContain('>Delete<');
   });

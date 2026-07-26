@@ -179,6 +179,11 @@ export function RuntimeSidebar({
                 const label = p.name ?? p.id;
                 return (
                   <li key={p.id}>
+                    {/* Sprint 3 task 3.11(b) — aria-label lets AT announce
+                        the destination; native title kept as a secondary
+                        hover-only hint. In collapsed icon-rail mode the CSS
+                        hides the label span, and screen readers still get
+                        the aria-label. */}
                     <button
                       type="button"
                       onClick={() => {
@@ -187,6 +192,7 @@ export function RuntimeSidebar({
                       }}
                       className={`appbana-sidebar-link ${active ? 'appbana-sidebar-link-active' : ''}`}
                       aria-current={active ? 'page' : undefined}
+                      aria-label={label}
                       title={label}
                     >
                       <span className="appbana-sidebar-icon">{iconForKind(kind)}</span>

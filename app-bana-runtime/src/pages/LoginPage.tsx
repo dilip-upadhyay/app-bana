@@ -4,10 +4,19 @@
  * Stage 2 requirement: loads branding before rendering, applies logo +
  * primary colour. When embedded in the studio (postMessage token received),
  * this page is never shown — AppRuntimeShell skips it.
+ *
+ * Sprint 3 tasks 3.8 + 3.9 + 3.11(c):
+ *   • Submit button migrated to the unified <Button variant="primary"> primitive.
+ *   • Primary colour applied by writing --color-brand at :root, so hover /
+ *     focus / active states inherit tenant tint (no inline style leakage).
+ *   • Heading structure fixed: <h1> is the page label "Sign In", tenant
+ *     display name demoted to a semantic <p> so screen readers announce
+ *     the page purpose first.
  */
 import { useEffect, useState } from 'react';
 import type { TenantBranding } from '@appbana/shared';
 import { fetchBranding } from '@appbana/shared';
+import { Button } from '../runtime/Button';
 
 interface Props {
   tenantId: string;
@@ -25,7 +34,19 @@ export function LoginPage({ tenantId, onLogin }: Props) {
     fetchBranding(tenantId).then(setBranding).catch(() => {});
   }, [tenantId]);
 
-  const primaryColor = branding?.primaryColor ?? '#6366f1';
+  // Task 3.9 — mirror the ramp AppRuntimeShell computes post-login so the
+  // login card, focus rings, and submit button all share the tenant tint.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const brand = branding?.primaryColor?.trim();
+    if (!brand) return;
+    root.style.setProperty('--color-brand', brand);
+    root.style.setProperty('--color-brand-hover',  `color-mix(in srgb, ${brand} 88%, black)`);
+    root.style.setProperty('--color-brand-active', `color-mix(in srgb, ${brand} 76%, black)`);
+    root.style.setProperty('--color-brand-soft',    `color-mix(in srgb, ${brand} 12%, white)`);
+    root.style.setProperty('--color-brand-on-soft', `color-mix(in srgb, ${brand} 76%, black)`);
+  }, [branding?.primaryColor]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,27 +62,26 @@ export function LoginPage({ tenantId, onLogin }: Props) {
     }
   }
 
+  const displayName = branding?.displayName ?? tenantId;
+
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4"
-      style={{ '--color-brand': primaryColor } as React.CSSProperties}
-    >
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-8 flex flex-col gap-6">
-        {/* Branding */}
+        {/* Branding — logo + tenant label (task 3.11c: demote to <p>) */}
         <div className="flex flex-col items-center gap-2">
           {branding?.logoUrl ? (
             <img
               src={branding.logoUrl}
-              alt={`${branding.displayName ?? tenantId} logo`}
+              alt={`${displayName} logo`}
               className="h-10 object-contain"
             />
           ) : (
             <span className="text-3xl" aria-hidden="true">🍌</span>
           )}
-          <h1 className="text-xl font-bold text-gray-800">
-            {branding?.displayName ?? 'AppBana'}
-          </h1>
-          <p className="text-sm text-gray-400">Sign in to continue</p>
+          <p className="text-sm font-medium text-gray-500" aria-label="Signing in to">
+            {displayName}
+          </p>
+          <h1 className="text-xl font-bold text-gray-800">Sign In</h1>
         </div>
 
         {/* Form */}
@@ -105,16 +125,9 @@ export function LoginPage({ tenantId, onLogin }: Props) {
             <p className="text-red-500 text-xs" role="alert">{error}</p>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 rounded-lg text-sm font-semibold text-white
-                       disabled:opacity-60 disabled:cursor-not-allowed transition-opacity
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            style={{ backgroundColor: primaryColor }}
-          >
+          <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
             {loading ? 'Signing in…' : 'Sign In'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

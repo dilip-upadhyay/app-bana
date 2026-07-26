@@ -157,6 +157,8 @@
            rounded-lg border border-gray-200 bg-white shadow-lg
            p-2;
     min-width: 18rem;
+    /* Sprint 3 task 3.11(a) — never overflow a 375-px viewport. */
+    max-width: calc(100vw - 2rem);
   }
   .appbana-datepicker-time {
     @apply flex items-center justify-end gap-2 mt-2 pt-2
@@ -210,33 +212,45 @@
   }
 
   /* ---- Buttons — MD3 filled tonal ------------------------------------- */
+  /* Sprint 3 task 3.9 — brand-colour tokens replace the hardcoded indigo
+     on the primary variant so tenant branding takes effect. New callers
+     should prefer the unified <Button variant="primary"> primitive; this
+     class survives for scaffolder-emitted plain <button className="appbana-button">
+     markup until GeneratePageTool is updated to emit Button too. */
   .appbana-button {
     @apply inline-flex items-center justify-center gap-2
            px-6 py-2.5
            rounded-lg
            text-white text-sm font-medium tracking-wide
-           bg-indigo-600
            shadow-sm
            transition-all duration-150 ease-out
-           hover:bg-indigo-700 hover:shadow
-           active:bg-indigo-800 active:shadow-none active:translate-y-px
-           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-white
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 disabled:hover:shadow-sm;
+           hover:shadow
+           active:shadow-none active:translate-y-px
+           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--color-brand);
+    --tw-ring-color: var(--color-brand);
   }
+  .appbana-button:hover:not(:disabled) { background-color: var(--color-brand-hover); }
+  .appbana-button:active:not(:disabled) { background-color: var(--color-brand-active); }
   /* Optional variants toggled by className the renderer passes through */
   .appbana-button.secondary {
-    @apply bg-indigo-50 text-indigo-700 shadow-none
-           hover:bg-indigo-100 hover:shadow-none
-           active:bg-indigo-200;
+    color: var(--color-brand-on-soft);
+    background-color: var(--color-brand-soft);
+    @apply shadow-none;
   }
+  .appbana-button.secondary:hover:not(:disabled) { filter: brightness(0.96); }
   .appbana-button.danger {
     @apply bg-red-600 hover:bg-red-700 active:bg-red-800
            focus:ring-red-500;
+    background-color: #dc2626;
   }
   .appbana-button.ghost {
-    @apply bg-transparent text-indigo-600 shadow-none
-           hover:bg-indigo-50 hover:shadow-none active:bg-indigo-100;
+    background-color: transparent;
+    color: var(--color-brand);
+    @apply shadow-none;
   }
+  .appbana-button.ghost:hover:not(:disabled) { background-color: var(--color-brand-soft); }
 
   /* ---- Runtime page tabs (legacy — retained for backwards compat) ------ */
   .appbana-tab {
@@ -247,8 +261,10 @@
            focus:outline-none focus:ring-2 focus:ring-indigo-500;
   }
   .appbana-tab-active {
-    @apply bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-700;
+    color: var(--color-brand-on-soft);
+    background-color: var(--color-brand-soft);
   }
+  .appbana-tab-active:hover { filter: brightness(0.96); }
 
   /* ---- Top app bar (sticky, spans full viewport width) ---------------- */
   .appbana-appbar {
@@ -345,8 +361,12 @@
            focus:outline-none focus:ring-2 focus:ring-indigo-500;
   }
   .appbana-sidebar-link-active {
-    @apply bg-indigo-50 text-indigo-700 border-indigo-600
-           hover:bg-indigo-100 hover:text-indigo-700;
+    color: var(--color-brand-on-soft);
+    background-color: var(--color-brand-soft);
+    border-color: var(--color-brand);
+  }
+  .appbana-sidebar-link-active:hover {
+    filter: brightness(0.96);
   }
   .appbana-sidebar-icon {
     @apply w-4 h-4 shrink-0 text-current;
@@ -444,26 +464,10 @@
     @apply flex flex-wrap items-center justify-end gap-3
            w-full;
   }
-  .appbana-form-actions .primary {
-    @apply appbana-button;
-  }
-  .appbana-form-actions .secondary {
-    @apply inline-flex items-center justify-center gap-2
-           px-4 py-2.5 rounded-lg text-sm font-medium
-           bg-transparent text-slate-700
-           border border-slate-300
-           hover:bg-slate-100 hover:border-slate-400
-           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
-           disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-  .appbana-form-actions .tertiary {
-    @apply inline-flex items-center justify-center gap-2
-           px-4 py-2.5 rounded-lg text-sm font-medium
-           text-slate-600
-           hover:bg-slate-100 hover:text-slate-900
-           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
-           disabled:opacity-50 disabled:cursor-not-allowed;
-  }
+  /* Sprint 3 task 3.8 — the old `.appbana-form-actions .primary/.secondary
+     /.tertiary` chrome rules were removed. Every caller now emits
+     <Button variant="…"> and picks up the unified `.appbana-btn*` styles
+     defined below. */
 
   /* ---- Sprint 1: Status pill ------------------------------------------ */
   .appbana-status-pill {
@@ -546,15 +550,8 @@
   .appbana-empty-state-body {
     @apply text-sm text-slate-500 max-w-md leading-relaxed;
   }
-  .appbana-empty-state-cta {
-    @apply inline-flex items-center gap-2
-           px-4 py-2 mt-2
-           text-sm font-medium text-white
-           bg-indigo-600 hover:bg-indigo-700
-           rounded-lg shadow-sm
-           focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400
-           transition-colors;
-  }
+  /* Sprint 3 task 3.8 — CTA now emits <Button variant="primary">, so the
+     bespoke `.appbana-empty-state-cta` chrome was removed. */
   .appbana-empty-state-cta-icon {
     @apply inline-flex items-center justify-center;
   }
@@ -619,7 +616,7 @@
            pointer-events-none;
   }
   .appbana-toast {
-    @apply pointer-events-auto
+    @apply pointer-events-auto relative
            flex items-start gap-3
            min-w-[260px] max-w-sm
            px-4 py-3 pr-8
@@ -635,9 +632,154 @@
   .appbana-toast.success .dot { @apply bg-emerald-500; }
   .appbana-toast.error   .dot { @apply bg-rose-500;    }
   .appbana-toast.info    .dot { @apply bg-indigo-500;  }
+  /* Sprint 3 task 3.10 — warning + action + dismiss slot chrome */
+  .appbana-toast.warning { @apply border-amber-200; }
+  .appbana-toast.warning .dot { @apply bg-amber-500; }
+  .appbana-toast-action {
+    @apply shrink-0 self-center
+           text-xs font-semibold uppercase tracking-wide
+           text-indigo-600 hover:text-indigo-800
+           px-2 py-1 rounded
+           focus:outline-none focus:ring-2 focus:ring-indigo-500;
+    color: var(--color-brand);
+  }
+  .appbana-toast-action:hover { color: var(--color-brand-active); }
+  .appbana-toast-close {
+    @apply absolute top-2 right-2
+           inline-flex items-center justify-center
+           w-5 h-5 rounded
+           text-slate-400 hover:text-slate-700 hover:bg-slate-100
+           focus:outline-none focus:ring-2 focus:ring-indigo-500;
+  }
 
   @keyframes toast-in {
     from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0);   }
+  }
+
+  /* ---- Sprint 3 task 3.8: Unified <Button> primitive ----------------- */
+  /* Base — every variant inherits layout + focus behaviour from here.   */
+  .appbana-btn {
+    @apply inline-flex items-center justify-center gap-2
+           rounded-lg font-medium tracking-wide
+           transition-all duration-150 ease-out
+           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    /* Ring colour follows the brand token so branded tenants get branded focus. */
+    --tw-ring-color: var(--color-brand);
+  }
+  .appbana-btn-sm { @apply px-3 py-1.5 text-xs; }
+  .appbana-btn-md { @apply px-4 py-2 text-sm; }
+  .appbana-btn-lg { @apply px-6 py-2.5 text-sm; }
+
+  /* Primary — the hero brand-coloured CTA (task 3.9 wires --color-brand). */
+  .appbana-btn-primary {
+    color: #fff;
+    background-color: var(--color-brand);
+    @apply shadow-sm hover:shadow;
+  }
+  .appbana-btn-primary:hover:not(:disabled) { background-color: var(--color-brand-hover); }
+  .appbana-btn-primary:active:not(:disabled) { background-color: var(--color-brand-active); }
+
+  /* Secondary — outlined neutral button (Cancel, Copy ID). */
+  .appbana-btn-secondary {
+    @apply bg-white text-slate-700 border border-slate-300
+           hover:bg-slate-50 hover:border-slate-400
+           active:bg-slate-100;
+  }
+
+  /* Tertiary — quiet text button used inside crowded action bars. */
+  .appbana-btn-tertiary {
+    @apply bg-transparent text-slate-600
+           hover:bg-slate-100 hover:text-slate-900
+           active:bg-slate-200;
+  }
+
+  /* Danger — destructive action (Delete, Remove). */
+  .appbana-btn-danger {
+    @apply text-white bg-rose-600 shadow-sm
+           hover:bg-rose-700 active:bg-rose-800
+           focus:ring-rose-500;
+  }
+
+  /* Ghost — tinted brand hover, used inside dense toolbars. */
+  .appbana-btn-ghost {
+    background-color: transparent;
+    color: var(--color-brand);
+  }
+  .appbana-btn-ghost:hover:not(:disabled) { background-color: var(--color-brand-soft); }
+
+  /* ---- Sprint 3 task 3.11: Tooltip primitive -------------------------- */
+  /* Wraps the trigger inline; the tooltip appears on hover AND focus so
+     keyboard users benefit too (WCAG 2.1.1). */
+  .appbana-tooltip-wrap {
+    @apply relative inline-flex;
+  }
+  .appbana-tooltip {
+    @apply pointer-events-none
+           absolute left-full top-1/2 -translate-y-1/2 ml-2
+           z-40
+           px-2 py-1 rounded-md
+           bg-slate-900 text-white text-xs font-medium whitespace-nowrap
+           opacity-0 scale-95
+           transition-all duration-100 ease-out
+           shadow-md;
+  }
+  .appbana-tooltip-wrap:hover > .appbana-tooltip,
+  .appbana-tooltip-wrap:focus-within > .appbana-tooltip {
+    @apply opacity-100 scale-100;
+  }
+
+  /* ---- Sprint 3 task 3.5: ConfirmDialog ------------------------------- */
+  /* Native <dialog> backed. Centred modal card, brand-agnostic. */
+  .appbana-confirm[open] {
+    @apply block border-0 p-0 rounded-xl shadow-2xl
+           bg-white text-slate-800
+           max-w-md w-[90vw];
+  }
+  .appbana-confirm::backdrop {
+    background: rgba(15, 23, 42, 0.5);
+  }
+  .appbana-confirm-body {
+    @apply flex flex-col gap-3 p-6;
+  }
+  .appbana-confirm-title { @apply text-lg font-semibold text-slate-900; }
+  .appbana-confirm-message { @apply text-sm text-slate-600; }
+  .appbana-confirm-actions {
+    @apply flex items-center justify-end gap-2 mt-2 pt-3 border-t border-slate-100;
+  }
+
+  /* ---- Sprint 3 task 3.7: ReferenceCombobox --------------------------- */
+  .appbana-combobox { @apply relative w-full; }
+  .appbana-combobox-listbox {
+    @apply absolute left-0 right-0 top-full mt-1 z-30
+           max-h-64 overflow-y-auto
+           bg-white border border-slate-200 rounded-lg shadow-lg
+           py-1;
+  }
+  .appbana-combobox-option {
+    @apply flex items-center justify-between gap-2
+           w-full text-left
+           px-3 py-2 text-sm text-slate-700
+           cursor-pointer;
+  }
+  .appbana-combobox-option[aria-selected='true'] { background-color: var(--color-brand-soft); color: var(--color-brand-on-soft); }
+  .appbana-combobox-option:hover { @apply bg-slate-100; }
+  .appbana-combobox-empty {
+    @apply px-3 py-2 text-xs text-slate-500 italic;
+  }
+
+  /* ---- Sprint 3 task 3.3: DetailPage view/edit toggle ---------------- */
+  .appbana-detail-field {
+    @apply flex flex-col gap-1 mb-4;
+  }
+  .appbana-detail-label {
+    @apply text-xs font-semibold text-slate-500 uppercase tracking-wide;
+  }
+  .appbana-detail-value {
+    @apply text-sm text-slate-800 break-words;
+  }
+  .appbana-detail-value.empty {
+    @apply text-slate-400 italic;
   }
 }

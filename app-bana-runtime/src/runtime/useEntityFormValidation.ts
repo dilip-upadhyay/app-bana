@@ -28,6 +28,14 @@ export interface UseEntityFormValidation {
   readonly validate: (form: HTMLFormElement) => { ok: true; data: Record<string, unknown> } | { ok: false; errors: FieldErrors };
   readonly clearError: (name: string) => void;
   readonly resetErrors: () => void;
+  /**
+   * Sprint 3 task 3.1 — Inject server-side field errors (from a 400
+   * response) into the same error store that client-side Zod errors flow
+   * through. Merges with the existing errors map so a form that already
+   * has one bad field can accept another from the server. Fields not in
+   * the payload are left untouched.
+   */
+  readonly setExternalErrors: (fieldErrors: FieldErrors) => void;
 }
 
 /** Read all named form controls in submission order (excludes buttons). */
@@ -168,8 +176,12 @@ export function useEntityFormValidation(): UseEntityFormValidation {
 
   const resetErrors = useCallback(() => setErrors({}), []);
 
+  const setExternalErrors = useCallback((fieldErrors: FieldErrors) => {
+    setErrors((prev) => ({ ...prev, ...fieldErrors }));
+  }, []);
+
   return useMemo(
-    () => ({ errors, validate, clearError, resetErrors }),
-    [errors, validate, clearError, resetErrors],
+    () => ({ errors, validate, clearError, resetErrors, setExternalErrors }),
+    [errors, validate, clearError, resetErrors, setExternalErrors],
   );
 }

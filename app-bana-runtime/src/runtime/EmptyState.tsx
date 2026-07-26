@@ -1,15 +1,13 @@
 /**
  * EmptyState.tsx — Illustrated empty-state primitive for the deployed runtime.
  *
- * Sprint 2 Task 2.3. Replaces the flat "No records yet" placeholder in
- * StudioTableLive with a friendly illustration + heading + optional CTA
- * button. The CTA is auto-derived: when the current app has a matching
- * "Add {Entity}" page, we render an indigo button that navigates to it
- * through `RuntimeNavigationContext`. If no add-page exists, we fall
- * back to a plain informational card so the user still gets guidance.
+ * Sprint 2 Task 2.3 + Sprint 3 task 3.8. The CTA now emits the unified
+ * <Button variant="primary"> so it picks up tenant branding and matches the
+ * Save / Sign-in / Add-row buttons pixel-for-pixel.
  */
 import type { ReactNode } from 'react';
 import { Illustration, illustrationFor, type IllustrationKey } from './illustrations';
+import { Button } from './Button';
 
 export interface EmptyStateProps {
   readonly title: string;
@@ -18,7 +16,7 @@ export interface EmptyStateProps {
   readonly illustration?: IllustrationKey;
   /** Used to auto-pick an illustration when `illustration` isn't set. */
   readonly entityName?: string;
-  /** Optional call-to-action rendered as a solid indigo button. */
+  /** Optional call-to-action rendered as a brand-primary <Button>. */
   readonly action?: {
     readonly label: string;
     readonly onClick: () => void;
@@ -65,16 +63,13 @@ export function EmptyState({
         <p className="appbana-empty-state-body">{description}</p>
       )}
       {action && (
-        <button
-          type="button"
+        <Button
+          variant="primary"
           onClick={action.onClick}
-          className="appbana-empty-state-cta"
+          icon={action.icon ?? <PlusIcon />}
         >
-          <span className="appbana-empty-state-cta-icon">
-            {action.icon ?? <PlusIcon />}
-          </span>
-          <span>{action.label}</span>
-        </button>
+          {action.label}
+        </Button>
       )}
     </div>
   );
