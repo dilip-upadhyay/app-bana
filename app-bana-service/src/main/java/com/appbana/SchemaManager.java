@@ -337,6 +337,109 @@ public class SchemaManager {
                 }
             }
         }
+        // H4 hardening — enforce declared FK relationships at the DB level.
+        // Run after column reconciliation so target columns are guaranteed to
+        // exist. Non-fatal on failure: a missing parent table just means the
+        // FK will be added on the next ensureTable for the child.
+        syncForeignKeys(schema, c, d);
+    }
+
+    /**
+     * H4 hardening — turn `EntityField.referenceEntity` + `EntityField.onDelete`
+     * into a real `FOREIGN KEY ... ON DELETE ...` constraint on the child
+     * table. Before this method existed, the onDelete metadata was pure
+     * documentation — nothing enforced it and a `DELETE FROM parent` would
+     * silently orphan child rows.
+     *
+     * Idempotent: skips fields whose FK already exists (matched by column
+     * name, not constraint name, so pre-existing hand-written FKs are
+     * respected). Tolerates missing parents (logs WARN, skips) — the FK
+     * gets added on a later ensureTable when the parent lands.
+     *
+     * The constraint is added with `ON DELETE {policy}`:
+     *   - `cascade`  → deleting parent also deletes children
+     *   - `setNull`  → deleting parent NULLs the FK column (requires nullable)
+     *   - anything else (including null / blank / "restrict") → RESTRICT,
+     *     which blocks the parent delete if children exist.
+     */
+    private static void syncForeignKeys(EntitySchema schema, Connection c, String dialect) {
+        String childTable = getPhysicalTableName(schema);
+        for (EntitySchema.Field f : schema.getFields()) {
+            if (!"reference".equalsIgnoreCase(f.getType())) continue;
+            String parentEntity = f.getReferenceEntity();
+            if (parentEntity == null || parentEntity.isBlank()) continue;
+
+            String parentTable = resolveParentPhysicalTable(schema, parentEntity);
+            String policy = mapOnDeleteToSql(f.getOnDelete());
+            String colName = f.getName();
+
+            try {
+                if (foreignKeyExists(c, childTable, colName)) continue;
+                if (!tableExists(c, parentTable)) {
+                    LOG.warn("[FK-SYNC] Skipping FK on {}.{} → {}: parent table not found yet",
+                            childTable, colName, parentTable);
+                    continue;
+                }
+                String constraintName = truncateIdentifier(("fk_" + childTable + "_" + colName).toLowerCase(Locale.ROOT));
+                String ddl = "ALTER TABLE " + quote(childTable)
+                        + " ADD CONSTRAINT " + quote(constraintName)
+                        + " FOREIGN KEY (" + quote(colName) + ")"
+                        + " REFERENCES " + quote(parentTable) + " (" + quote("ID") + ")"
+                        + " ON DELETE " + policy;
+                try (Statement s = c.createStatement()) {
+                    s.execute(ddl);
+                    recordMigration(c, schema.getName(), ddl);
+                    LOG.info("[FK-SYNC] Added {} ({} → {}, ON DELETE {})",
+                            constraintName, colName, parentTable, policy);
+                }
+            } catch (SQLException e) {
+                // FK add can fail for legitimate reasons (existing data violates
+                // the constraint, PK column name differs, etc). Log and move on
+                // rather than blocking the whole schema save.
+                LOG.warn("[FK-SYNC] Could not add FK on {}.{} → {}: {}",
+                        childTable, colName, parentTable, e.getMessage());
+            }
+        }
+    }
+
+    private static String resolveParentPhysicalTable(EntitySchema child, String parentEntityName) {
+        EntitySchema stub = new EntitySchema(parentEntityName, java.util.Collections.emptyList());
+        stub.setTenantId(child.getTenantId());
+        stub.setAppId(child.getAppId());
+        return getPhysicalTableName(stub);
+    }
+
+    private static String mapOnDeleteToSql(String policy) {
+        if (policy == null) return "RESTRICT";
+        String p = policy.trim().toLowerCase(Locale.ROOT);
+        switch (p) {
+            case "cascade":  return "CASCADE";
+            case "setnull":
+            case "set_null":
+            case "set null": return "SET NULL";
+            case "restrict":
+            case "":         return "RESTRICT";
+            default:
+                LOG.warn("[FK-SYNC] Unknown onDelete policy '{}', defaulting to RESTRICT", policy);
+                return "RESTRICT";
+        }
+    }
+
+    private static boolean tableExists(Connection c, String table) throws SQLException {
+        try (ResultSet rs = c.getMetaData().getTables(null, null, table.toUpperCase(Locale.ROOT), null)) {
+            return rs.next();
+        }
+    }
+
+    /** Returns true iff any existing FK on `childTable` covers the single column `colName`. */
+    private static boolean foreignKeyExists(Connection c, String childTable, String colName) throws SQLException {
+        try (ResultSet rs = c.getMetaData().getImportedKeys(null, null, childTable.toUpperCase(Locale.ROOT))) {
+            while (rs.next()) {
+                String fkCol = rs.getString("FKCOLUMN_NAME");
+                if (fkCol != null && fkCol.equalsIgnoreCase(colName)) return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -554,6 +657,10 @@ public class SchemaManager {
                 case "file":
                     // Phase B3 — stores the fileId issued by /api/files/upload (UUID w/o dashes = 32 chars).
                     return "VARCHAR(64)";
+                case "reference":
+                    // H4 hardening — reference columns must match the parent's PK type
+                    // (SERIAL/INTEGER) so a real FOREIGN KEY constraint can be added.
+                    return "INTEGER";
                 default:
                     return "VARCHAR(255)";
             }
@@ -586,6 +693,10 @@ public class SchemaManager {
                 return "CLOB";
             case "file":
                 return "VARCHAR(64)";
+            case "reference":
+                // H4 hardening — reference columns must match the parent's PK type
+                // (SERIAL/INTEGER) so a real FOREIGN KEY constraint can be added.
+                return "INT";
             default:
                 return "VARCHAR(255)";
         }
