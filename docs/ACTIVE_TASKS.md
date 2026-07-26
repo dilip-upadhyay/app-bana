@@ -1,5 +1,22 @@
 # AppBana AI Builder - Active Tasks
 
+## 🎯 Forward Plan (post-Stage-4) — Path to First Customer
+
+**Approved 2026-07-26.** The AI-Native UI Rebuild is complete through Stage 4 (`app-bana-ui/` retired). Three phases now stand between us and the first paying customer. Stage 5 (subdomain deploy) runs in parallel with Phase B/C, gated on ops rather than code.
+
+| Phase | Goal | Plan doc | Status |
+|-------|------|----------|--------|
+| **A — Quality Sprint** | Runtime UX Sprint 2: real date picker, sidebar redesign, empty states, loading skeletons, inline validation, status pills, user menu, page actions, WCAG AA, responsive breakpoints | [RUNTIME_UX_OVERHAUL_PLAN.md §Sprint 2](./planning/RUNTIME_UX_OVERHAUL_PLAN.md#sprint-2--make-it-feel-professional) | ⏳ Not started — plan already specced |
+| **B — Complex UI Epic** | 5 sub-phases (B1..B5): wizards · conditional fields · file upload · master-detail · list views (filter/group/saved views) | [COMPLEX_UI_PLAN.md](./planning/COMPLEX_UI_PLAN.md) | 📝 Plan drafted 2026-07-26 |
+| **C — Maker-Checker Epic** | 5 sub-phases (C1..C5): DB + role model · state machine + guard · approval UI + audit · AI Builder integration · notifications | [MAKER_CHECKER_PLAN.md](./planning/MAKER_CHECKER_PLAN.md) | 📝 Plan drafted 2026-07-26 |
+| **Stage 5 — Subdomain deploy** | Parallel ops track — DNS, reverse proxy, HTTPS, `Host`-based app resolution | [AI_NATIVE_UI_REBUILD_PLAN.md §Stage 5](./planning/AI_NATIVE_UI_REBUILD_PLAN.md#stage-5--subdomain-deployment) | ⏳ Ops-heavy, tiny code footprint |
+
+**Execution order:** A → B (B1..B5 serial) → C (C1..C5 mostly serial, C4 parallel with C2). C5 is v1.1-optional.
+
+**Total code effort (plan-authored):** ~10 hr (A) + ~29 hr (B) + ~30 hr (C, minus optional C5 ≈ 25 hr) = **~64–69 hours of focused engineering** to first-customer-ready.
+
+---
+
 ## 🚧 In Progress: AI-Native UI Rebuild
 
 **Primary reference:** [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md)
@@ -12,10 +29,10 @@ Rebuild the AppBana Studio as an AI-native frontend (chat drives everything — 
 | Stage 1 — Workspace + Studio MVP | pnpm workspace, `app-bana-shared`, `app-bana-studio` MVP with streaming chat + tool cards + preview iframe of old runtime, `data-appbana-*` attrs on old runtime | ✅ Done + fixes applied (auth response shape, localStorage key, deploy btn, page-nav postMessage, SSE regex) |
 | Stage 2 — Standalone runtime | `app-bana-runtime` (React port with tenant-branded login), studio iframe repointed 5173 → 5175 | ✅ Done — runtime live at port 5175, E2E passes |
 | Stage 3 — Studio v1.1 | Data drawer, session picker upgrade, image paste in chat | ✅ Done — commit `c9eb4fc`, see notes below |
-| Stage 3.5 — Runtime UX Overhaul (gate) | Design-system foundations + Sprint 1 fixes (page titles, formatted dates, resolved FK labels, status pills, sticky action bar, toasts). See [Runtime UX Overhaul Plan](./planning/RUNTIME_UX_OVERHAUL_PLAN.md). **Blocks Stage 4.** | 📝 Plan drafted 2026-07-26, awaiting approval |
-| Stage 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2 & 3 | ⏳ Blocked on Stage 3.5 Sprint 1 |
-| Stage 5 — Subdomain deploy | DNS + reverse proxy + `Host`-based app resolution | ⏳ Not started |
-| Stage 6 — Select-and-instruct | Runtime overlay, selection chips in composer, undo/history drawer | ⏳ Not started |
+| Stage 3.5 — Runtime UX Overhaul Sprint 1 (gate) | Design-system foundations + "not embarrassing" fixes (page titles, formatted dates, resolved FK labels, status pills, sticky action bar, toasts). See [Runtime UX Overhaul Plan](./planning/RUNTIME_UX_OVERHAUL_PLAN.md). | ✅ Done — 8/10 tasks shipped, 2 partial by design |
+| Stage 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2, 3 & 5 | ✅ Done — commit `6edd19a` |
+| Stage 5 — Subdomain deploy | DNS + reverse proxy + `Host`-based app resolution | ⏳ Not started — ops track, parallel with Phase B/C |
+| Stage 6 — Select-and-instruct | Runtime overlay, selection chips in composer, undo/history drawer | ⏳ Deferred to post-launch |
 
 **Stage 0 notes:**
 - `ComponentNode.id` is stable — page IDs derived from page name, node IDs are deterministic counter strings. No fix needed.
