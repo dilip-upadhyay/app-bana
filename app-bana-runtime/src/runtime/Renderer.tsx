@@ -18,6 +18,7 @@ import { FormActions } from './FormActions';
 import { toast } from './Toaster';
 import { humanizeHeader } from './cell-formatters';
 import { PageShell } from './PageShell';
+import { DatePicker } from './DatePicker';
 
 /** Turn "full_name" / "first-name" / "firstName" into "Full name". */
 function humanize(raw: string | undefined): string {
@@ -213,18 +214,33 @@ function renderNode(
               {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
             </label>
           )}
-          <input
-            id={inputId}
-            className={`appbana-input ${className}`}
-            style={styleObj}
-            type={nestedType}
-            placeholder={String(props.placeholder ?? '')}
-            defaultValue={String(props.value ?? '')}
-            name={String(props.name ?? '')}
-            required={required}
-            {...entityAttr}
-            {...fieldAttr}
-          />
+          {(nestedType === 'date' || nestedType === 'datetime' || nestedType === 'datetime-local') ? (
+            <DatePicker
+              id={inputId}
+              name={String(props.name ?? '')}
+              kind={nestedType === 'date' ? 'date' : 'datetime'}
+              required={required}
+              defaultValue={String(props.value ?? '')}
+              placeholder={String(props.placeholder ?? '')}
+              className={className}
+              styleObj={styleObj}
+              entityAttr={entityAttr}
+              fieldAttr={fieldAttr}
+            />
+          ) : (
+            <input
+              id={inputId}
+              className={`appbana-input ${className}`}
+              style={styleObj}
+              type={nestedType}
+              placeholder={String(props.placeholder ?? '')}
+              defaultValue={String(props.value ?? '')}
+              name={String(props.name ?? '')}
+              required={required}
+              {...entityAttr}
+              {...fieldAttr}
+            />
+          )}
           {helpText && <p className="appbana-field-help">{helpText}</p>}
         </div>
       );

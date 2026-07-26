@@ -88,7 +88,8 @@ export function AppRuntimeShell() {
           break;
         case 'setPage':
           if (app) {
-            const p = app.pages?.find((pg) => pg.id === msg.pageId);
+            const pgs = (app.pages ?? []) as PageMeta[];
+            const p = pgs.find((pg) => pg.id === msg.pageId);
             if (p) setCurrentPage(p);
           }
           break;
@@ -131,7 +132,7 @@ export function AppRuntimeShell() {
         pages: (appData.pagesData ?? appData.pages ?? []) as PageMeta[],
       };
       setApp(normalized);
-      const firstPage = normalized.pages?.[0] ?? null;
+      const firstPage = ((normalized.pages ?? []) as PageMeta[])[0] ?? null;
       setCurrentPage(firstPage);
     } catch (e) {
       if (!isMounted.current) return;
@@ -217,7 +218,7 @@ export function AppRuntimeShell() {
         {/* Desktop / tablet sidebar (permanent, hidden on mobile) */}
         <aside className="hidden md:block appbana-sidebar-container">
           <RuntimeSidebar
-            pages={app.pages ?? []}
+            pages={(app.pages ?? []) as PageMeta[]}
             currentPageId={currentPage?.id ?? null}
             onSelect={setCurrentPage}
           />
@@ -237,7 +238,7 @@ export function AppRuntimeShell() {
           aria-hidden={!mobileNavOpen}
         >
           <RuntimeSidebar
-            pages={app.pages ?? []}
+            pages={(app.pages ?? []) as PageMeta[]}
             currentPageId={currentPage?.id ?? null}
             onSelect={setCurrentPage}
             onClose={() => setMobileNavOpen(false)}
