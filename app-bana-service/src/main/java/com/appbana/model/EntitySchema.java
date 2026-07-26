@@ -15,6 +15,7 @@ public class EntitySchema {
     private String appId; // Owner App ID for isolation
     @com.fasterxml.jackson.annotation.JsonProperty("tenantId")
     private String tenantId; // Owner Tenant ID for global uniqueness
+    private boolean approvalRequired; // Task C1.3 — approval workflow enabled for this entity
 
     public EntitySchema() {
     }

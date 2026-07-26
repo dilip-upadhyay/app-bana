@@ -190,6 +190,7 @@ export interface EntitySchema {
   name: string;
   tenantId: string;
   appId: string;
+  approvalRequired?: boolean; // Task C1.3 — approval workflow enabled
   fields: EntityField[];
 }
 

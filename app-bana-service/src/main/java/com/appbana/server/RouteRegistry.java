@@ -45,6 +45,7 @@ public class RouteRegistry {
         AppContextRoutes.register(router);      // GET /api/app-context
         FileRoutes.register(router);            // Phase B3: POST /api/files/upload + GET /api/files/{id}
         SavedViewRoutes.register(router);       // Phase B5: GET/POST/DELETE /api/saved-views
+        RoleRoutes.register(router);            // Task C1.6: GET/POST/DELETE /api/apps/{appId}/roles
 
         GenericEntityRoutes.register(router);
 

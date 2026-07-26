@@ -512,6 +512,23 @@ public class AppRoutes {
                 }
 
                 AppMetadata created = AppManager.createApp(tenantId, app);
+
+                // Task C1.5 — Bootstrap: app creator automatically gets 'both' (maker + checker) role on all entities in app
+                String creatorUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
+                if (creatorUserId == null) creatorUserId = "system";
+                if (created.getEntities() != null) {
+                    java.util.Set<String> entityNames = new java.util.HashSet<>();
+                    for (Object obj : created.getEntities()) {
+                        if (obj instanceof com.appbana.model.EntitySchema es && es.getName() != null) {
+                            entityNames.add(es.getName());
+                        } else if (obj instanceof Map<?, ?> m) {
+                            Object name = m.get("name");
+                            if (name != null) entityNames.add(name.toString());
+                        }
+                    }
+                    com.appbana.approval.UserRoleService.grantCreatorRoles(tenantId, created.getId(), creatorUserId, entityNames);
+                }
+
                 res.json(201, created);
             } catch (IllegalStateException e) {
                 res.json(409, Map.of("error", e.getMessage()));
