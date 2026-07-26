@@ -6,7 +6,7 @@
 **Trigger:** Design review of the deployed Customer Onboarding App runtime on 2026-07-26 revealed severity-1 UX defects that would cause a prospective client to reject the product on sight. Before we throw away the old UI, the new one must be visibly better — not merely functionally equivalent.
 
 **Related active plans:**
-- [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan. Stage 5 (deploy) runs in parallel with Phase B/C.
+- [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan. Stage 5 (Production Deploy) runs after A/B/C/D and includes containerization + Redis + observability.
 - [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B** (next after A).
 - [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C** (last before launch).
 - Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).

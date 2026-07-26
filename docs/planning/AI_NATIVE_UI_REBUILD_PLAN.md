@@ -1,6 +1,6 @@
 # AI-Native UI Rebuild — Implementation Plan
 
-**Status:** ✅ Stages 0-4 shipped · ⏳ Stage 5 (subdomain deploy) awaiting ops · ⏳ Stage 6 (select-and-instruct) deferred to post-launch
+**Status:** ✅ Stages 0-4 shipped · ⏳ Stage 5 (Production Deploy — rescoped 2026-07-26) awaiting execution · ⏳ Stage 6 (select-and-instruct) deferred to post-launch
 **Approved:** 2026-07-25 · **Stage 4 shipped:** 2026-07-26 (commit `6edd19a`)
 **Owner:** AppBana core team
 **Primary reference:** This document is the single source of truth for the AI-native UI rebuild. All other docs (ACTIVE_TASKS, session summaries, roadmap, `.github/copilot-instructions.md`) link back here.
@@ -25,7 +25,7 @@
 8. [Stage 2 — Standalone runtime package](#stage-2--standalone-runtime-package)
 9. [Stage 3 — Studio v1.1 enhancements](#stage-3--studio-v11-enhancements)
 10. [Stage 4 — Retire `app-bana-ui/`](#stage-4--retire-app-bana-ui)
-11. [Stage 5 — Subdomain deployment](#stage-5--subdomain-deployment)
+11. [Stage 5 — Production Deploy](#stage-5--production-deploy)
 12. [Stage 6 — Select-and-instruct UX](#stage-6--select-and-instruct-ux)
 13. [Cross-cutting concerns](#cross-cutting-concerns)
 14. [Open verifications](#open-verifications)
@@ -432,7 +432,13 @@ Repo cleanup. Blocked by Stages 2 & 3 **and** by Sprint 1 of the [Runtime UX Ove
 
 ---
 
-## Stage 5 — Subdomain deployment
+## Stage 5 — Production Deploy
+
+**Rescoped 2026-07-26** from "subdomain deploy (ops-heavy, tiny code footprint)" to **"Production Deploy"** after a backend readiness audit. The original scope was correct but incomplete: to ship into production we also need containerization, externalized state, secrets management, and observability — none of which A/B/C/D absorbs. Total: ~50 hr.
+
+Five sub-tasks. 5.1 is the original subdomain scope; 5.2–5.5 are the backend-readiness items folded in.
+
+### 5.1 — Subdomain deploy (original scope, ~5 hr)
 
 Ops-heavy, tiny code footprint.
 
@@ -443,9 +449,51 @@ Ops-heavy, tiny code footprint.
 - CORS lock-down per subdomain
 - Runtime `resolveAppContext()` swaps its resolution strategy — one config change, no code rewrite
 
+### 5.2 — Containerization (~15 hr)
+
+- `Dockerfile` for `app-bana-service` (multi-stage: Maven build → slim JRE 21 runtime image; final image `< 250 MB`)
+- `Dockerfile` for `ai-builder` (same pattern)
+- `docker-compose.yml` at repo root for local dev: Postgres + Qdrant + Redis + backend + ai-builder + studio + runtime, single `docker compose up`
+- Deployment manifests for one target — **Azure Container Apps** (Bicep) is the default; K8s manifests + Helm chart optional for on-prem customers
+- Graceful shutdown hook: drain in-flight requests, close HikariCP pool, flush audit log buffer
+- Health/readiness probes wired to `/health` (see 5.5)
+
+### 5.3 — Secrets & config externalization (~6 hr)
+
+- Every setting currently in `config.json` becomes readable from environment variables (12-factor). `config.json` remains as dev-mode default only.
+- New `SecretsProvider` interface with three implementations:
+  - `EnvVarSecretsProvider` (default; reads `APPBANA_*` env vars)
+  - `AzureKeyVaultSecretsProvider` (uses `com.azure:azure-security-keyvault-secrets`)
+  - `AwsSecretsManagerProvider` (uses `software.amazon.awssdk:secretsmanager`)
+- Boot-time schema validation — if any required secret is missing, boot fails fast with a clear error message (no partial-start).
+- **Compliance:** `openaiApiKey`, JWT signing key, DB password, SMTP password all move out of `config.json` in prod.
+
+### 5.4 — Redis externalized state (~15 hr)
+
+Blocks horizontal scale — sessions and rate-limit counters currently live in `ConcurrentHashMap` and die on restart.
+
+- Add `redis.clients:jedis` dependency.
+- New `SessionStore` interface. `InMemorySessionStore` remains as dev default. New `RedisSessionStore` — key `session:{sessionId}` → JSON with 24 h TTL.
+- New `RateLimitStore` interface. `RedisRateLimitStore` uses `INCR` + `EXPIRE` (atomic per-window counter).
+- Optional `RedisCache` for widget queries (D2 currently uses in-process cache; Redis is a Phase E upgrade if D2 hits multi-pod scale).
+- Config flag `state.backend` = `memory` (default) or `redis`. Redis URL from `SecretsProvider`.
+
+### 5.5 — Observability (~10 hr)
+
+- Swap `slf4j-simple` for `logback-classic` with **JSON-formatted structured logs** (`net.logstash.logback:logstash-logback-encoder`).
+- Every request gets a `X-Correlation-Id` (generated if absent, propagated on cross-service calls to ai-builder).
+- Add `io.micrometer:micrometer-registry-prometheus`. Expose `/metrics` on a separate port (9090) — HTTP request rate, JDBC pool stats, HikariCP metrics, custom counters (agent tool executions, LLM tokens, notifications sent).
+- `/health` becomes a **deep** health check: DB connect + Qdrant ping + configured LLM provider ping. Returns per-dep status. Fails fast on any critical dep down.
+- OpenTelemetry: pull in `io.opentelemetry:opentelemetry-api` + `-sdk` + `-exporter-otlp` as no-op stubs (real backend wiring is dep-config only). Both services emit spans for HTTP + JDBC + outbound LLM calls once an OTLP endpoint is configured.
+
 ### Exit criteria — Stage 5
 
-A deployed app is reachable at `spice-shop.tenant42.apps.appbana.com` with tenant branding, over HTTPS.
+- A deployed app is reachable at `spice-shop.tenant42.apps.appbana.com` with tenant branding, over HTTPS.
+- Both services run as containers, brought up in ~30 s via `docker compose up` locally, deployed to Azure Container Apps in prod.
+- Two backend pods behind a load balancer share sessions and rate-limit counters (login on pod A, request routed to pod B still authenticated).
+- No secret appears in any committed file. Every secret is env-var-injected or Key Vault-resolved at boot.
+- `/health` returns a JSON dep status matrix; `/metrics` exposes Prometheus-format counters.
+- On-call engineer can pull the last 15 min of logs for a given `X-Correlation-Id` from Azure Log Analytics (or equivalent) and reconstruct a request path across studio → ai-builder → core → Postgres.
 
 ---
 
