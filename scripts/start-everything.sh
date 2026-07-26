@@ -2,7 +2,7 @@
 # =====================================================================
 # start-everything.sh  -  Restart all AppBana services (macOS / Linux)
 #
-# Orchestrates the three per-module scripts in the correct order.
+# Orchestrates the four per-module scripts in the correct order.
 # Each module script is fully self-contained (stops old, ensures deps,
 # builds if needed, launches). This script backgrounds each one with
 # logs redirected to dev-logs/, and waits for each service to be
@@ -11,12 +11,14 @@
 # Order:
 #   1. AI Builder  (port 8081)  <- also brings up Qdrant + PostgreSQL
 #   2. Backend     (port 8080)
-#   3. UI          (port 5173)
+#   3. Studio      (port 5174)
+#   4. Runtime     (port 5175)
 #
 # Logs:
 #   dev-logs/ai-builder.log
 #   dev-logs/backend.log
-#   dev-logs/ui.log
+#   dev-logs/studio.log
+#   dev-logs/runtime.log
 #
 # Stop everything:
 #   kill $(cat dev-logs/*.pid)
@@ -82,23 +84,28 @@ launch() {
     echo $! > "$LOG_DIR/$name.pid"
 }
 
-echo "[1/3] AI Builder"
+echo "[1/4] AI Builder"
 launch ai-builder start-ai-builder.sh
 wait_for_port 8081 ai-builder
 
-echo "[2/3] Backend"
+echo "[2/4] Backend"
 launch backend start-backend.sh
 wait_for_port 8080 backend
 
-echo "[3/3] UI"
-launch ui start-ui.sh
-wait_for_port 5173 ui 60
+echo "[3/4] Studio"
+launch studio start-studio.sh
+wait_for_port 5174 studio 60
+
+echo "[4/4] Runtime"
+launch runtime start-runtime.sh
+wait_for_port 5175 runtime 60
 
 echo "=========================================="
 echo "All services launched:"
 echo "   AI Builder: http://localhost:8081/health   (PID $(cat "$LOG_DIR/ai-builder.pid"))"
 echo "   Backend:    http://localhost:8080/health   (PID $(cat "$LOG_DIR/backend.pid"))"
-echo "   UI:         http://localhost:5173          (PID $(cat "$LOG_DIR/ui.pid"))"
+echo "   Studio:     http://localhost:5174          (PID $(cat "$LOG_DIR/studio.pid"))"
+echo "   Runtime:    http://localhost:5175          (PID $(cat "$LOG_DIR/runtime.pid"))"
 echo ""
 echo "Tail logs:  tail -f $LOG_DIR/*.log"
 echo "Stop all:   kill \$(cat $LOG_DIR/*.pid)"

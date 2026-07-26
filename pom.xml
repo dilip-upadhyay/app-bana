@@ -8,7 +8,6 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <modules>
-        <module>app-bana-ui</module>
         <module>app-bana-service</module>
         <module>ai-builder</module>
     </modules>

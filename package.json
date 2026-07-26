@@ -5,7 +5,6 @@
   "scripts": {
     "dev:studio": "pnpm --filter app-bana-studio dev",
     "dev:runtime": "pnpm --filter app-bana-runtime dev",
-    "dev:ui": "pnpm --filter app-bana-ui-frontend dev",
     "build:all": "pnpm -r build",
     "build:shared": "pnpm --filter @appbana/shared build"
   }
