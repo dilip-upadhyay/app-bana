@@ -25,7 +25,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * RoleRoutesSecurityTest — Tasks C1.10 & C1.11
+ * RoleRoutesSecurityTest — Tasks C1.10, C1.11, C1.12 & C1.13
  *
  * Real HTTP-layer end-to-end integration test suite using Java HttpClient over local TCP socket port 18088:
  * 1. Path tenantId is strictly enforced; payload body.tenantId is ignored (Blocker #2).
@@ -34,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * 4. App update preserves author field (author is immutable).
  * 5. POST /schema missing tenantId or appId returns 400 Bad Request.
  * 6. POST /schema on an un-owned app returns 403 Forbidden (C1.10 App ownership guard).
- * 7. POST /schema ONLY bootstraps creator role on NEW schema insert, NOT on updates (C1.10 Insert-only bootstrap).
+ * 7. POST /schema ONLY bootstraps creator role on NEW schema insert, NOT on updates (C1.10 & C1.13 Insert-only bootstrap).
+ * 8. Header identity spoofing (X-User-Id spoofing with valid session) is rejected with 403 (C1.12 Platform identity hardening).
  */
 public class RoleRoutesSecurityTest {
 
@@ -60,6 +61,49 @@ public class RoleRoutesSecurityTest {
 
     private String createTestSession(String userId) {
         return SessionService.createSession(userId).sessionId();
+    }
+
+    @Test
+    public void testHttpHeaderUserSpoofingIsRejected() throws Exception {
+        String tenantId = "t_spoof";
+        String appId = "app_spoof";
+        String entityName = "SpoofTarget";
+        String realAuthor = "victim_author";
+        String attacker = "attacker_user";
+
+        // Attacker creates a valid session for attacker_user
+        String attackerSessionToken = createTestSession(attacker);
+
+        // Seed App owned by realAuthor
+        AppMetadata app = new AppMetadata(appId, "Spoof App", "1.0.0");
+        app.setTenantId(tenantId);
+        app.setAuthor(realAuthor);
+        AppManager.createApp(tenantId, app);
+
+        EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
+        EntitySchema schema = new EntitySchema(entityName, List.of(idField));
+        schema.setTenantId(tenantId);
+        schema.setAppId(appId);
+        SchemaManager.saveSchema(schema);
+
+        // Attacker sends HTTP POST to grant role, presenting attackerSessionToken BUT passing X-User-Id: victim_author
+        String requestJson = MAPPER.writeValueAsString(Map.of(
+                "entityName", entityName,
+                "userId", attacker,
+                "role", "both"
+        ));
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/tenants/" + tenantId + "/apps/" + appId + "/roles"))
+                .header("Content-Type", "application/json")
+                .header("X-Session-Token", attackerSessionToken) // Attacker session
+                .header("X-User-Id", realAuthor) // Attempt to spoof victim author in header
+                .POST(HttpRequest.BodyPublishers.ofString(requestJson))
+                .build();
+
+        HttpResponse<String> response = client.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, response.statusCode(), "Server must ignore spoofed X-User-Id header and reject attacker with 403 Forbidden");
+        assertTrue(response.body().contains("Forbidden"));
     }
 
     @Test
@@ -96,7 +140,6 @@ public class RoleRoutesSecurityTest {
                 .uri(URI.create(BASE_URL + "/api/tenants/" + pathTenant + "/apps/" + appId + "/roles"))
                 .header("Content-Type", "application/json")
                 .header("X-Session-Token", sessionToken)
-                .header("X-User-Id", creator)
                 .POST(HttpRequest.BodyPublishers.ofString(requestJson))
                 .build();
 
@@ -143,7 +186,6 @@ public class RoleRoutesSecurityTest {
                 .uri(URI.create(BASE_URL + "/api/tenants/" + tenantId + "/apps/" + appId + "/roles"))
                 .header("Content-Type", "application/json")
                 .header("X-Session-Token", checkerSessionToken)
-                .header("X-User-Id", checkerUser)
                 .POST(HttpRequest.BodyPublishers.ofString(requestJson))
                 .build();
 
@@ -173,7 +215,6 @@ public class RoleRoutesSecurityTest {
                 .uri(URI.create(BASE_URL + "/appbana-studio/" + tenantId + "/apps"))
                 .header("Content-Type", "application/json")
                 .header("X-Session-Token", realAuthorSession)
-                .header("X-User-Id", realAuthor)
                 .POST(HttpRequest.BodyPublishers.ofString(createJson))
                 .build();
 
@@ -194,7 +235,6 @@ public class RoleRoutesSecurityTest {
                 .uri(URI.create(BASE_URL + "/appbana-studio/" + tenantId + "/apps/" + appId))
                 .header("Content-Type", "application/json")
                 .header("X-Session-Token", realAuthorSession)
-                .header("X-User-Id", realAuthor)
                 .PUT(HttpRequest.BodyPublishers.ofString(updateJson))
                 .build();
 
@@ -233,7 +273,6 @@ public class RoleRoutesSecurityTest {
                 .uri(URI.create(BASE_URL + "/schema"))
                 .header("Content-Type", "application/json")
                 .header("X-Session-Token", ownerSession)
-                .header("X-User-Id", appOwner)
                 .POST(HttpRequest.BodyPublishers.ofString(invalidJson))
                 .build();
 
@@ -252,7 +291,6 @@ public class RoleRoutesSecurityTest {
                 .uri(URI.create(BASE_URL + "/schema"))
                 .header("Content-Type", "application/json")
                 .header("X-Session-Token", attackerSession)
-                .header("X-User-Id", attacker)
                 .POST(HttpRequest.BodyPublishers.ofString(validJson))
                 .build();
 
@@ -264,7 +302,6 @@ public class RoleRoutesSecurityTest {
                 .uri(URI.create(BASE_URL + "/schema"))
                 .header("Content-Type", "application/json")
                 .header("X-Session-Token", ownerSession)
-                .header("X-User-Id", appOwner)
                 .POST(HttpRequest.BodyPublishers.ofString(validJson))
                 .build();
 
@@ -272,16 +309,20 @@ public class RoleRoutesSecurityTest {
         assertEquals(200, ownerRes.statusCode());
         assertTrue(UserRoleService.isMaker(tenantId, appId, entityName, appOwner));
 
-        // 4. Update existing schema (second save) does NOT grant role to updater
+        // C1.13 Fix: Revoke role for appOwner, then issue schema update and verify role is NOT re-granted
+        UserRoleService.revokeRole(tenantId, appId, entityName, appOwner);
+        assertFalse(UserRoleService.isMaker(tenantId, appId, entityName, appOwner), "Role should be revoked prior to update test");
+
+        // 4. Update existing schema (second save) does NOT re-grant role to appOwner on update
         HttpRequest updateReq = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/schema"))
                 .header("Content-Type", "application/json")
                 .header("X-Session-Token", ownerSession)
-                .header("X-User-Id", appOwner)
                 .POST(HttpRequest.BodyPublishers.ofString(validJson))
                 .build();
 
         HttpResponse<String> updateRes = client.send(updateReq, HttpResponse.BodyHandlers.ofString());
         assertEquals(200, updateRes.statusCode());
+        assertFalse(UserRoleService.isMaker(tenantId, appId, entityName, appOwner), "Schema update MUST NOT re-grant maker/checker role");
     }
 }

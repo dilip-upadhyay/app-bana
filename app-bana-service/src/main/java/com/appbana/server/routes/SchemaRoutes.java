@@ -165,7 +165,10 @@ public class SchemaRoutes {
                 String tenantId = schema.getTenantId();
                 String appId = schema.getAppId();
                 String userId = AuthService.extractUserId(req, cfg);
-                if (userId == null || userId.isBlank()) userId = "system";
+                if (userId == null || userId.isBlank()) {
+                    res.json(401, Map.of("error", "Unauthorized: valid session required"));
+                    return;
+                }
 
                 // Task C1.10 Fix: Enforce app ownership authorization before saving schema
                 if (!com.appbana.security.AppAuthorization.isAppOwnerOrSystem(tenantId, appId, userId)) {

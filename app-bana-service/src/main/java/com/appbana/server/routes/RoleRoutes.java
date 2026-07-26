@@ -88,7 +88,10 @@ public class RoleRoutes {
 
     private static void handlePostRole(Router.HttpRequest req, Router.HttpResponse res, String tenantId, String appId) {
         String callerUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
-        if (callerUserId == null || callerUserId.isBlank()) callerUserId = "system";
+        if (callerUserId == null || callerUserId.isBlank()) {
+            res.json(401, Map.of("error", "Unauthorized: valid session required"));
+            return;
+        }
 
         try {
             Map<String, String> body = req.readJson(new TypeReference<>() {});
@@ -137,7 +140,10 @@ public class RoleRoutes {
 
     private static void handleDeleteRole(Router.HttpRequest req, Router.HttpResponse res, String tenantId, String appId) {
         String callerUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
-        if (callerUserId == null || callerUserId.isBlank()) callerUserId = "system";
+        if (callerUserId == null || callerUserId.isBlank()) {
+            res.json(401, Map.of("error", "Unauthorized: valid session required"));
+            return;
+        }
 
         String entityName = req.query("entityName");
         String targetUserId = req.query("userId");

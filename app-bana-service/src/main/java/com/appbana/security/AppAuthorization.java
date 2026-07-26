@@ -6,12 +6,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * AppAuthorization — Task C1.10
+ * AppAuthorization — Task C1.10 & C1.12
  *
  * Centralized authorization helper for app-level ownership checks.
  */
-public class AppAuthorization {
+public final class AppAuthorization {
     private static final Logger LOG = LoggerFactory.getLogger(AppAuthorization.class);
+
+    private AppAuthorization() {
+        // Utility class
+    }
 
     /**
      * Checks if callerUserId is authorized to modify or manage an app (or its schemas/roles).

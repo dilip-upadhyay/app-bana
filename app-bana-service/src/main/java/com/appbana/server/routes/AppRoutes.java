@@ -511,7 +511,10 @@ public class AppRoutes {
                     return;
                 }
                 String creatorUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
-                if (creatorUserId == null || creatorUserId.isBlank()) creatorUserId = "system";
+                if (creatorUserId == null || creatorUserId.isBlank()) {
+                    res.json(401, Map.of("error", "Unauthorized: valid session required"));
+                    return;
+                }
 
                 // Enforce author field to authenticated creator (cannot be spoofed by client payload)
                 app.setAuthor(creatorUserId);

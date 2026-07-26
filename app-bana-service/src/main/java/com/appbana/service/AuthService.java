@@ -37,28 +37,41 @@ public class AuthService {
     }
 
     /**
-     * Extract user ID from request
-     * Checks X-User-Id header first, then derives from token
+     * Extract user ID from request.
+     * Priority:
+     * 1. Request attribute "userId" set by validated SessionMiddleware (authoritative).
+     * 2. Service token override: If request presents a valid admin/service token, allow X-User-Id header override (for internal service calls).
+     * 3. Session token lookup fallback via SessionService.validateSession(token).
      */
     public static String extractUserId(Router.HttpRequest req, AppConfig cfg) {
-        String userId = req.header("X-User-Id");
-        if (userId != null && !userId.isBlank()) {
-            return userId;
+        String token = extractToken(req);
+
+        // Priority 1: Check if admin service token is present -> allow X-User-Id header override for internal services
+        if (token != null && !token.isBlank() && hasAdmin(token, cfg)) {
+            String headerUserId = req.header("X-User-Id");
+            if (headerUserId != null && !headerUserId.isBlank()) {
+                return headerUserId;
+            }
+            return "admin";
         }
 
-        // Fallback: use token as user ID
-        String token = extractToken(req);
+        // Priority 2: Check session attribute set by SessionMiddleware (authoritative session user)
+        Object attrUserId = req.getAttribute("userId");
+        if (attrUserId instanceof String uid && !uid.isBlank()) {
+            return uid;
+        }
+
+        // Priority 3: Session token lookup fallback via SessionService
         if (token != null && !token.isBlank()) {
-            // For admin/read tokens, use special user IDs
-            if (hasAdmin(token, cfg)) {
-                return "admin";
-            }
             if (hasRead(token, cfg)) {
                 return "reader";
             }
-            // Otherwise use token itself as user ID
-            return token;
+            SessionService.SessionData session = SessionService.validateSession(token);
+            if (session != null && session.userId() != null) {
+                return session.userId();
+            }
         }
+
         return null;
     }
 
