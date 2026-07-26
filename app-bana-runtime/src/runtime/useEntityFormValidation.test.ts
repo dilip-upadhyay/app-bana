@@ -7,7 +7,7 @@
  * plain objects here and stay in Node without pulling in jsdom.
  */
 import { describe, it, expect } from 'vitest';
-import { ruleForControl } from './useEntityFormValidation';
+import { ruleForControl, isEffectivelyVisible } from './useEntityFormValidation';
 
 /** Minimal object shape mirroring the fields ruleForControl reads. */
 function makeInput(overrides: {
@@ -92,5 +92,92 @@ describe('ruleForControl', () => {
     // FormData gives 'on' when checked, absence (empty string) when not.
     expect(rule.safeParse('on').success).toBe(true);
     expect(rule.safeParse('').success).toBe(false);
+  });
+});
+
+/**
+ * H5 hardening — hidden fields (via `type="hidden"`, inline `display:none`
+ * on an ancestor, `hidden` attribute, `aria-hidden="true"`, or the runtime's
+ * own `data-appbana-hidden`) must not participate in validation, so a
+ * required-but-hidden field never blocks form submit.
+ */
+type FakeEl = {
+  type?: string;
+  hidden?: boolean;
+  style?: Partial<CSSStyleDeclaration>;
+  dataset?: Record<string, string>;
+  parentElement?: FakeEl | null;
+  attrs?: Record<string, string>;
+  getAttribute?: (n: string) => string | null;
+};
+
+function fakeEl(overrides: Partial<FakeEl> = {}): FakeEl {
+  const attrs = overrides.attrs ?? {};
+  return {
+    type: overrides.type ?? 'text',
+    hidden: overrides.hidden ?? false,
+    style: overrides.style ?? {},
+    dataset: overrides.dataset ?? {},
+    parentElement: overrides.parentElement ?? null,
+    attrs,
+    getAttribute: (n: string) => attrs[n] ?? null,
+  };
+}
+
+describe('isEffectivelyVisible', () => {
+  it('plain text input inside a form is visible', () => {
+    const form = fakeEl({});
+    const input = fakeEl({ parentElement: form });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(true);
+  });
+
+  it('type="hidden" is always invisible', () => {
+    const form = fakeEl({});
+    const input = fakeEl({ type: 'hidden', parentElement: form });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(false);
+  });
+
+  it('input with hidden attribute is invisible', () => {
+    const form = fakeEl({});
+    const input = fakeEl({ hidden: true, parentElement: form });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(false);
+  });
+
+  it('ancestor with display:none hides the input (WizardShell inactive step)', () => {
+    const form = fakeEl({});
+    const step = fakeEl({ style: { display: 'none' }, parentElement: form });
+    const input = fakeEl({ parentElement: step });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(false);
+  });
+
+  it('ancestor with data-appbana-hidden="true" hides the input', () => {
+    const form = fakeEl({});
+    const wrapper = fakeEl({ dataset: { appbanaHidden: 'true' }, parentElement: form });
+    const input = fakeEl({ parentElement: wrapper });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(false);
+  });
+
+  it('ancestor with aria-hidden="true" hides the input', () => {
+    const form = fakeEl({});
+    const wrapper = fakeEl({ attrs: { 'aria-hidden': 'true' }, parentElement: form });
+    const input = fakeEl({ parentElement: wrapper });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(false);
+  });
+
+  it('stops walking at the form element (siblings outside form do not affect us)', () => {
+    // form has display:none, but we stop AT the form — however the form itself
+    // is one of the checked nodes, so an entirely-hidden form is still hidden.
+    const form = fakeEl({ style: { display: 'none' } });
+    const input = fakeEl({ parentElement: form });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(false);
+  });
+
+  it('deeply nested visible input with all-visible ancestors is visible', () => {
+    const form = fakeEl({});
+    const grid = fakeEl({ parentElement: form });
+    const cell = fakeEl({ parentElement: grid });
+    const wrapper = fakeEl({ parentElement: cell });
+    const input = fakeEl({ parentElement: wrapper });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(true);
   });
 });

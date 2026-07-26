@@ -47,12 +47,64 @@ function collectControls(form: HTMLFormElement): HTMLElement[] {
     if (!el.name) continue;
     if (el.disabled) continue;
     // Skip submit/reset/button-style inputs.
-    if (el instanceof HTMLInputElement && (el.type === 'submit' || el.type === 'reset' || el.type === 'button' || el.type === 'hidden' && el.dataset.appbanaValidate === 'skip')) continue;
+    if (el instanceof HTMLInputElement && (el.type === 'submit' || el.type === 'reset' || el.type === 'button')) continue;
+    // H5 hardening — skip anything that is not effectively visible to the
+    // user. This covers three cases the Zod schema shouldn't try to enforce:
+    //   1. `type="hidden"` inputs (the DOM's own "not a user field")
+    //   2. Fields on an inactive wizard step (WizardShell renders every
+    //      step but wraps non-current steps in a `display:none` container)
+    //   3. Fields intentionally hidden by ancestor `hidden`/`aria-hidden`
+    //      or by the runtime with `data-appbana-hidden="true"`
+    // Opt-in escape hatch: mark an input `data-appbana-validate="required"`
+    // to force validation even when hidden (e.g. a hidden CSRF token that
+    // still must be present).
+    const forceValidate = (el as HTMLElement).dataset?.appbanaValidate === 'required';
+    if (!forceValidate && !isEffectivelyVisible(el, form)) continue;
     if (seen.has(el.name)) continue;
     seen.add(el.name);
     controls.push(el);
   }
   return controls;
+}
+
+/**
+ * H5 hardening — return true iff `el` is a control the user can plausibly
+ * see and fill in. Walks the ancestor chain up to (and not past) `form`.
+ *
+ * Exported for tests. Duck-types the DOM so the pure-Node vitest suite can
+ * pass plain objects — we only touch `hidden`, `style?.display`, `dataset`,
+ * `getAttribute`, and `parentElement`.
+ */
+export function isEffectivelyVisible(
+  el: HTMLElement,
+  form: HTMLFormElement | null,
+): boolean {
+  // 1. `type="hidden"` — always invisible for validation purposes.
+  const type = ((el as HTMLInputElement).type ?? '').toLowerCase();
+  if (type === 'hidden') return false;
+
+  // 2. Walk ancestors up to the form. Any hidden container hides its
+  //    descendants for validation too.
+  let node: HTMLElement | null = el;
+  while (node) {
+    // `hidden` attribute on the element itself.
+    if ((node as HTMLElement).hidden === true) return false;
+    // Runtime-owned marker (used by wizard/tab/accordion when they want to
+    // suppress validation but still keep values in the DOM).
+    const marker = (node as HTMLElement).dataset?.appbanaHidden;
+    if (marker === 'true') return false;
+    // `aria-hidden="true"` — accessibility contract that the subtree is
+    // not perceivable, so we don't demand it be filled.
+    if (typeof (node as HTMLElement).getAttribute === 'function'
+        && (node as HTMLElement).getAttribute('aria-hidden') === 'true') return false;
+    // Inline `display:none` — covers the WizardShell case where every
+    // step is rendered but non-current steps get `style="display:none"`.
+    const display = (node as HTMLElement).style?.display;
+    if (display === 'none') return false;
+    if (node === form) break;
+    node = (node as HTMLElement).parentElement ?? null;
+  }
+  return true;
 }
 
 /** Turn a single control's HTML/data metadata into a Zod rule. */
