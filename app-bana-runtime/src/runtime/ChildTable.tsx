@@ -7,17 +7,23 @@
  *   2. Renders them in a compact table with humanized headers
  *   3. Refreshes on `appbana:row-inserted/updated/deleted` events for the
  *      child entity, so add-row-and-return flows stay in sync
+ *   4. H2 hardening — offers per-row Delete + Copy ID via {@link RowActions}
+ *      so the child table is actually interactive, not just a read view.
  *
  * Intentionally scoped: does NOT wrap the full StudioTableLive column
  * inference (status pills / date formatting are still handled by cell
- * formatters used inline here).
+ * formatters used inline here). Row-level Edit is deferred because it
+ * needs a mini-form modal — tracked separately, not part of H2.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { fetchEntityRows } from '@appbana/shared';
+import { deleteEntityRow, fetchEntityRows } from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { humanizeHeader, formatDate } from './cell-formatters';
 import { Skeleton } from './Skeleton';
 import { StatusPill } from './StatusPill';
+import { RowActions } from './RowActions';
+import { useConfirm } from './ConfirmDialog';
+import { toast } from './Toaster';
 export interface ChildTableProps {
   readonly entityName: string;     // child entity, bare or qualified
   readonly fkField: string;        // e.g. "customer_id"
@@ -32,14 +38,17 @@ export function ChildTable(props: Readonly<ChildTableProps>) {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const qualified = qualifyEntityKey(entityName);
 
   const load = useCallback(async () => {
-    if (!entityName || !fkField || parentId === undefined || parentId === null) return;
+    if (!entityName || !fkField || parentId === undefined || parentId === null || parentId === '') return;
     setLoading(true);
     setError('');
     try {
       const result = await fetchEntityRows(
-        qualifyEntityKey(entityName),
+        qualified,
         getRuntimeToken(),
         { [fkField]: String(parentId), limit: pageSize, offset: 0 }
       );
@@ -49,12 +58,11 @@ export function ChildTable(props: Readonly<ChildTableProps>) {
     } finally {
       setLoading(false);
     }
-  }, [entityName, fkField, parentId, pageSize]);
+  }, [entityName, fkField, parentId, pageSize, qualified]);
 
   useEffect(() => { load().catch(() => {}); }, [load]);
 
   useEffect(() => {
-    const qualified = qualifyEntityKey(entityName);
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ entity?: string }>).detail;
       if (!detail?.entity) return;
@@ -70,7 +78,31 @@ export function ChildTable(props: Readonly<ChildTableProps>) {
       window.removeEventListener('appbana:row-updated', handler);
       window.removeEventListener('appbana:row-deleted', handler);
     };
-  }, [entityName, load]);
+  }, [entityName, qualified, load]);
+
+  const handleDelete = useCallback(async (rowId: string) => {
+    const ok = await confirm({
+      title: 'Delete this row?',
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    setDeletingId(rowId);
+    try {
+      await deleteEntityRow(qualified, rowId, getRuntimeToken());
+      window.dispatchEvent(new CustomEvent('appbana:row-deleted', {
+        detail: { entity: qualified, id: rowId },
+      }));
+      toast.success('Row deleted');
+    } catch (e) {
+      toast.error('Delete failed', {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  }, [qualified, confirm]);
 
   if (loading && rows.length === 0) {
     return <Skeleton className="h-16 w-full" />;
@@ -98,17 +130,30 @@ export function ChildTable(props: Readonly<ChildTableProps>) {
             {columns.map((c) => (
               <th key={c} className="px-3 py-2 font-medium">{humanizeHeader(c)}</th>
             ))}
+            <th aria-label="Row actions" className="w-10 px-2 py-2" />
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {rows.map((row, i) => {
             const rid = row.id;
             const key = typeof rid === 'string' || typeof rid === 'number' ? String(rid) : String(i);
+            const rowId = typeof rid === 'string' || typeof rid === 'number' ? String(rid) : '';
             return (
-              <tr key={key} className="hover:bg-slate-50">
+              <tr
+                key={key}
+                className={`hover:bg-slate-50 ${deletingId === rowId ? 'opacity-50' : ''}`}
+              >
                 {columns.map((c) => (
                   <td key={c} className="px-3 py-2 align-top">{renderCell(c, row[c])}</td>
                 ))}
+                {rowId ? (
+                  <RowActions
+                    rowId={rowId}
+                    onDelete={() => { void handleDelete(rowId); }}
+                  />
+                ) : (
+                  <td />
+                )}
               </tr>
             );
           })}

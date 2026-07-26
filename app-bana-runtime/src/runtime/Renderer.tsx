@@ -30,6 +30,7 @@ import { FormValuesProvider } from './form-values-context';
 import { ConditionalField } from './ConditionalField';
 import { FileUploadField } from './FileUploadField';
 import { ChildTable } from './ChildTable';
+import { useRecordScope } from './RecordContext';
 // Sprint 3 task 3.7 — anything larger than this switches from native <select>
 // to the search-driven combobox. Kept small so real-world lookup tables that
 // grow past a couple screens of rows stay usable.
@@ -126,6 +127,27 @@ export function renderPage(page: PageMeta): React.ReactElement {
       {body}
     </PageShell>
   );
+}
+
+/**
+ * H2 hardening — extract every `child_table` node from a page and render
+ * it as a top-level element. DetailPage calls this so the master-detail
+ * relationships baked into the page meta actually surface below the
+ * record's own form (DetailPage is a bespoke form and does not walk the
+ * page's node tree on its own).
+ *
+ * Returns [] when the page has no child_table nodes, so callers can
+ * safely omit the surrounding heading in that case.
+ */
+export function renderChildTablesFromPage(page: PageMeta): React.ReactElement[] {
+  const nodeMap = new Map(page.nodes.map((n) => [n.id, n]));
+  const out: React.ReactElement[] = [];
+  for (const node of page.nodes) {
+    if (node.type === 'child_table') {
+      out.push(renderNode(node, nodeMap, page.id));
+    }
+  }
+  return out;
 }
 
 /** Walk the node tree and return a map { fieldName -> rendered JSX } for
@@ -511,16 +533,19 @@ function renderNode(
     case 'child_table': {
       // Phase B4 — master–detail: renders rows of the child entity that
       // reference the current parent row via `fkField`.
+      // H2 hardening: parentId is auto-injected from RecordContext when
+      // rendered inside a detail page; only falls back to props for pages
+      // that hard-code the parent id (rare, but supported).
       const entityName = String(props.entityName ?? props.entity ?? '');
       const fkField = String(props.fkField ?? '');
-      const parentId = String(props.parentId ?? '');
+      const propParentId = props.parentId != null ? String(props.parentId) : '';
       const displayFields = Array.isArray(props.displayFields) ? (props.displayFields as string[]) : undefined;
       return (
-        <ChildTable
+        <ChildTableFromNode
           key={node.id}
           entityName={entityName}
           fkField={fkField}
-          parentId={parentId}
+          propParentId={propParentId}
           displayFields={displayFields}
           emptyLabel={props.emptyLabel ? String(props.emptyLabel) : undefined}
         />
@@ -827,6 +852,33 @@ function EntityForm(props: Readonly<EntityFormProps>) {
         </FormValuesProvider>
       </form>
     </EntityFormErrorProvider>
+  );
+}
+
+/**
+ * H2 wrapper — lets the child_table node case call the `useRecordScope`
+ * hook (renderNode is a plain recursion helper, not a component, and
+ * cannot call hooks directly). Auto-injects parentId from context when
+ * the page meta didn't hard-code one.
+ */
+interface ChildTableFromNodeProps {
+  readonly entityName: string;
+  readonly fkField: string;
+  readonly propParentId: string;
+  readonly displayFields?: readonly string[];
+  readonly emptyLabel?: string;
+}
+function ChildTableFromNode(props: Readonly<ChildTableFromNodeProps>) {
+  const scope = useRecordScope();
+  const parentId = props.propParentId || (scope?.recordId ?? '');
+  return (
+    <ChildTable
+      entityName={props.entityName}
+      fkField={props.fkField}
+      parentId={parentId}
+      displayFields={props.displayFields}
+      emptyLabel={props.emptyLabel}
+    />
   );
 }
 

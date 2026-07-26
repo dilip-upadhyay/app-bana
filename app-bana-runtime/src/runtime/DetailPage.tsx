@@ -32,6 +32,8 @@ import { toast } from './Toaster';
 import { PageShell } from './PageShell';
 import { formatDate } from './cell-formatters';
 import { entityNameFromKey } from './page-classifier';
+import { renderChildTablesFromPage } from './Renderer';
+import { RecordContextProvider } from './RecordContext';
 
 interface Props {
   readonly page: PageMeta;
@@ -402,6 +404,12 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
           )
         }
       </div>
+      {/* H2 hardening — surface any child_table nodes the scaffolder placed
+          in the page meta. RecordContextProvider makes the current recordId
+          available so ChildTable can auto-filter its rows to this parent. */}
+      <RecordContextProvider value={{ recordId, entityKey }}>
+        {renderChildTablesFromPage(page)}
+      </RecordContextProvider>
     </PageShell>
   );
 }
