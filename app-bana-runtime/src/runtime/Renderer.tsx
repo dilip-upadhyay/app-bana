@@ -18,6 +18,7 @@ import { FormActions } from './FormActions';
 import { toast } from './Toaster';
 import { humanizeHeader } from './cell-formatters';
 import { PageShell } from './PageShell';
+import { PageActions } from './PageActions';
 import { DatePicker } from './DatePicker';
 import { Skeleton } from './Skeleton';
 import { useEntityFormValidation } from './useEntityFormValidation';
@@ -74,7 +75,11 @@ export function renderPage(page: PageMeta): React.ReactElement {
     ? <div className="max-w-3xl w-full mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">{inner}</div>
     : inner;
   return (
-    <PageShell title={pageTitle(page)} subtitle={pageSubtitle(page)}>
+    <PageShell
+      title={pageTitle(page)}
+      subtitle={pageSubtitle(page)}
+      actions={<PageActions page={page} />}
+    >
       {body}
     </PageShell>
   );
