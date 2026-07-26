@@ -39,16 +39,19 @@ A single schema definition drives the entire stack. See [`.github/copilot-instru
 
 ---
 
-## Current state (2026-07-26)
+## Current state (2026-07-27)
 
 **Shipped**
-- Stages 0–4 of the AI-Native UI Rebuild (see [`planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md)) — the legacy `app-bana-ui/` is retired; Studio (5174) + Runtime (5175) + shared package are the frontend.
-- Runtime UX Sprint 1 (see [`planning/RUNTIME_UX_OVERHAUL_PLAN.md`](./planning/RUNTIME_UX_OVERHAUL_PLAN.md)) — 8/10 tasks done.
+- Stages 0–4 of the AI-Native UI Rebuild — legacy `app-bana-ui/` retired; Studio (5174) + Runtime (5175) + shared package are the frontend.
+- AI Schema Quality Stack — SchemaEnricher, Structured Generation, Dynamic Prompt Builder, RAG Domain Examples.
+- Intelligent Dialogue (Story 3.1) — `DialogueManager` state machine.
+- **Phase A — Quality Sprint** (Runtime UX Sprint 2) — date picker, sidebar redesign, empty states, loading skeletons, inline validation, status pills, WCAG AA, responsive breakpoints.
+- **Phase A2 — Runtime Foundations** (Sprint 3) — R/U/D primitives, reference combobox, unified Button, tenant branding CSS vars, field validation mapping, e2e CRUD specs.
+- **Phase B — Complex UI Epic** (B1–B5) — wizards, conditional fields, file upload, master-detail, list views with filter/group/saved views.
+- **Phase B.H — Hardening Sprint** (H1–H8) — file tenant isolation, auto-inject parentId + ChildTable, FilterBar + SavedViewsBar in StudioTableLive, real FK constraints, hidden-field validation strip, SQL GROUP BY, Playwright hardening suite, docs refresh.
 
 **Forward plan** (single source: [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md))
-- **Phase A** — Runtime UX Sprint 2 (~10 hr) — customer-demo-ready UI.
-- **Phase B** — Complex UI Epic (~29 hr) — wizards, conditional fields, upload, master-detail, list views.
-- **Phase C** — Maker-Checker Epic (~30 hr) — approvals with state machine, roles, audit trail.
+- **Phase C** — Maker-Checker Epic (~30 hr) — approvals with state machine, roles, audit trail. ← **NEXT**
 - **Phase D** — Enterprise Capabilities Epic (~125 hr) — SSO, dashboards, notifications, enterprise shell.
 - **Stage 5** — Production Deploy (~50 hr) — subdomain hosting + containerization + Redis + secrets + observability.
 - **Phase E** — Integration + Advanced Backlog (~87 hr, post-launch, customer-driven).
