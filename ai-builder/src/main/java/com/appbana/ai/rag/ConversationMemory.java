@@ -266,7 +266,7 @@ public class ConversationMemory {
         }
 
         String sql = """
-                SELECT id, user_id, session_id, message, response, intent, feedback, created_at, metadata
+                SELECT id, user_id, session_id, app_id, message, response, intent, feedback, created_at, metadata
                 FROM ai_conversations
                 WHERE session_id = ?
                 ORDER BY created_at ASC
@@ -379,7 +379,7 @@ public class ConversationMemory {
         }
 
         String sql = """
-                SELECT id, user_id, session_id, message, response, intent, feedback, created_at, metadata
+                SELECT id, user_id, session_id, app_id, message, response, intent, feedback, created_at, metadata
                 FROM ai_conversations
                 WHERE user_id = ?
                 ORDER BY created_at DESC
@@ -481,8 +481,9 @@ public class ConversationMemory {
 
     private void storeInDatabase(Conversation conversation) throws SQLException {
         String sql = """
-                INSERT INTO ai_conversations (id, user_id, session_id, message, response, intent, feedback, created_at, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                INSERT INTO ai_conversations
+                    (id, user_id, session_id, app_id, message, response, intent, feedback, created_at, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
                 """;
 
         try (Connection conn = dataSource.getConnection();
@@ -491,12 +492,13 @@ public class ConversationMemory {
             stmt.setObject(1, UUID.fromString(conversation.getId()));
             stmt.setString(2, conversation.getUserId());
             stmt.setObject(3, conversation.getSessionId());
-            stmt.setString(4, conversation.getMessage());
-            stmt.setString(5, conversation.getResponse());
-            stmt.setString(6, conversation.getIntent());
-            stmt.setInt(7, conversation.getFeedback());
-            stmt.setTimestamp(8, Timestamp.from(conversation.getCreatedAt()));
-            stmt.setString(9, conversation.getMetadata() != null ? conversation.getMetadata().toString() : "{}");
+            stmt.setString(4, conversation.getAppId());
+            stmt.setString(5, conversation.getMessage());
+            stmt.setString(6, conversation.getResponse());
+            stmt.setString(7, conversation.getIntent());
+            stmt.setInt(8, conversation.getFeedback());
+            stmt.setTimestamp(9, Timestamp.from(conversation.getCreatedAt()));
+            stmt.setString(10, conversation.getMetadata() != null ? conversation.getMetadata().toString() : "{}");
 
             stmt.executeUpdate();
         }
@@ -504,7 +506,7 @@ public class ConversationMemory {
 
     private Conversation getById(String id) {
         String sql = """
-                SELECT id, user_id, session_id, message, response, intent, feedback, created_at, metadata
+                SELECT id, user_id, session_id, app_id, message, response, intent, feedback, created_at, metadata
                 FROM ai_conversations
                 WHERE id = ?
                 """;
@@ -532,6 +534,12 @@ public class ConversationMemory {
         conv.setId(rs.getObject("id", UUID.class).toString());
         conv.setUserId(rs.getString("user_id"));
         conv.setSessionId(rs.getObject("session_id", UUID.class));
+        // app_id column added in V005 â€” tolerate older rows where it may be missing
+        try {
+            conv.setAppId(rs.getString("app_id"));
+        } catch (SQLException ignored) {
+            // Older ResultSet may not include the column; leave appId null.
+        }
         conv.setMessage(rs.getString("message"));
         conv.setResponse(rs.getString("response"));
         conv.setIntent(rs.getString("intent"));
@@ -547,6 +555,134 @@ public class ConversationMemory {
         return conv;
     }
 
+    // -------------------------------------------------------------------------
+    // Session summary + metadata management (Stage 3 — session picker)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Return one row per session for the given user, optionally scoped to an
+     * app. Includes the persisted title (from ai_chat_session_meta) or falls
+     * back to the first user message. Deleted sessions are excluded.
+     */
+    public List<SessionSummary> listSessionSummaries(String userId, String appId, int limit)
+            throws ConversationMemoryException {
+        if (dataSource == null) return new ArrayList<>();
+
+        // Deterministic aggregation: pick each session's earliest message as
+        // the preview, and the latest created_at as the sort key.
+        String sql = """
+                SELECT c.session_id                       AS session_id,
+                       MAX(c.created_at)                  AS last_activity,
+                       MIN(c.created_at)                  AS first_activity,
+                       (ARRAY_AGG(c.message ORDER BY c.created_at ASC))[1] AS first_message,
+                       MAX(c.app_id)                      AS app_id,
+                       COUNT(*)                           AS turn_count,
+                       m.title                            AS title
+                FROM ai_conversations c
+                LEFT JOIN ai_chat_session_meta m ON m.session_id = c.session_id
+                WHERE c.user_id = ?
+                  AND (?::text IS NULL OR c.app_id = ?)
+                  AND COALESCE(m.is_deleted, FALSE) = FALSE
+                GROUP BY c.session_id, m.title
+                ORDER BY last_activity DESC
+                LIMIT ?
+                """;
+
+        List<SessionSummary> out = new ArrayList<>();
+        try (Connection conn = dataSource.getConnection();
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, userId);
+            if (appId == null || appId.isBlank()) {
+                stmt.setNull(2, java.sql.Types.VARCHAR);
+                stmt.setNull(3, java.sql.Types.VARCHAR);
+            } else {
+                stmt.setString(2, appId);
+                stmt.setString(3, appId);
+            }
+            stmt.setInt(4, Math.clamp(limit, 1, 200));
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    SessionSummary s = new SessionSummary();
+                    s.sessionId    = rs.getObject("session_id", UUID.class).toString();
+                    s.lastActivity = rs.getTimestamp("last_activity") != null
+                            ? rs.getTimestamp("last_activity").toInstant().toEpochMilli() : 0L;
+                    s.appId        = rs.getString("app_id");
+                    s.turnCount    = rs.getInt("turn_count");
+                    String title   = rs.getString("title");
+                    String first   = rs.getString("first_message");
+                    s.title        = (title != null && !title.isBlank())
+                            ? title
+                            : truncate(first, 60);
+                    out.add(s);
+                }
+            }
+        } catch (SQLException e) {
+            log.error("[ConversationMemory] Failed to list session summaries", e);
+            throw new ConversationMemoryException("Failed to list session summaries", e);
+        }
+        return out;
+    }
+
+    /** Rename (or create) a session-level title. */
+    public void renameSession(String userId, UUID sessionId, String newTitle)
+            throws ConversationMemoryException {
+        if (dataSource == null) return;
+        String sql = """
+                INSERT INTO ai_chat_session_meta (session_id, user_id, title, is_deleted, updated_at)
+                VALUES (?, ?, ?, FALSE, NOW())
+                ON CONFLICT (session_id) DO UPDATE
+                    SET title = EXCLUDED.title, updated_at = NOW()
+                """;
+        try (Connection conn = dataSource.getConnection();
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setObject(1, sessionId);
+            stmt.setString(2, userId);
+            stmt.setString(3, newTitle);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            log.error("[ConversationMemory] Failed to rename session {}", sessionId, e);
+            throw new ConversationMemoryException("Failed to rename session", e);
+        }
+    }
+
+    /** Soft-delete a session so it disappears from the picker. */
+    public void deleteSession(String userId, UUID sessionId)
+            throws ConversationMemoryException {
+        if (dataSource == null) return;
+        String sql = """
+                INSERT INTO ai_chat_session_meta (session_id, user_id, title, is_deleted, updated_at)
+                VALUES (?, ?, NULL, TRUE, NOW())
+                ON CONFLICT (session_id) DO UPDATE
+                    SET is_deleted = TRUE, updated_at = NOW()
+                """;
+        try (Connection conn = dataSource.getConnection();
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setObject(1, sessionId);
+            stmt.setString(2, userId);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            log.error("[ConversationMemory] Failed to soft-delete session {}", sessionId, e);
+            throw new ConversationMemoryException("Failed to delete session", e);
+        }
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.length() <= max ? t : t.substring(0, max - 1) + "\u2026";
+    }
+
+    /** Flat summary row used by the studio session picker. */
+    @Data
+    public static class SessionSummary {
+        private String sessionId;
+        private String title;
+        private String appId;
+        private long lastActivity;
+        private int turnCount;
+    }
+
     /**
      * Conversation data class
      */
@@ -555,6 +691,7 @@ public class ConversationMemory {
         private String id;
         private String userId;
         private UUID sessionId;
+        private String appId;
         private String message;
         private String response;
         private String intent;

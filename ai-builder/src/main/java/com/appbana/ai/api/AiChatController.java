@@ -113,7 +113,9 @@ public class AiChatController {
         AgentContext agentContext = AgentContext.create(tenantId, appId, userId, sessionId, token)
                 .withVariable("chat_history", history)
                 .withVariable("user_preferences", userPreferences)
-                .withVariable("conversation_state", conversationState.name());
+                .withVariable("conversation_state", conversationState.name())
+                .withVariable("app_name",
+                        request.getAppName() != null ? request.getAppName() : "");
 
         // 5. Execute Agent Loop (Multimodal)
         AgentResponse result = agent.process(request.getMessage(), agentContext, request.getProvider(), request.getImages());
@@ -141,6 +143,7 @@ public class AiChatController {
             ConversationMemory.Conversation conv = new ConversationMemory.Conversation();
             conv.setUserId("chat_user"); // or userId
             conv.setSessionId(UUID.fromString(sessionId));
+            conv.setAppId(appId);
             conv.setMessage(userMessage);
             conv.setResponse(result.getFinalAnswer());
             conv.setIntent("agent_processed");

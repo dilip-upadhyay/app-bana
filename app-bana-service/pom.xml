@@ -23,13 +23,6 @@
     </properties>
 
     <dependencies>
-        <!-- UI resources extracted to separate module -->
-        <dependency>
-            <groupId>com.appbana</groupId>
-            <artifactId>app-bana-ui</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
         <!-- JSON handling -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

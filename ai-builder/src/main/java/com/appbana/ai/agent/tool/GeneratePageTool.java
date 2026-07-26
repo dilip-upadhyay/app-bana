@@ -299,10 +299,8 @@ public class GeneratePageTool implements Tool {
             container.put("type", "container");
 
             Map<String, Object> containerProps = new HashMap<>();
-            containerProps.put("className", "grid-cell");
+            containerProps.put("className", "appbana-form-cell");
             containerProps.put("slot", "cell-" + containerIndex);
-            containerProps.put("style",
-                    "min-height: 100px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;");
             containerProps.put("data-cell-index", String.valueOf(containerIndex));
             container.put("props", containerProps);
 
@@ -312,7 +310,11 @@ public class GeneratePageTool implements Tool {
 
             Map<String, Object> input = new HashMap<>();
             input.put("id", inputId);
-            input.put("type", "input");
+            // Emit a top-level `select` node for status fields so the runtime's
+            // <select> renderer uses the options[] directly instead of routing
+            // through the `<input type="select">` fallback (broken HTML).
+            String topLevelNodeType = "status".equals(fieldType) ? "select" : "input";
+            input.put("type", topLevelNodeType);
 
             Map<String, Object> inputProps = new HashMap<>();
             inputProps.put("entity", entityName);
@@ -321,9 +323,28 @@ public class GeneratePageTool implements Tool {
             inputProps.put("label", fieldLabel);
             inputProps.put("type", mapFieldToInputType(fieldType));
             inputProps.put("className", "input");
-            inputProps.put("marginBottom", "0");
-            if (!"reference".equals(fieldType)) {
+            if ("status".equals(fieldType)) {
+                // Copy status options through so the runtime <select> can populate.
+                // SchemaEnricher guarantees a non-empty options[] at the metadata boundary.
+                Object statusOptions = field.get("options");
+                if (statusOptions instanceof List<?> list && !list.isEmpty()) {
+                    inputProps.put("options", list);
+                }
+                if (Boolean.TRUE.equals(field.get("required"))) {
+                    inputProps.put("required", true);
+                }
+            } else if (!"reference".equals(fieldType)) {
                 inputProps.put("placeholder", "Enter " + fieldLabel.toLowerCase() + "...");
+            } else {
+                // Propagate the referenced entity name so the runtime ReferenceField
+                // knows which table to query. Without this, the runtime falls back to
+                // the field name, which only works when the FK column happens to share
+                // its name with the referenced entity (e.g. "customer" → Customer entity).
+                // Aliased FKs like "owner" → User or "assignee" → Employee would break.
+                Object refEntity = field.get("referenceEntity");
+                if (refEntity != null) {
+                    inputProps.put("referenceEntity", refEntity);
+                }
             }
             input.put("props", inputProps);
 
@@ -339,9 +360,8 @@ public class GeneratePageTool implements Tool {
         saveContainer.put("id", saveContainerId);
         saveContainer.put("type", "container");
         Map<String, Object> saveContainerProps = new HashMap<>();
-        saveContainerProps.put("className", "grid-cell");
+        saveContainerProps.put("className", "appbana-form-save-cell");
         saveContainerProps.put("slot", "cell-" + containerIndex);
-        saveContainerProps.put("style", "min-height: 100px; padding: 0.5rem; display: flex; align-items: center;");
         saveContainer.put("props", saveContainerProps);
 
         String saveButtonId = "save-btn";

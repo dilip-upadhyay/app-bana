@@ -1,0 +1,6 @@
+packages:
+  - app-bana-shared
+  - app-bana-studio
+  - app-bana-runtime
+allowBuilds:
+  esbuild: set this to true or false

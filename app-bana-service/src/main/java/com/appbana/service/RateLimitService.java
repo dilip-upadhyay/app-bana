@@ -30,7 +30,7 @@ public class RateLimitService {
     /**
      * Default maximum attempts per window.
      */
-    public static final int DEFAULT_MAX_ATTEMPTS = 100;
+    public static final int DEFAULT_MAX_ATTEMPTS = 1000;
     
     /**
      * Default window size in minutes.

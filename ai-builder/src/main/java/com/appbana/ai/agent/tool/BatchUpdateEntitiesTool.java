@@ -126,6 +126,9 @@ public class BatchUpdateEntitiesTool implements Tool {
 
             log.info("[BatchUpdateEntities] App: {}, Updates: {}", appId, updates.size());
 
+            String tenantId = context.tenantId() != null ? context.tenantId() : "default";
+            String token = context.token();
+
             // Process each update
             for (int i = 0; i < updates.size(); i++) {
                 Map<String, Object> update = updates.get(i);
@@ -135,8 +138,18 @@ public class BatchUpdateEntitiesTool implements Tool {
                 log.info("[BatchUpdateEntities] Processing {}/{}: {} on '{}'",
                         i + 1, updates.size(), operation, entityName);
 
+                // Guard: "App" is not an entity — LLMs sometimes try to use this tool
+                // to rename the app itself. Redirect them to update_app.
+                if ("App".equalsIgnoreCase(entityName)) {
+                    failedUpdates.add(entityName + ":" + operation
+                            + " - 'App' is not an entity. To rename or update the app itself, "
+                            + "call the update_app tool instead (arguments: name, description, defaultPage).");
+                    log.warn("[BatchUpdateEntities] ❌ Rejected entityName='App' — should use update_app tool");
+                    continue;
+                }
+
                 try {
-                    boolean success = executeUpdate(appId, entityName, operation, update);
+                    boolean success = executeUpdate(tenantId, appId, entityName, operation, update, token);
 
                     if (success) {
                         successfulUpdates.add(entityName + ":" + operation);
@@ -186,18 +199,18 @@ public class BatchUpdateEntitiesTool implements Tool {
     /**
      * Execute a single entity update
      */
-    private boolean executeUpdate(String appId, String entityName, String operation,
-            Map<String, Object> update) throws Exception {
+    private boolean executeUpdate(String tenantId, String appId, String entityName, String operation,
+            Map<String, Object> update, String token) throws Exception {
 
         switch (operation.toLowerCase()) {
             case "add_fields":
-                return addFields(appId, entityName, update);
+                return addFields(tenantId, appId, entityName, update, token);
             case "remove_fields":
-                return removeFields(appId, entityName, update);
+                return removeFields(tenantId, appId, entityName, update, token);
             case "update_fields":
-                return updateFields(appId, entityName, update);
+                return updateFields(tenantId, appId, entityName, update, token);
             case "rename_entity":
-                return renameEntity(appId, entityName, update);
+                return renameEntity(tenantId, appId, entityName, update, token);
             default:
                 log.warn("[BatchUpdateEntities] Unknown operation: {}", operation);
                 return false;
@@ -208,7 +221,8 @@ public class BatchUpdateEntitiesTool implements Tool {
      * Add fields to an entity
      */
     @SuppressWarnings("unchecked")
-    private boolean addFields(String appId, String entityName, Map<String, Object> update) throws Exception {
+    private boolean addFields(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
         List<Map<String, Object>> newFields = (List<Map<String, Object>>) update.get("fields");
         if (newFields == null || newFields.isEmpty()) {
             log.warn("[BatchUpdateEntities] No fields specified for add_fields operation");
@@ -216,7 +230,7 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         // Get current entity
-        Map<String, Object> entity = fetchEntity(appId, entityName);
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
         if (entity == null) {
             log.error("[BatchUpdateEntities] Entity '{}' not found in app '{}'", entityName, appId);
             return false;
@@ -250,14 +264,30 @@ public class BatchUpdateEntitiesTool implements Tool {
         entity.put("fields", existingFields);
 
         // Save updated entity
-        return saveEntity(appId, entityName, entity);
+        boolean saved = saveEntity(entity, token);
+
+        // Best-effort UI sync: after the schema save succeeds, propagate the newly
+        // added fields into matching form/list pages so the runtime preview shows
+        // them without the user having to regenerate pages manually. Failure here
+        // is logged but doesn't fail the tool call — the schema is the source of
+        // truth and has already been persisted.
+        if (saved) {
+            try {
+                syncPagesAfterAddFields(tenantId, appId, entityName, newFields, token);
+            } catch (Exception e) {
+                log.warn("[BatchUpdateEntities] Page sync after add_fields failed (schema is saved): {}",
+                        e.getMessage());
+            }
+        }
+        return saved;
     }
 
     /**
      * Remove fields from an entity
      */
     @SuppressWarnings("unchecked")
-    private boolean removeFields(String appId, String entityName, Map<String, Object> update) throws Exception {
+    private boolean removeFields(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
         List<Map<String, Object>> fieldsToRemove = (List<Map<String, Object>>) update.get("fields");
         if (fieldsToRemove == null || fieldsToRemove.isEmpty()) {
             log.warn("[BatchUpdateEntities] No fields specified for remove_fields operation");
@@ -271,7 +301,7 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         // Get current entity
-        Map<String, Object> entity = fetchEntity(appId, entityName);
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
         if (entity == null) {
             return false;
         }
@@ -290,14 +320,15 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         entity.put("fields", remainingFields);
-        return saveEntity(appId, entityName, entity);
+        return saveEntity(entity, token);
     }
 
     /**
      * Update existing fields in an entity
      */
     @SuppressWarnings("unchecked")
-    private boolean updateFields(String appId, String entityName, Map<String, Object> update) throws Exception {
+    private boolean updateFields(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
         List<Map<String, Object>> fieldUpdates = (List<Map<String, Object>>) update.get("fields");
         if (fieldUpdates == null || fieldUpdates.isEmpty()) {
             return false;
@@ -310,7 +341,7 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         // Get current entity
-        Map<String, Object> entity = fetchEntity(appId, entityName);
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
         if (entity == null) {
             return false;
         }
@@ -332,13 +363,14 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         entity.put("fields", existingFields);
-        return saveEntity(appId, entityName, entity);
+        return saveEntity(entity, token);
     }
 
     /**
      * Rename an entity
      */
-    private boolean renameEntity(String appId, String entityName, Map<String, Object> update) throws Exception {
+    private boolean renameEntity(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
         String newName = (String) update.get("newName");
         if (newName == null || newName.isBlank()) {
             log.warn("[BatchUpdateEntities] No newName specified for rename_entity operation");
@@ -346,99 +378,414 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         // Get current entity
-        Map<String, Object> entity = fetchEntity(appId, entityName);
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
         if (entity == null) {
             return false;
         }
 
-        // Update name and displayName
-        entity.put("name", newName);
+        // Update name and displayName. The schema key must be rebuilt for the new entity.
+        String newFullName = buildSchemaKey(tenantId, appId, newName);
+        entity.put("name", newFullName);
         entity.put("displayName", newName);
 
         // Delete old and create new
-        deleteEntity(appId, entityName);
-        return createEntity(appId, entity);
+        deleteEntity(tenantId, appId, entityName, token);
+        return saveEntity(entity, token);
     }
 
     /**
-     * Fetch entity from backend
+     * Build the multi-tenant schema key expected by SchemaManager.
      */
-    private Map<String, Object> fetchEntity(String appId, String entityName) throws Exception {
-        String url = String.format("%s/api/apps/%s/entities/%s", baseUrl, appId, entityName);
+    private static String buildSchemaKey(String tenantId, String appId, String entityName) {
+        String tp = (tenantId == null || tenantId.isBlank()) ? "default" : tenantId;
+        return tp + "_" + appId + "_" + entityName;
+    }
 
-        HttpRequest request = HttpRequest.newBuilder()
+    /**
+     * Fetch entity from backend via GET /schema/{tenantId}_{appId}_{entityName}.
+     */
+    private Map<String, Object> fetchEntity(String tenantId, String appId, String entityName, String token)
+            throws Exception {
+        String key = buildSchemaKey(tenantId, appId, entityName);
+        String url = String.format("%s/schema/%s", baseUrl, key);
+
+        HttpRequest.Builder rb = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .GET()
-                .timeout(Duration.ofSeconds(30))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                .header("Accept", "application/json")
+                .timeout(Duration.ofSeconds(30));
+        if (token != null && !token.isEmpty()) {
+            rb.header("Authorization", "Bearer " + token);
+        }
+        HttpResponse<String> response = httpClient.send(rb.GET().build(), HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() == 200) {
             return objectMapper.readValue(response.body(), Map.class);
         } else if (response.statusCode() == 404) {
+            log.warn("[BatchUpdateEntities] Entity schema not found at {}", url);
             return null;
         } else {
-            log.error("[BatchUpdateEntities] Failed to fetch entity: {} - {}", response.statusCode(), response.body());
+            log.error("[BatchUpdateEntities] Failed to fetch entity {}: {} - {}", url, response.statusCode(),
+                    response.body());
             return null;
         }
     }
 
     /**
-     * Save entity to backend
+     * Save (upsert) entity via POST /schema. The entity map must contain its full multi-tenant
+     * name (as returned by GET /schema/{key}); SchemaManager.saveSchema keys on it.
      */
-    private boolean saveEntity(String appId, String entityName, Map<String, Object> entity) throws Exception {
-        String url = String.format("%s/api/apps/%s/entities/%s", baseUrl, appId, entityName);
+    private boolean saveEntity(Map<String, Object> entity, String token) throws Exception {
+        String url = String.format("%s/schema", baseUrl);
         String json = objectMapper.writeValueAsString(entity);
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder rb = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .PUT(HttpRequest.BodyPublishers.ofString(json))
                 .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(30))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                .timeout(Duration.ofSeconds(30));
+        if (token != null && !token.isEmpty()) {
+            rb.header("Authorization", "Bearer " + token);
+        }
+        HttpResponse<String> response = httpClient.send(
+                rb.POST(HttpRequest.BodyPublishers.ofString(json)).build(),
+                HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() >= 200 && response.statusCode() < 300) {
             return true;
-        } else {
-            log.error("[BatchUpdateEntities] Failed to save entity: {} - {}", response.statusCode(), response.body());
-            return false;
+        }
+        log.error("[BatchUpdateEntities] Failed to save entity {}: {} - {}", entity.get("name"),
+                response.statusCode(), response.body());
+        return false;
+    }
+
+    /**
+     * Delete entity via DELETE /schema/{key}.
+     */
+    private boolean deleteEntity(String tenantId, String appId, String entityName, String token) throws Exception {
+        String key = buildSchemaKey(tenantId, appId, entityName);
+        String url = String.format("%s/schema/%s", baseUrl, key);
+
+        HttpRequest.Builder rb = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(30));
+        if (token != null && !token.isEmpty()) {
+            rb.header("Authorization", "Bearer " + token);
+        }
+        HttpResponse<String> response = httpClient.send(rb.DELETE().build(), HttpResponse.BodyHandlers.ofString());
+        return response.statusCode() >= 200 && response.statusCode() < 300;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Page auto-sync after add_fields
+    //
+    // The AppBana runtime renders forms and tables from static node metadata stored
+    // on each page (not directly from the entity schema). When a field is added to
+    // an entity, existing pages don't automatically pick it up. To close that gap
+    // we walk the app's pages after a successful schema update and append matching
+    // inputs to form pages / columns to table pages. Runs best-effort.
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /** Audit / auto-managed fields that should not appear in forms. */
+    private static final Set<String> AUDIT_FIELDS = Set.of("id", "created_at", "updated_at");
+
+    @SuppressWarnings("unchecked")
+    private void syncPagesAfterAddFields(String tenantId, String appId, String entityName,
+            List<Map<String, Object>> newFields, String token) throws Exception {
+        Map<String, Object> app = fetchAppMetadata(tenantId, appId, token);
+        if (app == null) return;
+
+        Object pagesDataObj = app.get("pagesData");
+        if (!(pagesDataObj instanceof List<?>)) return;
+        List<Object> pagesData = (List<Object>) pagesDataObj;
+
+        int updated = 0;
+        for (Object pageObj : pagesData) {
+            if (!(pageObj instanceof Map<?, ?>)) continue;
+            Map<String, Object> page = (Map<String, Object>) pageObj;
+            String pageId = (String) page.get("id");
+            if (pageId == null || pageId.isBlank()) continue;
+
+            boolean changed = false;
+            String rootType = rootNodeType(page);
+            if ("form".equals(rootType) && entityName.equals(rootFormEntity(page))) {
+                changed = appendFieldsToFormPage(page, entityName, newFields);
+            } else if ("table".equals(rootType) && entityName.equals(rootTableEntity(page))) {
+                changed = appendColumnsToTablePage(page, newFields);
+            }
+
+            if (changed) {
+                boolean ok = savePage(tenantId, appId, pageId, page, token);
+                if (ok) {
+                    updated++;
+                    log.info("[BatchUpdateEntities] Synced page '{}' with new fields for entity '{}'",
+                            pageId, entityName);
+                } else {
+                    log.warn("[BatchUpdateEntities] Failed to save synced page '{}'", pageId);
+                }
+            }
+        }
+        if (updated > 0) {
+            log.info("[BatchUpdateEntities] Auto-synced {} page(s) after add_fields on '{}'",
+                    updated, entityName);
         }
     }
 
-    /**
-     * Delete entity from backend
-     */
-    private boolean deleteEntity(String appId, String entityName) throws Exception {
-        String url = String.format("%s/api/apps/%s/entities/%s", baseUrl, appId, entityName);
+    @SuppressWarnings("unchecked")
+    private String rootNodeType(Map<String, Object> page) {
+        Object nodesObj = page.get("nodes");
+        String rootId = (String) page.getOrDefault("rootId", "root");
+        if (!(nodesObj instanceof List<?>)) return null;
+        for (Object n : (List<Object>) nodesObj) {
+            if (n instanceof Map<?, ?> m && rootId.equals(m.get("id"))) {
+                return (String) m.get("type");
+            }
+        }
+        return null;
+    }
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .DELETE()
-                .timeout(Duration.ofSeconds(30))
-                .build();
+    @SuppressWarnings("unchecked")
+    private String rootFormEntity(Map<String, Object> page) {
+        Map<String, Object> root = findNode(page, (String) page.getOrDefault("rootId", "root"));
+        if (root == null) return null;
+        Object props = root.get("props");
+        return props instanceof Map<?, ?> pm ? (String) ((Map<String, Object>) pm).get("entity") : null;
+    }
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        return response.statusCode() >= 200 && response.statusCode() < 300;
+    @SuppressWarnings("unchecked")
+    private String rootTableEntity(Map<String, Object> page) {
+        Map<String, Object> root = findNode(page, (String) page.getOrDefault("rootId", "root"));
+        if (root == null) return null;
+        Object props = root.get("props");
+        return props instanceof Map<?, ?> pm ? (String) ((Map<String, Object>) pm).get("entity") : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> findNode(Map<String, Object> page, String id) {
+        Object nodesObj = page.get("nodes");
+        if (!(nodesObj instanceof List<?>)) return null;
+        for (Object n : (List<Object>) nodesObj) {
+            if (n instanceof Map<?, ?> m && id != null && id.equals(m.get("id"))) {
+                return (Map<String, Object>) m;
+            }
+        }
+        return null;
     }
 
     /**
-     * Create entity in backend
+     * Append new inputs to a form page. Skips audit fields and any field that already
+     * has an input node bound to it. Reuses the same node shape as GeneratePageTool so
+     * StudioTableLive / the runtime form renderer can process them without special casing.
      */
-    private boolean createEntity(String appId, Map<String, Object> entity) throws Exception {
-        String url = String.format("%s/api/apps/%s/entities", baseUrl, appId);
-        String json = objectMapper.writeValueAsString(entity);
+    @SuppressWarnings("unchecked")
+    private boolean appendFieldsToFormPage(Map<String, Object> page, String entityName,
+            List<Map<String, Object>> newFields) {
+        Object nodesObj = page.get("nodes");
+        if (!(nodesObj instanceof List<?>)) return false;
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) nodesObj;
 
-        HttpRequest request = HttpRequest.newBuilder()
+        // Collect existing input `field` bindings so we don't duplicate.
+        Set<String> existingFieldBindings = new HashSet<>();
+        int maxContainerIndex = -1;
+        Map<String, Object> grid = null;
+        Map<String, Object> saveContainer = null;
+        for (Map<String, Object> n : nodes) {
+            String type = (String) n.get("type");
+            String id = (String) n.get("id");
+            if ("app-grid".equals(type)) grid = n;
+            if ("container".equals(type) && "container-save".equals(id)) saveContainer = n;
+            if (("input".equals(type) || "select".equals(type)) && n.get("props") instanceof Map<?, ?> pm) {
+                Object f = ((Map<String, Object>) pm).get("field");
+                if (f instanceof String s) existingFieldBindings.add(s);
+            }
+            if (id != null && id.startsWith("container-") && !"container-save".equals(id)) {
+                try { maxContainerIndex = Math.max(maxContainerIndex, Integer.parseInt(id.substring("container-".length()))); }
+                catch (NumberFormatException ignored) { /* non-numeric container id — leave as-is */ }
+            }
+        }
+        if (grid == null) return false; // Not a shape we know how to extend.
+
+        Map<String, Object> gridProps = (Map<String, Object>) grid.getOrDefault("props", new HashMap<>());
+        List<String> gridChildren = new ArrayList<>((List<String>) grid.getOrDefault("children", new ArrayList<>()));
+
+        boolean changed = false;
+        int nextIndex = maxContainerIndex + 1;
+        for (Map<String, Object> field : newFields) {
+            String fieldName = (String) field.get("name");
+            if (fieldName == null || AUDIT_FIELDS.contains(fieldName.toLowerCase())) continue;
+            if (existingFieldBindings.contains(fieldName)) continue;
+
+            String containerId = "container-" + nextIndex;
+            String inputId = "input-" + nextIndex;
+            String fieldType = (String) field.getOrDefault("type", "string");
+            String fieldLabel = (String) field.getOrDefault("label", fieldName);
+
+            Map<String, Object> container = new HashMap<>();
+            container.put("id", containerId);
+            container.put("type", "container");
+            container.put("children", List.of(inputId));
+            Map<String, Object> containerProps = new HashMap<>();
+            containerProps.put("className", "appbana-form-cell");
+            containerProps.put("slot", "cell-" + nextIndex);
+            containerProps.put("data-cell-index", String.valueOf(nextIndex));
+            container.put("props", containerProps);
+
+            Map<String, Object> input = new HashMap<>();
+            input.put("id", inputId);
+            String topLevelType = "status".equals(fieldType) ? "select" : "input";
+            input.put("type", topLevelType);
+            Map<String, Object> inputProps = new HashMap<>();
+            inputProps.put("entity", entityName);
+            inputProps.put("field", fieldName);
+            inputProps.put("name", fieldName);
+            inputProps.put("label", fieldLabel);
+            inputProps.put("type", mapFieldToInputType(fieldType));
+            inputProps.put("className", "input");
+            if ("status".equals(fieldType) && field.get("options") instanceof List<?> opts && !opts.isEmpty()) {
+                inputProps.put("options", opts);
+                if (Boolean.TRUE.equals(field.get("required"))) inputProps.put("required", true);
+            } else if ("reference".equals(fieldType)) {
+                Object refEntity = field.get("referenceEntity");
+                if (refEntity != null) inputProps.put("referenceEntity", refEntity);
+            } else {
+                inputProps.put("placeholder", "Enter " + fieldLabel.toLowerCase() + "...");
+            }
+            input.put("props", inputProps);
+
+            // Insert container + input before the save container in the nodes list so
+            // sibling nodes stay contiguous (StudioTableLive doesn't care, but this
+            // keeps the metadata readable/diff-friendly).
+            int insertAt = saveContainer != null ? nodes.indexOf(saveContainer) : nodes.size();
+            nodes.add(insertAt, container);
+            nodes.add(insertAt + 1, input);
+
+            // Reposition save-container to the next cell.
+            int saveIdx = gridChildren.indexOf("container-save");
+            if (saveIdx >= 0) gridChildren.add(saveIdx, containerId);
+            else gridChildren.add(containerId);
+
+            nextIndex++;
+            changed = true;
+        }
+
+        if (changed) {
+            // Recompute grid rows for the new cell count (grid is 3 cols).
+            int totalCells = gridChildren.size();
+            int cols = gridProps.get("cols") instanceof Number c ? c.intValue() : 3;
+            if (cols <= 0) cols = 3;
+            gridProps.put("rows", Math.max(1, (totalCells + cols - 1) / cols));
+            grid.put("props", gridProps);
+            grid.put("children", gridChildren);
+
+            // Shift save-container's slot to the last cell so the save button stays
+            // at the end of the visual grid.
+            if (saveContainer != null && saveContainer.get("props") instanceof Map<?, ?> spm) {
+                Map<String, Object> sp = (Map<String, Object>) spm;
+                sp.put("slot", "cell-" + (totalCells - 1));
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * Append new columns to a list/table page. Table root nodes carry a `props.fields`
+     * array of {name, label, type} which the runtime table uses directly.
+     */
+    @SuppressWarnings("unchecked")
+    private boolean appendColumnsToTablePage(Map<String, Object> page, List<Map<String, Object>> newFields) {
+        Map<String, Object> root = findNode(page, (String) page.getOrDefault("rootId", "root"));
+        if (root == null) return false;
+        Map<String, Object> props = (Map<String, Object>) root.getOrDefault("props", new HashMap<>());
+        List<Map<String, Object>> cols = (List<Map<String, Object>>) props.getOrDefault("fields", new ArrayList<>());
+
+        Set<String> existing = new HashSet<>();
+        for (Map<String, Object> c : cols) {
+            Object name = c.get("name");
+            if (name instanceof String s) existing.add(s);
+        }
+
+        boolean changed = false;
+        for (Map<String, Object> field : newFields) {
+            String fieldName = (String) field.get("name");
+            if (fieldName == null || existing.contains(fieldName)) continue;
+            Map<String, Object> col = new HashMap<>();
+            col.put("name", fieldName);
+            col.put("label", field.getOrDefault("label", fieldName));
+            col.put("type", mapFieldToTableType((String) field.getOrDefault("type", "string")));
+            cols.add(col);
+            changed = true;
+        }
+        if (changed) {
+            props.put("fields", cols);
+            root.put("props", props);
+        }
+        return changed;
+    }
+
+    /** Mirror of GeneratePageTool.mapFieldToInputType — kept local to avoid a cross-tool dep. */
+    private String mapFieldToInputType(String fieldType) {
+        if (fieldType == null) return "input";
+        return switch (fieldType.toLowerCase()) {
+            case "date" -> "date";
+            case "datetime", "timestamp" -> "datetime-local";
+            case "reference" -> "reference";
+            case "status" -> "select";
+            case "boolean" -> "checkbox";
+            case "longtext" -> "textarea";
+            default -> "input";
+        };
+    }
+
+    /** Convert schema field type to the runtime table's column type vocabulary. */
+    private String mapFieldToTableType(String fieldType) {
+        if (fieldType == null) return "text";
+        return switch (fieldType.toLowerCase()) {
+            case "int", "integer", "long", "number" -> "integer";
+            case "decimal", "float", "double" -> "number";
+            case "boolean" -> "boolean";
+            case "date" -> "date";
+            case "datetime", "timestamp" -> "datetime";
+            case "email" -> "email";
+            case "status" -> "status";
+            case "reference" -> "reference";
+            default -> "text";
+        };
+    }
+
+    private Map<String, Object> fetchAppMetadata(String tenantId, String appId, String token) throws Exception {
+        String url = String.format("%s/appbana-studio/%s/apps/%s", baseUrl, tenantId, appId);
+        HttpRequest.Builder rb = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(30))
-                .build();
+                .header("Accept", "application/json")
+                .timeout(Duration.ofSeconds(30));
+        if (token != null && !token.isEmpty()) {
+            rb.header("Authorization", "Bearer " + token);
+        }
+        HttpResponse<String> resp = httpClient.send(rb.GET().build(), HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() == 200) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = objectMapper.readValue(resp.body(), Map.class);
+            return body;
+        }
+        log.warn("[BatchUpdateEntities] Failed to fetch app metadata for {}: {} - {}", appId,
+                resp.statusCode(), resp.body());
+        return null;
+    }
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        return response.statusCode() >= 200 && response.statusCode() < 300;
+    private boolean savePage(String tenantId, String appId, String pageId, Map<String, Object> page, String token)
+            throws Exception {
+        String url = String.format("%s/appbana-studio/%s/apps/%s/pages/%s", baseUrl, tenantId, appId, pageId);
+        String json = objectMapper.writeValueAsString(page);
+        HttpRequest.Builder rb = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(30));
+        if (token != null && !token.isEmpty()) {
+            rb.header("Authorization", "Bearer " + token);
+        }
+        HttpResponse<String> resp = httpClient.send(
+                rb.PUT(HttpRequest.BodyPublishers.ofString(json)).build(),
+                HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() >= 200 && resp.statusCode() < 300) return true;
+        log.warn("[BatchUpdateEntities] savePage {} failed: {} - {}", pageId, resp.statusCode(), resp.body());
+        return false;
     }
 }

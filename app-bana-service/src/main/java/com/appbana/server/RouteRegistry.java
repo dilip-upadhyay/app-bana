@@ -37,6 +37,13 @@ public class RouteRegistry {
         AppRoutes.register(router);
         AiRoutes.register(router); // AI Builder routes
         SchemaRoutes.register(router);
+
+        // Stage 0: AI-native UI rebuild — public endpoints (no auth required)
+        // IMPORTANT: registered BEFORE GenericEntityRoutes so /api/app-context and
+        // /api/tenants/{id}/branding are not swallowed by the /api/{entity} wildcard.
+        TenantBrandingRoutes.register(router);  // GET /api/tenants/{id}/branding
+        AppContextRoutes.register(router);      // GET /api/app-context
+
         GenericEntityRoutes.register(router);
 
         // Health and monitoring

@@ -45,7 +45,7 @@ All launch scripts live in [`scripts/`](scripts/). Every script is available for
 |---------|---------------|
 | `.\scripts\start-everything.bat` | `./scripts/start-everything.sh` |
 
-Orchestrates all three modules in the correct order: **AI Builder → Backend → UI**, waiting for each to be reachable before starting the next.
+Orchestrates all four modules in the correct order: **AI Builder → Backend → Studio → Runtime**, waiting for each to be reachable before starting the next.
 
 ### Restart a single module
 
@@ -53,13 +53,15 @@ Orchestrates all three modules in the correct order: **AI Builder → Backend �
 |--------|---------|---------------|------|
 | AI Builder (Qdrant + Postgres deps) | `.\scripts\start-ai-builder.bat` | `./scripts/start-ai-builder.sh` | `8081` |
 | Backend API (Postgres dep) | `.\scripts\start-backend.bat` | `./scripts/start-backend.sh` | `8080` |
-| Studio UI (Vite dev server) | `.\scripts\start-ui.bat` | `./scripts/start-ui.sh` | `5173` |
+| Studio (Vite dev server) | `.\scripts\start-studio.bat` | `./scripts/start-studio.sh` | `5174` |
+| Runtime (Vite dev server) | `.\scripts\start-runtime.bat` | `./scripts/start-runtime.sh` | `5175` |
 
 ### Service URLs
 
 | Service | URL |
 |---------|-----|
-| Studio UI | http://localhost:5173 |
+| Studio | http://localhost:5174 |
+| Runtime | http://localhost:5175 |
 | Core API | http://localhost:8080/health |
 | AI Builder | http://localhost:8081/health |
 | Qdrant Dashboard | http://localhost:6333/dashboard |
@@ -91,7 +93,9 @@ Direct links to the most-used documents:
 app-bana/
 ├── ai-builder/          AI microservice (port 8081)
 ├── app-bana-service/    Core backend API (port 8080)
-├── app-bana-ui/         Studio frontend (Vite + LitElement, port 5173)
+├── app-bana-shared/     Shared TS package (types, api client, postMessage schema)
+├── app-bana-studio/     AI-native Studio (React + Vite, port 5174)
+├── app-bana-runtime/    Standalone deployed-app runtime (React + Vite, port 5175)
 ├── builder-database/    RAG knowledge base seed data
 ├── docs/                All documentation
 ├── config.json          Runtime configuration (DB, LLM keys)

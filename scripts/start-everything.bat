@@ -2,7 +2,7 @@
 REM =====================================================================
 REM start-everything.bat  -  Restart all AppBana services
 REM
-REM Orchestrates the three per-module scripts in the correct order.
+REM Orchestrates the four per-module scripts in the correct order.
 REM Each module script is fully self-contained (stops old, ensures deps,
 REM builds if needed, launches). This script simply chains them and
 REM waits for each service to be reachable before starting the next.
@@ -10,7 +10,8 @@ REM
 REM Order:
 REM   1. AI Builder  (port 8081)  <- also brings up Qdrant + PostgreSQL
 REM   2. Backend     (port 8080)
-REM   3. UI          (port 5173)
+REM   3. Studio      (port 5174)
+REM   4. Runtime     (port 5175)
 REM =====================================================================
 setlocal EnableDelayedExpansion
 
@@ -47,7 +48,7 @@ echo ==========================================
 echo Starting All AppBana Services
 echo ==========================================
 
-echo [1/3] Launching AI Builder in a new window...
+echo [1/4] Launching AI Builder in a new window...
 start "AI Builder" cmd /c ""%SCRIPT_DIR%start-ai-builder.bat""
 
 echo    Waiting for AI Builder to be ready on port 8081...
@@ -59,7 +60,7 @@ if !ERRORLEVEL! NEQ 0 (
 )
 echo    AI Builder is up.
 
-echo [2/3] Launching Backend in a new window...
+echo [2/4] Launching Backend in a new window...
 start "AppBana Backend" cmd /c ""%SCRIPT_DIR%start-backend.bat""
 
 echo    Waiting for Backend to be ready on port 8080...
@@ -71,13 +72,35 @@ if !ERRORLEVEL! NEQ 0 (
 )
 echo    Backend is up.
 
-echo [3/3] Launching UI in a new window...
-start "AppBana UI" cmd /c ""%SCRIPT_DIR%start-ui.bat""
+echo [3/4] Launching Studio in a new window...
+start "AppBana Studio" cmd /c ""%SCRIPT_DIR%start-studio.bat""
+
+echo    Waiting for Studio to be ready on port 5174...
+:waitStudioPort
+netstat -ano | findstr ":5174 " | findstr "LISTENING" >nul
+if !ERRORLEVEL! NEQ 0 (
+    ping 127.0.0.1 -n 3 >nul
+    goto waitStudioPort
+)
+echo    Studio is up.
+
+echo [4/4] Launching Runtime in a new window...
+start "AppBana Runtime" cmd /c ""%SCRIPT_DIR%start-runtime.bat""
+
+echo    Waiting for Runtime to be ready on port 5175...
+:waitRuntimePort
+netstat -ano | findstr ":5175 " | findstr "LISTENING" >nul
+if !ERRORLEVEL! NEQ 0 (
+    ping 127.0.0.1 -n 3 >nul
+    goto waitRuntimePort
+)
+echo    Runtime is up.
 
 echo ==========================================
 echo All services launched:
 echo    AI Builder: http://localhost:8081/health
 echo    Backend:    http://localhost:8080/health
-echo    UI:         http://localhost:5173
+echo    Studio:     http://localhost:5174
+echo    Runtime:    http://localhost:5175
 echo ==========================================
 endlocal

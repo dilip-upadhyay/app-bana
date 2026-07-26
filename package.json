@@ -1,0 +1,11 @@
+{
+  "name": "app-bana",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev:studio": "pnpm --filter app-bana-studio dev",
+    "dev:runtime": "pnpm --filter app-bana-runtime dev",
+    "build:all": "pnpm -r build",
+    "build:shared": "pnpm --filter @appbana/shared build"
+  }
+}

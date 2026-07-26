@@ -1,8 +1,8 @@
 # AppBana E2E Tests
 
-Playwright end-to-end tests for AppBana Studio. Kept in its own project
-(with its own `node_modules` and `package.json`) so it doesn't interfere
-with the UI or backend build.
+Playwright end-to-end tests for AppBana Studio + Runtime. Kept in its own project
+(with its own `node_modules` and `package.json`) so it doesn't interfere with
+the frontend or backend build.
 
 ## Prerequisites
 
@@ -14,7 +14,8 @@ The full stack must already be running:
 ```
 
 Expected ports:
-- UI:         http://localhost:5173
+- Studio:     http://localhost:5174
+- Runtime:    http://localhost:5175
 - Backend:    http://localhost:8080
 - AI Builder: http://localhost:8081
 
@@ -37,12 +38,15 @@ npm run report          # open last HTML report
 
 ## Environment overrides
 
-- `APPBANA_UI_URL`         — base URL (default `http://localhost:5173`)
+- `APPBANA_STUDIO_URL`     — base URL (default `http://localhost:5174`)
 - `APPBANA_BACKEND_URL`    — backend REST base (default `http://localhost:8080`)
 - `APPBANA_AI_BUILDER_URL` — AI Builder base (default `http://localhost:8081`)
 
 ## What runs
 
-- `tests/ai-builder-chat.spec.ts` — Registers a fresh user via
-  `POST /api/auth/register`, logs in through the Studio UI, opens the
-  AI Builder chat, sends a message, and asserts the assistant responds.
+- `tests/ai-builder-chat.studio.spec.ts` — Registers a fresh user via
+  `POST /api/auth/register`, logs into the Studio, opens the AI Builder chat,
+  sends a message, and asserts the assistant responds and the preview reloads.
+- `tests/stage-0-backend-contracts.spec.ts` — Verifies backend contracts
+  (branding, app-context, SSE stream shape).
+- `tests/stage-3-studio-drawers.spec.ts` — Verifies Data drawer + Session picker.

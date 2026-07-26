@@ -37,16 +37,25 @@ public class SessionMiddleware {
             "/api/apps/", // Public runtime APIs for end users
             "/api/ai/", // AI endpoints (development mode - for Magic Data Seed, AI generation)
             "/appbana-studio/", // Studio Builder APIs (development mode - TODO: enable auth in production)
+            "/api/tenants/", // Stage 0: tenant branding is public (needed pre-login by runtime)
+            "/api/app-context", // Stage 0: app-context resolver is public
             "/*.html", // All HTML files are public (studio.html, index.html, etc.)
             "/*.js", // JavaScript files from Vite build
             "/*.css", // CSS files from Vite build
             "/assets/" // Vite build assets
     };
 
-    // Special pattern: Entity APIs follow /api/{tenantId}/{entityName} format
-    // These should be public for runtime apps (authentication is app-specific, not
-    // platform-wide)
-    private static final String ENTITY_API_PATTERN = "^/api/[^/]+/[^/]+/?$";
+    // Special pattern: Entity APIs use a single path segment for the entity key,
+    // shaped like "{tenantId}_{appId}_{entityName}" (underscore-joined, NOT
+    // slash-joined). These are public for runtime apps — route-level auth
+    // (AuthService.hasRead/hasWrite) still applies when tokens are configured,
+    // so defense in depth is preserved in production.
+    //
+    // Covers all CRUD paths: base entity, /{rowId}, /batch, /bulk-delete,
+    // /bulk-export. Character class allows letters, digits, underscore, hyphen,
+    // and dot.
+    private static final String ENTITY_API_PATTERN =
+            "^/api/[A-Za-z0-9_.-]+(/([A-Za-z0-9_.-]+))?/?$";
 
     // Special pattern: App runtime APIs for loading apps/pages in published runtime
     // Example: /api/{tenantId}/apps/{appId}/env/{env}/full

@@ -38,50 +38,86 @@ AppBana is a **metadata-driven, AI-powered application builder**. Non-technical 
 
 ```
 app-bana/
-â”œâ”€â”€ ai-builder/                  â† AI LLM engine (port 8081)
-â”‚   â””â”€â”€ src/main/java/com/appbana/ai/
-â”‚       â”œâ”€â”€ agent/               â† AiAgent.java â€” the Think/Act/Observe loop
-â”‚       â”‚   â””â”€â”€ tool/            â† All agent tools (scaffold, mock data, etc.)
-â”‚       â”œâ”€â”€ api/                 â† REST endpoints (AiChatController.java)
-â”‚       â”œâ”€â”€ dialogue/            â† DialogueManager.java â€” conversation state machine
-â”‚       â”œâ”€â”€ llm/                 â† AdvancedPromptEngine.java, OpenAiLlmService.java
-â”‚       â”œâ”€â”€ rag/                 â† ConversationMemory.java, Qdrant vector store
-â”‚       â”œâ”€â”€ learning/            â† UserPreferenceEngine.java
-â”‚       â”œâ”€â”€ optimization/        â† DirectAnswerService.java, SemanticCache.java
-â”‚       â””â”€â”€ server/              â† AiServer.java, ToolRegistry.java
-â”‚
-â”œâ”€â”€ app-bana-service/            â† Core backend API (port 8080)
-â”‚   â””â”€â”€ src/main/java/com/appbana/
-â”‚       â”œâ”€â”€ ApiServer.java       â† HTTP server entry point
-â”‚       â”œâ”€â”€ SchemaManager.java   â† CREATE TABLE, migrations, multi-tenant isolation
-â”‚       â”œâ”€â”€ JdbcManager.java     â† Database connection pools (HikariCP)
-â”‚       â”œâ”€â”€ AppManager.java      â† App/entity lifecycle management
-â”‚       â””â”€â”€ server/routes/
-â”‚           â”œâ”€â”€ GenericEntityRoutes.java  â† /api/{entity}/* CRUD
-â”‚           â”œâ”€â”€ AppRoutes.java            â† /appbana-studio/* app management
-â”‚           â””â”€â”€ SchemaRoutes.java         â† /schema/* management
-â”‚
-â”œâ”€â”€ app-bana-ui/                 â† Frontend Studio (port 5173, Vite + LitElement)
-â”‚   â””â”€â”€ src/
-â”‚       â”œâ”€â”€ builder/             â† Visual app builder (AppManager, PageManager)
-â”‚       â”œâ”€â”€ runtime/             â† Live renderers (StudioTableLive.ts is key)
-â”‚       â”œâ”€â”€ services/            â† API clients
-â”‚       â””â”€â”€ main/                â† AI chat UI (AiChatBuilder.ts)
-â”‚
-â”œâ”€â”€ docs/                        â† Architecture & story documentation
-â”‚   â”œâ”€â”€ 01-ARCHITECTURE.md       â† Full system architecture reference
-â”‚   â”œâ”€â”€ AI_AGENT_ARCHITECTURE.md â† Agent design details
-â”‚   â”œâ”€â”€ ACTIVE_TASKS.md          â† Current sprint tasks
-â”‚   â””â”€â”€ session_summary.md       â† Latest session notes
-â”‚
+├── ai-builder/                  ← AI LLM engine (port 8081, Java 21)
+│   └── src/main/java/com/appbana/ai/
+│       ├── agent/               ← AiAgent.java — the Think/Act/Observe loop
+│       │   └── tool/            ← All agent tools (scaffold, mock data, update_app, etc.)
+│       ├── api/                 ← REST endpoints (AiChatController.java)
+│       ├── dialogue/            ← DialogueManager.java — conversation state machine
+│       ├── llm/                 ← AdvancedPromptEngine.java, OpenAiLlmService.java
+│       ├── rag/                 ← ConversationMemory.java, Qdrant vector store
+│       ├── learning/            ← UserPreferenceEngine.java
+│       ├── optimization/        ← DirectAnswerService.java, SemanticCache.java
+│       └── server/              ← AiServer.java, ToolRegistry.java
+│
+├── app-bana-service/            ← Core backend API (port 8080, Java 21)
+│   └── src/main/java/com/appbana/
+│       ├── ApiServer.java       ← HTTP server entry point (Tomcat embedded)
+│       ├── SchemaManager.java   ← CREATE TABLE, migrations, multi-tenant isolation
+│       ├── JdbcManager.java     ← Database connection pools (HikariCP)
+│       ├── AppManager.java      ← App/entity lifecycle management
+│       └── server/routes/
+│           ├── GenericEntityRoutes.java  ← /api/{entity}/* CRUD
+│           ├── AppRoutes.java            ← /appbana-studio/* app management
+│           └── SchemaRoutes.java         ← /schema/* management
+│
+├── app-bana-shared/             ← Shared TS package (pnpm workspace, `@appbana/shared`)
+│   └── src/
+│       ├── api-client.ts        ← All frontend API access. `authedFetch()` fires
+│       │                          `appbana:auth:expired` on 401 for global auth recovery
+│       ├── app-context.ts       ← resolveAppContext() — path today, hostname-ready
+│       ├── metadata.ts          ← PageMeta / ComponentNode / EntitySchema types
+│       ├── postmessage.ts       ← Studio ↔ runtime postMessage schema
+│       └── index.ts             ← Barrel export
+│
+├── app-bana-studio/             ← AI-native Studio (port 5174, React 18 + Vite + Tailwind + Zustand)
+│   └── src/
+│       ├── features/
+│       │   ├── auth/            ← AuthGate.tsx (login + session-expired banner)
+│       │   ├── chat/            ← ChatPane.tsx (streaming SSE + image paste)
+│       │   ├── data-drawer/     ← DataDrawer.tsx (entity rows, add-row form, "Ask AI to seed")
+│       │   ├── header/          ← Header.tsx
+│       │   ├── preview/         ← PreviewPane.tsx (iframe → 5175 runtime)
+│       │   └── sessions/        ← SessionPicker.tsx (search + rename + delete)
+│       └── stores/              ← Zustand stores (session, workspace, chat, drawer)
+│
+├── app-bana-runtime/            ← Standalone deployed-app runtime (port 5175, React 18 + Vite)
+│   └── src/
+│       ├── runtime/
+│       │   ├── AppRuntimeShell.tsx  ← Shell (sidebar + page slot)
+│       │   ├── Renderer.tsx         ← Walks PageMeta → React tree
+│       │   ├── StudioTableLive.tsx  ← Live entity tables (FK resolution, status pills, row actions)
+│       │   ├── PageShell.tsx        ← Title / subtitle / breadcrumb / actions wrapper
+│       │   ├── FormActions.tsx      ← Sticky Save/Cancel bar
+│       │   ├── RowActions.tsx       ← ⋯ hover menu (Edit / Copy ID / Delete)
+│       │   ├── Toaster.tsx          ← Zero-dep toast system
+│       │   ├── RuntimeSidebar.tsx   ← Left-nav
+│       │   ├── cell-formatters.ts   ← Pure helpers: humanizeHeader, formatDate, pickReferenceLabel
+│       │   └── qualifyEntityKey.ts  ← Ensures `{tenantId}_{appId}_{entity}` prefix
+│       └── pages/               ← Route entry (`/run/:tenant/:app`)
+│
+├── e2e/                         ← Playwright tests against Studio 5174 + Runtime 5175
+│
+├── docs/                        ← Architecture, planning, guides
+│   ├── planning/
+│   │   ├── AI_NATIVE_UI_REBUILD_PLAN.md   ← Primary rebuild plan
+│   │   └── RUNTIME_UX_OVERHAUL_PLAN.md    ← Runtime polish sprints
+│   ├── ACTIVE_TASKS.md
+│   └── session_summary.md
+│
 ├── config.json                  ← Database + OpenAI config (DO NOT commit secrets)
+├── pnpm-workspace.yaml          ← app-bana-shared / -studio / -runtime
+├── pom.xml                      ← Maven parent for ai-builder + app-bana-service
 ├── scripts/                     ← All launch scripts (.bat for Windows, .sh for macOS/Linux)
-│   ├── start-everything.{bat,sh}    ← Master orchestrator (starts all modules in order)
+│   ├── start-everything.{bat,sh}    ← Master orchestrator (all four services in order)
 │   ├── start-ai-builder.{bat,sh}    ← Restart AI Builder + Qdrant + Postgres
 │   ├── start-backend.{bat,sh}       ← Restart backend + Postgres
-│   └── start-ui.{bat,sh}            ← Restart UI (Vite dev server)
+│   ├── start-studio.{bat,sh}        ← Restart Studio (Vite 5174)
+│   └── start-runtime.{bat,sh}       ← Restart Runtime (Vite 5175)
 └── .github/copilot-instructions.md  ← This file
 ```
+
+**Historical note:** The old monolithic `app-bana-ui/` (Vite + LitElement, port 5173) was retired in July 2026. Its runtime was ported to `app-bana-runtime/` (React) and its builder was replaced by the AI-native `app-bana-studio/` (React). Anything referring to port 5173 or `app-bana-ui/` in older docs is out of date.
 
 ---
 
@@ -101,35 +137,42 @@ All launch scripts live in `scripts/`. Every script has a **Windows (`.bat`)** a
 |--------|---------|---------------|------|
 | AI Builder | `.\scripts\start-ai-builder.bat` | `./scripts/start-ai-builder.sh` | 8081 |
 | Backend | `.\scripts\start-backend.bat` | `./scripts/start-backend.sh` | 8080 |
-| UI | `.\scripts\start-ui.bat` | `./scripts/start-ui.sh` | 5173 |
+| Studio | `.\scripts\start-studio.bat` | `./scripts/start-studio.sh` | 5174 |
+| Runtime | `.\scripts\start-runtime.bat` | `./scripts/start-runtime.sh` | 5175 |
 
 ### What each module script does
 
 Every `start-*` script self-contains these steps:
 1. **Stop** any process already bound to its port.
-2. **Ensure dependencies** are up - Docker containers (Postgres, Qdrant), Node modules, `OPENAI_API_KEY`.
-3. **Build** its Maven module (or `npm install`) if artifacts / `node_modules` are missing.
+2. **Ensure dependencies** are up — Docker containers (Postgres, Qdrant), Node modules, `OPENAI_API_KEY`.
+3. **Build** its Maven module (or `pnpm install`) if artifacts / `node_modules` are missing.
 4. **Launch** the service in the foreground.
 
 ### What `start-everything` does
 
-Delegates to the three module scripts in the correct order and waits for each port to open before proceeding:
-1. AI Builder (port 8081) - also brings up Qdrant + Postgres.
+Delegates to the four module scripts in the correct order and waits for each port to open before proceeding:
+1. AI Builder (port 8081) — also brings up Qdrant + Postgres.
 2. Backend (port 8080).
-3. UI (port 5173).
+3. Studio (port 5174).
+4. Runtime (port 5175).
 
 On Windows each service opens in a new terminal window. On macOS/Linux each service is backgrounded with logs written to `dev-logs/*.log` (folder is gitignored).
+
 ### Service Ports Summary
 
 | Service | Port | URL |
 |---------|------|-----|
 | AI Builder | 8081 | http://localhost:8081/health |
 | Core API Backend | 8080 | http://localhost:8080/health |
-| Vite Frontend | 5173 | http://localhost:5173 |
+| Studio (React) | 5174 | http://localhost:5174 |
+| Runtime (React) | 5175 | http://localhost:5175/run/{tenantId}/{appId} |
 | Qdrant Vector DB | 6333 | http://localhost:6333/dashboard |
 
 ### After Changes to Java Code:
-Always restart with `.\start-everything.bat` to trigger Maven recompile and clean restart.
+Always restart with `.\scripts\start-everything.bat` (or the module-specific script) to trigger Maven recompile and clean restart.
+
+### After Changes to Frontend Code:
+Vite HMR handles studio + runtime automatically. Note that `@appbana/shared` is consumed **as source** (`"main": "./src/index.ts"`), so edits there hot-reload without an intermediate build step.
 
 ---
 
@@ -173,16 +216,19 @@ The single source of truth for all runtime configuration:
 
 ```
 User (natural language)
-        â†“
+        ↓
+  app-bana-studio (port 5174)
+  [ChatPane → SSE stream → AI Builder]
+        ↓
   ai-builder (port 8081)
-  [AiAgent â†’ Tools â†’ scaffold_app]
-        â†“
+  [AiAgent → Tools → scaffold_app]
+        ↓
   app-bana-service (port 8080)
   [SchemaManager creates table]
   [GenericEntityRoutes auto-generates CRUD API]
-        â†“
-  app-bana-ui (port 5173)
-  [StudioTableLive renders table from schema metadata]
+        ↓
+  app-bana-runtime (port 5175)
+  [Renderer + StudioTableLive render pages from schema metadata]
 ```
 
 ### Multi-Tenant Isolation
@@ -433,7 +479,35 @@ AppBana uses **safe, non-destructive migrations**:
 
 ## 12. Active Work & Known Issues
 
-### ðŸš§ In Progress: DialogueManager Integration (Story 3.1)
+### 🚧 IN PROGRESS: AI-Native UI Rebuild (Primary Initiative)
+
+**Primary reference:** [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](../docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md)
+
+Rebuild AppBana Studio as an AI-native frontend. Chat drives everything — no canvas, no palette, no property inspector. Segregate the current monolithic [`app-bana-ui/`](../app-bana-ui) into three pnpm workspace packages:
+
+| Package | Purpose | Port |
+|---|---|---|
+| `app-bana-shared` | Types + api client + postMessage schema + app-context resolver | — |
+| `app-bana-studio` | AI-native builder (streaming chat + tool cards + preview iframe + data drawer) | 5174 |
+| `app-bana-runtime` | Standalone renderer for deployed apps (own login, tenant-branded) | 5175 |
+
+**Stages:** 0 (backend prep — SSE, branding, app-context) → 1 (workspace + Studio MVP) → 2 (standalone runtime) → 3 (studio v1.1) → 4 (retire old UI) → 5 (subdomain deploy) → 6 (select-and-instruct UX).
+
+**Locked stack (do not change without approval):**
+- Vite 5 + React 18 + TypeScript + Tailwind + shadcn/ui + Zustand
+- pnpm workspaces
+- Native `fetch` + `ReadableStream` for streaming (Vercel AI SDK is **not** used — custom event shape)
+- `postMessage` handshake for studio→runtime token (NOT URL hash — security)
+
+**Backend additions in Stage 0 (in scope, do not treat as "no backend changes"):**
+- New endpoint `POST /api/ai/chat/agent/stream` (SSE with events `token`, `tool_call_start`, `tool_call_end`, `state`, `done`)
+- New endpoint `GET /api/tenants/{tenantId}/branding` (public, pre-login)
+- New endpoint `GET /api/app-context` (subdomain-ready)
+- Liquibase changeset for `tenants` branding columns
+
+**When working on this initiative, always consult the plan doc first.** Sections 2 (Monorepo Structure) and 3 (How to Start) of this instructions file describe the **pre-rebuild** layout and will be rewritten at the end of Stage 1. Until then, treat the plan doc as authoritative for the new package structure.
+
+### 🚧 In Progress: DialogueManager Integration (Story 3.1)
 **File**: `ai-builder/src/main/java/com/appbana/ai/dialogue/DialogueManager.java`
 
 **Goal**: Enforce strict conversation state transitions in `AiChatController` using a Java-level state machine instead of relying solely on LLM prompt engineering.

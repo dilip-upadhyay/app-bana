@@ -177,6 +177,7 @@ public class AiServer {
             toolRegistry.register(new BatchUpdateEntitiesTool(metadataValidator, backendUrl));
             toolRegistry.register(new GenerateMockDataTool(backendUrl));
             toolRegistry.register(new RollbackAppTool(backendUrl));
+            toolRegistry.register(new UpdateAppTool(backendUrl));
 
             log.info("Registered {} tools", toolRegistry.getToolCount());
 
@@ -185,7 +186,8 @@ public class AiServer {
 
             // AI Agent (with optional RAG domain examples — Phase 4)
             AiAgent agent = new AiAgent(llmRegistry, toolRegistry, agentConfig)
-                    .withKnowledgeBase(knowledgeBaseService);
+                    .withKnowledgeBase(knowledgeBaseService)
+                    .withBackendBaseUrl(backendUrl);
 
             // AI Chat Controller (Story 3.1 — wire in DialogueManager)
             DialogueManager dialogueManager = new DialogueManager();
@@ -199,13 +201,17 @@ public class AiServer {
                     patternExecutor,
                     dialogueManager);
 
+            // SSE streaming controller (Stage 0 — AI-native UI rebuild)
+            com.appbana.ai.api.AgentStreamController streamController =
+                    new com.appbana.ai.api.AgentStreamController(agent, conversationMemory, dialogueManager);
+
             // Chat History Controller
             ChatHistoryController historyController = new ChatHistoryController(conversationMemory);
 
             log.info("AI services initialized successfully");
 
             // Register routes
-            registerRoutes(router, chatController, historyController);
+            registerRoutes(router, chatController, streamController, historyController);
 
         } catch (Exception e) {
             log.error("Failed to initialize AI services", e);
@@ -219,6 +225,7 @@ public class AiServer {
      * Register all AI endpoints
      */
     private void registerRoutes(Router router, AiChatController chatController,
+                                com.appbana.ai.api.AgentStreamController streamController,
                                 ChatHistoryController historyController) {
         // Health check
         router.get("/health", (req, res) -> {
@@ -232,19 +239,28 @@ public class AiServer {
         // Regular chat endpoint
         router.post("/api/ai/chat", chatController.chat());
 
-        // Agent-based chat endpoint
+        // Agent-based chat endpoint (sync — kept for backward compat)
         router.post("/api/ai/chat/agent", chatController.chatAgent());
+
+        // SSE streaming agent endpoint (Stage 0 — AI-native UI rebuild)
+        router.post("/api/ai/chat/agent/stream", streamController.stream());
 
         // Chat history endpoints
         router.get("/api/ai/chat/history",  historyController.getHistory());
         router.get("/api/ai/chat/sessions", historyController.getSessions());
+        // Stage 3 — session picker: rename + soft-delete
+        router.put("/api/ai/chat/sessions/{sessionId}",    historyController.renameSession());
+        router.delete("/api/ai/chat/sessions/{sessionId}", historyController.deleteSession());
 
         log.info("Registered AI routes:");
         log.info("  GET  /health");
         log.info("  POST /api/ai/chat");
         log.info("  POST /api/ai/chat/agent");
+        log.info("  POST /api/ai/chat/agent/stream  (SSE)");
         log.info("  GET  /api/ai/chat/history");
         log.info("  GET  /api/ai/chat/sessions");
+        log.info("  PUT  /api/ai/chat/sessions/{sessionId}    (rename)");
+        log.info("  DELETE /api/ai/chat/sessions/{sessionId}  (soft-delete)");
     }
 
     public void start() {

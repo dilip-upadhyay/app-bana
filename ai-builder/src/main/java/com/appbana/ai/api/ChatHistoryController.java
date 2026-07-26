@@ -97,13 +97,15 @@ public class ChatHistoryController {
     }
 
     /**
-     * GET /api/ai/chat/sessions?userId=X&limit=20
-     * Returns distinct recent sessions for the user (useful for a future session sidebar).
+     * GET /api/ai/chat/sessions?userId=X&appId=Y&limit=20
+     * Returns one summary per session (title, appId, lastActivity, turnCount).
+     * Deleted sessions are excluded.
      */
     public BiConsumer<Router.HttpRequest, Router.HttpResponse> getSessions() {
         return (req, res) -> {
             try {
                 String userId   = req.query("userId");
+                String appId    = req.query("appId");
                 String limitStr = req.query("limit");
 
                 if (userId == null || userId.isBlank()) {
@@ -113,40 +115,29 @@ public class ChatHistoryController {
 
                 int limit = 20;
                 if (limitStr != null) {
-                    try { limit = Integer.parseInt(limitStr); } catch (NumberFormatException ignored) {}
+                    try { limit = Integer.parseInt(limitStr); } catch (NumberFormatException ignored) { /* keep default */ }
                 }
 
-                log.info("[ChatHistory] Loading sessions for user={} limit={}", userId, limit);
+                log.info("[ChatHistory] Loading sessions user={} appId={} limit={}", userId, appId, limit);
 
-                List<ConversationMemory.Conversation> recent =
-                        conversationMemory.getRecentByUser(userId, limit * 2); // fetch more to de-dup
-
-                // De-duplicate session IDs, preserve order (most recent first)
-                LinkedHashSet<String> sessionIds = new LinkedHashSet<>();
-                Map<String, Long> sessionTimestamps = new LinkedHashMap<>();
-
-                for (ConversationMemory.Conversation conv : recent) {
-                    if (conv.getSessionId() != null) {
-                        String sid = conv.getSessionId().toString();
-                        sessionIds.add(sid);
-                        sessionTimestamps.put(sid,
-                                conv.getCreatedAt() != null ? conv.getCreatedAt().toEpochMilli() : 0L);
-                    }
-                    if (sessionIds.size() >= limit) break;
-                }
+                List<ConversationMemory.SessionSummary> summaries =
+                        conversationMemory.listSessionSummaries(userId, appId, limit);
 
                 List<Map<String, Object>> sessions = new ArrayList<>();
-                for (String sid : sessionIds) {
-                    Map<String, Object> s = new LinkedHashMap<>();
-                    s.put("sessionId", sid);
-                    s.put("lastActivity", sessionTimestamps.get(sid));
-                    sessions.add(s);
+                for (ConversationMemory.SessionSummary s : summaries) {
+                    Map<String, Object> out = new LinkedHashMap<>();
+                    out.put("sessionId",    s.getSessionId());
+                    out.put("title",        s.getTitle());
+                    out.put("appId",        s.getAppId());
+                    out.put("lastActivity", s.getLastActivity());
+                    out.put("turnCount",    s.getTurnCount());
+                    sessions.add(out);
                 }
 
                 res.json(200, Map.of(
-                        "userId", userId,
+                        "userId",   userId,
                         "sessions", sessions,
-                        "count", sessions.size()
+                        "count",    sessions.size()
                 ));
 
             } catch (ConversationMemory.ConversationMemoryException e) {
@@ -154,6 +145,76 @@ public class ChatHistoryController {
                 res.json(500, Map.of("error", "Failed to load sessions: " + e.getMessage()));
             } catch (Exception e) {
                 log.error("[ChatHistory] Unexpected error", e);
+                res.json(500, Map.of("error", "Internal error: " + e.getMessage()));
+            }
+        };
+    }
+
+    /**
+     * PUT /api/ai/chat/sessions/{sessionId}
+     * Body: { "userId": "...", "title": "New title" }
+     */
+    public BiConsumer<Router.HttpRequest, Router.HttpResponse> renameSession() {
+        return (req, res) -> {
+            try {
+                String sessionId = req.pathParam("sessionId");
+                Map<String, Object> body = req.readJson(new TypeReference<Map<String, Object>>() {});
+                String userId = body != null ? (String) body.get("userId") : null;
+                String title  = body != null ? (String) body.get("title")  : null;
+
+                if (userId == null || userId.isBlank() || title == null || title.isBlank()) {
+                    res.json(400, Map.of("error", "userId and title are required"));
+                    return;
+                }
+                UUID sid;
+                try { sid = UUID.fromString(sessionId); }
+                catch (IllegalArgumentException e) {
+                    res.json(400, Map.of("error", "sessionId must be a valid UUID"));
+                    return;
+                }
+
+                conversationMemory.renameSession(userId, sid, title.trim());
+                res.json(200, Map.of("sessionId", sessionId, "title", title.trim()));
+
+            } catch (ConversationMemory.ConversationMemoryException e) {
+                log.error("[ChatHistory] Rename failed", e);
+                res.json(500, Map.of("error", "Rename failed: " + e.getMessage()));
+            } catch (Exception e) {
+                log.error("[ChatHistory] Unexpected error on rename", e);
+                res.json(500, Map.of("error", "Internal error: " + e.getMessage()));
+            }
+        };
+    }
+
+    /**
+     * DELETE /api/ai/chat/sessions/{sessionId}?userId=X
+     * Soft-deletes: session is hidden from the picker, history rows are retained.
+     */
+    public BiConsumer<Router.HttpRequest, Router.HttpResponse> deleteSession() {
+        return (req, res) -> {
+            try {
+                String sessionId = req.pathParam("sessionId");
+                String userId    = req.query("userId");
+
+                if (userId == null || userId.isBlank()) {
+                    res.json(400, Map.of("error", "userId is required"));
+                    return;
+                }
+                UUID sid;
+                try { sid = UUID.fromString(sessionId); }
+                catch (IllegalArgumentException e) {
+                    res.json(400, Map.of("error", "sessionId must be a valid UUID"));
+                    return;
+                }
+
+                conversationMemory.deleteSession(userId, sid);
+                res.json(200, Map.of("sessionId", sessionId, "deleted", true));
+
+            } catch (ConversationMemory.ConversationMemoryException e) {
+                log.error("[ChatHistory] Delete failed", e);
+                res.json(500, Map.of("error", "Delete failed: " + e.getMessage()));
+            } catch (Exception e) {
+                log.error("[ChatHistory] Unexpected error on delete", e);
                 res.json(500, Map.of("error", "Internal error: " + e.getMessage()));
             }
         };

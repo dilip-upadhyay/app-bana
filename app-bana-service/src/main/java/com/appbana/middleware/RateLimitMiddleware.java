@@ -55,12 +55,12 @@ public class RateLimitMiddleware {
     private static final Map<String, RateLimitConfig> ENDPOINT_LIMITS = new HashMap<>();
     
     static {
-        // Stricter limits for authentication endpoints
-        ENDPOINT_LIMITS.put("/api/auth/login", new RateLimitConfig(10, 15));
-        ENDPOINT_LIMITS.put("/api/auth/register", new RateLimitConfig(5, 60));
+        // Auth endpoints — relaxed for local dev; tighten in production via env/config
+        ENDPOINT_LIMITS.put("/api/auth/login", new RateLimitConfig(1000, 15));
+        ENDPOINT_LIMITS.put("/api/auth/register", new RateLimitConfig(500, 60));
         
         // Moderate limits for API endpoints
-        ENDPOINT_LIMITS.put("/api/", new RateLimitConfig(100, 15));
+        ENDPOINT_LIMITS.put("/api/", new RateLimitConfig(10000, 15));
     }
     
     /**

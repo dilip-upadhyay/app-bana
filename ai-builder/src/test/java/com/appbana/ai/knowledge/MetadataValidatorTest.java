@@ -206,6 +206,40 @@ class MetadataValidatorTest {
     }
 
     @Test
+    void testValidatePage_AcceptsRuntimeRendererComponentTypes() {
+        // Regression: MetadataValidator's VALID_COMPONENT_TYPES must stay in sync
+        // with the switch in app-bana-runtime/src/runtime/Renderer.tsx. In particular,
+        // GeneratePageTool emits top-level "select" nodes for status fields so the
+        // runtime's dropdown renderer can consume options[] directly. If any of these
+        // node types are rejected, scaffold_app fails with "Page validation failed:
+        // Unknown component type: '...'" and no app can be created for schemas that
+        // include a status field, a longtext field, or a reference field.
+        String[] typesEmittedByAgentTools = { "select", "reference", "textarea" };
+
+        for (String componentType : typesEmittedByAgentTools) {
+            Map<String, Object> page = createBasicPage();
+            List<Map<String, Object>> nodes = new ArrayList<>();
+            Map<String, Object> node = new HashMap<>();
+            node.put("id", "node-" + componentType);
+            node.put("type", componentType);
+            Map<String, Object> props = new HashMap<>();
+            props.put("entity", "Employee");
+            props.put("field", "onboarding_status");
+            props.put("referenceEntity", "Employee");
+            node.put("props", props);
+            nodes.add(node);
+            page.put("nodes", nodes);
+
+            ValidationResult result = validator.validatePage(page);
+
+            assertFalse(
+                    result.getDetailedErrors().contains("Unknown component type: '" + componentType + "'"),
+                    "Runtime renders <" + componentType + "> nodes; validator must not reject them. Errors: "
+                            + result.getDetailedErrors());
+        }
+    }
+
+    @Test
     void testValidatePage_InputMissingBindingProps() {
         // Arrange
         Map<String, Object> page = createBasicPage();
@@ -305,6 +339,74 @@ class MetadataValidatorTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> fixedFields = (List<Map<String, Object>>) fixed.get("fields");
         assertEquals("First Name", fixedFields.get(0).get("label"));
+    }
+
+    /**
+     * Plan Stage 0.1 — node ids must survive regeneration.
+     * Verifies that auto-fixing the same input twice produces identical ids
+     * (i.e. UUID.randomUUID() has been replaced with a deterministic scheme).
+     */
+    @Test
+    void testAutoFix_NodeIdsAreDeterministic() {
+        Map<String, Object> page1 = new HashMap<>();
+        Map<String, Object> page2 = new HashMap<>();
+
+        List<Map<String, Object>> nodes1 = new ArrayList<>();
+        List<Map<String, Object>> nodes2 = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            Map<String, Object> n1 = new HashMap<>();
+            n1.put("type", i == 0 ? "container" : "input");
+            n1.put("name", "field" + i);
+            nodes1.add(n1);
+            Map<String, Object> n2 = new HashMap<>();
+            n2.put("type", i == 0 ? "container" : "input");
+            n2.put("name", "field" + i);
+            nodes2.add(n2);
+        }
+        page1.put("nodes", nodes1);
+        page2.put("nodes", nodes2);
+
+        Map<String, Object> fixed1 = validator.autoFix(page1, new ValidationResult());
+        Map<String, Object> fixed2 = validator.autoFix(page2, new ValidationResult());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> f1 = (List<Map<String, Object>>) fixed1.get("nodes");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> f2 = (List<Map<String, Object>>) fixed2.get("nodes");
+
+        for (int i = 0; i < 3; i++) {
+            String id1 = (String) f1.get(i).get("id");
+            String id2 = (String) f2.get(i).get("id");
+            assertNotNull(id1, "Node " + i + " missing id");
+            assertEquals(id1, id2, "Node " + i + " id must be identical across regenerations");
+            assertTrue(id1.startsWith("n_"), "Deterministic id should start with 'n_' prefix, got: " + id1);
+        }
+    }
+
+    @Test
+    void testAutoFix_FieldIdsDeriveFromName() {
+        Map<String, Object> entity = createBasicEntity();
+
+        List<Map<String, Object>> fields = new ArrayList<>();
+        Map<String, Object> field = new HashMap<>();
+        field.put("name", "customerEmail");
+        field.put("type", "email");
+        fields.add(field);
+        entity.put("fields", fields);
+
+        // Auto-fix twice — ids must be stable and derived from the field name.
+        Map<String, Object> fixedA = validator.autoFix(entity, new ValidationResult());
+        Map<String, Object> fixedB = validator.autoFix(entity, new ValidationResult());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> fa = (List<Map<String, Object>>) fixedA.get("fields");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> fb = (List<Map<String, Object>>) fixedB.get("fields");
+
+        String idA = (String) fa.get(0).get("id");
+        String idB = (String) fb.get(0).get("id");
+        assertEquals(idA, idB, "Field id must be stable across regenerations");
+        assertEquals("f_customeremail", idA, "Field id should derive from lowercased name");
     }
 
     // Helper methods

@@ -18,6 +18,7 @@ import java.util.*;
 public class SchemaEnricher {
 
     // --- Field key constants ---
+    private static final String F_ID            = "id";
     private static final String F_NAME          = "name";
     private static final String F_LABEL         = "label";
     private static final String F_TYPE          = "type";
@@ -111,6 +112,15 @@ public class SchemaEnricher {
             entity.put("fields", fields);
         }
 
+        // Step 0 — normalise field NAMES to snake_case (identifier discipline).
+        // The AI prompt asks the LLM to emit snake_case, but nothing downstream
+        // enforces it. If the LLM emits "Full Name" or "firstName", it propagates
+        // all the way to the DB as a quoted identifier with spaces/casing, which
+        // sets up drift bugs the moment the schema is renamed. Normalise once here
+        // so every downstream consumer (backend, page metadata, runtime) sees the
+        // same canonical name. The original label is preserved for display.
+        normaliseFieldNames(fields, entityName);
+
         // Step 1 — normalise types
         for (Map<String, Object> field : fields) {
             String original = (String) field.get(F_TYPE);
@@ -138,6 +148,14 @@ public class SchemaEnricher {
                 }
             }
         }
+
+        // Step 1c — every field with type=status MUST have a non-empty options[].
+        // When the LLM omits options (common), inject a domain-neutral default so
+        // the generated form renders a real <select> instead of a free-text input.
+        // The runtime is defensive against missing options, but the UX defect
+        // ("status" as a text box) leaked through in early Customer Onboarding
+        // apps. Enforce at the metadata boundary so every future app benefits.
+        enforceStatusOptions(fields, entityName);
 
         // Step 2 — build set of existing field names (case-insensitive)
         Set<String> existingNames = new HashSet<>();
@@ -239,6 +257,54 @@ public class SchemaEnricher {
         }
     }
 
+    /** Default status pipeline used when the LLM omits options for a status field. */
+    static final List<String> DEFAULT_STATUS_OPTIONS = List.of(
+            "New", "In Progress", "Completed", "Cancelled");
+
+    /**
+     * Step 1c helper — every field with type=status must have a non-empty options[].
+     * Missing/empty options get {@link #DEFAULT_STATUS_OPTIONS} injected. This closes
+     * the "status renders as free-text input" UX defect at the metadata boundary so
+     * every downstream consumer (page generator, runtime) sees a well-formed status.
+     */
+    static void enforceStatusOptions(List<Map<String, Object>> fields, String entityName) {
+        for (Map<String, Object> field : fields) {
+            if (!"status".equals(field.get(F_TYPE))) continue;
+            Object opts = field.get("options");
+            boolean missing = opts == null;
+            boolean empty   = opts instanceof List<?> list && list.isEmpty();
+            if (missing || empty) {
+                field.put("options", new ArrayList<>(DEFAULT_STATUS_OPTIONS));
+                log.warn("[SchemaEnricher] Entity '{}': status field '{}' had no options — injected default {}",
+                        entityName, field.get(F_NAME), DEFAULT_STATUS_OPTIONS);
+            }
+        }
+    }
+
+    /**
+     * Step 0 helper — normalise every field name in the list to snake_case,
+     * preserving the original human-readable form as the label when none exists.
+     */
+    private void normaliseFieldNames(List<Map<String, Object>> fields, String entityName) {        for (Map<String, Object> field : fields) {
+            Object rawName = field.get(F_NAME);
+            if (rawName == null) continue;
+            String originalName = String.valueOf(rawName);
+            String normalised = toSnakeCase(originalName);
+            if (!normalised.equals(originalName)) {
+                log.warn("[SchemaEnricher] Entity '{}': field name '{}' \u2192 '{}' (normalised to snake_case)",
+                        entityName, originalName, normalised);
+                field.put(F_NAME, normalised);
+                Object lbl = field.get(F_LABEL);
+                if (lbl == null || String.valueOf(lbl).isBlank()) {
+                    field.put(F_LABEL, originalName);
+                }
+            }
+            if (field.containsKey(F_ID)) {
+                field.put(F_ID, normalised);
+            }
+        }
+    }
+
     /**
      * Resolves a raw LLM-produced type string to a valid AppBana type.
      * Priority: exact match → alias lookup → fallback to "text".
@@ -251,5 +317,34 @@ public class SchemaEnricher {
         if (aliased != null) return aliased;
         log.warn("[SchemaEnricher] Unknown type '{}' — falling back to '{}'", raw, DEFAULT_TYPE);
         return DEFAULT_TYPE;
+    }
+
+    /**
+     * Converts any human-friendly identifier to canonical snake_case.
+     * Rules (applied in order):
+     *   1. Split acronym\u2192Word boundaries: "HTTPResponse" \u2192 "HTTP_Response"
+     *   2. Split camelCase boundaries: "firstName" \u2192 "first_Name"
+     *   3. Replace whitespace / hyphens with underscores: "Full Name" \u2192 "Full_Name"
+     *   4. Strip characters that are not letters, digits, or underscores
+     *   5. Collapse runs of underscores
+     *   6. Trim leading/trailing underscores
+     *   7. Lower-case the result
+     * If normalisation strips everything, the trimmed original is returned so
+     * we never silently produce an empty identifier.
+     */
+    static String toSnakeCase(String input) {
+        if (input == null) return null;
+        String trimmed = input.trim();
+        if (trimmed.isEmpty()) return trimmed;
+        String out = trimmed
+                .replaceAll("(?<=[A-Z])(?=[A-Z][a-z])", "_")
+                .replaceAll("(?<=[a-z0-9])(?=[A-Z])",   "_")
+                .replaceAll("[\\s\\-]+", "_")
+                .replaceAll("\\W", "")
+                .replaceAll("_+", "_")
+                .toLowerCase();
+        while (out.startsWith("_")) out = out.substring(1);
+        while (out.endsWith("_")) out = out.substring(0, out.length() - 1);
+        return out.isEmpty() ? trimmed : out;
     }
 }

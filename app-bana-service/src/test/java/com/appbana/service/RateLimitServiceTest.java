@@ -45,7 +45,8 @@ class RateLimitServiceTest {
     @Order(1)
     @DisplayName("First request should be allowed with full remaining count")
     void testFirstRequestAllowed() {
-        // Act
+        // Act — exercise the default-arg overload so we're asserting the
+        // shipped DEFAULT_MAX_ATTEMPTS budget, not an inline override.
         RateLimitService.RateLimitResult result = 
             RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
         
@@ -61,10 +62,11 @@ class RateLimitServiceTest {
     @Order(2)
     @DisplayName("Multiple requests within limit should be allowed")
     void testMultipleRequestsWithinLimit() {
-        // Act - Make 50 requests
+        // Act - Make 50 requests against an explicit 100/15min budget so the
+        // assertion is independent of DEFAULT_MAX_ATTEMPTS.
         RateLimitService.RateLimitResult lastResult = null;
         for (int i = 0; i < 50; i++) {
-            lastResult = RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            lastResult = RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
             assertTrue(lastResult.allowed(), "Request " + (i + 1) + " should be allowed");
         }
         
@@ -77,15 +79,15 @@ class RateLimitServiceTest {
     @Order(3)
     @DisplayName("Per-IP limiting: Block attacker after 100 attempts in 15min")
     void testPerIpLimitingBlocksAfter100Attempts() {
-        // Act - Make exactly 100 requests
+        // Act - Make exactly 100 requests against an explicit 100/15min budget.
         RateLimitService.RateLimitResult result = null;
         for (int i = 0; i < 100; i++) {
-            result = RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            result = RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
             assertTrue(result.allowed(), "Request " + (i + 1) + " should be allowed");
         }
         
         // Assert - 101st request should be blocked
-        result = RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+        result = RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         assertFalse(result.allowed(), "101st request should be blocked");
         assertEquals(0, result.remaining(), "Should have 0 remaining");
         assertTrue(result.retryAfterSeconds() > 0, "Should have retry-after time");
@@ -95,14 +97,14 @@ class RateLimitServiceTest {
     @Order(4)
     @DisplayName("Blocked requests should return retry-after time")
     void testBlockedRequestReturnsRetryAfter() {
-        // Arrange - Exhaust limit
+        // Arrange - Exhaust an explicit 100/15min budget.
         for (int i = 0; i < 100; i++) {
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         }
         
         // Act
         RateLimitService.RateLimitResult result = 
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         
         // Assert
         assertFalse(result.allowed());
@@ -115,14 +117,14 @@ class RateLimitServiceTest {
     @Order(5)
     @DisplayName("Get status without recording attempt")
     void testGetStatusWithoutRecording() {
-        // Arrange - Make 10 requests
+        // Arrange - Make 10 requests against an explicit 100/15min budget.
         for (int i = 0; i < 10; i++) {
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         }
         
         // Act - Check status without recording
         RateLimitService.RateLimitResult status = 
-            RateLimitService.getRateLimitStatus(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.getRateLimitStatus(TEST_IP, TEST_ENDPOINT, 100, 15);
         
         // Assert
         assertTrue(status.allowed());
@@ -130,7 +132,7 @@ class RateLimitServiceTest {
         
         // Verify no new attempt was recorded
         RateLimitService.RateLimitResult afterCheck = 
-            RateLimitService.getRateLimitStatus(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.getRateLimitStatus(TEST_IP, TEST_ENDPOINT, 100, 15);
         assertEquals(90, afterCheck.remaining(), "Remaining should still be 90");
     }
     
@@ -210,17 +212,17 @@ class RateLimitServiceTest {
         
         // Act - Exhaust limit on endpoint1
         for (int i = 0; i < 100; i++) {
-            RateLimitService.checkRateLimit(TEST_IP, endpoint1);
+            RateLimitService.checkRateLimit(TEST_IP, endpoint1, 100, 15);
         }
         
         // Assert - endpoint1 should be blocked
         RateLimitService.RateLimitResult result1 = 
-            RateLimitService.checkRateLimit(TEST_IP, endpoint1);
+            RateLimitService.checkRateLimit(TEST_IP, endpoint1, 100, 15);
         assertFalse(result1.allowed(), "endpoint1 should be blocked");
         
         // Assert - endpoint2 should still be allowed
         RateLimitService.RateLimitResult result2 = 
-            RateLimitService.checkRateLimit(TEST_IP, endpoint2);
+            RateLimitService.checkRateLimit(TEST_IP, endpoint2, 100, 15);
         assertTrue(result2.allowed(), "endpoint2 should be allowed");
         assertEquals(99, result2.remaining(), "endpoint2 should have 99 remaining");
     }
@@ -234,16 +236,16 @@ class RateLimitServiceTest {
         
         // Act - Exhaust limit for ip1
         for (int i = 0; i < 100; i++) {
-            RateLimitService.checkRateLimit(ip1, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(ip1, TEST_ENDPOINT, 100, 15);
         }
         
         // Assert - ip1 blocked, ip2 allowed
         RateLimitService.RateLimitResult result1 = 
-            RateLimitService.checkRateLimit(ip1, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(ip1, TEST_ENDPOINT, 100, 15);
         assertFalse(result1.allowed(), "ip1 should be blocked");
         
         RateLimitService.RateLimitResult result2 = 
-            RateLimitService.checkRateLimit(ip2, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(ip2, TEST_ENDPOINT, 100, 15);
         assertTrue(result2.allowed(), "ip2 should be allowed");
     }
     
@@ -253,11 +255,11 @@ class RateLimitServiceTest {
     void testResetSingleIpEndpoint() {
         // Arrange - Exhaust limit
         for (int i = 0; i < 100; i++) {
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         }
         
         RateLimitService.RateLimitResult blocked = 
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         assertFalse(blocked.allowed());
         
         // Act - Reset
@@ -265,7 +267,7 @@ class RateLimitServiceTest {
         
         // Assert - Should be allowed again
         RateLimitService.RateLimitResult afterReset = 
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         assertTrue(afterReset.allowed(), "Should be allowed after reset");
         assertEquals(99, afterReset.remaining());
     }
@@ -279,8 +281,8 @@ class RateLimitServiceTest {
         
         // Arrange - Make requests to multiple endpoints
         for (int i = 0; i < 50; i++) {
-            RateLimitService.checkRateLimit(TEST_IP, endpoint1);
-            RateLimitService.checkRateLimit(TEST_IP, endpoint2);
+            RateLimitService.checkRateLimit(TEST_IP, endpoint1, 100, 15);
+            RateLimitService.checkRateLimit(TEST_IP, endpoint2, 100, 15);
         }
         
         // Act - Reset entire IP
@@ -288,9 +290,9 @@ class RateLimitServiceTest {
         
         // Assert - Both endpoints should be reset
         RateLimitService.RateLimitResult result1 = 
-            RateLimitService.checkRateLimit(TEST_IP, endpoint1);
+            RateLimitService.checkRateLimit(TEST_IP, endpoint1, 100, 15);
         RateLimitService.RateLimitResult result2 = 
-            RateLimitService.checkRateLimit(TEST_IP, endpoint2);
+            RateLimitService.checkRateLimit(TEST_IP, endpoint2, 100, 15);
         
         assertEquals(99, result1.remaining(), "endpoint1 should be reset");
         assertEquals(99, result2.remaining(), "endpoint2 should be reset");
@@ -304,12 +306,12 @@ class RateLimitServiceTest {
     void testClientWarningAt80Percent() {
         // Arrange - Make 79 requests (79% of 100)
         for (int i = 0; i < 79; i++) {
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         }
         
         // Act - 80th request
         RateLimitService.RateLimitResult result = 
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         
         // Assert - Should trigger warning
         assertTrue(result.allowed(), "Request should be allowed");
@@ -323,12 +325,12 @@ class RateLimitServiceTest {
     void testNoWarningBelowThreshold() {
         // Arrange - Make 50 requests (50% of 100)
         for (int i = 0; i < 50; i++) {
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         }
         
         // Act
         RateLimitService.RateLimitResult result = 
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         
         // Assert - Should NOT trigger warning
         assertTrue(result.allowed());
@@ -435,7 +437,7 @@ class RateLimitServiceTest {
                 try {
                     for (int j = 0; j < requestsPerThread; j++) {
                         RateLimitService.RateLimitResult result = 
-                            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+                            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
                         if (result.allowed()) {
                             allowedCount.incrementAndGet();
                         }
@@ -470,7 +472,7 @@ class RateLimitServiceTest {
             executor.submit(() -> {
                 try {
                     RateLimitService.RateLimitResult result = 
-                        RateLimitService.checkRateLimit(TEST_IP, endpoint);
+                        RateLimitService.checkRateLimit(TEST_IP, endpoint, 100, 15);
                     if (result.allowed()) {
                         successCount.incrementAndGet();
                     }
@@ -501,7 +503,7 @@ class RateLimitServiceTest {
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
-                    RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+                    RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
                 } finally {
                     latch.countDown();
                 }
@@ -516,7 +518,7 @@ class RateLimitServiceTest {
         
         // Verify state is consistent
         RateLimitService.RateLimitResult status = 
-            RateLimitService.getRateLimitStatus(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.getRateLimitStatus(TEST_IP, TEST_ENDPOINT, 100, 15);
         assertEquals(0, status.remaining(), "Should have 0 remaining after 200 requests");
     }
     
@@ -558,9 +560,9 @@ class RateLimitServiceTest {
     @DisplayName("Get tracked entries count")
     void testGetTrackedEntriesCount() {
         // Arrange - Create multiple entries
-        RateLimitService.checkRateLimit("192.168.1.1", "/api/endpoint1");
-        RateLimitService.checkRateLimit("192.168.1.2", "/api/endpoint1");
-        RateLimitService.checkRateLimit("192.168.1.1", "/api/endpoint2");
+        RateLimitService.checkRateLimit("192.168.1.1", "/api/endpoint1", 100, 15);
+        RateLimitService.checkRateLimit("192.168.1.2", "/api/endpoint1", 100, 15);
+        RateLimitService.checkRateLimit("192.168.1.1", "/api/endpoint2", 100, 15);
         
         // Act
         int count = RateLimitService.getTrackedEntriesCount();
@@ -574,7 +576,7 @@ class RateLimitServiceTest {
     @DisplayName("Clear all rate limits")
     void testClearAllRateLimits() {
         // Arrange - Create entries
-        RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+        RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         assertTrue(RateLimitService.getTrackedEntriesCount() > 0);
         
         // Act
@@ -586,7 +588,7 @@ class RateLimitServiceTest {
         
         // Verify new requests work correctly
         RateLimitService.RateLimitResult result = 
-            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT);
+            RateLimitService.checkRateLimit(TEST_IP, TEST_ENDPOINT, 100, 15);
         assertEquals(99, result.remaining(), "Should start fresh after clear");
     }
     
@@ -596,24 +598,24 @@ class RateLimitServiceTest {
     void testInputValidation() {
         // Assert - Null/empty IP address
         assertThrows(IllegalArgumentException.class, () -> 
-            RateLimitService.checkRateLimit(null, TEST_ENDPOINT)
+            RateLimitService.checkRateLimit(null, TEST_ENDPOINT, 100, 15)
         );
         
         assertThrows(IllegalArgumentException.class, () -> 
-            RateLimitService.checkRateLimit("", TEST_ENDPOINT)
+            RateLimitService.checkRateLimit("", TEST_ENDPOINT, 100, 15)
         );
         
         assertThrows(IllegalArgumentException.class, () -> 
-            RateLimitService.checkRateLimit("   ", TEST_ENDPOINT)
+            RateLimitService.checkRateLimit("   ", TEST_ENDPOINT, 100, 15)
         );
         
         // Assert - Null/empty endpoint
         assertThrows(IllegalArgumentException.class, () -> 
-            RateLimitService.checkRateLimit(TEST_IP, null)
+            RateLimitService.checkRateLimit(TEST_IP, null, 100, 15)
         );
         
         assertThrows(IllegalArgumentException.class, () -> 
-            RateLimitService.checkRateLimit(TEST_IP, "")
+            RateLimitService.checkRateLimit(TEST_IP, "", 100, 15)
         );
     }
 }

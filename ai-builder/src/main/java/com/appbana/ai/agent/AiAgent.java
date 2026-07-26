@@ -28,6 +28,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.concurrent.Future;
 import java.util.concurrent.ExecutionException;
 
@@ -55,6 +60,13 @@ public class AiAgent {
     private boolean patternMatchingEnabled = true; // Cost optimization
     private boolean semanticCacheEnabled = false; // DISABLED TEMPORARILY: Cache returning stale prompt responses
     private KnowledgeBaseService knowledgeBase = null; // Optional - RAG domain examples (Phase 4)
+    // Optional — when set the agent can fetch the currently-selected app's entity
+    // summary and inject it into the system prompt so the LLM doesn't have to guess
+    // whether "Department" is an entity or a field on Employee.
+    private String backendBaseUrl = null;
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
 
     public AiAgent(LlmRegistry llmRegistry, ToolRegistry toolRegistry, AgentConfig config) {
         this.llmRegistry = llmRegistry;
@@ -75,6 +87,18 @@ public class AiAgent {
     public AiAgent withKnowledgeBase(KnowledgeBaseService kb) {
         this.knowledgeBase = kb;
         log.info("AiAgent: RAG domain examples enabled");
+        return this;
+    }
+
+    /**
+     * Attach the app-bana-service base URL so the agent can lazily fetch a compact
+     * entity summary for the currently-selected app and inject it into the LLM
+     * prompt. Without this the LLM has to guess entity/field names, which leads to
+     * wasted tool calls (e.g. calling get_entity_details on a field name).
+     */
+    public AiAgent withBackendBaseUrl(String url) {
+        this.backendBaseUrl = url;
+        log.info("AiAgent: backend base URL set for entity summary injection: {}", url);
         return this;
     }
 
@@ -107,6 +131,382 @@ public class AiAgent {
      */
     public AgentResponse process(String userMessage, AgentContext context) {
         return process(userMessage, context, null, null);
+    }
+
+    /**
+     * Process a user message through the agent loop, emitting SSE events to the supplied emitter.
+     * The agent loop runs synchronously on the calling (virtual) thread while events are pushed
+     * to the client in real time.
+     */
+    public AgentResponse processWithStream(String userMessage, AgentContext context,
+                                           String provider, List<String> images,
+                                           StreamEmitter emitter) {
+        LlmService llmService = llmRegistry.getService(provider);
+        long startTime = System.currentTimeMillis();
+        List<AgentResponse.AgentStep> steps = new ArrayList<>();
+
+        // Emit the current dialogue state as the first event so the UI can react
+        String conversationState = (String) context.getVariable("conversation_state");
+        if (conversationState != null) {
+            emitter.state(conversationState);
+        }
+
+        try {
+            log.info("[AGENT-STREAM] Starting stream processing for user: {}", context.userId());
+
+            // Pattern matching (cost optimisation, no LLM call)
+            if (patternMatchingEnabled) {
+                java.util.Optional<AgentResponse> patternResult = patternExecutor.tryExecute(userMessage, context);
+                if (patternResult.isPresent()) {
+                    AgentResponse resp = patternResult.get();
+                    emitter.token(resp.getFinalAnswer());
+                    emitter.done(context.sessionId(), resp.getFinalAnswer());
+                    return resp;
+                }
+            }
+
+            int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
+            int consecutiveFailures = 0;
+            Set<String> failedSignatures = new HashSet<>();
+            // Track successful tool signatures per request to break repeat-success loops
+            // (e.g. LLM calling list_apps 6 times in a row with identical arguments).
+            java.util.Map<String, Integer> successCounts = new java.util.HashMap<>();
+
+            for (int iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
+                log.info("[AGENT-STREAM] === Iteration {} / {} ===", iteration, effectiveMaxIterations);
+
+                long elapsed = System.currentTimeMillis() - startTime;
+                if (elapsed > config.getTimeoutSeconds() * 1000L) {
+                    log.warn("[AGENT-STREAM] Timeout reached after {}ms", elapsed);
+                    return AgentResponse.error("Agent timeout after " + elapsed + "ms", steps, elapsed);
+                }
+
+                AgentThought thought = think(userMessage, steps, context, llmService, images);
+                if (thought == null) {
+                    String msg = "Sorry — I couldn't get a response from the AI model. Please try again in a moment.";
+                    emitter.token(msg);
+                    emitter.done(context.sessionId(), msg);
+                    return AgentResponse.error(msg, steps, System.currentTimeMillis() - startTime);
+                }
+
+                AgentResponse.AgentStep step = new AgentResponse.AgentStep(iteration, thought.getThinking());
+
+                // Stall guard: the LLM returned neither a final answer nor a tool call.
+                // Without this the loop would silently burn iterations and the user would
+                // see an empty assistant bubble. Convert it into a helpful fallback.
+                if (!thought.isFinalAnswer() && !thought.hasToolCalls()) {
+                    steps.add(step);
+                    String stallMsg = buildStallFallback(steps);
+                    emitter.token(stallMsg);
+                    emitter.done(context.sessionId(), stallMsg);
+                    return AgentResponse.success(stallMsg, steps, System.currentTimeMillis() - startTime);
+                }
+
+                if (thought.isFinalAnswer()) {
+                    steps.add(step);
+                    String finalAnswer = thought.getFinalAnswer();
+                    emitter.token(finalAnswer);
+                    emitter.done(context.sessionId(), finalAnswer);
+                    return AgentResponse.success(finalAnswer, steps, System.currentTimeMillis() - startTime);
+                }
+
+                if (thought.hasToolCalls()) {
+                    List<ToolResult> results = executeToolsWithStream(thought.getToolCalls(), context, emitter);
+                    boolean allToolsFailed = true;
+                    boolean loopDetected = false;
+
+                    for (ToolResult result : results) {
+                        String signature = result.getToolName() + ":" + result.getArguments();
+                        if (!result.isSuccess()) {
+                            if (failedSignatures.contains(signature)) {
+                                result.setError("CRITICAL: Repeated failure. " + result.getError());
+                            }
+                            failedSignatures.add(signature);
+                        } else {
+                            failedSignatures.remove(signature);
+                            allToolsFailed = false;
+                            int count = successCounts.merge(signature, 1, Integer::sum);
+                            if (count >= 2) {
+                                // Same tool + same args already succeeded this request. Do not
+                                // let the LLM keep re-issuing it — abort the loop and hand back
+                                // whatever answer we have so far.
+                                log.warn("[AGENT-STREAM] Aborting loop: tool '{}' already succeeded with identical args {} time(s)",
+                                        result.getToolName(), count);
+                                loopDetected = true;
+                            }
+                        }
+                        step.addToolResult(result);
+                    }
+
+                    if (loopDetected) {
+                        steps.add(step);
+                        // Operation-aware fallback: if a mutation tool (e.g. batch_update_entities)
+                        // succeeded, tell the user the change went through instead of the old
+                        // "please tell me which app" message which made successful edits look failed.
+                        String finalMsg;
+                        ToolResult batchOk = results.stream()
+                                .filter(r -> "batch_update_entities".equals(r.getToolName()) && r.isSuccess())
+                                .findFirst().orElse(null);
+                        if (batchOk != null) {
+                            finalMsg = buildBatchUpdateFinalMessage(batchOk);
+                        } else if (results.stream().anyMatch(r -> r.isSuccess() && isMutationTool(r.getToolName()))) {
+                            finalMsg = "I've made the requested changes. Refresh the preview if you don't see them yet.";
+                        } else {
+                            // Read-only loop (e.g. LLM kept calling list_entities). Use
+                            // buildStallFallback which summarises tools that ran and asks a
+                            // sensible follow-up — do NOT tell the user to "pick an app"
+                            // when they clearly already have one selected.
+                            finalMsg = buildStallFallback(steps);
+                        }
+                        emitter.token(finalMsg);
+                        emitter.done(context.sessionId(), finalMsg);
+                        return AgentResponse.success(finalMsg, steps, System.currentTimeMillis() - startTime);
+                    }
+
+                    if (allToolsFailed) {
+                        consecutiveFailures++;
+                        if (consecutiveFailures >= 3) {
+                            steps.add(step);
+                            String msg = "I ran into repeated errors trying to complete that request. " +
+                                    "Details: " + results.get(0).getError() + ". Please rephrase or try again.";
+                            emitter.token(msg);
+                            emitter.done(context.sessionId(), msg);
+                            return AgentResponse.error(msg, steps, System.currentTimeMillis() - startTime);
+                        }
+                    } else {
+                        consecutiveFailures = 0;
+
+                        boolean scaffoldSucceeded = results.stream()
+                                .anyMatch(r -> "scaffold_app".equals(r.getToolName()) && r.isSuccess());
+                        if (scaffoldSucceeded) {
+                            steps.add(step);
+                            ToolResult scaffoldResult = results.stream()
+                                    .filter(r -> "scaffold_app".equals(r.getToolName()) && r.isSuccess())
+                                    .findFirst().get();
+
+                            String finalMsg = buildScaffoldFinalMessage(scaffoldResult, context);
+                            emitter.token(finalMsg);
+                            emitter.done(context.sessionId(), finalMsg);
+                            return AgentResponse.success(finalMsg, steps, System.currentTimeMillis() - startTime);
+                        }
+
+                        // Same shortcut for batch entity edits — once the mutation succeeds we
+                        // don't need to hand control back to the LLM (which tends to loop and
+                        // re-issue the identical call, wasting tokens and confusing the user).
+                        ToolResult batchOk = results.stream()
+                                .filter(r -> "batch_update_entities".equals(r.getToolName()) && r.isSuccess())
+                                .findFirst().orElse(null);
+                        if (batchOk != null) {
+                            steps.add(step);
+                            String finalMsg = buildBatchUpdateFinalMessage(batchOk);
+                            emitter.token(finalMsg);
+                            emitter.done(context.sessionId(), finalMsg);
+                            return AgentResponse.success(finalMsg, steps, System.currentTimeMillis() - startTime);
+                        }
+                    }
+                }
+
+                steps.add(step);
+            }
+
+            String errMsg = buildStallFallback(steps);
+            emitter.token(errMsg);
+            emitter.done(context.sessionId(), errMsg);
+            return AgentResponse.error(errMsg, steps, System.currentTimeMillis() - startTime);
+
+        } catch (Exception e) {
+            log.error("[AGENT-STREAM] Error in streaming processing", e);
+            String msg = "Sorry — something went wrong while processing your request. Please try again.";
+            try {
+                emitter.token(msg);
+                emitter.done(context.sessionId(), msg);
+            } catch (Exception ignored) {
+                // Emitter may already be closed; nothing else we can do here.
+            }
+            return AgentResponse.error("Agent error: " + e.getMessage(), steps,
+                    System.currentTimeMillis() - startTime);
+        }
+    }
+
+    /**
+     * Execute tools and emit tool_call_start / tool_call_end events for each one.
+     */
+    private List<ToolResult> executeToolsWithStream(List<ToolCall> toolCalls, AgentContext context,
+                                                     StreamEmitter emitter) {
+        if (toolCalls.isEmpty()) return Collections.emptyList();
+
+        boolean requiresSequential = toolCalls.stream()
+                .anyMatch(call -> call.getName().equals("create_entity") ||
+                        call.getName().equals("generate_page") ||
+                        call.getName().equals("create_app"));
+
+        List<ToolResult> results = new ArrayList<>();
+
+        if (requiresSequential) {
+            for (ToolCall call : toolCalls) {
+                String id = call.getName() + "-" + System.nanoTime();
+                emitter.toolCallStart(id, call.getName(), call.getArguments());
+                long t = System.currentTimeMillis();
+                ToolResult result;
+                try {
+                    Tool tool = toolRegistry.getTool(call.getName());
+                    if (tool == null) {
+                        result = ToolResult.error(call.getName(), "Tool not found: " + call.getName());
+                    } else {
+                        result = tool.execute(call.getArguments(), context);
+                        result.setExecutionTimeMs(System.currentTimeMillis() - t);
+                        result.setToolName(call.getName());
+                    }
+                } catch (Exception e) {
+                    log.error("[AGENT-STREAM] Tool execution failed: {}", call.getName(), e);
+                    result = ToolResult.error(call.getName(), "Execution error: " + e.getMessage());
+                }
+                emitter.toolCallEnd(id, result.isSuccess() ? "ok" : "error",
+                        result.isSuccess() ? result.getData() : result.getError());
+                results.add(result);
+            }
+        } else {
+            try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+                List<Callable<ToolResult>> tasks = new ArrayList<>();
+                List<String> ids = new ArrayList<>();
+                for (ToolCall call : toolCalls) {
+                    String id = call.getName() + "-" + System.nanoTime();
+                    ids.add(id);
+                    emitter.toolCallStart(id, call.getName(), call.getArguments());
+                    tasks.add(() -> {
+                        long t = System.currentTimeMillis();
+                        try {
+                            Tool tool = toolRegistry.getTool(call.getName());
+                            if (tool == null) return ToolResult.error(call.getName(), "Tool not found: " + call.getName());
+                            ToolResult res = tool.execute(call.getArguments(), context);
+                            res.setExecutionTimeMs(System.currentTimeMillis() - t);
+                            res.setToolName(call.getName());
+                            try { res.setArguments(objectMapper.writeValueAsString(call.getArguments())); } catch (Exception ignored) {}
+                            return res;
+                        } catch (Exception e) {
+                            return ToolResult.error(call.getName(), "Execution error: " + e.getMessage());
+                        }
+                    });
+                }
+                List<Future<ToolResult>> futures = executor.invokeAll(tasks);
+                for (int i = 0; i < futures.size(); i++) {
+                    ToolResult res;
+                    try { res = futures.get(i).get(); } catch (Exception e) {
+                        res = ToolResult.error("unknown", "Future failed: " + e.getMessage());
+                    }
+                    emitter.toolCallEnd(ids.get(i), res.isSuccess() ? "ok" : "error",
+                            res.isSuccess() ? res.getData() : res.getError());
+                    results.add(res);
+                }
+            } catch (Exception e) {
+                log.error("[AGENT-STREAM] Critical error in parallel streaming execution", e);
+                results.add(ToolResult.error("agent_system", "Parallel execution failed: " + e.getMessage()));
+            }
+        }
+        return results;
+    }
+
+    /** Reusable scaffold success message builder (used by both sync and stream paths). */
+    private String buildScaffoldFinalMessage(ToolResult scaffoldResult, AgentContext context) {
+        String finalMsg = "Your app has been built and deployed successfully! You can now find it in the Apps section.";
+        Object data = scaffoldResult.getData();
+        if (data instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> dataMap = (Map<String, Object>) data;
+            String appName = (String) dataMap.get("appName");
+            @SuppressWarnings("unchecked")
+            List<?> pages = (List<?>) dataMap.get("pagesCreated");
+            @SuppressWarnings("unchecked")
+            List<?> entities = (List<?>) dataMap.get("entitiesCreated");
+            String appId = (String) dataMap.get("appId");
+            String tenantId = context.tenantId() != null ? context.tenantId() : "default";
+            if (appName != null) {
+                String appUrl = appId != null ? String.format("/run/%s/%s", tenantId, appId) : null;
+                String urlLine = appUrl != null
+                        ? String.format("\n\n🌐 **Open your app:** [Click here to launch it](%s)", appUrl)
+                        : "\n\nYou can open it via 📂 Open App in the top toolbar.";
+                finalMsg = String.format(
+                        "🎉 **%s** has been built and deployed successfully!\n\n" +
+                        "- **%d entities** created: %s\n" +
+                        "- **%d pages** created: %s%s",
+                        appName,
+                        entities != null ? entities.size() : 0, entities,
+                        pages != null ? pages.size() : 0, pages,
+                        urlLine);
+            }
+        }
+        return finalMsg;
+    }
+
+    /**
+     * Reusable batch-update success message builder. Turns the tool result into a
+     * user-facing "done" message that names the entities/operations touched, so the
+     * user isn't left wondering whether their add_fields / remove_fields / rename
+     * request actually landed.
+     */
+    private String buildBatchUpdateFinalMessage(ToolResult batchResult) {
+        Object data = batchResult.getData();
+        if (data instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> dataMap = (Map<String, Object>) data;
+            @SuppressWarnings("unchecked")
+            List<String> successful = (List<String>) dataMap.get("successfulUpdates");
+            if (successful != null && !successful.isEmpty()) {
+                // successful entries look like "Employee:add_fields"
+                String detail = String.join(", ", successful);
+                return "✅ Done — I applied the requested changes: " + detail
+                        + ". Refresh the preview if you don't see them yet.";
+            }
+        }
+        return "✅ Done — I applied the requested changes. Refresh the preview if you don't see them yet.";
+    }
+
+    /**
+     * Fallback message when the agent loop finishes without the LLM producing a final answer
+     * (e.g. it kept issuing read-only tool calls, stalled, or hit max iterations). Summarises
+     * what did happen so the user isn't left staring at an empty chat bubble.
+     */
+    private String buildStallFallback(List<AgentResponse.AgentStep> steps) {
+        // Collect names of tools that ran successfully across all steps.
+        java.util.LinkedHashSet<String> okTools = new java.util.LinkedHashSet<>();
+        java.util.LinkedHashSet<String> failedTools = new java.util.LinkedHashSet<>();
+        boolean anyMutation = false;
+        for (AgentResponse.AgentStep s : steps) {
+            List<ToolResult> results = s.getToolResults();
+            if (results == null) continue;
+            for (ToolResult r : results) {
+                String name = r.getToolName() != null ? r.getToolName() : "unknown";
+                if (r.isSuccess()) {
+                    okTools.add(name);
+                    if (isMutationTool(name)) anyMutation = true;
+                } else {
+                    failedTools.add(name);
+                }
+            }
+        }
+
+        if (anyMutation) {
+            return "I've made the requested changes. Refresh the preview if you don't see them yet, "
+                    + "or tell me what to adjust next.";
+        }
+        if (!okTools.isEmpty() && failedTools.isEmpty()) {
+            return "I gathered the information I needed (" + String.join(", ", okTools) + ") "
+                    + "but I haven't made any changes yet. Want me to go ahead — just say **yes** "
+                    + "or tell me exactly what to change.";
+        }
+        if (!failedTools.isEmpty()) {
+            return "I tried to complete that request but ran into problems with: "
+                    + String.join(", ", failedTools) + ". Could you rephrase or give me more detail?";
+        }
+        return "I'm not sure what to do next. Could you tell me a bit more about what you'd like to change?";
+    }
+
+    private static final java.util.Set<String> MUTATION_TOOLS = java.util.Set.of(
+            "scaffold_app", "create_app", "create_entity", "generate_page",
+            "batch_update_entities", "generate_mock_data", "deploy_app", "rollback_app");
+
+    private static boolean isMutationTool(String name) {
+        return name != null && MUTATION_TOOLS.contains(name);
     }
 
     /**
@@ -264,7 +664,10 @@ public class AiAgent {
             StringBuilder promptBuilder = new StringBuilder();
             promptBuilder.append("### SYSTEM INSTRUCTIONS ###\n");
             promptBuilder.append(buildSystemPrompt(context)).append("\n\n");
-            
+
+            promptBuilder.append("### CURRENT EXECUTION CONTEXT ###\n");
+            promptBuilder.append(buildExecutionContext(context)).append("\n\n");
+
             promptBuilder.append("### AVAILABLE TOOLS ###\n");
             promptBuilder.append(toolRegistry.getToolDescriptions()).append("\n\n");
 
@@ -568,6 +971,128 @@ public class AiAgent {
                         2. **NEW BUILD**: If the `appId` was "(none selected)" or you just created a brand new app, you MUST use words like "built and deployed" or "created".
                         """);
         return prompt.toString();
+    }
+
+    /**
+     * Emit a compact block describing the current agent execution context so the LLM knows
+     * which app / tenant / user it's operating on. The system prompt references
+     * "CURRENT EXECUTION CONTEXT below" — this method is what produces it.
+     */
+    private String buildExecutionContext(AgentContext context) {
+        String appId = context.appId();
+        boolean appSelected = appId != null && !appId.isBlank() && !"default".equals(appId);
+        String appName = context.hasVariable("app_name") ? String.valueOf(context.getVariable("app_name")) : "";
+        String tenantId = context.tenantId() != null ? context.tenantId() : "default";
+        String userId = context.userId() != null ? context.userId() : "anonymous";
+
+        StringBuilder sb = new StringBuilder();
+        if (appSelected) {
+            sb.append("- Selected app ID: ").append(appId).append('\n');
+            if (!appName.isBlank()) {
+                sb.append("- Selected app name: \"").append(appName).append("\"\n");
+            }
+            sb.append("- An app IS currently selected. When the user asks \"which app do I have selected?\" or ")
+              .append("similar, answer directly using the name above — DO NOT tell them to select an app first.\n");
+        } else {
+            sb.append("- Selected app ID: (none selected)\n");
+            sb.append("- No app is currently selected. If the user's request needs an app, ask which one.\n");
+        }
+        sb.append("- Tenant: ").append(tenantId).append('\n');
+        sb.append("- User: ").append(userId);
+
+        // Inject a compact entity+field summary for the selected app so the LLM can
+        // answer factual questions ("how many chars can I enter in Department?")
+        // without a round-trip that might mis-identify a field name as an entity.
+        // Best-effort: silently skipped if the backend URL isn't wired or the fetch
+        // fails.
+        if (appSelected && backendBaseUrl != null) {
+            String summary = loadEntitySummary(context);
+            if (summary != null && !summary.isBlank()) {
+                sb.append("\n\n### ENTITIES IN THIS APP ###\n");
+                sb.append(summary);
+                sb.append("\n(Names of fields listed above are FIELDS on their parent entity, not standalone entities. ")
+                  .append("Do NOT call get_entity_details on a field name — call it on the parent entity.)");
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Lazily fetch a compact entity summary for the currently-selected app and cache
+     * it on the context. Runs once per conversation (cached under variable key
+     * "entity_summary") so per-iteration prompt building is cheap.
+     */
+    @SuppressWarnings("unchecked")
+    private String loadEntitySummary(AgentContext context) {
+        if (context.hasVariable("entity_summary")) {
+            Object cached = context.getVariable("entity_summary");
+            return cached instanceof String s ? s : null;
+        }
+        try {
+            String tenantId = context.tenantId() != null ? context.tenantId() : "default";
+            String url = String.format("%s/appbana-studio/%s/apps/%s", backendBaseUrl, tenantId, context.appId());
+            HttpRequest.Builder rb = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Accept", "application/json")
+                    .timeout(Duration.ofSeconds(5));
+            if (context.token() != null && !context.token().isEmpty()) {
+                rb.header("Authorization", "Bearer " + context.token());
+            }
+            HttpResponse<String> resp = httpClient.send(rb.GET().build(), HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) {
+                log.debug("[AGENT] Entity summary fetch returned {}: skipping", resp.statusCode());
+                context.variables().put("entity_summary", "");
+                return "";
+            }
+            Map<String, Object> app = objectMapper.readValue(resp.body(), Map.class);
+            String summary = buildEntitySummaryText(app);
+            context.variables().put("entity_summary", summary);
+            return summary;
+        } catch (Exception e) {
+            log.debug("[AGENT] Entity summary fetch failed (best-effort): {}", e.getMessage());
+            context.variables().put("entity_summary", "");
+            return "";
+        }
+    }
+
+    /** Turn the raw app metadata into a short, LLM-friendly entity+field listing. */
+    @SuppressWarnings("unchecked")
+    private String buildEntitySummaryText(Map<String, Object> app) {
+        Object entitiesObj = app.get("entities");
+        if (!(entitiesObj instanceof List<?> entitiesList) || entitiesList.isEmpty()) {
+            // Fall back to bare schema names if the app hasn't been hydrated with full entities.
+            Object schemas = app.get("schemas");
+            if (schemas instanceof List<?> sl && !sl.isEmpty()) {
+                return sl.stream().map(String::valueOf).map(n -> "- " + n).collect(Collectors.joining("\n"));
+            }
+            return "";
+        }
+        StringBuilder out = new StringBuilder();
+        for (Object eo : entitiesList) {
+            if (!(eo instanceof Map<?, ?> em)) continue;
+            Map<String, Object> entity = (Map<String, Object>) em;
+            String entityName = String.valueOf(entity.getOrDefault("name", "(unnamed)"));
+            Object fieldsObj = entity.get("fields");
+            out.append("- ").append(entityName);
+            if (fieldsObj instanceof List<?> fields && !fields.isEmpty()) {
+                out.append(" (fields: ");
+                out.append(fields.stream().limit(30).map(f -> {
+                    if (!(f instanceof Map<?, ?> fm)) return "";
+                    Map<String, Object> fmap = (Map<String, Object>) fm;
+                    Object fn = fmap.get("name");
+                    Object ft = fmap.get("type");
+                    Object flen = fmap.get("length");
+                    String base = String.valueOf(fn) + (ft != null ? ":" + ft : "");
+                    if (flen != null && ("text".equals(String.valueOf(ft)) || "string".equals(String.valueOf(ft)))) {
+                        base += "(" + flen + ")";
+                    }
+                    return base;
+                }).filter(s -> !s.isEmpty()).collect(Collectors.joining(", ")));
+                out.append(")");
+            }
+            out.append('\n');
+        }
+        return out.toString();
     }
 
     /**

@@ -1,0 +1,408 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------------- */
+/* Design tokens — single source of truth for color / spacing / radius / etc */
+/* Runtime UX Overhaul Plan §0.2 — see docs/planning/RUNTIME_UX_OVERHAUL_PLAN */
+/* ------------------------------------------------------------------------- */
+:root {
+  /* Brand */
+  --color-brand:        #6366f1;  /* violet-600 */
+  --color-brand-hover:  #4f46e5;
+  --color-brand-active: #4338ca;
+  --color-brand-soft:   #eef2ff;
+  --color-brand-on-soft:#4338ca;
+
+  /* Surface */
+  --color-surface:   #ffffff;
+  --color-surface-2: #f8fafc;   /* app background */
+  --color-surface-3: #f1f5f9;   /* subtle panel */
+
+  /* Border */
+  --color-border:        #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  /* Text */
+  --color-text-primary:   #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-tertiary:  #94a3b8;
+
+  /* Status */
+  --color-success-bg: #dcfce7; --color-success-fg: #166534;
+  --color-warning-bg: #fef3c7; --color-warning-fg: #92400e;
+  --color-danger-bg:  #fee2e2; --color-danger-fg:  #991b1b;
+  --color-info-bg:    #dbeafe; --color-info-fg:    #1e40af;
+  --color-neutral-bg: #f1f5f9; --color-neutral-fg: #475569;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Base — typography + document defaults                                     */
+/* ------------------------------------------------------------------------- */
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont,
+                 'Segoe UI', 'Helvetica Neue', sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Components — controls emitted by Renderer.tsx                             */
+/* Each rule targets the class the renderer applies (appbana-*).             */
+/* ------------------------------------------------------------------------- */
+@layer components {
+
+  /* ---- Inputs (text / date / email / number / password) --------------- */
+  .appbana-input,
+  .appbana-select,
+  .appbana-textarea {
+    @apply w-full
+           px-3.5 py-2.5
+           rounded-lg
+           border border-gray-300
+           bg-white text-gray-900 text-sm
+           placeholder-gray-400
+           shadow-sm
+           transition-all duration-150 ease-out
+           focus:outline-none
+           focus:border-indigo-500
+           focus:ring-2 focus:ring-indigo-500/25
+           hover:border-gray-400;
+  }
+  .appbana-input:disabled,
+  .appbana-select:disabled,
+  .appbana-textarea:disabled {
+    @apply bg-gray-100 text-gray-500 cursor-not-allowed;
+  }
+
+  /* Native <select> gets a chevron caret so it doesn't look like a text input */
+  .appbana-select {
+    @apply appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.65rem center;
+    background-size: 1.15rem;
+  }
+
+  .appbana-textarea {
+    @apply resize-y min-h-[96px] leading-relaxed;
+  }
+
+  /* ---- Field wrapper (persistent label + input + optional help) ------- */
+  .appbana-field {
+    @apply flex flex-col gap-1.5 min-w-0;
+  }
+  .appbana-field-label {
+    @apply text-xs font-semibold text-gray-700 tracking-wide;
+    /* Override the base `label` rule so wrapped labels don't get double margin */
+    margin-bottom: 0;
+  }
+  .appbana-field-required {
+    @apply text-rose-500 ml-0.5;
+  }
+  .appbana-field-help {
+    @apply text-xs text-gray-500 mt-0.5;
+  }
+  /* Force full-width fields (textarea, table) to span the whole grid row */
+  .appbana-field-full,
+  .appbana-form .appbana-form-full {
+    grid-column: 1 / -1;
+  }
+
+  /* ---- Form layout — responsive 2-col grid that collapses to 1-col ---- */
+  .appbana-form {
+    @apply grid gap-x-6 gap-y-5;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  /* Direct <button> children (like a Save button) span the whole row and
+     get top spacing so they don't sit flush to the last field. */
+  .appbana-form > button,
+  .appbana-form > .appbana-button {
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin-top: 0.25rem;
+  }
+  /* Standalone <p> / helper text spans the whole row so it doesn't break
+     the two-column rhythm. */
+  .appbana-form > p {
+    grid-column: 1 / -1;
+    @apply text-sm text-gray-600;
+  }
+
+  /* ---- Buttons — MD3 filled tonal ------------------------------------- */
+  .appbana-button {
+    @apply inline-flex items-center justify-center gap-2
+           px-6 py-2.5
+           rounded-lg
+           text-white text-sm font-medium tracking-wide
+           bg-indigo-600
+           shadow-sm
+           transition-all duration-150 ease-out
+           hover:bg-indigo-700 hover:shadow
+           active:bg-indigo-800 active:shadow-none active:translate-y-px
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-white
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 disabled:hover:shadow-sm;
+  }
+  /* Optional variants toggled by className the renderer passes through */
+  .appbana-button.secondary {
+    @apply bg-indigo-50 text-indigo-700 shadow-none
+           hover:bg-indigo-100 hover:shadow-none
+           active:bg-indigo-200;
+  }
+  .appbana-button.danger {
+    @apply bg-red-600 hover:bg-red-700 active:bg-red-800
+           focus:ring-red-500;
+  }
+  .appbana-button.ghost {
+    @apply bg-transparent text-indigo-600 shadow-none
+           hover:bg-indigo-50 hover:shadow-none active:bg-indigo-100;
+  }
+
+  /* ---- Runtime page tabs (legacy — retained for backwards compat) ------ */
+  .appbana-tab {
+    @apply px-3 py-1.5 rounded-md text-sm font-medium
+           text-gray-600
+           transition-colors duration-150
+           hover:bg-gray-100 hover:text-gray-900
+           focus:outline-none focus:ring-2 focus:ring-indigo-500;
+  }
+  .appbana-tab-active {
+    @apply bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-700;
+  }
+
+  /* ---- Top app bar (sticky, spans full viewport width) ---------------- */
+  .appbana-appbar {
+    @apply h-14 flex items-center gap-3 px-4 sm:px-6
+           border-b border-gray-200 bg-white shadow-sm
+           sticky top-0 z-20;
+  }
+  .appbana-appbar-brand {
+    @apply font-semibold text-gray-900 text-base tracking-tight truncate;
+  }
+  .appbana-appbar-menu {
+    @apply inline-flex items-center justify-center
+           w-9 h-9 rounded-md
+           text-gray-600
+           transition-colors duration-150
+           hover:bg-gray-100 hover:text-gray-900
+           focus:outline-none focus:ring-2 focus:ring-indigo-500;
+  }
+
+  /* ---- Left navigation sidebar ---------------------------------------- */
+  .appbana-sidebar-container {
+    @apply w-60 shrink-0 border-r border-gray-200 bg-white;
+  }
+  .appbana-sidebar {
+    @apply h-full;
+  }
+  .appbana-sidebar-link {
+    @apply w-full flex items-center gap-3
+           px-3 py-2
+           rounded-md
+           text-sm font-medium text-left
+           text-gray-700
+           border-l-2 border-transparent
+           transition-colors duration-150
+           hover:bg-gray-50 hover:text-gray-900
+           focus:outline-none focus:ring-2 focus:ring-indigo-500;
+  }
+  .appbana-sidebar-link-active {
+    @apply bg-indigo-50 text-indigo-700 border-indigo-600
+           hover:bg-indigo-100 hover:text-indigo-700;
+  }
+  .appbana-sidebar-icon {
+    @apply w-4 h-4 shrink-0 text-current;
+  }
+  .appbana-sidebar-icon > svg {
+    @apply w-full h-full;
+  }
+
+  /* ---- Mobile drawer (below md: breakpoint) --------------------------- */
+  .appbana-drawer-backdrop {
+    @apply fixed inset-0 z-30
+           bg-slate-900/40 backdrop-blur-[2px]
+           cursor-default;
+  }
+  .appbana-drawer {
+    @apply fixed top-0 left-0 z-40
+           h-full w-64
+           bg-white border-r border-gray-200 shadow-xl
+           -translate-x-full
+           transition-transform duration-200 ease-out;
+  }
+  .appbana-drawer-open {
+    @apply translate-x-0;
+  }
+
+  /* ---- Page card container -------------------------------------------- */
+  .appbana-page-card {
+    @apply bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8;
+  }
+
+  /* ---- Sprint 1: PageShell (title, subtitle, breadcrumb, actions) ----- */
+  .appbana-page-shell {
+    @apply flex flex-col gap-6;
+  }
+  .appbana-page-header {
+    @apply flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3
+           pb-4 border-b border-slate-200;
+  }
+  .appbana-page-crumbs {
+    @apply flex items-center gap-1.5 text-xs text-slate-500 mb-1;
+  }
+  .appbana-page-crumbs > .sep { @apply text-slate-300; }
+  .appbana-page-title {
+    @apply text-2xl font-semibold tracking-tight text-slate-900 leading-tight;
+  }
+  .appbana-page-subtitle {
+    @apply text-sm text-slate-500 mt-1;
+  }
+  .appbana-page-actions {
+    @apply flex items-center gap-2 shrink-0;
+  }
+  .appbana-page-body {
+    @apply flex flex-col gap-6;
+  }
+
+  /* ---- Sprint 1: Form cell + form-save-cell (replace inline styles) --- */
+  .appbana-form-cell {
+    @apply flex flex-col gap-1.5;
+  }
+  .appbana-form-save-cell {
+    /* Full-row cell that the sticky action bar renders inside. */
+    grid-column: 1 / -1;
+    @apply flex items-center justify-end mt-4 pt-4 border-t border-slate-200;
+  }
+
+  /* ---- Sprint 1: Sticky form action bar ------------------------------- */
+  .appbana-form-actions {
+    @apply flex flex-wrap items-center justify-end gap-3
+           w-full;
+  }
+  .appbana-form-actions .primary {
+    @apply appbana-button;
+  }
+  .appbana-form-actions .secondary {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2.5 rounded-lg text-sm font-medium
+           bg-transparent text-slate-700
+           border border-slate-300
+           hover:bg-slate-100 hover:border-slate-400
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .appbana-form-actions .tertiary {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2.5 rounded-lg text-sm font-medium
+           text-slate-600
+           hover:bg-slate-100 hover:text-slate-900
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* ---- Sprint 1: Status pill ------------------------------------------ */
+  .appbana-status-pill {
+    @apply inline-flex items-center gap-1
+           px-2.5 py-0.5 rounded-full
+           text-xs font-medium tracking-normal
+           whitespace-nowrap;
+  }
+  .appbana-status-pill.status-success { background: var(--color-success-bg); color: var(--color-success-fg); }
+  .appbana-status-pill.status-warning { background: var(--color-warning-bg); color: var(--color-warning-fg); }
+  .appbana-status-pill.status-danger  { background: var(--color-danger-bg);  color: var(--color-danger-fg);  }
+  .appbana-status-pill.status-info    { background: var(--color-info-bg);    color: var(--color-info-fg);    }
+  .appbana-status-pill.status-neutral { background: var(--color-neutral-bg); color: var(--color-neutral-fg); }
+
+  /* ---- Sprint 1: Table header — sentence case, non-uppercase in DOM --- */
+  .appbana-table-th {
+    @apply px-4 py-3
+           text-xs font-semibold uppercase tracking-wider
+           text-slate-500 text-left
+           bg-slate-50 border-b border-slate-200;
+  }
+  .appbana-table-td {
+    @apply px-4 py-3 text-sm text-slate-700 align-middle;
+  }
+  .appbana-table-row {
+    @apply border-b border-slate-100
+           transition-colors duration-100
+           hover:bg-slate-50;
+  }
+  .appbana-table-row-actions {
+    @apply relative w-10 px-2 text-right;
+  }
+  .appbana-row-actions-btn {
+    @apply inline-flex items-center justify-center
+           w-8 h-8 rounded-md
+           text-slate-400
+           opacity-0 group-hover:opacity-100
+           hover:bg-slate-100 hover:text-slate-700
+           focus:outline-none focus:opacity-100 focus:ring-2 focus:ring-indigo-500
+           transition-all duration-100;
+  }
+  .appbana-row-actions-menu {
+    @apply absolute right-2 top-9 z-10
+           min-w-[10rem]
+           bg-white border border-slate-200 rounded-lg shadow-lg
+           py-1;
+  }
+  .appbana-row-actions-menu button {
+    @apply w-full text-left px-3 py-1.5 text-sm text-slate-700
+           hover:bg-slate-100
+           focus:outline-none focus:bg-slate-100;
+  }
+  .appbana-row-actions-menu button.danger {
+    @apply text-rose-600 hover:bg-rose-50;
+  }
+
+  /* ---- Sprint 1: Empty state ------------------------------------------ */
+  .appbana-empty {
+    @apply flex flex-col items-center justify-center
+           gap-3 px-6 py-16 text-center;
+  }
+  .appbana-empty h3 {
+    @apply text-base font-semibold text-slate-700;
+  }
+  .appbana-empty p {
+    @apply text-sm text-slate-500 max-w-sm;
+  }
+
+  /* ---- Sprint 1: Toaster ---------------------------------------------- */
+  .appbana-toaster {
+    @apply fixed bottom-4 right-4 z-50
+           flex flex-col gap-2
+           pointer-events-none;
+  }
+  .appbana-toast {
+    @apply pointer-events-auto
+           flex items-start gap-3
+           min-w-[260px] max-w-sm
+           px-4 py-3 pr-8
+           bg-white border border-slate-200 rounded-lg shadow-lg
+           text-sm text-slate-800
+           animate-[toast-in_150ms_ease-out];
+  }
+  .appbana-toast.success { @apply border-emerald-200; }
+  .appbana-toast.error   { @apply border-rose-200; }
+  .appbana-toast .dot {
+    @apply mt-1 w-2 h-2 rounded-full shrink-0;
+  }
+  .appbana-toast.success .dot { @apply bg-emerald-500; }
+  .appbana-toast.error   .dot { @apply bg-rose-500;    }
+  .appbana-toast.info    .dot { @apply bg-indigo-500;  }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0);   }
+  }
+}
