@@ -726,6 +726,31 @@ public class EntityCrudService {
                         throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                     yield lv;
                 }
+                case "decimal", "numeric", "money", "float", "double" -> {
+                    // Coerce to BigDecimal so Postgres NUMERIC columns accept
+                    // the bind. Accepts Number (JSON number literal) and String
+                    // (form input or JSON string). min/max are compared as
+                    // Long -> BigDecimal.
+                    java.math.BigDecimal bd;
+                    if (raw instanceof java.math.BigDecimal existing) {
+                        bd = existing;
+                    } else if (raw instanceof Number n) {
+                        // Use String constructor via toString() to avoid the
+                        // double-precision noise of BigDecimal.valueOf(double).
+                        bd = new java.math.BigDecimal(n.toString());
+                    } else {
+                        String rs = raw.toString().trim();
+                        if (rs.isEmpty()) yield null;
+                        bd = new java.math.BigDecimal(rs);
+                    }
+                    if (f.getMin() != null
+                            && bd.compareTo(java.math.BigDecimal.valueOf(f.getMin())) < 0)
+                        throw new IllegalArgumentException("field '" + f.getName() + "' below min");
+                    if (f.getMax() != null
+                            && bd.compareTo(java.math.BigDecimal.valueOf(f.getMax())) > 0)
+                        throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    yield bd;
+                }
                 case "boolean" -> {
                     if (raw instanceof Boolean) {
                         yield raw;
