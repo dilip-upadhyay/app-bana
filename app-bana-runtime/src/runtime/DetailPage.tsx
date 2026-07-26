@@ -253,7 +253,7 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
     if (!record) return;
     const ok = await confirm({
       title: `Delete ${entityLabel}?`,
-      message: 'This can be undone from the notification for a few seconds.',
+      message: 'This cannot be truly undone — the notification lets you recreate the row with the same fields, but any links to other records will not be restored.',
       confirmLabel: 'Delete',
       danger: true,
     });
@@ -266,19 +266,22 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
         detail: { entity: entityKey, id: recordId },
       }));
       toast.success(`${entityLabel} deleted`, {
-        // Sprint 3 task 3.10 — action slot restores the row via insert.
+        description: 'Use Recreate to insert the same fields back as a new record (with a new id).',
+        // Sprint 3 task 3.10 (post-review: honest copy) — action slot
+        // re-inserts the row as a fresh record. It gets a new PK, so this
+        // is a "Recreate", not a genuine undo. Backend soft-delete would
+        // be needed to restore the original id + inbound FKs.
         action: {
-          label: 'Undo',
+          label: 'Recreate',
           onClick: async () => {
             try {
-              // Preserve the original id so tables refresh in place.
               await insertEntityRow(entityKey, snapshot, token);
               window.dispatchEvent(new CustomEvent('appbana:row-inserted', {
                 detail: { entity: entityKey },
               }));
-              toast.info(`${entityLabel} restored`);
+              toast.info(`${entityLabel} recreated as a new record`);
             } catch (err) {
-              toast.error('Restore failed', {
+              toast.error('Recreate failed', {
                 description: err instanceof Error ? err.message : String(err),
               });
             }

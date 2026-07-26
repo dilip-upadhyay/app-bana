@@ -73,12 +73,19 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
   const nav = useRuntimeNavigation();
   const confirm = useConfirm();
 
-  // Sprint 3 task 3.6 — delete a single row with confirm dialog + undo toast.
+  // Sprint 3 task 3.6 — delete a single row with confirm dialog + recreate toast.
+  //
+  // Post-review note: the "Undo" action re-inserts the row payload, which
+  // means the restored record gets a *new* primary key. Any foreign keys
+  // that pointed at the original row stay orphaned. The copy below is
+  // careful not to promise a true undo — call it out as "Recreate" and warn
+  // that links won't come back. A real undo needs a soft-delete column and
+  // a POST /restore endpoint (deferred, tracked in the follow-up backlog).
   const handleDelete = useCallback(async (row: Record<string, unknown>, rowId: string) => {
     const entityName = entityNameFromKey(entityKey) || 'record';
     const ok = await confirm({
       title: `Delete ${entityName}?`,
-      message: 'This can be undone from the notification for a few seconds.',
+      message: 'This cannot be truly undone — the notification lets you recreate the row with the same fields, but any links to other records will not be restored.',
       confirmLabel: 'Delete',
       danger: true,
     });
@@ -90,19 +97,20 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
         detail: { entity: qualifyEntityKey(entityKey), id: rowId },
       }));
       toast.success(`${entityName} deleted`, {
-        // Sprint 3 task 3.10 — action slot restores the row.
+        description: 'Use Recreate to insert the same fields back as a new record (with a new id).',
+        // Sprint 3 task 3.10 — action slot re-inserts the row as a fresh record.
         action: {
-          label: 'Undo',
+          label: 'Recreate',
           onClick: () => {
             insertEntityRow(qualifyEntityKey(entityKey), row, token)
               .then(() => {
                 window.dispatchEvent(new CustomEvent('appbana:row-inserted', {
                   detail: { entity: qualifyEntityKey(entityKey) },
                 }));
-                toast.info(`${entityName} restored`);
+                toast.info(`${entityName} recreated as a new record`);
               })
               .catch((err) => {
-                toast.error('Restore failed', {
+                toast.error('Recreate failed', {
                   description: err instanceof Error ? err.message : String(err),
                 });
               });

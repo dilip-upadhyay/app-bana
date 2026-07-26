@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import type { TenantBranding } from '@appbana/shared';
 import { fetchBranding } from '@appbana/shared';
 import { Button } from '../runtime/Button';
+import { applyBrandRamp } from '../runtime/applyBrandRamp';
 
 interface Props {
   tenantId: string;
@@ -34,18 +35,11 @@ export function LoginPage({ tenantId, onLogin }: Props) {
     fetchBranding(tenantId).then(setBranding).catch(() => {});
   }, [tenantId]);
 
-  // Task 3.9 — mirror the ramp AppRuntimeShell computes post-login so the
-  // login card, focus rings, and submit button all share the tenant tint.
+  // Task 3.9 (post-review: extracted to applyBrandRamp helper) — mirror the
+  // ramp AppRuntimeShell computes post-login so the login card, focus rings,
+  // and submit button all share the tenant tint.
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const root = document.documentElement;
-    const brand = branding?.primaryColor?.trim();
-    if (!brand) return;
-    root.style.setProperty('--color-brand', brand);
-    root.style.setProperty('--color-brand-hover',  `color-mix(in srgb, ${brand} 88%, black)`);
-    root.style.setProperty('--color-brand-active', `color-mix(in srgb, ${brand} 76%, black)`);
-    root.style.setProperty('--color-brand-soft',    `color-mix(in srgb, ${brand} 12%, white)`);
-    root.style.setProperty('--color-brand-on-soft', `color-mix(in srgb, ${brand} 76%, black)`);
+    applyBrandRamp(branding?.primaryColor);
   }, [branding?.primaryColor]);
 
   async function handleSubmit(e: React.FormEvent) {

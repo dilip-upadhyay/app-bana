@@ -35,10 +35,6 @@ export interface PageActionsProps {
   readonly page: PageMeta;
 }
 
-/** Custom-event names emitted by the Detail-page action buttons. */
-export const PAGE_EDIT_EVENT = 'appbana:page:edit';
-export const PAGE_DELETE_EVENT = 'appbana:page:delete';
-
 interface PageActionsInternals {
   readonly kind: ReturnType<typeof classifyKind>;
   readonly entity: string | null;
@@ -113,9 +109,6 @@ export function PageActions({ page }: Readonly<PageActionsProps>) {
           variant="secondary"
           icon={<EditIcon />}
           onClick={() => {
-            window.dispatchEvent(
-              new CustomEvent(PAGE_EDIT_EVENT, { detail: { pageId: page.id, entity } }),
-            );
             toast.info('Select a record from the list to edit it');
           }}
         >
@@ -125,9 +118,6 @@ export function PageActions({ page }: Readonly<PageActionsProps>) {
           variant="danger"
           icon={<TrashIcon />}
           onClick={() => {
-            window.dispatchEvent(
-              new CustomEvent(PAGE_DELETE_EVENT, { detail: { pageId: page.id, entity } }),
-            );
             toast.info(`Select a ${label} to delete`, {
               description: 'Open a row from the list to enable this action.',
             });

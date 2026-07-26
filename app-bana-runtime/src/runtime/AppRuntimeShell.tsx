@@ -20,6 +20,7 @@ import { Toaster } from './Toaster';
 import { UserMenu } from './UserMenu';
 import { DetailPage } from './DetailPage';
 import { ConfirmDialogHost } from './ConfirmDialog';
+import { applyBrandRamp } from './applyBrandRamp';
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
@@ -168,29 +169,12 @@ export function AppRuntimeShell() {
     return () => { cancelled = true; };
   }, [token, ctx?.tenantId]);
 
-  // --- Sprint 3 task 3.9: propagate primaryColor into the CSS token stack ---
-  // Every brand-coloured surface (buttons, active nav, tabs, tooltips…) reads
-  // `--color-brand` off :root. We compute matching hover / active / soft
-  // variants via `color-mix` so a single tenant colour drives the whole tint
-  // ramp. Runs at document scope so preview iframes inherit the tint too.
+  // Sprint 3 task 3.9 (post-review: extracted to applyBrandRamp helper) —
+  // propagate tenant primaryColor into the shared CSS token stack so every
+  // brand-coloured surface (buttons, active nav, tabs, tooltips…) re-tints
+  // in unison. Runs at document scope so preview iframes inherit too.
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const root = document.documentElement;
-    const brand = branding?.primaryColor?.trim();
-    if (!brand) {
-      // Reset to the defaults defined in globals.css :root
-      ['--color-brand', '--color-brand-hover', '--color-brand-active',
-       '--color-brand-soft', '--color-brand-on-soft']
-        .forEach((v) => root.style.removeProperty(v));
-      return;
-    }
-    root.style.setProperty('--color-brand', brand);
-    // Darker shades for hover/active — 12% and 24% blended toward black.
-    root.style.setProperty('--color-brand-hover',  `color-mix(in srgb, ${brand} 88%, black)`);
-    root.style.setProperty('--color-brand-active', `color-mix(in srgb, ${brand} 76%, black)`);
-    // Softer tinted background for filled-tonal / soft variants (~10% brand + white).
-    root.style.setProperty('--color-brand-soft',    `color-mix(in srgb, ${brand} 12%, white)`);
-    root.style.setProperty('--color-brand-on-soft', `color-mix(in srgb, ${brand} 76%, black)`);
+    applyBrandRamp(branding?.primaryColor);
   }, [branding?.primaryColor]);
 
   // --- Login handler (when not embedded in studio) ---
