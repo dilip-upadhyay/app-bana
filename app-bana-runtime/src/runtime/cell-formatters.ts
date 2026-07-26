@@ -135,14 +135,21 @@ export function pickReferenceLabel(row: Record<string, unknown> | null | undefin
 }
 
 // ─── Status pill classification ──────────────────────────────────────────────
+//
+// Plan-mandated colour mapping (RUNTIME_UX_OVERHAUL_PLAN §Sprint 2 Task 2.6):
+//   New / Draft / Open        → info    (blue)
+//   In Progress / Processing  → warning (amber)
+//   Completed / Approved      → success (green)
+//   Blocked / Cancelled       → danger  (red)
+//   fallback                  → neutral (slate)
 
 export type StatusTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
 const TONE_RULES: Array<{ readonly pattern: RegExp; readonly tone: StatusTone }> = [
   { pattern: /^(done|completed|complete|closed|approved|active|success|paid|shipped)$/i, tone: 'success' },
-  { pattern: /^(in\s*progress|pending|processing|onboarding|open|new|draft)$/i, tone: 'info' },
-  { pattern: /^(on\s*hold|waiting|review|blocked|delayed|warning)$/i, tone: 'warning' },
-  { pattern: /^(cancelled|canceled|failed|rejected|error|deleted|inactive)$/i, tone: 'danger' },
+  { pattern: /^(in\s*progress|processing|pending|onboarding|on\s*hold|waiting|review|delayed|warning)$/i, tone: 'warning' },
+  { pattern: /^(new|open|draft|info)$/i, tone: 'info' },
+  { pattern: /^(blocked|cancelled|canceled|failed|rejected|error|deleted|inactive)$/i, tone: 'danger' },
 ];
 
 export function classifyStatus(value: unknown): StatusTone {

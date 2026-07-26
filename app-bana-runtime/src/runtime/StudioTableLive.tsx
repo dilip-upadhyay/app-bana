@@ -14,7 +14,8 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { ComponentNode } from '@appbana/shared';
 import { fetchEntityRows } from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
-import { formatDate, humanizeHeader, pickReferenceLabel, classifyStatus } from './cell-formatters';
+import { formatDate, humanizeHeader, pickReferenceLabel } from './cell-formatters';
+import { StatusPill } from './StatusPill';
 import { RowActions } from './RowActions';
 import { toast } from './Toaster';
 import { EmptyState } from './EmptyState';
@@ -168,8 +169,7 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     // Status pill
     if (type === 'status') {
       const s = raw == null ? '' : String(raw);
-      if (!s) return <span className="text-slate-400">—</span>;
-      return <span className={`appbana-status-pill status-${classifyStatus(s)}`}>{s}</span>;
+      return <StatusPill value={s} />;
     }
 
     // Date / datetime
@@ -182,11 +182,7 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     // Boolean
     if (type === 'boolean') {
       const truthy = raw === true || raw === 'true' || raw === 1 || raw === '1';
-      return (
-        <span className={`appbana-status-pill ${truthy ? 'status-success' : 'status-neutral'}`}>
-          {truthy ? 'Yes' : 'No'}
-        </span>
-      );
+      return <StatusPill value={truthy ? 'Yes' : 'No'} tone={truthy ? 'success' : 'neutral'} />;
     }
 
     // Default

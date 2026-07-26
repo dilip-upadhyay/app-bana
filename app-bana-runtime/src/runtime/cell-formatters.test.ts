@@ -106,18 +106,21 @@ describe('classifyStatus', () => {
     expect(classifyStatus('Paid')).toBe('success');
   });
 
-  it('maps in-progress states to info', () => {
-    expect(classifyStatus('In Progress')).toBe('info');
+  it('maps new / open / draft states to info (blue)', () => {
     expect(classifyStatus('New')).toBe('info');
+    expect(classifyStatus('Open')).toBe('info');
     expect(classifyStatus('Draft')).toBe('info');
   });
 
-  it('maps waiting/warning states to warning', () => {
+  it('maps in-progress and waiting states to warning (amber)', () => {
+    expect(classifyStatus('In Progress')).toBe('warning');
+    expect(classifyStatus('Processing')).toBe('warning');
     expect(classifyStatus('On Hold')).toBe('warning');
     expect(classifyStatus('Waiting')).toBe('warning');
   });
 
-  it('maps failed states to danger', () => {
+  it('maps blocked / cancelled / failed states to danger (red)', () => {
+    expect(classifyStatus('Blocked')).toBe('danger');
     expect(classifyStatus('Cancelled')).toBe('danger');
     expect(classifyStatus('Rejected')).toBe('danger');
   });
