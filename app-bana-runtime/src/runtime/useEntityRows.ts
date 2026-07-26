@@ -6,10 +6,11 @@
  * forms and RowActions (`appbana:row-inserted|updated|deleted`) so any
  * table that mounts this hook stays consistent with the rest of the runtime.
  *
- * Deliberately narrow — no sort/filter yet; those will land alongside the
- * table-header interactions that the current UI does not expose.
+ * H3 hardening — accepts optional `extraParams` that get merged into the
+ * fetch query. When the params object changes, page is reset to 1 so
+ * stale offsets don't hide fresh rows.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchEntityRows } from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 
@@ -27,6 +28,7 @@ export interface UseEntityRowsResult {
 export function useEntityRows(
   entityKey: string,
   pageSize: number,
+  extraParams?: Record<string, string | number>,
 ): UseEntityRowsResult {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [total, setTotal] = useState(0);
@@ -34,15 +36,29 @@ export function useEntityRows(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Stringify params so we can use it as an effect dependency and reset the
+  // page whenever the caller's filters actually change (React would otherwise
+  // treat a new object literal every render as "different").
+  const paramsKey = JSON.stringify(extraParams ?? {});
+  const paramsKeyPrev = useRef(paramsKey);
+  useEffect(() => {
+    if (paramsKeyPrev.current !== paramsKey) {
+      paramsKeyPrev.current = paramsKey;
+      setPage(1);
+    }
+  }, [paramsKey]);
+
   const load = useCallback(async () => {
     if (!entityKey) return;
     setLoading(true);
     setError('');
     try {
-      const result = await fetchEntityRows(qualifyEntityKey(entityKey), getRuntimeToken(), {
+      const params: Record<string, string | number> = {
+        ...(extraParams ?? {}),
         limit: pageSize,
         offset: (page - 1) * pageSize,
-      });
+      };
+      const result = await fetchEntityRows(qualifyEntityKey(entityKey), getRuntimeToken(), params);
       setRows(result.rows);
       setTotal(result.total);
     } catch (e) {
@@ -50,7 +66,10 @@ export function useEntityRows(
     } finally {
       setLoading(false);
     }
-  }, [entityKey, page, pageSize]);
+    // paramsKey is included so filter changes trigger a fetch even when the
+    // caller passes a fresh object literal each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityKey, page, pageSize, paramsKey]);
 
   useEffect(() => { load().catch(() => {}); }, [load]);
 

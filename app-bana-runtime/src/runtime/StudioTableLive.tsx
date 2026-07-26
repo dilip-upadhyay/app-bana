@@ -11,7 +11,7 @@
  *   - viewport-filling shell (§1.10)
  */
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import type { ComponentNode } from '@appbana/shared';
+import type { ComponentNode, FilterDef, SavedViewRecord } from '@appbana/shared';
 import { fetchEntityRows, deleteEntityRow, insertEntityRow, resolveAppContext } from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { formatDate, humanizeHeader, pickReferenceLabel } from './cell-formatters';
@@ -25,6 +25,8 @@ import { useConfirm } from './ConfirmDialog';
 import { useEntityRows } from './useEntityRows';
 import { TableHeader } from './TableHeader';
 import { PaginationBar } from './PaginationBar';
+import { FilterBar } from './FilterBar';
+import { SavedViewsBar } from './SavedViewsBar';
 import {
   entityNameFromKey,
   findAddPageForEntity,
@@ -57,6 +59,36 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     [props.fields],
   );
 
+  // H3 hardening — filter chips + saved views.
+  // `props.filters` is the FilterDef[] the scaffolder attaches to list-page
+  // table nodes (see ai-builder GeneratePageTool line ~325). When empty the
+  // FilterBar renders nothing, so this is safe on tables that never opted in.
+  const filterDefs: FilterDef[] = useMemo(
+    () => (Array.isArray(props.filters) ? (props.filters as FilterDef[]) : []),
+    [props.filters],
+  );
+  const [filterValues, setFilterValues] = useState<Record<string, unknown>>(() => {
+    // Seed with any `default` on each FilterDef so the initial fetch is scoped.
+    const seed: Record<string, unknown> = {};
+    for (const f of filterDefs) {
+      if (f.default !== undefined) seed[f.field] = f.default;
+    }
+    return seed;
+  });
+
+  // Convert filterValues → query params for the row fetcher. Skip empty
+  // strings / null so we don't send `?status=` (which would filter to rows
+  // whose status is literally empty).
+  const fetchParams = useMemo<Record<string, string | number>>(() => {
+    const out: Record<string, string | number> = {};
+    for (const [k, v] of Object.entries(filterValues)) {
+      if (v == null || v === '') continue;
+      if (typeof v === 'number' || typeof v === 'string') out[k] = v;
+      else out[k] = JSON.stringify(v);
+    }
+    return out;
+  }, [filterValues]);
+
   // Sprint 3 task 3.12 — pagination + lifecycle refresh live in a hook now.
   const {
     rows,
@@ -66,7 +98,7 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     loading,
     error,
     setPage,
-  } = useEntityRows(entityKey, PAGE_SIZE);
+  } = useEntityRows(entityKey, PAGE_SIZE, fetchParams);
 
   const [fkMaps, setFkMaps] = useState<Record<string, Map<string, string>>>({});
   // Sprint 3 task 3.6 — RowActions navigation + destructive confirm.
@@ -266,6 +298,36 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
           )}
         </div>
       </div>
+
+      {/* H3 hardening — saved views chips (fetched from /api/saved-views).
+          Only rendered when we can resolve the tenant + app context; on
+          runtimes where that's missing the bar quietly hides. */}
+      {(() => {
+        const ctx = resolveAppContext(window.location);
+        if (!ctx) return null;
+        const currentView = Object.keys(filterValues).length > 0
+          ? { filters: filterValues }
+          : undefined;
+        return (
+          <SavedViewsBar
+            tenantId={ctx.tenantId}
+            appId={ctx.appId}
+            entityKey={qualifyEntityKey(entityKey)}
+            currentView={currentView}
+            onSelect={(v) => {
+              setFilterValues(v.view.filters ?? {});
+            }}
+          />
+        );
+      })()}
+
+      {/* H3 hardening — filter chips row. Renders nothing when the page
+          meta didn't declare any filters (see FilterBar guard). */}
+      <FilterBar
+        filters={filterDefs}
+        values={filterValues}
+        onChange={setFilterValues}
+      />
 
       {/* Error */}
       {error && (
