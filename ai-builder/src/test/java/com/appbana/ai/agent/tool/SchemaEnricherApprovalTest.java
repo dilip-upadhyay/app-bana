@@ -1,4 +1,4 @@
-package com.appbana.approval;
+package com.appbana.ai.agent.tool;
 
 import com.appbana.ai.agent.tool.SchemaEnricher;
 import org.junit.jupiter.api.Test;

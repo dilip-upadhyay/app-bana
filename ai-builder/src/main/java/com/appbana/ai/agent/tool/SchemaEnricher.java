@@ -204,7 +204,7 @@ public class SchemaEnricher {
         List<Map<String, Object>> approvalCols = new ArrayList<>();
 
         approvalCols.add(createField("approval_status", "approval_status", "status", "Approval Status", false, false, false, List.of("DRAFT", "PENDING", "APPROVED", "REJECTED")));
-        approvalCols.add(createField("approval_revision", "approval_revision", T_INTEGER, "Approval Revision", false, false, false, null));
+        approvalCols.add(createField("approval_revision", "approval_revision", T_NUMBER, "Approval Revision", false, false, false, null));
         approvalCols.add(createField("approval_parent_id", "approval_parent_id", T_TEXT, "Approval Parent ID", false, false, false, null));
         approvalCols.add(createField("submitted_by", "submitted_by", T_TEXT, "Submitted By", false, false, false, null));
         approvalCols.add(createField("submitted_at", "submitted_at", T_DATETIME, "Submitted At", false, false, false, null));

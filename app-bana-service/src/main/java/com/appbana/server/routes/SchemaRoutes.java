@@ -156,6 +156,14 @@ public class SchemaRoutes {
                 }
 
                 SchemaManager.saveSchema(schema);
+
+                // Task C1.8 — Bootstrap creator role when entity schema is created/saved via POST /schema
+                String userId = AuthService.extractUserId(req, cfg);
+                if (userId == null || userId.isBlank()) userId = "system";
+                String tenantId = (schema.getTenantId() != null && !schema.getTenantId().isBlank()) ? schema.getTenantId() : "default";
+                String appId = (schema.getAppId() != null && !schema.getAppId().isBlank()) ? schema.getAppId() : "default";
+                com.appbana.approval.UserRoleService.grantRole(tenantId, appId, schema.getName(), userId, com.appbana.approval.UserRoleService.Role.BOTH, userId);
+
                 res.json(200, Map.of("status", "saved", "name", schema.getName()));
             } catch (Exception e) {
                 LOG.error("Failed to save schema", e);

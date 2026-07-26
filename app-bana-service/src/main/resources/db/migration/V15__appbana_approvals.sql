@@ -6,11 +6,11 @@ CREATE TABLE IF NOT EXISTS appbana_approvals (
     row_id            VARCHAR(255) NOT NULL,
     revision          INTEGER NOT NULL,
     from_state        VARCHAR(20),
-    to_state          VARCHAR(20) NOT NULL,
+    to_state          VARCHAR(20) NOT NULL CHECK (to_state IN ('DRAFT', 'PENDING', 'APPROVED', 'REJECTED')),
     actor_user_id     VARCHAR(255) NOT NULL,
     actor_role        VARCHAR(50) NOT NULL,
     reason            TEXT,
-    diff              JSONB,
+    diff              TEXT,
     created_at        TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
