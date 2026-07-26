@@ -77,14 +77,21 @@ export function ChatPane() {
         ctrl.signal
       );
 
+      let sawToken = false;
       for await (const ev of stream) {
         applyEvent(assistantId, ev);
+        if (ev.event === 'token') sawToken = true;
         // After a successful scaffold or page creation, refresh the preview
         if (ev.event === 'tool_call_end' && ev.data.status === 'ok') {
           refreshPreview();
         }
-        if (ev.event === 'done' && ev.data.conversationId) {
-          setSessionId(ev.data.conversationId);
+        if (ev.event === 'done') {
+          if (ev.data.conversationId) setSessionId(ev.data.conversationId);
+          // Safety net: if the backend never sent a token but has a finalMessage,
+          // surface it so the assistant bubble isn't empty.
+          if (!sawToken && ev.data.finalMessage) {
+            applyEvent(assistantId, { event: 'token', data: { text: ev.data.finalMessage } });
+          }
         }
       }
     } catch (err) {

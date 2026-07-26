@@ -72,6 +72,11 @@ export function MessageBubble({ msg }: { msg: ChatMessage }) {
             {msg.streaming && !msg.content && (
               <span className="inline-block w-2 h-4 bg-indigo-400 animate-pulse rounded-sm" />
             )}
+            {!msg.streaming && !msg.content && (msg.toolCalls?.length ?? 0) > 0 && (
+              <p className="text-gray-400 italic">
+                I ran the tools above but didn't produce a summary. Let me know how you'd like to proceed.
+              </p>
+            )}
           </div>
         )}
 

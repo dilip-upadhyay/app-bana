@@ -159,11 +159,24 @@ public class AiAgent {
 
                 AgentThought thought = think(userMessage, steps, context, llmService, images);
                 if (thought == null) {
-                    return AgentResponse.error("Failed to get response from LLM", steps,
-                            System.currentTimeMillis() - startTime);
+                    String msg = "Sorry — I couldn't get a response from the AI model. Please try again in a moment.";
+                    emitter.token(msg);
+                    emitter.done(context.sessionId(), msg);
+                    return AgentResponse.error(msg, steps, System.currentTimeMillis() - startTime);
                 }
 
                 AgentResponse.AgentStep step = new AgentResponse.AgentStep(iteration, thought.getThinking());
+
+                // Stall guard: the LLM returned neither a final answer nor a tool call.
+                // Without this the loop would silently burn iterations and the user would
+                // see an empty assistant bubble. Convert it into a helpful fallback.
+                if (!thought.isFinalAnswer() && !thought.hasToolCalls()) {
+                    steps.add(step);
+                    String stallMsg = buildStallFallback(steps);
+                    emitter.token(stallMsg);
+                    emitter.done(context.sessionId(), stallMsg);
+                    return AgentResponse.success(stallMsg, steps, System.currentTimeMillis() - startTime);
+                }
 
                 if (thought.isFinalAnswer()) {
                     steps.add(step);
@@ -215,8 +228,11 @@ public class AiAgent {
                         consecutiveFailures++;
                         if (consecutiveFailures >= 3) {
                             steps.add(step);
-                            return AgentResponse.error("Stuck after 3 failures: " + results.get(0).getError(),
-                                    steps, System.currentTimeMillis() - startTime);
+                            String msg = "I ran into repeated errors trying to complete that request. " +
+                                    "Details: " + results.get(0).getError() + ". Please rephrase or try again.";
+                            emitter.token(msg);
+                            emitter.done(context.sessionId(), msg);
+                            return AgentResponse.error(msg, steps, System.currentTimeMillis() - startTime);
                         }
                     } else {
                         consecutiveFailures = 0;
@@ -240,12 +256,20 @@ public class AiAgent {
                 steps.add(step);
             }
 
-            String errMsg = "Max iterations reached";
+            String errMsg = buildStallFallback(steps);
+            emitter.token(errMsg);
             emitter.done(context.sessionId(), errMsg);
             return AgentResponse.error(errMsg, steps, System.currentTimeMillis() - startTime);
 
         } catch (Exception e) {
             log.error("[AGENT-STREAM] Error in streaming processing", e);
+            String msg = "Sorry — something went wrong while processing your request. Please try again.";
+            try {
+                emitter.token(msg);
+                emitter.done(context.sessionId(), msg);
+            } catch (Exception ignored) {
+                // Emitter may already be closed; nothing else we can do here.
+            }
             return AgentResponse.error("Agent error: " + e.getMessage(), steps,
                     System.currentTimeMillis() - startTime);
         }
@@ -359,6 +383,54 @@ public class AiAgent {
             }
         }
         return finalMsg;
+    }
+
+    /**
+     * Fallback message when the agent loop finishes without the LLM producing a final answer
+     * (e.g. it kept issuing read-only tool calls, stalled, or hit max iterations). Summarises
+     * what did happen so the user isn't left staring at an empty chat bubble.
+     */
+    private String buildStallFallback(List<AgentResponse.AgentStep> steps) {
+        // Collect names of tools that ran successfully across all steps.
+        java.util.LinkedHashSet<String> okTools = new java.util.LinkedHashSet<>();
+        java.util.LinkedHashSet<String> failedTools = new java.util.LinkedHashSet<>();
+        boolean anyMutation = false;
+        for (AgentResponse.AgentStep s : steps) {
+            List<ToolResult> results = s.getToolResults();
+            if (results == null) continue;
+            for (ToolResult r : results) {
+                String name = r.getToolName() != null ? r.getToolName() : "unknown";
+                if (r.isSuccess()) {
+                    okTools.add(name);
+                    if (isMutationTool(name)) anyMutation = true;
+                } else {
+                    failedTools.add(name);
+                }
+            }
+        }
+
+        if (anyMutation) {
+            return "I've made the requested changes. Refresh the preview if you don't see them yet, "
+                    + "or tell me what to adjust next.";
+        }
+        if (!okTools.isEmpty() && failedTools.isEmpty()) {
+            return "I gathered the information I needed (" + String.join(", ", okTools) + ") "
+                    + "but I haven't made any changes yet. Want me to go ahead — just say **yes** "
+                    + "or tell me exactly what to change.";
+        }
+        if (!failedTools.isEmpty()) {
+            return "I tried to complete that request but ran into problems with: "
+                    + String.join(", ", failedTools) + ". Could you rephrase or give me more detail?";
+        }
+        return "I'm not sure what to do next. Could you tell me a bit more about what you'd like to change?";
+    }
+
+    private static final java.util.Set<String> MUTATION_TOOLS = java.util.Set.of(
+            "scaffold_app", "create_app", "create_entity", "generate_page",
+            "batch_update_entities", "generate_mock_data", "deploy_app", "rollback_app");
+
+    private static boolean isMutationTool(String name) {
+        return name != null && MUTATION_TOOLS.contains(name);
     }
 
     /**
