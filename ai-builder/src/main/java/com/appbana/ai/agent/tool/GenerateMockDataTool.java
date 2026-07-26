@@ -80,9 +80,9 @@ public class GenerateMockDataTool implements Tool {
             return ToolResult.error(getName(), "Records array cannot be empty.");
         }
 
-        if (records.size() > 20) {
-            log.warn("[GenerateMockDataTool] Limiting inserted records to 20 to prevent overload.");
-            records = records.subList(0, 20);
+        if (records.size() > 50) {
+            log.warn("[GenerateMockDataTool] Limiting inserted records to 50 (asked for {}) to prevent overload.", records.size());
+            records = records.subList(0, 50);
         }
 
         try {
