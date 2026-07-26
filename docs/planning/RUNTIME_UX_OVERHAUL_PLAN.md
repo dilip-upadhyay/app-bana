@@ -54,13 +54,13 @@ Three sprints, ~20 hours of focused work, ship in this order:
 - **Sprint 2** closes every 🟠 defect. ~10 hours. After this the product is defensible.
 - **Sprint 3** closes the 🟡 defects + dark mode + keyboard shortcuts. Nice-to-have.
 
-**Stage 4 of the AI-Native UI Rebuild is blocked until Sprint 1 exit criteria pass.** Sprints 2 and 3 may run in parallel with Stage 4.
+**Stage 4 of the AI-Native UI Rebuild shipped 2026-07-26 after Sprint 1 met its exit criteria.** Sprint 2 = **Phase A** in the current forward plan; Sprint 3 is deferred to post-launch.
 
 ---
 
 ## Why we are doing this now
 
-1. **Timing.** We are about to delete the old `app-bana-ui/` (Stage 4). The new runtime is the ONLY UI a customer will see. If it looks worse than the LitElement version, we regress in perception even if we advance in architecture.
+1. **Timing.** The old `app-bana-ui/` was retired in Stage 4 (2026-07-26, commit `6edd19a`). The new runtime is now the ONLY UI a customer will see. If it looks worse than the LitElement version did, we regress in perception even if we have advanced in architecture.
 2. **The demo test.** A live demo of the current runtime — page title missing, dates in ISO 8601, `status = "New"` typed by hand, empty half-page — would be rejected in a first sales meeting.
 3. **The defects are cheap to fix.** Every 🔴 item is a metadata-driven rendering change confined to five files. There is no architectural rework here. The cost is measured in hours, not sprints.
 4. **The AI Builder is complicit.** Two 🔴 defects (status-as-text, unlabelled FK columns) are actually AI-Builder / SchemaEnricher gaps that leak into the runtime. Fixing them at the metadata layer means every future app benefits automatically, not just Customer Onboarding.

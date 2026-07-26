@@ -4,6 +4,21 @@ Every document under `docs/` is **current** and describes the system as it ships
 
 ---
 
+## What AppBana is (and where we're going)
+
+**AppBana is a metadata-driven, AI-powered application builder.** A non-technical user describes what they want in natural language and the AI agent autonomously:
+
+1. Defines the data model
+2. Creates PostgreSQL tables (via `SchemaManager`)
+3. Generates REST CRUD APIs (auto-derived from schema)
+4. Renders UI pages (via metadata → React runtime)
+
+A single schema definition drives the entire stack. See [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) §5 for the metadata-driven flow.
+
+**The 12-month product goal** is a differentiated enterprise-ready SaaS: the first tool where a business owner can chat-build a real regulated-industry workflow (with approvals, audit, dashboards, SSO) in one afternoon. The forward plan below (A → B → C → D → Stage 5) is the path to first-enterprise-customer-live. Everything post-launch lives in Phase E.
+
+---
+
 ## Where should I start?
 
 | I want to... | Read this |
@@ -36,7 +51,7 @@ Every document under `docs/` is **current** and describes the system as it ships
 - **Phase C** — Maker-Checker Epic (~30 hr) — approvals with state machine, roles, audit trail.
 - **Phase D** — Enterprise Capabilities Epic (~125 hr) — SSO, dashboards, notifications, enterprise shell.
 - **Stage 5** — Production Deploy (~50 hr) — subdomain hosting + containerization + Redis + secrets + observability.
-- **Phase E** — Integration + Advanced Backlog (~90 hr, post-launch, customer-driven).
+- **Phase E** — Integration + Advanced Backlog (~87 hr, post-launch, customer-driven).
 
 ---
 

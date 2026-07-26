@@ -150,7 +150,7 @@ The bar for "done" is **"AI-native flow is fully functional"**, not feature pari
 | Studio → Runtime token | `postMessage` handshake (NOT URL hash — security) |
 | Runtime login | Yes, with tenant branding loaded pre-login |
 | App resolution | Pluggable function: path today (`/run/:tenant/:app`), hostname later (subdomain) |
-| Subdomain deploy | Design in v1, deliver in Stage 5 |
+| Subdomain deploy | Design in v1, delivered as Stage 5.1 inside the rescoped Stage 5 (Production Deploy) — see [§Stage 5](#stage-5--production-deploy) |
 | Tenant branding | Small backend addition: columns on tenants + public `GET /api/tenants/{id}/branding` |
 | Data drawer, session picker, image paste | Stage 3 (v1.1) |
 | Select-and-instruct feature | Stage 6 (v2) — foundations (`data-appbana-*` attrs + postMessage) baked into Stages 1–2 |

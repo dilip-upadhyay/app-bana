@@ -14,8 +14,9 @@ Recent commits (freshest last):
 - `5455c9a` — docs: purge all stale documentation
 - `c3793ff` — docs(plan): add Enterprise Capabilities epic (Phase D)
 - `3c0752d` — docs(plan): re-order forward plan to A → B → C → D
+- `0ad115f` — docs(plan): backend audit → rescope Stage 5 as Production Deploy, add Phase E backlog
 
-### Pending commit — docs(plan): backend audit + Stage 5 rescope + Phase E backlog
+### Latest commit — docs(plan): backend audit + Stage 5 rescope + Phase E backlog (`0ad115f`)
 
 **Trigger:** Product owner asked frank questions about backend readiness — file upload, external API integrations, S3/Azure Blob, containerization, cloud deploy. The forward plan up to that point focused only on frontend + workflow features, leaving backend production-readiness undocumented.
 
