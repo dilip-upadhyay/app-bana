@@ -184,19 +184,6 @@ public class RoleRoutes {
      * Note: CHECKER is a workflow role, NOT an admin role. Workflow checkers cannot grant roles to themselves or others.
      */
     static boolean isAuthorizedToManageRoles(String tenantId, String appId, String entityName, String callerUserId) {
-        if ("system".equalsIgnoreCase(callerUserId)) {
-            return true;
-        }
-        try {
-            AppMetadata app = AppManager.getApp(tenantId, appId);
-            if (app != null && app.getAuthor() != null) {
-                if (callerUserId.equalsIgnoreCase(app.getAuthor())) {
-                    return true;
-                }
-            }
-        } catch (Exception e) {
-            LOG.warn("[RoleRoutes] Authorization check failed to retrieve app metadata: {}", e.getMessage());
-        }
-        return false;
+        return com.appbana.security.AppAuthorization.isAppOwnerOrSystem(tenantId, appId, callerUserId);
     }
 }

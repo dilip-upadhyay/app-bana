@@ -502,6 +502,10 @@ public class AppRoutes {
                     res.json(409, Map.of("error", "App with ID " + app.getId() + " already exists"));
                     return;
                 }
+                if (app.getId() == null || app.getId().isBlank()) {
+                    res.json(400, Map.of("error", "App ID is required"));
+                    return;
+                }
                 if (app.getName() == null || app.getName().isEmpty()) {
                     res.json(400, Map.of("error", "App name is required"));
                     return;

@@ -167,6 +167,12 @@ public class SchemaRoutes {
                 String userId = AuthService.extractUserId(req, cfg);
                 if (userId == null || userId.isBlank()) userId = "system";
 
+                // Task C1.10 Fix: Enforce app ownership authorization before saving schema
+                if (!com.appbana.security.AppAuthorization.isAppOwnerOrSystem(tenantId, appId, userId)) {
+                    res.json(403, Map.of("error", "Forbidden: caller is not authorized to create or modify entity schemas for app " + appId));
+                    return;
+                }
+
                 // Check if this entity schema is NEW before saving (upsert)
                 boolean isNewEntity = SchemaManager.loadSchema(appId, schema.getName(), tenantId) == null;
 
