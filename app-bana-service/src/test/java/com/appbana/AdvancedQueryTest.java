@@ -118,7 +118,7 @@ public class AdvancedQueryTest {
     @Test
     @Order(1)
     void emptyProjectionOmitsFieldsKey() throws Exception {
-        JsonNode node = get("/api/customer?fields=&limit=2");
+        JsonNode node = get("/api/default_default_customer?fields=&limit=2");
         assertTrue(node.has("rows"), "rows present");
         assertFalse(node.has("fields"), "fields key should be omitted when fields= (blank)");
         assertEquals(2, node.get("rows").size());
@@ -127,7 +127,7 @@ public class AdvancedQueryTest {
     @Test
     @Order(2)
     void duplicateSortCollapses() throws Exception {
-        JsonNode node = get("/api/customer?sort=firstName,-firstName&limit=1");
+        JsonNode node = get("/api/default_default_customer?sort=firstName,-firstName&limit=1");
         assertTrue(node.has("sort"));
         JsonNode sort = node.get("sort");
         assertEquals(1, sort.size(), "duplicate sort entries should collapse to one");
@@ -137,7 +137,7 @@ public class AdvancedQueryTest {
     @Test
     @Order(3)
     void badTimestampFilterLeftLiteral() throws Exception {
-        JsonNode node = get("/api/logs?filter=createdAt:notISO&count=true");
+        JsonNode node = get("/api/default_default_logs?filter=createdAt:notISO&count=true");
         assertTrue(node.has("filters"));
         assertEquals("notISO", node.get("filters").get("createdAt").asText());
         assertTrue(node.has("total"));
@@ -146,9 +146,9 @@ public class AdvancedQueryTest {
     @Test
     @Order(4)
     void qIgnoredWhenNoTextualFields() throws Exception {
-        JsonNode baseline = get("/api/numeric_only?count=true");
+        JsonNode baseline = get("/api/default_default_numeric_only?count=true");
         long total = baseline.get("total").asLong();
-        JsonNode withQ = get("/api/numeric_only?q=something&count=true");
+        JsonNode withQ = get("/api/default_default_numeric_only?q=something&count=true");
         assertEquals(total, withQ.get("total").asLong(), "q should not change count when no textual fields");
         assertEquals("something", withQ.get("query").asText());
     }
@@ -156,7 +156,7 @@ public class AdvancedQueryTest {
     @Test
     @Order(5)
     void countOnlyOmitsRows() throws Exception {
-        JsonNode node = get("/api/customer?count=true&q=Name");
+        JsonNode node = get("/api/default_default_customer?count=true&q=Name");
         assertTrue(node.has("total"));
         assertFalse(node.has("rows"), "count-only response should not have rows");
         assertEquals("Name", node.get("query").asText());

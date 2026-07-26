@@ -91,18 +91,18 @@ public class SecurityIntegrationTest {
     @DisplayName("1.1: Rate limit blocks excessive requests before session check")
     public void testRateLimitBlocksBeforeSession() {
         // Setup
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("POST");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.100");
         
         // Make 100 requests (at limit — pinned via explicit maxAttempts so the
         // assertion is independent of RateLimitService.DEFAULT_MAX_ATTEMPTS).
         for (int i = 0; i < 100; i++) {
-            RateLimitService.checkRateLimit("192.168.1.100", "/api/users", 100, 15);
+            RateLimitService.checkRateLimit("192.168.1.100", "/dashboard", 100, 15);
         }
         
         // 101st request should be blocked by rate limiter
-        var result = RateLimitService.checkRateLimit("192.168.1.100", "/api/users", 100, 15);
+        var result = RateLimitService.checkRateLimit("192.168.1.100", "/dashboard", 100, 15);
         boolean blocked = !result.allowed();
         
         assertTrue(blocked, "Rate limiter should block 101st request");
@@ -120,13 +120,13 @@ public class SecurityIntegrationTest {
     @DisplayName("1.2: Rate limit allows requests within threshold")
     public void testRateLimitAllowsWithinThreshold() {
         // Setup
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("POST");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.200");
         
         // Make 50 requests (under limit)
         for (int i = 0; i < 50; i++) {
-            var result = RateLimitService.checkRateLimit("192.168.1.200", "/api/users");
+            var result = RateLimitService.checkRateLimit("192.168.1.200", "/dashboard");
             assertTrue(result.allowed(), "Request " + (i + 1) + " should be allowed");
         }
         
@@ -149,7 +149,7 @@ public class SecurityIntegrationTest {
         SessionData session = SessionService.createSession("user123", 30);
         String sessionId = session.sessionId();
         
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("GET");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.201");
         when(mockRequest.header("X-Session-Token")).thenReturn(sessionId);
@@ -172,7 +172,7 @@ public class SecurityIntegrationTest {
     @DisplayName("2.2: Invalid session blocks request with 401")
     public void testInvalidSessionBlocksRequest() {
         // Setup: Invalid session token
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("GET");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.202");
         when(mockRequest.header("X-Session-Token")).thenReturn("invalid-token-12345");
@@ -191,7 +191,7 @@ public class SecurityIntegrationTest {
     @DisplayName("2.3: Missing session blocks protected endpoint")
     public void testMissingSessionBlocksProtectedEndpoint() {
         // Setup: No session token
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("POST");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.203");
         when(mockRequest.header("X-Session-Token")).thenReturn(null);
@@ -297,7 +297,7 @@ public class SecurityIntegrationTest {
         String sessionId = session.sessionId();
         String csrfToken = CsrfService.generateToken(sessionId);
         
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("POST");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.206");
         when(mockRequest.header("X-Session-Token")).thenReturn(sessionId);
@@ -328,7 +328,7 @@ public class SecurityIntegrationTest {
         String sessionId = session.sessionId();
         String csrfToken = CsrfService.generateToken(sessionId);
         
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("POST");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.207");
         when(mockRequest.header("X-Session-Token")).thenReturn(sessionId);
@@ -357,13 +357,13 @@ public class SecurityIntegrationTest {
     @DisplayName("5.2: Pipeline stops at first security failure")
     public void testPipelineStopsAtFirstFailure() {
         // Setup: Rate limit exceeded
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("POST");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.208");
         
         // Exceed rate limit (explicit 100/15 to be independent of default).
         for (int i = 0; i < 100; i++) {
-            RateLimitService.checkRateLimit("192.168.1.208", "/api/users", 100, 15);
+            RateLimitService.checkRateLimit("192.168.1.208", "/dashboard", 100, 15);
         }
         
         // Run middleware pipeline
@@ -392,7 +392,7 @@ public class SecurityIntegrationTest {
         Thread.sleep(100);
         
         // Setup request
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("GET");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.209");
         when(mockRequest.header("X-Session-Token")).thenReturn(sessionId);
@@ -418,7 +418,7 @@ public class SecurityIntegrationTest {
         String invalidSessionId = "invalid-session-id-12345";
         
         // Setup request with invalid session
-        when(mockRequest.path()).thenReturn("/api/users");
+        when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("GET");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.210");
         when(mockRequest.header("X-Session-Token")).thenReturn(invalidSessionId);
