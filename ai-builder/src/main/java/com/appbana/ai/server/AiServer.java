@@ -185,7 +185,8 @@ public class AiServer {
 
             // AI Agent (with optional RAG domain examples — Phase 4)
             AiAgent agent = new AiAgent(llmRegistry, toolRegistry, agentConfig)
-                    .withKnowledgeBase(knowledgeBaseService);
+                    .withKnowledgeBase(knowledgeBaseService)
+                    .withBackendBaseUrl(backendUrl);
 
             // AI Chat Controller (Story 3.1 — wire in DialogueManager)
             DialogueManager dialogueManager = new DialogueManager();

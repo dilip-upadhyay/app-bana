@@ -28,6 +28,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.concurrent.Future;
 import java.util.concurrent.ExecutionException;
 
@@ -55,6 +60,13 @@ public class AiAgent {
     private boolean patternMatchingEnabled = true; // Cost optimization
     private boolean semanticCacheEnabled = false; // DISABLED TEMPORARILY: Cache returning stale prompt responses
     private KnowledgeBaseService knowledgeBase = null; // Optional - RAG domain examples (Phase 4)
+    // Optional — when set the agent can fetch the currently-selected app's entity
+    // summary and inject it into the system prompt so the LLM doesn't have to guess
+    // whether "Department" is an entity or a field on Employee.
+    private String backendBaseUrl = null;
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
 
     public AiAgent(LlmRegistry llmRegistry, ToolRegistry toolRegistry, AgentConfig config) {
         this.llmRegistry = llmRegistry;
@@ -75,6 +87,18 @@ public class AiAgent {
     public AiAgent withKnowledgeBase(KnowledgeBaseService kb) {
         this.knowledgeBase = kb;
         log.info("AiAgent: RAG domain examples enabled");
+        return this;
+    }
+
+    /**
+     * Attach the app-bana-service base URL so the agent can lazily fetch a compact
+     * entity summary for the currently-selected app and inject it into the LLM
+     * prompt. Without this the LLM has to guess entity/field names, which leads to
+     * wasted tool calls (e.g. calling get_entity_details on a field name).
+     */
+    public AiAgent withBackendBaseUrl(String url) {
+        this.backendBaseUrl = url;
+        log.info("AiAgent: backend base URL set for entity summary injection: {}", url);
         return this;
     }
 
@@ -228,8 +252,11 @@ public class AiAgent {
                         } else if (results.stream().anyMatch(r -> r.isSuccess() && isMutationTool(r.getToolName()))) {
                             finalMsg = "I've made the requested changes. Refresh the preview if you don't see them yet.";
                         } else {
-                            finalMsg = "I already gathered that information above. Please tell me which app you'd like to work on " +
-                                    "(by name) and what you'd like to do with it.";
+                            // Read-only loop (e.g. LLM kept calling list_entities). Use
+                            // buildStallFallback which summarises tools that ran and asks a
+                            // sensible follow-up — do NOT tell the user to "pick an app"
+                            // when they clearly already have one selected.
+                            finalMsg = buildStallFallback(steps);
                         }
                         emitter.token(finalMsg);
                         emitter.done(context.sessionId(), finalMsg);
@@ -972,7 +999,100 @@ public class AiAgent {
         }
         sb.append("- Tenant: ").append(tenantId).append('\n');
         sb.append("- User: ").append(userId);
+
+        // Inject a compact entity+field summary for the selected app so the LLM can
+        // answer factual questions ("how many chars can I enter in Department?")
+        // without a round-trip that might mis-identify a field name as an entity.
+        // Best-effort: silently skipped if the backend URL isn't wired or the fetch
+        // fails.
+        if (appSelected && backendBaseUrl != null) {
+            String summary = loadEntitySummary(context);
+            if (summary != null && !summary.isBlank()) {
+                sb.append("\n\n### ENTITIES IN THIS APP ###\n");
+                sb.append(summary);
+                sb.append("\n(Names of fields listed above are FIELDS on their parent entity, not standalone entities. ")
+                  .append("Do NOT call get_entity_details on a field name — call it on the parent entity.)");
+            }
+        }
         return sb.toString();
+    }
+
+    /**
+     * Lazily fetch a compact entity summary for the currently-selected app and cache
+     * it on the context. Runs once per conversation (cached under variable key
+     * "entity_summary") so per-iteration prompt building is cheap.
+     */
+    @SuppressWarnings("unchecked")
+    private String loadEntitySummary(AgentContext context) {
+        if (context.hasVariable("entity_summary")) {
+            Object cached = context.getVariable("entity_summary");
+            return cached instanceof String s ? s : null;
+        }
+        try {
+            String tenantId = context.tenantId() != null ? context.tenantId() : "default";
+            String url = String.format("%s/appbana-studio/%s/apps/%s", backendBaseUrl, tenantId, context.appId());
+            HttpRequest.Builder rb = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Accept", "application/json")
+                    .timeout(Duration.ofSeconds(5));
+            if (context.token() != null && !context.token().isEmpty()) {
+                rb.header("Authorization", "Bearer " + context.token());
+            }
+            HttpResponse<String> resp = httpClient.send(rb.GET().build(), HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) {
+                log.debug("[AGENT] Entity summary fetch returned {}: skipping", resp.statusCode());
+                context.variables().put("entity_summary", "");
+                return "";
+            }
+            Map<String, Object> app = objectMapper.readValue(resp.body(), Map.class);
+            String summary = buildEntitySummaryText(app);
+            context.variables().put("entity_summary", summary);
+            return summary;
+        } catch (Exception e) {
+            log.debug("[AGENT] Entity summary fetch failed (best-effort): {}", e.getMessage());
+            context.variables().put("entity_summary", "");
+            return "";
+        }
+    }
+
+    /** Turn the raw app metadata into a short, LLM-friendly entity+field listing. */
+    @SuppressWarnings("unchecked")
+    private String buildEntitySummaryText(Map<String, Object> app) {
+        Object entitiesObj = app.get("entities");
+        if (!(entitiesObj instanceof List<?> entitiesList) || entitiesList.isEmpty()) {
+            // Fall back to bare schema names if the app hasn't been hydrated with full entities.
+            Object schemas = app.get("schemas");
+            if (schemas instanceof List<?> sl && !sl.isEmpty()) {
+                return sl.stream().map(String::valueOf).map(n -> "- " + n).collect(Collectors.joining("\n"));
+            }
+            return "";
+        }
+        StringBuilder out = new StringBuilder();
+        for (Object eo : entitiesList) {
+            if (!(eo instanceof Map<?, ?> em)) continue;
+            Map<String, Object> entity = (Map<String, Object>) em;
+            String entityName = String.valueOf(entity.getOrDefault("name", "(unnamed)"));
+            Object fieldsObj = entity.get("fields");
+            out.append("- ").append(entityName);
+            if (fieldsObj instanceof List<?> fields && !fields.isEmpty()) {
+                out.append(" (fields: ");
+                out.append(fields.stream().limit(30).map(f -> {
+                    if (!(f instanceof Map<?, ?> fm)) return "";
+                    Map<String, Object> fmap = (Map<String, Object>) fm;
+                    Object fn = fmap.get("name");
+                    Object ft = fmap.get("type");
+                    Object flen = fmap.get("length");
+                    String base = String.valueOf(fn) + (ft != null ? ":" + ft : "");
+                    if (flen != null && ("text".equals(String.valueOf(ft)) || "string".equals(String.valueOf(ft)))) {
+                        base += "(" + flen + ")";
+                    }
+                    return base;
+                }).filter(s -> !s.isEmpty()).collect(Collectors.joining(", ")));
+                out.append(")");
+            }
+            out.append('\n');
+        }
+        return out.toString();
     }
 
     /**
