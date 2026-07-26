@@ -1,5 +1,36 @@
 # AppBana AI Builder - Active Tasks
 
+## 🎯 Forward Plan (post-Stage-4) — Path to First Customer
+
+**Approved 2026-07-26 · Revised 2026-07-26 four times: (1) Phase D inserted after enterprise-app comparison, (2) reordered to A → B → D → C to put fundamentals before enterprise polish, (3) reordered again to A → B → C → D — product before packaging, (4) backend audit rescoped Stage 5 from "subdomain deploy" (~5 hr) to "Production Deploy" (~50 hr) and split residual backend work into a Phase E backlog.** The AI-Native UI Rebuild is complete through Stage 4 (`app-bana-ui/` retired). Four coding phases + one production-readiness stage stand between us and the first enterprise customer. Stage 5's sub-tasks 5.2 (containerize) and 5.3 (secrets) can be pulled forward in parallel with C/D if a customer demo needs cloud hosting sooner.
+
+| Phase | Goal | Plan doc | Status |
+|-------|------|----------|--------|
+| **A — Quality Sprint** | Runtime UX Sprint 2: real date picker, sidebar redesign, empty states, loading skeletons, inline validation, status pills, user menu, page actions, WCAG AA, responsive breakpoints | [RUNTIME_UX_OVERHAUL_PLAN.md §Sprint 2](./planning/RUNTIME_UX_OVERHAUL_PLAN.md#sprint-2--make-it-feel-professional) | ⏳ Not started — plan already specced |
+| **B — Complex UI Epic** | 5 sub-phases (B1..B5): wizards · conditional fields · file upload (backend included) · master-detail · list views (filter/group/saved views) | [COMPLEX_UI_PLAN.md](./planning/COMPLEX_UI_PLAN.md) | 📝 Plan drafted 2026-07-26 |
+| **C — Maker-Checker Epic** | 5 sub-phases (C1..C5): DB + role model · state machine + guard · approval UI + audit · AI Builder integration · notifications (in-app + email adapter in C5.4) | [MAKER_CHECKER_PLAN.md](./planning/MAKER_CHECKER_PLAN.md) | 📝 Plan drafted 2026-07-26 |
+| **D — Enterprise Capabilities** | 4 sub-phases (D1..D4): enterprise SSO (OIDC/Azure B2C) · dashboards + 6 widget primitives (with 60 s in-process cache) · durable notifications + SSE broadcaster · multi-level sidebar + header actions + branded login | [ENTERPRISE_CAPABILITIES_PLAN.md](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) | 📝 Plan drafted 2026-07-26 |
+| **Stage 5 — Production Deploy** | Rescoped 2026-07-26. 5 sub-tasks: 5.1 subdomain hosting · 5.2 containerization (Docker + Compose + ACA/K8s) · 5.3 secrets externalization · 5.4 Redis-backed sessions + rate limit · 5.5 structured logs + metrics + deep health + OTel | [AI_NATIVE_UI_REBUILD_PLAN.md §Stage 5](./planning/AI_NATIVE_UI_REBUILD_PLAN.md#stage-5--production-deploy) | 📝 Rescope drafted 2026-07-26 |
+| **Phase E — Integration + Advanced Backlog** | 8 items (E1..E8), ~87 hr total, no committed order — cloud storage adapters · outbound integration framework · async job queue · CSV/Excel import/export · Postgres FTS · GDPR / PII · WebSocket · API versioning. Customer-demand-driven. | [BACKEND_BACKLOG.md](./planning/BACKEND_BACKLOG.md) | 📝 Backlog drafted 2026-07-26 |
+
+**Execution order:** A → B (B1..B5 serial) → C (C1..C5 mostly serial, C4 parallel with C2 — C1+C2 can start in the background while B is landing if we need to compress schedule) → D (D1 + D4 parallelizable, D2 standalone, D3 after D2) → Stage 5 (5.2 + 5.3 can start earlier and run in parallel with C/D; 5.4 needs 5.3; 5.5 is independent). Phase E items are customer-demand-driven and have no committed order.
+
+**Total code effort to first-enterprise-customer-live:** ~10 hr (A) + ~29 hr (B) + ~30 hr (C, minus optional C5 ≈ 25 hr) + ~125 hr (D) + ~50 hr (Stage 5) = **~244 hours of focused engineering.** To *differentiated demo-able product* (A + B + C without D or Stage 5) it's **~64–69 hours**. Phase E backlog adds up to ~87 hr but is post-launch.
+
+**Backend audit 2026-07-26:** each phase plan's file-level change map was cross-checked against the current backend. File upload backend already lives in B3, email adapter in C5.4, SSE broadcaster in D3, widget cache in D2 — no fold-ins needed. What *is* missing from every phase is production-readiness: containerization, externalized state (Redis), secrets management, and observability. Those four folded into Stage 5, which grew from ~5 hr ("ops-heavy, tiny code footprint") to ~50 hr ("Production Deploy"). Truly optional items — cloud storage adapters, outbound integration framework, async job queue, CSV import, FTS search, GDPR, WebSocket, API versioning — moved to a lean **Phase E "Integration + Advanced Backlog"** doc with no committed order.
+
+**Why C goes before D:** approvals are the *product* (AppBana's differentiator — AI-generated regulated-industry workflows). SSO, dashboards, and enterprise shell are *packaging*. Ship the product first, then package it. Concrete reasoning: (a) every SaaS has SSO, few have AI-generated maker-checker — C is why a customer picks us over the incumbent; (b) C is ~30 hr, D is ~125 hr — C-first means a differentiator lands in ~1 week vs. 4–5 weeks of D infrastructure with nothing new user-visible; (c) prospects will PoC with local auth, they won't PoC with broken approvals; (d) D's specifics (which OIDC provider, group→role mapping, branding) are better co-designed with a real prospect than guessed — delaying D means D1 lands against real requirements.
+
+**Why B goes before C:** B is the foundation approvals stand on. Real approval workflows have file attachments (B3), conditional fields (B2), parent-child records (B4), and a checker inbox that is a list view with filter/group/saved views (B5). C shipped before B would approve a single row of text fields — approval theatre, not the real thing.
+
+**C5 notification tradeoff:** C5 is v1.1-optional. If shipped inside C, it uses a simple polling badge (2–3 hr of throwaway code). Once D3 lands, C5 gets replaced with the durable rule-driven notification substrate. Total cost of the throwaway: negligible.
+
+**Optional schedule compression:** C1 (DB + role model) and C2 (state machine + guard) are pure backend work and could run in parallel with B if we want to shave ~1 week. C3 onward genuinely wants B done first. Not doing this by default — keeping the phases clean — but flagging the option.
+
+**Why Phase D was ever added:** a screenshot-by-screenshot comparison with a live enterprise SaaS on 2026-07-26 showed that A + B + C alone deliver a solid CRUD builder with a differentiated approval workflow, but not a product an enterprise IT department procures without a fight. Enterprise SSO is a categorical gate; dashboards are the first screen executives see; a branded login + multi-level sidebar is what makes an app feel "real" in the first 5 seconds. D is now positioned as the final polish before first-enterprise-customer close, not as a prerequisite for the differentiator.
+
+---
+
 ## 🚧 In Progress: AI-Native UI Rebuild
 
 **Primary reference:** [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md)
@@ -12,10 +43,10 @@ Rebuild the AppBana Studio as an AI-native frontend (chat drives everything — 
 | Stage 1 — Workspace + Studio MVP | pnpm workspace, `app-bana-shared`, `app-bana-studio` MVP with streaming chat + tool cards + preview iframe of old runtime, `data-appbana-*` attrs on old runtime | ✅ Done + fixes applied (auth response shape, localStorage key, deploy btn, page-nav postMessage, SSE regex) |
 | Stage 2 — Standalone runtime | `app-bana-runtime` (React port with tenant-branded login), studio iframe repointed 5173 → 5175 | ✅ Done — runtime live at port 5175, E2E passes |
 | Stage 3 — Studio v1.1 | Data drawer, session picker upgrade, image paste in chat | ✅ Done — commit `c9eb4fc`, see notes below |
-| Stage 3.5 — Runtime UX Overhaul (gate) | Design-system foundations + Sprint 1 fixes (page titles, formatted dates, resolved FK labels, status pills, sticky action bar, toasts). See [Runtime UX Overhaul Plan](./planning/RUNTIME_UX_OVERHAUL_PLAN.md). **Blocks Stage 4.** | 📝 Plan drafted 2026-07-26, awaiting approval |
-| Stage 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2 & 3 | ⏳ Blocked on Stage 3.5 Sprint 1 |
-| Stage 5 — Subdomain deploy | DNS + reverse proxy + `Host`-based app resolution | ⏳ Not started |
-| Stage 6 — Select-and-instruct | Runtime overlay, selection chips in composer, undo/history drawer | ⏳ Not started |
+| Stage 3.5 — Runtime UX Overhaul Sprint 1 (gate) | Design-system foundations + "not embarrassing" fixes (page titles, formatted dates, resolved FK labels, status pills, sticky action bar, toasts). See [Runtime UX Overhaul Plan](./planning/RUNTIME_UX_OVERHAUL_PLAN.md). | ✅ Done — 8/10 tasks shipped, 2 partial by design |
+| Stage 4 — Retire `app-bana-ui/` | Delete old UI, full rewrite of copilot-instructions Sections 2, 3 & 5 | ✅ Done — commit `6edd19a` |
+| Stage 5 — Production Deploy | Rescoped 2026-07-26. Subdomain hosting + containerization + Redis-backed state + secrets externalization + observability (see [master plan §Stage 5](./planning/AI_NATIVE_UI_REBUILD_PLAN.md#stage-5--production-deploy)) | ⏳ Not started — starts after Phase D or 5.2 + 5.3 can be pulled forward |
+| Stage 6 — Select-and-instruct | Runtime overlay, selection chips in composer, undo/history drawer | ⏳ Deferred to post-launch |
 
 **Stage 0 notes:**
 - `ComponentNode.id` is stable — page IDs derived from page name, node IDs are deterministic counter strings. No fix needed.

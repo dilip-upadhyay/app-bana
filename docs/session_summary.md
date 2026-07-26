@@ -1,97 +1,94 @@
-# Session Summary: Story 3.1 — DialogueManager Implementation
+# Session Summary — 2026-07-26
 
-## What Was Built
-
-### Core State Machine (`DialogueManager.java` — full rewrite)
-- **Per-session state** stored in `ConcurrentHashMap<String, ConversationState>` — true isolation per tab/user
-- **`resolveState(sessionId, history, message)`** — auto-transitions via `ConversationSpec` keyword analysis
-- **State ladder**: `GREETING` → `GATHERING_REQUIREMENTS` → `CONFIRMING` → `GENERATING` → `COMPLETED`
-- **`notifyScaffolding()`** / **`notifyCompleted()`** — controller-driven hooks for post-tool transitions
-- `GENERATING` and `COMPLETED` are locked — `resolveState()` cannot auto-regress them
-
-### Hard Tool Filtering (`ToolRegistry.java` + `AiAgent.java`)
-- Added `getToolDescriptions(Set<String> allowedTools)` overload to `ToolRegistry`
-- `AiAgent.buildAgentPrompt()` now reads `conversation_state` from `AgentContext` and calls the filtered overload
-- **In `GREETING` / `GATHERING_REQUIREMENTS`**: `scaffold_app`, `create_app`, `deploy_app`, `generate_mock_data`, etc. are **completely hidden from the LLM** — not just a prompt hint, a hard filter
-- **In `CONFIRMING` and beyond**: all tools unlocked
-
-### Controller Integration (`AiChatController.java`)
-- `DialogueManager` injected as a constructor parameter
-- Before every agent call: `resolveState()` → stored in `AgentContext` as `"conversation_state"`
-- After success: checks response text for build keywords → triggers `notifyScaffolding()` / `notifyCompleted()`
-- API response now includes `"conversationState": "GATHERING_REQUIREMENTS"` etc.
-
-### Tests (`DialogueManagerTest.java` — 16 tests, all green)
-- GREETING → GATHERING_REQUIREMENTS on entity keywords
-- GATHERING_REQUIREMENTS → CONFIRMING on confirmation keywords
-- `notifyScaffolding/notifyCompleted` explicit hooks
-- State locking (GENERATING/COMPLETED don't auto-regress)
-- Tool-set gating per state (build tools hidden/exposed correctly)
-- Session isolation (different UUIDs are fully independent)
-
-## Next Session Goal
-- **Backlog**: Merge `feature/ai-schema-quality` → `main`
-- **Next Epic 3 Story**: LLM Error Recovery loops (preventing max iteration starvation on failed API calls)
-- **Enhancement**: Visual Feedback — Vite UI typing indicator while `AiAgent` executes
+**Working branch:** `feature/ui-rebuild`
 
 ---
 
-# Session Summary: AI-Native UI Rebuild — Planning Phase (2026-07-25)
+## What shipped this session
 
-## What Was Decided
+Recent commits (freshest last):
+- `723a193` — fix(studio): show login screen when session expires
+- `6edd19a` — chore(stage-4): retire `app-bana-ui/`
+- `eca9f3a` — docs(plan): add Complex UI + Maker-Checker epic plans (B & C)
+- `e6efc47` — docs: consolidate documentation
+- `5455c9a` — docs: purge all stale documentation
+- `c3793ff` — docs(plan): add Enterprise Capabilities epic (Phase D)
+- `3c0752d` — docs(plan): re-order forward plan to A → B → C → D
+- `0ad115f` — docs(plan): backend audit → rescope Stage 5 as Production Deploy, add Phase E backlog
 
-Approved and locked the implementation plan for a full **AI-native UI rebuild** of the AppBana Studio. Primary reference document: [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md).
+### Latest commit — docs(plan): backend audit + Stage 5 rescope + Phase E backlog (`0ad115f`)
 
-### Direction
-- Rebuild the Studio as an AI-native frontend — chat drives everything, no canvas / palette / property inspector.
-- Segregate the current monolithic `app-bana-ui/` into three pnpm workspace packages:
-  - `app-bana-shared` — types + api client + postMessage schema + app-context resolver
-  - `app-bana-studio` (port **5174**) — the AI-native builder (streaming chat + tool cards + preview iframe + data drawer)
-  - `app-bana-runtime` (port **5175**) — standalone renderer for deployed apps (own login, tenant-branded)
-- `PageMeta` / `ComponentNode` schema is the boundary contract; studio and runtime communicate only via URL + `postMessage`, never direct imports.
+**Trigger:** Product owner asked frank questions about backend readiness — file upload, external API integrations, S3/Azure Blob, containerization, cloud deploy. The forward plan up to that point focused only on frontend + workflow features, leaving backend production-readiness undocumented.
 
-### Locked Stack
-- Vite 5 + React 18 + TypeScript + Tailwind + shadcn/ui + Zustand
-- Native `fetch` + `ReadableStream` for streaming (Vercel AI SDK dropped — custom event shape)
-- pnpm workspaces
+**Approach:** Rather than invent a monolithic "Phase E" backend plan and repeat work already scoped inside A/B/C/D, ran a per-phase backend audit against the actual code:
 
-### Backend Additions (in scope, Stage 0)
-1. **SSE streaming** — `POST /api/ai/chat/agent/stream` on ai-builder with events: `token`, `tool_call_start`, `tool_call_end`, `state`, `done`
-2. **Tenant branding** — Liquibase changeset + public `GET /api/tenants/{id}/branding`
-3. **App-context resolver** — `GET /api/app-context` (subdomain-ready)
-4. **Verify `ComponentNode.id` stability** across `generate_page` re-runs
+| Audited capability | Already in phase? |
+|---|---|
+| File upload + `FileStorageAdapter` + local disk | ✅ B3 (`appbana_files` table, `POST /api/files/upload`, `GET /api/files/{id}`, `SchemaManager` `type:"file"`) |
+| SMTP email adapter | ✅ C5.4 (`NotificationChannel` + `EmailChannel`) |
+| SSE broadcaster + `NotificationSseHub` | ✅ D3 (already file-mapped) |
+| Widget query cache | ✅ D2 (60 s in-process cache) |
+| Containerization, Redis, secrets, observability | ❌ Not in any phase — needed to *deploy* AppBana |
+| Cloud storage adapters (S3, Azure Blob) | ❌ Deferred by B3.2 "plug in later" |
+| Outbound integration framework | ❌ Nowhere. `WorkflowEngine` has a stub |
+| Async job queue, CSV import, FTS, GDPR, WebSocket, API versioning | ❌ Nowhere. No current driver |
 
-### Delivery Stages (see plan doc for full detail)
-| Stage | Summary |
-|-------|---------|
-| 0 | Backend prep — SSE, branding, app-context, node-id verification |
-| 1 | Workspace skeleton + Studio MVP (embeds old runtime via iframe) |
-| 2 | Standalone runtime package (React port with tenant-branded login) |
-| 3 | Studio v1.1 — data drawer, session picker upgrade, image paste |
-| 4 | Retire `app-bana-ui/` entirely |
-| 5 | Subdomain deployment |
-| 6 | Select-and-instruct UX (click element in preview → attach to chat) |
+**Two structural changes made:**
 
-### Cross-cutting Decisions
-- Runtime has **its own login screen** with tenant branding loaded pre-login (`GET /api/tenants/{id}/branding` is public).
-- Studio → Runtime token passing via **postMessage handshake**, NOT URL hash (security).
-- Foundations for future "select and instruct" baked into Stages 1–2 (`data-appbana-node|entity|field|page` attrs + postMessage bridge).
-- Feature parity with old UI is **NOT** required — bar is "AI-native flow fully functional".
-- Old `app-bana-ui/` runs unchanged through Stages 1–3, retired in Stage 4.
-- Ports: studio 5174, runtime 5175, old ui 5173, backend 8080, ai 8081.
+1. **Stage 5 rescoped** from ~5 hr ("subdomain deploy — ops-heavy, tiny code footprint") to ~50 hr ("**Production Deploy**"). Now includes 5 sub-tasks:
+    - **5.1** — original subdomain hosting scope (~5 hr)
+    - **5.2** — Containerization: Dockerfile per service + `docker-compose.yml` + Azure Container Apps Bicep or K8s manifests (~15 hr)
+    - **5.3** — Secrets externalization: 12-factor env vars + `SecretsProvider` interface (Env / Azure Key Vault / AWS Secrets Manager) (~6 hr)
+    - **5.4** — Redis-backed sessions + rate limit + optional distributed cache (~15 hr)
+    - **5.5** — JSON structured logs + correlation IDs + Micrometer `/metrics` + deep `/health` + OpenTelemetry stubs (~10 hr)
 
-## Documentation Updated
-- **NEW** [`docs/planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) — primary reference (comprehensive, phase-wise)
-- **UPDATED** [`docs/ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — added "🚧 In Progress" section pointing to the plan
-- **UPDATED** [`docs/README.md`](./README.md) — added link in Planning section
-- **UPDATED** [`docs/planning/03-ROADMAP.md`](./planning/03-ROADMAP.md) — added AI-Native UI Rebuild phase reference
-- **UPDATED** [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) — pointer note in Section 12 (Active Work). Full rewrite of Sections 2 & 3 deferred to end of Stage 1 (workspace layout won't exist until then).
+2. **New doc — [`planning/BACKEND_BACKLOG.md`](./planning/BACKEND_BACKLOG.md) (Phase E)** — lean backlog with 8 items (E1..E8) ordered by likely customer demand, ~87 hr total, no committed order. Nothing pulled into active plan until a customer or strategic driver appears. Explicit "not in this backlog" section lists what already lives elsewhere so future readers don't re-add duplicates.
 
-## Next Session Goal
-**Begin Stage 0 (Backend prep):**
-1. Read `AiAgent.java` and `AiChatController.java` to understand current tool-call emission shape.
-2. Read `metadata.ts` and `GeneratePageTool.java` to verify `ComponentNode.id` stability.
-3. Check if a `tenants` table exists (decides Liquibase strategy).
-4. Implement `AgentStreamController` (SSE) with the 5-event schema.
-5. Add tenant branding columns + `TenantBrandingRoutes`.
-6. Add `AppContextRoutes` for path + Host resolution.
+**Files modified for these changes:**
+- [`planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) — Stage 5 section rewritten with 5 sub-tasks; anchor renamed `stage-5--subdomain-deployment` → `stage-5--production-deploy`; ToC + status line updated.
+- [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — forward-plan table's Stage 5 row rewritten to describe the 5 sub-tasks; new Phase E row added; execution-order line extended with Stage 5 sub-task deps; total effort revised ~194 hr → ~244 hr; added backend-audit rationale paragraph.
+- [`README.md`](./README.md) — forward-plan bullets, persona-table, and folder-layout tree all include Stage 5 (rescoped) + Phase E.
+- [`planning/RUNTIME_UX_OVERHAUL_PLAN.md`](./planning/RUNTIME_UX_OVERHAUL_PLAN.md) — cross-plan reference updated to reflect Stage 5 as post-D not in-parallel-with-B/C.
+- **New:** [`planning/BACKEND_BACKLOG.md`](./planning/BACKEND_BACKLOG.md) — Phase E backlog.
+
+---
+
+## Current forward plan (final)
+
+```
+Phase A — Runtime UX Sprint 2        (~10 hr)   — customer-demo-ready UI
+     ↓
+Phase B — Complex UI Epic            (~29 hr)   — wizards · conditional fields · upload · master-detail · list views
+                                                  (file upload backend already scoped in B3 — local disk only)
+     ↓
+Phase C — Maker-Checker Epic         (~30 hr)   — approvals + audit + in-app notifications + SMTP email adapter (C5.4)
+     ↓
+🚀 Demo-able differentiated product  (~69 hr total, ~2 weeks focused)
+     ↓
+Phase D — Enterprise Capabilities    (~125 hr)  — SSO · dashboards + 60 s in-process cache · SSE-pushed notifications · enterprise shell
+     ↓
+Stage 5 — Production Deploy          (~50 hr)   — subdomain hosting + containerize + secrets + Redis + observability
+                                                  (5.2/5.3 pullable-forward if we need ACA earlier for a customer demo)
+     ↓
+🚀 First enterprise customer live    (~244 hr total)
+     ↓
+Phase E — Integration + Advanced Backlog (~87 hr, post-launch, customer-driven)
+     ↓ cloud storage adapters (E1) · outbound integration framework (E2) · async job queue (E3)
+     ↓ CSV/Excel (E4) · Postgres FTS (E5) · GDPR (E6) · WebSocket (E7) · API versioning (E8)
+```
+
+**Single source of truth:** [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md).
+
+---
+
+## Next session goal
+
+**Start Phase A, Task 2.1** — replace the runtime's native `<input type="date">` with `react-day-picker` in a popover. Format via `date-fns`, emit ISO 8601 on submit. See [`planning/RUNTIME_UX_OVERHAUL_PLAN.md`](./planning/RUNTIME_UX_OVERHAUL_PLAN.md) Sprint 2 §2.1.
+
+---
+
+## Consistency rules (unchanged)
+
+1. [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — single source for status.
+2. [`README.md`](./README.md) — single source for navigation.
+3. [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) §2 + §3 + §5 — single source for "how the system runs today".

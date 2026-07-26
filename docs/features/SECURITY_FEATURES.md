@@ -321,12 +321,12 @@ router.use(CsrfMiddleware.validate());
 
 ## Frontend Integration
 
-### Automatic Security (FormContainer.ts)
+### Automatic Security (shared api-client)
 
-**File:** `app-bana-ui/src/components/FormContainer.ts` (400+ lines)  
-**Demo:** `form-security-demo.html`
+**File:** [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts)  
+**Auth UI:** [`app-bana-studio/src/features/auth/AuthGate.tsx`](../../app-bana-studio/src/features/auth/AuthGate.tsx)
 
-All forms automatically include security features:
+All authed calls flow through `authedFetch()` which broadcasts a browser event on 401 so the auth gate can force re-login. CSRF tokens and session headers are injected consistently:
 
 #### 1. CSRF Token Fetching
 
@@ -655,15 +655,13 @@ A: SessionMiddleware automatically renews valid sessions on each request (slidin
   - `com.appbana.middleware.CsrfMiddleware`
   - `com.appbana.middleware.SessionMiddleware`
   - `com.appbana.middleware.RateLimitMiddleware`
-  - `app-bana-ui/src/components/FormContainer.ts`
+  - [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts)
+  - [`app-bana-studio/src/features/auth/AuthGate.tsx`](../../app-bana-studio/src/features/auth/AuthGate.tsx)
 
 - **Test Files:**
   - All test files in `src/test/java/com/appbana/service/`
   - All test files in `src/test/java/com/appbana/middleware/`
   - `src/test/java/com/appbana/integration/SecurityIntegrationTest.java`
-
-- **Demos:**
-  - `app-bana-ui/form-security-demo.html`
 
 - **Builder Database:**
   - `builder-database/09-authentication.json` (v1.2.0)

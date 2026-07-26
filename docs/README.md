@@ -1,72 +1,91 @@
 # AppBana Documentation
 
-Centralized documentation for the AppBana platform. Every markdown file for humans lives under this folder — nothing else in the repo contains prose documentation.
+Every document under `docs/` is **current** and describes the system as it ships today. Anything that was stale or superseded has been removed. If you find something that doesn't match the code, that's a bug — please open an issue or fix it directly.
 
 ---
 
-## Folder Layout
+## What AppBana is (and where we're going)
 
-| Folder | Purpose |
-|--------|---------|
-| [`architecture/`](./architecture/) | System design, component architecture, data-binding internals |
-| [`features/`](./features/) | Deep dives into shipped features (AI Agent, multi-tenant model, security, templates, adapters) |
-| [`guides/`](./guides/) | How-to guides for developers, testers, and end users |
-| [`planning/`](./planning/) | Roadmap and forward-looking implementation stories |
-| [`specs/`](./specs/) | Feature specifications (auth, workflow) |
+**AppBana is a metadata-driven, AI-powered application builder.** A non-technical user describes what they want in natural language and the AI agent autonomously:
 
-Top-level files:
+1. Defines the data model
+2. Creates PostgreSQL tables (via `SchemaManager`)
+3. Generates REST CRUD APIs (auto-derived from schema)
+4. Renders UI pages (via metadata → React runtime)
 
-- [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) — current sprint / in-flight work
-- [`session_summary.md`](./session_summary.md) — most recent working session notes
+A single schema definition drives the entire stack. See [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) §5 for the metadata-driven flow.
+
+**The 12-month product goal** is a differentiated enterprise-ready SaaS: the first tool where a business owner can chat-build a real regulated-industry workflow (with approvals, audit, dashboards, SSO) in one afternoon. The forward plan below (A → B → C → D → Stage 5) is the path to first-enterprise-customer-live. Everything post-launch lives in Phase E.
 
 ---
 
-## Start Here
+## Where should I start?
 
-1. **New to the codebase?** Read [`architecture/01-ARCHITECTURE.md`](./architecture/01-ARCHITECTURE.md), then [`guides/02-DEVELOPMENT_GUIDE.md`](./guides/02-DEVELOPMENT_GUIDE.md).
-2. **Starting a new session?** Follow [`guides/SESSION_RESUME_GUIDE.md`](./guides/SESSION_RESUME_GUIDE.md).
-3. **Building on the AI Agent?** Read [`features/ai-agent.md`](./features/ai-agent.md) and [`features/ai-builder-service.md`](./features/ai-builder-service.md).
-4. **Working on a specific area?** Jump to the folder below.
+| I want to... | Read this |
+|---|---|
+| Understand the whole system in 10 minutes | [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) |
+| See what's shipped and what's next | [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) |
+| See the current session's work | [`session_summary.md`](./session_summary.md) |
+| Understand the AI-Native rebuild plan | [`planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) |
+| Work on Runtime UX (Phase A) | [`planning/RUNTIME_UX_OVERHAUL_PLAN.md`](./planning/RUNTIME_UX_OVERHAUL_PLAN.md) |
+| Build the Complex UI epic (Phase B) | [`planning/COMPLEX_UI_PLAN.md`](./planning/COMPLEX_UI_PLAN.md) |
+| Build the Maker-Checker epic (Phase C) | [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) |
+| Build the Enterprise Capabilities epic (Phase D) | [`planning/ENTERPRISE_CAPABILITIES_PLAN.md`](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) |
+| See the residual backend backlog (Phase E) | [`planning/BACKEND_BACKLOG.md`](./planning/BACKEND_BACKLOG.md) |
+| Understand the AI Builder microservice | [`features/ai-builder-service.md`](./features/ai-builder-service.md) |
+| Understand security (auth / CSRF / RBAC / rate limit) | [`features/SECURITY_FEATURES.md`](./features/SECURITY_FEATURES.md) + [`specs/AUTH.md`](./specs/AUTH.md) |
+| Understand the datasource adapter model | [`architecture/datasource-adapters.md`](./architecture/datasource-adapters.md) |
+| Understand the AI knowledge base + builder-database rules | [`features/KNOWLEDGE_BASE.md`](./features/KNOWLEDGE_BASE.md) + [`features/builder-database.md`](./features/builder-database.md) |
 
 ---
 
-## Architecture
+## Current state (2026-07-26)
 
-- [`01-ARCHITECTURE.md`](./architecture/01-ARCHITECTURE.md) — full system architecture reference
-- [`ARCHITECTURE_VISUAL_SUMMARY.md`](./architecture/ARCHITECTURE_VISUAL_SUMMARY.md) — diagrams and visual summary
-- [`ENTITY_FORM_BINDING_ARCHITECTURE.md`](./architecture/ENTITY_FORM_BINDING_ARCHITECTURE.md) — how forms bind to entities at runtime
-- [`datasource-adapters.md`](./architecture/datasource-adapters.md) — universal datasource adapter system
+**Shipped**
+- Stages 0–4 of the AI-Native UI Rebuild (see [`planning/AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md)) — the legacy `app-bana-ui/` is retired; Studio (5174) + Runtime (5175) + shared package are the frontend.
+- Runtime UX Sprint 1 (see [`planning/RUNTIME_UX_OVERHAUL_PLAN.md`](./planning/RUNTIME_UX_OVERHAUL_PLAN.md)) — 8/10 tasks done.
 
-## Features
+**Forward plan** (single source: [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md))
+- **Phase A** — Runtime UX Sprint 2 (~10 hr) — customer-demo-ready UI.
+- **Phase B** — Complex UI Epic (~29 hr) — wizards, conditional fields, upload, master-detail, list views.
+- **Phase C** — Maker-Checker Epic (~30 hr) — approvals with state machine, roles, audit trail.
+- **Phase D** — Enterprise Capabilities Epic (~125 hr) — SSO, dashboards, notifications, enterprise shell.
+- **Stage 5** — Production Deploy (~50 hr) — subdomain hosting + containerization + Redis + secrets + observability.
+- **Phase E** — Integration + Advanced Backlog (~87 hr, post-launch, customer-driven).
 
-- [`ai-agent.md`](./features/ai-agent.md) — AI Agent design, Think/Act/Observe loop, tools
-- [`ai-builder-service.md`](./features/ai-builder-service.md) — the `ai-builder` microservice
-- [`builder-database.md`](./features/builder-database.md) — knowledge base fed to the AI agent
-- [`multi-tenant-design.md`](./features/multi-tenant-design.md) — physical table isolation & multi-tenant model
-- [`SECURITY_FEATURES.md`](./features/SECURITY_FEATURES.md) — auth, RBAC, FLS, CSRF, rate limiting
-- [`KNOWLEDGE_BASE.md`](./features/KNOWLEDGE_BASE.md) — RAG knowledge store
-- [`page-templates.md`](./features/page-templates.md) — system page templates
+---
 
-## Guides
+## Folder layout
 
-- [`02-DEVELOPMENT_GUIDE.md`](./guides/02-DEVELOPMENT_GUIDE.md) — local setup and dev workflow
-- [`04-USER_MANUAL.md`](./guides/04-USER_MANUAL.md) — end-user Studio guide
-- [`SESSION_RESUME_GUIDE.md`](./guides/SESSION_RESUME_GUIDE.md) — session resume checklist
-- [`JAVA21_QUICK_REFERENCE.md`](./guides/JAVA21_QUICK_REFERENCE.md) — Java 21 features used in the codebase
-- [`API_VERIFICATION.md`](./guides/API_VERIFICATION.md) — API verification procedures
-- [`api-client.md`](./guides/api-client.md) — frontend API client & interceptor system
-- [`automation-testing.md`](./guides/automation-testing.md) — end-to-end automation testing notes
+```
+docs/
+├── README.md                       ← this file (navigation)
+├── ACTIVE_TASKS.md                 ← status of every workstream
+├── session_summary.md              ← what shipped this session
+├── planning/                       ← the six active epic plans (execution order A → B → C → D → Stage 5 → E)
+│   ├── AI_NATIVE_UI_REBUILD_PLAN.md    ← master rebuild + Stage 5 Production Deploy
+│   ├── RUNTIME_UX_OVERHAUL_PLAN.md
+│   ├── COMPLEX_UI_PLAN.md
+│   ├── MAKER_CHECKER_PLAN.md
+│   ├── ENTERPRISE_CAPABILITIES_PLAN.md
+│   └── BACKEND_BACKLOG.md              ← Phase E residual backlog
+├── architecture/
+│   └── datasource-adapters.md      ← universal datasource adapter model
+├── features/
+│   ├── ai-builder-service.md       ← the ai-builder microservice
+│   ├── SECURITY_FEATURES.md        ← auth, CSRF, RBAC, rate limit, FLS
+│   ├── KNOWLEDGE_BASE.md           ← agent knowledge rules
+│   └── builder-database.md         ← builder-database/*.json reference
+└── specs/
+    └── AUTH.md                     ← auth protocol spec
+```
 
-## Planning
+---
 
-- [`03-ROADMAP.md`](./planning/03-ROADMAP.md) — product roadmap
-- [`AI_NATIVE_UI_REBUILD_PLAN.md`](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) — **🚧 IN PROGRESS** — AI-native UI rebuild (chat-driven studio + standalone runtime, 3-package pnpm workspace)
-- [`AI_AGENT_IMPLEMENTATION_PLAN.md`](./planning/AI_AGENT_IMPLEMENTATION_PLAN.md) — AI agent implementation plan
-- [`AI_AGENT_STORIES.md`](./planning/AI_AGENT_STORIES.md) — AI agent user stories
-- [`AI_SCHEMA_QUALITY_PLAN.md`](./planning/AI_SCHEMA_QUALITY_PLAN.md) — schema quality improvement plan
-- [`IMPLEMENTATION_STORIES.md`](./planning/IMPLEMENTATION_STORIES.md) — implementation story backlog
+## The three consistency rules
 
-## Specs
+1. **[`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md) is the single source for status.** Individual plan docs describe scope + design; status lives in ACTIVE_TASKS.
+2. **`docs/README.md` (this file) is the single source for navigation.** New docs must be added here or they don't exist.
+3. **[`.github/copilot-instructions.md`](../.github/copilot-instructions.md) sections 2, 3 and 5 are the single source for "how the system runs today"** (monorepo layout, how to start, metadata-driven flow). Deep dives live in `features/` and `architecture/`.
 
-- [`AUTH.md`](./specs/AUTH.md) — authentication & RBAC specification
-- [`WORKFLOW.md`](./specs/WORKFLOW.md) — workflow automation specification
+If any doc drifts from these rules, fix by editing this file + `ACTIVE_TASKS.md` first, then propagate down. Never the reverse.

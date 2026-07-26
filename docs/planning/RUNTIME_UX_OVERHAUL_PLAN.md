@@ -1,9 +1,15 @@
 # Runtime UX Overhaul — Implementation Plan
 
-**Status:** DRAFT — pending approval
+**Status:** ✅ Sprint 1 shipped (8/10 tasks done, 2 partial by design) · ⏳ Sprint 2 = **Phase A** in the current forward plan · ⏳ Sprint 3 deferred to post-launch
 **Owner:** AppBana core team
-**Position in master roadmap:** Pre-Stage-4 quality gate on the [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md). Retiring the old `app-bana-ui/` (Stage 4) is contingent on the new runtime meeting the "client-ready" bar defined here.
+**Position in master roadmap:** Sprint 1 gated Stage 4 of the [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md). Stage 4 shipped 2026-07-26; Sprint 2 is now the leading edge of the post-Stage-4 forward plan ("Phase A").
 **Trigger:** Design review of the deployed Customer Onboarding App runtime on 2026-07-26 revealed severity-1 UX defects that would cause a prospective client to reject the product on sight. Before we throw away the old UI, the new one must be visibly better — not merely functionally equivalent.
+
+**Related active plans:**
+- [AI-Native UI Rebuild Plan](./AI_NATIVE_UI_REBUILD_PLAN.md) — the master rebuild plan. Stage 5 (Production Deploy) runs after A/B/C/D and includes containerization + Redis + observability.
+- [Complex UI Plan](./COMPLEX_UI_PLAN.md) — **Phase B** (next after A).
+- [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C** (last before launch).
+- Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 
 ---
 
@@ -48,13 +54,13 @@ Three sprints, ~20 hours of focused work, ship in this order:
 - **Sprint 2** closes every 🟠 defect. ~10 hours. After this the product is defensible.
 - **Sprint 3** closes the 🟡 defects + dark mode + keyboard shortcuts. Nice-to-have.
 
-**Stage 4 of the AI-Native UI Rebuild is blocked until Sprint 1 exit criteria pass.** Sprints 2 and 3 may run in parallel with Stage 4.
+**Stage 4 of the AI-Native UI Rebuild shipped 2026-07-26 after Sprint 1 met its exit criteria.** Sprint 2 = **Phase A** in the current forward plan; Sprint 3 is deferred to post-launch.
 
 ---
 
 ## Why we are doing this now
 
-1. **Timing.** We are about to delete the old `app-bana-ui/` (Stage 4). The new runtime is the ONLY UI a customer will see. If it looks worse than the LitElement version, we regress in perception even if we advance in architecture.
+1. **Timing.** The old `app-bana-ui/` was retired in Stage 4 (2026-07-26, commit `6edd19a`). The new runtime is now the ONLY UI a customer will see. If it looks worse than the LitElement version did, we regress in perception even if we have advanced in architecture.
 2. **The demo test.** A live demo of the current runtime — page title missing, dates in ISO 8601, `status = "New"` typed by hand, empty half-page — would be rejected in a first sales meeting.
 3. **The defects are cheap to fix.** Every 🔴 item is a metadata-driven rendering change confined to five files. There is no architectural rework here. The cost is measured in hours, not sprints.
 4. **The AI Builder is complicit.** Two 🔴 defects (status-as-text, unlabelled FK columns) are actually AI-Builder / SchemaEnricher gaps that leak into the runtime. Fixing them at the metadata layer means every future app benefits automatically, not just Customer Onboarding.
