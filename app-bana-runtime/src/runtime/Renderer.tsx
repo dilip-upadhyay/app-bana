@@ -20,6 +20,9 @@ import { humanizeHeader } from './cell-formatters';
 import { PageShell } from './PageShell';
 import { DatePicker } from './DatePicker';
 import { Skeleton } from './Skeleton';
+import { useEntityFormValidation } from './useEntityFormValidation';
+import { EntityFormErrorProvider } from './entity-form-context';
+import { FormField, ValidatedInput, ValidatedSelect, ValidatedTextarea } from './FormField';
 
 /** Turn "full_name" / "first-name" / "firstName" into "Full name". */
 function humanize(raw: string | undefined): string {
@@ -151,16 +154,20 @@ function renderNode(
         props.referenceEntity ?? props.entity ?? props.entityName ?? ''
       );
       const helpText = String(props.help ?? props.description ?? '');
+      const fieldName = String(props.name ?? refEntity);
       return (
-        <div key={node.id} className="appbana-field" {...dataAttrs}>
-          {label && (
-            <label htmlFor={inputId} className="appbana-field-label">
-              {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
-            </label>
-          )}
+        <FormField
+          key={node.id}
+          name={fieldName}
+          label={label}
+          htmlFor={inputId}
+          required={required}
+          helpText={helpText}
+          dataAttrs={dataAttrs}
+        >
           <ReferenceField
             id={inputId}
-            name={String(props.name ?? refEntity)}
+            name={fieldName}
             refEntity={refEntity}
             required={required}
             defaultValue={String(props.value ?? '')}
@@ -169,8 +176,7 @@ function renderNode(
             entityAttr={entityAttr}
             fieldAttr={fieldAttr}
           />
-          {helpText && <p className="appbana-field-help">{helpText}</p>}
-        </div>
+        </FormField>
       );
     }
 
@@ -180,22 +186,27 @@ function renderNode(
       const inputId = `appbana-in-${node.id}`;
       const helpText = String(props.help ?? props.description ?? '');
       const nestedType = String(props.type ?? props.inputType ?? 'text');
+      const fieldName = String(props.name ?? '');
       // Scaffold emits reference FK fields as {type:'input', props:{type:'reference', field:'Customer'}}.
       // Route those to the live-loaded <select> instead of a plain text input.
       if (nestedType === 'reference') {
         const refEntity = String(
           props.referenceEntity ?? props.field ?? props.name ?? ''
         );
+        const refFieldName = String(props.name ?? props.field ?? refEntity);
         return (
-          <div key={node.id} className="appbana-field" {...dataAttrs}>
-            {label && (
-              <label htmlFor={inputId} className="appbana-field-label">
-                {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
-              </label>
-            )}
+          <FormField
+            key={node.id}
+            name={refFieldName}
+            label={label}
+            htmlFor={inputId}
+            required={required}
+            helpText={helpText}
+            dataAttrs={dataAttrs}
+          >
             <ReferenceField
               id={inputId}
-              name={String(props.name ?? props.field ?? refEntity)}
+              name={refFieldName}
               refEntity={refEntity}
               required={required}
               defaultValue={String(props.value ?? '')}
@@ -204,21 +215,23 @@ function renderNode(
               entityAttr={entityAttr}
               fieldAttr={fieldAttr}
             />
-            {helpText && <p className="appbana-field-help">{helpText}</p>}
-          </div>
+          </FormField>
         );
       }
       return (
-        <div key={node.id} className="appbana-field" {...dataAttrs}>
-          {label && (
-            <label htmlFor={inputId} className="appbana-field-label">
-              {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
-            </label>
-          )}
+        <FormField
+          key={node.id}
+          name={fieldName}
+          label={label}
+          htmlFor={inputId}
+          required={required}
+          helpText={helpText}
+          dataAttrs={dataAttrs}
+        >
           {(nestedType === 'date' || nestedType === 'datetime' || nestedType === 'datetime-local') ? (
             <DatePicker
               id={inputId}
-              name={String(props.name ?? '')}
+              name={fieldName}
               kind={nestedType === 'date' ? 'date' : 'datetime'}
               required={required}
               defaultValue={String(props.value ?? '')}
@@ -229,21 +242,20 @@ function renderNode(
               fieldAttr={fieldAttr}
             />
           ) : (
-            <input
+            <ValidatedInput
               id={inputId}
               className={`appbana-input ${className}`}
               style={styleObj}
               type={nestedType}
               placeholder={String(props.placeholder ?? '')}
               defaultValue={String(props.value ?? '')}
-              name={String(props.name ?? '')}
+              name={fieldName}
               required={required}
               {...entityAttr}
               {...fieldAttr}
             />
           )}
-          {helpText && <p className="appbana-field-help">{helpText}</p>}
-        </div>
+        </FormField>
       );
     }
 
@@ -252,21 +264,26 @@ function renderNode(
       const required = Boolean(props.required);
       const inputId = `appbana-sel-${node.id}`;
       const helpText = String(props.help ?? props.description ?? '');
+      const fieldName = String(props.name ?? '');
       // If a select node references another entity, render a live-loaded ReferenceField.
       const refEntity = String(
         props.referenceEntity ?? props.entityName ?? ''
       );
       if (refEntity) {
+        const refFieldName = String(props.name ?? refEntity);
         return (
-          <div key={node.id} className="appbana-field" {...dataAttrs}>
-            {label && (
-              <label htmlFor={inputId} className="appbana-field-label">
-                {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
-              </label>
-            )}
+          <FormField
+            key={node.id}
+            name={refFieldName}
+            label={label}
+            htmlFor={inputId}
+            required={required}
+            helpText={helpText}
+            dataAttrs={dataAttrs}
+          >
             <ReferenceField
               id={inputId}
-              name={String(props.name ?? refEntity)}
+              name={refFieldName}
               refEntity={refEntity}
               required={required}
               defaultValue={String(props.value ?? '')}
@@ -275,22 +292,24 @@ function renderNode(
               entityAttr={entityAttr}
               fieldAttr={fieldAttr}
             />
-            {helpText && <p className="appbana-field-help">{helpText}</p>}
-          </div>
+          </FormField>
         );
       }
       return (
-        <div key={node.id} className="appbana-field" {...dataAttrs}>
-          {label && (
-            <label htmlFor={inputId} className="appbana-field-label">
-              {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
-            </label>
-          )}
-          <select
+        <FormField
+          key={node.id}
+          name={fieldName}
+          label={label}
+          htmlFor={inputId}
+          required={required}
+          helpText={helpText}
+          dataAttrs={dataAttrs}
+        >
+          <ValidatedSelect
             id={inputId}
             className={`appbana-select ${className}`}
             style={styleObj}
-            name={String(props.name ?? '')}
+            name={fieldName}
             defaultValue={String(props.value ?? '')}
             required={required}
             {...entityAttr}
@@ -299,9 +318,8 @@ function renderNode(
             {((props.options as string[]) ?? []).map((opt: string) => (
               <option key={opt} value={opt}>{opt}</option>
             ))}
-          </select>
-          {helpText && <p className="appbana-field-help">{helpText}</p>}
-        </div>
+          </ValidatedSelect>
+        </FormField>
       );
     }
 
@@ -310,18 +328,23 @@ function renderNode(
       const required = Boolean(props.required);
       const inputId = `appbana-ta-${node.id}`;
       const helpText = String(props.help ?? props.description ?? '');
+      const fieldName = String(props.name ?? '');
       return (
-        <div key={node.id} className="appbana-field appbana-field-full" {...dataAttrs}>
-          {label && (
-            <label htmlFor={inputId} className="appbana-field-label">
-              {label}{required && <span className="appbana-field-required" aria-hidden="true"> *</span>}
-            </label>
-          )}
-          <textarea
+        <FormField
+          key={node.id}
+          name={fieldName}
+          label={label}
+          htmlFor={inputId}
+          required={required}
+          helpText={helpText}
+          full
+          dataAttrs={dataAttrs}
+        >
+          <ValidatedTextarea
             id={inputId}
             className={`appbana-textarea ${className}`}
             style={styleObj}
-            name={String(props.name ?? '')}
+            name={fieldName}
             placeholder={String(props.placeholder ?? '')}
             defaultValue={String(props.value ?? '')}
             rows={Number(props.rows ?? 4)}
@@ -329,8 +352,7 @@ function renderNode(
             {...entityAttr}
             {...fieldAttr}
           />
-          {helpText && <p className="appbana-field-help">{helpText}</p>}
-        </div>
+        </FormField>
       );
     }
 
@@ -480,7 +502,7 @@ function ReferenceField(props: Readonly<ReferenceFieldProps>) {
     );
   }
   return (
-    <select
+    <ValidatedSelect
       id={id}
       name={name}
       className={`appbana-select ${className}`}
@@ -496,7 +518,7 @@ function ReferenceField(props: Readonly<ReferenceFieldProps>) {
         const val = String(row.id ?? rowRec.ID ?? rowRec.id ?? '');
         return <option key={val} value={val}>{optionLabelFor(row)}</option>;
       })}
-    </select>
+    </ValidatedSelect>
   );
 }
 
@@ -513,18 +535,27 @@ interface EntityFormProps {
 function EntityForm(props: Readonly<EntityFormProps>) {
   const { className, styleObj, entity, dataAttrs, children } = props;
   const [saving, setSaving] = useState(false);
+  const { errors, validate, clearError, resetErrors } = useEntityFormValidation();
 
   async function submit(form: HTMLFormElement): Promise<boolean> {
     if (!entity) {
       toast.error('Save failed', { description: 'This form has no entity bound.' });
       return false;
     }
-    const fd = new FormData(form);
+    const result = validate(form);
+    if (!result.ok) {
+      // Focus the first invalid input for keyboard users.
+      const firstBad = Object.keys(result.errors)[0];
+      if (firstBad) {
+        const el = form.querySelector<HTMLElement>(`[name="${CSS.escape(firstBad)}"]`);
+        el?.focus();
+      }
+      toast.error('Please fix the highlighted fields');
+      return false;
+    }
     const payload: Record<string, unknown> = {};
-    for (const [k, v] of fd.entries()) {
-      if (!k) continue;
-      const s = typeof v === 'string' ? v : '';
-      payload[k] = s === '' ? null : s;
+    for (const [k, v] of Object.entries(result.data)) {
+      payload[k] = v === '' || v === undefined ? null : v;
     }
     setSaving(true);
     try {
@@ -548,7 +579,10 @@ function EntityForm(props: Readonly<EntityFormProps>) {
     e.preventDefault();
     const form = e.currentTarget;
     const ok = await submit(form);
-    if (ok) form.reset();
+    if (ok) {
+      form.reset();
+      resetErrors();
+    }
   }
 
   // "Save & Add another" — same as Save but keeps the user on the form so they
@@ -556,31 +590,34 @@ function EntityForm(props: Readonly<EntityFormProps>) {
   async function handleSaveAndNew() {
     const form = document.querySelector<HTMLFormElement>(`form[data-entity="${entity}"]`);
     if (!form) return;
-    if (!form.reportValidity()) return;
     const ok = await submit(form);
     if (ok) {
       form.reset();
+      resetErrors();
       const first = form.querySelector<HTMLElement>('input, select, textarea');
       first?.focus();
     }
   }
 
   return (
-    <form
-      className={className}
-      style={styleObj}
-      data-entity={entity}
-      onSubmit={handleSubmit}
-      {...dataAttrs}
-    >
-      {children}
-      <div className="appbana-form-save-cell">
-        <FormActions
-          saving={saving}
-          onSaveAndNew={entity ? handleSaveAndNew : undefined}
-        />
-      </div>
-    </form>
+    <EntityFormErrorProvider errors={errors} clearError={clearError}>
+      <form
+        className={className}
+        style={styleObj}
+        data-entity={entity}
+        onSubmit={handleSubmit}
+        noValidate
+        {...dataAttrs}
+      >
+        {children}
+        <div className="appbana-form-save-cell">
+          <FormActions
+            saving={saving}
+            onSaveAndNew={entity ? handleSaveAndNew : undefined}
+          />
+        </div>
+      </form>
+    </EntityFormErrorProvider>
   );
 }
 

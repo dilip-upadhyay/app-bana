@@ -119,6 +119,21 @@
     grid-column: 1 / -1;
   }
 
+  /* ---- Sprint 2 Task 2.5: inline validation --------------------------- */
+  .appbana-field-error {
+    @apply text-xs font-medium text-rose-600 mt-1;
+  }
+  /* Any input/select/textarea inside an invalid field gets a red outline. */
+  .appbana-field-invalid > .appbana-input,
+  .appbana-field-invalid > .appbana-select,
+  .appbana-field-invalid > .appbana-textarea,
+  .appbana-field-invalid .appbana-input,
+  .appbana-field-invalid .appbana-select,
+  .appbana-field-invalid .appbana-textarea,
+  .appbana-field-invalid [aria-invalid='true'] {
+    @apply border-rose-500 ring-1 ring-rose-300;
+  }
+
   /* ---- Date picker popover (react-day-picker) ------------------------- */
   .appbana-datepicker {
     @apply w-full;
