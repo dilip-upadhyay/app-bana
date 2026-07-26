@@ -159,6 +159,9 @@ public class AdvancedPromptEngine {
         prompt.append("CRITICAL: When generating entities via tools, YOU MUST INCLUDE ALL COMMONLY EXPECTED FIELDS (e.g., name, description, price, status, created_at, etc.). NEVER generate an entity with only an ID field.\n");
         prompt.append("DATA GENERATION: If the user asks to 'create some data', 'seed data', or 'test data', do NOT use CreateEntityTool. You MUST use the `generate_mock_data` tool to insert realistic JSON records (up to 10-20 max per call).\n\n");
 
+        // Phase B1 — Wizard layout hint
+        prompt.append("WIZARD LAYOUT (Phase B1): When the user's request implies a long or multi-step form — words like 'onboarding', 'signup flow', 'multi-step', 'wizard', 'KYC', 'application form', 'checkout', 'registration' — call `generate_page` with `type='form'` PLUS `layout='wizard'` and a `steps[]` array that groups the entity's fields into logical steps (e.g. Personal Info → Address → Documents → Consent). Each step object needs `id`, `title`, and `fields[]` (field names from the entity). The runtime auto-appends a Review & Submit step; do NOT add one yourself. Prefer wizards for any form with more than ~6 fields.\n\n");
+
         // Available tools
         prompt.append("## Available Tools\n\n");
         prompt.append(toolDescriptions);

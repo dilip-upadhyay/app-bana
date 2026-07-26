@@ -25,6 +25,7 @@ import { useEntityFormValidation } from './useEntityFormValidation';
 import { EntityFormErrorProvider } from './entity-form-context';
 import { FormField, ValidatedInput, ValidatedSelect, ValidatedTextarea } from './FormField';
 import { ReferenceCombobox } from './ReferenceCombobox';
+import { WizardShell } from './WizardShell';
 
 // Sprint 3 task 3.7 — anything larger than this switches from native <select>
 // to the search-driven combobox. Kept small so real-world lookup tables that
@@ -81,6 +82,31 @@ export function renderPage(page: PageMeta): React.ReactElement {
       </PageShell>
     );
   }
+
+  // Phase B1 — Wizard layout takes over the whole page body. Collect every
+  // form-field descendant by `name` so WizardShell can render just the
+  // subset belonging to the current step.
+  if (page.layout === 'wizard' && Array.isArray(page.steps) && page.steps.length > 0) {
+    const fieldByName = collectFormFieldsByName(root, nodeMap, page.id);
+    const entity = findFormEntity(root, nodeMap) ?? '';
+    return (
+      <PageShell
+        title={pageTitle(page)}
+        subtitle={pageSubtitle(page)}
+        actions={<PageActions page={page} />}
+      >
+        <div className="max-w-3xl w-full mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">
+          <WizardShell
+            entity={entity}
+            steps={page.steps}
+            renderField={(name) => fieldByName.get(name) ?? null}
+            draftId={page.id}
+          />
+        </div>
+      </PageShell>
+    );
+  }
+
   const kind = classifyPage(page);
   const inner = renderNode(root, nodeMap, page.id);
   // Form pages sit in a centred, narrower card so the eye lands on the fields.
@@ -97,6 +123,53 @@ export function renderPage(page: PageMeta): React.ReactElement {
       {body}
     </PageShell>
   );
+}
+
+/** Walk the node tree and return a map { fieldName -> rendered JSX } for
+ *  every form control (input / select / textarea / reference). Used by
+ *  the wizard path to render fields per-step without invoking the whole
+ *  form node.
+ */
+function collectFormFieldsByName(
+  root: ComponentNode,
+  nodeMap: Map<string, ComponentNode>,
+  pageId: string,
+): Map<string, React.ReactElement> {
+  const out = new Map<string, React.ReactElement>();
+  const walk = (node: ComponentNode) => {
+    const props = node.props ?? {};
+    const name = String(props.name ?? props.field ?? '');
+    const isField = ['input', 'select', 'textarea', 'reference'].includes(node.type);
+    if (isField && name && !out.has(name)) {
+      out.set(name, renderNode(node, nodeMap, pageId));
+    }
+    for (const childId of node.children ?? []) {
+      const child = nodeMap.get(childId);
+      if (child) walk(child);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+/** Find the entity string on the first `form` / `studio-form` node in the tree. */
+function findFormEntity(
+  root: ComponentNode,
+  nodeMap: Map<string, ComponentNode>,
+): string | null {
+  const stack: ComponentNode[] = [root];
+  while (stack.length) {
+    const node = stack.pop()!;
+    if (node.type === 'form' || node.type === 'studio-form') {
+      const e = String(node.props?.entity ?? '');
+      if (e) return e;
+    }
+    for (const childId of node.children ?? []) {
+      const child = nodeMap.get(childId);
+      if (child) stack.push(child);
+    }
+  }
+  return null;
 }
 
 function fieldLabel(props: Record<string, unknown>): string {

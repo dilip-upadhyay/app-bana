@@ -81,6 +81,25 @@ public class GeneratePageTool implements Tool {
                     "fixedFields": {
                       "type": "object",
                       "description": "Static field values to merge into the save request (e.g. { 'Cart': { 'qty': 1 } })"
+                    },
+                    "layout": {
+                      "type": "string",
+                      "enum": ["form", "list", "detail", "wizard"],
+                      "description": "Phase B1 — Optional compound layout. Use 'wizard' with `steps[]` for multi-step forms (onboarding, KYC, long signups). Omit for a flat single-page form."
+                    },
+                    "steps": {
+                      "type": "array",
+                      "description": "Phase B1 — Wizard step definitions. Required when layout='wizard'. Each step lists the field names to render in that step; the runtime auto-appends a Review & Submit step.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id":       { "type": "string", "description": "Stable step id, e.g. 'personal-info'" },
+                          "title":    { "type": "string", "description": "Short step title shown in the progress bar" },
+                          "subtitle": { "type": "string", "description": "Optional one-line subtitle under the title" },
+                          "fields":   { "type": "array", "items": { "type": "string" }, "description": "Field names (from the entity schema) rendered in this step" }
+                        },
+                        "required": ["id", "title", "fields"]
+                      }
                     }
                   },
                   "required": ["name", "path", "type", "entityName"]
@@ -122,6 +141,23 @@ public class GeneratePageTool implements Tool {
             pageMetadata.put("kind", pageType);
             if (entityForKey != null && appIdForKey != null && !appIdForKey.isEmpty()) {
                 pageMetadata.put("entityKey", tenantForKey + "_" + appIdForKey + "_" + entityForKey);
+            }
+
+            // Phase B1 — Wizard layout. When the caller specifies
+            // layout='wizard' + steps[], stamp them onto the PageMeta so the
+            // runtime WizardShell takes over rendering. Requires the underlying
+            // form page to have been built (so form-field nodes exist that the
+            // wizard can then partition by step).
+            Object layoutArg = arguments.get("layout");
+            Object stepsArg  = arguments.get("steps");
+            if ("wizard".equals(layoutArg) && stepsArg instanceof List<?> stepsList && !stepsList.isEmpty()) {
+                if (!"form".equals(pageType)) {
+                    log.warn("[GeneratePageTool] layout='wizard' requires type='form'; ignoring wizard on {} page", pageType);
+                } else {
+                    pageMetadata.put("layout", "wizard");
+                    pageMetadata.put("steps", stepsList);
+                    log.info("[GeneratePageTool] Wizard layout applied with {} steps", stepsList.size());
+                }
             }
 
             // 2. Validate metadata
