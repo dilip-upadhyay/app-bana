@@ -231,10 +231,114 @@ export async function insertEntityRow(
     body: JSON.stringify(row),
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Insert failed: ${res.status} ${body}`);
+    await throwEntityError(res, 'Insert failed');
   }
   return res.json();
+}
+
+/**
+ * Sprint 3 task 3.4 — Update a single row via `PUT /api/{entity}/{id}`.
+ * Backend returns `{ updated: number }`. Throws {@link ApiFieldError} on 400
+ * so the caller can render inline field errors.
+ */
+export async function updateEntityRow(
+  entityKey: string,
+  id: string | number,
+  row: Record<string, unknown>,
+  token: string
+): Promise<{ updated: number }> {
+  const res = await authedFetch(`${BACKEND}/api/${entityKey}/${encodeURIComponent(String(id))}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) {
+    await throwEntityError(res, 'Update failed');
+  }
+  return res.json();
+}
+
+/**
+ * Sprint 3 task 3.5 — Delete a single row via `DELETE /api/{entity}/{id}`.
+ * Returns `{ deleted: number }` from the backend.
+ */
+export async function deleteEntityRow(
+  entityKey: string,
+  id: string | number,
+  token: string
+): Promise<{ deleted: number }> {
+  const res = await authedFetch(`${BACKEND}/api/${entityKey}/${encodeURIComponent(String(id))}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    await throwEntityError(res, 'Delete failed');
+  }
+  return res.json();
+}
+
+/**
+ * Sprint 3 task 3.3 — Fetch a single row by id. Used by DetailPage to
+ * hydrate the entity form in view / edit mode.
+ */
+export async function getEntityRow(
+  entityKey: string,
+  id: string | number,
+  token: string
+): Promise<Record<string, unknown> | null> {
+  const res = await authedFetch(`${BACKEND}/api/${entityKey}/${encodeURIComponent(String(id))}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    await throwEntityError(res, 'Fetch failed');
+  }
+  return res.json();
+}
+
+/**
+ * Sprint 3 task 3.1 — Structured error thrown by the entity mutation helpers
+ * when the backend returns HTTP 4xx. `fieldErrors` mirrors the backend's
+ * `errors: { fieldName: reason }` map when present; otherwise it's empty and
+ * the caller should surface `.message` at form level.
+ *
+ * See {@link com.appbana.service.ErrorHandler#fieldValidationError} on the
+ * backend for the response contract.
+ */
+export class ApiFieldError extends Error {
+  readonly status: number;
+  readonly fieldErrors: Record<string, string>;
+  constructor(message: string, status: number, fieldErrors: Record<string, string> = {}) {
+    super(message);
+    this.name = 'ApiFieldError';
+    this.status = status;
+    this.fieldErrors = fieldErrors;
+  }
+}
+
+/**
+ * Read a mutation Response's body, normalise it into either an
+ * {@link ApiFieldError} (when the backend returned a structured `errors`
+ * map) or a plain Error, and throw. Never returns.
+ */
+async function throwEntityError(res: Response, prefix: string): Promise<never> {
+  const raw = await res.text().catch(() => '');
+  let parsed: unknown;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    parsed = null;
+  }
+  const body = (parsed ?? {}) as { error?: string; errors?: Record<string, string> };
+  const message = body.error ?? raw ?? `${prefix}: ${res.status}`;
+  if (body.errors && typeof body.errors === 'object') {
+    throw new ApiFieldError(message, res.status, body.errors);
+  }
+  // Non-structured 4xx / 5xx — still throw as a plain Error but preserve
+  // the status so callers can distinguish network from validation failures.
+  const err = new Error(`${prefix}: ${res.status} ${message}`);
+  (err as Error & { status?: number }).status = res.status;
+  throw err;
 }
 
 // â”€â”€ Chat sessions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

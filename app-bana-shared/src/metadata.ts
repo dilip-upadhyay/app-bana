@@ -19,6 +19,20 @@ export interface PageMeta {
   rootId: string;
   nodes: ComponentNode[];
   type?: string;
+  /**
+   * Sprint 3 task 3.2 — Authoritative page-kind metadata. When present the
+   * runtime trusts this over sniffing the node tree. `dashboard` reserved
+   * for future non-entity landing pages. Legacy pages without `kind` fall
+   * back to the runtime's `classifyPage` heuristic.
+   */
+  kind?: 'form' | 'list' | 'detail' | 'dashboard';
+  /**
+   * Sprint 3 task 3.3 — For `kind: 'detail'` pages, the qualified entity key
+   * (`{tenantId}_{appId}_{Entity}`) the page renders records from. Optional
+   * because add / list pages don't need it (they derive entity from a node
+   * prop instead).
+   */
+  entityKey?: string;
 }
 
 export interface ThemeMeta {

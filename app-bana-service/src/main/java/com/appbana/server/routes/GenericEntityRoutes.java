@@ -471,6 +471,12 @@ public class GenericEntityRoutes {
                 Map<String, Object> response = new LinkedHashMap<>();
                 response.put("id", idObj);
                 res.json(201, response);
+            } catch (IllegalArgumentException e) {
+                // Sprint 3 task 3.1 — validation errors surface as 400 with
+                // a structured {errors: {fieldName: reason}} payload so the
+                // runtime can render them inline under the offending input.
+                LOG.warn("Insert validation failed for entity={}: {}", entity, e.getMessage());
+                res.json(400, ErrorHandler.fieldValidationError(e));
             } catch (Exception e) {
                 LOG.error("Insert failed for entity={}", entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
@@ -732,6 +738,10 @@ public class GenericEntityRoutes {
                     }
                 }
                 res.json(200, Map.of("updated", updated));
+            } catch (IllegalArgumentException e) {
+                // Sprint 3 task 3.1 — same structured 400 shape as POST.
+                LOG.warn("Update validation failed for entity {} id {}: {}", entity, idStr, e.getMessage());
+                res.json(400, ErrorHandler.fieldValidationError(e));
             } catch (SQLException e) {
                 LOG.error("Update failed for entity {} id {}", entity, idStr, e);
                 res.json(500, ErrorHandler.errorDetails(e));
