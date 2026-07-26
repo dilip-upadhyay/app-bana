@@ -14,6 +14,7 @@ import { resolveAppContext, getApp, login as apiLogin } from '@appbana/shared';
 import { renderPage } from './Renderer';
 import { RuntimeSidebar } from './RuntimeSidebar';
 import { RuntimeNavigationProvider } from './runtime-navigation';
+import { AppLoadingSkeleton } from './Skeleton';
 import { LoginPage } from '../pages/LoginPage';
 import { Toaster } from './Toaster';
 
@@ -168,11 +169,7 @@ export function AppRuntimeShell() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 text-gray-400 text-sm">
-        Loading app…
-      </div>
-    );
+    return <AppLoadingSkeleton />;
   }
 
   if (error) {

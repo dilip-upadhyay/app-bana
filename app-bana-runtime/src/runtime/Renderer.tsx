@@ -19,6 +19,7 @@ import { toast } from './Toaster';
 import { humanizeHeader } from './cell-formatters';
 import { PageShell } from './PageShell';
 import { DatePicker } from './DatePicker';
+import { Skeleton } from './Skeleton';
 
 /** Turn "full_name" / "first-name" / "firstName" into "Full name". */
 function humanize(raw: string | undefined): string {
@@ -460,9 +461,12 @@ function ReferenceField(props: Readonly<ReferenceFieldProps>) {
 
   if (loading) {
     return (
-      <select id={id} className={`appbana-select ${className}`} disabled>
-        <option>Loading {refEntity || 'options'}…</option>
-      </select>
+      <div className="appbana-reference-loading" aria-busy="true">
+        <Skeleton
+          className="h-9 w-full rounded-md"
+          ariaLabel={`Loading ${refEntity || 'options'}`}
+        />
+      </div>
     );
   }
   if (error) {

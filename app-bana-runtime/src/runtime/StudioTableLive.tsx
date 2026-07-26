@@ -18,6 +18,7 @@ import { formatDate, humanizeHeader, pickReferenceLabel, classifyStatus } from '
 import { RowActions } from './RowActions';
 import { toast } from './Toaster';
 import { EmptyState } from './EmptyState';
+import { TableSkeleton } from './Skeleton';
 import { useRuntimeNavigation } from './runtime-navigation';
 import { entityNameFromKey, findAddPageForEntity } from './page-classifier';
 
@@ -219,14 +220,8 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
 
       {/* Loading skeleton */}
       {loading && (
-        <div className="px-5 py-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={`skel-row-${i}`} className="flex gap-3 py-2 animate-pulse">
-              {Array.from({ length: Math.max(displayFieldNames.length, 3) }).map((__, j) => (
-                <div key={`skel-cell-${i}-${j}`} className="h-4 bg-slate-100 rounded flex-1" />
-              ))}
-            </div>
-          ))}
+        <div className="px-5 py-4">
+          <TableSkeleton columns={displayFieldNames.length} rows={5} />
         </div>
       )}
 
