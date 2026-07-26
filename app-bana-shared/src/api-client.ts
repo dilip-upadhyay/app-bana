@@ -299,6 +299,7 @@ export interface ChatPayload {
   userId: string;
   tenantId: string;
   appId: string;
+  appName?: string;
   token?: string;
   provider?: string;
   images?: string[];

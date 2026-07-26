@@ -588,7 +588,10 @@ public class AiAgent {
             StringBuilder promptBuilder = new StringBuilder();
             promptBuilder.append("### SYSTEM INSTRUCTIONS ###\n");
             promptBuilder.append(buildSystemPrompt(context)).append("\n\n");
-            
+
+            promptBuilder.append("### CURRENT EXECUTION CONTEXT ###\n");
+            promptBuilder.append(buildExecutionContext(context)).append("\n\n");
+
             promptBuilder.append("### AVAILABLE TOOLS ###\n");
             promptBuilder.append(toolRegistry.getToolDescriptions()).append("\n\n");
 
@@ -892,6 +895,35 @@ public class AiAgent {
                         2. **NEW BUILD**: If the `appId` was "(none selected)" or you just created a brand new app, you MUST use words like "built and deployed" or "created".
                         """);
         return prompt.toString();
+    }
+
+    /**
+     * Emit a compact block describing the current agent execution context so the LLM knows
+     * which app / tenant / user it's operating on. The system prompt references
+     * "CURRENT EXECUTION CONTEXT below" — this method is what produces it.
+     */
+    private String buildExecutionContext(AgentContext context) {
+        String appId = context.appId();
+        boolean appSelected = appId != null && !appId.isBlank() && !"default".equals(appId);
+        String appName = context.hasVariable("app_name") ? String.valueOf(context.getVariable("app_name")) : "";
+        String tenantId = context.tenantId() != null ? context.tenantId() : "default";
+        String userId = context.userId() != null ? context.userId() : "anonymous";
+
+        StringBuilder sb = new StringBuilder();
+        if (appSelected) {
+            sb.append("- Selected app ID: ").append(appId).append('\n');
+            if (!appName.isBlank()) {
+                sb.append("- Selected app name: \"").append(appName).append("\"\n");
+            }
+            sb.append("- An app IS currently selected. When the user asks \"which app do I have selected?\" or ")
+              .append("similar, answer directly using the name above — DO NOT tell them to select an app first.\n");
+        } else {
+            sb.append("- Selected app ID: (none selected)\n");
+            sb.append("- No app is currently selected. If the user's request needs an app, ask which one.\n");
+        }
+        sb.append("- Tenant: ").append(tenantId).append('\n');
+        sb.append("- User: ").append(userId);
+        return sb.toString();
     }
 
     /**

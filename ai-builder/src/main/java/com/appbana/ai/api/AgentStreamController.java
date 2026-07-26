@@ -94,7 +94,9 @@ public class AgentStreamController {
             AgentContext agentContext = AgentContext
                     .create(tenantId, appId, userId, sessionId, token)
                     .withVariable("chat_history", history)
-                    .withVariable("conversation_state", conversationState.name());
+                    .withVariable("conversation_state", conversationState.name())
+                    .withVariable("app_name",
+                            request.getAppName() != null ? request.getAppName() : "");
 
             // Open SSE stream — must be done before writing any body
             try {

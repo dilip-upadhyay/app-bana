@@ -71,6 +71,7 @@ export function ChatPane() {
           userId: userId ?? 'anonymous',
           tenantId: tenantId ?? 'default',
           appId: currentApp?.id ?? 'default',
+          appName: currentApp?.name ?? '',
           token: token ?? undefined,
           ...(images.length > 0 ? { images } : {}),
         },

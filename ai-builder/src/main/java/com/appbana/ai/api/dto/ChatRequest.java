@@ -14,6 +14,7 @@ public class ChatRequest {
     private String appType; // Optional: for context
     private String tenantId; // Story 8.5: For agent context
     private String appId; // Story 8.5: For agent context
+    private String appName; // Human-readable name of the currently-selected app (optional)
     private String token; // Story 8.5: For authentication
     private String provider; // 'openai' or 'gemini'
     private java.util.List<String> images; // Base64 encoded images for Ai Understanding
