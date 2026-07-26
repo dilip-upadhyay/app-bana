@@ -50,9 +50,13 @@ export function LoginPage({ tenantId, onLogin }: Props) {
         {/* Branding */}
         <div className="flex flex-col items-center gap-2">
           {branding?.logoUrl ? (
-            <img src={branding.logoUrl} alt="logo" className="h-10 object-contain" />
+            <img
+              src={branding.logoUrl}
+              alt={`${branding.displayName ?? tenantId} logo`}
+              className="h-10 object-contain"
+            />
           ) : (
-            <span className="text-3xl">🍌</span>
+            <span className="text-3xl" aria-hidden="true">🍌</span>
           )}
           <h1 className="text-xl font-bold text-gray-800">
             {branding?.displayName ?? 'AppBana'}
@@ -61,35 +65,52 @@ export function LoginPage({ tenantId, onLogin }: Props) {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none
-                       focus:ring-2 focus:ring-indigo-500"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none
-                       focus:ring-2 focus:ring-indigo-500"
-          />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" aria-label="Sign in">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="appbana-login-email" className="text-xs font-medium text-gray-600">
+              Email
+            </label>
+            <input
+              id="appbana-login-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              aria-required="true"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none
+                         focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="appbana-login-password" className="text-xs font-medium text-gray-600">
+              Password
+            </label>
+            <input
+              id="appbana-login-password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              aria-required="true"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none
+                         focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
 
           {error && (
-            <p className="text-red-500 text-xs">{error}</p>
+            <p className="text-red-500 text-xs" role="alert">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={loading}
             className="w-full py-2 rounded-lg text-sm font-semibold text-white
-                       disabled:opacity-60 disabled:cursor-not-allowed transition-opacity"
+                       disabled:opacity-60 disabled:cursor-not-allowed transition-opacity
+                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
             style={{ backgroundColor: primaryColor }}
           >
             {loading ? 'Signing in…' : 'Sign In'}

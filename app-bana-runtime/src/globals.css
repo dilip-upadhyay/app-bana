@@ -63,6 +63,20 @@
 /* ------------------------------------------------------------------------- */
 @layer components {
 
+  /* ---- Skip link (WCAG 2.4.1 Bypass Blocks) --------------------------- */
+  .appbana-skip-link {
+    @apply absolute left-3 top-3 z-50
+           -translate-y-16 opacity-0 pointer-events-none
+           inline-flex items-center px-4 py-2
+           bg-indigo-600 text-white text-sm font-medium
+           rounded-md shadow-lg
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+           transition-transform;
+  }
+  .appbana-skip-link:focus {
+    @apply translate-y-0 opacity-100 pointer-events-auto;
+  }
+
   /* ---- Inputs (text / date / email / number / password) --------------- */
   .appbana-input,
   .appbana-select,
@@ -462,7 +476,7 @@
   .appbana-row-actions-menu button {
     @apply w-full text-left px-3 py-1.5 text-sm text-slate-700
            hover:bg-slate-100
-           focus:outline-none focus:bg-slate-100;
+           focus:outline-none focus:bg-slate-100 focus:ring-2 focus:ring-inset focus:ring-indigo-500;
   }
   .appbana-row-actions-menu button.danger {
     @apply text-rose-600 hover:bg-rose-50;

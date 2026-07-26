@@ -203,6 +203,8 @@ export function AppRuntimeShell() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* WCAG 2.4.1 — Skip to main content. Hidden until focused. */}
+      <a href="#appbana-main" className="appbana-skip-link">Skip to main content</a>
       {/* Top app bar — sticky, spans full width */}
       <header className="appbana-appbar">
         <button
@@ -260,7 +262,7 @@ export function AppRuntimeShell() {
         </aside>
 
         {/* Main content — scrollable */}
-        <main className="flex-1 overflow-y-auto">
+        <main id="appbana-main" tabIndex={-1} className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
             {currentPage ? (
               <RuntimeNavigationProvider
