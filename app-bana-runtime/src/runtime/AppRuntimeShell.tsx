@@ -209,7 +209,7 @@ export function AppRuntimeShell() {
       <header className="appbana-appbar">
         <button
           type="button"
-          className="appbana-appbar-menu md:hidden"
+          className="appbana-appbar-menu sm:hidden"
           onClick={() => setMobileNavOpen(true)}
           aria-label="Open navigation"
         >
@@ -231,8 +231,10 @@ export function AppRuntimeShell() {
 
       {/* Body — sidebar + main */}
       <div className="flex flex-1 min-h-0">
-        {/* Desktop / tablet sidebar (permanent, hidden on mobile) */}
-        <aside className="hidden md:block appbana-sidebar-container">
+        {/* Sidebar: full at md+, icon-rail at sm-to-md, hidden below sm.
+            The visual collapse is CSS-driven — see .appbana-sidebar-container
+            @media (max-width: 767.98px) in globals.css. */}
+        <aside className="hidden sm:block appbana-sidebar-container">
           <RuntimeSidebar
             pages={(app.pages ?? []) as PageMeta[]}
             currentPageId={currentPage?.id ?? null}
@@ -244,13 +246,13 @@ export function AppRuntimeShell() {
         {mobileNavOpen && (
           <button
             type="button"
-            className="appbana-drawer-backdrop md:hidden"
+            className="appbana-drawer-backdrop sm:hidden"
             aria-label="Close navigation"
             onClick={() => setMobileNavOpen(false)}
           />
         )}
         <aside
-          className={`appbana-drawer md:hidden ${mobileNavOpen ? 'appbana-drawer-open' : ''}`}
+          className={`appbana-drawer sm:hidden ${mobileNavOpen ? 'appbana-drawer-open' : ''}`}
           aria-hidden={!mobileNavOpen}
         >
           <RuntimeSidebar

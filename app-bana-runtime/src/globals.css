@@ -178,10 +178,21 @@
     font-size: 0.875rem;
   }
 
-  /* ---- Form layout — responsive 2-col grid that collapses to 1-col ---- */
+  /* ---- Form layout — responsive 2-col grid that collapses to 1-col ----
+     Sprint 2 Task 2.10: explicit breakpoints.
+       < 640px (mobile / < sm)  → 1 column
+       ≥ 640px (sm and up)      → 2 columns
+     Previously we used `auto-fit minmax(240px, 1fr)`, which could pack up
+     to 3 columns on wide viewports and produced a jarring reflow between
+     390px and 480px. Explicit media queries give a predictable rhythm. */
   .appbana-form {
     @apply grid gap-x-6 gap-y-5;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 640px) {
+    .appbana-form {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
   /* Direct <button> children (like a Save button) span the whole row and
      get top spacing so they don't sit flush to the last field. */
@@ -342,6 +353,33 @@
   }
   .appbana-sidebar-icon > svg {
     @apply w-full h-full;
+  }
+
+  /* Sprint 2 Task 2.10 — collapsed icon-rail between sm and md.
+     Full sidebar (w-64) at md+; icon-only rail (w-14) between sm and md;
+     hidden below sm (mobile drawer takes over). The React component is
+     identical in all modes — the label spans hide via CSS. */
+  @media (min-width: 640px) and (max-width: 767.98px) {
+    .appbana-sidebar-container {
+      width: 3.5rem;
+    }
+    .appbana-sidebar-container .appbana-sidebar > div {
+      padding: 0.5rem;
+    }
+    .appbana-sidebar-container .appbana-sidebar-section {
+      display: none;
+    }
+    .appbana-sidebar-container .appbana-sidebar-link {
+      justify-content: center;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+      gap: 0;
+    }
+    /* Hide the label span; the icon span stays. `title={label}` on the
+       button gives a native tooltip on hover for orientation. */
+    .appbana-sidebar-container .appbana-sidebar-link > span:not(.appbana-sidebar-icon) {
+      display: none;
+    }
   }
 
   /* ---- Mobile drawer (below md: breakpoint) --------------------------- */
