@@ -30,6 +30,12 @@ export interface FileUploadFieldProps {
 
 interface UploadedInfo {
   fileId: string;
+  /**
+   * H1 hardening — the backend returns a tenant-scoped URL
+   * (`/api/files/{tenantId}/{appId}/{fileId}`). Consumers must use this
+   * verbatim so cross-tenant reads stay impossible.
+   */
+  url?: string;
   filename?: string;
   mimeType?: string;
   size?: number;
@@ -189,7 +195,7 @@ export function FileUploadField(props: Readonly<FileUploadFieldProps>) {
         <div className="mt-2 text-xs text-slate-500">
           Preview:{' '}
           <a
-            href={`/api/files/${uploaded.fileId}`}
+            href={uploaded.url ?? `/api/files/${uploaded.fileId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-indigo-600 hover:underline"

@@ -12,7 +12,7 @@
  */
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { ComponentNode } from '@appbana/shared';
-import { fetchEntityRows, deleteEntityRow, insertEntityRow } from '@appbana/shared';
+import { fetchEntityRows, deleteEntityRow, insertEntityRow, resolveAppContext } from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { formatDate, humanizeHeader, pickReferenceLabel } from './cell-formatters';
 import { StatusPill } from './StatusPill';
@@ -219,13 +219,22 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
       return <StatusPill value={truthy ? 'Yes' : 'No'} tone={truthy ? 'success' : 'neutral'} />;
     }
 
-    // Phase B3 — file link
+    // Phase B3 — file link. H1 hardening: URL includes tenant + app so the
+    // backend can enforce the (tenant, app, fileId) triple and refuse
+    // cross-tenant reads. We resolve tenant/app from the same context the
+    // entity fetch uses, so both are always in sync.
     if (type === 'file') {
       const fileId = raw == null ? '' : String(raw);
       if (!fileId) return <span className="text-slate-400">—</span>;
+      const ctx = resolveAppContext(window.location);
+      const tenantId = ctx?.tenantId ?? 'default';
+      const appId = ctx?.appId ?? '';
+      const href = appId
+        ? `/api/files/${tenantId}/${appId}/${fileId}`
+        : `/api/files/${fileId}`; // legacy fallback — will 404 on the new backend
       return (
         <a
-          href={`/api/files/${fileId}`}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           className="text-indigo-600 hover:underline"

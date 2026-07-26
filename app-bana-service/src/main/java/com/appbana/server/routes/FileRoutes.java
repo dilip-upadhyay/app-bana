@@ -53,8 +53,12 @@ public class FileRoutes {
             "(file_id, tenant_id, app_id, entity_key, field_name, original_name, mime_type, size_bytes, storage_path, uploaded_by) " +
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+    /** Tenant-scoped lookup — the (tenantId, appId, fileId) triple prevents
+     *  cross-tenant reads. A file uploaded to tenant A cannot be downloaded
+     *  by supplying tenant B's id in the URL, even with a valid fileId. */
     private static final String SELECT_SQL =
-            "SELECT original_name, mime_type, size_bytes, storage_path FROM appbana_files WHERE file_id = ?";
+            "SELECT original_name, mime_type, size_bytes, storage_path FROM appbana_files " +
+            "WHERE file_id = ? AND tenant_id = ? AND app_id = ?";
 
     private FileRoutes() {}
 
@@ -68,9 +72,11 @@ public class FileRoutes {
         }
 
         router.post("/api/files/upload", (req, res) -> handleUpload(req, res, storage));
-        router.get("/api/files/{fileId}", (req, res) -> handleDownload(req, res, storage));
+        // Tenant-scoped download URL. The tenantId + appId in the path are
+        // enforced against the stored row — a mismatched triple returns 404.
+        router.get("/api/files/{tenantId}/{appId}/{fileId}", (req, res) -> handleDownload(req, res, storage));
 
-        LOG.info("Registered file routes: POST /api/files/upload, GET /api/files/{{fileId}}");
+        LOG.info("Registered file routes: POST /api/files/upload, GET /api/files/{{tenantId}}/{{appId}}/{{fileId}}");
     }
 
     private static void handleUpload(Router.HttpRequest req, Router.HttpResponse res, FileStorageAdapter storage) {
@@ -166,7 +172,12 @@ public class FileRoutes {
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("fileId", fileId);
-        out.put("url", "/api/files/" + fileId);
+        // Tenant-scoped download URL. Consumers should use this verbatim
+        // rather than constructing their own path — the tenantId + appId
+        // are enforced server-side and a mismatched triple returns 404.
+        out.put("url", "/api/files/" + tenantId + "/" + appId + "/" + fileId);
+        out.put("tenantId", tenantId);
+        out.put("appId", appId);
         out.put("filename", filename);
         out.put("mimeType", mimeType);
         out.put("size", bytes.length);
@@ -174,7 +185,17 @@ public class FileRoutes {
     }
 
     private static void handleDownload(Router.HttpRequest req, Router.HttpResponse res, FileStorageAdapter storage) {
+        String tenantId = req.pathParam("tenantId");
+        String appId = req.pathParam("appId");
         String fileId = req.pathParam("fileId");
+        if (tenantId == null || !SAFE_ID.matcher(tenantId).matches()) {
+            res.json(400, Map.of("error", "Invalid tenantId"));
+            return;
+        }
+        if (appId == null || !SAFE_ID.matcher(appId).matches()) {
+            res.json(400, Map.of("error", "Invalid appId"));
+            return;
+        }
         if (fileId == null || !SAFE_ID.matcher(fileId).matches()) {
             res.json(400, Map.of("error", "Invalid fileId"));
             return;
@@ -186,8 +207,13 @@ public class FileRoutes {
         try (Connection conn = JdbcManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(SELECT_SQL)) {
             ps.setString(1, fileId);
+            ps.setString(2, tenantId);
+            ps.setString(3, appId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
+                    // Do NOT distinguish "unknown fileId" from "wrong tenant" —
+                    // returning 404 in both cases prevents a probe-attack that
+                    // enumerates file ids across tenants.
                     res.json(404, Map.of("error", "Unknown fileId"));
                     return;
                 }
@@ -196,7 +222,7 @@ public class FileRoutes {
                 storagePath = rs.getString("storage_path");
             }
         } catch (Exception e) {
-            LOG.error("Failed to look up file {}", fileId, e);
+            LOG.error("Failed to look up file {} for tenant {} app {}", fileId, tenantId, appId, e);
             res.json(500, Map.of("error", "Failed to look up file"));
             return;
         }
