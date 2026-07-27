@@ -35,6 +35,40 @@ the reverse.
 
 ---
 
+## The quality bar (what "done" means)
+
+After your change, the documentation set must satisfy all five. Check each one explicitly before
+you finish — do not assume.
+
+**1. Comprehensive.** Every behaviour a reader must know to use or extend the feature is written
+down somewhere reachable from [docs/README.md](docs/README.md). That includes the unobvious parts:
+required setup (containers, env vars), the failure modes and what they look like, deliberate
+deviations from the plan and why, and known limitations. A feature documented only by its happy
+path is not documented. Ask yourself: *could a new developer use this without reading the source?*
+If not, name the gap.
+
+**2. No duplication.** Each fact has exactly **one** home, decided by the three rules above.
+Everywhere else **links** to it. If you find yourself pasting the same paragraph, table, or endpoint
+list into a second file, stop and replace the copy with a link. Duplicated content does not stay in
+sync — one copy always rots and the reader cannot tell which one is real. When you find existing
+duplication, collapse it: keep the copy in the owning file, replace the other with a link.
+
+**3. No stale content.** [docs/README.md](docs/README.md) asserts that every document under `docs/`
+describes the system as it ships today. So when a change makes a section wrong, **delete or rewrite
+it** — never append a contradicting note beside it. If a whole document is superseded, delete the
+file and remove it from README. Historical narrative belongs in `session_summary.md` and commit
+messages, not in reference docs.
+
+**4. Up to date.** Every number, status, SHA, route, port and file path reflects the code at HEAD,
+verified in Step 1 — not carried over from the previous revision of the doc.
+
+**5. Linked.** Nothing is orphaned. Every doc is reachable from
+[docs/README.md](docs/README.md) (both the "Where should I start?" table and the "Folder layout"
+tree), and every cross-reference is a working relative markdown link rather than a bare filename in
+prose. Deep-dive docs link back up to the plan or feature they elaborate.
+
+---
+
 ## Step 1 — Establish ground truth (do this before editing anything)
 
 Batch these in parallel:
@@ -82,11 +116,15 @@ If the change touched none of the above, say so and stop — do not invent doc c
 
 ## Step 4 — Verify before you finish
 
+Walk the five quality-bar checks explicitly, then these mechanical ones:
+
 - Re-read every markdown table you edited. **Table rows must be one line each** — a wrapped or merged
   row silently destroys the table render. This has broken `MAKER_CHECKER_PLAN.md` before.
 - Confirm every relative link resolves (`docs/…` links are relative to the file they live in;
   `.github/copilot-instructions.md` links out with `../`).
 - Grep for the *old* test count / old status string one more time to confirm zero stragglers.
+- Grep for any sentence you added that already exists elsewhere — if it does, delete yours and link.
+- Confirm every file under `docs/` is still reachable from `docs/README.md`.
 - Confirm the "Current state (YYYY-MM-DD)" date in `docs/README.md` is today's.
 
 ---
@@ -96,6 +134,13 @@ If the change touched none of the above, say so and stop — do not invent doc c
 Drawn from prior rounds — check every time:
 
 - **Stale test counts.** The same count is repeated in 3–4 files; updating one is the default failure.
+  The deeper fix is to stop duplicating it — cite it in ACTIVE_TASKS and link from the rest.
+- **Copy-paste drift.** The same endpoint table or setup instructions exist in two files and have
+  quietly diverged. Whichever you are reading, you cannot tell which is correct.
+- **Orphan doc.** A file exists under `docs/` but nothing links to it, so it is never read and never
+  maintained — it is worse than absent because it still shows up in search.
+- **Happy-path-only feature doc.** No setup prerequisites, no failure modes, no limitations. The
+  reader hits the first error and falls back to reading source.
 - **Corrupted table rows.** Two rows merged onto one line during an edit. Always re-read the table.
 - **Status recorded in the plan doc but not ACTIVE_TASKS** (violates rule 1), or vice versa.
 - **Exit criterion ticked because the code exists**, not because a test proves it.
@@ -124,7 +169,9 @@ Drawn from prior rounds — check every time:
 1. A short list of the facts you verified and how (command run, file+line read).
 2. The edits, applied.
 3. A summary table of every file changed and the one-line reason.
-4. Anything you found that is wrong in the docs but **out of scope** for this change — list it, do
+4. An explicit pass/fail line for each of the five quality-bar checks — comprehensive, no
+   duplication, no stale content, up to date, linked. If any fails, say why and what remains.
+5. Anything you found that is wrong in the docs but **out of scope** for this change — list it, do
    not silently fix it.
 
 **Now update the documentation for the work described below.** Start with Step 1; do not edit a
