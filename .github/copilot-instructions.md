@@ -564,6 +564,21 @@ fix: correct multi-tenant URL prefix in GenerateMockDataTool
 chore: update copilot instructions with DialogueManager plans
 ```
 
+### Always Commit and Push
+
+**Always commit and push after completing a unit of work.** Do not leave finished work sitting uncommitted in the working tree.
+
+1. Run the affected module's tests first (`mvn -pl app-bana-service test`, `pnpm test`, etc.) and confirm they pass.
+2. Commit using the message convention above, with a body explaining *why* when the change is non-obvious.
+3. Push to the current branch immediately — `git push origin $(git branch --show-current)`.
+
+Exceptions (ask first, don't auto-commit):
+- The user explicitly said not to commit.
+- Tests are failing or the build is broken.
+- The change contains secrets, credentials, or generated artifacts that belong in `.gitignore`.
+
+Note: `RevisionFlowTest` and the other DB-backed tests need PostgreSQL running (`docker start appbana-postgres`). A "Connection to localhost:5432 refused" failure is environmental, not a code regression — but do not commit until you have actually verified against a live DB.
+
 ---
 
 ## 14. Common Pitfalls
