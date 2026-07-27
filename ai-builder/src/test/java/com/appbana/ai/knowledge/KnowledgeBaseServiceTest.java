@@ -36,6 +36,8 @@ class KnowledgeBaseServiceTest {
 
     private AppBanaSchemaLoader schemaLoader;
     private KnowledgeBaseService knowledgeBaseService;
+    /** The loader's schema set grows over time, so never hard-code the expected count. */
+    private int schemaCount;
 
     private static final String COLLECTION_NAME = "appbana_knowledge";
     private static final float[] FAKE_EMBEDDING = new float[1536];
@@ -44,6 +46,7 @@ class KnowledgeBaseServiceTest {
     void setUp() {
         // Use real schema loader for test data
         schemaLoader = new AppBanaSchemaLoader();
+        schemaCount = schemaLoader.getAllSchemas().size();
 
         // Initialize service with mocks
         knowledgeBaseService = new KnowledgeBaseService(
@@ -59,10 +62,26 @@ class KnowledgeBaseServiceTest {
         Arrays.fill(FAKE_EMBEDDING, 0.1f);
     }
 
+    /**
+     * indexAllSchemas() batches its embedding calls through embedBatch(), not embed().
+     * Stubbing only embed() leaves embedBatch() returning an empty list, which makes every
+     * single schema fail on embeddings.get(i).
+     */
+    private void stubBatchEmbedding() throws Exception {
+        when(embeddingService.embedBatch(anyList())).thenAnswer(invocation -> {
+            List<String> texts = invocation.getArgument(0);
+            List<float[]> out = new ArrayList<>(texts.size());
+            for (int i = 0; i < texts.size(); i++) {
+                out.add(FAKE_EMBEDDING);
+            }
+            return out;
+        });
+    }
+
     @Test
     void testIndexAllSchemas_Success() throws Exception {
         // Arrange
-        when(embeddingService.embed(anyString())).thenReturn(FAKE_EMBEDDING);
+        stubBatchEmbedding();
         doNothing().when(vectorStoreService).store(anyString(), anyString(), any(float[].class), anyMap());
 
         // Act
@@ -74,10 +93,10 @@ class KnowledgeBaseServiceTest {
 
         // Verify all schemas were indexed (31 field types + 5 components + 1 page + 1
         // validation + 1 = 39)
-        assertEquals(39, knowledgeBaseService.getIndexedCount());
+        assertEquals(schemaCount, knowledgeBaseService.getIndexedCount());
 
         // Verify store was called for each schema
-        verify(vectorStoreService, times(39)).store(
+        verify(vectorStoreService, times(schemaCount)).store(
                 eq(COLLECTION_NAME),
                 anyString(),
                 any(float[].class),
@@ -87,6 +106,7 @@ class KnowledgeBaseServiceTest {
     @Test
     void testSearchRelevantSchemas_EmailField() throws Exception {
         // Arrange - Index first
+        stubBatchEmbedding();
         when(embeddingService.embed(anyString())).thenReturn(FAKE_EMBEDDING);
         doNothing().when(vectorStoreService).store(anyString(), anyString(), any(float[].class), anyMap());
         knowledgeBaseService.indexAllSchemas();
@@ -119,6 +139,7 @@ class KnowledgeBaseServiceTest {
     @Test
     void testSearchByType_ComponentsOnly() throws Exception {
         // Arrange - Index first
+        stubBatchEmbedding();
         when(embeddingService.embed(anyString())).thenReturn(FAKE_EMBEDDING);
         doNothing().when(vectorStoreService).store(anyString(), anyString(), any(float[].class), anyMap());
         knowledgeBaseService.indexAllSchemas();
@@ -172,7 +193,7 @@ class KnowledgeBaseServiceTest {
     @Test
     void testRefreshKnowledge_ClearsAndReindexes() throws Exception {
         // Arrange
-        when(embeddingService.embed(anyString())).thenReturn(FAKE_EMBEDDING);
+        stubBatchEmbedding();
         doNothing().when(vectorStoreService).store(anyString(), anyString(), any(float[].class), anyMap());
         when(qdrantService.collectionExists(COLLECTION_NAME)).thenReturn(true);
         doNothing().when(qdrantService).deleteCollection(COLLECTION_NAME);
@@ -183,14 +204,14 @@ class KnowledgeBaseServiceTest {
 
         // Assert
         assertTrue(knowledgeBaseService.isInitialized());
-        assertEquals(39, knowledgeBaseService.getIndexedCount());
+        assertEquals(schemaCount, knowledgeBaseService.getIndexedCount());
 
         // Verify collection was deleted and recreated
         verify(qdrantService).deleteCollection(COLLECTION_NAME);
         verify(qdrantService).initializeCollections();
 
         // Verify re-indexing happened
-        verify(vectorStoreService, times(39)).store(
+        verify(vectorStoreService, times(schemaCount)).store(
                 eq(COLLECTION_NAME),
                 anyString(),
                 any(float[].class),
@@ -200,6 +221,7 @@ class KnowledgeBaseServiceTest {
     @Test
     void testSearchRelevantSchemas_EmptyQuery() throws Exception {
         // Arrange - Index first
+        stubBatchEmbedding();
         when(embeddingService.embed(anyString())).thenReturn(FAKE_EMBEDDING);
         doNothing().when(vectorStoreService).store(anyString(), anyString(), any(float[].class), anyMap());
         knowledgeBaseService.indexAllSchemas();
@@ -217,8 +239,8 @@ class KnowledgeBaseServiceTest {
 
     @Test
     void testIndexAllSchemas_EmbeddingFailure() throws Exception {
-        // Arrange
-        when(embeddingService.embed(anyString()))
+        // Arrange — the batch call is what indexAllSchemas actually uses.
+        when(embeddingService.embedBatch(anyList()))
                 .thenThrow(new EmbeddingException("OpenAI API error"));
 
         // Act & Assert
@@ -228,7 +250,7 @@ class KnowledgeBaseServiceTest {
 
         assertTrue(exception.getMessage().contains("Failed to index schemas"));
         // Note: initialized may be true if some schemas succeeded before failure
-        assertTrue(knowledgeBaseService.getIndexedCount() < 39);
+        assertTrue(knowledgeBaseService.getIndexedCount() < schemaCount);
     }
 
     @Test

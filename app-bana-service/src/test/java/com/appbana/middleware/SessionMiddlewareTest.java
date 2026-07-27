@@ -154,39 +154,36 @@ class SessionMiddlewareTest {
     // ========================================
 
     @Test
-    @DisplayName("Should allow /appbana-studio/apps paths without session (currently public)")
+    @DisplayName("Should require session for /appbana-studio/apps paths")
     void testStudioAppsPathRequiresSession() {
         when(req.path()).thenReturn("/appbana-studio/apps");
         when(req.header("X-Session-Token")).thenReturn(null);
 
         SessionMiddleware.create().accept(req, res);
 
-        // Currently excluded in SessionMiddleware.java, so it should NOT return 401
-        verify(res, never()).json(anyInt(), any());
+        verify(res).json(eq(401), any(Map.class));
     }
 
     @Test
-    @DisplayName("Should allow /appbana-studio/apps/{id} paths without session (currently public)")
+    @DisplayName("Should require session for /appbana-studio/apps/{id} paths")
     void testStudioAppByIdRequiresSession() {
         when(req.path()).thenReturn("/appbana-studio/apps/my-app-id");
         when(req.header("X-Session-Token")).thenReturn(null);
 
         SessionMiddleware.create().accept(req, res);
 
-        // Currently excluded in SessionMiddleware.java, so it should NOT return 401
-        verify(res, never()).json(anyInt(), any());
+        verify(res).json(eq(401), any(Map.class));
     }
 
     @Test
-    @DisplayName("Should allow /appbana-studio/apps/{id}/pages/{pageId} paths without session (currently public)")
+    @DisplayName("Should require session for /appbana-studio/apps/{id}/pages/{pageId} paths")
     void testStudioPagesRequireSession() {
         when(req.path()).thenReturn("/appbana-studio/apps/my-app/pages/home");
         when(req.header("X-Session-Token")).thenReturn(null);
 
         SessionMiddleware.create().accept(req, res);
 
-        // Currently excluded in SessionMiddleware.java, so it should NOT return 401
-        verify(res, never()).json(anyInt(), any());
+        verify(res).json(eq(401), any(Map.class));
     }
 
     // ========================================

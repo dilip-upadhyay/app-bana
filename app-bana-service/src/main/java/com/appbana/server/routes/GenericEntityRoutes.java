@@ -4,6 +4,7 @@ import com.appbana.AuditLogService;
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
 import com.appbana.api.Router;
+import com.appbana.approval.ApprovalService;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
@@ -452,6 +453,10 @@ public class GenericEntityRoutes {
 
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
+
+            // C2.15 — Use shared enforceApprovalPreInsert helper (same guard as batch/studio/runtime/env routes).
+            // The actor variable already holds extractUserId; re-use it here as callerUserId.
+            enforceApprovalPreInsert(schema, data, AuthService.extractUserId(req, cfg));
             try {
                 Object idObj = crud.insertRecord(schema, data);
                 Map<String, Object> after = crud.getById(schema, idObj);
@@ -520,6 +525,15 @@ public class GenericEntityRoutes {
                 return;
             }
 
+            // C2.15 — Use shared enforceApprovalPreInsert helper for every batch element.
+            // Same guard as single POST, studio POST, runtime POST, env POST.
+            {
+                String batchUserId = AuthService.extractUserId(req, cfg);
+                for (Map<String, Object> element : payload) {
+                    enforceApprovalPreInsert(schema, element, batchUserId);
+                }
+            }
+
             try {
                 Map<String, Object> out = crud.insertBatch(schema, payload);
                 Object idsObj = out.get("ids");
@@ -568,16 +582,26 @@ public class GenericEntityRoutes {
             // Phase B5 — group by a single column. When set, we fetch the
             // filtered rows (respecting limit) and bucket them in Java.
             String groupByParam = req.query("groupBy");
+            // C2.7 — approval-state filter, checker-only for PENDING.
+            String approvalStatusParam = req.query("_approvalStatus");
 
             Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+            boolean approvalFilterApplied;
+            try {
+                approvalFilterApplied = applyApprovalStatusFilter(schema, null, null, approvalStatusParam, filters,
+                        AuthService.extractUserId(req, cfg), AuthService.authEnabled(cfg));
+            } catch (ApprovalFilterException afe) {
+                res.json(afe.status(), Map.of("error", afe.getMessage()));
+                return;
+            }
             boolean countOnly = "true".equalsIgnoreCase(countFlag) || (countFlag != null && countFlag.equals("1"));
 
             Integer limit = null;
             Integer offset = null;
             boolean anyAdv = countOnly || q != null || fieldsParam != null || sortParam != null || filterParam != null
-                    || limitS != null || offsetS != null;
+                    || limitS != null || offsetS != null || approvalFilterApplied;
             if (limitS != null || offsetS != null || q != null || fieldsParam != null || sortParam != null
-                    || filterParam != null) {
+                    || filterParam != null || approvalFilterApplied) {
                 try {
                     limit = limitS != null ? Integer.parseInt(limitS) : 50;
                 } catch (Exception ignore) {
@@ -759,6 +783,32 @@ public class GenericEntityRoutes {
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
 
+            if (schema.isApprovalRequired()) {
+                try {
+                    ApprovalPutResult guard = applyApprovalPutGuard(crud, schema, idStr, data,
+                            AuthService.extractUserId(req, cfg));
+                    switch (guard.action()) {
+                        case BLOCKED_PENDING -> {
+                            res.json(400, guard.body());
+                            return;
+                        }
+                        case CONFLICT -> {
+                            res.json(409, guard.body());
+                            return;
+                        }
+                        case REVISION -> {
+                            res.json(200, guard.body());
+                            return;
+                        }
+                        case PROCEED -> { /* fall through to the normal update below */ }
+                    }
+                } catch (SQLException e) {
+                    LOG.error("Failed to check approval status on PUT for entity {} id {}", entity, idStr, e);
+                    res.json(500, ErrorHandler.errorDetails(e));
+                    return;
+                }
+            }
+
             try {
                 if (permissionService != null && AuthService.authEnabled(cfg)) {
                     String userId = AuthService.extractUserId(req, cfg);
@@ -816,6 +866,28 @@ public class GenericEntityRoutes {
                 return;
             }
 
+            // B6 FIX — Block DELETE on approval-enabled entities when record is PENDING.
+            // Deleting a PENDING record would orphan the audit trail and bypass the checker queue.
+            if (schema.isApprovalRequired()) {
+                try {
+                    Map<String, Object> existing = crud.getById(schema, idStr);
+                    if (existing != null) {
+                        Object statusObj = existing.get("approval_status");
+                        if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
+                        String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
+                        if ("PENDING".equalsIgnoreCase(currentStatus)) {
+                            LOG.warn("[SECURITY] DELETE blocked: entity={} id={} is in PENDING state", entity, idStr);
+                            res.json(400, Map.of("error", "Cannot delete record while approval is PENDING"));
+                            return;
+                        }
+                    }
+                } catch (SQLException e) {
+                    LOG.error("Failed to check approval status on DELETE for entity {} id {}", entity, idStr, e);
+                    res.json(500, ErrorHandler.errorDetails(e));
+                    return;
+                }
+            }
+
             try {
                 Map<String, Object> before = crud.getById(schema, idStr);
                 int deleted = crud.deleteById(schema, idStr);
@@ -833,12 +905,15 @@ public class GenericEntityRoutes {
             AppConfig cfg = ConfigManager.getConfig();
             String actor = "anonymous";
             if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
+                // H8: use extractServiceToken for hasAdmin — never pass session IDs to admin gate.
+                String tok = AuthService.extractServiceToken(req);
                 if (!AuthService.hasAdmin(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
+                // Use authenticated identity for audit, not the raw token literal.
+                String uid = AuthService.extractUserId(req, cfg);
+                actor = (uid != null && !uid.isBlank()) ? uid : "admin";
             }
 
             String entity = req.pathParam("entity");
@@ -861,14 +936,30 @@ public class GenericEntityRoutes {
                 return;
             }
 
+            // B11 FIX — Block bulk-delete on any PENDING record in an approval-required entity.
+            // Same invariant as DELETE /api/{entity}/{id}: deleting PENDING rows orphans the audit trail.
             int deletedCount = 0;
             List<Object> deletedIds = new ArrayList<>();
+            List<Object> blockedIds = new ArrayList<>();
             for (Object idVal : ids) {
                 if (idVal == null)
                     continue;
                 String idStr = String.valueOf(idVal);
                 try {
                     Map<String, Object> before = crud.getById(schema, idStr);
+
+                    // Check approval state before deleting if schema requires approval
+                    if (schema.isApprovalRequired() && before != null) {
+                        Object statusObj = before.get("approval_status");
+                        if (statusObj == null) statusObj = before.get("APPROVAL_STATUS");
+                        String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
+                        if ("PENDING".equalsIgnoreCase(currentStatus)) {
+                            LOG.warn("[SECURITY] Bulk-delete blocked for entity={} id={}: record is PENDING", entity, idStr);
+                            blockedIds.add(idVal);
+                            continue; // skip this ID — do NOT delete
+                        }
+                    }
+
                     int d = crud.deleteById(schema, idStr);
                     if (d > 0) {
                         deletedCount += d;
@@ -879,13 +970,21 @@ public class GenericEntityRoutes {
                     LOG.warn("Bulk delete failed for {} id {}: {}", entity, idStr, e.getMessage());
                 }
             }
-            res.json(200, Map.of("deleted", deletedCount, "ids", deletedIds));
+            Map<String, Object> bulkResult = new LinkedHashMap<>();
+            bulkResult.put("deleted", deletedCount);
+            bulkResult.put("ids", deletedIds);
+            if (!blockedIds.isEmpty()) {
+                bulkResult.put("blocked", blockedIds);
+                bulkResult.put("blockedReason", "PENDING approval — cannot delete records awaiting checker review");
+            }
+            res.json(200, bulkResult);
         });
 
         router.post("/api/{entity}/bulk-export", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
+                // H8 consistency: use extractServiceToken so session IDs never reach hasRead.
+                String tok = AuthService.extractServiceToken(req);
                 if (!AuthService.hasRead(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
@@ -953,10 +1052,22 @@ public class GenericEntityRoutes {
 
         // POST /appbana-studio/{tenantId}/apps/{appId}/{entity} - Create entity scoped
         // to tenant and app
+        // B10 FIX — Studio POST now applies approval guard + uses authenticated user as audit actor.
+        // SessionMiddleware already validated the session for /appbana-studio/* paths, so
+        // req.getAttribute("userId") is already populated by the time we arrive here.
         router.post("/appbana-studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
+
+            // Derive caller identity (SessionMiddleware has already validated; this reads the attribute).
+            String studioInsertUserId = AuthService.extractUserId(req, cfg);
+            if (studioInsertUserId == null || studioInsertUserId.isBlank()) {
+                // SessionMiddleware should have caught this; treat as double-check.
+                res.json(401, Map.of("error", "Authentication required for studio mutations"));
+                return;
+            }
 
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
@@ -976,27 +1087,28 @@ public class GenericEntityRoutes {
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
 
+            // B10 FIX — Apply approval pre-insert guard: strip client-supplied approval columns,
+            // force DRAFT status, and bind submitted_by to the authenticated user.
+            enforceApprovalPreInsert(schema, data, studioInsertUserId);
+
             try {
-                // Set TenantContext for this request from URL path parameters
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
 
                 try {
-                    // EntityCrudService will auto-inject tenant_id and app_id
                     Object idObj = crud.insertRecord(schema, data);
                     Map<String, Object> after = crud.getById(schema, idObj);
                     String id = String.valueOf(idObj);
 
-                    // Audit logging
-                    AuditLogService.log("INSERT", schema.getName(), id, "studio", null, after);
+                    // M9 FIX — Audit actor is the authenticated studioUserId, not hardcoded "studio".
+                    AuditLogService.log("INSERT", schema.getName(), id, studioInsertUserId, null, after);
 
                     res.json(201, Map.of("id", idObj, "appId", appId));
                 } finally {
-                    // Always clear context
                     TenantContext.clear();
                 }
             } catch (Exception e) {
-                LOG.error("App-scoped insert failed for app={} entity={}", appId, entity, e);
+                LOG.error("Studio insert failed for app={} entity={}", appId, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
             }
         });
@@ -1036,10 +1148,22 @@ public class GenericEntityRoutes {
 
             Map<String, Object> filters = crud.parseFilters(filterParam, schema);
 
+            // C2.7 — approval-state filter, checker-only for PENDING.
+            String approvalStatusParam = req.query("_approvalStatus");
+            boolean approvalFilterApplied;
+            try {
+                approvalFilterApplied = applyApprovalStatusFilter(schema, tenantId, appId, approvalStatusParam, filters,
+                        AuthService.extractUserId(req, ConfigManager.getConfig()),
+                        AuthService.authEnabled(ConfigManager.getConfig()));
+            } catch (ApprovalFilterException afe) {
+                res.json(afe.status(), Map.of("error", afe.getMessage()));
+                return;
+            }
+
             Integer limit = null;
             Integer offset = null;
             boolean anyAdv = q != null || fieldsParam != null || sortParam != null || filterParam != null
-                    || limitS != null || offsetS != null;
+                    || limitS != null || offsetS != null || approvalFilterApplied;
             if (anyAdv) {
                 try {
                     limit = limitS != null ? Integer.parseInt(limitS) : 50;
@@ -1133,11 +1257,20 @@ public class GenericEntityRoutes {
 
         // PUT /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Update entity
         // scoped to tenant and app
+        // B7 FIX — Studio PUT now enforces approval guard and session auth.
         router.put("/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
+
+            // Session auth required for studio mutations
+            String studioUserId = AuthService.extractUserId(req, cfg);
+            if (studioUserId == null || studioUserId.isBlank()) {
+                res.json(401, Map.of("error", "Authentication required for studio mutations"));
+                return;
+            }
 
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
@@ -1157,6 +1290,40 @@ public class GenericEntityRoutes {
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
 
+            // B7 FIX — Apply approval guard to studio PUT (same logic as /api/{entity}/{id} PUT).
+            // C2.3 — an edit to a live APPROVED row becomes a DRAFT revision instead of an overwrite.
+            if (schema.isApprovalRequired()) {
+                try {
+                    TenantContext.set(new TenantContext(tenantId, appId));
+                    try {
+                        ApprovalPutResult guard = applyApprovalPutGuard(crud, schema, idStr, data, studioUserId);
+                        switch (guard.action()) {
+                            case BLOCKED_PENDING -> {
+                                res.json(400, guard.body());
+                                return;
+                            }
+                            case CONFLICT -> {
+                                res.json(409, guard.body());
+                                return;
+                            }
+                            case REVISION -> {
+                                Map<String, Object> body = new LinkedHashMap<>(guard.body());
+                                body.put("appId", appId);
+                                res.json(200, body);
+                                return;
+                            }
+                            case PROCEED -> { /* fall through to the normal update below */ }
+                        }
+                    } finally {
+                        TenantContext.clear();
+                    }
+                } catch (SQLException e) {
+                    LOG.error("Failed to check approval status on studio PUT for app={} entity={} id={}", appId, entity, idStr, e);
+                    res.json(500, ErrorHandler.errorDetails(e));
+                    return;
+                }
+            }
+
             try {
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
@@ -1167,7 +1334,7 @@ public class GenericEntityRoutes {
                     Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
 
                     if (updated > 0) {
-                        AuditLogService.log("UPDATE", schema.getName(), idStr, "studio", before, after);
+                        AuditLogService.log("UPDATE", schema.getName(), idStr, studioUserId, before, after);
                     }
 
                     res.json(200, Map.of("updated", updated, "appId", appId));
@@ -1182,11 +1349,20 @@ public class GenericEntityRoutes {
 
         // DELETE /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Delete entity
         // scoped to tenant and app
+        // B7 FIX — Studio DELETE now enforces PENDING gate and session auth.
         router.delete("/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
+
+            // Session auth required for studio mutations
+            String studioDeleteUserId = AuthService.extractUserId(req, cfg);
+            if (studioDeleteUserId == null || studioDeleteUserId.isBlank()) {
+                res.json(401, Map.of("error", "Authentication required for studio mutations"));
+                return;
+            }
 
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
@@ -1203,6 +1379,32 @@ public class GenericEntityRoutes {
                 return;
             }
 
+            // B7 FIX — Block DELETE on PENDING records via studio route.
+            if (schema.isApprovalRequired()) {
+                try {
+                    TenantContext.set(new TenantContext(tenantId, appId));
+                    try {
+                        Map<String, Object> existing = crud.getById(schema, idStr);
+                        if (existing != null) {
+                            Object statusObj = existing.get("approval_status");
+                            if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
+                            String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
+                            if ("PENDING".equalsIgnoreCase(currentStatus)) {
+                                LOG.warn("[SECURITY] Studio DELETE blocked: app={} entity={} id={} is PENDING", appId, entity, idStr);
+                                res.json(400, Map.of("error", "Cannot delete record while approval is PENDING"));
+                                return;
+                            }
+                        }
+                    } finally {
+                        TenantContext.clear();
+                    }
+                } catch (SQLException e) {
+                    LOG.error("Failed to check approval status on studio DELETE for app={} entity={} id={}", appId, entity, idStr, e);
+                    res.json(500, ErrorHandler.errorDetails(e));
+                    return;
+                }
+            }
+
             try {
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
@@ -1212,7 +1414,7 @@ public class GenericEntityRoutes {
                     int deleted = crud.deleteById(schema, idStr);
 
                     if (deleted > 0) {
-                        AuditLogService.log("DELETE", schema.getName(), idStr, "studio", before, null);
+                        AuditLogService.log("DELETE", schema.getName(), idStr, studioDeleteUserId, before, null);
                     }
 
                     res.json(200, Map.of("deleted", deleted, "appId", appId));
@@ -1226,14 +1428,24 @@ public class GenericEntityRoutes {
         });
 
         // ==================== RUNTIME APP-SCOPED ENTITY ROUTES ====================
-        // Similar to studio routes above, but exposed at /api for runtime apps
-        // No authentication required - handled by SessionMiddleware exclusion
+        // These routes are hit by deployed runtime applications (real end-users).
+        // SessionMiddleware excludes /api/{tenantId}/apps/ paths to allow end-user sessions,
+        // but exclusion ≠ "no auth required". Each mutation route MUST enforce its own auth gate.
 
         // POST /api/{tenantId}/apps/{appId}/{entity} - Runtime entity creation
+        // B8 FIX — This is the primary runtime write path. Previously unauthenticated and ungated.
         router.post("/api/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
+
+            // B8 FIX — Route-level session auth gate. Middleware exclusion ≠ public access.
+            String runtimeUserId = AuthService.extractUserId(req, cfg);
+            if (runtimeUserId == null || runtimeUserId.isBlank()) {
+                res.json(401, Map.of("error", "Authentication required"));
+                return;
+            }
 
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
@@ -1253,26 +1465,25 @@ public class GenericEntityRoutes {
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
 
+            // B8 FIX — Apply approval pre-insert guard.
+            enforceApprovalPreInsert(schema, data, runtimeUserId);
+
             try {
-                // Set TenantContext for this request from URL path parameters
                 TenantContext ctx = new TenantContext(tenantId, appId);
                 TenantContext.set(ctx);
 
                 try {
-                    // EntityCrudService will auto-inject tenant_id and app_id
                     Object idObj = crud.insertRecord(schema, data);
                     Map<String, Object> after = crud.getById(schema, idObj);
                     String id = String.valueOf(idObj);
 
-                    // Audit logging
-                    AuditLogService.log("INSERT", schema.getName(), id, "runtime", null, after);
+                    AuditLogService.log("INSERT", schema.getName(), id, runtimeUserId, null, after);
 
                     Map<String, Object> response = new LinkedHashMap<>();
                     response.put("id", idObj);
                     response.put("appId", appId);
                     res.json(201, response);
                 } finally {
-                    // Always clear context
                     TenantContext.clear();
                 }
             } catch (Exception e) {
@@ -1280,18 +1491,27 @@ public class GenericEntityRoutes {
                 res.json(500, ErrorHandler.errorDetails(e));
             }
         });
-// ==================== ENVIRONMENT-SPECIFIC ENTITY CRUD ====================
-        // These routes handle SIT/PROD environments with separate data isolation
+        // ==================== ENVIRONMENT-SPECIFIC ENTITY CRUD ====================
+        // These routes handle SIT/PROD environments with separate data isolation.
         // URL pattern: /api/{tenantId}/apps/{appId}/env/{env}/{entity}
-        
+        // SessionMiddleware excludes these paths; each mutation route enforces its own auth gate.
+
         // POST /api/{tenantId}/apps/{appId}/env/{env}/{entity} - Create entity in specific environment
+        // B9 FIX — This is the primary deployed-app write path for SIT/PROD. Previously unauthenticated and ungated.
         router.post("/api/{tenantId}/apps/{appId}/env/{env}/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String env = req.pathParam("env");
             String entity = req.pathParam("entity");
 
-            LOG.info("[ENV-CREATE] Request: tenant={}, app={}, env={}, entity={}", tenantId, appId, env, entity);
+            // B9 FIX — Route-level session auth gate. Exclusion from SessionMiddleware ≠ public write access.
+            String envInsertUserId = AuthService.extractUserId(req, cfg);
+            if (envInsertUserId == null || envInsertUserId.isBlank()) {
+                res.json(401, Map.of("error", "Authentication required"));
+                return;
+            }
+
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1307,20 +1527,17 @@ public class GenericEntityRoutes {
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
-                LOG.warn("[ENV-CREATE] Schema not found: tenant={}, app={}, entity={}", tenantId, appId, entity);
                 res.json(404, Map.of("error", "unknown entity: " + entity));
                 return;
             }
-            LOG.debug("[ENV-CREATE] Schema loaded successfully for entity: {}", entity);
 
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
 
+            // B9 FIX — Apply approval pre-insert guard before any DB write.
+            enforceApprovalPreInsert(schema, data, envInsertUserId);
+
             try {
-                // Set TenantContext with environment for data isolation
-                // Table naming: env_tenant_app_entity (e.g., SIT_t-123_app-456_User)
-                LOG.info("[ENV-CREATE] Setting TenantContext: tenant={}, app={}, env={}", tenantId, appId, env);
-                LOG.debug("[ENV-CREATE] TenantContext will create table with env prefix if env != DEV");
                 TenantContext ctx = new TenantContext(tenantId, appId, env);
                 TenantContext.set(ctx);
 
@@ -1328,12 +1545,9 @@ public class GenericEntityRoutes {
                     Object idObj = crud.insertRecord(schema, data);
                     Map<String, Object> after = crud.getById(schema, idObj);
                     String id = String.valueOf(idObj);
-                    LOG.info("[ENV-CREATE] Successfully created entity: id={}, entity={}, env={}", idObj, entity, env);
-                    LOG.debug("[ENV-CREATE] Audit logged for entity: {} id={}", entity, id);
 
-                    AuditLogService.log("INSERT", schema.getName(), id, "runtime-" + env, null, after);
+                    AuditLogService.log("INSERT", schema.getName(), id, envInsertUserId + "/env-" + env, null, after);
 
-                    LOG.debug("[ENV-CREATE] Clearing TenantContext for env={}", env);
                     Map<String, Object> response = new LinkedHashMap<>();
                     response.put("id", idObj);
                     response.put("appId", appId);
@@ -1343,7 +1557,6 @@ public class GenericEntityRoutes {
                     TenantContext.clear();
                 }
             } catch (Exception e) {
-                LOG.error("[ENV-CREATE] Failed to create entity: tenant={}, app={}, env={}, entity={}", tenantId, appId, env, entity, e);
                 LOG.error("Env-scoped insert failed for app={} env={} entity={}", appId, env, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
             }
@@ -1389,7 +1602,18 @@ public class GenericEntityRoutes {
                     }
 
                     Map<String, Object> filters = crud.parseFilters(filterParam, schema);
-                    
+
+                    // C2.7 — approval-state filter, checker-only for PENDING.
+                    String approvalStatusParam = req.query("_approvalStatus");
+                    try {
+                        applyApprovalStatusFilter(schema, tenantId, appId, approvalStatusParam, filters,
+                                AuthService.extractUserId(req, ConfigManager.getConfig()),
+                                AuthService.authEnabled(ConfigManager.getConfig()));
+                    } catch (ApprovalFilterException afe) {
+                        res.json(afe.status(), Map.of("error", afe.getMessage()));
+                        return;
+                    }
+
                     // Get total count for pagination
                     long total = crud.countOnly(schema, q, filters);
                     
@@ -1453,12 +1677,21 @@ public class GenericEntityRoutes {
         });
 
         // PUT /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id} - Update in specific environment
+        // B7 FIX — Env-scoped PUT now enforces approval guard and session auth.
         router.put("/api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String env = req.pathParam("env");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
+
+            // Session auth required for env-scoped mutations
+            String envPutUserId = AuthService.extractUserId(req, cfg);
+            if (envPutUserId == null || envPutUserId.isBlank()) {
+                res.json(401, Map.of("error", "Authentication required for data mutations"));
+                return;
+            }
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1468,6 +1701,38 @@ public class GenericEntityRoutes {
 
             Map<String, Object> data = req.readJson(new TypeReference<>() {
             });
+
+            // B7 FIX — Apply same approval guard as /api/{entity}/{id} PUT.
+            // C2.3 — an edit to a live APPROVED row becomes a DRAFT revision instead of an overwrite.
+            if (schema.isApprovalRequired()) {
+                try {
+                    TenantContext.set(new TenantContext(tenantId, appId, env));
+                    try {
+                        ApprovalPutResult guard = applyApprovalPutGuard(crud, schema, idStr, data, envPutUserId);
+                        switch (guard.action()) {
+                            case BLOCKED_PENDING -> {
+                                res.json(400, guard.body());
+                                return;
+                            }
+                            case CONFLICT -> {
+                                res.json(409, guard.body());
+                                return;
+                            }
+                            case REVISION -> {
+                                res.json(200, guard.body());
+                                return;
+                            }
+                            case PROCEED -> { /* fall through to the normal update below */ }
+                        }
+                    } finally {
+                        TenantContext.clear();
+                    }
+                } catch (SQLException e) {
+                    LOG.error("Failed to check approval status on env PUT for app={} env={} entity={} id={}", appId, env, entity, idStr, e);
+                    res.json(500, ErrorHandler.errorDetails(e));
+                    return;
+                }
+            }
 
             try {
                 TenantContext ctx = new TenantContext(tenantId, appId, env);
@@ -1479,7 +1744,7 @@ public class GenericEntityRoutes {
                     Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
                     
                     if (updated > 0) {
-                        AuditLogService.log("UPDATE", schema.getName(), idStr, "runtime-" + env, before, after);
+                        AuditLogService.log("UPDATE", schema.getName(), idStr, envPutUserId + "/env-" + env, before, after);
                     }
                     
                     res.json(200, Map.of("updated", updated));
@@ -1493,17 +1758,52 @@ public class GenericEntityRoutes {
         });
 
         // DELETE /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id} - Delete in specific environment
+        // B7 FIX — Env-scoped DELETE now enforces PENDING gate and session auth.
         router.delete("/api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String env = req.pathParam("env");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
 
+            // Session auth required for env-scoped mutations
+            String envDeleteUserId = AuthService.extractUserId(req, cfg);
+            if (envDeleteUserId == null || envDeleteUserId.isBlank()) {
+                res.json(401, Map.of("error", "Authentication required for data mutations"));
+                return;
+            }
+
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity: " + entity));
                 return;
+            }
+
+            // B7 FIX — Block DELETE on PENDING records via env-scoped route.
+            if (schema.isApprovalRequired()) {
+                try {
+                    TenantContext.set(new TenantContext(tenantId, appId, env));
+                    try {
+                        Map<String, Object> existing = crud.getById(schema, idStr);
+                        if (existing != null) {
+                            Object statusObj = existing.get("approval_status");
+                            if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
+                            String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
+                            if ("PENDING".equalsIgnoreCase(currentStatus)) {
+                                LOG.warn("[SECURITY] Env DELETE blocked: app={} env={} entity={} id={} is PENDING", appId, env, entity, idStr);
+                                res.json(400, Map.of("error", "Cannot delete record while approval is PENDING"));
+                                return;
+                            }
+                        }
+                    } finally {
+                        TenantContext.clear();
+                    }
+                } catch (SQLException e) {
+                    LOG.error("Failed to check approval status on env DELETE for app={} env={} entity={} id={}", appId, env, entity, idStr, e);
+                    res.json(500, ErrorHandler.errorDetails(e));
+                    return;
+                }
             }
 
             try {
@@ -1515,7 +1815,7 @@ public class GenericEntityRoutes {
                     int deleted = crud.deleteById(schema, idStr);
                     
                     if (deleted > 0) {
-                        AuditLogService.log("DELETE", schema.getName(), idStr, "runtime-" + env, before, null);
+                        AuditLogService.log("DELETE", schema.getName(), idStr, envDeleteUserId + "/env-" + env, before, null);
                     }
                     
                     res.json(200, Map.of("deleted", deleted));
@@ -1527,5 +1827,350 @@ public class GenericEntityRoutes {
                 res.json(500, ErrorHandler.errorDetails(e));
             }
         });
+    }
+
+    private static final List<String> APPROVAL_COLUMNS = List.of(
+            "approval_status", "APPROVAL_STATUS",
+            "approval_revision", "APPROVAL_REVISION",
+            "approval_parent_id", "APPROVAL_PARENT_ID",
+            "submitted_by", "SUBMITTED_BY",
+            "submitted_at", "SUBMITTED_AT",
+            "approved_by", "APPROVED_BY",
+            "approved_at", "APPROVED_AT",
+            "rejection_reason", "REJECTION_REASON"
+    );
+
+    /** Lower-cased approval column names, for schema-field comparisons. */
+    private static final Set<String> APPROVAL_FIELD_NAMES = Set.of(
+            "approval_status", "approval_revision", "approval_parent_id",
+            "submitted_by", "submitted_at", "approved_by", "approved_at", "rejection_reason"
+    );
+
+    private static final Set<String> VALID_APPROVAL_STATUSES = Set.of("DRAFT", "PENDING", "APPROVED", "REJECTED");
+
+    /** What the caller should do after {@link #applyApprovalPutGuard} has inspected a PUT. */
+    enum ApprovalPutAction {
+        /** Not an approval entity, or the row is safe to update in place. */
+        PROCEED,
+        /** Row is awaiting approval — reject the edit (400). */
+        BLOCKED_PENDING,
+        /** Row was live and APPROVED — a DRAFT revision was written instead (200). */
+        REVISION,
+        /** A revision of this row is already PENDING — reject the edit (409). */
+        CONFLICT
+    }
+
+    record ApprovalPutResult(ApprovalPutAction action, Map<String, Object> body) {
+        static final ApprovalPutResult PROCEED = new ApprovalPutResult(ApprovalPutAction.PROCEED, null);
+    }
+
+    /**
+     * C2.3 — approval guard for every {@code PUT .../{entity}/{id}} handler.
+     *
+     * <p>Behaviour by current {@code approval_status} of the target row:
+     * <ul>
+     *   <li><b>PENDING</b> → {@link ApprovalPutAction#BLOCKED_PENDING}. Editing a row a checker
+     *       is looking at would let a maker swap the payload after submission.</li>
+     *   <li><b>DRAFT / REJECTED</b> → {@link ApprovalPutAction#PROCEED}. These rows are not live,
+     *       so they are edited in place and reset to DRAFT. The revision counter is deliberately
+     *       left alone; {@code ApprovalService.submitForApproval} owns bumping it on resubmit.</li>
+     *   <li><b>APPROVED</b> → the row is live and must not be mutated. A separate DRAFT revision
+     *       row is created (or the existing open one refreshed) with
+     *       {@code approval_parent_id = <liveId>}, and {@link ApprovalPutAction#REVISION} is
+     *       returned. If an open revision is already PENDING, {@link ApprovalPutAction#CONFLICT}.</li>
+     * </ul>
+     *
+     * <p>Client-supplied approval columns are always stripped first, so a maker can never
+     * hand-craft a payload that pre-approves itself or re-points {@code approval_parent_id}.
+     *
+     * <p>Callers must have set the appropriate {@link TenantContext} beforehand where their
+     * route requires one.
+     *
+     * @return what the caller should do; {@code body} is the JSON payload for non-PROCEED outcomes
+     */
+    static ApprovalPutResult applyApprovalPutGuard(EntityCrudService crud, EntitySchema schema,
+                                                          String idStr, Map<String, Object> data,
+                                                          String callerUserId) throws SQLException {
+        if (schema == null || !schema.isApprovalRequired() || data == null) {
+            return ApprovalPutResult.PROCEED;
+        }
+
+        stripApprovalColumns(data);
+
+        Map<String, Object> existing = crud.getById(schema, idStr);
+        if (existing == null) {
+            return ApprovalPutResult.PROCEED;
+        }
+
+        String currentStatus = approvalString(existing, "approval_status", "DRAFT");
+        int rev = approvalInt(existing, "approval_revision", 1);
+
+        if ("PENDING".equalsIgnoreCase(currentStatus)) {
+            return new ApprovalPutResult(ApprovalPutAction.BLOCKED_PENDING,
+                    Map.of("error", "Cannot update record while approval is PENDING"));
+        }
+
+        boolean hasParentColumn = schema.getFields().stream()
+                .anyMatch(f -> "approval_parent_id".equalsIgnoreCase(f.getName()));
+
+        if (!"APPROVED".equalsIgnoreCase(currentStatus) || !hasParentColumn) {
+            if ("APPROVED".equalsIgnoreCase(currentStatus)) {
+                LOG.warn("[APPROVAL] Entity {} has no approval_parent_id column — falling back to in-place edit "
+                        + "of APPROVED row {}. Re-run the scaffolder to enable revisions.", schema.getName(), idStr);
+            }
+            // DRAFT / REJECTED rows are private to the maker: edit in place and return to DRAFT.
+            data.put("approval_status", "DRAFT");
+            data.put("rejection_reason", null);
+            if (callerUserId != null && !callerUserId.isBlank()) {
+                data.put("submitted_by", callerUserId);
+            }
+            return ApprovalPutResult.PROCEED;
+        }
+
+        // Serialise concurrent revision creation for this parent. Without it two simultaneous PUTs
+        // both see "no open revision" and each insert one, breaking the one-open-revision-per-parent
+        // invariant and making the 409 below defeatable by an ordinary double-submit.
+        try (EntityCrudService.RowLock lock = crud.lockRow(schema, idStr)) {
+            Map<String, Object> openRevision = crud.findOpenRevision(schema, idStr);
+            if (openRevision != null
+                    && "PENDING".equalsIgnoreCase(approvalString(openRevision, "approval_status", "DRAFT"))) {
+                return new ApprovalPutResult(ApprovalPutAction.CONFLICT, Map.of(
+                        "error", "A revision of this record is already awaiting approval",
+                        "revisionId", String.valueOf(rowValue(openRevision, primaryKeyName(schema)))));
+            }
+
+            int nextRevision = rev + 1;
+            Map<String, Object> revisionData = new LinkedHashMap<>();
+            String pkName = primaryKeyName(schema);
+            for (EntitySchema.Field f : schema.getFields()) {
+                String name = f.getName();
+                if (f.isPrimaryKey() || APPROVAL_FIELD_NAMES.contains(name.toLowerCase(Locale.ROOT))) {
+                    continue;
+                }
+                revisionData.put(name, rowValue(existing, name));
+            }
+            // The caller's edits win over the carried-over live values.
+            for (Map.Entry<String, Object> e : data.entrySet()) {
+                if (pkName != null && pkName.equalsIgnoreCase(e.getKey())) {
+                    continue;
+                }
+                revisionData.put(e.getKey(), e.getValue());
+            }
+
+            revisionData.put("approval_status", "DRAFT");
+            revisionData.put("approval_revision", nextRevision);
+            revisionData.put("approval_parent_id", idStr);
+            revisionData.put("rejection_reason", null);
+            revisionData.put("submitted_at", null);
+            revisionData.put("approved_by", null);
+            revisionData.put("approved_at", null);
+            if (callerUserId != null && !callerUserId.isBlank()) {
+                revisionData.put("submitted_by", callerUserId);
+            }
+
+            String revisionId;
+            if (openRevision != null) {
+                revisionId = String.valueOf(rowValue(openRevision, pkName));
+                crud.updateById(schema, revisionId, revisionData);
+            } else {
+                Object generated = crud.insertRecord(schema, revisionData);
+                revisionId = generated != null ? String.valueOf(generated) : null;
+            }
+
+            LOG.info("[APPROVAL] PUT on APPROVED row {} of {} produced DRAFT revision {} (revision {})",
+                    idStr, schema.getName(), revisionId, nextRevision);
+
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("updated", 0);
+            body.put("revision", true);
+            body.put("revisionId", revisionId);
+            body.put("parentId", idStr);
+            body.put("approvalStatus", "DRAFT");
+            body.put("approvalRevision", nextRevision);
+            return new ApprovalPutResult(ApprovalPutAction.REVISION, body);
+        }
+    }
+
+    private static String primaryKeyName(EntitySchema schema) {
+        return schema.getFields().stream()
+                .filter(EntitySchema.Field::isPrimaryKey)
+                .map(EntitySchema.Field::getName)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** Row maps come back with either exact-case or UPPER_CASE keys depending on the driver path. */
+    private static Object rowValue(Map<String, Object> row, String column) {
+        if (row == null || column == null) {
+            return null;
+        }
+        if (row.containsKey(column)) {
+            return row.get(column);
+        }
+        String upper = column.toUpperCase(Locale.ROOT);
+        if (row.containsKey(upper)) {
+            return row.get(upper);
+        }
+        String lower = column.toLowerCase(Locale.ROOT);
+        return row.get(lower);
+    }
+
+    private static String approvalString(Map<String, Object> row, String column, String fallback) {
+        Object v = rowValue(row, column);
+        return v != null ? String.valueOf(v) : fallback;
+    }
+
+    private static int approvalInt(Map<String, Object> row, String column, int fallback) {
+        Object v = rowValue(row, column);
+        if (v instanceof Number n) {
+            return n.intValue();
+        }
+        if (v != null) {
+            try {
+                return Integer.parseInt(String.valueOf(v));
+            } catch (NumberFormatException ignore) {
+                return fallback;
+            }
+        }
+        return fallback;
+    }
+
+    /** Signals that {@code ?_approvalStatus=} was invalid or not permitted for this caller. */
+    static class ApprovalFilterException extends RuntimeException {
+        private final int status;
+
+        ApprovalFilterException(int status, String message) {
+            super(message);
+            this.status = status;
+        }
+
+        int status() {
+            return status;
+        }
+    }
+
+    /**
+     * C2.7 — validates and authorizes the {@code ?_approvalStatus=} list filter.
+     *
+     * <p>Rules:
+     * <ul>
+     *   <li>Absent/blank → {@code null} (no filter applied).</li>
+     *   <li>Entity has no approval workflow → 400. Silently ignoring it would return the
+     *       full unfiltered table, which a caller asking for PENDING must never receive.</li>
+     *   <li>Value outside DRAFT/PENDING/APPROVED/REJECTED → 400.</li>
+     *   <li>{@code PENDING} → caller must hold the checker role (or own the app). The pending
+     *       queue is the checker's view; makers must not be able to enumerate it.</li>
+     * </ul>
+     *
+     * @return the canonical upper-case status to filter on, or {@code null}
+     */
+    static String resolveApprovalStatusFilter(EntitySchema schema, String tenantId, String appId,
+                                                      String raw, String callerUserId, boolean authEnabled) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        if (schema == null || !schema.isApprovalRequired()) {
+            throw new ApprovalFilterException(400,
+                    "_approvalStatus is not supported: entity does not have an approval workflow");
+        }
+        String status = raw.trim().toUpperCase(Locale.ROOT);
+        if (!VALID_APPROVAL_STATUSES.contains(status)) {
+            throw new ApprovalFilterException(400,
+                    "invalid _approvalStatus '" + raw + "' (expected DRAFT, PENDING, APPROVED or REJECTED)");
+        }
+
+        if ("PENDING".equals(status) && authEnabled) {
+            String t = (tenantId != null && !tenantId.isBlank()) ? tenantId : schema.getTenantId();
+            String a = (appId != null && !appId.isBlank()) ? appId : schema.getAppId();
+            boolean allowed = callerUserId != null && !callerUserId.isBlank()
+                    && ApprovalService.hasCheckerOrOwnerPermission(t, a, schema.getName(), callerUserId);
+            if (!allowed) {
+                LOG.warn("[SECURITY] _approvalStatus=PENDING denied for user={} on entity={}",
+                        callerUserId, schema.getName());
+                throw new ApprovalFilterException(403,
+                        "forbidden: only checkers may list PENDING records for " + schema.getName());
+            }
+        }
+        return status;
+    }
+
+    /**
+     * C2.7 — applies and authorizes the approval-state list filter.
+     *
+     * <p>Two doors lead to the same predicate and both must be guarded:
+     * <ol>
+     *   <li>the dedicated {@code ?_approvalStatus=} parameter, and</li>
+     *   <li>the generic {@code ?filter=approval_status:PENDING} parameter, which
+     *       {@code parseFilters} happily accepts because {@code approval_status} is a real
+     *       schema field.</li>
+     * </ol>
+     * Guarding only the first would leave the checker queue enumerable by any maker.
+     *
+     * @param filters mutated in place when an explicit {@code _approvalStatus} was supplied
+     * @return true if {@code _approvalStatus} was supplied (callers use this to force the
+     *         advanced query path, which is the only one that honours filters)
+     * @throws ApprovalFilterException if the value is invalid or the caller may not see it
+     */
+    static boolean applyApprovalStatusFilter(EntitySchema schema, String tenantId, String appId,
+                                             String raw, Map<String, Object> filters,
+                                             String callerUserId, boolean authEnabled) {
+        String explicit = resolveApprovalStatusFilter(schema, tenantId, appId, raw, callerUserId, authEnabled);
+        if (explicit != null) {
+            filters.put("approval_status", explicit);
+            return true;
+        }
+
+        if (schema != null && schema.isApprovalRequired() && filters != null) {
+            for (Map.Entry<String, Object> e : filters.entrySet()) {
+                if ("approval_status".equalsIgnoreCase(e.getKey()) && e.getValue() != null) {
+                    // Same validation + checker gate as the dedicated parameter.
+                    resolveApprovalStatusFilter(schema, tenantId, appId, String.valueOf(e.getValue()),
+                            callerUserId, authEnabled);
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void stripApprovalColumns(Map<String, Object> data) {
+        if (data == null) return;
+        for (String col : APPROVAL_COLUMNS) {
+            data.remove(col);
+        }
+    }
+
+    /**
+     * enforceApprovalPreInsert — C2.15 shared guard applied before every insertRecord/insertBatch call.
+     *
+     * Invariant: if schema.isApprovalRequired(), NO client-supplied approval metadata survives into the DB.
+     * - Strips all 8 approval columns from the payload (prevents forged status/actor injection):
+     *   approval_status, approval_revision, approval_parent_id, submitted_by, submitted_at,
+     *   approved_by, approved_at, rejection_reason (+ UPPER_CASE variants).
+     * - Forces approval_status = DRAFT (new records must begin in DRAFT, never APPROVED/PENDING).
+     * - Forces approval_revision = 1.
+     * - Binds submitted_by to the authenticated callerUserId (prevents forged submitter).
+     *
+     * Bypass-attempt detection: logs WARN if the client payload contained ANY of the 8 approval
+     * columns (not just the first 3 — covers approved_at, submitted_at, rejection_reason too).     *
+     * If schema does NOT require approval, this method is a no-op (strips nothing).
+     *
+     * Called from: single POST, batch POST (per element), studio POST, runtime POST, env-scoped POST.
+     */
+    private static void enforceApprovalPreInsert(EntitySchema schema, Map<String, Object> data, String callerUserId) {
+        if (schema == null || !schema.isApprovalRequired() || data == null) return;
+
+        // Check all 8 approval columns (both lower and UPPER variants) — not just the first 3.
+        boolean hadApprovalCols = APPROVAL_COLUMNS.stream().anyMatch(data::containsKey);
+        if (hadApprovalCols) {
+            LOG.warn("[SECURITY] enforceApprovalPreInsert: client attempted to set approval columns on entity={} — stripping",
+                    schema.getName());
+        }
+
+        stripApprovalColumns(data);
+        data.put("approval_status", "DRAFT");
+        data.put("approval_revision", 1);
+        if (callerUserId != null && !callerUserId.isBlank()) {
+            data.put("submitted_by", callerUserId);
+        }
     }
 }

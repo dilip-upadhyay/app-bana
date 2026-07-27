@@ -416,8 +416,11 @@ public class AppManager {
             existing.setDescription(updates.getDescription());
         if (updates.getVersion() != null)
             existing.setVersion(updates.getVersion());
-        if (updates.getAuthor() != null)
-            existing.setAuthor(updates.getAuthor());
+        // Author is immutable — never overwrite created author field
+        if (updates.getAuthor() != null && !updates.getAuthor().equals(existing.getAuthor())) {
+            LOG.warn("[AppManager] Attempt to overwrite immutable app author '{}' with '{}' ignored for app {}",
+                    existing.getAuthor(), updates.getAuthor(), existing.getId());
+        }
         if (updates.getPages() != null)
             existing.setPages(updates.getPages());
         if (updates.getDefaultPage() != null)

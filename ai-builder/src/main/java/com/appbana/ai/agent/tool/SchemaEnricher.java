@@ -183,6 +183,57 @@ public class SchemaEnricher {
         if (!toInsert.isEmpty()) {
             fields.addAll(0, toInsert);
         }
+
+        // Step 4 — Task C1.2: if approvalRequired is true, inject approval columns
+        boolean approvalRequired = Boolean.TRUE.equals(entity.get("approvalRequired"));
+        if (approvalRequired) {
+            injectApprovalFields(fields, entityName);
+        }
+    }
+
+    /**
+     * Injects the 8 standard approval columns for entities with approvalRequired: true.
+     */
+    private static void injectApprovalFields(List<Map<String, Object>> fields, String entityName) {
+        Set<String> existingNames = new HashSet<>();
+        for (Map<String, Object> field : fields) {
+            String name = (String) field.get(F_NAME);
+            if (name != null) existingNames.add(name.toLowerCase());
+        }
+
+        List<Map<String, Object>> approvalCols = new ArrayList<>();
+
+        approvalCols.add(createField("approval_status", "approval_status", "status", "Approval Status", false, false, false, List.of("DRAFT", "PENDING", "APPROVED", "REJECTED")));
+        approvalCols.add(createField("approval_revision", "approval_revision", T_NUMBER, "Approval Revision", false, false, false, null));
+        approvalCols.add(createField("approval_parent_id", "approval_parent_id", T_TEXT, "Approval Parent ID", false, false, false, null));
+        approvalCols.add(createField("submitted_by", "submitted_by", T_TEXT, "Submitted By", false, false, false, null));
+        approvalCols.add(createField("submitted_at", "submitted_at", T_DATETIME, "Submitted At", false, false, false, null));
+        approvalCols.add(createField("approved_by", "approved_by", T_TEXT, "Approved By", false, false, false, null));
+        approvalCols.add(createField("approved_at", "approved_at", T_DATETIME, "Approved At", false, false, false, null));
+        approvalCols.add(createField("rejection_reason", "rejection_reason", "longtext", "Rejection Reason", false, false, false, null));
+
+        for (Map<String, Object> col : approvalCols) {
+            String colName = (String) col.get(F_NAME);
+            if (!existingNames.contains(colName.toLowerCase())) {
+                fields.add(col);
+                log.info("[SchemaEnricher] Entity '{}': injecting approval column '{}'", entityName, colName);
+            }
+        }
+    }
+
+    private static Map<String, Object> createField(String id, String name, String type, String label, boolean required, boolean pk, boolean ai, List<String> options) {
+        Map<String, Object> field = new LinkedHashMap<>();
+        field.put("id", id);
+        field.put(F_NAME, name);
+        field.put(F_TYPE, type);
+        field.put(F_LABEL, label);
+        field.put(F_REQUIRED, required);
+        field.put(F_PRIMARY_KEY, pk);
+        field.put(F_AUTO_INC, ai);
+        if (options != null) {
+            field.put("options", new ArrayList<>(options));
+        }
+        return field;
     }
 
     /**

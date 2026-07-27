@@ -123,9 +123,11 @@ class AppBanaPromptEnhancerTest {
 
     @Test
     void testEnhancePrompt_NoRelevantSchemas() throws Exception {
-        // Arrange
-        String userMessage = "hello";
-        String basePrompt = "User: hello\nAssistant:";
+        // Arrange — must be a *technical* query, otherwise the conditional-RAG guard returns
+        // the base prompt before the knowledge base is ever consulted and this stops testing
+        // the "search returned nothing" branch it is named after.
+        String userMessage = "create an entity";
+        String basePrompt = "User: create an entity\nAssistant:";
 
         when(knowledgeBaseService.searchRelevantSchemas(eq(userMessage), anyInt()))
                 .thenReturn(Collections.emptyList());
@@ -136,6 +138,17 @@ class AppBanaPromptEnhancerTest {
         // Assert
         assertEquals(basePrompt, enhanced);
         verify(knowledgeBaseService).searchRelevantSchemas(eq(userMessage), anyInt());
+    }
+
+    @Test
+    void testEnhancePrompt_NonTechnicalQuerySkipsRag() {
+        // Conditional RAG: a chit-chat message must not cost a vector search.
+        String basePrompt = "User: hello\nAssistant:";
+
+        String enhanced = promptEnhancer.enhancePrompt("hello", basePrompt);
+
+        assertEquals(basePrompt, enhanced);
+        verifyNoInteractions(knowledgeBaseService);
     }
 
     @Test

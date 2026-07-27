@@ -15,6 +15,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.security.KeyStore;
+import java.util.Set;
 
 /**
  * Core HTTP server bootstrap for AppBana.
@@ -30,57 +31,73 @@ public class ApiServer {
             .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
     private static final Logger LOG = LoggerFactory.getLogger(ApiServer.class);
 
-    public static void startJdk(int port) throws IOException {
+    private static final Set<Integer> runningPorts = new java.util.concurrent.ConcurrentHashMap().newKeySet();
+    private static volatile boolean migrationsRun = false;
+
+    public static synchronized void startJdk(int port) throws IOException {
+        if (runningPorts.contains(port)) {
+            LOG.info("[ApiServer] Server already running on port {}, reusing instance", port);
+            return;
+        }
         AppConfig cfg = ConfigManager.getConfig();
 
-        // Run Liquibase migrations BEFORE initializing services
-        try {
-            LOG.info("Running Liquibase database migrations...");
-            
-            // Use existing HikariCP datasource (already initialized by ConfigManager)
-            javax.sql.DataSource dataSource = JdbcManager.getDataSource();
-            
-            liquibase.database.Database database = liquibase.database.DatabaseFactory.getInstance()
-                    .findCorrectDatabaseImplementation(new liquibase.database.jvm.JdbcConnection(
-                            dataSource.getConnection()));
-            
-            liquibase.Liquibase liquibase = new liquibase.Liquibase(
-                    "db/changelog/db.changelog-master.xml",
-                    new liquibase.resource.ClassLoaderResourceAccessor(),
-                    database);
-            
-            // Clean database only if explicitly enabled
-            if (Boolean.TRUE.equals(cfg.getFlywayCleanOnStart())) {
-                LOG.warn("⚠️  CLEANING DATABASE - ALL DATA WILL BE LOST (flywayCleanOnStart=true)");
-                liquibase.dropAll();
-            } else {
-                LOG.info("✅ Database persistence enabled (flywayCleanOnStart=false)");
+        if (!migrationsRun) {
+            // Run Liquibase migrations BEFORE initializing services
+            try {
+                LOG.info("Running Liquibase database migrations...");
+                
+                // Use existing HikariCP datasource (already initialized by ConfigManager)
+                javax.sql.DataSource dataSource = JdbcManager.getDataSource();
+                
+                liquibase.database.Database database = liquibase.database.DatabaseFactory.getInstance()
+                        .findCorrectDatabaseImplementation(new liquibase.database.jvm.JdbcConnection(
+                                dataSource.getConnection()));
+                
+                liquibase.Liquibase liquibase = new liquibase.Liquibase(
+                        "db/changelog/db.changelog-master.xml",
+                        new liquibase.resource.ClassLoaderResourceAccessor(),
+                        database);
+                
+                // Clean database only if explicitly enabled
+                if (Boolean.TRUE.equals(cfg.getFlywayCleanOnStart())) {
+                    LOG.warn("⚠️  CLEANING DATABASE - ALL DATA WILL BE LOST (flywayCleanOnStart=true)");
+                    liquibase.dropAll();
+                } else {
+                    LOG.info("✅ Database persistence enabled (flywayCleanOnStart=false)");
+                }
+                
+                // Run migrations
+                liquibase.update(new liquibase.Contexts(), new liquibase.LabelExpression());
+                
+                LOG.info("Liquibase migrations complete");
+                migrationsRun = true;
+            } catch (Exception e) {
+                LOG.error("Liquibase migration failed: {}", e.getMessage(), e);
+                throw new RuntimeException("Database migration failed", e);
             }
-            
-            // Run migrations
-            liquibase.update(new liquibase.Contexts(), new liquibase.LabelExpression());
-            
-            LOG.info("Liquibase migrations complete");
-        } catch (Exception e) {
-            LOG.error("Liquibase migration failed: {}", e.getMessage(), e);
-            throw new RuntimeException("Database migration failed", e);
         }
 
         // Initialize PermissionService with datasource
         try {
-            javax.sql.DataSource dataSource = new com.zaxxer.hikari.HikariDataSource();
-            ((com.zaxxer.hikari.HikariDataSource) dataSource).setJdbcUrl(cfg.getJdbcUrl());
-            ((com.zaxxer.hikari.HikariDataSource) dataSource).setUsername(cfg.getUsername());
-            ((com.zaxxer.hikari.HikariDataSource) dataSource).setPassword(cfg.getPassword());
-            new PermissionService(dataSource);
+            new PermissionService(JdbcManager.getDataSource());
             LOG.info("PermissionService initialized for Field-Level Security");
         } catch (Exception e) {
             LOG.warn("Failed to initialize PermissionService: {}", e.getMessage());
         }
 
         // Always start the HTTP server (can redirect to HTTPS if configured)
-        HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
-        configureServer(httpServer);
+        HttpServer httpServer = null;
+        try {
+            httpServer = HttpServer.create(new InetSocketAddress(port), 0);
+            configureServer(httpServer);
+            httpServer.setExecutor(r -> Thread.ofVirtual().start(r));
+            httpServer.start();
+            runningPorts.add(port);
+        } catch (java.net.BindException e) {
+            LOG.warn("[ApiServer] Server port {} already in use, reusing active socket", port);
+            runningPorts.add(port);
+            return;
+        }
         boolean httpsStarted = false;
 
         // Optionally start HTTPS server
@@ -159,9 +176,6 @@ public class ApiServer {
             }
         }
 
-        // Use virtual threads for handling requests (Java 21+)
-        httpServer.setExecutor(r -> Thread.ofVirtual().start(r));
-        httpServer.start();
         LOG.info("HTTP server started on port {}{}", port, httpsStarted ? " (HTTPS also enabled)" : "");
     }
 

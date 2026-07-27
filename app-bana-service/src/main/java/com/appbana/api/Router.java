@@ -89,7 +89,7 @@ public class Router {
             if (!r.method.equals(method)) continue;
             Map<String,String> params = new HashMap<>();
             if (match(r.parts, req, params)) {
-                reqW = new HttpRequest(ex, params, parseQuery(uri.getQuery()));
+                reqW.setPathParams(params);
                 try {
                     r.handler.accept(reqW, resW);
                 } catch (Exception e) {
@@ -191,6 +191,11 @@ public class Router {
         private final Map<String,Object> attributes = new HashMap<>();
         
         public HttpRequest(HttpExchange ex, Map<String,String> pathParams, Map<String,String> query){ this.ex=ex; this.pathParams=pathParams; this.query=query; }
+        public void setPathParams(Map<String,String> params) {
+            if (params != null) {
+                this.pathParams.putAll(params);
+            }
+        }
         public String method(){ return ex.getRequestMethod(); }
         public String path(){ return ex.getRequestURI().getPath(); }
         public Map<String,String> pathParams(){ return pathParams; }

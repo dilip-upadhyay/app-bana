@@ -36,8 +36,7 @@ public class SessionMiddleware {
             "/api/templates", // Templates are public read-only resources
             "/api/apps/", // Public runtime APIs for end users
             "/api/ai/", // AI endpoints (development mode - for Magic Data Seed, AI generation)
-            "/appbana-studio/", // Studio Builder APIs (development mode - TODO: enable auth in production)
-            "/api/tenants/", // Stage 0: tenant branding is public (needed pre-login by runtime)
+            "/api/tenants/*/branding", // Stage 0: tenant branding is public (needed pre-login by runtime)
             "/api/app-context", // Stage 0: app-context resolver is public
             "/*.html", // All HTML files are public (studio.html, index.html, etc.)
             "/*.js", // JavaScript files from Vite build
@@ -129,6 +128,11 @@ public class SessionMiddleware {
             return false;
         }
 
+        // CRITICAL (C1.12 & C2.6): Role management, schema APIs, and approval routes MUST ALWAYS require session authentication
+        if (path.contains("/roles") || path.equals("/schema") || path.contains("/approvals") || path.endsWith("/submit") || path.endsWith("/approve") || path.endsWith("/reject")) {
+            return false;
+        }
+
         // Check if it matches the entity API pattern (/api/{tenantId}/{entityName})
         if (path.matches(ENTITY_API_PATTERN)) {
             LOG.info("[SessionMiddleware] Matched entity API pattern for: {}", path);
@@ -136,7 +140,6 @@ public class SessionMiddleware {
         }
 
         // Check if it matches the app runtime API pattern (/api/{tenantId}/apps/...)
-        // Simplified: just check if path contains "/apps/" after "/api/"
         if (path.startsWith("/api/") && path.contains("/apps/")) {
             LOG.info("[SessionMiddleware] Matched app runtime API pattern for: {}", path);
             return true;

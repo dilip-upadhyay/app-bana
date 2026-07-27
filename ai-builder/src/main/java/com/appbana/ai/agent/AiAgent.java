@@ -655,6 +655,26 @@ public class AiAgent {
     }
 
     /**
+     * Render the learned user preferences that AiChatController puts on the context under
+     * "user_preferences". Without this the UserPreferenceEngine collects preferences that
+     * never reach the model. Returns "" when there is nothing to say.
+     */
+    @SuppressWarnings("unchecked")
+    private String buildUserPreferencesSection(AgentContext context) {
+        Object raw = context.getVariable("user_preferences");
+        if (!(raw instanceof Map<?, ?> prefs) || prefs.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("## USER PREFERENCES & STYLE\n");
+        sb.append("You MUST respect the following user preferences:\n");
+        for (Map.Entry<String, Object> entry : ((Map<String, Object>) prefs).entrySet()) {
+            sb.append("- **").append(entry.getKey()).append("**: ").append(entry.getValue()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    /**
      * Determine next action via LLM with multimodal support
      */
     private AgentThought think(String userMessage, List<AgentResponse.AgentStep> previousSteps,
@@ -671,7 +691,12 @@ public class AiAgent {
             promptBuilder.append("### AVAILABLE TOOLS ###\n");
             promptBuilder.append(toolRegistry.getToolDescriptions()).append("\n\n");
 
-            
+            String preferencesSection = buildUserPreferencesSection(context);
+            if (!preferencesSection.isEmpty()) {
+                promptBuilder.append(preferencesSection).append("\n\n");
+            }
+
+
             if (!previousSteps.isEmpty()) {
                 promptBuilder.append("### CONVERSATION HISTORY ###\n");
                 for (AgentResponse.AgentStep step : previousSteps) {

@@ -48,6 +48,23 @@ public class SchemaDefinition {
         public String getValue() {
             return value;
         }
+
+        /**
+         * Resolve by wire value (e.g. "field-type") or by constant name, returning {@code null}
+         * for unknown types. {@code valueOf} is wrong here: the wire value and the constant name
+         * differ (ENTITY_FIELD carries the value "field-type"), so valueOf("FIELD_TYPE") throws.
+         */
+        public static SchemaType fromValue(String raw) {
+            if (raw == null) {
+                return null;
+            }
+            for (SchemaType st : values()) {
+                if (st.value.equalsIgnoreCase(raw) || st.name().equalsIgnoreCase(raw)) {
+                    return st;
+                }
+            }
+            return null;
+        }
     }
 
 
@@ -56,6 +73,14 @@ public class SchemaDefinition {
      */
     public void setType(SchemaType type) {
         this.type = type.getValue();
+    }
+
+    /**
+     * Set a wire type that has no matching enum constant (e.g. "domain-template").
+     * Lombok suppresses the generated String setter because of the enum overload above.
+     */
+    public void setRawType(String type) {
+        this.type = type;
     }
 
     /**

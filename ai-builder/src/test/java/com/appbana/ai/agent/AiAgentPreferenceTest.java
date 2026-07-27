@@ -38,9 +38,14 @@ class AiAgentPreferenceTest {
         config = AgentConfig.defaults();
         config.setDebugMode(false);
         
-        when(llmRegistry.getService(anyString())).thenReturn(llmService);
+        // process(msg, ctx) delegates with provider = null, and anyString() does not match
+        // null — the registry was handing back a null LlmService and think() failed silently.
+        when(llmRegistry.getService(nullable(String.class))).thenReturn(llmService);
 
         agent = new AiAgent(llmRegistry, toolRegistry, config);
+        // The pattern executor is a cost optimisation that short-circuits before any LLM call.
+        // These tests assert on the prompt the LLM receives, so it has to be off.
+        agent.setPatternMatchingEnabled(false);
     }
 
     @Test

@@ -61,4 +61,12 @@
         <sqlFile path="db/migration/V14__saved_views.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
+    <changeSet id="V15" author="appbana">
+        <sqlFile path="db/migration/V15__appbana_approvals.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
+    <changeSet id="V16" author="appbana">
+        <sqlFile path="db/migration/V16__appbana_user_roles.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
 </databaseChangeLog>

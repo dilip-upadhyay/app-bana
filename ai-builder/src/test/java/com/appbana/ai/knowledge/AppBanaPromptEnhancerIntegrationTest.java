@@ -31,13 +31,11 @@ class AppBanaPromptEnhancerIntegrationTest {
 
     @BeforeAll
     static void setUp() throws Exception {
-        // Check for OpenAI API key
+        // These tests make real, billable OpenAI calls. Skip rather than fail when no key is
+        // configured, so an unkeyed dev/CI machine still gets a green build.
         String apiKey = System.getenv("OPENAI_API_KEY");
-        if (apiKey == null || apiKey.isEmpty()) {
-            throw new IllegalStateException(
-                    "OPENAI_API_KEY environment variable not set. " +
-                            "Integration tests require a valid OpenAI API key.");
-        }
+        org.junit.jupiter.api.Assumptions.assumeTrue(apiKey != null && !apiKey.isEmpty(),
+                "OPENAI_API_KEY not set — skipping OpenAI integration tests");
 
         // Initialize configuration
         AiConfig config = new AiConfig();

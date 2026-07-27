@@ -155,7 +155,37 @@ public class SchemaRoutes {
                     return;
                 }
 
+                // Task C1.9 Fix: Reject schemas missing tenantId or appId (no phantom default fallbacks)
+                if (schema.getTenantId() == null || schema.getTenantId().isBlank() ||
+                    schema.getAppId() == null || schema.getAppId().isBlank()) {
+                    res.json(400, Map.of("error", "tenantId and appId are required in schema payload"));
+                    return;
+                }
+
+                String tenantId = schema.getTenantId();
+                String appId = schema.getAppId();
+                String userId = AuthService.extractUserId(req, cfg);
+                if (userId == null || userId.isBlank()) {
+                    res.json(401, Map.of("error", "Unauthorized: valid session required"));
+                    return;
+                }
+
+                // Task C1.10 Fix: Enforce app ownership authorization before saving schema
+                if (!com.appbana.security.AppAuthorization.isAppOwnerOrSystem(tenantId, appId, userId)) {
+                    res.json(403, Map.of("error", "Forbidden: caller is not authorized to create or modify entity schemas for app " + appId));
+                    return;
+                }
+
+                // Check if this entity schema is NEW before saving (upsert)
+                boolean isNewEntity = SchemaManager.loadSchema(appId, schema.getName(), tenantId) == null;
+
                 SchemaManager.saveSchema(schema);
+
+                // Task C1.9 Fix: ONLY bootstrap creator role on INSERT (new entity creation), NOT on updates.
+                if (isNewEntity) {
+                    com.appbana.approval.UserRoleService.grantRole(tenantId, appId, schema.getName(), userId, com.appbana.approval.UserRoleService.Role.BOTH, userId);
+                }
+
                 res.json(200, Map.of("status", "saved", "name", schema.getName()));
             } catch (Exception e) {
                 LOG.error("Failed to save schema", e);
