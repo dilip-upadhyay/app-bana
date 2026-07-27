@@ -206,7 +206,10 @@ The single source of truth for all runtime configuration:
 - **PostgreSQL 16** running locally
 - DB name: `appbana`
 - User: `appbana` / Password: `appbana_dev_2026`
-- Schema migrations managed by **Liquibase** (not Flyway) â€” changesets live in `app-bana-service/src/main/resources/db/changelog/`
+- Schema migrations use **two different tools**, one per Java module — do not assume:
+  - `app-bana-service` â†’ **Liquibase**. Changesets in `app-bana-service/src/main/resources/db/changelog/db.changelog-master.xml`, SQL in `.../db/migration/` (`V0`, `V1`, â€¦). Run from `ApiServer.startJdk()`.
+  - `ai-builder` â†’ **Flyway**. SQL in `ai-builder/src/main/resources/db/migration/` (`V001`, `V002`, â€¦).
+  - Both share the path suffix `db/migration/` and both share the `appbana` database. The zero-padded (`V001`) vs unpadded (`V1`) numbering is the quickest way to tell which module a file belongs to.
 
 ---
 
@@ -400,6 +403,24 @@ DELETE /api/{entity}/{id}       â†’ Delete record
 ?_approvalStatus=PENDING       -> Approval-state filter (PENDING is checker-only; 403 otherwise)
 ```
 
+### Approval Endpoints (maker-checker)
+```
+POST   /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/submit
+POST   /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/approve
+POST   /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/reject    (body: {"reason": "..."} — required)
+GET    /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/approvals/pending      (checker-only queue)
+GET    /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/approvals/audit  (most-recent-first)
+```
+
+Status codes are deliberately distinct — do not collapse them:
+
+| Code | Meaning |
+|------|---------|
+| 401 | No valid session |
+| 403 | Authorization failure — missing MAKER/CHECKER role, or separation-of-duties violation (maker approving own row) |
+| **409** | **Workflow conflict** — record is not in the required state (e.g. approving a non-`PENDING` row, submitting an already-`PENDING` row, losing an approve/reject race). Thrown as `ApprovalConflictException` |
+| 400 | Malformed request — record not found, missing rejection reason |
+
 ### AI Endpoints
 ```
 POST   /api/ai/chat             â†’ General chat
@@ -476,6 +497,17 @@ AppBana uses **safe, non-destructive migrations**:
 - Renamed fields â†’ `ALTER TABLE RENAME COLUMN` (tracked via `existingName` property)
 - No production drops â€” data is preserved
 
+**Liquibase changesets** (`app-bana-service` only — `ai-builder` uses Flyway, see §4) live in
+`app-bana-service/src/main/resources/db/changelog/` and run from `ApiServer.startJdk()` *before* any
+service initialises. Two rules:
+
+1. **Never edit a changeset that has already been applied.** Liquibase checksums each one; editing it
+   breaks every existing database. Add a new changeset instead.
+2. **The chain must migrate an empty database.** A changeset may only reference objects created by an
+   earlier changeset — never one created lazily at runtime by Java. `V0__bootstrap_meta_tables.sql`
+   exists because V10 violated this and no fresh environment could be provisioned. Verify by pointing
+   `config.json` at a brand-new database and running the suite.
+
 ---
 
 ## 12. Active Work & Known Issues
@@ -529,6 +561,8 @@ INITIAL â†’ GATHERING_INFO â†’ CONFIRMING_DETAILS â†’ CREATING â
 - **Mock data 404 bug**: `GenerateMockDataTool` now correctly prefixes entity URLs with `tenantId_appId_`
 - **Boot race condition**: `start-everything.bat` now kills all stale Java/Node processes before starting
 - **Scaffold entity fields**: `ScaffoldAppTool` now propagates `entityFields` to `GeneratePageTool` for `tableProps`
+- **Fresh-database provisioning** (`13bd762`): `appbana_schemas` / `appbana_migrations` / `appbana_audit` were created lazily by `JdbcManager.ensureMetaTable()`, which runs *after* Liquibase, so changeset V10 could never migrate an empty database. Changeset **V0** now creates them first. Never edit an already-applied changeset to fix this class of problem — it changes the checksum and breaks every existing database.
+- **`ai-builder` test suite** (`100b676`): Testcontainers mapped Qdrant's HTTP port 6333 instead of the gRPC port **6334**, which `QdrantService` actually speaks. Repairing the suite exposed two production bugs: `SchemaType.valueOf` threw on the `field-type` wire value (31 of 47 schemas returned `type == null`), and user preferences were loaded onto the agent context but never referenced by `AiAgent`.
 
 ### âš ï¸ Known Limitations
 - **Agent iteration limit**: Capped at 5 iterations per request. Complex multi-entity scaffolding may hit this limit.
