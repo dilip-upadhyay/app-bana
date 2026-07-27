@@ -94,9 +94,10 @@ public class ApiServer {
             httpServer.start();
             runningPorts.add(port);
         } catch (java.net.BindException e) {
-            LOG.warn("[ApiServer] Server port {} already in use, reusing active socket", port);
-            runningPorts.add(port);
-            return;
+            // In-JVM reuse is already handled by the runningPorts check above, so reaching
+            // here means a *foreign* process owns the port. Silently "reusing" it would point
+            // tests and local dev at an unknown server, so fail fast instead.
+            throw new IOException("[ApiServer] Port " + port + " is already in use by another process", e);
         }
         boolean httpsStarted = false;
 

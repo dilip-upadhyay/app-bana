@@ -145,7 +145,7 @@ public class ApprovalService {
 
                 Status currentStatus = Status.fromValue(currentStateStr);
                 if (currentStatus == Status.PENDING) {
-                    throw new IllegalStateException("Record " + rowId + " is already in PENDING approval state");
+                    throw new ApprovalConflictException("Record " + rowId + " is already in PENDING approval state");
                 }
 
                 // Increment revision on resubmit after rejection or state update
@@ -223,7 +223,7 @@ public class ApprovalService {
                 }
 
                 if (!"PENDING".equalsIgnoreCase(currentStateStr)) {
-                    throw new IllegalStateException("Cannot approve record " + rowId + ": state is " + currentStateStr + " (must be PENDING)");
+                    throw new ApprovalConflictException("Cannot approve record " + rowId + ": state is " + currentStateStr + " (must be PENDING)");
                 }
 
                 // CRITICAL SEPARATION OF DUTIES ENFORCEMENT:
@@ -323,7 +323,7 @@ public class ApprovalService {
                 }
 
                 if (!"PENDING".equalsIgnoreCase(currentStateStr)) {
-                    throw new IllegalStateException("Cannot reject record " + rowId + ": state is " + currentStateStr + " (must be PENDING)");
+                    throw new ApprovalConflictException("Cannot reject record " + rowId + ": state is " + currentStateStr + " (must be PENDING)");
                 }
 
                 // CRITICAL SEPARATION OF DUTIES ENFORCEMENT:
@@ -420,7 +420,9 @@ public class ApprovalService {
         }
 
         List<Map<String, Object>> trail = new ArrayList<>();
-        String sql = "SELECT * FROM appbana_approvals WHERE tenant_id = ? AND app_id = ? AND entity_name = ? AND row_id = ? ORDER BY created_at ASC";
+        // C2.6: most recent first. `revision` is the tiebreaker for entries that share a
+        // timestamp; `id` is a UUID and would order arbitrarily.
+        String sql = "SELECT * FROM appbana_approvals WHERE tenant_id = ? AND app_id = ? AND entity_name = ? AND row_id = ? ORDER BY created_at DESC, revision DESC";
 
         try (Connection conn = JdbcManager.getConnection(tenantId);
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -496,7 +498,7 @@ public class ApprovalService {
             ps.setObject(1, parseRowId(revisionRowId));
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
-                    throw new IllegalStateException("Revision row " + revisionRowId + " disappeared mid-approval");
+                    throw new ApprovalConflictException("Revision row " + revisionRowId + " disappeared mid-approval");
                 }
                 int cols = rs.getMetaData().getColumnCount();
                 for (int i = 1; i <= cols; i++) {
