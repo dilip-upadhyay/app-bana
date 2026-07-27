@@ -95,7 +95,13 @@ C2 was signed off with two plan items silently unimplemented. Both are now close
 | C2.7 | `?_approvalStatus=` did not exist | Implemented on all three GET list route families, with `PENDING` restricted to checkers. The `?filter=approval_status:…` side door is routed through the same check |
 | — | `APPROVAL_COLUMNS` omitted `approval_parent_id`, so clients could forge it | Added to the strip-list |
 
-New test file `RevisionFlowTest.java` (17 tests). Backend suite: **266/266 pass** (was 249/249).
+New test file `RevisionFlowTest.java` (20 tests). Backend suite: **269/269 pass** (was 249/249).
+
+A code review of the first commit (`88dbbaa`) surfaced four further defects, fixed in `62957f8`:
+missing-parent merge reported a dead row id as live; `clearRevisionPointer` swallowed an exception
+inside an open transaction and turned a rollback into a reported success; concurrent PUTs on the
+same parent each inserted a revision (now serialised by a `SELECT … FOR UPDATE` mutex); and 64KB
+audit-diff truncation destroyed the irreplaceable `before` snapshot (now sheds `after` first).
 
 Deliberate deviation: no `superseded_by` column. See the note in
 [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) §C2.
