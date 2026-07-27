@@ -28,11 +28,19 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * ApprovalRoutesSecurityTest — Phase C2.10 / H4
+ * ApprovalRoutesSecurityTest — Phase C2.10 / H4 / C2.13 / C2.14
  *
- * Full HTTP Integration Test Suite for Maker-Checker Approval Routes & Security Guards:
- * Tests real HTTP calls over port 18088 for session authentication, separation of duties,
- * role authorization, generic CRUD POST/PUT bypass prevention, and UUID table name resolution.
+ * Full HTTP Integration Test Suite for Maker-Checker Approval Routes & Security Guards.
+ * Tests real HTTP calls over port 18089 for:
+ *   - Session authentication (unauthenticated → 401)
+ *   - Separation of duties: submitter cannot approve own record (SoD violation → 403)
+ *   - Generic CRUD POST bypass: approval_status=APPROVED is overwritten to DRAFT (B5 check)
+ *   - Batch POST bypass (B5): every element forced to DRAFT with server-side submitted_by
+ *   - Generic PUT while PENDING → 400 (state machine guard)
+ *   - DELETE while PENDING → 400 (B6 check)
+ *   - Env-scoped PUT while PENDING → 400 (B7 check)
+ *   - Env-scoped DELETE while PENDING → 400 (B7 check)
+ *   - UUID / hyphen appId table name resolution
  */
 public class ApprovalRoutesSecurityTest {
 
@@ -212,6 +220,57 @@ public class ApprovalRoutesSecurityTest {
         }
     }
 
+    /**
+     * C2.13 — B5: Batch POST bypass prevention.
+     * Attacker supplies approval_status=APPROVED in a batch payload.
+     * The batch handler MUST strip and force DRAFT on every element.
+     * This test fails if the B5 fix is not present (insertBatch would accept raw payload).
+     */
+    @Test
+    public void testBatchPostBypassPrevented() throws Exception {
+        String batchUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME + "/batch";
+
+        // Batch of 2 records, both with forged approval_status=APPROVED — note: no explicit id
+        // (table uses SERIAL PK so auto-assign). Use submitted_by probe to verify both were stored.
+        String batchPayload = MAPPER.writeValueAsString(List.of(
+                Map.of("amount", 500, "approval_status", "APPROVED", "submitted_by", "hacker_user"),
+                Map.of("amount", 600, "approval_status", "APPROVED", "approved_by", "hacker_checker")
+        ));
+
+        HttpRequest batchReq = HttpRequest.newBuilder()
+                .uri(URI.create(batchUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(batchPayload))
+                .build();
+
+        HttpResponse<String> batchRes = HTTP_CLIENT.send(batchReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(201, batchRes.statusCode(), "Batch insert should return 201: " + batchRes.body());
+
+        // Verify BOTH records are forced to DRAFT, not APPROVED (query by server-set submitted_by)
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT \"APPROVAL_STATUS\", \"SUBMITTED_BY\", \"APPROVED_BY\" FROM \"" + TABLE_NAME +
+                     "\" WHERE \"AMOUNT\" IN (500, 600) ORDER BY \"AMOUNT\"")) {
+            try (var rs = ps.executeQuery()) {
+                int rowCount = 0;
+                while (rs.next()) {
+                    rowCount++;
+                    String status = rs.getString("APPROVAL_STATUS");
+                    String submittedBy = rs.getString("SUBMITTED_BY");
+                    String approvedBy = rs.getString("APPROVED_BY");
+                    assertEquals("DRAFT", status,
+                            "Batch element must be forced to DRAFT, not APPROVED (amount=" + (rowCount == 1 ? 500 : 600) + ")");
+                    assertEquals("alice_maker", submittedBy,
+                            "Batch element submitted_by must be session user alice_maker, not hacker_user");
+                    assertNull(approvedBy,
+                            "Batch element approved_by must be null — forged value must be stripped");
+                }
+                assertEquals(2, rowCount, "Both batch records must have been inserted");
+            }
+        }
+    }
+
     @Test
     public void testGenericPutBypassPreventedWhilePending() throws Exception {
         // First, set record 201 to PENDING state
@@ -240,6 +299,147 @@ public class ApprovalRoutesSecurityTest {
         HttpResponse<String> putRes = HTTP_CLIENT.send(putReq, HttpResponse.BodyHandlers.ofString());
         assertEquals(400, putRes.statusCode(), "Generic PUT while PENDING must be rejected with 400");
         assertTrue(putRes.body().contains("Cannot update record while approval is PENDING"));
+    }
+
+    /**
+     * C2.13 — B6: DELETE while PENDING bypass prevention.
+     * Deleting a PENDING record would orphan the audit trail and silently bypass the checker queue.
+     * This test fails if the B6 fix is not present (deleteById would succeed without a state check).
+     */
+    @Test
+    public void testDeleteBlockedWhilePending() throws Exception {
+        // Submit record 201 to PENDING state
+        String submitUrl = BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID + "/entities/" + ENTITY_NAME + "/records/201/submit";
+        HttpRequest submitReq = HttpRequest.newBuilder()
+                .uri(URI.create(submitUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+        HttpResponse<String> submitRes = HTTP_CLIENT.send(submitReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, submitRes.statusCode(), "Submit must succeed before DELETE test: " + submitRes.body());
+
+        // Attempt DELETE while record is PENDING -> must return 400 Bad Request!
+        String deleteUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME + "/201";
+        HttpRequest deleteReq = HttpRequest.newBuilder()
+                .uri(URI.create(deleteUrl))
+                .header("X-Session-Token", checkerSessionToken)
+                .DELETE()
+                .build();
+
+        HttpResponse<String> deleteRes = HTTP_CLIENT.send(deleteReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, deleteRes.statusCode(),
+                "DELETE on PENDING record must return 400 to prevent orphaned audit trail. Got: " + deleteRes.body());
+        assertTrue(deleteRes.body().contains("Cannot delete record while approval is PENDING"),
+                "Response must explain deletion was blocked due to PENDING state");
+
+        // Verify the record was NOT deleted from DB
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM \"" + TABLE_NAME + "\" WHERE \"ID\" = 201")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1), "Record 201 must still exist in the DB after blocked DELETE");
+            }
+        }
+    }
+
+    /**
+     * C2.13 — B7: Env-scoped PUT while PENDING bypass prevention.
+     * The /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id} PUT route must enforce the same
+     * PENDING gate as the generic /api/{entity}/{id} PUT. Without the B7 fix, this route
+     * would accept the PUT and persist APPROVED status directly — bypassing the checker queue.
+     */
+    @Test
+    public void testEnvScopedPutBypassPreventedWhilePending() throws Exception {
+        // Submit record 201 to PENDING state
+        String submitUrl = BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID + "/entities/" + ENTITY_NAME + "/records/201/submit";
+        HttpRequest submitReq = HttpRequest.newBuilder()
+                .uri(URI.create(submitUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+        assertEquals(200, HTTP_CLIENT.send(submitReq, HttpResponse.BodyHandlers.ofString()).statusCode());
+
+        // Attempt env-scoped PUT while record is PENDING.
+        // Use env=DEV which maps to the same (non-prefixed) table as the seeded record.
+        // This exercises both the session auth gate and the PENDING state guard.
+        String envPutUrl = BASE_URL + "/api/" + TENANT_ID + "/apps/" + APP_ID + "/env/DEV/" + ENTITY_NAME + "/201";
+        String putPayload = MAPPER.writeValueAsString(Map.of(
+                "amount", 7777.0,
+                "approval_status", "APPROVED"
+        ));
+
+        // Unauthenticated env PUT -> 401 (session auth gate fires before schema/DB lookup)
+        HttpRequest unauthReq = HttpRequest.newBuilder()
+                .uri(URI.create(envPutUrl))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(putPayload))
+                .build();
+        HttpResponse<String> unauthRes = HTTP_CLIENT.send(unauthReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, unauthRes.statusCode(),
+                "Unauthenticated env-scoped PUT must return 401. Got: " + unauthRes.body());
+
+        // Authenticated env PUT while PENDING -> 400
+        HttpRequest authReq = HttpRequest.newBuilder()
+                .uri(URI.create(envPutUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(putPayload))
+                .build();
+        HttpResponse<String> authRes = HTTP_CLIENT.send(authReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, authRes.statusCode(),
+                "Env-scoped PUT while PENDING must be blocked with 400. Got: " + authRes.body());
+        assertTrue(authRes.body().contains("Cannot update record while approval is PENDING"));
+    }
+
+    /**
+     * C2.13 — B7: Env-scoped DELETE while PENDING bypass prevention.
+     * Same DELETE orphan-trail attack vector as B6, but via the env-scoped route.
+     * This test fails if the B7 DELETE fix is absent.
+     */
+    @Test
+    public void testEnvScopedDeleteBlockedWhilePending() throws Exception {
+        // Submit record 201 to PENDING state
+        String submitUrl = BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID + "/entities/" + ENTITY_NAME + "/records/201/submit";
+        HttpRequest submitReq = HttpRequest.newBuilder()
+                .uri(URI.create(submitUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+        assertEquals(200, HTTP_CLIENT.send(submitReq, HttpResponse.BodyHandlers.ofString()).statusCode());
+
+        // Attempt env-scoped DELETE while record is PENDING.
+        // Use env=DEV which maps to the same (non-prefixed) table as the seeded record.
+        String envDeleteUrl = BASE_URL + "/api/" + TENANT_ID + "/apps/" + APP_ID + "/env/DEV/" + ENTITY_NAME + "/201";
+
+        // Unauthenticated env DELETE -> 401 (session auth gate fires before schema/DB lookup)
+        HttpRequest unauthReq = HttpRequest.newBuilder()
+                .uri(URI.create(envDeleteUrl))
+                .DELETE()
+                .build();
+        HttpResponse<String> unauthRes = HTTP_CLIENT.send(unauthReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, unauthRes.statusCode(),
+                "Unauthenticated env-scoped DELETE must return 401. Got: " + unauthRes.body());
+
+        // Authenticated env DELETE while PENDING -> 400
+        HttpRequest authReq = HttpRequest.newBuilder()
+                .uri(URI.create(envDeleteUrl))
+                .header("X-Session-Token", checkerSessionToken)
+                .DELETE()
+                .build();
+        HttpResponse<String> authRes = HTTP_CLIENT.send(authReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, authRes.statusCode(),
+                "Env-scoped DELETE on PENDING record must return 400. Got: " + authRes.body());
+        assertTrue(authRes.body().contains("Cannot delete record while approval is PENDING"),
+                "Response body must indicate PENDING deletion was blocked");
+
+        // Verify record 201 still exists in DB
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM \"" + TABLE_NAME + "\" WHERE \"ID\" = 201")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1), "Record 201 must still exist after blocked env DELETE");
+            }
+        }
     }
 
     @Test

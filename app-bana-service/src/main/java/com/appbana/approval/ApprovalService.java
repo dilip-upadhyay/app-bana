@@ -74,10 +74,30 @@ public class ApprovalService {
     }
 
     /**
+     * H6 — Named helper: returns true if the given user has CHECKER role OR is the app owner / system.
+     *
+     * App owners are deliberately treated as super-checkers here. If strict owner-SoD is required,
+     * the caller should additionally verify that the owner is not the same user who submitted the record
+     * (the submittedBy != checkerUserId guard in approveRecord/rejectRecord already handles that).
+     */
+    public static boolean hasCheckerOrOwnerPermission(String tenantId, String appId, String entityName, String userId) {
+        return UserRoleService.isChecker(tenantId, appId, entityName, userId)
+                || AppAuthorization.isAppOwnerOrSystem(tenantId, appId, userId);
+    }
+
+    /**
+     * H6 — Named helper: returns true if the given user has MAKER role OR is the app owner / system.
+     */
+    public static boolean hasMakerOrOwnerPermission(String tenantId, String appId, String entityName, String userId) {
+        return UserRoleService.isMaker(tenantId, appId, entityName, userId)
+                || AppAuthorization.isAppOwnerOrSystem(tenantId, appId, userId);
+    }
+
+    /**
      * Submits a DRAFT or REJECTED record for approval (DRAFT/REJECTED -> PENDING).
      */
     public static Map<String, Object> submitForApproval(String tenantId, String appId, String entityName, String rowId, String submitterUserId, String comments) throws Exception {
-        if (!UserRoleService.isMaker(tenantId, appId, entityName, submitterUserId) && !AppAuthorization.isAppOwnerOrSystem(tenantId, appId, submitterUserId)) {
+        if (!hasMakerOrOwnerPermission(tenantId, appId, entityName, submitterUserId)) {
             throw new IllegalStateException("Forbidden: User '" + submitterUserId + "' does not have MAKER role on entity " + entityName);
         }
 
@@ -154,7 +174,7 @@ public class ApprovalService {
      * Approves a PENDING record (PENDING -> APPROVED).
      */
     public static Map<String, Object> approveRecord(String tenantId, String appId, String entityName, String rowId, String checkerUserId, String comments) throws Exception {
-        if (!UserRoleService.isChecker(tenantId, appId, entityName, checkerUserId) && !AppAuthorization.isAppOwnerOrSystem(tenantId, appId, checkerUserId)) {
+        if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, checkerUserId)) {
             throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER role on entity " + entityName);
         }
 
@@ -232,7 +252,7 @@ public class ApprovalService {
      * Rejects a PENDING record (PENDING -> REJECTED).
      */
     public static Map<String, Object> rejectRecord(String tenantId, String appId, String entityName, String rowId, String checkerUserId, String reason) throws Exception {
-        if (!UserRoleService.isChecker(tenantId, appId, entityName, checkerUserId) && !AppAuthorization.isAppOwnerOrSystem(tenantId, appId, checkerUserId)) {
+        if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, checkerUserId)) {
             throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER role on entity " + entityName);
         }
 
@@ -320,7 +340,7 @@ public class ApprovalService {
         if (callerUserId == null || callerUserId.isBlank()) {
             throw new IllegalStateException("Unauthorized: Caller user ID required");
         }
-        if (!UserRoleService.isChecker(tenantId, appId, entityName, callerUserId) && !AppAuthorization.isAppOwnerOrSystem(tenantId, appId, callerUserId)) {
+        if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId)) {
             throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have CHECKER or owner rights on entity " + entityName);
         }
 
@@ -354,10 +374,9 @@ public class ApprovalService {
             throw new IllegalStateException("Unauthorized: Caller user ID required");
         }
         boolean isMaker = UserRoleService.isMaker(tenantId, appId, entityName, callerUserId);
-        boolean isChecker = UserRoleService.isChecker(tenantId, appId, entityName, callerUserId);
-        boolean isOwner = AppAuthorization.isAppOwnerOrSystem(tenantId, appId, callerUserId);
+        boolean isOwnerOrHasCheckerRole = hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId);
 
-        if (!isMaker && !isChecker && !isOwner) {
+        if (!isMaker && !isOwnerOrHasCheckerRole) {
             throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have permission to view approval audit history for " + entityName);
         }
 
@@ -386,6 +405,13 @@ public class ApprovalService {
     }
 
     private static void logAuditEntry(Connection conn, String tenantId, String appId, String entityName, String rowId, int revision, String fromState, String toState, String actorUserId, String actorRole, String reason, String diff) throws Exception {
+        // M6 FIX — Cap diff payload to prevent unbounded JSONB inserts on wide records.
+        final int MAX_DIFF_LEN = 65536;
+        if (diff != null && diff.length() > MAX_DIFF_LEN) {
+            diff = diff.substring(0, MAX_DIFF_LEN - 13) + "[TRUNCATED]\"";
+            LOG.warn("[ApprovalService] diff snapshot truncated to {} chars for entity={} rowId={}", MAX_DIFF_LEN, entityName, rowId);
+        }
+
         String sql = "INSERT INTO appbana_approvals (id, tenant_id, app_id, entity_name, row_id, revision, from_state, to_state, actor_user_id, actor_role, reason, diff, created_at) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
 
