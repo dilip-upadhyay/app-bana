@@ -9,6 +9,7 @@
  *   - status pills for `type: "status"` columns (§1.5)
  *   - hover-revealed row actions with a proper empty state (§1.9)
  *   - viewport-filling shell (§1.10)
+ *   - maker-checker approval state (C3.1)
  */
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { ComponentNode, FilterDef, SavedViewRecord } from '@appbana/shared';
@@ -16,6 +17,14 @@ import { fetchEntityRows, deleteEntityRow, insertEntityRow, resolveAppContext } 
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { formatDate, humanizeHeader, pickReferenceLabel } from './cell-formatters';
 import { StatusPill } from './StatusPill';
+import { ApprovalStatusPill } from './ApprovalStatusPill';
+import {
+  isApprovalColumn,
+  isApprovalStatusColumn,
+  rowsHaveApprovalColumns,
+  readRowValue,
+  APPROVAL_STATUS_COLUMN,
+} from './approval-columns';
 import { RowActions } from './RowActions';
 import { toast } from './Toaster';
 import { EmptyState } from './EmptyState';
@@ -212,9 +221,23 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
   }
 
   // ─── Header / column resolution ───────────────────────────────────────
-  const displayFieldNames: string[] = fields.length > 0
+  // C3.1: pages are generated from the entity's user-defined fields, so
+  // `props.fields` never lists the approval columns the backend injects. If we
+  // took `fields` at face value an approval-required entity would render with
+  // no approval state visible at all. So: derive approval-awareness from the
+  // data, surface `approval_status` as a trailing column, and keep the other
+  // seven injected columns hidden — they are workflow plumbing, not content.
+  const approvalEnabled = rowsHaveApprovalColumns(rows);
+
+  const declaredFieldNames: string[] = fields.length > 0
     ? fields.map((f) => f.name)
     : (rows[0] ? Object.keys(rows[0]).filter((k) => k.toLowerCase() !== 'id') : []);
+
+  const displayFieldNames: string[] = (() => {
+    const visible = declaredFieldNames.filter((n) => !isApprovalColumn(n));
+    if (approvalEnabled) visible.push(APPROVAL_STATUS_COLUMN);
+    return visible;
+  })();
 
   const fieldByName = new Map(fields.map((f) => [f.name, f]));
 
@@ -222,6 +245,12 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     const meta = fieldByName.get(fieldName);
     const raw = row[fieldName];
     const type = meta?.type ?? inferTypeFromName(fieldName);
+
+    // Approval state — checked before the generic status branch, which would
+    // otherwise render "PENDING" shouty and colour DRAFT blue instead of slate.
+    if (isApprovalStatusColumn(fieldName)) {
+      return <ApprovalStatusPill value={readRowValue(row, fieldName)} />;
+    }
 
     // Foreign-key label
     if (type === 'reference') {
