@@ -10,6 +10,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    # The Java test suites talk to a real PostgreSQL on localhost:5432 using the
+    # credentials in the repo's config.json. Liquibase migrations run on server
+    # start-up, so an empty database is all that is required.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: appbana
+          POSTGRES_USER: appbana
+          POSTGRES_PASSWORD: appbana_dev_2026
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U appbana -d appbana"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4

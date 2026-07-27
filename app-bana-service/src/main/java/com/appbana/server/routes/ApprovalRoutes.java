@@ -1,6 +1,7 @@
 package com.appbana.server.routes;
 
 import com.appbana.api.Router;
+import com.appbana.approval.ApprovalConflictException;
 import com.appbana.approval.ApprovalService;
 import com.appbana.config.ConfigManager;
 import com.appbana.service.AuthService;
@@ -48,6 +49,8 @@ public class ApprovalRoutes {
 
                 Map<String, Object> result = ApprovalService.submitForApproval(tenantId, appId, entityName, rowId, callerUserId, comments);
                 res.json(200, result);
+            } catch (ApprovalConflictException e) {
+                res.json(409, Map.of("error", e.getMessage()));
             } catch (IllegalStateException e) {
                 res.json(403, Map.of("error", e.getMessage()));
             } catch (IllegalArgumentException e) {
@@ -80,6 +83,8 @@ public class ApprovalRoutes {
 
                 Map<String, Object> result = ApprovalService.approveRecord(tenantId, appId, entityName, rowId, callerUserId, comments);
                 res.json(200, result);
+            } catch (ApprovalConflictException e) {
+                res.json(409, Map.of("error", e.getMessage()));
             } catch (IllegalStateException e) {
                 res.json(403, Map.of("error", e.getMessage()));
             } catch (IllegalArgumentException e) {
@@ -112,6 +117,8 @@ public class ApprovalRoutes {
 
                 Map<String, Object> result = ApprovalService.rejectRecord(tenantId, appId, entityName, rowId, callerUserId, reason);
                 res.json(200, result);
+            } catch (ApprovalConflictException e) {
+                res.json(409, Map.of("error", e.getMessage()));
             } catch (IllegalStateException e) {
                 res.json(403, Map.of("error", e.getMessage()));
             } catch (IllegalArgumentException e) {
@@ -143,6 +150,8 @@ public class ApprovalRoutes {
                         "count", pending.size(),
                         "records", pending
                 ));
+            } catch (ApprovalConflictException e) {
+                res.json(409, Map.of("error", e.getMessage()));
             } catch (IllegalStateException e) {
                 res.json(403, Map.of("error", e.getMessage()));
             } catch (Exception e) {
@@ -174,6 +183,8 @@ public class ApprovalRoutes {
                         "count", auditTrail.size(),
                         "history", auditTrail
                 ));
+            } catch (ApprovalConflictException e) {
+                res.json(409, Map.of("error", e.getMessage()));
             } catch (IllegalStateException e) {
                 res.json(403, Map.of("error", e.getMessage()));
             } catch (Exception e) {

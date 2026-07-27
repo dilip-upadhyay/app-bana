@@ -66,9 +66,7 @@ public class ApprovalRoutesSecurityTest {
 
     @BeforeAll
     public static void startServerAndPrepareDb() throws Exception {
-        try {
-            ApiServer.startJdk(18089);
-        } catch (Exception ignored) {}
+        ApiServer.startJdk(18089);
 
         try (Connection c = JdbcManager.getConnection("default");
              Statement s = c.createStatement()) {
@@ -189,9 +187,52 @@ public class ApprovalRoutesSecurityTest {
         assertTrue(checkerApproveRes.body().contains("\"APPROVED\""));
     }
 
+    /**
+     * A workflow conflict (acting on a record that is not in the required state) must surface
+     * as 409 Conflict, not 403 Forbidden — 403 would tell clients they lack permission when in
+     * fact they simply lost a race or acted out of order.
+     */
     @Test
-    public void testGenericPostBypassPrevented() throws Exception {
-        String postUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME;
+    public void testStateConflictReturns409NotForbidden() throws Exception {
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\") VALUES (409, 55.0, 'DRAFT', 1)")) {
+            ps.executeUpdate();
+        }
+
+        String base = BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID + "/entities/" + ENTITY_NAME + "/records/409";
+
+        // Approving a DRAFT record: the checker is fully authorized, the record is just not PENDING.
+        HttpResponse<String> approveDraft = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "/approve"))
+                .header("X-Session-Token", checkerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(409, approveDraft.statusCode(), "Approving a non-PENDING record must be 409 Conflict: " + approveDraft.body());
+        assertTrue(approveDraft.body().contains("must be PENDING"));
+
+        // Rejecting a DRAFT record is the same class of conflict.
+        HttpResponse<String> rejectDraft = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "/reject"))
+                .header("X-Session-Token", checkerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{\"reason\":\"nope\"}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(409, rejectDraft.statusCode(), "Rejecting a non-PENDING record must be 409 Conflict: " + rejectDraft.body());
+
+        // Submitting twice: the second submit finds the record already PENDING.
+        HttpRequest submit = HttpRequest.newBuilder()
+                .uri(URI.create(base + "/submit"))
+                .header("X-Session-Token", makerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+        assertEquals(200, HTTP_CLIENT.send(submit, HttpResponse.BodyHandlers.ofString()).statusCode());
+
+        HttpResponse<String> doubleSubmit = HTTP_CLIENT.send(submit, HttpResponse.BodyHandlers.ofString());
+        assertEquals(409, doubleSubmit.statusCode(), "Re-submitting a PENDING record must be 409 Conflict: " + doubleSubmit.body());
+        assertTrue(doubleSubmit.body().contains("already in PENDING"));
+    }
+
+    @Test
+    public void testGenericPostBypassPrevented() throws Exception {        String postUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME;
 
         // Attacker attempts to POST with approval_status = APPROVED and forged submitted_by
         String payload = MAPPER.writeValueAsString(Map.of(

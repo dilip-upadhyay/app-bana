@@ -206,9 +206,11 @@ public class PasswordServiceTest {
         long endTime = System.currentTimeMillis();
         long duration = endTime - startTime;
 
-        // BCrypt with cost factor 12 should take 100-500ms
+        // BCrypt with cost factor 12 should take 100-500ms on a dev box. The security-relevant
+        // property is the lower bound; the upper bound is generous because shared CI runners are
+        // heavily contended and a tight ceiling makes this test flaky.
         assertTrue(duration >= 50, "Hashing should take at least 50ms (security requirement)");
-        assertTrue(duration <= 1000, "Hashing should complete within 1 second");
+        assertTrue(duration <= 5000, "Hashing should complete within 5 seconds");
         
         System.out.println("Hash generation took " + duration + "ms (expected: 100-500ms)");
     }
@@ -217,26 +219,43 @@ public class PasswordServiceTest {
     @DisplayName("Security - Constant-time comparison (timing attack prevention)")
     public void testConstantTimeComparison() {
         String password = "TestPassword123!";
+        String wrongPassword = "WrongPassword123!";
         String hash = PasswordService.hashPassword(password);
 
-        // Verify with wrong password (should take similar time as correct)
-        long startCorrect = System.nanoTime();
-        PasswordService.verifyPassword(password, hash);
-        long durationCorrect = System.nanoTime() - startCorrect;
+        // Warm up: the first few calls pay JIT + class-loading costs that would otherwise
+        // dominate the measurement and make a single-shot comparison meaninglessly noisy.
+        for (int i = 0; i < 3; i++) {
+            PasswordService.verifyPassword(password, hash);
+            PasswordService.verifyPassword(wrongPassword, hash);
+        }
 
-        long startWrong = System.nanoTime();
-        PasswordService.verifyPassword("WrongPassword123!", hash);
-        long durationWrong = System.nanoTime() - startWrong;
+        // Sample repeatedly and compare medians. A single sample on a contended CI runner can
+        // be off by an order of magnitude purely from scheduling.
+        int samples = 7;
+        long[] correct = new long[samples];
+        long[] wrong = new long[samples];
+        for (int i = 0; i < samples; i++) {
+            long t0 = System.nanoTime();
+            PasswordService.verifyPassword(password, hash);
+            correct[i] = System.nanoTime() - t0;
 
-        // Both should take similar time (within 50% variance)
-        double ratio = (double) Math.max(durationCorrect, durationWrong) / 
-                       (double) Math.min(durationCorrect, durationWrong);
-        
-        assertTrue(ratio < 2.0, "Verification time should be constant (timing attack prevention)");
-        
-        System.out.printf("Correct: %.2fms, Wrong: %.2fms, Ratio: %.2fx%n", 
-                         durationCorrect / 1_000_000.0, 
-                         durationWrong / 1_000_000.0, 
+            long t1 = System.nanoTime();
+            PasswordService.verifyPassword(wrongPassword, hash);
+            wrong[i] = System.nanoTime() - t1;
+        }
+        java.util.Arrays.sort(correct);
+        java.util.Arrays.sort(wrong);
+        long medianCorrect = correct[samples / 2];
+        long medianWrong = wrong[samples / 2];
+
+        double ratio = (double) Math.max(medianCorrect, medianWrong)
+                     / (double) Math.min(medianCorrect, medianWrong);
+
+        assertTrue(ratio < 2.0, "Verification time should be constant (timing attack prevention), ratio was " + ratio);
+
+        System.out.printf("Correct: %.2fms, Wrong: %.2fms, Ratio: %.2fx%n",
+                         medianCorrect / 1_000_000.0,
+                         medianWrong / 1_000_000.0,
                          ratio);
     }
 

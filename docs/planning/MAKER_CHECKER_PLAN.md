@@ -217,11 +217,13 @@ The audit table is append-only. Row-level revisions live in the app's own entity
 - [x] Non-checker cannot see `PENDING` rows via `?_approvalStatus=PENDING` (403) — including the
       side door `?filter=approval_status:PENDING`.
 - [x] Approving a revision atomically replaces the live row; the previous version is retained and queryable via audit.
-- [x] `GET .../records/{id}/approvals/audit` returns the full state-transition timeline.
+- [x] `GET .../records/{id}/approvals/audit` returns the full state-transition timeline,
+      most recent first.
 - [x] Editing a live `APPROVED` row never mutates it; it produces a `DRAFT` revision.
-- [ ] Concurrent approve + reject on the same row: one wins, the other returns 409 Conflict.
-      *(`SELECT ... FOR UPDATE` serialises them and the loser gets an `IllegalStateException`
-      mapped to 400, not 409. Cosmetic status-code mismatch — tracked for C3.)*
+- [x] Concurrent approve + reject on the same row: one wins, the other returns 409 Conflict.
+      *(`SELECT ... FOR UPDATE` serialises them; the loser gets an `ApprovalConflictException`,
+      a subtype of `IllegalStateException` that `ApprovalRoutes` maps to 409. Authorization
+      failures keep their distinct 403.)*
 
 ### Implemented behaviour — revisions (C2.3)
 

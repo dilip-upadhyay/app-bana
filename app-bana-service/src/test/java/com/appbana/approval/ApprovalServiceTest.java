@@ -158,21 +158,22 @@ public class ApprovalServiceTest {
         Map<String, Object> approveRes = ApprovalService.approveRecord(TENANT_ID, APP_ID, ENTITY_NAME, "101", checker, "Looks good now");
         assertEquals("APPROVED", approveRes.get("status"));
 
-        // Verify Audit Trail has 4 state transition log entries
+        // Verify Audit Trail has 4 state transition log entries.
+        // C2.6: the trail is returned most-recent-first, so index 0 is the final transition.
         List<Map<String, Object>> audit = ApprovalService.getAuditTrail(TENANT_ID, APP_ID, ENTITY_NAME, "101", maker);
         assertEquals(4, audit.size(), "Audit trail must record all 4 state transitions");
 
-        assertEquals("DRAFT", audit.get(0).get("from_state"));
-        assertEquals("PENDING", audit.get(0).get("to_state"));
+        assertEquals("PENDING", audit.get(0).get("from_state"));
+        assertEquals("APPROVED", audit.get(0).get("to_state"));
 
-        assertEquals("PENDING", audit.get(1).get("from_state"));
-        assertEquals("REJECTED", audit.get(1).get("to_state"));
+        assertEquals("REJECTED", audit.get(1).get("from_state"));
+        assertEquals("PENDING", audit.get(1).get("to_state"));
 
-        assertEquals("REJECTED", audit.get(2).get("from_state"));
-        assertEquals("PENDING", audit.get(2).get("to_state"));
+        assertEquals("PENDING", audit.get(2).get("from_state"));
+        assertEquals("REJECTED", audit.get(2).get("to_state"));
 
-        assertEquals("PENDING", audit.get(3).get("from_state"));
-        assertEquals("APPROVED", audit.get(3).get("to_state"));
+        assertEquals("DRAFT", audit.get(3).get("from_state"));
+        assertEquals("PENDING", audit.get(3).get("to_state"));
     }
 
     @Test
