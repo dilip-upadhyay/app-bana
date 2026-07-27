@@ -980,7 +980,8 @@ public class GenericEntityRoutes {
         router.post("/api/{entity}/bulk-export", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
+                // H8 consistency: use extractServiceToken so session IDs never reach hasRead.
+                String tok = AuthService.extractServiceToken(req);
                 if (!AuthService.hasRead(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
@@ -1825,10 +1826,15 @@ public class GenericEntityRoutes {
      * enforceApprovalPreInsert — C2.15 shared guard applied before every insertRecord/insertBatch call.
      *
      * Invariant: if schema.isApprovalRequired(), NO client-supplied approval metadata survives into the DB.
-     * - Strips all approval columns from the payload (prevents forged status/actor injection).
+     * - Strips all 8 approval columns from the payload (prevents forged status/actor injection):
+     *   approval_status, approval_revision, submitted_by, submitted_at,
+     *   approved_by, approved_at, rejection_reason (+ UPPER_CASE variants).
      * - Forces approval_status = DRAFT (new records must begin in DRAFT, never APPROVED/PENDING).
      * - Forces approval_revision = 1.
      * - Binds submitted_by to the authenticated callerUserId (prevents forged submitter).
+     *
+     * Bypass-attempt detection: logs WARN if the client payload contained ANY of the 8 approval
+     * columns (not just the first 3 — covers approved_at, submitted_at, rejection_reason too).
      *
      * If schema does NOT require approval, this method is a no-op (strips nothing).
      *
@@ -1837,9 +1843,8 @@ public class GenericEntityRoutes {
     private static void enforceApprovalPreInsert(EntitySchema schema, Map<String, Object> data, String callerUserId) {
         if (schema == null || !schema.isApprovalRequired() || data == null) return;
 
-        boolean hadApprovalCols = data.containsKey("approval_status") || data.containsKey("APPROVAL_STATUS")
-                || data.containsKey("submitted_by") || data.containsKey("SUBMITTED_BY")
-                || data.containsKey("approved_by") || data.containsKey("APPROVED_BY");
+        // Check all 8 approval columns (both lower and UPPER variants) — not just the first 3.
+        boolean hadApprovalCols = APPROVAL_COLUMNS.stream().anyMatch(data::containsKey);
         if (hadApprovalCols) {
             LOG.warn("[SECURITY] enforceApprovalPreInsert: client attempted to set approval columns on entity={} — stripping",
                     schema.getName());
