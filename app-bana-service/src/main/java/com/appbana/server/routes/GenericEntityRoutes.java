@@ -4,6 +4,7 @@ import com.appbana.AuditLogService;
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
 import com.appbana.api.Router;
+import com.appbana.approval.ApprovalService;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
@@ -581,16 +582,26 @@ public class GenericEntityRoutes {
             // Phase B5 — group by a single column. When set, we fetch the
             // filtered rows (respecting limit) and bucket them in Java.
             String groupByParam = req.query("groupBy");
+            // C2.7 — approval-state filter, checker-only for PENDING.
+            String approvalStatusParam = req.query("_approvalStatus");
 
             Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+            boolean approvalFilterApplied;
+            try {
+                approvalFilterApplied = applyApprovalStatusFilter(schema, null, null, approvalStatusParam, filters,
+                        AuthService.extractUserId(req, cfg), AuthService.authEnabled(cfg));
+            } catch (ApprovalFilterException afe) {
+                res.json(afe.status(), Map.of("error", afe.getMessage()));
+                return;
+            }
             boolean countOnly = "true".equalsIgnoreCase(countFlag) || (countFlag != null && countFlag.equals("1"));
 
             Integer limit = null;
             Integer offset = null;
             boolean anyAdv = countOnly || q != null || fieldsParam != null || sortParam != null || filterParam != null
-                    || limitS != null || offsetS != null;
+                    || limitS != null || offsetS != null || approvalFilterApplied;
             if (limitS != null || offsetS != null || q != null || fieldsParam != null || sortParam != null
-                    || filterParam != null) {
+                    || filterParam != null || approvalFilterApplied) {
                 try {
                     limit = limitS != null ? Integer.parseInt(limitS) : 50;
                 } catch (Exception ignore) {
@@ -773,31 +784,23 @@ public class GenericEntityRoutes {
             });
 
             if (schema.isApprovalRequired()) {
-                stripApprovalColumns(data);
                 try {
-                    Map<String, Object> existing = crud.getById(schema, idStr);
-                    if (existing != null) {
-                        Object statusObj = existing.get("approval_status");
-                        if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
-                        String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
-
-                        if ("PENDING".equalsIgnoreCase(currentStatus)) {
-                            res.json(400, Map.of("error", "Cannot update record while approval is PENDING"));
+                    ApprovalPutResult guard = applyApprovalPutGuard(crud, schema, idStr, data,
+                            AuthService.extractUserId(req, cfg));
+                    switch (guard.action()) {
+                        case BLOCKED_PENDING -> {
+                            res.json(400, guard.body());
                             return;
                         }
-
-                        if ("APPROVED".equalsIgnoreCase(currentStatus) || "REJECTED".equalsIgnoreCase(currentStatus)) {
-                            Object revObj = existing.get("approval_revision");
-                            if (revObj == null) revObj = existing.get("APPROVAL_REVISION");
-                            int rev = 1;
-                            if (revObj instanceof Number n) rev = n.intValue();
-                            data.put("approval_status", "DRAFT");
-                            data.put("approval_revision", rev + 1);
-                            String userId = AuthService.extractUserId(req, cfg);
-                            if (userId != null && !userId.isBlank()) {
-                                data.put("submitted_by", userId);
-                            }
+                        case CONFLICT -> {
+                            res.json(409, guard.body());
+                            return;
                         }
+                        case REVISION -> {
+                            res.json(200, guard.body());
+                            return;
+                        }
+                        case PROCEED -> { /* fall through to the normal update below */ }
                     }
                 } catch (SQLException e) {
                     LOG.error("Failed to check approval status on PUT for entity {} id {}", entity, idStr, e);
@@ -1145,10 +1148,22 @@ public class GenericEntityRoutes {
 
             Map<String, Object> filters = crud.parseFilters(filterParam, schema);
 
+            // C2.7 — approval-state filter, checker-only for PENDING.
+            String approvalStatusParam = req.query("_approvalStatus");
+            boolean approvalFilterApplied;
+            try {
+                approvalFilterApplied = applyApprovalStatusFilter(schema, tenantId, appId, approvalStatusParam, filters,
+                        AuthService.extractUserId(req, ConfigManager.getConfig()),
+                        AuthService.authEnabled(ConfigManager.getConfig()));
+            } catch (ApprovalFilterException afe) {
+                res.json(afe.status(), Map.of("error", afe.getMessage()));
+                return;
+            }
+
             Integer limit = null;
             Integer offset = null;
             boolean anyAdv = q != null || fieldsParam != null || sortParam != null || filterParam != null
-                    || limitS != null || offsetS != null;
+                    || limitS != null || offsetS != null || approvalFilterApplied;
             if (anyAdv) {
                 try {
                     limit = limitS != null ? Integer.parseInt(limitS) : 50;
@@ -1276,28 +1291,28 @@ public class GenericEntityRoutes {
             });
 
             // B7 FIX — Apply approval guard to studio PUT (same logic as /api/{entity}/{id} PUT).
+            // C2.3 — an edit to a live APPROVED row becomes a DRAFT revision instead of an overwrite.
             if (schema.isApprovalRequired()) {
-                stripApprovalColumns(data);
                 try {
                     TenantContext.set(new TenantContext(tenantId, appId));
                     try {
-                        Map<String, Object> existing = crud.getById(schema, idStr);
-                        if (existing != null) {
-                            Object statusObj = existing.get("approval_status");
-                            if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
-                            String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
-                            if ("PENDING".equalsIgnoreCase(currentStatus)) {
-                                res.json(400, Map.of("error", "Cannot update record while approval is PENDING"));
+                        ApprovalPutResult guard = applyApprovalPutGuard(crud, schema, idStr, data, studioUserId);
+                        switch (guard.action()) {
+                            case BLOCKED_PENDING -> {
+                                res.json(400, guard.body());
                                 return;
                             }
-                            if ("APPROVED".equalsIgnoreCase(currentStatus) || "REJECTED".equalsIgnoreCase(currentStatus)) {
-                                Object revObj = existing.get("approval_revision");
-                                if (revObj == null) revObj = existing.get("APPROVAL_REVISION");
-                                int rev = revObj instanceof Number n ? n.intValue() : 1;
-                                data.put("approval_status", "DRAFT");
-                                data.put("approval_revision", rev + 1);
-                                data.put("submitted_by", studioUserId);
+                            case CONFLICT -> {
+                                res.json(409, guard.body());
+                                return;
                             }
+                            case REVISION -> {
+                                Map<String, Object> body = new LinkedHashMap<>(guard.body());
+                                body.put("appId", appId);
+                                res.json(200, body);
+                                return;
+                            }
+                            case PROCEED -> { /* fall through to the normal update below */ }
                         }
                     } finally {
                         TenantContext.clear();
@@ -1587,7 +1602,18 @@ public class GenericEntityRoutes {
                     }
 
                     Map<String, Object> filters = crud.parseFilters(filterParam, schema);
-                    
+
+                    // C2.7 — approval-state filter, checker-only for PENDING.
+                    String approvalStatusParam = req.query("_approvalStatus");
+                    try {
+                        applyApprovalStatusFilter(schema, tenantId, appId, approvalStatusParam, filters,
+                                AuthService.extractUserId(req, ConfigManager.getConfig()),
+                                AuthService.authEnabled(ConfigManager.getConfig()));
+                    } catch (ApprovalFilterException afe) {
+                        res.json(afe.status(), Map.of("error", afe.getMessage()));
+                        return;
+                    }
+
                     // Get total count for pagination
                     long total = crud.countOnly(schema, q, filters);
                     
@@ -1677,28 +1703,26 @@ public class GenericEntityRoutes {
             });
 
             // B7 FIX — Apply same approval guard as /api/{entity}/{id} PUT.
+            // C2.3 — an edit to a live APPROVED row becomes a DRAFT revision instead of an overwrite.
             if (schema.isApprovalRequired()) {
-                stripApprovalColumns(data);
                 try {
                     TenantContext.set(new TenantContext(tenantId, appId, env));
                     try {
-                        Map<String, Object> existing = crud.getById(schema, idStr);
-                        if (existing != null) {
-                            Object statusObj = existing.get("approval_status");
-                            if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
-                            String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
-                            if ("PENDING".equalsIgnoreCase(currentStatus)) {
-                                res.json(400, Map.of("error", "Cannot update record while approval is PENDING"));
+                        ApprovalPutResult guard = applyApprovalPutGuard(crud, schema, idStr, data, envPutUserId);
+                        switch (guard.action()) {
+                            case BLOCKED_PENDING -> {
+                                res.json(400, guard.body());
                                 return;
                             }
-                            if ("APPROVED".equalsIgnoreCase(currentStatus) || "REJECTED".equalsIgnoreCase(currentStatus)) {
-                                Object revObj = existing.get("approval_revision");
-                                if (revObj == null) revObj = existing.get("APPROVAL_REVISION");
-                                int rev = revObj instanceof Number n ? n.intValue() : 1;
-                                data.put("approval_status", "DRAFT");
-                                data.put("approval_revision", rev + 1);
-                                data.put("submitted_by", envPutUserId);
+                            case CONFLICT -> {
+                                res.json(409, guard.body());
+                                return;
                             }
+                            case REVISION -> {
+                                res.json(200, guard.body());
+                                return;
+                            }
+                            case PROCEED -> { /* fall through to the normal update below */ }
                         }
                     } finally {
                         TenantContext.clear();
@@ -1808,12 +1832,300 @@ public class GenericEntityRoutes {
     private static final List<String> APPROVAL_COLUMNS = List.of(
             "approval_status", "APPROVAL_STATUS",
             "approval_revision", "APPROVAL_REVISION",
+            "approval_parent_id", "APPROVAL_PARENT_ID",
             "submitted_by", "SUBMITTED_BY",
             "submitted_at", "SUBMITTED_AT",
             "approved_by", "APPROVED_BY",
             "approved_at", "APPROVED_AT",
             "rejection_reason", "REJECTION_REASON"
     );
+
+    /** Lower-cased approval column names, for schema-field comparisons. */
+    private static final Set<String> APPROVAL_FIELD_NAMES = Set.of(
+            "approval_status", "approval_revision", "approval_parent_id",
+            "submitted_by", "submitted_at", "approved_by", "approved_at", "rejection_reason"
+    );
+
+    private static final Set<String> VALID_APPROVAL_STATUSES = Set.of("DRAFT", "PENDING", "APPROVED", "REJECTED");
+
+    /** What the caller should do after {@link #applyApprovalPutGuard} has inspected a PUT. */
+    enum ApprovalPutAction {
+        /** Not an approval entity, or the row is safe to update in place. */
+        PROCEED,
+        /** Row is awaiting approval — reject the edit (400). */
+        BLOCKED_PENDING,
+        /** Row was live and APPROVED — a DRAFT revision was written instead (200). */
+        REVISION,
+        /** A revision of this row is already PENDING — reject the edit (409). */
+        CONFLICT
+    }
+
+    record ApprovalPutResult(ApprovalPutAction action, Map<String, Object> body) {
+        static final ApprovalPutResult PROCEED = new ApprovalPutResult(ApprovalPutAction.PROCEED, null);
+    }
+
+    /**
+     * C2.3 — approval guard for every {@code PUT .../{entity}/{id}} handler.
+     *
+     * <p>Behaviour by current {@code approval_status} of the target row:
+     * <ul>
+     *   <li><b>PENDING</b> → {@link ApprovalPutAction#BLOCKED_PENDING}. Editing a row a checker
+     *       is looking at would let a maker swap the payload after submission.</li>
+     *   <li><b>DRAFT / REJECTED</b> → {@link ApprovalPutAction#PROCEED}. These rows are not live,
+     *       so they are edited in place and reset to DRAFT. The revision counter is deliberately
+     *       left alone; {@code ApprovalService.submitForApproval} owns bumping it on resubmit.</li>
+     *   <li><b>APPROVED</b> → the row is live and must not be mutated. A separate DRAFT revision
+     *       row is created (or the existing open one refreshed) with
+     *       {@code approval_parent_id = <liveId>}, and {@link ApprovalPutAction#REVISION} is
+     *       returned. If an open revision is already PENDING, {@link ApprovalPutAction#CONFLICT}.</li>
+     * </ul>
+     *
+     * <p>Client-supplied approval columns are always stripped first, so a maker can never
+     * hand-craft a payload that pre-approves itself or re-points {@code approval_parent_id}.
+     *
+     * <p>Callers must have set the appropriate {@link TenantContext} beforehand where their
+     * route requires one.
+     *
+     * @return what the caller should do; {@code body} is the JSON payload for non-PROCEED outcomes
+     */
+    static ApprovalPutResult applyApprovalPutGuard(EntityCrudService crud, EntitySchema schema,
+                                                          String idStr, Map<String, Object> data,
+                                                          String callerUserId) throws SQLException {
+        if (schema == null || !schema.isApprovalRequired() || data == null) {
+            return ApprovalPutResult.PROCEED;
+        }
+
+        stripApprovalColumns(data);
+
+        Map<String, Object> existing = crud.getById(schema, idStr);
+        if (existing == null) {
+            return ApprovalPutResult.PROCEED;
+        }
+
+        String currentStatus = approvalString(existing, "approval_status", "DRAFT");
+        int rev = approvalInt(existing, "approval_revision", 1);
+
+        if ("PENDING".equalsIgnoreCase(currentStatus)) {
+            return new ApprovalPutResult(ApprovalPutAction.BLOCKED_PENDING,
+                    Map.of("error", "Cannot update record while approval is PENDING"));
+        }
+
+        boolean hasParentColumn = schema.getFields().stream()
+                .anyMatch(f -> "approval_parent_id".equalsIgnoreCase(f.getName()));
+
+        if (!"APPROVED".equalsIgnoreCase(currentStatus) || !hasParentColumn) {
+            if ("APPROVED".equalsIgnoreCase(currentStatus)) {
+                LOG.warn("[APPROVAL] Entity {} has no approval_parent_id column — falling back to in-place edit "
+                        + "of APPROVED row {}. Re-run the scaffolder to enable revisions.", schema.getName(), idStr);
+            }
+            // DRAFT / REJECTED rows are private to the maker: edit in place and return to DRAFT.
+            data.put("approval_status", "DRAFT");
+            data.put("rejection_reason", null);
+            if (callerUserId != null && !callerUserId.isBlank()) {
+                data.put("submitted_by", callerUserId);
+            }
+            return ApprovalPutResult.PROCEED;
+        }
+
+        Map<String, Object> openRevision = crud.findOpenRevision(schema, idStr);
+        if (openRevision != null
+                && "PENDING".equalsIgnoreCase(approvalString(openRevision, "approval_status", "DRAFT"))) {
+            return new ApprovalPutResult(ApprovalPutAction.CONFLICT, Map.of(
+                    "error", "A revision of this record is already awaiting approval",
+                    "revisionId", String.valueOf(rowValue(openRevision, primaryKeyName(schema)))));
+        }
+
+        int nextRevision = rev + 1;
+        Map<String, Object> revisionData = new LinkedHashMap<>();
+        String pkName = primaryKeyName(schema);
+        for (EntitySchema.Field f : schema.getFields()) {
+            String name = f.getName();
+            if (f.isPrimaryKey() || APPROVAL_FIELD_NAMES.contains(name.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            revisionData.put(name, rowValue(existing, name));
+        }
+        // The caller's edits win over the carried-over live values.
+        for (Map.Entry<String, Object> e : data.entrySet()) {
+            if (pkName != null && pkName.equalsIgnoreCase(e.getKey())) {
+                continue;
+            }
+            revisionData.put(e.getKey(), e.getValue());
+        }
+
+        revisionData.put("approval_status", "DRAFT");
+        revisionData.put("approval_revision", nextRevision);
+        revisionData.put("approval_parent_id", idStr);
+        revisionData.put("rejection_reason", null);
+        revisionData.put("submitted_at", null);
+        revisionData.put("approved_by", null);
+        revisionData.put("approved_at", null);
+        if (callerUserId != null && !callerUserId.isBlank()) {
+            revisionData.put("submitted_by", callerUserId);
+        }
+
+        String revisionId;
+        if (openRevision != null) {
+            revisionId = String.valueOf(rowValue(openRevision, pkName));
+            crud.updateById(schema, revisionId, revisionData);
+        } else {
+            Object generated = crud.insertRecord(schema, revisionData);
+            revisionId = generated != null ? String.valueOf(generated) : null;
+        }
+
+        LOG.info("[APPROVAL] PUT on APPROVED row {} of {} produced DRAFT revision {} (revision {})",
+                idStr, schema.getName(), revisionId, nextRevision);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("updated", 0);
+        body.put("revision", true);
+        body.put("revisionId", revisionId);
+        body.put("parentId", idStr);
+        body.put("approvalStatus", "DRAFT");
+        body.put("approvalRevision", nextRevision);
+        return new ApprovalPutResult(ApprovalPutAction.REVISION, body);
+    }
+
+    private static String primaryKeyName(EntitySchema schema) {
+        return schema.getFields().stream()
+                .filter(EntitySchema.Field::isPrimaryKey)
+                .map(EntitySchema.Field::getName)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** Row maps come back with either exact-case or UPPER_CASE keys depending on the driver path. */
+    private static Object rowValue(Map<String, Object> row, String column) {
+        if (row == null || column == null) {
+            return null;
+        }
+        if (row.containsKey(column)) {
+            return row.get(column);
+        }
+        String upper = column.toUpperCase(Locale.ROOT);
+        if (row.containsKey(upper)) {
+            return row.get(upper);
+        }
+        String lower = column.toLowerCase(Locale.ROOT);
+        return row.get(lower);
+    }
+
+    private static String approvalString(Map<String, Object> row, String column, String fallback) {
+        Object v = rowValue(row, column);
+        return v != null ? String.valueOf(v) : fallback;
+    }
+
+    private static int approvalInt(Map<String, Object> row, String column, int fallback) {
+        Object v = rowValue(row, column);
+        if (v instanceof Number n) {
+            return n.intValue();
+        }
+        if (v != null) {
+            try {
+                return Integer.parseInt(String.valueOf(v));
+            } catch (NumberFormatException ignore) {
+                return fallback;
+            }
+        }
+        return fallback;
+    }
+
+    /** Signals that {@code ?_approvalStatus=} was invalid or not permitted for this caller. */
+    static class ApprovalFilterException extends RuntimeException {
+        private final int status;
+
+        ApprovalFilterException(int status, String message) {
+            super(message);
+            this.status = status;
+        }
+
+        int status() {
+            return status;
+        }
+    }
+
+    /**
+     * C2.7 — validates and authorizes the {@code ?_approvalStatus=} list filter.
+     *
+     * <p>Rules:
+     * <ul>
+     *   <li>Absent/blank → {@code null} (no filter applied).</li>
+     *   <li>Entity has no approval workflow → 400. Silently ignoring it would return the
+     *       full unfiltered table, which a caller asking for PENDING must never receive.</li>
+     *   <li>Value outside DRAFT/PENDING/APPROVED/REJECTED → 400.</li>
+     *   <li>{@code PENDING} → caller must hold the checker role (or own the app). The pending
+     *       queue is the checker's view; makers must not be able to enumerate it.</li>
+     * </ul>
+     *
+     * @return the canonical upper-case status to filter on, or {@code null}
+     */
+    static String resolveApprovalStatusFilter(EntitySchema schema, String tenantId, String appId,
+                                                      String raw, String callerUserId, boolean authEnabled) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        if (schema == null || !schema.isApprovalRequired()) {
+            throw new ApprovalFilterException(400,
+                    "_approvalStatus is not supported: entity does not have an approval workflow");
+        }
+        String status = raw.trim().toUpperCase(Locale.ROOT);
+        if (!VALID_APPROVAL_STATUSES.contains(status)) {
+            throw new ApprovalFilterException(400,
+                    "invalid _approvalStatus '" + raw + "' (expected DRAFT, PENDING, APPROVED or REJECTED)");
+        }
+
+        if ("PENDING".equals(status) && authEnabled) {
+            String t = (tenantId != null && !tenantId.isBlank()) ? tenantId : schema.getTenantId();
+            String a = (appId != null && !appId.isBlank()) ? appId : schema.getAppId();
+            boolean allowed = callerUserId != null && !callerUserId.isBlank()
+                    && ApprovalService.hasCheckerOrOwnerPermission(t, a, schema.getName(), callerUserId);
+            if (!allowed) {
+                LOG.warn("[SECURITY] _approvalStatus=PENDING denied for user={} on entity={}",
+                        callerUserId, schema.getName());
+                throw new ApprovalFilterException(403,
+                        "forbidden: only checkers may list PENDING records for " + schema.getName());
+            }
+        }
+        return status;
+    }
+
+    /**
+     * C2.7 — applies and authorizes the approval-state list filter.
+     *
+     * <p>Two doors lead to the same predicate and both must be guarded:
+     * <ol>
+     *   <li>the dedicated {@code ?_approvalStatus=} parameter, and</li>
+     *   <li>the generic {@code ?filter=approval_status:PENDING} parameter, which
+     *       {@code parseFilters} happily accepts because {@code approval_status} is a real
+     *       schema field.</li>
+     * </ol>
+     * Guarding only the first would leave the checker queue enumerable by any maker.
+     *
+     * @param filters mutated in place when an explicit {@code _approvalStatus} was supplied
+     * @return true if {@code _approvalStatus} was supplied (callers use this to force the
+     *         advanced query path, which is the only one that honours filters)
+     * @throws ApprovalFilterException if the value is invalid or the caller may not see it
+     */
+    static boolean applyApprovalStatusFilter(EntitySchema schema, String tenantId, String appId,
+                                             String raw, Map<String, Object> filters,
+                                             String callerUserId, boolean authEnabled) {
+        String explicit = resolveApprovalStatusFilter(schema, tenantId, appId, raw, callerUserId, authEnabled);
+        if (explicit != null) {
+            filters.put("approval_status", explicit);
+            return true;
+        }
+
+        if (schema != null && schema.isApprovalRequired() && filters != null) {
+            for (Map.Entry<String, Object> e : filters.entrySet()) {
+                if ("approval_status".equalsIgnoreCase(e.getKey()) && e.getValue() != null) {
+                    // Same validation + checker gate as the dedicated parameter.
+                    resolveApprovalStatusFilter(schema, tenantId, appId, String.valueOf(e.getValue()),
+                            callerUserId, authEnabled);
+                }
+            }
+        }
+        return false;
+    }
 
     private static void stripApprovalColumns(Map<String, Object> data) {
         if (data == null) return;
@@ -1827,15 +2139,14 @@ public class GenericEntityRoutes {
      *
      * Invariant: if schema.isApprovalRequired(), NO client-supplied approval metadata survives into the DB.
      * - Strips all 8 approval columns from the payload (prevents forged status/actor injection):
-     *   approval_status, approval_revision, submitted_by, submitted_at,
+     *   approval_status, approval_revision, approval_parent_id, submitted_by, submitted_at,
      *   approved_by, approved_at, rejection_reason (+ UPPER_CASE variants).
      * - Forces approval_status = DRAFT (new records must begin in DRAFT, never APPROVED/PENDING).
      * - Forces approval_revision = 1.
      * - Binds submitted_by to the authenticated callerUserId (prevents forged submitter).
      *
      * Bypass-attempt detection: logs WARN if the client payload contained ANY of the 8 approval
-     * columns (not just the first 3 — covers approved_at, submitted_at, rejection_reason too).
-     *
+     * columns (not just the first 3 — covers approved_at, submitted_at, rejection_reason too).     *
      * If schema does NOT require approval, this method is a no-op (strips nothing).
      *
      * Called from: single POST, batch POST (per element), studio POST, runtime POST, env-scoped POST.

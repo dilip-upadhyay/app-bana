@@ -31,6 +31,24 @@ public class ApprovalService {
     private static final Logger LOG = LoggerFactory.getLogger(ApprovalService.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /**
+     * C2.3 — columns that are never copied verbatim from a revision row onto its parent
+     * during {@link #mergeRevisionIntoParent}. The PK and CREATED_AT belong to the parent;
+     * the approval bookkeeping columns are set explicitly by the merge statement.
+     */
+    private static final Set<String> NON_MERGED_COLUMNS = Set.of(
+            "ID",
+            "CREATED_AT",
+            "APPROVAL_STATUS",
+            "APPROVAL_REVISION",
+            "APPROVAL_PARENT_ID",
+            "SUBMITTED_BY",
+            "SUBMITTED_AT",
+            "APPROVED_BY",
+            "APPROVED_AT",
+            "REJECTION_REASON"
+    );
+
     public enum Status {
         DRAFT("DRAFT"),
         PENDING("PENDING"),
@@ -186,8 +204,9 @@ public class ApprovalService {
                 String currentStateStr = "PENDING";
                 int currentRevision = 1;
                 String submittedBy = null;
+                String parentRowId = null;
 
-                String selectSql = "SELECT \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\" FROM \"" + tableName + "\" WHERE \"ID\" = ? FOR UPDATE";
+                String selectSql = "SELECT * FROM \"" + tableName + "\" WHERE \"ID\" = ? FOR UPDATE";
                 try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
                     ps.setObject(1, parseRowId(rowId));
                     try (ResultSet rs = ps.executeQuery()) {
@@ -198,6 +217,7 @@ public class ApprovalService {
                         currentRevision = rs.getInt("APPROVAL_REVISION");
                         if (currentRevision <= 0) currentRevision = 1;
                         submittedBy = rs.getString("SUBMITTED_BY");
+                        parentRowId = readOptionalString(rs, "APPROVAL_PARENT_ID");
                     }
                 }
 
@@ -230,17 +250,31 @@ public class ApprovalService {
                 // Audit log entry
                 logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, "PENDING", "APPROVED", checkerUserId, "CHECKER", comments, diffJson);
 
+                // C2.3 — this row is a revision of a live APPROVED row. Fold it back into the
+                // parent (which keeps its id, so foreign keys stay intact) and drop the
+                // revision row. Same transaction => the replacement is atomic.
+                String supersededParentId = null;
+                if (parentRowId != null && !parentRowId.isBlank()) {
+                    mergeRevisionIntoParent(conn, tenantId, appId, entityName, tableName,
+                            rowId, parentRowId, currentRevision, checkerUserId, submittedBy, comments);
+                    supersededParentId = parentRowId;
+                }
+
                 conn.commit();
                 LOG.info("[ApprovalService] Approved record {} in {} by checker {}", rowId, tableName, checkerUserId);
 
-                return Map.of(
-                        "tenantId", tenantId,
-                        "appId", appId,
-                        "entityName", entityName,
-                        "rowId", rowId,
-                        "status", "APPROVED",
-                        "approvedBy", checkerUserId
-                );
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("tenantId", tenantId);
+                result.put("appId", appId);
+                result.put("entityName", entityName);
+                result.put("rowId", supersededParentId != null ? supersededParentId : rowId);
+                result.put("status", "APPROVED");
+                result.put("approvedBy", checkerUserId);
+                if (supersededParentId != null) {
+                    result.put("mergedFromRevisionRowId", rowId);
+                    result.put("revision", currentRevision);
+                }
+                return result;
             } catch (Exception e) {
                 conn.rollback();
                 throw e;
@@ -402,6 +436,172 @@ public class ApprovalService {
             }
         }
         return trail;
+    }
+
+    /**
+     * C2.3 — atomically folds an approved revision row back into the live parent row.
+     *
+     * <p>Runs inside the caller's transaction (which already holds a {@code FOR UPDATE}
+     * lock on the revision row). Steps:
+     * <ol>
+     *   <li>{@code SELECT ... FOR UPDATE} the parent, snapshotting it for the audit diff.</li>
+     *   <li>Copy every business column from the revision onto the parent. Business =
+     *       everything except the PK, {@code CREATED_AT} and the approval bookkeeping
+     *       columns, which are set explicitly.</li>
+     *   <li>Mark the parent APPROVED at the revision's revision number.</li>
+     *   <li>Delete the revision row.</li>
+     *   <li>Write an audit entry against the <em>parent</em> row id whose diff carries the
+     *       full pre-merge snapshot — this is how the previous version stays recoverable.</li>
+     * </ol>
+     *
+     * <p>The parent id is deliberately preserved so foreign keys created by Phase B.H4 keep
+     * pointing at a live row. That is why no {@code superseded_by} column is needed.
+     */
+    private static void mergeRevisionIntoParent(Connection conn, String tenantId, String appId, String entityName,
+                                                String tableName, String revisionRowId, String parentRowId,
+                                                int revision, String checkerUserId, String submittedBy,
+                                                String comments) throws Exception {
+
+        Map<String, Object> parentBefore = new LinkedHashMap<>();
+        List<String> allColumns = new ArrayList<>();
+
+        String parentSql = "SELECT * FROM \"" + tableName + "\" WHERE \"ID\" = ? FOR UPDATE";
+        try (PreparedStatement ps = conn.prepareStatement(parentSql)) {
+            ps.setObject(1, parseRowId(parentRowId));
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    // Parent vanished (deleted out from under us). Leave the revision row standing
+                    // as the new live record rather than losing the data entirely.
+                    LOG.warn("[ApprovalService] Revision {} points at missing parent {} in {} — keeping revision as live row",
+                            revisionRowId, parentRowId, tableName);
+                    clearRevisionPointer(conn, tableName, revisionRowId);
+                    return;
+                }
+                int cols = rs.getMetaData().getColumnCount();
+                for (int i = 1; i <= cols; i++) {
+                    String col = rs.getMetaData().getColumnName(i);
+                    allColumns.add(col);
+                    parentBefore.put(col.toLowerCase(Locale.ROOT), rs.getObject(i));
+                }
+            }
+        }
+
+        Map<String, Object> revisionRow = new LinkedHashMap<>();
+        try (PreparedStatement ps = conn.prepareStatement("SELECT * FROM \"" + tableName + "\" WHERE \"ID\" = ?")) {
+            ps.setObject(1, parseRowId(revisionRowId));
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalStateException("Revision row " + revisionRowId + " disappeared mid-approval");
+                }
+                int cols = rs.getMetaData().getColumnCount();
+                for (int i = 1; i <= cols; i++) {
+                    revisionRow.put(rs.getMetaData().getColumnName(i).toUpperCase(Locale.ROOT), rs.getObject(i));
+                }
+            }
+        }
+
+        List<String> setParts = new ArrayList<>();
+        List<Object> params = new ArrayList<>();
+        for (String col : allColumns) {
+            if (NON_MERGED_COLUMNS.contains(col.toUpperCase(Locale.ROOT))) {
+                continue;
+            }
+            setParts.add("\"" + col + "\" = ?");
+            params.add(revisionRow.get(col.toUpperCase(Locale.ROOT)));
+        }
+
+        setParts.add("\"APPROVAL_STATUS\" = 'APPROVED'");
+        setParts.add("\"APPROVAL_REVISION\" = ?");
+        params.add(revision);
+        setParts.add("\"SUBMITTED_BY\" = ?");
+        params.add(submittedBy);
+        setParts.add("\"SUBMITTED_AT\" = ?");
+        params.add(revisionRow.get("SUBMITTED_AT"));
+        setParts.add("\"APPROVED_BY\" = ?");
+        params.add(checkerUserId);
+        setParts.add("\"APPROVED_AT\" = NOW()");
+        setParts.add("\"REJECTION_REASON\" = NULL");
+        if (allColumns.stream().anyMatch(c -> "APPROVAL_PARENT_ID".equalsIgnoreCase(c))) {
+            setParts.add("\"APPROVAL_PARENT_ID\" = NULL");
+        }
+
+        String mergeSql = "UPDATE \"" + tableName + "\" SET " + String.join(", ", setParts) + " WHERE \"ID\" = ?";
+        try (PreparedStatement ps = conn.prepareStatement(mergeSql)) {
+            int i = 1;
+            for (Object p : params) {
+                ps.setObject(i++, p);
+            }
+            ps.setObject(i, parseRowId(parentRowId));
+            ps.executeUpdate();
+        }
+
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM \"" + tableName + "\" WHERE \"ID\" = ?")) {
+            ps.setObject(1, parseRowId(revisionRowId));
+            ps.executeUpdate();
+        }
+
+        Map<String, Object> after = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : revisionRow.entrySet()) {
+            if (!NON_MERGED_COLUMNS.contains(e.getKey())) {
+                after.put(e.getKey().toLowerCase(Locale.ROOT), e.getValue());
+            }
+        }
+
+        Map<String, Object> diff = new LinkedHashMap<>();
+        diff.put("rowId", parentRowId);
+        diff.put("fromState", "APPROVED");
+        diff.put("toState", "APPROVED");
+        diff.put("mergedFromRevisionRowId", revisionRowId);
+        diff.put("revision", revision);
+        diff.put("before", stringifyValues(parentBefore));
+        diff.put("after", stringifyValues(after));
+
+        logAuditEntry(conn, tenantId, appId, entityName, parentRowId, revision, "APPROVED", "APPROVED",
+                checkerUserId, "CHECKER", comments, MAPPER.writeValueAsString(diff));
+
+        LOG.info("[ApprovalService] Revision {} merged into live parent {} in {} (revision {})",
+                revisionRowId, parentRowId, tableName, revision);
+    }
+
+    /**
+     * Fallback when a revision's parent no longer exists: null out the dangling pointer so
+     * the revision becomes an ordinary live row instead of an orphan.
+     */
+    private static void clearRevisionPointer(Connection conn, String tableName, String revisionRowId) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "UPDATE \"" + tableName + "\" SET \"APPROVAL_PARENT_ID\" = NULL WHERE \"ID\" = ?")) {
+            ps.setObject(1, parseRowId(revisionRowId));
+            ps.executeUpdate();
+        } catch (Exception e) {
+            LOG.warn("[ApprovalService] Failed to clear dangling approval_parent_id on row {}: {}",
+                    revisionRowId, e.getMessage());
+        }
+    }
+
+    /**
+     * Audit diffs are stored as JSON. JDBC hands back Timestamp/BigDecimal/array types that
+     * Jackson may not serialise predictably, so values are normalised to strings first.
+     */
+    private static Map<String, Object> stringifyValues(Map<String, Object> row) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : row.entrySet()) {
+            Object v = e.getValue();
+            if (v == null || v instanceof Number || v instanceof Boolean || v instanceof String) {
+                out.put(e.getKey(), v);
+            } else {
+                out.put(e.getKey(), String.valueOf(v));
+            }
+        }
+        return out;
+    }
+
+    /** Reads a column that may not exist on legacy tables, returning null instead of throwing. */
+    private static String readOptionalString(ResultSet rs, String column) {
+        try {
+            return rs.getString(column);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static void logAuditEntry(Connection conn, String tenantId, String appId, String entityName, String rowId, int revision, String fromState, String toState, String actorUserId, String actorRole, String reason, String diff) throws Exception {

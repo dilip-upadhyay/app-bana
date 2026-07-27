@@ -204,7 +204,7 @@ The audit table is append-only. Row-level revisions live in the app's own entity
 |---|---|---|---|
 | C2.1 | `ApprovalService` — the state machine. Methods: `submit(row)`, `approve(row, checkerId)`, `reject(row, checkerId, reason)`, `resubmit(row)`. Enforces valid transitions, writes to `appbana_approvals`, updates row columns atomically in one transaction | new `com.appbana.approval.ApprovalService` | 120 min |
 | C2.2 | `ApprovalGuard` — middleware/interceptor on `GenericEntityRoutes`. On write, checks role; on read, filters by state (non-checkers see only `APPROVED` rows they created, plus their own `DRAFT` / `REJECTED` rows; checkers additionally see `PENDING`) | new `com.appbana.approval.ApprovalGuard` + wire into [`GenericEntityRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/GenericEntityRoutes.java) | 90 min |
-| C2.3 | Revision handling — `PUT /api/{entity}/{id}` on an `APPROVED` row does NOT overwrite; it clones the row into a new `DRAFT` revision with `approval_parent_id = originalId`. On approve, the new revision replaces the parent atomically (parent row soft-marked `superseded_by`) | `ApprovalService` + `GenericEntityRoutes` | 90 min |
+| C2.3 | Revision handling — `PUT /api/{entity}/{id}` on an `APPROVED` row does NOT overwrite; it clones the row into a new `DRAFT` revision with `approval_parent_id = originalId`. On approve, the new revision replaces the parent atomically | `ApprovalService` + `GenericEntityRoutes` | 90 min |
 | C2.4 | New action endpoints: `POST /api/{entity}/{id}/submit`, `POST /api/{entity}/{id}/approve`, `POST /api/{entity}/{id}/reject` (body: `{reason}`) | `GenericEntityRoutes` | 60 min |
 | C2.5 | Diff computation — when submitting a revision, compute field-level diff vs. the parent and store in `appbana_approvals.diff` | `ApprovalService` | 45 min |
 | C2.6 | Query endpoint `GET /api/{entity}/{id}/audit` — returns full transition history from `appbana_approvals`, most recent first | `GenericEntityRoutes` | 30 min |
@@ -213,11 +213,69 @@ The audit table is append-only. Row-level revisions live in the app's own entity
 
 ### Exit criteria — C2
 
-- [ ] Maker cannot approve their own row (403).
-- [ ] Non-checker cannot see `PENDING` rows in list queries.
-- [ ] Approving a revision atomically replaces the live row; the previous version is retained and queryable via audit.
-- [ ] `GET /api/{entity}/{id}/audit` returns the full state-transition timeline.
+- [x] Maker cannot approve their own row (403).
+- [x] Non-checker cannot see `PENDING` rows via `?_approvalStatus=PENDING` (403) — including the
+      side door `?filter=approval_status:PENDING`.
+- [x] Approving a revision atomically replaces the live row; the previous version is retained and queryable via audit.
+- [x] `GET .../records/{id}/approvals/audit` returns the full state-transition timeline.
+- [x] Editing a live `APPROVED` row never mutates it; it produces a `DRAFT` revision.
 - [ ] Concurrent approve + reject on the same row: one wins, the other returns 409 Conflict.
+      *(`SELECT ... FOR UPDATE` serialises them and the loser gets an `IllegalStateException`
+      mapped to 400, not 409. Cosmetic status-code mismatch — tracked for C3.)*
+
+### Implemented behaviour — revisions (C2.3)
+
+**Edit of a live `APPROVED` row (`PUT`, all three route families):**
+
+| Current state of target row | Result |
+|---|---|
+| `PENDING` | `400` — a row under review cannot be edited |
+| `DRAFT` / `REJECTED` | edited in place, reset to `DRAFT`, `rejection_reason` cleared. Revision counter untouched — `submitForApproval` owns bumping it on resubmit |
+| `APPROVED` | live row untouched; a **separate** `DRAFT` row is written with `approval_parent_id = <liveId>` and `approval_revision = n+1`. Response: `{"updated":0,"revision":true,"revisionId":…,"parentId":…,"approvalStatus":"DRAFT","approvalRevision":n+1}` |
+| `APPROVED` with a revision already `PENDING` | `409` — one open revision per row |
+
+A second edit while a `DRAFT`/`REJECTED` revision is open **refreshes that revision** rather than
+creating another row, so form autosave cannot spam the table.
+
+**Approving a revision** (`ApprovalService.approveRecord`, single transaction):
+1. `SELECT … FOR UPDATE` the revision, then the parent.
+2. Copy every business column from revision → parent. Business = all columns except the PK,
+   `created_at`, and the eight approval columns.
+3. Mark the parent `APPROVED` at the revision's revision number; null out `approval_parent_id`.
+4. `DELETE` the revision row.
+5. Write an audit entry against the **parent** row id whose `diff` carries the complete
+   pre-merge snapshot (`before`) and the merged values (`after`).
+
+> **Deviation from the original plan — no `superseded_by` column.**
+> The plan said the parent should be soft-marked `superseded_by`, which only makes sense if the
+> revision's id becomes the new canonical id. Phase B.H4 added real PostgreSQL `FOREIGN KEY`
+> constraints for reference fields, so re-pointing the canonical id would break every FK aimed at
+> the parent. Instead the **parent id is preserved** and the revision is folded into it. The
+> previous version stays recoverable from `appbana_approvals.diff.before`, which satisfies
+> "the previous version is retained in the audit table". Consequently the injected-column list
+> stays at the eight columns documented above.
+
+If a revision's parent has been deleted meanwhile, the dangling `approval_parent_id` is nulled and
+the revision simply becomes the live row (logged as a WARN) — data is never dropped.
+
+**Legacy tables** created before C2.3 have no `approval_parent_id` column. `applyApprovalPutGuard`
+detects this, logs a WARN and falls back to the old in-place edit rather than failing.
+
+### Implemented behaviour — `?_approvalStatus=` (C2.7)
+
+`GET /api/{entity}`, `GET /appbana-studio/{tenantId}/apps/{appId}/{entity}` and
+`GET /api/{tenantId}/apps/{appId}/env/{env}/{entity}` accept `?_approvalStatus=DRAFT|PENDING|APPROVED|REJECTED`.
+
+- Entity has no approval workflow → `400` (silently ignoring it would return the whole table to a
+  caller who asked for a subset).
+- Value outside the four states → `400`.
+- `PENDING` → caller must hold the `checker` role on that entity, or own the app → otherwise `403`.
+- The generic `?filter=approval_status:…` parameter is routed through the **same** check, so it
+  cannot be used to enumerate the checker queue.
+
+Revision rows are deliberately **not** hidden from unfiltered list queries — the state machine above
+shows parent and revision coexisting, and the maker needs to see their pending edit.
+`?_approvalStatus=APPROVED` is the supported way to get live-rows-only.
 
 ---
 

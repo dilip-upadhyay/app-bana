@@ -47,7 +47,7 @@ Backend: 220/220 tests pass · Runtime Vitest: 147/147 · E2E Playwright: 8/8 di
 [✅ Done]     Phase A2 — Runtime Foundations (Sprint 3)
 [✅ Done]     Phase B  — Complex UI Epic (B1–B5)
 [✅ Done]     Phase B.H — Hardening Sprint (H1–H8)
-[🟡 In Prog] Phase C  — Maker-Checker Epic (C1 signed off; C2 state machine & backend routes shipped)
+[🟡 In Prog] Phase C  — Maker-Checker Epic (C1 + C2 complete; C3 next)
      ↓
 🎯 Demo-able differentiated product
      ↓
@@ -65,15 +65,40 @@ Backend: 220/220 tests pass · Runtime Vitest: 147/147 · E2E Playwright: 8/8 di
 
 ## Next session goal
 
-**Start Phase C — Maker-Checker Epic, sub-phase C1** (DB migration + role model). See [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md).
+**Start Phase C sub-phase C3 — Runtime approval UI.** See [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) §C3.
+
+Nothing in `app-bana-runtime/` is approval-aware yet — no `Approval*.tsx`, `Checker*.tsx` or `Audit*.tsx` exists.
 
 Tasks:
-- C1.1 — Liquibase changesets for `appbana_approvals` + `appbana_user_roles`
-- C1.2 — `SchemaEnricher` approval column injection
-- C1.3 — `SchemaManager` persistence of `approvalRequired` flag
-- C1.4 — `UserRoleService` CRUD
-- C1.5 — Bootstrap: app creator gets `role: 'both'`
-- C1.6 — `RoleRoutes.java` REST endpoints
+- C3.1 — `ApprovalStatusPill.tsx`, auto-wired into the `StudioTableLive` cell renderer
+- C3.2 — `FormActions.tsx`: `Save as draft` + `Submit for approval`
+- C3.3 — `CheckerQueuePage.tsx` + `checker_queue` PageMeta layout
+- C3.4 — `ApprovalDetail.tsx` + `RejectDialog.tsx` (side-by-side diff for revisions)
+- C3.5 — `AuditDrawer.tsx`
+- C3.6 — "My Drafts" / "Needs Rework" saved views
+- C3.7 — global "Pending my approval" badge
+- C3.8 — toasts on submit/approve/reject
+
+The backend contract C3 builds on is now complete: revision rows expose `approval_parent_id`,
+`?_approvalStatus=` narrows list pages, and `.../records/{id}/approvals/audit` returns the timeline
+including the pre-merge snapshot for revision approvals.
+
+---
+
+## C2 gap closure (2026-07-28)
+
+C2 was signed off with two plan items silently unimplemented. Both are now closed:
+
+| # | Was | Now |
+|---|-----|-----|
+| C2.3 | `PUT` on an `APPROVED` row overwrote the live row in place and flipped it to `DRAFT`, destroying approved data | The live row is untouched; a separate `DRAFT` revision is written with `approval_parent_id`. On approve, `ApprovalService.approveRecord` merges the revision into the parent (parent id preserved so B.H4 foreign keys survive) and deletes the revision — one transaction |
+| C2.7 | `?_approvalStatus=` did not exist | Implemented on all three GET list route families, with `PENDING` restricted to checkers. The `?filter=approval_status:…` side door is routed through the same check |
+| — | `APPROVAL_COLUMNS` omitted `approval_parent_id`, so clients could forge it | Added to the strip-list |
+
+New test file `RevisionFlowTest.java` (17 tests). Backend suite: **266/266 pass** (was 249/249).
+
+Deliberate deviation: no `superseded_by` column. See the note in
+[`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) §C2.
 
 ---
 

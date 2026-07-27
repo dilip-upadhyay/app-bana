@@ -397,6 +397,7 @@ DELETE /api/{entity}/{id}       â†’ Delete record
 ?_fields=name,email            â†’ Column projection
 ?_sort=name:asc,age:desc       â†’ Sorting
 ?_count=true                   â†’ Count only
+?_approvalStatus=PENDING       -> Approval-state filter (PENDING is checker-only; 403 otherwise)
 ```
 
 ### AI Endpoints

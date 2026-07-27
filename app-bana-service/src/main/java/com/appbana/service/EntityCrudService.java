@@ -336,6 +336,44 @@ public class EntityCrudService {
         }
     }
 
+    /**
+     * C2.3 — finds the single "open" (not yet approved) revision row whose
+     * {@code approval_parent_id} points at {@code parentId}.
+     *
+     * <p>Open means {@code approval_status} is DRAFT, PENDING or REJECTED. An APPROVED
+     * revision cannot exist: {@code ApprovalService.approveRecord} merges it into the
+     * parent and deletes it in the same transaction.
+     *
+     * <p>Returns {@code null} when the schema has no {@code approval_parent_id} field
+     * (legacy tables created before C2.3) or when no open revision exists.
+     */
+    public Map<String, Object> findOpenRevision(EntitySchema schema, String parentId) throws SQLException {
+        if (schema == null || parentId == null || parentId.isBlank()) {
+            return null;
+        }
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
+                .orElse(null);
+        boolean hasParentCol = schema.getFields().stream()
+                .anyMatch(f -> "approval_parent_id".equalsIgnoreCase(f.getName()));
+        if (pk == null || !hasParentCol) {
+            return null;
+        }
+
+        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema))
+                + " WHERE " + quote("approval_parent_id") + " = ?"
+                + " AND UPPER(" + quote("approval_status") + ") IN ('DRAFT','PENDING','REJECTED')"
+                + " ORDER BY " + quote("approval_revision") + " DESC";
+
+        try (Connection c = schemaConnection(schema);
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, parentId);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Map<String, Object>> list = toList(rs);
+                return list.isEmpty() ? null : list.getFirst();
+            }
+        }
+    }
+
     public Map<String, Object> parseFilters(String raw, EntitySchema schema) {
         Map<String, Object> map = new LinkedHashMap<>();
         if (raw == null || raw.isBlank()) {
