@@ -341,6 +341,157 @@ async function throwEntityError(res: Response, prefix: string): Promise<never> {
   throw err;
 }
 
+// ── Approvals (maker-checker, Phase C2/C3) ───────────────────────────────────
+
+/**
+ * Thrown when the backend returns 409 from an approval transition — i.e. the
+ * record is not in a state the requested transition allows.
+ *
+ * This is a *conflict*, not a permission failure, and callers must treat it
+ * differently: a 403 means "you may never do this", a 409 means "someone else
+ * got there first, reload and look again". The backend draws the same
+ * distinction via `ApprovalConflictException`.
+ */
+export class ApprovalConflictError extends Error {
+  readonly status = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApprovalConflictError';
+  }
+}
+
+/** The four states of the approval state machine, as persisted by the backend. */
+export type ApprovalStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
+/** Identifies a single record in the approval workflow. */
+export interface ApprovalTarget {
+  readonly tenantId: string;
+  readonly appId: string;
+  /** Bare entity name (e.g. `Invoice`), NOT the qualified `{tenant}_{app}_{entity}` key. */
+  readonly entityName: string;
+  readonly rowId: string | number;
+}
+
+/** One entry in a record's approval history. Column names are lower-cased by the backend. */
+export interface ApprovalAuditEntry {
+  readonly id?: string;
+  readonly action?: string;
+  readonly status?: string;
+  readonly revision?: number;
+  readonly actor_user_id?: string;
+  readonly comments?: string | null;
+  readonly created_at?: string | number | null;
+  readonly [key: string]: unknown;
+}
+
+function approvalBase(t: ApprovalTarget): string {
+  return `${BACKEND}/api/tenants/${encodeURIComponent(t.tenantId)}`
+    + `/apps/${encodeURIComponent(t.appId)}`
+    + `/entities/${encodeURIComponent(t.entityName)}`;
+}
+
+function recordBase(t: ApprovalTarget): string {
+  return `${approvalBase(t)}/records/${encodeURIComponent(String(t.rowId))}`;
+}
+
+/**
+ * Normalise an approval failure. 409 becomes {@link ApprovalConflictError} so
+ * the UI can offer "reload" rather than "you lack permission"; everything else
+ * falls through to the shared handler, which preserves `.status`.
+ */
+async function throwApprovalError(res: Response, prefix: string): Promise<never> {
+  if (res.status === 409) {
+    const raw = await res.text().catch(() => '');
+    let message = raw;
+    try {
+      message = (JSON.parse(raw) as { error?: string }).error ?? raw;
+    } catch {
+      /* keep raw */
+    }
+    throw new ApprovalConflictError(message || `${prefix}: conflict`);
+  }
+  return throwEntityError(res, prefix);
+}
+
+async function approvalPost(
+  url: string,
+  body: Record<string, unknown> | null,
+  token: string,
+  prefix: string
+): Promise<Record<string, unknown>> {
+  const res = await authedFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) await throwApprovalError(res, prefix);
+  return res.json();
+}
+
+/** Move a DRAFT (or REJECTED) record into PENDING. Maker action. */
+export async function submitForApproval(
+  target: ApprovalTarget,
+  token: string,
+  comments?: string
+): Promise<Record<string, unknown>> {
+  return approvalPost(
+    `${recordBase(target)}/submit`,
+    comments ? { comments } : {},
+    token,
+    'Submit for approval failed'
+  );
+}
+
+/** Approve a PENDING record. Checker action; the backend enforces separation of duties. */
+export async function approveRecord(
+  target: ApprovalTarget,
+  token: string,
+  comments?: string
+): Promise<Record<string, unknown>> {
+  return approvalPost(
+    `${recordBase(target)}/approve`,
+    comments ? { comments } : {},
+    token,
+    'Approve failed'
+  );
+}
+
+/** Reject a PENDING record back to its maker. `reason` is required by the backend. */
+export async function rejectRecord(
+  target: ApprovalTarget,
+  token: string,
+  reason: string
+): Promise<Record<string, unknown>> {
+  return approvalPost(`${recordBase(target)}/reject`, { reason }, token, 'Reject failed');
+}
+
+/**
+ * Every PENDING row of an entity, newest submission first. 403 if the caller is
+ * not a checker or app owner for this entity — callers that use this to decide
+ * whether to *show* a queue should treat 403 as "empty", not as an error.
+ */
+export async function fetchPendingApprovals(
+  target: Omit<ApprovalTarget, 'rowId'>,
+  token: string
+): Promise<Array<Record<string, unknown>>> {
+  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending`;
+  const res = await authedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) await throwApprovalError(res, 'Fetch pending approvals failed');
+  return res.json();
+}
+
+/** A record's approval history, most recent first. */
+export async function fetchApprovalAudit(
+  target: ApprovalTarget,
+  token: string
+): Promise<ApprovalAuditEntry[]> {
+  const res = await authedFetch(`${recordBase(target)}/approvals/audit`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) await throwApprovalError(res, 'Fetch approval history failed');
+  return res.json();
+}
+
 // â”€â”€ Chat sessions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface ChatSession {

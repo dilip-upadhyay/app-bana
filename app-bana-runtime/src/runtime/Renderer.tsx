@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { PageMeta, ComponentNode, FieldCondition } from '@appbana/shared';
-import { fetchEntityRows, insertEntityRow, ApiFieldError } from '@appbana/shared';
+import { fetchEntityRows, insertEntityRow, ApiFieldError, getEntitySchema, submitForApproval, resolveAppContext } from '@appbana/shared';
 import { StudioTableLive } from './StudioTableLive';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { FormActions } from './FormActions';
@@ -31,6 +31,7 @@ import { ConditionalField } from './ConditionalField';
 import { FileUploadField } from './FileUploadField';
 import { ChildTable } from './ChildTable';
 import { useRecordScope } from './RecordContext';
+import { entityNameFromKey } from './page-classifier';
 // Sprint 3 task 3.7 — anything larger than this switches from native <select>
 // to the search-driven combobox. Kept small so real-world lookup tables that
 // grow past a couple screens of rows stay usable.
@@ -744,6 +745,13 @@ interface EntityFormProps {
   children: React.ReactNode;
 }
 
+/**
+ * What the user asked for when they saved. Passed explicitly rather than read
+ * from state because the button handler and the async submit run in the same
+ * tick — a `setState` before `await` would not be visible inside the closure.
+ */
+type FormIntent = 'save' | 'draft' | 'submit';
+
 function EntityForm(props: Readonly<EntityFormProps>) {
   const { className, styleObj, entity, dataAttrs, children } = props;
   const [saving, setSaving] = useState(false);
@@ -751,7 +759,27 @@ function EntityForm(props: Readonly<EntityFormProps>) {
   // Phase B2 — publish live form values to descendant ConditionalField instances.
   const formElRef = useRef<HTMLFormElement | null>(null);
 
-  async function submit(form: HTMLFormElement): Promise<boolean> {
+  // C3.2 — approval-required entities get a draft/submit action bar. The flag
+  // lives on the entity schema, not on the page, because pages generated
+  // before approval was switched on would otherwise never pick it up.
+  const [approvalRequired, setApprovalRequired] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'draft' | 'submit' | null>(null);
+
+  useEffect(() => {
+    if (!entity) return;
+    let cancelled = false;
+    getEntitySchema(qualifyEntityKey(entity), getRuntimeToken())
+      .then((schema) => {
+        if (!cancelled) setApprovalRequired(Boolean(schema?.approvalRequired));
+      })
+      // A schema lookup failure must not break the form. Falling back to the
+      // plain Save bar degrades to the pre-C3 behaviour: the row is still
+      // created as a DRAFT by the backend, it just isn't auto-submitted.
+      .catch(() => { if (!cancelled) setApprovalRequired(false); });
+    return () => { cancelled = true; };
+  }, [entity]);
+
+  async function submit(form: HTMLFormElement, intent: FormIntent = 'save'): Promise<boolean> {
     if (!entity) {
       toast.error('Save failed', { description: 'This form has no entity bound.' });
       return false;
@@ -774,11 +802,47 @@ function EntityForm(props: Readonly<EntityFormProps>) {
     setSaving(true);
     try {
       const qualified = qualifyEntityKey(entity);
-      await insertEntityRow(qualified, payload, getRuntimeToken());
+      const created = await insertEntityRow(qualified, payload, getRuntimeToken());
       window.dispatchEvent(
         new CustomEvent('appbana:row-inserted', { detail: { entity: qualified } })
       );
-      toast.success('Saved', { description: `New ${humanize(entity.split('_').pop())} added.` });
+      const entityLabel = humanize(entity.split('_').pop());
+
+      // C3.2 — the insert always lands in DRAFT (enforced backend-side by
+      // C2.3). Entering the workflow is a second, separate call, so a failure
+      // here leaves a recoverable draft rather than losing the user's typing.
+      if (approvalRequired && intent === 'submit') {
+        const ctx = resolveAppContext(window.location);
+        const rowId = (created as { id?: unknown })?.id;
+        if (!ctx?.appId || rowId == null) {
+          toast.warning('Saved as draft', {
+            description: 'Could not submit for approval automatically — submit it from the list view.',
+          });
+          return true;
+        }
+        await submitForApproval(
+          {
+            tenantId: ctx.tenantId ?? 'default',
+            appId: ctx.appId,
+            entityName: entityNameFromKey(qualified),
+            rowId: rowId as string | number,
+          },
+          getRuntimeToken()
+        );
+        window.dispatchEvent(
+          new CustomEvent('appbana:row-inserted', { detail: { entity: qualified } })
+        );
+        toast.success('Submitted for approval', {
+          description: `${entityLabel} is now awaiting a checker.`,
+        });
+        return true;
+      }
+
+      toast.success(approvalRequired ? 'Saved as draft' : 'Saved', {
+        description: approvalRequired
+          ? `${entityLabel} saved. Submit it for approval when you're ready.`
+          : `New ${entityLabel} added.`,
+      });
       return true;
     } catch (err) {
       // Sprint 3 task 3.1 — Backend 400s with a structured field-error
@@ -803,13 +867,31 @@ function EntityForm(props: Readonly<EntityFormProps>) {
       return false;
     } finally {
       setSaving(false);
+      setPendingAction(null);
     }
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
-    const ok = await submit(form);
+    // In approval mode the form's default action is "submit for approval",
+    // matching the primary button, so Enter does what the button says.
+    const intent: FormIntent = approvalRequired ? 'submit' : 'save';
+    setPendingAction(approvalRequired ? 'submit' : null);
+    const ok = await submit(form, intent);
+    if (ok) {
+      form.reset();
+      resetErrors();
+    }
+  }
+
+  // C3.2 — "Save as draft": persist without entering the workflow. The row is
+  // created in DRAFT either way; this simply skips the submit call.
+  async function handleSaveDraft() {
+    const form = formElRef.current;
+    if (!form) return;
+    setPendingAction('draft');
+    const ok = await submit(form, 'draft');
     if (ok) {
       form.reset();
       resetErrors();
@@ -821,7 +903,7 @@ function EntityForm(props: Readonly<EntityFormProps>) {
   async function handleSaveAndNew() {
     const form = document.querySelector<HTMLFormElement>(`form[data-entity="${entity}"]`);
     if (!form) return;
-    const ok = await submit(form);
+    const ok = await submit(form, 'save');
     if (ok) {
       form.reset();
       resetErrors();
@@ -837,6 +919,7 @@ function EntityForm(props: Readonly<EntityFormProps>) {
         className={className}
         style={styleObj}
         data-entity={entity}
+        data-approval-required={approvalRequired ? 'true' : undefined}
         onSubmit={handleSubmit}
         noValidate
         {...dataAttrs}
@@ -846,7 +929,10 @@ function EntityForm(props: Readonly<EntityFormProps>) {
           <div className="appbana-form-save-cell">
             <FormActions
               saving={saving}
-              onSaveAndNew={entity ? handleSaveAndNew : undefined}
+              pendingAction={pendingAction}
+              onSaveAndNew={entity && !approvalRequired ? handleSaveAndNew : undefined}
+              approvalMode={approvalRequired}
+              onSaveDraft={approvalRequired ? handleSaveDraft : undefined}
             />
           </div>
         </FormValuesProvider>
