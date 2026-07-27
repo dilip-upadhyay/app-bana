@@ -212,7 +212,7 @@ public class PasswordServiceTest {
         assertTrue(duration >= 50, "Hashing should take at least 50ms (security requirement)");
         assertTrue(duration <= 5000, "Hashing should complete within 5 seconds");
         
-        System.out.println("Hash generation took " + duration + "ms (expected: 100-500ms)");
+        System.out.println("Hash generation took " + duration + "ms (dev box typically 100-500ms; shared CI runners higher)");
     }
 
     @Test

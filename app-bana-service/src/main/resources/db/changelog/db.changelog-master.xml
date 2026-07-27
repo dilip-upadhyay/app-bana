@@ -5,6 +5,14 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.29.xsd">
 
+    <!-- V0 must run first: it creates the platform meta tables (appbana_schemas,
+         appbana_migrations, appbana_audit) that V10 alters. They used to be created
+         lazily by JdbcManager *after* Liquibase, so a fresh database could never be
+         migrated. Idempotent, so it is a no-op on existing databases. -->
+    <changeSet id="V0" author="appbana">
+        <sqlFile path="db/migration/V0__bootstrap_meta_tables.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
     <changeSet id="V1" author="appbana">
         <sqlFile path="db/migration/V1__auth_schema.sql" splitStatements="true" stripComments="false"/>
     </changeSet>

@@ -232,7 +232,8 @@ public class ApprovalRoutesSecurityTest {
     }
 
     @Test
-    public void testGenericPostBypassPrevented() throws Exception {        String postUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME;
+    public void testGenericPostBypassPrevented() throws Exception {
+        String postUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME;
 
         // Attacker attempts to POST with approval_status = APPROVED and forged submitted_by
         String payload = MAPPER.writeValueAsString(Map.of(
