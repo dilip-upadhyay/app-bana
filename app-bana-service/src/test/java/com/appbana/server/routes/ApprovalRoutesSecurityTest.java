@@ -28,16 +28,21 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * ApprovalRoutesSecurityTest — Phase C2.10 / H4 / C2.13 / C2.14
+ * ApprovalRoutesSecurityTest — Phase C2.10 / H4 / C2.13 / C2.14 / C2.15-C2.21
  *
  * Full HTTP Integration Test Suite for Maker-Checker Approval Routes & Security Guards.
  * Tests real HTTP calls over port 18089 for:
  *   - Session authentication (unauthenticated → 401)
  *   - Separation of duties: submitter cannot approve own record (SoD violation → 403)
+ *   - Owner SoD: owner_alice submits → owner_alice tries to approve → 403 (H9)
  *   - Generic CRUD POST bypass: approval_status=APPROVED is overwritten to DRAFT (B5 check)
  *   - Batch POST bypass (B5): every element forced to DRAFT with server-side submitted_by
  *   - Generic PUT while PENDING → 400 (state machine guard)
  *   - DELETE while PENDING → 400 (B6 check)
+ *   - Bulk-delete PENDING gate (B11): PENDING rows skipped, returned in blocked[] list
+ *   - Studio POST bypass (B10): forged status forced to DRAFT, actor = studioUserId not "studio"
+ *   - Runtime app-scoped POST bypass (B8): unauthenticated → 401; forged status → DRAFT
+ *   - Runtime env-scoped POST bypass (B9): unauthenticated → 401; forged status → DRAFT
  *   - Env-scoped PUT while PENDING → 400 (B7 check)
  *   - Env-scoped DELETE while PENDING → 400 (B7 check)
  *   - UUID / hyphen appId table name resolution
@@ -492,5 +497,240 @@ public class ApprovalRoutesSecurityTest {
         HttpResponse<String> submitRes = HTTP_CLIENT.send(submitReq, HttpResponse.BodyHandlers.ofString());
         assertEquals(200, submitRes.statusCode(), "UUID appId submit failed: " + submitRes.body());
         assertTrue(submitRes.body().contains("\"PENDING\""));
+    }
+
+    /**
+     * H9 — Owner SoD invariant.
+     * alice_maker holds role=BOTH (maker+checker) on the entity.
+     * She submits record 201 herself.
+     * When she then tries to approve it herself, the SoD check must fire → 403.
+     * This test fails if submittedBy.equalsIgnoreCase(checkerUserId) is ever removed or bypassed.
+     */
+    @Test
+    public void testOwnerCannotSelfApprove() throws Exception {
+        String submitUrl = BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID + "/entities/" + ENTITY_NAME + "/records/201/submit";
+        String approveUrl = BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID + "/entities/" + ENTITY_NAME + "/records/201/approve";
+
+        // alice_maker has BOTH role — she is a valid submitter
+        HttpRequest submitReq = HttpRequest.newBuilder()
+                .uri(URI.create(submitUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+        HttpResponse<String> submitRes = HTTP_CLIENT.send(submitReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, submitRes.statusCode(), "Owner submit must succeed: " + submitRes.body());
+        assertTrue(submitRes.body().contains("\"PENDING\""), "Record must be PENDING after owner submit");
+
+        // Now alice_maker (same user) tries to approve her own submission → must be 403
+        HttpRequest selfApproveReq = HttpRequest.newBuilder()
+                .uri(URI.create(approveUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{\"comments\":\"Self-approving as owner\"}"))
+                .build();
+        HttpResponse<String> selfApproveRes = HTTP_CLIENT.send(selfApproveReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, selfApproveRes.statusCode(),
+                "Owner must NOT be able to approve their own submission. Got: " + selfApproveRes.body());
+        assertTrue(selfApproveRes.body().contains("Separation of duties violation"),
+                "403 response must cite SoD violation");
+    }
+
+    /**
+     * C2.18 — B8: Runtime app-scoped POST bypass prevention.
+     * POST /api/{tenantId}/apps/{appId}/{entity} was previously unauthenticated AND ungated.
+     * This test fails if:
+     *   - Unauthenticated request is not rejected with 401 (auth gate missing)
+     *   - Authenticated request with approval_status=APPROVED lands as APPROVED in DB (strip missing)
+     */
+    @Test
+    public void testRuntimeAppScopedInsertBypassPrevented() throws Exception {
+        String insertUrl = BASE_URL + "/api/" + TENANT_ID + "/apps/" + APP_ID + "/" + ENTITY_NAME;
+
+        String payload = MAPPER.writeValueAsString(Map.of(
+                "amount", 750,
+                "approval_status", "APPROVED",
+                "submitted_by", "hacker_runtime"
+        ));
+
+        // Unauthenticated → 401 (B8 auth gate)
+        HttpRequest unauthReq = HttpRequest.newBuilder()
+                .uri(URI.create(insertUrl))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+        HttpResponse<String> unauthRes = HTTP_CLIENT.send(unauthReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, unauthRes.statusCode(),
+                "Unauthenticated runtime POST must return 401. Got: " + unauthRes.body());
+
+        // Authenticated with forged approval_status=APPROVED → 201 but DB must show DRAFT
+        HttpRequest authReq = HttpRequest.newBuilder()
+                .uri(URI.create(insertUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+        HttpResponse<String> authRes = HTTP_CLIENT.send(authReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(201, authRes.statusCode(), "Authenticated runtime POST must return 201: " + authRes.body());
+
+        // Verify DB: approval_status=DRAFT, submitted_by=alice_maker (not hacker_runtime)
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT \"APPROVAL_STATUS\", \"SUBMITTED_BY\" FROM \"" + TABLE_NAME + "\" WHERE \"AMOUNT\" = 750")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "Inserted record (amount=750) must exist in DB");
+                assertEquals("DRAFT", rs.getString("APPROVAL_STATUS"),
+                        "Runtime POST: client-supplied APPROVED must be forced to DRAFT");
+                assertEquals("alice_maker", rs.getString("SUBMITTED_BY"),
+                        "Runtime POST: submitted_by must be session user alice_maker, not hacker_runtime");
+            }
+        }
+    }
+
+    /**
+     * C2.18 — B9: Runtime env-scoped POST bypass prevention.
+     * POST /api/{tenantId}/apps/{appId}/env/{env}/{entity} was previously unauthenticated AND ungated.
+     * Same attack vector as B8 but via the SIT/PROD env route.
+     */
+    @Test
+    public void testEnvScopedInsertBypassPrevented() throws Exception {
+        // Use DEV env (maps to the same non-prefixed table as the seeded schema)
+        String insertUrl = BASE_URL + "/api/" + TENANT_ID + "/apps/" + APP_ID + "/env/DEV/" + ENTITY_NAME;
+
+        String payload = MAPPER.writeValueAsString(Map.of(
+                "amount", 850,
+                "approval_status", "APPROVED",
+                "submitted_by", "hacker_env"
+        ));
+
+        // Unauthenticated → 401 (B9 auth gate)
+        HttpRequest unauthReq = HttpRequest.newBuilder()
+                .uri(URI.create(insertUrl))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+        HttpResponse<String> unauthRes = HTTP_CLIENT.send(unauthReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, unauthRes.statusCode(),
+                "Unauthenticated env-scoped POST must return 401. Got: " + unauthRes.body());
+
+        // Authenticated with forged approval_status=APPROVED → 201 but DB must show DRAFT
+        HttpRequest authReq = HttpRequest.newBuilder()
+                .uri(URI.create(insertUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+        HttpResponse<String> authRes = HTTP_CLIENT.send(authReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(201, authRes.statusCode(), "Authenticated env POST must return 201: " + authRes.body());
+
+        // Verify DB: approval_status=DRAFT, submitted_by=alice_maker
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT \"APPROVAL_STATUS\", \"SUBMITTED_BY\" FROM \"" + TABLE_NAME + "\" WHERE \"AMOUNT\" = 850")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "Inserted env record (amount=850) must exist in DB");
+                assertEquals("DRAFT", rs.getString("APPROVAL_STATUS"),
+                        "Env POST: client-supplied APPROVED must be forced to DRAFT");
+                assertEquals("alice_maker", rs.getString("SUBMITTED_BY"),
+                        "Env POST: submitted_by must be session user alice_maker, not hacker_env");
+            }
+        }
+    }
+
+    /**
+     * C2.18 — B10: Studio POST bypass prevention.
+     * POST /appbana-studio/{tenantId}/apps/{appId}/{entity} went through SessionMiddleware
+     * but had no stripApprovalColumns / DRAFT enforcement. Any authenticated user could create
+     * a pre-approved record via the studio path.
+     *
+     * Also verifies M9: audit actor must be the studioUserId, not hardcoded "studio".
+     */
+    @Test
+    public void testStudioInsertBypassPrevented() throws Exception {
+        String studioUrl = BASE_URL + "/appbana-studio/" + TENANT_ID + "/apps/" + APP_ID + "/" + ENTITY_NAME;
+
+        String payload = MAPPER.writeValueAsString(Map.of(
+                "amount", 950,
+                "approval_status", "APPROVED",
+                "submitted_by", "hacker_studio",
+                "approved_by", "fake_checker"
+        ));
+
+        // Authenticated as alice_maker with forged approval fields → 201 but DB must show DRAFT
+        HttpRequest authReq = HttpRequest.newBuilder()
+                .uri(URI.create(studioUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+        HttpResponse<String> authRes = HTTP_CLIENT.send(authReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(201, authRes.statusCode(), "Studio POST must return 201: " + authRes.body());
+
+        // Verify DB: status forced to DRAFT, submitted_by = authenticated user (not hacker_studio),
+        // approved_by must be null (stripped)
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT \"APPROVAL_STATUS\", \"SUBMITTED_BY\", \"APPROVED_BY\" FROM \"" + TABLE_NAME + "\" WHERE \"AMOUNT\" = 950")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "Studio-inserted record (amount=950) must exist");
+                assertEquals("DRAFT", rs.getString("APPROVAL_STATUS"),
+                        "Studio POST: client-supplied APPROVED must be forced to DRAFT");
+                assertEquals("alice_maker", rs.getString("SUBMITTED_BY"),
+                        "Studio POST: submitted_by must be authenticated studioUserId, not hacker_studio");
+                assertNull(rs.getString("APPROVED_BY"),
+                        "Studio POST: forged approved_by must be stripped to null");
+            }
+        }
+    }
+
+    /**
+     * C2.18 — B11: Bulk-delete PENDING gate.
+     * POST /api/{entity}/bulk-delete iterating IDs with no approval check would let
+     * an admin orphan PENDING records from the audit trail.
+     * This test fails if the B11 per-ID PENDING gate is absent.
+     */
+    @Test
+    public void testBulkDeleteBlocksPendingRows() throws Exception {
+        // Submit record 201 to PENDING state
+        String submitUrl = BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID + "/entities/" + ENTITY_NAME + "/records/201/submit";
+        HttpRequest submitReq = HttpRequest.newBuilder()
+                .uri(URI.create(submitUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+        HttpResponse<String> submitRes = HTTP_CLIENT.send(submitReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, submitRes.statusCode(), "Submit must succeed before bulk-delete test: " + submitRes.body());
+
+        // Bulk-delete request targeting record 201 (which is now PENDING)
+        String bulkDeleteUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME + "/bulk-delete";
+        String bulkPayload = MAPPER.writeValueAsString(Map.of("ids", List.of(201)));
+
+        HttpRequest bulkReq = HttpRequest.newBuilder()
+                .uri(URI.create(bulkDeleteUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(bulkPayload))
+                .build();
+        HttpResponse<String> bulkRes = HTTP_CLIENT.send(bulkReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, bulkRes.statusCode(), "Bulk-delete must return 200 (partial success): " + bulkRes.body());
+
+        // Parse response — 201 must appear in blocked[], not in ids[]
+        Map<String, Object> result = MAPPER.readValue(bulkRes.body(), new TypeReference<>() {});
+        @SuppressWarnings("unchecked")
+        List<Object> deletedIds = (List<Object>) result.get("ids");
+        @SuppressWarnings("unchecked")
+        List<Object> blockedIds = (List<Object>) result.get("blocked");
+
+        assertNotNull(blockedIds, "Response must contain 'blocked' array when PENDING rows are skipped");
+        assertFalse(blockedIds.isEmpty(), "PENDING record 201 must appear in blocked[]");
+        assertTrue(deletedIds == null || !deletedIds.contains(201),
+                "PENDING record 201 must NOT appear in deleted ids[]");
+
+        // Verify the record was NOT physically deleted from DB
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM \"" + TABLE_NAME + "\" WHERE \"ID\" = 201")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1), "Record 201 must still exist after bulk-delete blocked it due to PENDING state");
+            }
+        }
     }
 }

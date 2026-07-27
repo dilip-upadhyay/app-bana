@@ -405,11 +405,23 @@ public class ApprovalService {
     }
 
     private static void logAuditEntry(Connection conn, String tenantId, String appId, String entityName, String rowId, int revision, String fromState, String toState, String actorUserId, String actorRole, String reason, String diff) throws Exception {
-        // M6 FIX — Cap diff payload to prevent unbounded JSONB inserts on wide records.
+        // H10 FIX — Truncation must produce valid JSON so audit UIs can JSON.parse without throwing.
+        // The previous approach sliced mid-string and appended [TRUNCATED]" producing unbalanced JSON.
         final int MAX_DIFF_LEN = 65536;
         if (diff != null && diff.length() > MAX_DIFF_LEN) {
-            diff = diff.substring(0, MAX_DIFF_LEN - 13) + "[TRUNCATED]\"";
-            LOG.warn("[ApprovalService] diff snapshot truncated to {} chars for entity={} rowId={}", MAX_DIFF_LEN, entityName, rowId);
+            int originalLen = diff.length();
+            // Reserve ~120 chars for the sentinel wrapper so the total stays under MAX_DIFF_LEN.
+            int prefixLen = MAX_DIFF_LEN - 120;
+            try {
+                diff = MAPPER.writeValueAsString(Map.of(
+                        "truncated", true,
+                        "originalLen", originalLen,
+                        "prefix", diff.substring(0, Math.min(diff.length(), prefixLen))
+                ));
+            } catch (Exception e) {
+                diff = "{\"truncated\":true,\"originalLen\":" + originalLen + "}";
+            }
+            LOG.warn("[ApprovalService] diff snapshot truncated: originalLen={} for entity={} rowId={}", originalLen, entityName, rowId);
         }
 
         String sql = "INSERT INTO appbana_approvals (id, tenant_id, app_id, entity_name, row_id, revision, from_state, to_state, actor_user_id, actor_role, reason, diff, created_at) " +
