@@ -21,6 +21,8 @@ import { UserMenu } from './UserMenu';
 import { DetailPage } from './DetailPage';
 import { ConfirmDialogHost } from './ConfirmDialog';
 import { applyBrandRamp } from './applyBrandRamp';
+import { CurrentUserProvider, useCurrentUser } from './useCurrentUser';
+import { CheckerQueuePage } from './CheckerQueuePage';
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
@@ -56,6 +58,11 @@ export function AppRuntimeShell() {
   const [selectedRecord, setSelectedRecord] = useState<
     { page: PageMeta; recordId: string } | null
   >(null);
+  // C3.3 — the checker queue is a shell-level view rather than a PageMeta: it
+  // has no page metadata behind it and its visibility depends on the caller's
+  // roles, not on the app definition. Modelled as a second overlay layer,
+  // mirroring how `selectedRecord` already overrides the current page.
+  const [queueEntity, setQueueEntity] = useState<string | null>(null);
   // Stage 2 contract fields — full Stage 6 wiring lands with select-and-instruct.
   // Stored in refs (not state) because the current render doesn't consume them yet;
   // Stage 6 will migrate these to state and drive the inspection overlay.
@@ -217,6 +224,7 @@ export function AppRuntimeShell() {
   }
 
   return (
+    <CurrentUserProvider token={token} tenantId={ctx?.tenantId} appId={ctx?.appId}>
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* WCAG 2.4.1 — Skip to main content. Hidden until focused. */}
       <a href="#appbana-main" className="appbana-skip-link">Skip to main content</a>
@@ -250,10 +258,12 @@ export function AppRuntimeShell() {
             The visual collapse is CSS-driven — see .appbana-sidebar-container
             @media (max-width: 767.98px) in globals.css. */}
         <aside className="hidden sm:block appbana-sidebar-container">
-          <RuntimeSidebar
+          <ApprovalAwareSidebar
             pages={(app.pages ?? []) as PageMeta[]}
-            currentPageId={currentPage?.id ?? null}
-            onSelect={setCurrentPage}
+            currentPageId={queueEntity ? null : (currentPage?.id ?? null)}
+            onSelect={(p) => { setQueueEntity(null); setCurrentPage(p); }}
+            currentQueueEntity={queueEntity}
+            onSelectQueue={(entity) => { setSelectedRecord(null); setQueueEntity(entity); }}
           />
         </aside>
 
@@ -270,23 +280,32 @@ export function AppRuntimeShell() {
           className={`appbana-drawer sm:hidden ${mobileNavOpen ? 'appbana-drawer-open' : ''}`}
           aria-hidden={!mobileNavOpen}
         >
-          <RuntimeSidebar
+          <ApprovalAwareSidebar
             pages={(app.pages ?? []) as PageMeta[]}
-            currentPageId={currentPage?.id ?? null}
-            onSelect={setCurrentPage}
+            currentPageId={queueEntity ? null : (currentPage?.id ?? null)}
+            onSelect={(p) => { setQueueEntity(null); setCurrentPage(p); }}
             onClose={() => setMobileNavOpen(false)}
+            currentQueueEntity={queueEntity}
+            onSelectQueue={(entity) => { setSelectedRecord(null); setQueueEntity(entity); }}
           />
         </aside>
 
         {/* Main content — scrollable */}
         <main id="appbana-main" tabIndex={-1} className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-            {currentPage ? (
+            {queueEntity ? (
+              <CheckerQueuePage
+                tenantId={ctx?.tenantId ?? 'default'}
+                appId={ctx?.appId ?? ''}
+                entityName={queueEntity}
+              />
+            ) : currentPage ? (
               <RuntimeNavigationProvider
                 pages={(app.pages ?? []) as PageMeta[]}
-                navigateToPage={(p) => { setSelectedRecord(null); setCurrentPage(p); }}
+                navigateToPage={(p) => { setSelectedRecord(null); setQueueEntity(null); setCurrentPage(p); }}
                 navigateToRecord={(page, recordId) => {
                   // Route: switch to the detail page and stash the record id.
+                  setQueueEntity(null);
                   setCurrentPage(page);
                   setSelectedRecord({ page, recordId });
                 }}
@@ -311,5 +330,24 @@ export function AppRuntimeShell() {
       <Toaster />
       <ConfirmDialogHost />
     </div>
+    </CurrentUserProvider>
   );
+}
+
+/**
+ * Thin wrapper so the sidebar can read the caller's workflow roles without the
+ * shell itself subscribing — the shell renders above the provider.
+ */
+function ApprovalAwareSidebar(
+  props: Readonly<{
+    pages: PageMeta[];
+    currentPageId: string | null;
+    onSelect: (page: PageMeta) => void;
+    onClose?: () => void;
+    currentQueueEntity: string | null;
+    onSelectQueue: (entityName: string) => void;
+  }>
+) {
+  const { checkerEntities } = useCurrentUser();
+  return <RuntimeSidebar {...props} checkerEntities={checkerEntities} />;
 }
