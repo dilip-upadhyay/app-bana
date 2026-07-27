@@ -8,6 +8,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -154,5 +156,59 @@ public class UserRoleService {
         for (String entityName : entityNames) {
             grantRole(tenantId, appId, entityName, creatorUserId, Role.BOTH, "system");
         }
+    }
+
+    /**
+     * Task C3.3 — every entity role a user holds within one app, keyed by entity name.
+     *
+     * The runtime needs this to decide which entities get a checker queue. Doing
+     * it per-entity would mean one round trip per entity on every page load, so
+     * this is a single query and BOTH is expanded the same way
+     * {@link #getUserRoles} expands it, keeping the two consistent.
+     *
+     * @return entityName -&gt; roles held. Entities with no grant are absent.
+     */
+    public static Map<String, Set<Role>> getUserRolesForApp(String tenantId, String appId, String userId) {
+        Objects.requireNonNull(tenantId, "tenantId required");
+        Objects.requireNonNull(appId, "appId required");
+        Objects.requireNonNull(userId, "userId required");
+
+        Map<String, Set<Role>> byEntity = new LinkedHashMap<>();
+        String sql = "SELECT entity_name, role FROM appbana_user_roles "
+                + "WHERE tenant_id = ? AND app_id = ? AND user_id = ? ORDER BY entity_name";
+
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, tenantId);
+            ps.setString(2, appId);
+            ps.setString(3, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String entityName = rs.getString(1);
+                    Role r;
+                    try {
+                        r = Role.fromValue(rs.getString(2));
+                    } catch (IllegalArgumentException e) {
+                        // A role value we don't understand must not sink the whole
+                        // lookup — skip it and keep the rest of the user's roles.
+                        log.warn("[UserRoleService] Ignoring unknown role '{}' on entity '{}'", rs.getString(2), entityName);
+                        continue;
+                    }
+                    Set<Role> roles = byEntity.computeIfAbsent(entityName, k -> new HashSet<>());
+                    if (r == Role.BOTH) {
+                        roles.add(Role.MAKER);
+                        roles.add(Role.CHECKER);
+                        roles.add(Role.BOTH);
+                    } else if (r != null) {
+                        roles.add(r);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            log.error("[UserRoleService] Failed to query app roles for user '{}': {}", userId, e.getMessage(), e);
+            throw new RuntimeException("Failed to query user roles for app", e);
+        }
+
+        return byEntity;
     }
 }

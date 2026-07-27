@@ -133,6 +133,15 @@ public class SessionMiddleware {
             return false;
         }
 
+        // C3.3: /api/users/me reports the caller's own identity and roles, so it
+        // is meaningless without a validated session. It would otherwise be
+        // swallowed by ENTITY_API_PATTERN below (as entity="users", id="me"),
+        // which would skip session validation and leave `userId` unset — the
+        // handler would then 401 every caller regardless of their token.
+        if (path.equals("/api/users/me") || path.startsWith("/api/users/me/")) {
+            return false;
+        }
+
         // Check if it matches the entity API pattern (/api/{tenantId}/{entityName})
         if (path.matches(ENTITY_API_PATTERN)) {
             LOG.info("[SessionMiddleware] Matched entity API pattern for: {}", path);

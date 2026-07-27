@@ -492,6 +492,53 @@ export async function fetchApprovalAudit(
   return res.json();
 }
 
+/** What the caller may do with one entity in the maker-checker workflow. */
+export interface EntityRoleGrant {
+  readonly roles: string[];
+  readonly isMaker: boolean;
+  readonly isChecker: boolean;
+}
+
+/**
+ * Identity plus per-entity workflow roles for the signed-in user.
+ * `entityRoles` is keyed by bare entity name and only populated when an
+ * `appId` was supplied — roles are scoped to a single app.
+ */
+export interface CurrentUser {
+  readonly userId: string;
+  readonly email?: string;
+  readonly name?: string;
+  readonly tenantId: string;
+  readonly appId?: string;
+  readonly isAppOwner?: boolean;
+  readonly entityRoles: Record<string, EntityRoleGrant>;
+}
+
+/**
+ * Task C3.3 — "who am I, and what may I do here?" in one call.
+ *
+ * Pass the app scope to get `entityRoles`; without it you get identity only.
+ * The per-entity alternative (`/api/tenants/../roles`) costs a round trip per
+ * entity on every page load and pushes the BOTH-expands-to-maker+checker rule
+ * into the client.
+ */
+export async function fetchCurrentUser(
+  token: string,
+  scope?: { tenantId?: string; appId?: string }
+): Promise<CurrentUser> {
+  const qs = new URLSearchParams();
+  if (scope?.tenantId) qs.set('tenantId', scope.tenantId);
+  if (scope?.appId) qs.set('appId', scope.appId);
+  const suffix = qs.toString() ? `?${qs}` : '';
+
+  const res = await authedFetch(`${BACKEND}/api/users/me${suffix}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) await throwEntityError(res, 'Fetch current user failed');
+  const raw = (await res.json()) as CurrentUser;
+  return { ...raw, entityRoles: raw.entityRoles ?? {} };
+}
+
 // â”€â”€ Chat sessions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface ChatSession {
