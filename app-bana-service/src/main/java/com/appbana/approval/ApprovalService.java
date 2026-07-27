@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.*;
 
 /**
@@ -255,9 +256,13 @@ public class ApprovalService {
                 // revision row. Same transaction => the replacement is atomic.
                 String supersededParentId = null;
                 if (parentRowId != null && !parentRowId.isBlank()) {
-                    mergeRevisionIntoParent(conn, tenantId, appId, entityName, tableName,
+                    boolean merged = mergeRevisionIntoParent(conn, tenantId, appId, entityName, tableName,
                             rowId, parentRowId, currentRevision, checkerUserId, submittedBy, comments);
-                    supersededParentId = parentRowId;
+                    // When the parent had already been deleted the revision itself stays live, so the
+                    // caller must be told about `rowId`, not about the parent id that no longer resolves.
+                    if (merged) {
+                        supersededParentId = parentRowId;
+                    }
                 }
 
                 conn.commit();
@@ -457,10 +462,10 @@ public class ApprovalService {
      * <p>The parent id is deliberately preserved so foreign keys created by Phase B.H4 keep
      * pointing at a live row. That is why no {@code superseded_by} column is needed.
      */
-    private static void mergeRevisionIntoParent(Connection conn, String tenantId, String appId, String entityName,
-                                                String tableName, String revisionRowId, String parentRowId,
-                                                int revision, String checkerUserId, String submittedBy,
-                                                String comments) throws Exception {
+    private static boolean mergeRevisionIntoParent(Connection conn, String tenantId, String appId, String entityName,
+                                                   String tableName, String revisionRowId, String parentRowId,
+                                                   int revision, String checkerUserId, String submittedBy,
+                                                   String comments) throws Exception {
 
         Map<String, Object> parentBefore = new LinkedHashMap<>();
         List<String> allColumns = new ArrayList<>();
@@ -475,7 +480,7 @@ public class ApprovalService {
                     LOG.warn("[ApprovalService] Revision {} points at missing parent {} in {} — keeping revision as live row",
                             revisionRowId, parentRowId, tableName);
                     clearRevisionPointer(conn, tableName, revisionRowId);
-                    return;
+                    return false;
                 }
                 int cols = rs.getMetaData().getColumnCount();
                 for (int i = 1; i <= cols; i++) {
@@ -561,20 +566,24 @@ public class ApprovalService {
 
         LOG.info("[ApprovalService] Revision {} merged into live parent {} in {} (revision {})",
                 revisionRowId, parentRowId, tableName, revision);
+        return true;
     }
 
     /**
      * Fallback when a revision's parent no longer exists: null out the dangling pointer so
      * the revision becomes an ordinary live row instead of an orphan.
+     *
+     * <p>Failures are propagated on purpose. This runs inside the caller's open transaction, and
+     * in PostgreSQL a failed statement aborts the whole transaction — swallowing the error here
+     * would let {@code approveRecord} reach {@code commit()} (silently downgraded to a rollback)
+     * and report a success that never persisted.
      */
-    private static void clearRevisionPointer(Connection conn, String tableName, String revisionRowId) {
+    private static void clearRevisionPointer(Connection conn, String tableName, String revisionRowId)
+            throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(
                 "UPDATE \"" + tableName + "\" SET \"APPROVAL_PARENT_ID\" = NULL WHERE \"ID\" = ?")) {
             ps.setObject(1, parseRowId(revisionRowId));
             ps.executeUpdate();
-        } catch (Exception e) {
-            LOG.warn("[ApprovalService] Failed to clear dangling approval_parent_id on row {}: {}",
-                    revisionRowId, e.getMessage());
         }
     }
 
@@ -609,6 +618,13 @@ public class ApprovalService {
         // The previous approach sliced mid-string and appended [TRUNCATED]" producing unbalanced JSON.
         final int MAX_DIFF_LEN = 65536;
         if (diff != null && diff.length() > MAX_DIFF_LEN) {
+            // C2.3 — for a revision merge, `before` is the ONLY surviving copy of the previous
+            // approved row (the parent is overwritten in place and the revision row is deleted),
+            // whereas `after` is always reconstructible by reading the now-live parent. So shed
+            // `after` before resorting to a blind prefix truncation that would destroy `before`.
+            diff = dropAfterSnapshot(diff, MAX_DIFF_LEN, entityName, rowId);
+        }
+        if (diff != null && diff.length() > MAX_DIFF_LEN) {
             int originalLen = diff.length();
             // Reserve ~120 chars for the sentinel wrapper so the total stays under MAX_DIFF_LEN.
             int prefixLen = MAX_DIFF_LEN - 120;
@@ -641,6 +657,36 @@ public class ApprovalService {
             ps.setString(11, reason);
             ps.setString(12, diff);
             ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Oversized-diff first resort: drop the {@code after} snapshot, which can always be recovered
+     * by reading the live row, so that the irreplaceable {@code before} snapshot survives.
+     * Returns the input unchanged if it is not a JSON object or has no {@code after} key.
+     */
+    @SuppressWarnings("unchecked")
+    private static String dropAfterSnapshot(String diff, int maxLen, String entityName, String rowId) {
+        try {
+            Object parsed = MAPPER.readValue(diff, Object.class);
+            if (!(parsed instanceof Map)) {
+                return diff;
+            }
+            Map<String, Object> map = new LinkedHashMap<>((Map<String, Object>) parsed);
+            if (!map.containsKey("after")) {
+                return diff;
+            }
+            map.remove("after");
+            map.put("afterOmitted", true);
+            String shrunk = MAPPER.writeValueAsString(map);
+            if (shrunk.length() <= maxLen) {
+                LOG.warn("[ApprovalService] diff too large — dropped 'after' snapshot to preserve 'before' "
+                        + "for entity={} rowId={} (after is recoverable from the live row)", entityName, rowId);
+                return shrunk;
+            }
+            return shrunk;
+        } catch (Exception e) {
+            return diff;
         }
     }
 

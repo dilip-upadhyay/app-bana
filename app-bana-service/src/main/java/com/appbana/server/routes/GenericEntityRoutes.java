@@ -1927,63 +1927,68 @@ public class GenericEntityRoutes {
             return ApprovalPutResult.PROCEED;
         }
 
-        Map<String, Object> openRevision = crud.findOpenRevision(schema, idStr);
-        if (openRevision != null
-                && "PENDING".equalsIgnoreCase(approvalString(openRevision, "approval_status", "DRAFT"))) {
-            return new ApprovalPutResult(ApprovalPutAction.CONFLICT, Map.of(
-                    "error", "A revision of this record is already awaiting approval",
-                    "revisionId", String.valueOf(rowValue(openRevision, primaryKeyName(schema)))));
-        }
-
-        int nextRevision = rev + 1;
-        Map<String, Object> revisionData = new LinkedHashMap<>();
-        String pkName = primaryKeyName(schema);
-        for (EntitySchema.Field f : schema.getFields()) {
-            String name = f.getName();
-            if (f.isPrimaryKey() || APPROVAL_FIELD_NAMES.contains(name.toLowerCase(Locale.ROOT))) {
-                continue;
+        // Serialise concurrent revision creation for this parent. Without it two simultaneous PUTs
+        // both see "no open revision" and each insert one, breaking the one-open-revision-per-parent
+        // invariant and making the 409 below defeatable by an ordinary double-submit.
+        try (EntityCrudService.RowLock lock = crud.lockRow(schema, idStr)) {
+            Map<String, Object> openRevision = crud.findOpenRevision(schema, idStr);
+            if (openRevision != null
+                    && "PENDING".equalsIgnoreCase(approvalString(openRevision, "approval_status", "DRAFT"))) {
+                return new ApprovalPutResult(ApprovalPutAction.CONFLICT, Map.of(
+                        "error", "A revision of this record is already awaiting approval",
+                        "revisionId", String.valueOf(rowValue(openRevision, primaryKeyName(schema)))));
             }
-            revisionData.put(name, rowValue(existing, name));
-        }
-        // The caller's edits win over the carried-over live values.
-        for (Map.Entry<String, Object> e : data.entrySet()) {
-            if (pkName != null && pkName.equalsIgnoreCase(e.getKey())) {
-                continue;
+
+            int nextRevision = rev + 1;
+            Map<String, Object> revisionData = new LinkedHashMap<>();
+            String pkName = primaryKeyName(schema);
+            for (EntitySchema.Field f : schema.getFields()) {
+                String name = f.getName();
+                if (f.isPrimaryKey() || APPROVAL_FIELD_NAMES.contains(name.toLowerCase(Locale.ROOT))) {
+                    continue;
+                }
+                revisionData.put(name, rowValue(existing, name));
             }
-            revisionData.put(e.getKey(), e.getValue());
+            // The caller's edits win over the carried-over live values.
+            for (Map.Entry<String, Object> e : data.entrySet()) {
+                if (pkName != null && pkName.equalsIgnoreCase(e.getKey())) {
+                    continue;
+                }
+                revisionData.put(e.getKey(), e.getValue());
+            }
+
+            revisionData.put("approval_status", "DRAFT");
+            revisionData.put("approval_revision", nextRevision);
+            revisionData.put("approval_parent_id", idStr);
+            revisionData.put("rejection_reason", null);
+            revisionData.put("submitted_at", null);
+            revisionData.put("approved_by", null);
+            revisionData.put("approved_at", null);
+            if (callerUserId != null && !callerUserId.isBlank()) {
+                revisionData.put("submitted_by", callerUserId);
+            }
+
+            String revisionId;
+            if (openRevision != null) {
+                revisionId = String.valueOf(rowValue(openRevision, pkName));
+                crud.updateById(schema, revisionId, revisionData);
+            } else {
+                Object generated = crud.insertRecord(schema, revisionData);
+                revisionId = generated != null ? String.valueOf(generated) : null;
+            }
+
+            LOG.info("[APPROVAL] PUT on APPROVED row {} of {} produced DRAFT revision {} (revision {})",
+                    idStr, schema.getName(), revisionId, nextRevision);
+
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("updated", 0);
+            body.put("revision", true);
+            body.put("revisionId", revisionId);
+            body.put("parentId", idStr);
+            body.put("approvalStatus", "DRAFT");
+            body.put("approvalRevision", nextRevision);
+            return new ApprovalPutResult(ApprovalPutAction.REVISION, body);
         }
-
-        revisionData.put("approval_status", "DRAFT");
-        revisionData.put("approval_revision", nextRevision);
-        revisionData.put("approval_parent_id", idStr);
-        revisionData.put("rejection_reason", null);
-        revisionData.put("submitted_at", null);
-        revisionData.put("approved_by", null);
-        revisionData.put("approved_at", null);
-        if (callerUserId != null && !callerUserId.isBlank()) {
-            revisionData.put("submitted_by", callerUserId);
-        }
-
-        String revisionId;
-        if (openRevision != null) {
-            revisionId = String.valueOf(rowValue(openRevision, pkName));
-            crud.updateById(schema, revisionId, revisionData);
-        } else {
-            Object generated = crud.insertRecord(schema, revisionData);
-            revisionId = generated != null ? String.valueOf(generated) : null;
-        }
-
-        LOG.info("[APPROVAL] PUT on APPROVED row {} of {} produced DRAFT revision {} (revision {})",
-                idStr, schema.getName(), revisionId, nextRevision);
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("updated", 0);
-        body.put("revision", true);
-        body.put("revisionId", revisionId);
-        body.put("parentId", idStr);
-        body.put("approvalStatus", "DRAFT");
-        body.put("approvalRevision", nextRevision);
-        return new ApprovalPutResult(ApprovalPutAction.REVISION, body);
     }
 
     private static String primaryKeyName(EntitySchema schema) {

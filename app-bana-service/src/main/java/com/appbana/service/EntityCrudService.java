@@ -362,7 +362,7 @@ public class EntityCrudService {
         String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema))
                 + " WHERE " + quote("approval_parent_id") + " = ?"
                 + " AND UPPER(" + quote("approval_status") + ") IN ('DRAFT','PENDING','REJECTED')"
-                + " ORDER BY " + quote("approval_revision") + " DESC";
+                + " ORDER BY " + quote("approval_revision") + " DESC, " + quote(pk.getName()) + " DESC";
 
         try (Connection c = schemaConnection(schema);
                 PreparedStatement ps = c.prepareStatement(sql)) {
@@ -370,6 +370,79 @@ public class EntityCrudService {
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
                 return list.isEmpty() ? null : list.getFirst();
+            }
+        }
+    }
+
+    /**
+     * C2.3 — takes a {@code SELECT ... FOR UPDATE} lock on one row and holds it until closed.
+     *
+     * <p>Used to serialise revision creation for a given parent. {@code findOpenRevision} and the
+     * subsequent insert/update run on their own pooled connections, but because a competing request
+     * blocks on this same parent row before it can read, the find-then-write sequence is still
+     * mutually exclusive: the loser only proceeds after the winner has committed and released.
+     *
+     * <p>Returns {@code null} when the schema has no primary key. Never commits — the lock exists
+     * purely as a mutex, so {@link RowLock#close()} rolls back.
+     */
+    public RowLock lockRow(EntitySchema schema, String rowId) throws SQLException {
+        EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
+                .orElse(null);
+        if (pk == null || rowId == null || rowId.isBlank()) {
+            return null;
+        }
+        String sql = "SELECT " + quote(pk.getName()) + " FROM " + quote(SchemaManager.getPhysicalTableName(schema))
+                + " WHERE " + quote(pk.getName()) + " = ? FOR UPDATE";
+        Connection c = schemaConnection(schema);
+        try {
+            c.setAutoCommit(false);
+            try (PreparedStatement ps = c.prepareStatement(sql)) {
+                ps.setObject(1, parseId(rowId, pk));
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                }
+            }
+            return new RowLock(c);
+        } catch (SQLException e) {
+            try {
+                c.rollback();
+            } catch (SQLException ignored) {
+                // best effort — the connection is being discarded anyway
+            }
+            try {
+                c.setAutoCommit(true);
+            } catch (SQLException ignored) {
+                // best effort
+            }
+            c.close();
+            throw e;
+        }
+    }
+
+    /** Handle for the row lock taken by {@link #lockRow}. Closing releases it. */
+    public static final class RowLock implements AutoCloseable {
+        private final Connection conn;
+
+        private RowLock(Connection conn) {
+            this.conn = conn;
+        }
+
+        @Override
+        public void close() {
+            try {
+                conn.rollback();
+            } catch (SQLException e) {
+                LOG.warn("[REVISION_LOCK] rollback on release failed: {}", e.getMessage());
+            }
+            try {
+                conn.setAutoCommit(true);
+            } catch (SQLException e) {
+                LOG.warn("[REVISION_LOCK] autocommit restore failed: {}", e.getMessage());
+            }
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                LOG.warn("[REVISION_LOCK] close failed: {}", e.getMessage());
             }
         }
     }

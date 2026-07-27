@@ -86,6 +86,7 @@ public class RevisionFlowTest {
                 new EntitySchema.Field("id", "integer", true, true, null),
                 new EntitySchema.Field("vendor", "string", false, false, null),
                 new EntitySchema.Field("amount", "decimal", false, false, null),
+                new EntitySchema.Field("notes", "text", false, false, null),
                 new EntitySchema.Field("approval_status", "status", false, false, null),
                 new EntitySchema.Field("approval_revision", "integer", false, false, null),
                 new EntitySchema.Field("approval_parent_id", "text", false, false, null),
@@ -470,5 +471,134 @@ public class RevisionFlowTest {
         assertEquals(1, rows.size());
         assertEquals("Acme", rows.get(0).get("vendor"));
         assertEquals(1L, ((Number) out.get("total")).longValue());
+    }
+
+    // ------------------------------------------ post-review hardening (round 2)
+
+    /**
+     * If the parent is deleted while a revision is pending, the revision stays live. The
+     * response must then point at the revision id — pointing at the deleted parent id would
+     * send clients to a row that no longer exists and make the approved edit look lost.
+     */
+    @Test
+    public void approvingRevisionWhoseParentVanishedReportsTheRevisionIdAsLive() throws Exception {
+        String liveId = seedApprovedRow("Acme", 100.0);
+
+        GenericEntityRoutes.ApprovalPutResult created = GenericEntityRoutes.applyApprovalPutGuard(
+                crud, schema, liveId, body("amount", 250.0), MAKER);
+        String revisionId = String.valueOf(created.body().get("revisionId"));
+
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, revisionId, MAKER, "please review");
+
+        // Parent is deleted out from under the pending revision.
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "DELETE FROM \"" + TABLE_NAME + "\" WHERE \"ID\" = ?")) {
+            ps.setLong(1, Long.parseLong(liveId));
+            assertEquals(1, ps.executeUpdate());
+        }
+
+        Map<String, Object> result = ApprovalService.approveRecord(
+                TENANT_ID, APP_ID, ENTITY_NAME, revisionId, CHECKER, "ok");
+
+        assertEquals(revisionId, String.valueOf(result.get("rowId")),
+                "no merge happened, so the caller must be pointed at the surviving revision row");
+        assertNull(result.get("mergedFromRevisionRowId"),
+                "nothing was merged — the merge fields must not be reported");
+
+        Map<String, Object> survivor = crud.getById(schema, revisionId);
+        assertNotNull(survivor, "the revision must survive as the live row");
+        assertEquals("APPROVED", str(survivor, "approval_status"));
+        assertEquals(250.0, dbl(survivor, "amount"), 0.0001);
+        assertNull(str(survivor, "approval_parent_id"), "dangling parent pointer must be cleared");
+        assertEquals(1, rowCount());
+    }
+
+    /**
+     * The merge overwrites the parent and deletes the revision, so {@code diff.before} in the
+     * audit table is the only surviving copy of the previous approved version. It must not be
+     * lost to the oversized-diff truncation — {@code after} is dropped first because it can
+     * always be recovered by reading the live row.
+     */
+    @Test
+    public void oversizedMergeDiffPreservesTheBeforeSnapshot() throws Exception {
+        String bulky = "x".repeat(40_000);
+
+        String liveId = seedApprovedRow("Acme", 100.0);
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "UPDATE \"" + TABLE_NAME + "\" SET \"NOTES\" = ? WHERE \"ID\" = ?")) {
+            ps.setString(1, bulky);
+            ps.setLong(2, Long.parseLong(liveId));
+            assertEquals(1, ps.executeUpdate());
+        }
+
+        GenericEntityRoutes.ApprovalPutResult created = GenericEntityRoutes.applyApprovalPutGuard(
+                crud, schema, liveId, body("notes", "y".repeat(40_000)), MAKER);
+        String revisionId = String.valueOf(created.body().get("revisionId"));
+
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, revisionId, MAKER, "big");
+        ApprovalService.approveRecord(TENANT_ID, APP_ID, ENTITY_NAME, revisionId, CHECKER, "ok");
+
+        String mergeDiff = null;
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT diff FROM appbana_approvals WHERE row_id = ? ORDER BY created_at DESC")) {
+            ps.setString(1, liveId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String d = rs.getString(1);
+                    if (d != null && d.contains("mergedFromRevisionRowId")) {
+                        mergeDiff = d;
+                        break;
+                    }
+                }
+            }
+        }
+
+        assertNotNull(mergeDiff, "merge audit entry must exist");
+        assertFalse(mergeDiff.startsWith("{\"truncated\":true"),
+                "the whole diff must not be blindly prefix-truncated");
+        assertTrue(mergeDiff.contains("\"before\""), "the pre-merge snapshot must survive");
+        assertTrue(mergeDiff.contains(bulky), "the previous approved value must be recoverable verbatim");
+        assertTrue(mergeDiff.contains("\"afterOmitted\":true"),
+                "'after' is shed first because it is recoverable from the live row");
+    }
+
+    /**
+     * Two simultaneous PUTs on the same APPROVED parent must not each insert a revision.
+     * Without the parent row lock both observe "no open revision" and the
+     * one-open-revision-per-parent invariant (and the 409 that depends on it) breaks.
+     */
+    @Test
+    public void concurrentPutsOnTheSameParentProduceOnlyOneRevision() throws Exception {
+        String liveId = seedApprovedRow("Acme", 100.0);
+
+        int threads = 8;
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        List<java.util.concurrent.Future<GenericEntityRoutes.ApprovalPutResult>> futures = new java.util.ArrayList<>();
+
+        try (java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threads)) {
+            for (int i = 0; i < threads; i++) {
+                final double amount = 200.0 + i;
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return GenericEntityRoutes.applyApprovalPutGuard(
+                            crud, schema, liveId, body("amount", amount), MAKER);
+                }));
+            }
+            start.countDown();
+            for (java.util.concurrent.Future<GenericEntityRoutes.ApprovalPutResult> f : futures) {
+                assertEquals(GenericEntityRoutes.ApprovalPutAction.REVISION, f.get().action());
+            }
+        }
+
+        assertEquals(2, rowCount(), "the parent plus exactly one revision row");
+
+        java.util.Set<String> revisionIds = new java.util.HashSet<>();
+        for (java.util.concurrent.Future<GenericEntityRoutes.ApprovalPutResult> f : futures) {
+            revisionIds.add(String.valueOf(f.get().body().get("revisionId")));
+        }
+        assertEquals(1, revisionIds.size(), "every writer must converge on the same revision row");
     }
 }
