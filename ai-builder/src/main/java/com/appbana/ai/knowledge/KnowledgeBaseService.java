@@ -486,15 +486,16 @@ public class KnowledgeBaseService {
             schema.setName((String) metadata.get("schemaName"));
             schema.setDescription((String) metadata.get("description"));
 
-            // Parse schema type safely — Qdrant returns String, not enum; cast would throw
+            // Parse schema type safely — Qdrant returns the wire value ("field-type"), which is
+            // NOT the enum constant name (ENTITY_FIELD), so valueOf() would throw and silently
+            // leave the type null on every field-type hit.
             String typeStr = (String) metadata.get("schemaType");
-            if (typeStr != null) {
-                try {
-                    schema.setType(SchemaType.valueOf(typeStr.toUpperCase().replace("-", "_")));
-                } catch (IllegalArgumentException e) {
-                    // Custom type like "domain-template" — not an enum value, skip
-                    log.debug("Non-enum schema type '{}', skipping setType", typeStr);
-                }
+            SchemaType parsedType = SchemaType.fromValue(typeStr);
+            if (parsedType != null) {
+                schema.setType(parsedType);
+            } else if (typeStr != null) {
+                // Custom type like "domain-template" — not an enum value, keep the raw string.
+                schema.setRawType(typeStr);
             }
 
             // Parse examples

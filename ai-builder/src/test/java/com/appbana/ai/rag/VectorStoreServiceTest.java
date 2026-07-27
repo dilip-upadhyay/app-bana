@@ -38,7 +38,9 @@ class VectorStoreServiceTest {
         // Create configuration
         config = new AiConfig();
         config.setQdrantHost(qdrantContainer.getHost());
-        config.setQdrantPort(qdrantContainer.getMappedPort(6333));
+        // 6334 is the gRPC port. QdrantService speaks gRPC, so mapping 6333 (the HTTP/REST
+        // port) makes every call fail with "INTERNAL: http2 exception".
+        config.setQdrantPort(qdrantContainer.getMappedPort(6334));
         config.setQdrantApiKey(null);
 
         // Initialize services
@@ -203,16 +205,17 @@ class VectorStoreServiceTest {
 
     @Test
     @Order(7)
-    @DisplayName("Should validate required metadata fields")
+    @DisplayName("Should accept metadata without conversation-specific fields")
     void testValidateMetadata() {
-        // Given
+        // userId/timestamp were deliberately relaxed to warn-only in VectorStoreService
+        // because knowledge/schema vectors legitimately carry neither. This test previously
+        // asserted the old strict behaviour and only went unnoticed because the whole class
+        // was being skipped by a broken setUpAll.
         float[] vector = createRandomVector();
-        Map<String, Object> invalidMetadata = Map.of("text", "Missing userId and timestamp");
+        Map<String, Object> sparseMetadata = Map.of("text", "No userId and no timestamp");
 
-        // When/Then
-        assertThrows(IllegalArgumentException.class, () -> {
-            vectorStoreService.store("conversations", UUID.randomUUID().toString(), vector, invalidMetadata);
-        });
+        assertDoesNotThrow(() ->
+                vectorStoreService.store("conversations", UUID.randomUUID().toString(), vector, sparseMetadata));
     }
 
     @Test
@@ -237,8 +240,19 @@ class VectorStoreServiceTest {
     @Order(9)
     @DisplayName("Should handle search with no results")
     void testSearchNoResults() throws Exception {
-        // Given - create a new collection with no data
+        // Given - an empty collection. It has to actually be created; searching a
+        // non-existent collection raises NOT_FOUND, which is a different scenario.
         String emptyCollection = "empty_test";
+        qdrantService.getClient().createCollectionAsync(
+                io.qdrant.client.grpc.Collections.CreateCollection.newBuilder()
+                        .setCollectionName(emptyCollection)
+                        .setVectorsConfig(io.qdrant.client.grpc.Collections.VectorsConfig.newBuilder()
+                                .setParams(io.qdrant.client.grpc.Collections.VectorParams.newBuilder()
+                                        .setSize(1536)
+                                        .setDistance(io.qdrant.client.grpc.Collections.Distance.Cosine)
+                                        .build())
+                                .build())
+                        .build()).get();
 
         // When
         List<SearchResult> results = vectorStoreService.search(emptyCollection, createRandomVector(), 5, null);

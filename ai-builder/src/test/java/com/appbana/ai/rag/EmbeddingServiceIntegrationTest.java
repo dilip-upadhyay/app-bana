@@ -28,12 +28,11 @@ class EmbeddingServiceIntegrationTest {
 
     @BeforeAll
     static void setUpAll() {
-        // Check if API key is available
+        // These tests make real, billable OpenAI calls. Skip rather than fail when no key is
+        // configured, so an unkeyed dev/CI machine still gets a green build.
         String apiKey = System.getenv("OPENAI_API_KEY");
-        if (apiKey == null || apiKey.isEmpty()) {
-            throw new IllegalStateException(
-                    "OPENAI_API_KEY environment variable is required for integration tests");
-        }
+        org.junit.jupiter.api.Assumptions.assumeTrue(apiKey != null && !apiKey.isEmpty(),
+                "OPENAI_API_KEY not set — skipping OpenAI integration tests");
 
         // Create configuration
         config = new AiConfig();

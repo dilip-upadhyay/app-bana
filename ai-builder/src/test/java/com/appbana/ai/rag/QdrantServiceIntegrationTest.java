@@ -33,7 +33,9 @@ class QdrantServiceIntegrationTest {
         // Create configuration pointing to test container
         config = new AiConfig();
         config.setQdrantHost(qdrantContainer.getHost());
-        config.setQdrantPort(qdrantContainer.getMappedPort(6333));
+        // 6334 is the gRPC port. QdrantService speaks gRPC, so mapping 6333 (the HTTP/REST
+        // port) makes every call fail with "INTERNAL: http2 exception".
+        config.setQdrantPort(qdrantContainer.getMappedPort(6334));
         config.setQdrantApiKey(null);
 
         // Initialize service
@@ -120,9 +122,21 @@ class QdrantServiceIntegrationTest {
     @Test
     @Order(7)
     @DisplayName("Should delete collection")
-    void testDeleteCollection() {
-        // Given - create a test collection first
+    void testDeleteCollection() throws Exception {
+        // Given - the collection must actually exist, otherwise Qdrant rejects the delete
+        // and this test asserts nothing.
         String testCollection = "test_collection_to_delete";
+        qdrantService.getClient().createCollectionAsync(
+                io.qdrant.client.grpc.Collections.CreateCollection.newBuilder()
+                        .setCollectionName(testCollection)
+                        .setVectorsConfig(io.qdrant.client.grpc.Collections.VectorsConfig.newBuilder()
+                                .setParams(io.qdrant.client.grpc.Collections.VectorParams.newBuilder()
+                                        .setSize(1536)
+                                        .setDistance(io.qdrant.client.grpc.Collections.Distance.Cosine)
+                                        .build())
+                                .build())
+                        .build()).get();
+        assertTrue(qdrantService.collectionExists(testCollection), "precondition: collection created");
 
         // When
         qdrantService.deleteCollection(testCollection);
