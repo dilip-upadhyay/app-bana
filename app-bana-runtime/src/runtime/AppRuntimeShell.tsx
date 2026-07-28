@@ -23,7 +23,7 @@ import { ConfirmDialogHost } from './ConfirmDialog';
 import { applyBrandRamp } from './applyBrandRamp';
 import { CurrentUserProvider, useCurrentUser } from './useCurrentUser';
 import { CheckerQueuePage } from './CheckerQueuePage';
-import { usePendingCounts } from './usePendingCounts';
+import { PendingCountsProvider, usePendingCountsValue } from './PendingCountsProvider';
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
@@ -226,6 +226,7 @@ export function AppRuntimeShell() {
 
   return (
     <CurrentUserProvider token={token} tenantId={ctx?.tenantId} appId={ctx?.appId}>
+    <PendingCountsProvider tenantId={ctx?.tenantId} appId={ctx?.appId}>
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* WCAG 2.4.1 — Skip to main content. Hidden until focused. */}
       <a href="#appbana-main" className="appbana-skip-link">Skip to main content</a>
@@ -265,8 +266,6 @@ export function AppRuntimeShell() {
             onSelect={(p) => { setQueueEntity(null); setCurrentPage(p); }}
             currentQueueEntity={queueEntity}
             onSelectQueue={(entity) => { setSelectedRecord(null); setQueueEntity(entity); }}
-            tenantId={ctx?.tenantId}
-            appId={ctx?.appId}
           />
         </aside>
 
@@ -290,8 +289,6 @@ export function AppRuntimeShell() {
             onClose={() => setMobileNavOpen(false)}
             currentQueueEntity={queueEntity}
             onSelectQueue={(entity) => { setSelectedRecord(null); setQueueEntity(entity); }}
-            tenantId={ctx?.tenantId}
-            appId={ctx?.appId}
           />
         </aside>
 
@@ -335,6 +332,7 @@ export function AppRuntimeShell() {
       <Toaster />
       <ConfirmDialogHost />
     </div>
+    </PendingCountsProvider>
     </CurrentUserProvider>
   );
 }
@@ -342,6 +340,10 @@ export function AppRuntimeShell() {
 /**
  * Thin wrapper so the sidebar can read the caller's workflow roles without the
  * shell itself subscribing — the shell renders above the provider.
+ *
+ * C3.9 — pending counts are *read* here, not polled here. See
+ * PendingCountsProvider: this component is rendered twice (desktop rail and
+ * mobile drawer) and polling inside it doubled every request.
  */
 function ApprovalAwareSidebar(
   props: Readonly<{
@@ -351,16 +353,13 @@ function ApprovalAwareSidebar(
     onClose?: () => void;
     currentQueueEntity: string | null;
     onSelectQueue: (entityName: string) => void;
-    tenantId: string | undefined;
-    appId: string | undefined;
   }>
 ) {
-  const { tenantId, appId, ...sidebarProps } = props;
   const { checkerEntities } = useCurrentUser();
-  const pendingCounts = usePendingCounts(tenantId, appId, checkerEntities);
+  const pendingCounts = usePendingCountsValue();
   return (
     <RuntimeSidebar
-      {...sidebarProps}
+      {...props}
       checkerEntities={checkerEntities}
       pendingCounts={pendingCounts}
     />

@@ -231,6 +231,117 @@ public class ApprovalRoutesSecurityTest {
         assertTrue(doubleSubmit.body().contains("already in PENDING"));
     }
 
+    /**
+     * C3.9 — proves on the wire that a bare field query param is inert and that
+     * {@code filter=} is the door that works.
+     *
+     * <p>This is the defect behind the "Needs rework" view showing every maker's
+     * rejected records. The runtime sent {@code ?submitted_by=alice}; the handler
+     * reads a fixed param allowlist and never looks at it, so the scoping was
+     * dropped in transit and the response came back 200 with an unscoped body.
+     * Nothing failed and nothing logged — the list was simply wider than asked
+     * for. A test that only read the code could not have caught it, so this one
+     * asserts the row counts either side of the difference.
+     */
+    @Test
+    public void testBareFieldParamIsIgnoredButFilterParamScopesTheList() throws Exception {
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (301, 10.0, 'REJECTED', 1, 'alice_maker')");
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (302, 20.0, 'REJECTED', 1, 'someone_else')");
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (303, 30.0, 'REJECTED', 1, 'someone_else')");
+            // A user id that *contains* alice_maker. Under the default substring
+            // LIKE this row would be handed to alice as if it were hers.
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (304, 40.0, 'REJECTED', 1, 'alice_maker_2')");
+        }
+
+        String base = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME;
+
+        // What the runtime used to send. The param is silently discarded.
+        HttpResponse<String> bare = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?_approvalStatus=REJECTED&submitted_by=alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, bare.statusCode(), bare.body());
+        assertEquals(4, countRecords(bare.body()),
+                "A bare field param is not read by the handler, so the list comes back unscoped");
+
+        // A plain filter clause reaches the database but substring-matches, which
+        // is wrong for an identity: alice_maker_2's record comes back too.
+        HttpResponse<String> loose = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?_approvalStatus=REJECTED&filter=submitted_by:alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, loose.statusCode(), loose.body());
+        assertEquals(2, countRecords(loose.body()),
+                "String filters default to a substring match, which over-matches user ids");
+
+        // What it sends now: leading '=' requests an exact comparison.
+        HttpResponse<String> filtered = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?_approvalStatus=REJECTED&filter=submitted_by:=alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, filtered.statusCode(), filtered.body());
+        assertEquals(1, countRecords(filtered.body()),
+                "An exact filter scopes the list to exactly the caller's own rejected records");
+    }
+
+    /**
+     * C3.9 — the count-only response must not carry an empty {@code records} array.
+     *
+     * <p>It used to, alongside a non-zero {@code count}. Any caller applying the
+     * normal queue semantics to that body saw an empty queue and a badge that
+     * contradicted it. An absent key makes the caller notice; a lying one does not.
+     */
+    @Test
+    public void testCountOnlyResponseDoesNotFakeAnEmptyRecordList() throws Exception {
+        HttpResponse<String> submit = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID
+                        + "/entities/" + ENTITY_NAME + "/records/201/submit"))
+                .header("X-Session-Token", makerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, submit.statusCode(), submit.body());
+
+        String pendingUrl = BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID
+                + "/entities/" + ENTITY_NAME + "/approvals/pending";
+
+        HttpResponse<String> countOnly = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(pendingUrl + "?countOnly=true"))
+                .header("X-Session-Token", checkerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, countOnly.statusCode(), countOnly.body());
+
+        Map<String, Object> body = MAPPER.readValue(countOnly.body(), new TypeReference<>() {});
+        assertEquals(1, ((Number) body.get("count")).intValue());
+        assertFalse(body.containsKey("records"),
+                "A count-only response must omit records entirely rather than send an empty list");
+        assertEquals(Boolean.TRUE, body.get("countOnly"));
+
+        // And the full queue, for the same checker, agrees with that count.
+        HttpResponse<String> full = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(pendingUrl))
+                .header("X-Session-Token", checkerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, full.statusCode(), full.body());
+        assertEquals(1, countRecords(full.body()), "The badge and the queue must not disagree");
+    }
+
+    /** Row count from any of the list shapes the API uses: `rows`, `records`, or a bare array. */
+    private int countRecords(String json) throws Exception {
+        String trimmed = json.trim();
+        if (trimmed.startsWith("[")) {
+            return MAPPER.readValue(trimmed, new TypeReference<List<Object>>() {}).size();
+        }
+        Map<String, Object> body = MAPPER.readValue(trimmed, new TypeReference<>() {});
+        for (String key : List.of("rows", "records")) {
+            if (body.get(key) instanceof List<?> list) {
+                return list.size();
+            }
+        }
+        throw new AssertionError("No row list in response: " + json);
+    }
+
     @Test
     public void testGenericPostBypassPrevented() throws Exception {
         String postUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME;

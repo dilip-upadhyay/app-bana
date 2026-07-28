@@ -779,6 +779,35 @@
            text-[0.6875rem] font-semibold leading-none text-center;
   }
 
+  /* ---- Task C3.9: maker approval panel on the detail page ------------- */
+  /* Sits above the record card so the state and the action are the first
+     things a maker sees, not something they have to scroll past the fields
+     to find. */
+  .appbana-approval-panel {
+    @apply mx-5 mt-4 mb-2 p-4 rounded-xl border border-slate-200 bg-slate-50;
+  }
+  .appbana-approval-panel-head {
+    @apply flex flex-wrap items-center gap-3;
+  }
+  .appbana-approval-panel-meta {
+    @apply text-sm text-slate-500;
+  }
+  .appbana-approval-panel-actions {
+    @apply ml-auto flex items-center gap-2;
+  }
+  .appbana-approval-panel-hint {
+    @apply mt-2 text-sm text-slate-600;
+  }
+  .appbana-approval-rejection {
+    @apply mt-3 p-3 rounded-lg bg-rose-50 border border-rose-200;
+  }
+  .appbana-approval-rejection-label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-rose-700;
+  }
+  .appbana-approval-rejection-body {
+    @apply mt-1 text-sm text-rose-900 whitespace-pre-wrap break-words;
+  }
+
   /* ---- Sprint 3 task 3.7: ReferenceCombobox --------------------------- */
   .appbana-combobox { @apply relative w-full; }
 

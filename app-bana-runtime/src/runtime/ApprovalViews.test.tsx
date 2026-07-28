@@ -12,9 +12,14 @@ describe('buildApprovalSystemViews', () => {
     expect(views.map((v) => v.name)).toContain('Drafts');
   });
 
-  it('scopes needs-rework to the caller', () => {
+  it('scopes needs-rework to the caller, and exactly', () => {
     const rework = buildApprovalSystemViews('alice').find((v) => v.name === 'Needs rework');
-    expect(rework?.view.filters).toEqual({ _approvalStatus: 'REJECTED', submitted_by: 'alice' });
+    // `exact` rather than a bare string: string filters substring-match by
+    // default, so scoping to "alice" would otherwise also return "alice2"'s.
+    expect(rework?.view.filters).toEqual({
+      _approvalStatus: 'REJECTED',
+      submitted_by: { __exact: 'alice' },
+    });
   });
 
   /**
@@ -29,8 +34,19 @@ describe('buildApprovalSystemViews', () => {
   });
 
   it('omits needs-rework when the user is unknown, rather than showing everyone\'s', () => {
-    expect(buildApprovalSystemViews(null).map((v) => v.name)).toEqual(['Drafts']);
-    expect(buildApprovalSystemViews(undefined).map((v) => v.name)).toEqual(['Drafts']);
+    expect(buildApprovalSystemViews(null).map((v) => v.name)).toEqual(['All', 'Drafts']);
+    expect(buildApprovalSystemViews(undefined).map((v) => v.name)).toEqual(['All', 'Drafts']);
+  });
+
+  /**
+   * C3.9 — without an unfiltered chip, selecting a view that returns no rows
+   * left the user on an empty table with the filter still applied and nothing
+   * to click: FilterBar renders nothing when the page declares no filters.
+   */
+  it('leads with an unfiltered "All" view so an empty result is escapable', () => {
+    const first = buildApprovalSystemViews('alice')[0];
+    expect(first.name).toBe('All');
+    expect(first.view.filters).toEqual({});
   });
 
   /**
@@ -38,7 +54,10 @@ describe('buildApprovalSystemViews', () => {
    * path, which is the only path that honours filters.
    */
   it('filters through the dedicated parameter, not a bare field filter', () => {
-    for (const v of buildApprovalSystemViews('alice')) {
+    const filtering = buildApprovalSystemViews('alice')
+      .filter((v) => Object.keys(v.view.filters ?? {}).length > 0);
+    expect(filtering.length).toBeGreaterThan(0);
+    for (const v of filtering) {
       expect(Object.keys(v.view.filters ?? {})).toContain('_approvalStatus');
       expect(Object.keys(v.view.filters ?? {})).not.toContain('approval_status');
     }

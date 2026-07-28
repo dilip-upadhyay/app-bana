@@ -823,7 +823,7 @@ function EntityForm(props: Readonly<EntityFormProps>) {
         const rowId = (created as { id?: unknown })?.id;
         if (!ctx?.appId || rowId == null) {
           toast.warning('Saved as draft', {
-            description: 'Could not submit for approval automatically — submit it from the list view.',
+            description: 'Could not submit for approval automatically — open the record and use "Submit for approval".',
           });
           return true;
         }
@@ -847,7 +847,7 @@ function EntityForm(props: Readonly<EntityFormProps>) {
 
       toast.success(approvalRequired ? 'Saved as draft' : 'Saved', {
         description: approvalRequired
-          ? `${entityLabel} saved. Submit it for approval when you're ready.`
+          ? `${entityLabel} saved as a draft. Open it and use "Submit for approval" when you're ready.`
           : `New ${entityLabel} added.`,
       });
       return true;
@@ -855,9 +855,13 @@ function EntityForm(props: Readonly<EntityFormProps>) {
       // C3.8 — the insert succeeded and only the workflow transition failed.
       // The record exists as a draft; say so, and return true so the form
       // clears rather than tempting the user into a duplicate.
+      //
+      // C3.9 — the copy used to say "submit it from the list view", which was
+      // a lie: no such affordance existed anywhere in the runtime. It now
+      // points at the panel on the record's own page, which does.
       if (draftSaved) {
         toast.warning('Saved as draft, but not submitted', {
-          description: `${describeSubmitFailure(err)} Your changes are safe — submit it from the list view.`,
+          description: `${describeSubmitFailure(err)} Your changes are safe — open the record and use "Submit for approval".`,
         });
         return true;
       }

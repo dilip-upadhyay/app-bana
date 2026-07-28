@@ -13,8 +13,15 @@
  * bare `approval_status` field filter. Both doors reach the same predicate and
  * both are guarded (C2.7), but the dedicated one is validated explicitly and
  * forces the advanced query path, which is the only path that honours filters.
+ *
+ * C3.9 — the caller scoping on "Needs rework" is expressed as a `filter=`
+ * clause. It used to be a bare `submitted_by` param, which the backend never
+ * reads: the scoping was dropped in transit and every maker saw every other
+ * maker's rejected records under a heading that said they were theirs. See
+ * entity-query.ts.
  */
 import type { SavedViewRecord } from '@appbana/shared';
+import { exact } from './entity-query';
 
 export const APPROVAL_VIEW_PREFIX = '__approval__';
 
@@ -33,6 +40,15 @@ export const APPROVAL_VIEW_PREFIX = '__approval__';
  */
 export function buildApprovalSystemViews(userId: string | null | undefined): SavedViewRecord[] {
   const views: SavedViewRecord[] = [
+    // C3.9 — "All" is the way back. Without it, selecting a view that returns
+    // no rows left the user on an empty table with the filter still applied and
+    // no affordance to clear it: FilterBar renders nothing when the page meta
+    // declares no filters, which is the common case for scaffolded pages.
+    {
+      viewId: `${APPROVAL_VIEW_PREFIX}all`,
+      name: 'All',
+      view: { filters: {} },
+    },
     {
       viewId: `${APPROVAL_VIEW_PREFIX}drafts`,
       name: 'Drafts',
@@ -44,7 +60,10 @@ export function buildApprovalSystemViews(userId: string | null | undefined): Sav
     views.push({
       viewId: `${APPROVAL_VIEW_PREFIX}rework`,
       name: 'Needs rework',
-      view: { filters: { _approvalStatus: 'REJECTED', submitted_by: userId } },
+      // `exact` matters here: string filters default to a substring match, so
+      // scoping to the user "bob" without it would also return everything
+      // submitted by "bobby".
+      view: { filters: { _approvalStatus: 'REJECTED', submitted_by: exact(userId) } },
     });
   }
 

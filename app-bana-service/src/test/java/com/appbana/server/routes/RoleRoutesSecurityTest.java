@@ -395,9 +395,13 @@ public class RoleRoutesSecurityTest {
     /**
      * The authorization check runs before the schema lookup on purpose: answering 404 first would
      * let an unauthorized caller enumerate which entities exist inside an app that is not theirs.
+     *
+     * <p>C3.9: originally only GET was fixed. handlePostRole and handleDeleteRole, fifty lines below
+     * it in the same file, had the identical ordering and the identical disclosure. All three verbs
+     * are pinned here so the next handler added to this file has an obvious template.
      */
     @Test
-    public void testGetRolesDoesNotLeakEntityExistenceToUnauthorizedCallers() throws Exception {
+    public void testRoleRoutesDoNotLeakEntityExistenceToUnauthorizedCallers() throws Exception {
         String tenantId = "t_enum";
         String appId = "app_enum";
         String owner = "enum_owner";
@@ -415,19 +419,45 @@ public class RoleRoutesSecurityTest {
         SchemaManager.saveSchema(schema);
 
         String outsiderSession = createTestSession(outsider);
-        String base = BASE_URL + "/api/tenants/" + tenantId + "/apps/" + appId + "/roles?userId=someone_else&entityName=";
+        String rolesUrl = BASE_URL + "/api/tenants/" + tenantId + "/apps/" + appId + "/roles";
+        String queryBase = rolesUrl + "?userId=someone_else&entityName=";
 
-        HttpResponse<String> existing = client.send(
-                HttpRequest.newBuilder().uri(URI.create(base + "RealEntity"))
+        assertIndistinguishable("GET",
+                HttpRequest.newBuilder().uri(URI.create(queryBase + "RealEntity"))
                         .header("X-Session-Token", outsiderSession).GET().build(),
-                HttpResponse.BodyHandlers.ofString());
-        HttpResponse<String> missing = client.send(
-                HttpRequest.newBuilder().uri(URI.create(base + "NoSuchEntity"))
-                        .header("X-Session-Token", outsiderSession).GET().build(),
-                HttpResponse.BodyHandlers.ofString());
+                HttpRequest.newBuilder().uri(URI.create(queryBase + "NoSuchEntity"))
+                        .header("X-Session-Token", outsiderSession).GET().build());
+
+        String realBody = MAPPER.writeValueAsString(Map.of(
+                "entityName", "RealEntity", "userId", "someone_else", "role", "maker"));
+        String missingBody = MAPPER.writeValueAsString(Map.of(
+                "entityName", "NoSuchEntity", "userId", "someone_else", "role", "maker"));
+        assertIndistinguishable("POST",
+                HttpRequest.newBuilder().uri(URI.create(rolesUrl))
+                        .header("Content-Type", "application/json")
+                        .header("X-Session-Token", outsiderSession)
+                        .POST(HttpRequest.BodyPublishers.ofString(realBody)).build(),
+                HttpRequest.newBuilder().uri(URI.create(rolesUrl))
+                        .header("Content-Type", "application/json")
+                        .header("X-Session-Token", outsiderSession)
+                        .POST(HttpRequest.BodyPublishers.ofString(missingBody)).build());
+
+        assertIndistinguishable("DELETE",
+                HttpRequest.newBuilder().uri(URI.create(queryBase + "RealEntity"))
+                        .header("X-Session-Token", outsiderSession).DELETE().build(),
+                HttpRequest.newBuilder().uri(URI.create(queryBase + "NoSuchEntity"))
+                        .header("X-Session-Token", outsiderSession).DELETE().build());
+    }
+
+    private void assertIndistinguishable(String verb, HttpRequest realEntity, HttpRequest missingEntity)
+            throws Exception {
+        HttpResponse<String> existing = client.send(realEntity, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> missing = client.send(missingEntity, HttpResponse.BodyHandlers.ofString());
 
         assertEquals(existing.statusCode(), missing.statusCode(),
-                "An unauthorized caller must not be able to tell an existing entity from a missing one by status code");
-        assertEquals(403, existing.statusCode());
+                verb + " /roles: an unauthorized caller must not be able to tell an existing entity"
+                        + " from a missing one by status code");
+        assertEquals(403, existing.statusCode(),
+                verb + " /roles must answer 403 before it answers 404");
     }
 }

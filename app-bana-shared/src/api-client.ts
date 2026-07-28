@@ -241,12 +241,27 @@ export async function insertEntityRow(
  * Backend returns `{ updated: number }`. Throws {@link ApiFieldError} on 400
  * so the caller can render inline field errors.
  */
+/**
+ * Result of a PUT. Approval-required entities can answer with a *revision*
+ * rather than an in-place update: editing an APPROVED record creates a new
+ * DRAFT row (C2.3) and leaves the original untouched. Callers that ignore
+ * `revision` will tell the user "Saved" and then show them unchanged values.
+ */
+export interface UpdateEntityRowResult {
+  readonly updated: number;
+  readonly revision?: boolean;
+  readonly revisionId?: string;
+  readonly parentId?: string;
+  readonly approvalStatus?: string;
+  readonly approvalRevision?: number;
+}
+
 export async function updateEntityRow(
   entityKey: string,
   id: string | number,
   row: Record<string, unknown>,
   token: string
-): Promise<{ updated: number }> {
+): Promise<UpdateEntityRowResult> {
   const res = await authedFetch(`${BACKEND}/api/${entityKey}/${encodeURIComponent(String(id))}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

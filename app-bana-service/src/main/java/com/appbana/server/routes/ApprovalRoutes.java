@@ -144,6 +144,11 @@ public class ApprovalRoutes {
             try {
                 // C3.7: the nav badge polls, so it asks for a count only rather than
                 // dragging every pending row across the wire on every tick.
+                //
+                // C3.9: the response carries no `records` key at all. It used to send
+                // `"records": []` beside a non-zero count, so any caller reading it
+                // with the normal queue semantics saw an empty queue and a badge that
+                // disagreed with it. An absent key forces the caller to notice.
                 if (Boolean.parseBoolean(req.query("countOnly"))) {
                     int count = ApprovalService.getPendingCount(tenantId, appId, entityName, callerUserId);
                     res.json(200, Map.of(
@@ -151,17 +156,34 @@ public class ApprovalRoutes {
                             "appId", appId,
                             "entityName", entityName,
                             "count", count,
-                            "records", List.of()
+                            "countOnly", true
                     ));
                     return;
                 }
 
-                List<Map<String, Object>> pending = ApprovalService.getPendingQueue(tenantId, appId, entityName, callerUserId);
+                int offset = 0;
+                try {
+                    String offsetParam = req.query("offset");
+                    if (offsetParam != null && !offsetParam.isBlank()) {
+                        offset = Math.max(0, Integer.parseInt(offsetParam));
+                    }
+                } catch (NumberFormatException ignore) {
+                    offset = 0;
+                }
+
+                List<Map<String, Object>> pending =
+                        ApprovalService.getPendingQueue(tenantId, appId, entityName, callerUserId, offset);
                 res.json(200, Map.of(
                         "tenantId", tenantId,
                         "appId", appId,
                         "entityName", entityName,
                         "count", pending.size(),
+                        "offset", offset,
+                        "pageSize", ApprovalService.QUEUE_PAGE_SIZE,
+                        // A full page means there is very likely more behind it. The
+                        // queue is FIFO, so silently stopping at the page boundary
+                        // would hide the newest work indefinitely.
+                        "hasMore", pending.size() == ApprovalService.QUEUE_PAGE_SIZE,
                         "records", pending
                 ));
             } catch (ApprovalConflictException e) {

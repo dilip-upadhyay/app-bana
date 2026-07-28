@@ -451,7 +451,10 @@ public class RevisionFlowTest {
         Map<String, Object> filters = new LinkedHashMap<>();
         assertTrue(GenericEntityRoutes.applyApprovalStatusFilter(
                 schema, TENANT_ID, APP_ID, "pending", filters, CHECKER, true));
-        assertEquals("PENDING", filters.get("approval_status"));
+        // C3.9 — wrapped in ExactMatch so buildWhere emits `= ?` rather than the
+        // default `LIKE '%PENDING%'`. Asserting the wrapper, not just the value,
+        // keeps the exactness from being dropped by a later refactor.
+        assertEquals(new EntityCrudService.ExactMatch("PENDING"), filters.get("approval_status"));
     }
 
     @Test

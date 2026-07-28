@@ -67,17 +67,32 @@ public class UserRoutes {
                     out.put("tenantId", user.getTenantId());
                 }
 
-                String tenantId = req.query("tenantId");
+                // C3.9 — `tenantId` in the response is the *identity* tenant, taken
+                // from the users table, and is never overwritten by the query param.
+                // It used to be: the client-supplied `?tenantId=` won, so the response
+                // asserted a tenant identity the server had not verified. Nothing
+                // leaked (only the caller's own roles are returned), but an
+                // unverified value returned from an identity endpoint invites callers
+                // to trust it as verified.
+                //
+                // The query param still selects the *scope* for the role lookup, which
+                // is legitimate: roles are per-app and the caller says which app they
+                // are asking about. It is reported separately so the two cannot be
+                // confused.
+                String scopeTenantId = req.query("tenantId");
                 String appId = req.query("appId");
-                if (tenantId == null || tenantId.isBlank()) {
-                    tenantId = user != null ? user.getTenantId() : "default";
+                if (scopeTenantId == null || scopeTenantId.isBlank()) {
+                    scopeTenantId = user != null ? user.getTenantId() : "default";
                 }
-                out.put("tenantId", tenantId);
+                if (!out.containsKey("tenantId")) {
+                    out.put("tenantId", scopeTenantId);
+                }
+                out.put("scopeTenantId", scopeTenantId);
 
                 if (appId != null && !appId.isBlank()) {
                     out.put("appId", appId);
-                    out.put("isAppOwner", AppAuthorization.isAppOwnerOrSystem(tenantId, appId, callerUserId));
-                    out.put("entityRoles", buildEntityRoles(tenantId, appId, callerUserId));
+                    out.put("isAppOwner", AppAuthorization.isAppOwnerOrSystem(scopeTenantId, appId, callerUserId));
+                    out.put("entityRoles", buildEntityRoles(scopeTenantId, appId, callerUserId));
                 } else {
                     out.put("entityRoles", Map.of());
                 }

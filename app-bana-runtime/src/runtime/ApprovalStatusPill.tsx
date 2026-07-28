@@ -58,7 +58,11 @@ export function toApprovalState(value: unknown): ApprovalState | null {
   if (value == null) return null;
   const s = String(value).trim().toUpperCase();
   if (!s) return null;
-  return s in PRESENTATION ? (s as ApprovalState) : null;
+  // `hasOwnProperty` rather than `in`: `in` walks the prototype chain, so a
+  // value of "TOSTRING" or "CONSTRUCTOR" would test true and then be cast to
+  // an ApprovalState it is not. (`Object.hasOwn` would be the modern spelling
+  // but the package's `lib` target predates it.)
+  return Object.prototype.hasOwnProperty.call(PRESENTATION, s) ? (s as ApprovalState) : null;
 }
 
 export interface ApprovalStatusPillProps {

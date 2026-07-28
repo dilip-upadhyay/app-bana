@@ -2116,15 +2116,24 @@ public class GenericEntityRoutes {
                                              String callerUserId, boolean authEnabled) {
         String explicit = resolveApprovalStatusFilter(schema, tenantId, appId, raw, callerUserId, authEnabled);
         if (explicit != null) {
-            filters.put("approval_status", explicit);
+            // C3.9 — exact, not the default substring LIKE. The four states do not
+            // currently overlap as substrings, but a fifth one that did would
+            // silently widen every approval-filtered list.
+            filters.put("approval_status", new EntityCrudService.ExactMatch(explicit));
             return true;
         }
 
         if (schema != null && schema.isApprovalRequired() && filters != null) {
             for (Map.Entry<String, Object> e : filters.entrySet()) {
                 if ("approval_status".equalsIgnoreCase(e.getKey()) && e.getValue() != null) {
+                    // C3.9 — unwrap an ExactMatch first. Without this the C2.7 checker
+                    // gate would validate the literal string "ExactMatch[value=PENDING]"
+                    // instead of "PENDING", which is a security check quietly looking
+                    // at the wrong value.
+                    Object value = e.getValue() instanceof EntityCrudService.ExactMatch em ? em.value() : e.getValue();
+                    if (value == null) continue;
                     // Same validation + checker gate as the dedicated parameter.
-                    resolveApprovalStatusFilter(schema, tenantId, appId, String.valueOf(e.getValue()),
+                    resolveApprovalStatusFilter(schema, tenantId, appId, String.valueOf(value),
                             callerUserId, authEnabled);
                 }
             }

@@ -124,16 +124,20 @@ public class RoleRoutes {
                 return;
             }
 
-            EntitySchema schema = SchemaManager.loadSchema(appId, entityName, tenantId);
-            if (schema == null) {
-                res.json(404, Map.of("error", "Entity not found: " + entityName));
+            // C3.9 — authorization precedes the schema lookup. In the original order a
+            // 404 for a missing entity let an unauthorized caller enumerate which
+            // entities exist inside an app that is not theirs. Same reasoning, and same
+            // ordering, as handleGetRoles.
+            if (!isAuthorizedToManageRoles(tenantId, appId, entityName, callerUserId)) {
+                res.json(403, Map.of("error", "Forbidden: caller cannot manage roles for entity " + entityName));
                 return;
             }
 
-            // CRITICAL FIX (C1.9): Authorization check — ONLY app creator or system can manage roles.
-            // CHECKER role is a workflow role, NOT an admin role, and CANNOT manage roles.
-            if (!isAuthorizedToManageRoles(tenantId, appId, entityName, callerUserId)) {
-                res.json(403, Map.of("error", "Forbidden: caller cannot manage roles for entity " + entityName));
+            // CHECKER is a workflow role, NOT an admin role, and cannot manage roles —
+            // see isAuthorizedToManageRoles.
+            EntitySchema schema = SchemaManager.loadSchema(appId, entityName, tenantId);
+            if (schema == null) {
+                res.json(404, Map.of("error", "Entity not found: " + entityName));
                 return;
             }
 
@@ -172,15 +176,17 @@ public class RoleRoutes {
         }
 
         try {
-            EntitySchema schema = SchemaManager.loadSchema(appId, entityName, tenantId);
-            if (schema == null) {
-                res.json(404, Map.of("error", "Entity not found: " + entityName));
+            // C3.9 — authorization precedes the schema lookup, as in the other two
+            // handlers: a 404 would otherwise let an unauthorized caller enumerate the
+            // entities of an app that is not theirs.
+            if (!isAuthorizedToManageRoles(tenantId, appId, entityName, callerUserId)) {
+                res.json(403, Map.of("error", "Forbidden: caller cannot manage roles for entity " + entityName));
                 return;
             }
 
-            // CRITICAL FIX (C1.9): Authorization check — ONLY app creator or system can manage roles.
-            if (!isAuthorizedToManageRoles(tenantId, appId, entityName, callerUserId)) {
-                res.json(403, Map.of("error", "Forbidden: caller cannot manage roles for entity " + entityName));
+            EntitySchema schema = SchemaManager.loadSchema(appId, entityName, tenantId);
+            if (schema == null) {
+                res.json(404, Map.of("error", "Entity not found: " + entityName));
                 return;
             }
 

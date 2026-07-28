@@ -478,6 +478,12 @@ public class EntityCrudService {
                 LOG.info("[FILTER] Skipping pair with empty name");
                 continue;
             }
+            // C3.9 — a leading '=' on the value requests an exact comparison
+            // instead of the default substring LIKE. See ExactMatch.
+            boolean exact = val.startsWith("=");
+            if (exact) {
+                val = val.substring(1).trim();
+            }
             LOG.info("[FILTER] Looking up field '{}' (lowercased: '{}') in schema", name,
                     name.toLowerCase(Locale.ROOT));
             EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
@@ -488,11 +494,26 @@ public class EntityCrudService {
             Object parsed = parseFilterValue(f, val);
             LOG.info("[FILTER] Parsed filter: {}={} (type: {}, parsed value: {})", f.getName(), val, f.getType(),
                     parsed);
-            map.put(f.getName(), parsed); // canonical
+            map.put(f.getName(), exact ? new ExactMatch(parsed) : parsed); // canonical
         }
         LOG.info("[FILTER] Final filter map: {}", map);
         return map;
     }
+
+    /**
+     * Marks a filter value that must be compared with {@code =} rather than the
+     * default case-insensitive {@code LIKE '%value%'}.
+     *
+     * <p>C3.9 — string filters default to a substring match, which is right for a
+     * user typing into a search box and wrong for anything identity-shaped. The
+     * approval "Needs rework" view scopes a list to {@code submitted_by}, and
+     * under a substring match the user {@code bob} would also see every record
+     * submitted by {@code bobby}. Silently, and with a 200.
+     *
+     * <p>Written on the wire as a leading {@code =} on the value:
+     * {@code filter=submitted_by:=bob}.
+     */
+    public record ExactMatch(Object value) {}
 
     public long countOnly(EntitySchema schema, String q, Map<String, Object> filters) throws SQLException {
         StringBuilder where = new StringBuilder();
@@ -1062,9 +1083,18 @@ public class EntityCrudService {
                     continue; // unknown
                 }
 
+                // C3.9 — unwrap an explicit exact-match request before any of the
+                // type handling below looks at the value.
+                boolean exactRequested = false;
+                Object filterValue = e.getValue();
+                if (filterValue instanceof ExactMatch em) {
+                    exactRequested = true;
+                    filterValue = em.value();
+                }
+
                 String t = f.getType().toLowerCase(Locale.ROOT);
                 if ((t.equalsIgnoreCase("date") || t.equalsIgnoreCase("timestamp"))
-                        && e.getValue() instanceof String sVal) {
+                        && filterValue instanceof String sVal) {
                     boolean valid = false;
                     try {
                         Instant.parse(sVal);
@@ -1080,14 +1110,14 @@ public class EntityCrudService {
                 String quotedKey = quote(f.getName());
 
                 // If filter value is NULL (parsing failed), we skip it to avoid DB errors
-                if (e.getValue() == null) {
+                if (filterValue == null) {
                     LOG.warn("[BUILD_WHERE] Filter value for '{}' is null (parsing failed?), skipping predicate.",
                             e.getKey());
                     continue;
                 }
 
                 // Coerce filter value to match column type if it's a string from JSON
-                Object finalValue = e.getValue();
+                Object finalValue = filterValue;
                 if (finalValue instanceof String sVal) {
                     Object parsed = parseFilterValue(f, sVal);
                     if (parsed != null) {
@@ -1095,8 +1125,9 @@ public class EntityCrudService {
                     }
                 }
 
-                // Use LIKE with wildcards for string/text fields, exact match for others
-                if (t.equals("string") || t.equals("text") || t.equals("varchar")) {
+                // Use LIKE with wildcards for string/text fields, exact match for
+                // others — or when the caller explicitly asked for exact.
+                if (!exactRequested && (t.equals("string") || t.equals("text") || t.equals("varchar"))) {
                     // Case-insensitive LIKE match for string fields
                     LOG.info("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey,
                             finalValue);

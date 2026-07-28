@@ -156,6 +156,41 @@ public class ApprovalServiceTest {
         assertEquals("101", queue.get(2).get("id").toString());
     }
 
+    /**
+     * The badge and the queue must agree, and both must exclude the caller's own
+     * submissions.
+     *
+     * <p>C3.9 — separation of duties means a checker can never approve what they
+     * submitted, so counting those rows offered work the backend would then refuse:
+     * the badge said "2" and the queue presented nothing actionable. A badge that
+     * overstates trains users to ignore it. This pins the two predicates together,
+     * because the failure mode is precisely them drifting apart.
+     */
+    @Test
+    public void testQueueAndCountBothExcludeTheCallersOwnSubmissions() throws Exception {
+        String other = "sod_other_maker";
+        String reviewer = "sod_reviewer";
+        UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, other, UserRoleService.Role.MAKER, "system");
+        // BOTH so the reviewer can submit as well as review — that is the whole
+        // point: their own submission must not appear in their own queue.
+        UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, reviewer, UserRoleService.Role.BOTH, "system");
+
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\") VALUES (110, 10.0, 'DRAFT', 1)");
+        }
+
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "101", other, "someone else's work");
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "110", reviewer, "my own work");
+
+        List<Map<String, Object>> queue = ApprovalService.getPendingQueue(TENANT_ID, APP_ID, ENTITY_NAME, reviewer);
+        assertEquals(1, queue.size(), "The reviewer's own submission must not appear in their queue");
+        assertEquals("101", queue.get(0).get("id").toString());
+
+        int count = ApprovalService.getPendingCount(TENANT_ID, APP_ID, ENTITY_NAME, reviewer);
+        assertEquals(queue.size(), count, "The badge count must match what the queue actually offers");
+    }
+
     @Test
     public void testSeparationOfDutiesViolationFailsApproveAndReject() throws Exception {
         String userBoth = "user_both";

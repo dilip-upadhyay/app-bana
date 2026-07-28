@@ -37,6 +37,7 @@ import { PaginationBar } from './PaginationBar';
 import { FilterBar } from './FilterBar';
 import { SavedViewsBar } from './SavedViewsBar';
 import { buildApprovalSystemViews, isSystemView } from './approval-views';
+import { toEntityQueryParams } from './entity-query';
 import { useCurrentUser } from './useCurrentUser';
 import {
   entityNameFromKey,
@@ -90,18 +91,14 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const { user } = useCurrentUser();
 
-  // Convert filterValues → query params for the row fetcher. Skip empty
-  // strings / null so we don't send `?status=` (which would filter to rows
-  // whose status is literally empty).
-  const fetchParams = useMemo<Record<string, string | number>>(() => {
-    const out: Record<string, string | number> = {};
-    for (const [k, v] of Object.entries(filterValues)) {
-      if (v == null || v === '') continue;
-      if (typeof v === 'number' || typeof v === 'string') out[k] = v;
-      else out[k] = JSON.stringify(v);
-    }
-    return out;
-  }, [filterValues]);
+  // C3.9 — filters go out as `filter=name:value`, not as bare `?name=value`.
+  // The backend reads a fixed param allowlist and drops everything outside it,
+  // so bare params were being discarded in transit and the list came back
+  // unfiltered with a 200. See entity-query.ts for the full account.
+  const { params: fetchParams, rejected: rejectedFilters } = useMemo(
+    () => toEntityQueryParams(filterValues),
+    [filterValues],
+  );
 
   // Sprint 3 task 3.12 — pagination + lifecycle refresh live in a hook now.
   const {
@@ -232,7 +229,19 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
   // no approval state visible at all. So: derive approval-awareness from the
   // data, surface `approval_status` as a trailing column, and keep the other
   // seven injected columns hidden — they are workflow plumbing, not content.
-  const approvalEnabled = rowsHaveApprovalColumns(rows);
+  // C3.9 — this is latched. It used to be recomputed from the current page of
+  // rows on every render, which made the approval affordances erase themselves:
+  // select "Drafts", get zero rows, `rows` no longer proves anything, the
+  // system-view chips disappear — while the filter stays applied. The user was
+  // stranded on an empty table with no way back but a page reload. Approval
+  // support is a property of the entity, not of the current result set, so once
+  // observed it holds until the entity changes.
+  const [approvalSeen, setApprovalSeen] = useState(false);
+  useEffect(() => { setApprovalSeen(false); }, [entityKey]);
+  useEffect(() => {
+    if (rowsHaveApprovalColumns(rows)) setApprovalSeen(true);
+  }, [rows]);
+  const approvalEnabled = approvalSeen || rowsHaveApprovalColumns(rows);
 
   const declaredFieldNames: string[] = fields.length > 0
     ? fields.map((f) => f.name)
@@ -379,6 +388,15 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
       {error && (
         <div className="mx-5 my-3 p-3 bg-rose-50 text-rose-700 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {/* C3.9 — a filter we cannot express on the wire is announced, never
+          dropped quietly. A silently unapplied filter shows a wider list than
+          the user asked for, and nothing on screen would say so. */}
+      {rejectedFilters.length > 0 && (
+        <div className="mx-5 my-3 p-3 bg-amber-50 text-amber-800 rounded-lg text-sm">
+          {`Not filtering by ${rejectedFilters.join(', ')} — the value contains a comma, which this filter cannot express. The list below is not narrowed by it.`}
         </div>
       )}
 
