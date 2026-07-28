@@ -386,7 +386,10 @@ public class ApprovalService {
         String tableName = getTableName(tenantId, appId, entityName);
         List<Map<String, Object>> results = new ArrayList<>();
 
-        String sql = "SELECT * FROM \"" + tableName + "\" WHERE \"APPROVAL_STATUS\" = 'PENDING' ORDER BY \"SUBMITTED_AT\" DESC LIMIT 500";
+        // C3.7: oldest submission first. A review queue is FIFO — under DESC the
+        // longest-waiting record sinks to the bottom and starves, which is exactly
+        // what an approval SLA exists to prevent.
+        String sql = "SELECT * FROM \"" + tableName + "\" WHERE \"APPROVAL_STATUS\" = 'PENDING' ORDER BY \"SUBMITTED_AT\" ASC LIMIT 500";
 
         try (Connection conn = JdbcManager.getConnection(tenantId);
              PreparedStatement ps = conn.prepareStatement(sql);
@@ -402,6 +405,31 @@ public class ApprovalService {
             }
         }
         return results;
+    }
+
+    /**
+     * Number of records awaiting this caller's review, for the nav badge (C3.7).
+     *
+     * A dedicated COUNT exists because the badge polls: reusing
+     * {@link #getPendingQueue} would ship up to 500 fully-materialised rows per
+     * entity per user every polling interval purely to read their length.
+     * Authorization is identical to the queue itself.
+     */
+    public static int getPendingCount(String tenantId, String appId, String entityName, String callerUserId) throws Exception {
+        if (callerUserId == null || callerUserId.isBlank()) {
+            throw new IllegalStateException("Unauthorized: Caller user ID required");
+        }
+        if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId)) {
+            throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have CHECKER or owner rights on entity " + entityName);
+        }
+
+        String tableName = getTableName(tenantId, appId, entityName);
+        String sql = "SELECT COUNT(*) FROM \"" + tableName + "\" WHERE \"APPROVAL_STATUS\" = 'PENDING'";
+        try (Connection conn = JdbcManager.getConnection(tenantId);
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            return rs.next() ? rs.getInt(1) : 0;
+        }
     }
 
     /**

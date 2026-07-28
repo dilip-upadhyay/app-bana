@@ -142,6 +142,20 @@ public class ApprovalRoutes {
             }
 
             try {
+                // C3.7: the nav badge polls, so it asks for a count only rather than
+                // dragging every pending row across the wire on every tick.
+                if (Boolean.parseBoolean(req.query("countOnly"))) {
+                    int count = ApprovalService.getPendingCount(tenantId, appId, entityName, callerUserId);
+                    res.json(200, Map.of(
+                            "tenantId", tenantId,
+                            "appId", appId,
+                            "entityName", entityName,
+                            "count", count,
+                            "records", List.of()
+                    ));
+                    return;
+                }
+
                 List<Map<String, Object>> pending = ApprovalService.getPendingQueue(tenantId, appId, entityName, callerUserId);
                 res.json(200, Map.of(
                         "tenantId", tenantId,

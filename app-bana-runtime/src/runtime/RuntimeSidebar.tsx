@@ -23,6 +23,7 @@ import {
   singularize,
   type PageKind,
 } from './page-classifier';
+import { formatBadgeCount } from './usePendingCounts';
 
 interface RuntimeSidebarProps {
   readonly pages: PageMeta[];
@@ -39,6 +40,8 @@ interface RuntimeSidebarProps {
   readonly checkerEntities?: readonly string[];
   readonly currentQueueEntity?: string | null;
   readonly onSelectQueue?: (entityName: string) => void;
+  /** Task C3.7 — pending count per entity, keyed as in `checkerEntities`. */
+  readonly pendingCounts?: Readonly<Record<string, number>>;
 }
 
 /** Zero-dep icons. 24×24 viewbox, currentColor stroke, Lucide conventions. */
@@ -170,6 +173,7 @@ export function RuntimeSidebar({
   checkerEntities = [],
   currentQueueEntity = null,
   onSelectQueue,
+  pendingCounts = {},
 }: RuntimeSidebarProps) {
   const groups = groupPages(pages);
   const showHeaders = groups.length > 1 || (groups.length === 1 && groups[0].entity !== null);
@@ -184,7 +188,13 @@ export function RuntimeSidebar({
             <ul className="flex flex-col gap-0.5">
               {checkerEntities.map((entity) => {
                 const active = currentQueueEntity === entity;
+                const pending = pendingCounts[entity] ?? 0;
+                const badge = formatBadgeCount(pending);
+                // The count belongs in the accessible name, not only in a
+                // decorative pill: a screen reader user should not have to open
+                // the queue to learn there is nothing in it.
                 const label = `${pluralize(singularize(entity))} to review`;
+                const ariaLabel = pending > 0 ? `${label}, ${pending} pending` : label;
                 return (
                   <li key={entity}>
                     <button
@@ -195,12 +205,16 @@ export function RuntimeSidebar({
                       }}
                       className={`appbana-sidebar-link ${active ? 'appbana-sidebar-link-active' : ''}`}
                       aria-current={active ? 'page' : undefined}
-                      aria-label={label}
-                      title={label}
+                      aria-label={ariaLabel}
+                      title={ariaLabel}
                       data-approval-queue-link={entity}
+                      data-pending-count={pending}
                     >
                       <span className="appbana-sidebar-icon">{ICONS.check}</span>
                       <span className="truncate">{label}</span>
+                      {badge && (
+                        <span className="appbana-nav-badge" aria-hidden="true">{badge}</span>
+                      )}
                     </button>
                   </li>
                 );

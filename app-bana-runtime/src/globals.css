@@ -749,8 +749,7 @@
     @apply flex items-center justify-end gap-2 mt-2 pt-3 border-t border-slate-100;
   }
 
-  /* ---- Task C3.5: approval audit drawer ------------------------------- */
-  /* Wider than a confirm dialog: entries carry a rejection reason in prose. */
+  /* ---- Task C3.5: approval audit drawer ------------------------------- */  /* Wider than a confirm dialog: entries carry a rejection reason in prose. */
   .appbana-audit-drawer { @apply max-w-xl w-full; }
 
   .appbana-audit-list { @apply relative flex flex-col gap-4 my-2 max-h-96 overflow-y-auto pr-1; }
@@ -769,6 +768,15 @@
 
   .appbana-audit-comment {
     @apply text-sm text-slate-600 mt-1 pl-3 border-l-2 border-slate-200 italic break-words;
+  }
+
+  /* ---- Task C3.7: pending-approval nav badge -------------------------- */
+  /* ml-auto pushes it to the trailing edge; shrink-0 keeps it intact when a
+     long entity label truncates beside it. */
+  .appbana-nav-badge {
+    @apply ml-auto shrink-0 min-w-[1.25rem] px-1.5 py-0.5
+           rounded-full bg-amber-500 text-white
+           text-[0.6875rem] font-semibold leading-none text-center;
   }
 
   /* ---- Sprint 3 task 3.7: ReferenceCombobox --------------------------- */

@@ -479,7 +479,8 @@ function unwrapList<T>(payload: unknown, key: string): T[] {
 }
 
 /**
- * Every PENDING row of an entity, newest submission first. 403 if the caller is
+ * Every PENDING row of an entity, oldest submission first — a review queue is
+ * FIFO, so the longest-waiting record is dealt with first. 403 if the caller is
  * not a checker or app owner for this entity — callers that use this to decide
  * whether to *show* a queue should treat 403 as "empty", not as an error.
  */
@@ -491,6 +492,27 @@ export async function fetchPendingApprovals(
   const res = await authedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) await throwApprovalError(res, 'Fetch pending approvals failed');
   return unwrapList<Record<string, unknown>>(await res.json(), 'records');
+}
+
+/**
+ * How many records await this caller's review. Asks the backend for a count
+ * only: this drives a polling badge, and fetching the full queue every tick
+ * just to read its length would be wasteful.
+ *
+ * Returns 0 rather than throwing on 403 — "you are not a checker here" means a
+ * count of zero, and a badge is not the place to report a permission problem.
+ */
+export async function fetchPendingApprovalCount(
+  target: Omit<ApprovalTarget, 'rowId'>,
+  token: string
+): Promise<number> {
+  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending?countOnly=true`;
+  const res = await authedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 403) return 0;
+  if (!res.ok) await throwApprovalError(res, 'Fetch pending count failed');
+  const body = await res.json();
+  const count = (body as { count?: unknown })?.count;
+  return typeof count === 'number' ? count : 0;
 }
 
 /** A record's approval history, most recent first. */

@@ -117,6 +117,45 @@ public class ApprovalServiceTest {
         assertEquals("101", queue.get(0).get("id").toString());
     }
 
+    /**
+     * C3.7 exit criterion: the checker queue ranks oldest-submitted first.
+     * It shipped as DESC, under which the longest-waiting record sinks to the
+     * bottom of the queue and starves — the opposite of what an approval SLA is
+     * for.
+     */
+    @Test
+    public void testPendingQueueIsOldestFirst() throws Exception {
+        String maker = "fifo_maker";
+        String checker = "fifo_checker";
+        UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, maker, UserRoleService.Role.MAKER, "system");
+        UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, checker, UserRoleService.Role.CHECKER, "system");
+
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\") VALUES (102, 10.0, 'DRAFT', 1)");
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\") VALUES (103, 20.0, 'DRAFT', 1)");
+        }
+
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "101", maker, "first");
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "102", maker, "second");
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "103", maker, "third");
+
+        // submitted_at is set by the service; force distinct, out-of-insertion-order
+        // timestamps so the assertion tests the ORDER BY rather than insertion order.
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("UPDATE \"" + TABLE_NAME + "\" SET \"SUBMITTED_AT\" = TIMESTAMP '2026-01-03 10:00:00' WHERE \"ID\" = 101");
+            s.execute("UPDATE \"" + TABLE_NAME + "\" SET \"SUBMITTED_AT\" = TIMESTAMP '2026-01-01 10:00:00' WHERE \"ID\" = 102");
+            s.execute("UPDATE \"" + TABLE_NAME + "\" SET \"SUBMITTED_AT\" = TIMESTAMP '2026-01-02 10:00:00' WHERE \"ID\" = 103");
+        }
+
+        List<Map<String, Object>> queue = ApprovalService.getPendingQueue(TENANT_ID, APP_ID, ENTITY_NAME, checker);
+        assertEquals(3, queue.size());
+        assertEquals("102", queue.get(0).get("id").toString(), "The longest-waiting record must be reviewed first");
+        assertEquals("103", queue.get(1).get("id").toString());
+        assertEquals("101", queue.get(2).get("id").toString());
+    }
+
     @Test
     public void testSeparationOfDutiesViolationFailsApproveAndReject() throws Exception {
         String userBoth = "user_both";

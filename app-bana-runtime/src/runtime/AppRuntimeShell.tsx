@@ -23,6 +23,7 @@ import { ConfirmDialogHost } from './ConfirmDialog';
 import { applyBrandRamp } from './applyBrandRamp';
 import { CurrentUserProvider, useCurrentUser } from './useCurrentUser';
 import { CheckerQueuePage } from './CheckerQueuePage';
+import { usePendingCounts } from './usePendingCounts';
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
@@ -264,6 +265,8 @@ export function AppRuntimeShell() {
             onSelect={(p) => { setQueueEntity(null); setCurrentPage(p); }}
             currentQueueEntity={queueEntity}
             onSelectQueue={(entity) => { setSelectedRecord(null); setQueueEntity(entity); }}
+            tenantId={ctx?.tenantId}
+            appId={ctx?.appId}
           />
         </aside>
 
@@ -287,6 +290,8 @@ export function AppRuntimeShell() {
             onClose={() => setMobileNavOpen(false)}
             currentQueueEntity={queueEntity}
             onSelectQueue={(entity) => { setSelectedRecord(null); setQueueEntity(entity); }}
+            tenantId={ctx?.tenantId}
+            appId={ctx?.appId}
           />
         </aside>
 
@@ -346,8 +351,18 @@ function ApprovalAwareSidebar(
     onClose?: () => void;
     currentQueueEntity: string | null;
     onSelectQueue: (entityName: string) => void;
+    tenantId: string | undefined;
+    appId: string | undefined;
   }>
 ) {
+  const { tenantId, appId, ...sidebarProps } = props;
   const { checkerEntities } = useCurrentUser();
-  return <RuntimeSidebar {...props} checkerEntities={checkerEntities} />;
+  const pendingCounts = usePendingCounts(tenantId, appId, checkerEntities);
+  return (
+    <RuntimeSidebar
+      {...sidebarProps}
+      checkerEntities={checkerEntities}
+      pendingCounts={pendingCounts}
+    />
+  );
 }
