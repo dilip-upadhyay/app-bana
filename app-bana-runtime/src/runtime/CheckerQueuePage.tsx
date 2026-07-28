@@ -118,7 +118,6 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
 
   useEffect(() => { void load(); }, [load]);
 
-
   function targetFor(row: Row): ApprovalTarget {
     return { tenantId, appId, entityName, rowId: rowId(row) };
   }

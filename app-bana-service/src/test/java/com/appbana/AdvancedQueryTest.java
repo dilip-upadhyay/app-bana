@@ -149,6 +149,15 @@ public class AdvancedQueryTest {
     }
 
     private static JsonNode get(String path) throws IOException, InterruptedException {
+        return getExpectStatus(path, 200);
+    }
+
+    /**
+     * Review #4 — needed so {@code badTimestampFilterRejectedWith400} (and the
+     * type-allowlist round-trip test) can assert a deliberate non-200 response
+     * instead of only ever exercising the happy path.
+     */
+    private static JsonNode getExpectStatus(String path, int expectedStatus) throws IOException, InterruptedException {
         HttpClient c = HttpClient.newHttpClient();
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE + path))
@@ -156,7 +165,7 @@ public class AdvancedQueryTest {
                 .GET()
                 .build();
         HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
-        assertEquals(200, resp.statusCode(),
+        assertEquals(expectedStatus, resp.statusCode(),
                 () -> "Unexpected status for GET " + path + ": " + resp.statusCode() + " body=" + resp.body());
         return M.readTree(resp.body());
     }
@@ -182,11 +191,17 @@ public class AdvancedQueryTest {
 
     @Test
     @Order(3)
-    void badTimestampFilterLeftLiteral() throws Exception {
-        JsonNode node = get("/api/default_default_logs?filter=createdAt:notISO&count=true");
-        assertTrue(node.has("filters"));
-        assertEquals("notISO", node.get("filters").get("createdAt").asText());
-        assertTrue(node.has("total"));
+    void badTimestampFilterRejectedWith400() throws Exception {
+        // Review #4 (High A) — an unparseable typed filter value used to be
+        // silently dropped (fail-open: 200 with the literal echoed back and an
+        // unscoped `total`). filter= is the only scoping mechanism several
+        // callers rely on, so failing open here is a correctness/data-exposure
+        // hazard, not just a UX one. Deliberately fails closed with 400 now —
+        // this replaces badTimestampFilterLeftLiteral, which asserted the old
+        // fail-open contract.
+        JsonNode node = getExpectStatus("/api/default_default_logs?filter=createdAt:notISO&count=true", 400);
+        assertTrue(node.has("errors"), "400 body should have a structured field-error map");
+        assertTrue(node.get("errors").has("createdAt"), "the offending field should be named in the error");
     }
 
     @Test
@@ -251,5 +266,70 @@ public class AdvancedQueryTest {
         // reference column too.
         JsonNode node = get("/api/default_default_line_item?invoice_id=1&count=true");
         assertEquals(3, node.get("total").asLong());
+    }
+
+    // Review #4 — the round-3/round-4 commit messages both claimed the
+    // coercion switches now "cover every type the AI Builder generates", and
+    // both times that claim was wrong ("datetime" slipped through both
+    // rounds). The cheapest way to stop the claim and the coverage from
+    // drifting apart again is to make the claim itself a test: enumerate the
+    // literal field-type allowlist the AI Builder hands the LLM (see
+    // ai-builder's schema-field-type instructions / §11 of the copilot
+    // instructions) and assert every single one round-trips insert -> exact
+    // filter without a 500 and without a false zero-match. Uses assertAll so
+    // one failing type doesn't hide the others.
+    @Test
+    @Order(11)
+    void everyAiBuilderAllowlistedTypeRoundTripsInsertToFilter() {
+        long ts = Instant.parse("2026-01-15T10:30:00Z").toEpochMilli();
+        List<org.junit.jupiter.api.function.Executable> checks = new ArrayList<>();
+        for (Object[] c : new Object[][] {
+                { "text", "hello-text", "hello-text" },
+                { "number", 42, "42" },
+                { "decimal", "19.99", "19.99" },
+                { "boolean", true, "true" },
+                { "date", ts, "2026-01-15T10:30:00Z" },
+                { "datetime", ts, "2026-01-15T10:30:00Z" },
+                { "email", "user@example.com", "user@example.com" },
+                { "phone", "555-0100", "555-0100" },
+                { "status", "ACTIVE", "ACTIVE" },
+                { "reference", 5, "5" },
+                { "longtext", "long text content here", "long text content here" },
+        }) {
+            String type = (String) c[0];
+            Object insertValue = c[1];
+            String filterLiteral = (String) c[2];
+            checks.add(() -> assertTypeRoundTrips(type, insertValue, filterLiteral));
+        }
+        assertAll("AI Builder field-type allowlist must round-trip insert -> filter", checks);
+    }
+
+    private static void assertTypeRoundTrips(String type, Object insertValue, String filterLiteral) throws Exception {
+        EntityCrudService crud = new EntityCrudService();
+        EntitySchema schema = new EntitySchema();
+        schema.setName("rt_" + type);
+        schema.setTenantId("default");
+        schema.setAppId("default");
+        schema.setFields(List.of(
+                field("id", "long", true, true),
+                field("value", type, false, false)));
+        SchemaManager.saveSchema(schema);
+
+        // Fresh table on the shared dev Postgres instance — clear it so the
+        // exact-count assertion below is deterministic across repeated runs.
+        try (java.sql.Connection conn = JdbcManager.getConnection();
+                java.sql.Statement st = conn.createStatement()) {
+            st.execute("DELETE FROM \"" + SchemaManager.getPhysicalTableName(schema).toUpperCase(Locale.ROOT)
+                    + "\"");
+        }
+
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("value", insertValue);
+        crud.insertRecord(schema, row);
+
+        String encoded = java.net.URLEncoder.encode(filterLiteral, java.nio.charset.StandardCharsets.UTF_8);
+        JsonNode node = get("/api/default_default_rt_" + type + "?filter=value:=" + encoded + "&count=true");
+        assertEquals(1, node.get("total").asLong(),
+                "type '" + type + "' must round-trip insert -> filter without a 500 or a 0-match");
     }
 }

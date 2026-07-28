@@ -450,7 +450,7 @@ public class EntityCrudService {
     public Map<String, Object> parseFilters(String raw, EntitySchema schema) {
         Map<String, Object> map = new LinkedHashMap<>();
         if (raw == null || raw.isBlank()) {
-            LOG.info("[FILTER] No filter string provided");
+            LOG.debug("[FILTER] No filter string provided");
             return map;
         }
         // URL-decode the filter string to handle spaces encoded as + or %20
@@ -459,23 +459,23 @@ public class EntityCrudService {
         } catch (Exception e) {
             LOG.warn("[FILTER] Failed to URL-decode filter string, using as-is: {}", raw);
         }
-        LOG.info("[FILTER] Parsing filter string: {}", raw);
+        LOG.debug("[FILTER] Parsing filter string: {}", raw);
         String[] pairs = raw.split(",");
         Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
         for (EntitySchema.Field f : schema.getFields()) {
             fieldMap.put(f.getName().toLowerCase(Locale.ROOT), f);
-            LOG.info("[FILTER] Schema field: {} (lowercased: {})", f.getName(), f.getName().toLowerCase(Locale.ROOT));
+            LOG.debug("[FILTER] Schema field: {} (lowercased: {})", f.getName(), f.getName().toLowerCase(Locale.ROOT));
         }
         for (String p : pairs) {
             int idx = p.indexOf(":");
             if (idx <= 0) {
-                LOG.info("[FILTER] Skipping invalid pair (no colon or at start): {}", p);
+                LOG.debug("[FILTER] Skipping invalid pair (no colon or at start): {}", p);
                 continue;
             }
             String name = p.substring(0, idx).trim();
             String val = p.substring(idx + 1).trim();
             if (name.isEmpty()) {
-                LOG.info("[FILTER] Skipping pair with empty name");
+                LOG.debug("[FILTER] Skipping pair with empty name");
                 continue;
             }
             // C3.9 — a leading '=' on the value requests an exact comparison
@@ -484,19 +484,31 @@ public class EntityCrudService {
             if (exact) {
                 val = val.substring(1).trim();
             }
-            LOG.info("[FILTER] Looking up field '{}' (lowercased: '{}') in schema", name,
+            LOG.debug("[FILTER] Looking up field '{}' (lowercased: '{}') in schema", name,
                     name.toLowerCase(Locale.ROOT));
             EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
             if (f == null) {
-                LOG.info("[FILTER] Field '{}' not found in schema, skipping", name);
+                LOG.debug("[FILTER] Field '{}' not found in schema, skipping", name);
                 continue; // ignore unknown
             }
             Object parsed = parseFilterValue(f, val);
-            LOG.info("[FILTER] Parsed filter: {}={} (type: {}, parsed value: {})", f.getName(), val, f.getType(),
+            if (parsed == null) {
+                // Review #4 (High A) — a filter value that fails to coerce for the
+                // field's type used to be stored as null here and then silently
+                // dropped by buildWhere() (fail-open: 200 with an unscoped or
+                // under-scoped result). filter= is the only scoping mechanism for
+                // several callers (child records, saved views, approval queues),
+                // so failing open is a correctness/data-exposure hazard, not just
+                // a UX one. Fail closed instead: reject the whole request with
+                // 400 and say exactly which field/value was bad.
+                throw new FieldValidationException(f.getName(),
+                        "invalid value '" + val + "' for type '" + f.getType() + "'");
+            }
+            LOG.debug("[FILTER] Parsed filter: {}={} (type: {}, parsed value: {})", f.getName(), val, f.getType(),
                     parsed);
             map.put(f.getName(), exact ? new ExactMatch(parsed) : parsed); // canonical
         }
-        LOG.info("[FILTER] Final filter map: {}", map);
+        LOG.debug("[FILTER] Final filter map: {}", map);
         return map;
     }
 
@@ -862,17 +874,15 @@ public class EntityCrudService {
             return null;
         }
         try {
-            return switch (t) {
-                // C3.10 (item A follow-up) — "number" and "reference" both map to
-                // INTEGER at the DDL layer (SchemaManager.sqlType()); "serial" is an
-                // alias some AI-generated schemas use for an auto-increment int.
-                // Before this, all three fell through to the `default` branch below,
-                // which does raw.toString() unconditionally — so a perfectly good
-                // Integer became a String and Postgres rejected the INSERT/UPDATE
-                // with "column is of type integer but expression is of type
-                // character varying". Same defect class as parseFilterValue, on
-                // the write path instead of the read path.
-                case "int", "integer", "number", "reference", "serial" -> {
+            // Review #4 (round 4 of the field-type-coercion defect family) —
+            // dispatch on SchemaManager.classifyFieldType(), the single shared
+            // type->kind mapping also consulted by sqlType() and
+            // parseFilterValue() below, instead of maintaining a third
+            // independent alias list here. This is what closes the "datetime"
+            // blocker: it was missing from this switch and parseFilterValue's,
+            // even though sqlType() already mapped it to TIMESTAMP.
+            return switch (SchemaManager.classifyFieldType(t)) {
+                case INTEGER, REFERENCE -> {
                     if (raw instanceof Number) {
                         long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin())
@@ -912,7 +922,7 @@ public class EntityCrudService {
                         throw new IllegalArgumentException("field '" + f.getName() + "' invalid integer format");
                     }
                 }
-                case "long", "bigint", "bigserial" -> {
+                case BIGINT -> {
                     if (raw instanceof Number) {
                         long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin())
@@ -928,12 +938,11 @@ public class EntityCrudService {
                         throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                     yield lv;
                 }
-                case "decimal", "numeric", "money", "float", "double", "currency" -> {
+                case DECIMAL -> {
                     // Coerce to BigDecimal so Postgres NUMERIC columns accept
                     // the bind. Accepts Number (JSON number literal) and String
                     // (form input or JSON string). min/max are compared as
-                    // Long -> BigDecimal. "currency" added alongside the DDL
-                    // alias in SchemaManager.sqlType() — C3.10 (item A follow-up).
+                    // Long -> BigDecimal.
                     java.math.BigDecimal bd;
                     if (raw instanceof java.math.BigDecimal existing) {
                         bd = existing;
@@ -954,7 +963,7 @@ public class EntityCrudService {
                         throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                     yield bd;
                 }
-                case "boolean" -> {
+                case BOOLEAN -> {
                     if (raw instanceof Boolean) {
                         yield raw;
                     }
@@ -965,7 +974,7 @@ public class EntityCrudService {
                         yield false;
                     throw new IllegalArgumentException("field '" + f.getName() + "' invalid boolean");
                 }
-                case "date", "timestamp" -> {
+                case TIMESTAMP -> {
                     // if already a date/timestamp, just return
                     if (raw instanceof java.util.Date) {
                         if (raw instanceof Timestamp) yield raw;
@@ -997,19 +1006,10 @@ public class EntityCrudService {
                         }
                     }
                 }
-                case "text", "string" -> {
-                    String str = raw.toString();
-                    if (f.getLength() != null && str.length() > f.getLength())
-                        throw new IllegalArgumentException(
-                                "field '" + f.getName() + "' length exceeds " + f.getLength());
-                    if (f.getPattern() != null && !f.getPattern().isEmpty() && !"null".equals(f.getPattern())) {
-                        if (!Pattern.compile(f.getPattern()).matcher(str).matches())
-                            throw new IllegalArgumentException("field '" + f.getName() + "' does not match pattern");
-                    }
-                    yield str;
-                }
-                default -> {
-                    // string/text or other unhandled types
+                case TEXT, FILE, STRING -> {
+                    // Covers "text"/"string" plus every alias that classifies as
+                    // STRING (email, phone, status, file, and anything
+                    // unrecognized) — all just need length/pattern validation.
                     String str = raw.toString();
                     if (f.getLength() != null && str.length() > f.getLength())
                         throw new IllegalArgumentException(
@@ -1033,30 +1033,22 @@ public class EntityCrudService {
     private static Object parseFilterValue(EntitySchema.Field f, String v) {
         String t = f.getType().toLowerCase(Locale.ROOT);
         try {
-            return switch (t) {
-                // C3.10 (item A follow-up) — "number" and "reference" both map to
-                // INTEGER at the DDL layer (see SchemaManager.sqlType()), and
-                // "reference" is exactly how every generated foreign-key column is
-                // typed. Before this, both fell through to the `default -> v` branch
-                // below and bound a raw String against an INTEGER column, which
-                // Postgres rejects with "operator does not exist: integer = character
-                // varying" — a 500 on every filtered child-table fetch.
-                case "int", "integer", "serial", "number", "reference" -> Integer.parseInt(v);
-                case "long", "bigint", "bigserial" -> Long.parseLong(v);
-                // "decimal"/"numeric"/"money"/"float"/"double"/"currency" all map to
-                // NUMERIC(19,4) in SchemaManager.sqlType() — bind a BigDecimal, not a
-                // String, for the same reason as above.
-                case "decimal", "numeric", "money", "float", "double", "currency" -> new java.math.BigDecimal(v);
-                case "boolean" -> ("true".equalsIgnoreCase(v) || "1".equals(v));
-                case "date", "timestamp" -> {
-                    // Accept only valid ISO-8601 instant strings; if parsing fails treat as raw
-                    try {
-                        yield Timestamp.from(Instant.parse(v));
-                    } catch (Exception ignored) {
-                        yield v;
-                    }
-                }
-                default -> v;
+            // Review #4 — same shared classifyFieldType() dispatch as
+            // coerceAndValidateRaw()/sqlType(); see the comment there. This also
+            // closes High-A for dates specifically: an unparseable
+            // date/timestamp/datetime value used to fall back to the raw String
+            // (`yield v`) instead of null, which was the one kind that DIDN'T get
+            // treated as a parse failure — it just bound the literal string
+            // against a TIMESTAMP column (500) or slipped past as a literal.
+            // Every kind now fails the same way — null — which parseFilters()
+            // turns into a 400 instead of a silently dropped predicate.
+            return switch (SchemaManager.classifyFieldType(t)) {
+                case INTEGER, REFERENCE -> Integer.parseInt(v);
+                case BIGINT -> Long.parseLong(v);
+                case DECIMAL -> new java.math.BigDecimal(v);
+                case BOOLEAN -> ("true".equalsIgnoreCase(v) || "1".equals(v));
+                case TIMESTAMP -> Timestamp.from(Instant.parse(v));
+                case TEXT, FILE, STRING -> v;
             };
         } catch (Exception e) {
             // If parsing fails for a typed field (e.g. integer), return null to indicate
@@ -1073,7 +1065,7 @@ public class EntityCrudService {
             StringBuilder where,
             List<Object> params) {
         List<String> parts = new ArrayList<>();
-        LOG.info("[BUILD_WHERE] Building WHERE clause. q={}, filters={}", q, filters);
+        LOG.debug("[BUILD_WHERE] Building WHERE clause. q={}, filters={}", q, filters);
 
         if (q != null && !q.isBlank()) {
             String uq = q.trim().toUpperCase(Locale.ROOT);
@@ -1097,10 +1089,10 @@ public class EntityCrudService {
             }
 
             for (Map.Entry<String, Object> e : filters.entrySet()) {
-                LOG.info("[BUILD_WHERE] Processing filter entry: key={}, value={}", e.getKey(), e.getValue());
+                LOG.debug("[BUILD_WHERE] Processing filter entry: key={}, value={}", e.getKey(), e.getValue());
                 EntitySchema.Field f = fieldMap.get(e.getKey().toLowerCase(Locale.ROOT));
                 if (f == null) {
-                    LOG.info("[BUILD_WHERE] Field '{}' not found in schema, skipping", e.getKey());
+                    LOG.debug("[BUILD_WHERE] Field '{}' not found in schema, skipping", e.getKey());
                     continue; // unknown
                 }
 
@@ -1114,20 +1106,11 @@ public class EntityCrudService {
                 }
 
                 String t = f.getType().toLowerCase(Locale.ROOT);
-                if ((t.equalsIgnoreCase("date") || t.equalsIgnoreCase("timestamp"))
-                        && filterValue instanceof String sVal) {
-                    boolean valid = false;
-                    try {
-                        Instant.parse(sVal);
-                        valid = true;
-                    } catch (Exception ignored) {
-                    }
-                    if (!valid) {
-                        LOG.info("[BUILD_WHERE] Skipping invalid date/timestamp filter: {}", sVal);
-                        continue; // skip predicate, prevents DB parse error
-                    }
-                }
-
+                // Review #4 — the date/timestamp-specific Instant.parse pre-check
+                // that used to live here is now dead code: parseFilters(), the
+                // only normal producer of this map, already rejects an
+                // unparseable date/timestamp/datetime value with a 400 before
+                // buildWhere() ever runs. Removed rather than left stale.
                 String quotedKey = quote(f.getName());
 
                 // If filter value is NULL (parsing failed), we skip it to avoid DB errors
@@ -1148,7 +1131,7 @@ public class EntityCrudService {
                         // String against a typed SQL column and 500; skip the predicate
                         // instead, matching how the date/timestamp branch above already
                         // behaves.
-                        LOG.info("[BUILD_WHERE] Skipping filter for '{}' — value '{}' does not parse as type '{}'",
+                        LOG.debug("[BUILD_WHERE] Skipping filter for '{}' — value '{}' does not parse as type '{}'",
                                 e.getKey(), sVal, t);
                         continue;
                     }
@@ -1159,12 +1142,12 @@ public class EntityCrudService {
                 // others — or when the caller explicitly asked for exact.
                 if (!exactRequested && (t.equals("string") || t.equals("text") || t.equals("varchar"))) {
                     // Case-insensitive LIKE match for string fields
-                    LOG.info("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey,
+                    LOG.debug("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey,
                             finalValue);
                     parts.add("UPPER(" + quotedKey + ") LIKE ?");
                     params.add("%" + String.valueOf(finalValue).toUpperCase(Locale.ROOT) + "%");
                 } else {
-                    LOG.info("[BUILD_WHERE] Adding exact filter condition: {} = ? (param: {} [type: {}])", quotedKey,
+                    LOG.debug("[BUILD_WHERE] Adding exact filter condition: {} = ? (param: {} [type: {}])", quotedKey,
                             finalValue, finalValue != null ? finalValue.getClass().getSimpleName() : "null");
                     parts.add(quotedKey + " = ?");
                     params.add(finalValue);
@@ -1174,8 +1157,8 @@ public class EntityCrudService {
 
         if (!parts.isEmpty()) {
             where.append(" WHERE ").append(String.join(" AND ", parts));
-            LOG.info("[BUILD_WHERE] Final WHERE clause: {}", where);
-            LOG.info("[BUILD_WHERE] Final params: {}", params);
+            LOG.debug("[BUILD_WHERE] Final WHERE clause: {}", where);
+            LOG.debug("[BUILD_WHERE] Final params: {}", params);
         }
     }
 }

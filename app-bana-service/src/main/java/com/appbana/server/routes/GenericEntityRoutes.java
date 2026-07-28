@@ -585,7 +585,16 @@ public class GenericEntityRoutes {
             // C2.7 — approval-state filter, checker-only for PENDING.
             String approvalStatusParam = req.query("_approvalStatus");
 
-            Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+            Map<String, Object> filters;
+            try {
+                filters = crud.parseFilters(filterParam, schema);
+            } catch (IllegalArgumentException iae) {
+                // Review #4 (High A) — parseFilters() now fails closed (400) on an
+                // unparseable typed filter value instead of silently dropping the
+                // predicate and returning an under-scoped 200.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
+                return;
+            }
             boolean approvalFilterApplied;
             try {
                 approvalFilterApplied = applyApprovalStatusFilter(schema, null, null, approvalStatusParam, filters,
@@ -1146,7 +1155,15 @@ public class GenericEntityRoutes {
             LOG.info("[STUDIO-LIST] entity={}, filter={}, sort={}, limit={}, offset={}", 
                      entity, filterParam, sortParam, limitS, offsetS);
 
-            Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+            Map<String, Object> filters;
+            try {
+                filters = crud.parseFilters(filterParam, schema);
+            } catch (IllegalArgumentException iae) {
+                // Review #4 (High A) — fail closed (400) instead of silently
+                // dropping an unparseable typed filter predicate.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
+                return;
+            }
 
             // C2.7 — approval-state filter, checker-only for PENDING.
             String approvalStatusParam = req.query("_approvalStatus");
@@ -1601,7 +1618,15 @@ public class GenericEntityRoutes {
                         offset = 0;
                     }
 
-                    Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+                    Map<String, Object> filters;
+                    try {
+                        filters = crud.parseFilters(filterParam, schema);
+                    } catch (IllegalArgumentException iae) {
+                        // Review #4 (High A) — fail closed (400) instead of silently
+                        // dropping an unparseable typed filter predicate.
+                        res.json(400, ErrorHandler.fieldValidationError(iae));
+                        return;
+                    }
 
                     // C2.7 — approval-state filter, checker-only for PENDING.
                     String approvalStatusParam = req.query("_approvalStatus");

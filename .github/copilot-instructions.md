@@ -492,7 +492,7 @@ datetime    â†’ TIMESTAMP
 email       â†’ VARCHAR(255) with email validation
 phone       â†’ VARCHAR(50)
 status      â†’ VARCHAR(100) with options[]
-reference   â†’ VARCHAR(255) referencing another entity
+reference   â†’ INTEGER (H4 hardening — must match the parent's PK type for a real FOREIGN KEY)
 ```
 
 > [!WARNING]

@@ -616,6 +616,40 @@ public class SchemaManager {
         }
     }
 
+    /**
+     * Review #4 (round 4 of the field-type-coercion defect family) — the DDL
+     * mapping here ({@link #sqlType}) and the value-coercion switches in
+     * {@code EntityCrudService} ({@code coerceAndValidateRaw},
+     * {@code parseFilterValue}) had drifted into three independent hand-maintained
+     * switch statements on the same raw type string. Round 3 added
+     * "serial"/"bigserial"/"money"/"numeric" to the coercion switches but not
+     * here, and none of the three switches recognized "datetime" consistently.
+     * This enum + {@link #classifyFieldType} is the single source of truth for
+     * "which SQL-ish kind does this schema type name belong to" — sqlType() and
+     * every EntityCrudService coercion switch now consult it instead of keeping
+     * their own alias lists, so a type added to one can no longer silently miss
+     * the other two.
+     */
+    public enum FieldSqlKind {
+        STRING, INTEGER, BIGINT, BOOLEAN, TIMESTAMP, DECIMAL, TEXT, FILE, REFERENCE
+    }
+
+    /** Case-insensitive; unrecognized/null type names classify as {@code STRING} (VARCHAR), matching prior behavior. */
+    public static FieldSqlKind classifyFieldType(String rawType) {
+        String t = rawType == null ? "" : rawType.toLowerCase(Locale.ROOT);
+        return switch (t) {
+            case "int", "integer", "number", "serial" -> FieldSqlKind.INTEGER;
+            case "long", "bigint", "bigserial" -> FieldSqlKind.BIGINT;
+            case "boolean" -> FieldSqlKind.BOOLEAN;
+            case "date", "timestamp", "datetime" -> FieldSqlKind.TIMESTAMP;
+            case "decimal", "double", "float", "currency", "numeric", "money" -> FieldSqlKind.DECIMAL;
+            case "text", "longtext" -> FieldSqlKind.TEXT;
+            case "file" -> FieldSqlKind.FILE;
+            case "reference" -> FieldSqlKind.REFERENCE;
+            default -> FieldSqlKind.STRING;
+        };
+    }
+
     private static String sqlType(EntitySchema.Field f, String dialect) {
         return sqlType(f, dialect, false);
     }
@@ -626,80 +660,33 @@ public class SchemaManager {
 
         // For ALTER statements, we can't use SERIAL/BIGSERIAL, must use INTEGER/BIGINT
         boolean useSerial = aiPk && !forAlter;
+        boolean isPg = "postgres".equals(dialect) || "postgresql".equals(dialect);
 
-        if ("postgres".equals(dialect) || "postgresql".equals(dialect)) {
-            switch (t) {
-                case "string":
-                case "varchar":
+        return switch (classifyFieldType(t)) {
+            case STRING -> {
+                // "string"/"varchar" respect an explicit length; every other alias
+                // that classifies as STRING (email, phone, status, and anything
+                // unrecognized) keeps the fixed VARCHAR(255) this always returned,
+                // to avoid silently resizing existing columns for schemas nobody
+                // asked to widen/narrow.
+                if (t.equals("string") || t.equals("varchar")) {
                     int len = (f.getLength() != null) ? f.getLength() : 255;
-                    return "VARCHAR(" + len + ")";
-                case "int":
-                case "integer":
-                case "number": // Handle 'number' as INTEGER
-                    return useSerial ? "SERIAL" : "INTEGER";
-                case "long":
-                case "bigint":
-                    return useSerial ? "BIGSERIAL" : "BIGINT";
-                case "boolean":
-                    return "BOOLEAN";
-                case "date":
-                case "timestamp":
-                case "datetime":
-                    return "TIMESTAMP";
-                case "decimal":
-                case "double":
-                case "float":
-                case "currency": // Handle 'currency' as NUMERIC
-                    return "NUMERIC(19,4)";
-                case "text":
-                case "longtext":
-                    return "TEXT";
-                case "file":
-                    // Phase B3 — stores the fileId issued by /api/files/upload (UUID w/o dashes = 32 chars).
-                    return "VARCHAR(64)";
-                case "reference":
-                    // H4 hardening — reference columns must match the parent's PK type
-                    // (SERIAL/INTEGER) so a real FOREIGN KEY constraint can be added.
-                    return "INTEGER";
-                default:
-                    return "VARCHAR(255)";
+                    yield "VARCHAR(" + len + ")" + (!isPg && aiPk ? " AUTO_INCREMENT" : "");
+                }
+                yield "VARCHAR(255)";
             }
-        }
-        switch (t) {
-            case "string":
-            case "varchar":
-                int len = (f.getLength() != null) ? f.getLength() : 255;
-                return "VARCHAR(" + len + ")" + (aiPk ? " AUTO_INCREMENT" : "");
-            case "int":
-            case "integer":
-            case "number":
-                return "INT" + (aiPk ? " AUTO_INCREMENT" : "");
-            case "long":
-            case "bigint":
-                return "BIGINT" + (aiPk ? " AUTO_INCREMENT" : "");
-            case "boolean":
-                return "BOOLEAN";
-            case "date":
-            case "timestamp":
-            case "datetime":
-                return "TIMESTAMP";
-            case "decimal":
-            case "double":
-            case "float":
-            case "currency":
-                return "DECIMAL(19,4)";
-            case "text":
-            case "longtext":
-                return "CLOB";
-            case "file":
-                return "VARCHAR(64)";
-            case "reference":
-                // H4 hardening — reference columns must match the parent's PK type
-                // (SERIAL/INTEGER) so a real FOREIGN KEY constraint can be added.
-                return "INT";
-            default:
-                return "VARCHAR(255)";
-        }
+            case INTEGER -> isPg ? (useSerial ? "SERIAL" : "INTEGER") : ("INT" + (aiPk ? " AUTO_INCREMENT" : ""));
+            case BIGINT -> isPg ? (useSerial ? "BIGSERIAL" : "BIGINT") : ("BIGINT" + (aiPk ? " AUTO_INCREMENT" : ""));
+            case BOOLEAN -> "BOOLEAN";
+            case TIMESTAMP -> "TIMESTAMP";
+            case DECIMAL -> isPg ? "NUMERIC(19,4)" : "DECIMAL(19,4)";
+            case TEXT -> isPg ? "TEXT" : "CLOB";
+            // Phase B3 — stores the fileId issued by /api/files/upload (UUID w/o dashes = 32 chars).
+            case FILE -> "VARCHAR(64)";
+            // H4 hardening — reference columns must match the parent's PK type
+            // (SERIAL/INTEGER) so a real FOREIGN KEY constraint can be added.
+            case REFERENCE -> isPg ? "INTEGER" : "INT";
+        };
     }
 
     private static String normalizeSqlType(String s) {
