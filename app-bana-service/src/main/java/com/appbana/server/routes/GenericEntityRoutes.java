@@ -4,6 +4,7 @@ import com.appbana.AuditLogService;
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
 import com.appbana.api.Router;
+import com.appbana.approval.ApprovalColumns;
 import com.appbana.approval.ApprovalService;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
@@ -1854,22 +1855,13 @@ public class GenericEntityRoutes {
         });
     }
 
-    private static final List<String> APPROVAL_COLUMNS = List.of(
-            "approval_status", "APPROVAL_STATUS",
-            "approval_revision", "APPROVAL_REVISION",
-            "approval_parent_id", "APPROVAL_PARENT_ID",
-            "submitted_by", "SUBMITTED_BY",
-            "submitted_at", "SUBMITTED_AT",
-            "approved_by", "APPROVED_BY",
-            "approved_at", "APPROVED_AT",
-            "rejection_reason", "REJECTION_REASON"
-    );
+    // Review #6 — both lists now delegate to ApprovalColumns, the single canonical
+    // source (previously duplicated verbatim here and drifted independently from the
+    // set EntityCrudService.parseFilters()/buildWhere() needed).
+    private static final List<String> APPROVAL_COLUMNS = ApprovalColumns.NAMES_BOTH_CASES;
 
     /** Lower-cased approval column names, for schema-field comparisons. */
-    private static final Set<String> APPROVAL_FIELD_NAMES = Set.of(
-            "approval_status", "approval_revision", "approval_parent_id",
-            "submitted_by", "submitted_at", "approved_by", "approved_at", "rejection_reason"
-    );
+    private static final Set<String> APPROVAL_FIELD_NAMES = ApprovalColumns.FIELD_NAMES;
 
     private static final Set<String> VALID_APPROVAL_STATUSES = Set.of("DRAFT", "PENDING", "APPROVED", "REJECTED");
 

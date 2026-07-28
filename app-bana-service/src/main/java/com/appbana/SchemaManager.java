@@ -651,6 +651,10 @@ public class SchemaManager {
      * columns, that needs an explicit migration plan and a corpus check first, not a side effect
      * of this shared-classifier refactor.
      */
+    /** Known aliases that are *intentionally* STRING-kind — excluded from the unrecognized-type WARN log. */
+    private static final Set<String> STRING_ALIASES = Set.of(
+            "string", "varchar", "email", "phone", "status", "uuid", "money", "numeric", "serial", "bigserial");
+
     public static FieldSqlKind classifyFieldType(String rawType) {
         String t = rawType == null ? "" : rawType.toLowerCase(Locale.ROOT);
         return switch (t) {
@@ -673,10 +677,6 @@ public class SchemaManager {
             }
         };
     }
-
-    /** Known aliases that are *intentionally* STRING-kind — excluded from the unrecognized-type WARN log. */
-    private static final Set<String> STRING_ALIASES = Set.of(
-            "string", "varchar", "email", "phone", "status", "uuid", "money", "numeric", "serial", "bigserial");
 
     private static String sqlType(EntitySchema.Field f, String dialect) {
         return sqlType(f, dialect, false);

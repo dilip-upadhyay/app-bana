@@ -287,6 +287,83 @@ public class ApprovalRoutesSecurityTest {
     }
 
     /**
+     * Review #6 (blocker) — the eight approval columns are physical-only: {@code
+     * approvalRequired} entities get them added to the table by the AI Builder's
+     * {@code scaffold_app} enrichment step, not by {@code SchemaManager}, so any
+     * entity whose approval workflow was turned on any other way (a raw {@code
+     * create_entity} call, a later {@code batch_update_entities}, a direct schema
+     * edit) can have the physical columns without them ever appearing in {@code
+     * EntitySchema.getFields()}. Unlike the fixture in {@code
+     * testBareFieldParamIsIgnoredButFilterParamScopesTheList} above — which declares
+     * {@code submitted_by} etc. as real fields and so was never exposed to the bug —
+     * this test deliberately does not, to reproduce the reported scenario exactly.
+     *
+     * <p>Before this fix, {@code filter=submitted_by:=alice_maker} — the literal
+     * request {@code approval-views.ts}'s "Needs rework" view sends — 400'd for
+     * every entity in that state, because {@code parseFilters()}'s unknown-field
+     * check (Review #5) had no way to tell "typo'd field name" apart from
+     * "legitimate approval column absent from the schema's field list".
+     */
+    @Test
+    public void testApprovalColumnFilterWorksWhenAbsentFromSchemaFields() throws Exception {
+        String entityName = "UndeclaredApprovalCols";
+        String tableName = "APP_" + TENANT_ID.toUpperCase() + "_" + APP_ID.toUpperCase() + "_"
+                + entityName.toUpperCase();
+
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("DROP TABLE IF EXISTS \"" + tableName + "\"");
+        }
+
+        // Deliberately NO EntitySchema.Field for any of the 8 approval columns —
+        // only the user-defined fields, matching the "physical-only" scenario.
+        EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
+        EntitySchema.Field amountField = new EntitySchema.Field("amount", "integer", false, false, null);
+        EntitySchema schema = new EntitySchema(entityName, List.of(idField, amountField));
+        schema.setTenantId(TENANT_ID);
+        schema.setAppId(APP_ID);
+        schema.setApprovalRequired(true);
+        SchemaManager.saveSchema(schema);
+
+        // Add the approval columns by hand, as raw DDL — simulating however they
+        // ended up physically present without going through the field-driven
+        // ensureTable() loop (which only ever sees schema.getFields()).
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("ALTER TABLE \"" + tableName + "\" ADD COLUMN \"APPROVAL_STATUS\" VARCHAR(255)");
+            s.execute("ALTER TABLE \"" + tableName + "\" ADD COLUMN \"APPROVAL_REVISION\" INTEGER");
+            s.execute("ALTER TABLE \"" + tableName + "\" ADD COLUMN \"SUBMITTED_BY\" VARCHAR(255)");
+            s.execute(
+                    "INSERT INTO \"" + tableName + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (1, 10.0, 'REJECTED', 1, 'alice_maker')");
+            s.execute(
+                    "INSERT INTO \"" + tableName + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (2, 20.0, 'REJECTED', 1, 'someone_else')");
+        }
+
+        UserRoleService.grantRole(TENANT_ID, APP_ID, entityName, "alice_maker", UserRoleService.Role.BOTH, "system");
+
+        String base = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + entityName;
+
+        // The exact request approval-views.ts's "Needs rework" view sends.
+        HttpResponse<String> rework = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?_approvalStatus=REJECTED&filter=submitted_by:=alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, rework.statusCode(),
+                "filter=submitted_by:=... must not 400 just because submitted_by is absent from getFields(): "
+                        + rework.body());
+        assertEquals(1, countRecords(rework.body()),
+                "The filter must still scope the list to the caller's own rejected records");
+
+        // A genuine typo'd field name must still 400 — the Review #5 fail-closed fix
+        // for real unknown fields must not have been reopened by this exemption.
+        HttpResponse<String> typo = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?filter=submittedd_by:=alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, typo.statusCode(), "A genuinely unknown field name must still be rejected");
+    }
+
+    /**
      * C3.9 — the count-only response must not carry an empty {@code records} array.
      *
      * <p>It used to, alongside a non-zero {@code count}. Any caller applying the

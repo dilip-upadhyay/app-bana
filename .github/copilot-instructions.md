@@ -395,7 +395,9 @@ DELETE /api/{entity}/{id}       â†’ Delete record
 ```
 ?limit=50&offset=0             → Pagination (max limit 500)
 ?q=John                        → Full-text-ish search across text columns
-?filter=name:John,status:active → Field-level filters (comma-separated; unknown fields ignored)
+?filter=name:John,status:active → Field-level filters (comma-separated; an unrecognized field name 400s —
+                                  see Review #5/#6 — except the 8 injected approval columns, which are
+                                  always accepted even though they're absent from EntitySchema.getFields())
 ?filter=name:=John             → Exact match — leading '=' on the value. Default (no '=') is
                                   a case-insensitive substring LIKE, which over-matches identity
                                   fields (submitted_by:bob would also match "bobby").
@@ -414,6 +416,16 @@ DELETE /api/{entity}/{id}       â†’ Delete record
 > docs and some now-fixed callers assuming otherwise (C3.9/C3.10). The runtime's `entity-query.ts`
 > (`toEntityQueryParams`) is the canonical client-side helper — route any new list-fetching UI through it
 > instead of hand-building query params.
+
+> [!WARNING]
+> **`filter=` values must be RFC 3986 percent-encoded, not form-encoded.** The server decodes the query
+> string exactly once (`URI.getQuery()`), which treats a literal `+` as a literal `+`, not a space. A space
+> in a filter value MUST be sent as `%20`. Do **not** build this query string with a bare
+> `URLSearchParams(...).toString()` — its default `application/x-www-form-urlencoded` output encodes a space
+> as `+`, which the server will store as a literal `+`, not decode back to a space, silently corrupting the
+> filter (zero matches, no error). `app-bana-shared/api-client.ts`'s `fetchEntityRows()` post-processes with
+> `.replace(/\+/g, '%20')` for exactly this reason — copy that pattern (or route through `toEntityQueryParams`)
+> for any new caller that builds a `filter=` string with `URLSearchParams`.
 
 
 ### Approval Endpoints (maker-checker)

@@ -2,6 +2,7 @@ package com.appbana.service;
 
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
+import com.appbana.approval.ApprovalColumns;
 import com.appbana.model.EntitySchema;
 import com.appbana.model.TenantContext;
 import org.slf4j.Logger;
@@ -491,16 +492,30 @@ public class EntityCrudService {
                     name.toLowerCase(Locale.ROOT));
             EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
             if (f == null) {
-                // Review #5 (nit) — this used to `continue` (ignore unknown field),
-                // which is the exact same fail-open hazard the null-value check just
-                // below closes for a bad *value*: a typo'd field name (e.g.
-                // "?filter=statuss:open" instead of "status:open") silently produced
-                // an unscoped 200 instead of the caller's intended filter. filter= is
-                // the only scoping mechanism for several callers (child records,
-                // saved views, approval queues), so a typo here is a correctness/
-                // data-exposure hazard, not just a UX one. Fail closed like the value
-                // check does, rather than leaving this one hole in the same fix.
-                throw new FieldValidationException(name, "unknown filter field '" + name + "'");
+                // Review #6 (blocker) — approval system columns (approval_status,
+                // submitted_by, ...) are physical-only: SchemaManager injects them into
+                // the table for every approval-required entity, but they are never
+                // members of schema.getFields(), so the fieldMap lookup above always
+                // misses them. Before Review #5's fail-closed fix, an unknown field
+                // silently produced an unscoped 200 — which is how a filter on these
+                // columns "worked" (by not actually filtering). Rejecting them outright
+                // is worse: it 400s the maker-side "Needs rework" view (filter=
+                // submitted_by:=alice) for everyone. Treat them as free text instead of
+                // throwing — buildWhere() has the matching case for the SQL side.
+                if (ApprovalColumns.isApprovalColumn(name)) {
+                    map.put(name.toLowerCase(Locale.ROOT), exact ? new ExactMatch(val) : val);
+                    continue;
+                }
+                // This used to `continue` (ignore unknown field), which is the exact
+                // same fail-open hazard the null-value check just below closes for a
+                // bad *value*: a typo'd field name (e.g. "?filter=statuss:open" instead
+                // of "status:open") silently produced an unscoped 200 instead of the
+                // caller's intended filter. filter= is the only scoping mechanism for
+                // several callers (child records, saved views, approval queues), so a
+                // typo here is a correctness/data-exposure hazard, not just a UX one.
+                // Fail closed like the value check does, rather than leaving this one
+                // hole in the same fix.
+                throw new FieldValidationException(name, "unknown filter field");
             }
             Object parsed = parseFilterValue(f, val);
             if (parsed == null) {
@@ -1119,8 +1134,34 @@ public class EntityCrudService {
                 LOG.debug("[BUILD_WHERE] Processing filter entry: key={}, value={}", e.getKey(), e.getValue());
                 EntitySchema.Field f = fieldMap.get(e.getKey().toLowerCase(Locale.ROOT));
                 if (f == null) {
-                    LOG.debug("[BUILD_WHERE] Field '{}' not found in schema, skipping", e.getKey());
-                    continue; // unknown
+                    // Review #6 (blocker) — mirrors the parseFilters() case above: an
+                    // approval system column has no EntitySchema.Field, so the fieldMap
+                    // lookup misses it even though parseFilters() legitimately put it in
+                    // this map. Build the predicate directly against the physical column
+                    // name instead of dropping it (which would silently un-scope the
+                    // maker-side "Needs rework" query).
+                    if (ApprovalColumns.isApprovalColumn(e.getKey())) {
+                        boolean exactRequested = false;
+                        Object filterValue = e.getValue();
+                        if (filterValue instanceof ExactMatch em) {
+                            exactRequested = true;
+                            filterValue = em.value();
+                        }
+                        if (filterValue == null) {
+                            continue;
+                        }
+                        String quotedKey = quote(e.getKey());
+                        if (!exactRequested) {
+                            parts.add("UPPER(" + quotedKey + ") LIKE ?");
+                            params.add("%" + String.valueOf(filterValue).toUpperCase(Locale.ROOT) + "%");
+                        } else {
+                            parts.add(quotedKey + " = ?");
+                            params.add(filterValue);
+                        }
+                    } else {
+                        LOG.debug("[BUILD_WHERE] Field '{}' not found in schema, skipping", e.getKey());
+                    }
+                    continue; // unknown, or already handled as an approval column above
                 }
 
                 // C3.9 — unwrap an explicit exact-match request before any of the
