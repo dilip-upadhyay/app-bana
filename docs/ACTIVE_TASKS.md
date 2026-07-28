@@ -37,17 +37,23 @@
 
 ## ✅ Build health (single source — do not duplicate these counts elsewhere)
 
-Last verified 2026-07-28 at `8560ac0`.
+Last verified 2026-07-29 at `a18461f`.
 
 | Module | Command | Result |
 |---|---|---|
-| `app-bana` | `mvn -B verify` | 281 tests · 0 failures · 0 errors |
+| `app-bana` | `mvn -B verify` | 298 tests · 0 failures · 0 errors |
 | `ai-builder` | `mvn -B verify` | 145 tests · 0 failures · 0 errors · 2 skipped |
-| `app-bana-runtime` | `pnpm test` | 246 tests · 0 failures |
+| `app-bana-runtime` | `pnpm test` | 269 tests · 0 failures |
 | CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green |
 
-CI runs only on pull requests targeting `main`, so work pushed to a feature branch
-with no open PR is unverified until one exists.
+**Review #10 fix (2026-07-29):** CI used to trigger only on push/PR against `main`/`master`, so work on a
+feature branch with no open PR against `main` was never covered by CI — flagged as the highest-leverage
+open item after 10 review rounds. CI now triggers on push and PR against every branch, and a new
+`frontend` job runs `pnpm --filter @appbana/shared build` (type-check), `pnpm --filter app-bana-studio
+build`, `pnpm --filter @appbana/runtime test` (vitest) and `pnpm --filter @appbana/runtime build` — none
+of which need secrets. **Still not covered:** the Playwright e2e suite in `e2e/`, which needs the full
+stack (Postgres, Qdrant, ai-builder, backend, Studio, Runtime) running plus `OPENAI_API_KEY` — a bigger
+lift requiring a repo secret, tracked as a follow-up rather than attempted in this pass.
 
 The 2 `ai-builder` skips are integration tests gated on `OPENAI_API_KEY` via `Assumptions.assumeTrue`.
 
