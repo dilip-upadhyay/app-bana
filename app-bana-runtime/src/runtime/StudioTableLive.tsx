@@ -36,6 +36,8 @@ import { TableHeader } from './TableHeader';
 import { PaginationBar } from './PaginationBar';
 import { FilterBar } from './FilterBar';
 import { SavedViewsBar } from './SavedViewsBar';
+import { buildApprovalSystemViews, isSystemView } from './approval-views';
+import { useCurrentUser } from './useCurrentUser';
 import {
   entityNameFromKey,
   findAddPageForEntity,
@@ -84,6 +86,9 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     }
     return seed;
   });
+  // C3.6 — which system view is applied, purely for the chip's active state.
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const { user } = useCurrentUser();
 
   // Convert filterValues → query params for the row fetcher. Skip empty
   // strings / null so we don't send `?status=` (which would filter to rows
@@ -337,13 +342,20 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
         const currentView = Object.keys(filterValues).length > 0
           ? { filters: filterValues }
           : undefined;
+        // C3.6 — approval system views appear only once the rows prove this
+        // entity actually has the workflow enabled, for the same reason the
+        // status column does: page metadata never mentions approval.
+        const systemViews = approvalEnabled ? buildApprovalSystemViews(user?.userId) : [];
         return (
           <SavedViewsBar
             tenantId={ctx.tenantId}
             appId={ctx.appId}
             entityKey={qualifyEntityKey(entityKey)}
             currentView={currentView}
+            systemViews={systemViews}
+            activeViewId={activeViewId}
             onSelect={(v) => {
+              setActiveViewId(isSystemView(v.viewId) ? v.viewId : null);
               setFilterValues(v.view.filters ?? {});
             }}
           />
@@ -355,7 +367,12 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
       <FilterBar
         filters={filterDefs}
         values={filterValues}
-        onChange={setFilterValues}
+        onChange={(next) => {
+          // Editing filters by hand means the applied system view no longer
+          // describes what is on screen, so drop its active state.
+          setActiveViewId(null);
+          setFilterValues(next);
+        }}
       />
 
       {/* Error */}

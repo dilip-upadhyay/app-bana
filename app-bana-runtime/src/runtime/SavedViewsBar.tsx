@@ -21,6 +21,14 @@ interface SavedViewsBarProps {
   readonly entityKey: string;
   readonly currentView?: SavedViewRecord['view'];
   readonly onSelect: (view: SavedViewRecord) => void;
+  /**
+   * Task C3.6 — synthesised views rendered ahead of the user's own. They carry
+   * no delete affordance: they are not the user's to remove, and a "delete"
+   * that silently reappeared on reload would be worse than none.
+   */
+  readonly systemViews?: readonly SavedViewRecord[];
+  /** viewId of the currently applied view, for an active state. */
+  readonly activeViewId?: string | null;
 }
 
 export function SavedViewsBar({
@@ -29,6 +37,8 @@ export function SavedViewsBar({
   entityKey,
   currentView,
   onSelect,
+  systemViews = [],
+  activeViewId = null,
 }: Readonly<SavedViewsBarProps>) {
   const [views, setViews] = useState<SavedViewRecord[]>([]);
   const [busy, setBusy] = useState(false);
@@ -77,6 +87,25 @@ export function SavedViewsBar({
       className="flex flex-wrap items-center gap-2 px-5 py-2 border-b border-slate-200 bg-white"
       data-appbana-saved-views
     >
+      {systemViews.map((v) => {
+        const active = activeViewId === v.viewId;
+        return (
+          <button
+            key={v.viewId}
+            type="button"
+            className={`px-3 py-1 rounded-full text-xs ${
+              active
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }`}
+            aria-pressed={active}
+            data-system-view={v.viewId}
+            onClick={() => onSelect(v)}
+          >
+            {v.name}
+          </button>
+        );
+      })}
       {views.map((v) => (
         <span key={v.viewId} className="inline-flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200 text-xs">
           <button
