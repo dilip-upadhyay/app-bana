@@ -480,7 +480,26 @@ public class EntityCrudService {
             return schema.getFields();
         }
         List<EntitySchema.Field> combined = new ArrayList<>(schema.getFields());
-        combined.addAll(ApprovalColumns.asFields());
+        // Review #8 (Nit) — if a schema declares one of the 8 approval columns as
+        // a real field of its own (ApprovalRoutesSecurityTest's fixture does this),
+        // appending the synthetic definition unconditionally put both in this list.
+        // fieldMap-building callers (parseFilters/listAdvanced) put()-last-wins so
+        // the synthetic one silently shadowed the declared one, while
+        // resolveQueryableField()'s loop is first-wins and returned the declared
+        // one — two lookup paths disagreeing about which Field object is
+        // authoritative for the same name. Harmless today because
+        // ApprovalColumns.TYPES matches the physical DDL column-for-column, but
+        // skip the synthetic field outright when the name is already declared so
+        // both paths agree by construction instead of by coincidence.
+        Set<String> declared = new HashSet<>();
+        for (EntitySchema.Field f : schema.getFields()) {
+            declared.add(f.getName().toLowerCase(Locale.ROOT));
+        }
+        for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+            if (declared.add(f.getName().toLowerCase(Locale.ROOT))) {
+                combined.add(f);
+            }
+        }
         return combined;
     }
 

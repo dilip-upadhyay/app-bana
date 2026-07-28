@@ -489,4 +489,114 @@ public class AdvancedQueryTest {
                 "/api/default_default_" + entityName + "?_approvalStatus=REJECTED&filter=approval_status:=REJECTED",
                 200);
     }
+
+    @Test
+    @Order(16)
+    void groupByOnApprovalColumnDoesNotContradictGroupCounts() throws Exception {
+        // Review #8 (High) — groupByParam resolves through getQueryableFields()
+        // (Review #7), which includes the 8 approval columns, but those are
+        // excluded from the DEFAULT projection the `rows` are fetched with. The
+        // per-page Java bucketing used to read row.get(groupByParam) against rows
+        // that never had the column, collapsing every row into a single "" bucket
+        // in `groups` while `groupCounts` (SQL, unaffected by projection) reported
+        // the true per-group breakdown in the SAME response body. Assert the two
+        // halves of the response never disagree: either `groups` is correctly
+        // bucketed (because the column IS on the fetched rows) or it is omitted
+        // entirely — never a single fake "" bucket sitting next to a correct
+        // `groupCounts`.
+        String entityName = "approval_group_rt";
+        EntitySchema schema = new EntitySchema();
+        schema.setName(entityName);
+        schema.setTenantId("default");
+        schema.setAppId("default");
+        schema.setApprovalRequired(true);
+        schema.setFields(List.of(field("id", "long", true, true)));
+        SchemaManager.saveSchema(schema);
+
+        String table = SchemaManager.getPhysicalTableName(schema).toUpperCase(Locale.ROOT);
+        try (java.sql.Connection conn = JdbcManager.getConnection();
+                java.sql.Statement st = conn.createStatement()) {
+            st.execute("DELETE FROM \"" + table + "\"");
+            st.execute("ALTER TABLE \"" + table + "\" ADD COLUMN IF NOT EXISTS \"APPROVAL_STATUS\" VARCHAR(255)");
+            st.execute("INSERT INTO \"" + table + "\" (\"APPROVAL_STATUS\") VALUES ('DRAFT')");
+            st.execute("INSERT INTO \"" + table + "\" (\"APPROVAL_STATUS\") VALUES ('DRAFT')");
+            st.execute("INSERT INTO \"" + table + "\" (\"APPROVAL_STATUS\") VALUES ('PENDING')");
+        }
+
+        // Default projection (no fields=): `groups`, if present at all, must not
+        // contain a bucket with an empty key while `groupCounts` shows a real split.
+        JsonNode defaultProjection = getExpectStatus(
+                "/api/default_default_" + entityName + "?groupBy=approval_status", 200);
+        Map<String, Long> groupCounts = new HashMap<>();
+        defaultProjection.get("groupCounts").fields()
+                .forEachRemaining(e -> groupCounts.put(e.getKey(), e.getValue().asLong()));
+        assertEquals(2L, groupCounts.get("DRAFT"));
+        assertEquals(1L, groupCounts.get("PENDING"));
+        if (defaultProjection.has("groups")) {
+            for (JsonNode g : defaultProjection.get("groups")) {
+                assertFalse(g.get("key").asText().isEmpty(),
+                        "a `groups` entry must never carry an empty key while groupCounts reports a real split: "
+                                + defaultProjection);
+            }
+        }
+
+        // Explicit fields= including the group column: `groups` must now be
+        // present AND correctly bucketed, agreeing with `groupCounts`.
+        JsonNode explicitProjection = getExpectStatus(
+                "/api/default_default_" + entityName + "?groupBy=approval_status&fields=id,approval_status", 200);
+        assertTrue(explicitProjection.has("groups"), "groups must be present once the column is in the projection");
+        Map<String, Long> groupsSeen = new HashMap<>();
+        for (JsonNode g : explicitProjection.get("groups")) {
+            groupsSeen.put(g.get("key").asText(), g.get("count").asLong());
+        }
+        assertEquals(2L, groupsSeen.get("DRAFT"));
+        assertEquals(1L, groupsSeen.get("PENDING"));
+    }
+
+    @Test
+    @Order(17)
+    void declaredApprovalColumnIsNotShadowedBySyntheticDefinition() throws Exception {
+        // Review #8 (Nit) — when a schema declares one of the 8 approval columns
+        // as a real EntitySchema.Field of its own (as this test does), the
+        // synthetic ApprovalColumns.asFields() definition used to be appended
+        // unconditionally, so getQueryableFields() held two entries for the same
+        // name: fieldMap-building callers (parseFilters/listAdvanced) put()
+        // last-wins so the synthetic one silently shadowed the declared one,
+        // while resolveQueryableField()'s loop is first-wins and returned the
+        // declared one instead — two lookup paths disagreeing about which Field
+        // was authoritative for the same name. This just needs filter/sort/
+        // groupBy to resolve and behave consistently with no contradiction.
+        String entityName = "approval_declared_field_rt";
+        EntitySchema schema = new EntitySchema();
+        schema.setName(entityName);
+        schema.setTenantId("default");
+        schema.setAppId("default");
+        schema.setApprovalRequired(true);
+        schema.setFields(List.of(field("id", "long", true, true),
+                field("approval_status", "string", false, false)));
+        SchemaManager.saveSchema(schema);
+
+        String table = SchemaManager.getPhysicalTableName(schema).toUpperCase(Locale.ROOT);
+        try (java.sql.Connection conn = JdbcManager.getConnection();
+                java.sql.Statement st = conn.createStatement()) {
+            st.execute("DELETE FROM \"" + table + "\"");
+            st.execute("INSERT INTO \"" + table + "\" (\"APPROVAL_STATUS\") VALUES ('DRAFT')");
+            st.execute("INSERT INTO \"" + table + "\" (\"APPROVAL_STATUS\") VALUES ('APPROVED')");
+        }
+
+        JsonNode filtered = getExpectStatus(
+                "/api/default_default_" + entityName + "?filter=approval_status:=DRAFT&count=true", 200);
+        assertEquals(1L, filtered.get("total").asLong());
+
+        JsonNode sorted = getExpectStatus(
+                "/api/default_default_" + entityName + "?sort=approval_status&fields=id,approval_status", 200);
+        assertEquals(2, sorted.get("rows").size());
+
+        JsonNode grouped = getExpectStatus(
+                "/api/default_default_" + entityName + "?groupBy=approval_status&fields=id,approval_status", 200);
+        Map<String, Long> counts = new HashMap<>();
+        grouped.get("groupCounts").fields().forEachRemaining(e -> counts.put(e.getKey(), e.getValue().asLong()));
+        assertEquals(1L, counts.get("DRAFT"));
+        assertEquals(1L, counts.get("APPROVED"));
+    }
 }

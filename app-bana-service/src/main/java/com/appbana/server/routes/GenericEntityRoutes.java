@@ -622,10 +622,16 @@ public class GenericEntityRoutes {
 
             Integer limit = null;
             Integer offset = null;
+            boolean hasGroupBy = groupByParam != null && !groupByParam.isBlank();
+            // Review #8 (High) — groupBy was not itself part of this advanced-path
+            // trigger, so a bare `?groupBy=X` with no other query param fell into
+            // the "!anyAdv" simple-list branch below, which never runs the groupBy
+            // bucketing/countByGroup logic at all: a 200 with a plain row array,
+            // no `groups`, no `groupCounts`, and no indication groupBy was ignored.
             boolean anyAdv = countOnly || q != null || fieldsParam != null || sortParam != null || filterParam != null
-                    || limitS != null || offsetS != null || approvalFilterApplied;
+                    || limitS != null || offsetS != null || approvalFilterApplied || hasGroupBy;
             if (limitS != null || offsetS != null || q != null || fieldsParam != null || sortParam != null
-                    || filterParam != null || approvalFilterApplied) {
+                    || filterParam != null || approvalFilterApplied || hasGroupBy) {
                 try {
                     limit = limitS != null ? Integer.parseInt(limitS) : 50;
                 } catch (Exception ignore) {
@@ -699,31 +705,58 @@ public class GenericEntityRoutes {
                         //
                         // H6 hardening: also compute TRUE per-group counts across
                         // the whole filtered dataset (not just the current page)
-                        // via a real SQL GROUP BY. The `groups` field remains a
-                        // per-page bucketing for backwards compat; the new
-                        // `groupCounts` map is what UIs should show for accurate
-                        // totals ("Active (127)", "Pending (43)", ...) even when
-                        // there are more rows than the page size.
+                        // via a real SQL GROUP BY. The `groupCounts` map is what
+                        // UIs should show for accurate totals ("Active (127)",
+                        // "Pending (43)", ...) even when there are more rows than
+                        // the page size.
                         if (groupByParam != null && !groupByParam.isBlank()) {
                             Object rowsObj = out.get("rows");
                             if (rowsObj instanceof List<?> rowsList) {
-                                Map<String, List<Object>> buckets = new LinkedHashMap<>();
-                                for (Object item : rowsList) {
-                                    if (item instanceof Map<?, ?> row) {
-                                        Object key = row.get(groupByParam);
-                                        String keyStr = key == null ? "" : String.valueOf(key);
-                                        buckets.computeIfAbsent(keyStr, k -> new ArrayList<>()).add(item);
+                                // Review #8 (High) — `groupByParam` resolves through
+                                // getQueryableFields() (Review #7), which includes the 8
+                                // approval columns, but those are deliberately excluded
+                                // from the default projection the `rows` above were
+                                // fetched with (see the leak guardrail in
+                                // EntityCrudService#listAdvanced). Bucketing on
+                                // row.get(groupByParam) here used to silently read a key
+                                // that was never in the row map, collapsing every group
+                                // into a single "" bucket while `groupCounts` (SQL,
+                                // unaffected by projection) reported the true per-group
+                                // breakdown a few lines later in the SAME response body
+                                // — a UI reading `groups` saw a lie next to the truth in
+                                // `groupCounts`. Only bucket in Java when the resolved
+                                // column is actually present on the fetched rows;
+                                // otherwise omit `groups` entirely rather than fabricate
+                                // a wrong one — `groupCounts` remains the correct,
+                                // always-present source of truth for totals.
+                                String canonicalGroupBy = crud.resolveQueryableField(schema, groupByParam);
+                                boolean keyAvailableOnRow = canonicalGroupBy != null
+                                        && (rowsList.isEmpty()
+                                                || (rowsList.get(0) instanceof Map<?, ?> firstRow
+                                                        && firstRow.containsKey(canonicalGroupBy)));
+                                if (keyAvailableOnRow) {
+                                    Map<String, List<Object>> buckets = new LinkedHashMap<>();
+                                    for (Object item : rowsList) {
+                                        if (item instanceof Map<?, ?> row) {
+                                            Object key = row.get(canonicalGroupBy);
+                                            String keyStr = key == null ? "" : String.valueOf(key);
+                                            buckets.computeIfAbsent(keyStr, k -> new ArrayList<>()).add(item);
+                                        }
                                     }
+                                    List<Map<String, Object>> groups = new ArrayList<>(buckets.size());
+                                    for (Map.Entry<String, List<Object>> entry : buckets.entrySet()) {
+                                        Map<String, Object> g = new LinkedHashMap<>();
+                                        g.put("key", entry.getKey());
+                                        g.put("count", entry.getValue().size());
+                                        g.put("rows", entry.getValue());
+                                        groups.add(g);
+                                    }
+                                    out.put("groups", groups);
+                                } else {
+                                    LOG.debug("[GROUP-BY] '{}' not present on the projected rows for {}; "
+                                            + "omitting per-page `groups` and relying on `groupCounts` only",
+                                            groupByParam, entity);
                                 }
-                                List<Map<String, Object>> groups = new ArrayList<>(buckets.size());
-                                for (Map.Entry<String, List<Object>> entry : buckets.entrySet()) {
-                                    Map<String, Object> g = new LinkedHashMap<>();
-                                    g.put("key", entry.getKey());
-                                    g.put("count", entry.getValue().size());
-                                    g.put("rows", entry.getValue());
-                                    groups.add(g);
-                                }
-                                out.put("groups", groups);
                                 out.put("groupBy", groupByParam);
                                 // H6 — true, whole-dataset counts. Silently skipped
                                 // (empty map) if the column doesn't exist on the
