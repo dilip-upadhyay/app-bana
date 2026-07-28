@@ -179,6 +179,15 @@ public class AdvancedPromptEngine {
                 "  • `aggregates: [{ field, agg, label? }]` — set when the user asks for totals or averages ('show total revenue', 'average order value'). Aggs: sum | avg | count | min | max.\n" +
                 "Saved views themselves (per-user favourites like 'My open tasks') are not baked into page metadata — the runtime exposes a SavedViewsBar backed by `/api/saved-views` and users create them at runtime. You only produce the raw filter/groupBy scaffolding.\n\n");
 
+        // Phase C4 — Maker-checker (two-person approval) hint
+        prompt.append("APPROVAL WORKFLOWS / MAKER-CHECKER (Phase C4): Some records are too consequential for one person to create unilaterally. If the user's domain implies a regulated or money-moving record — customer onboarding, KYC, account opening, loan or credit applications, expense claims, purchase orders, invoices for payment, policy issuance, claims processing, contracts, employee onboarding, payroll changes, vendor setup — then:\n" +
+                "  • In PHASE 1, propose the approval flow in plain business language as part of your specification, and ask about it explicitly. Never use the words 'maker-checker', 'approval_status', 'state machine' or any other platform jargon with the user. Say something like: \"This app will use a two-person check — one team member fills in a new customer profile, and a second person reviews and approves it before it goes live. Does that match how your team works?\"\n" +
+                "  • Only flag the entity that actually carries the risk. In a loan app that is the Application, not the Branch or Product lookup tables. Reference/lookup data, catalogues, and read-mostly config never need approval.\n" +
+                "  • In PHASE 2, set `approvalRequired: true` on those entities (the flag is a property of the ENTITY object, a sibling of `name` and `fields`, in both `scaffold_app` and `create_entity`).\n" +
+                "  • Do NOT hand-write approval fields. Setting the flag makes the platform add the approval columns, the status pill, the submit / approve / reject actions, the checker queue and the audit trail for you. Adding your own `approval_status`, `submitted_by`, `approved_at` etc. is wrong and will be renamed out of the way.\n" +
+                "  • If the user declines (\"no approvals\", \"just one person\", \"keep it simple\"), omit the flag entirely and build flat entities. Never re-propose it after a decline.\n" +
+                "  • Do NOT propose approvals for low-risk domains — blogs, todo lists, recipes, inventory catalogues, personal trackers, a spice shop. Offering a two-person check there is noise.\n\n");
+
         // Available tools
         prompt.append("## Available Tools\n\n");
         prompt.append(toolDescriptions);

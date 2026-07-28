@@ -193,14 +193,22 @@ public class SchemaEnricher {
 
     /**
      * Injects the 8 standard approval columns for entities with approvalRequired: true.
+     *
+     * <p>Task C4.3 — the canonical definition always wins over an LLM-authored one.
+     * This method used to SKIP injecting a column whose name the LLM had already
+     * emitted. That is exactly backwards for the approval columns: if the model
+     * invented its own {@code approval_status} (say with options Yes/No, or as
+     * plain text), the entity came out flagged {@code approvalRequired} but with
+     * a status column the state machine cannot drive — DRAFT/PENDING/APPROVED/
+     * REJECTED were not valid values for it. Same class of hazard the backend hit
+     * in Review #8, where a hand-declared approval column shadowed the synthetic
+     * one and two lookup paths disagreed about which definition was authoritative.
+     * Now a colliding user field is renamed out of the way to {@code workflow_<name>}
+     * (preserving whatever the user actually wanted to model) and the canonical
+     * column is injected unconditionally, so there is exactly one definition and
+     * it is always the platform's.
      */
     private static void injectApprovalFields(List<Map<String, Object>> fields, String entityName) {
-        Set<String> existingNames = new HashSet<>();
-        for (Map<String, Object> field : fields) {
-            String name = (String) field.get(F_NAME);
-            if (name != null) existingNames.add(name.toLowerCase());
-        }
-
         List<Map<String, Object>> approvalCols = new ArrayList<>();
 
         approvalCols.add(createField("approval_status", "approval_status", "status", "Approval Status", false, false, false, List.of("DRAFT", "PENDING", "APPROVED", "REJECTED")));
@@ -212,12 +220,39 @@ public class SchemaEnricher {
         approvalCols.add(createField("approved_at", "approved_at", T_DATETIME, "Approved At", false, false, false, null));
         approvalCols.add(createField("rejection_reason", "rejection_reason", "longtext", "Rejection Reason", false, false, false, null));
 
+        Set<String> reserved = new HashSet<>();
         for (Map<String, Object> col : approvalCols) {
-            String colName = (String) col.get(F_NAME);
-            if (!existingNames.contains(colName.toLowerCase())) {
-                fields.add(col);
-                log.info("[SchemaEnricher] Entity '{}': injecting approval column '{}'", entityName, colName);
+            reserved.add(((String) col.get(F_NAME)).toLowerCase());
+        }
+
+        // Step 1 — move any user-authored field that squats on a reserved approval
+        // name aside, rather than letting it suppress the canonical definition.
+        Set<String> takenNames = new HashSet<>();
+        for (Map<String, Object> field : fields) {
+            String name = (String) field.get(F_NAME);
+            if (name != null) takenNames.add(name.toLowerCase());
+        }
+        for (Map<String, Object> field : fields) {
+            String name = (String) field.get(F_NAME);
+            if (name == null || !reserved.contains(name.toLowerCase())) continue;
+
+            String renamed = "workflow_" + name;
+            int suffix = 2;
+            while (takenNames.contains(renamed.toLowerCase()) || reserved.contains(renamed.toLowerCase())) {
+                renamed = "workflow_" + name + "_" + suffix++;
             }
+            log.warn("[SchemaEnricher] Entity '{}': field '{}' collides with the reserved approval "
+                    + "column of the same name; renaming it to '{}' so the canonical approval "
+                    + "definition stays authoritative", entityName, name, renamed);
+            field.put(F_NAME, renamed);
+            field.put("id", renamed);
+            takenNames.add(renamed.toLowerCase());
+        }
+
+        // Step 2 — the canonical columns are now guaranteed collision-free.
+        for (Map<String, Object> col : approvalCols) {
+            fields.add(col);
+            log.info("[SchemaEnricher] Entity '{}': injecting approval column '{}'", entityName, col.get(F_NAME));
         }
     }
 

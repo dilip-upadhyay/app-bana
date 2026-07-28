@@ -1,6 +1,6 @@
 # Maker-Checker Epic — Implementation Plan
 
-**Status:** 📝 Spec approved 2026-07-26 · ⏳ Execution not started
+**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 🟡 (C4.1–C4.3 done, C4.4 open, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
 **Owner:** AppBana core team
 **Position in master roadmap:** Phase C of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) and Phase B (Complex UI Epic) completing. Runs *before* Phase D — approvals are AppBana's differentiator (the *product*), while D is enterprise packaging.
 **Trigger:** Every regulated customer-facing workflow — KYC, loan origination, account opening, policy issuance, claims processing — has a mandatory two-person integrity control: a **maker** creates or edits a record and a **checker** approves it before it becomes live. AppBana today has no concept of `submitted`, `pending approval`, `approved`, or `rejected`. Without maker-checker, we cannot ship into any regulated vertical, which is the majority of the customer-onboarding market.
@@ -339,11 +339,24 @@ shows parent and revision coexisting, and the maker needs to see their pending e
 | C4.4 | Two new RAG domain templates — `customer-onboarding-with-approval.json`, `loan-origination-with-approval.json` — showing the agent what an approval-required schema + page set looks like | `builder-database/` | 60 min |
 | C4.5 | Auto-generate checker queue page — when `scaffold_app` sees `approvalRequired: true` on any entity, `GeneratePageTool` also emits a `checker_queue` page for that entity | [`GeneratePageTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java) | 30 min |
 
+**Progress (2026-07-29):** C4.1 ✅ · C4.2 ✅ · C4.3 ✅ · C4.4 ⬜ · C4.5 ❌ closed as obsolete (see deviation below). C4.4 is the only task remaining.
+
+> **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
+> Accepting `approvalRequired` in the two parameter schemas was necessary but not sufficient. `CreateEntityTool.buildEntityMetadata` constructs the *entire* body POSTed to `/schema` and silently drops anything it does not explicitly copy, so the flag never reached the backend. Because `SchemaEnricher` read the flag independently and injected the 8 approval columns anyway, the failure was invisible from the outside: the physical table came out approval-shaped while the schema record carried `approvalRequired=false`, and all 13 backend guards branch on `schema.isApprovalRequired()` rather than on the presence of the columns. The entity *looked* approval-enabled and behaved as if it were not. Fixed, with `CreateEntityToolApprovalTest` pinning the payload.
+
+> **Deviation from plan — C4.3 was inverted.**
+> The task reads "validate that entities flagged `approvalRequired` don't also request incompatible custom `status` fields". The real hazard is narrower and worse: `injectApprovalFields` used to *skip* injecting any column whose name already existed, so an LLM that invented its own `approval_status` (type `text`, options `Yes`/`No`) suppressed the canonical definition entirely and produced an approval-required entity whose status column the state machine cannot drive. A plain "validate and reject" would have surfaced it as an error the user cannot act on. The canonical column is now injected unconditionally and the colliding user field is renamed to `workflow_<name>` — which is what the parenthetical auto-resolve actually intended, generalised from `status` to all 8 reserved names.
+
+> **Deviation from plan — C4.5 as written is not implementable.**
+> C4.5 assumes the checker queue is a page with `PageMeta` behind it. It is not: C3.3 shipped the queue as **shell state with no route and no `PageMeta`**, because its contents are per-user (a checker sees only rows they are eligible to approve) and the runtime has no router, so synthesising page metadata would mean inventing it at scaffold time and filtering it back out per caller. `GeneratePageTool` therefore has nothing meaningful to emit. The queue already appears automatically for any user holding the CHECKER role the moment an approval-required entity exists — which is the outcome C4.5 wanted — so **no scaffold-time work is required**. C4.5 is closed as obsolete rather than implemented. If the runtime gains a router later, revisit as a routing task, not a scaffolding one.
+
 ### Exit criteria — C4
 
-- [ ] User says *"I want a customer onboarding app"* → agent proposes maker-checker in Phase 1 → user says *"yes"* → scaffold produces approval-required entities + checker queue pages automatically.
+- [ ] User says *"I want a customer onboarding app"* → agent proposes maker-checker in Phase 1 → user says *"yes"* → scaffold produces approval-required entities. (The checker queue then appears on its own for CHECKER-role users — see the C4.5 deviation; it is not scaffolded.)
 - [ ] User can override: *"no approval flow"* → agent produces flat entities.
 - [ ] Regression: apps that don't imply approval (blog, todo, spice shop) do NOT get the maker-checker prompt.
+
+The three criteria above are all end-to-end chat behaviours and remain unverified — they need the full stack plus `OPENAI_API_KEY` and a human reading the agent's Phase 1 reply. What *is* verified by unit tests today: the flag survives into the `/schema` payload, both tool schemas advertise it with an intact decision rule, and a colliding LLM-authored approval column is renamed rather than allowed to shadow the canonical one.
 
 ---
 

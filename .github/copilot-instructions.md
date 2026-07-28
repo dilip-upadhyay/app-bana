@@ -308,9 +308,9 @@ All tools live in `ai-builder/src/main/java/com/appbana/ai/agent/tool/` and impl
 
 | Tool Name | Class | Purpose |
 |-----------|-------|---------|
-| `scaffold_app` | `ScaffoldAppTool` | **Primary tool** â€” Creates entire app (App + Entities + Pages) in one shot |
+| `scaffold_app` | `ScaffoldAppTool` | **Primary tool** — Creates entire app (App + Entities + Pages) in one shot. Each entity accepts `approvalRequired: boolean` (Phase C4) |
 | `create_app` | `CreateAppTool` | Creates just the app shell |
-| `create_entity` | `CreateEntityTool` | Creates a single entity/table |
+| `create_entity` | `CreateEntityTool` | Creates a single entity/table. Accepts `approvalRequired: boolean` (Phase C4) |
 | `generate_page` | `GeneratePageTool` | Generates a UI page for an entity |
 | `list_apps` | `ListAppsTool` | Lists all apps for this tenant |
 | `list_entities` | `ListEntitiesTool` | Lists entities in an app |
@@ -329,7 +329,15 @@ All tools live in `ai-builder/src/main/java/com/appbana/ai/agent/tool/` and impl
 3. Add clear JSON schema for parameters â€” the LLM reads this to know how to call the tool
 4. Always handle `ConnectException` â€” the ai-builder and app-bana-service are separate processes
 5. Return `ToolResult.error(name, message)` on failure â€” never throw exceptions silently
-
+> [!WARNING]
+> **Adding a parameter to a tool's JSON schema does not make it reach the backend.** A tool typically has a
+> separate method that builds the HTTP body (e.g. `CreateEntityTool.buildEntityMetadata`) by copying named
+> keys one at a time — anything not explicitly copied there is dropped with no error. Task C4.1 exists
+> because `approvalRequired` was accepted, read by `SchemaEnricher` (which injected the 8 approval columns,
+> so the table came out approval-shaped) and then dropped before the `/schema` POST, leaving
+> `approvalRequired=false` on the schema record that all 13 backend guards actually branch on. The entity
+> looked approval-enabled and behaved as if it were not. When you add a tool parameter, assert end-to-end
+> that it survives into the request body — a schema-only test proves nothing.
 ---
 
 ## 8. Critical Rules â€” Multi-Tenant Entity Endpoints

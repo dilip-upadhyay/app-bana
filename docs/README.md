@@ -41,7 +41,7 @@ A single schema definition drives the entire stack. See [`.github/copilot-instru
 
 ---
 
-## Current state (2026-07-28)
+## Current state (2026-07-29)
 
 **Shipped**
 - Stages 0–4 of the AI-Native UI Rebuild — legacy `app-bana-ui/` retired; Studio (5174) + Runtime (5175) + shared package are the frontend.
@@ -52,11 +52,12 @@ A single schema definition drives the entire stack. See [`.github/copilot-instru
 - **Phase B — Complex UI Epic** (B1–B5) — wizards, conditional fields, file upload, master-detail, list views with filter/group/saved views.
 - **Phase B.H — Hardening Sprint** (H1–H8) — file tenant isolation, auto-inject parentId + ChildTable, FilterBar + SavedViewsBar in StudioTableLive, real FK constraints, hidden-field validation strip, SQL GROUP BY, Playwright hardening suite, docs refresh.
 - **Phase C1 — Approval DB migration + role model** and **Phase C2 — Approval state machine, permission guard, revisions, audit trail**. All C2 exit criteria met.
+- **Phase C3 — Runtime approval UI** — status pills, submit/approve/reject actions, checker queue, audit timeline. All exit criteria met except the Playwright maker→checker round-trip, which still needs the full stack running.
 
 **Build health** lives in [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md#-build-health-single-source--do-not-duplicate-these-counts-elsewhere) — it is the single source for test counts and CI status.
 
 **Forward plan** (single source: [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md))
-- **Phase C** — Maker-Checker Epic (~30 hr) — C1 and C2 complete; **C3 Runtime approval UI is next**, then C4 (AI Builder) and C5 (notifications).
+- **Phase C** — Maker-Checker Epic (~30 hr) — C1, C2 and C3 complete; **C4 (AI Builder `approvalRequired`) is in progress**, then C5 (notifications, v1.1-optional).
 - **Phase D** — Enterprise Capabilities Epic (~125 hr) — SSO, dashboards, notifications, enterprise shell.
 - **Stage 5** — Production Deploy (~50 hr) — subdomain hosting + containerization + Redis + secrets + observability.
 - **Phase E** — Integration + Advanced Backlog (~87 hr, post-launch, customer-driven).
