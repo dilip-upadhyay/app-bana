@@ -5,7 +5,9 @@
  * rows, the classic `<select>` becomes unusable. This component provides
  * an accessible combobox instead:
  *
- *   - Debounced server-side search (300ms) via `fetchEntityRows(..., {search})`.
+ *   - Debounced server-side search (300ms) via `fetchEntityRows(..., {q})`.
+ *     (C3.10 — this used to send `{search}`, a key the backend's query-param
+ *     allowlist does not read; typing here silently re-fetched page 1.)
  *   - Keyboard nav: ArrowUp / ArrowDown / Enter / Escape / Tab.
  *   - Scroll-to-bottom pagination (adds 20 more rows per fetch).
  *   - Renders the same human label as `StudioTableLive` via `pickReferenceLabel`.
@@ -113,7 +115,7 @@ export function ReferenceCombobox(props: Readonly<ReferenceComboboxProps>) {
         limit: PAGE_SIZE,
         offset: pageOffset,
       };
-      if (searchTerm) params.search = searchTerm;
+      if (searchTerm) params.q = searchTerm;
       const result = await fetchEntityRows(qualifiedKey, getRuntimeToken(), params);
       const mapped: Row[] = [];
       for (const rec of result.rows) {

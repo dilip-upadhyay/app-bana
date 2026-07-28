@@ -3,7 +3,9 @@
  *
  * Given a child entity key, the foreign-key column that points at the parent,
  * and the current parent row's id, this component:
- *   1. Fetches child rows filtered by `?{fkField}={parentId}`
+ *   1. Fetches child rows scoped to the parent via `filter={fkField}:={parentId}`
+ *      (C3.10 — a bare `?{fkField}={parentId}` param is outside the backend's
+ *      query-param allowlist and is silently dropped; see entity-query.ts)
  *   2. Renders them in a compact table with humanized headers
  *   3. Refreshes on `appbana:row-inserted/updated/deleted` events for the
  *      child entity, so add-row-and-return flows stay in sync
@@ -19,6 +21,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { deleteEntityRow, fetchEntityRows } from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { humanizeHeader, formatDate } from './cell-formatters';
+import { toEntityQueryParams, exact } from './entity-query';
 import { Skeleton } from './Skeleton';
 import { StatusPill } from './StatusPill';
 import { RowActions } from './RowActions';
@@ -47,10 +50,19 @@ export function ChildTable(props: Readonly<ChildTableProps>) {
     setLoading(true);
     setError('');
     try {
+      // The backend reads a fixed query-param allowlist (limit, offset, q,
+      // fields, sort, filter, count, groupBy, _approvalStatus) and silently
+      // drops anything outside it — a bare `?{fkField}={parentId}` param is
+      // therefore never applied, and the "filtered" fetch comes back as an
+      // unscoped first page instead. Route the FK scope through `filter=`
+      // like every other caller in this file's family (StudioTableLive,
+      // FilterBar, saved views), and require an exact match: a substring
+      // match on an id column would let "7" pull in "17", "27", etc.
+      const { params } = toEntityQueryParams({ [fkField]: exact(String(parentId)) });
       const result = await fetchEntityRows(
         qualified,
         getRuntimeToken(),
-        { [fkField]: String(parentId), limit: pageSize, offset: 0 }
+        { ...params, limit: pageSize, offset: 0 }
       );
       setRows(result.rows);
     } catch (e) {

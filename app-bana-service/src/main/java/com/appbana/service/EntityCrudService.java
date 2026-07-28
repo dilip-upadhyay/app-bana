@@ -863,7 +863,16 @@ public class EntityCrudService {
         }
         try {
             return switch (t) {
-                case "int", "integer" -> {
+                // C3.10 (item A follow-up) — "number" and "reference" both map to
+                // INTEGER at the DDL layer (SchemaManager.sqlType()); "serial" is an
+                // alias some AI-generated schemas use for an auto-increment int.
+                // Before this, all three fell through to the `default` branch below,
+                // which does raw.toString() unconditionally — so a perfectly good
+                // Integer became a String and Postgres rejected the INSERT/UPDATE
+                // with "column is of type integer but expression is of type
+                // character varying". Same defect class as parseFilterValue, on
+                // the write path instead of the read path.
+                case "int", "integer", "number", "reference", "serial" -> {
                     if (raw instanceof Number) {
                         long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin())
@@ -919,11 +928,12 @@ public class EntityCrudService {
                         throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                     yield lv;
                 }
-                case "decimal", "numeric", "money", "float", "double" -> {
+                case "decimal", "numeric", "money", "float", "double", "currency" -> {
                     // Coerce to BigDecimal so Postgres NUMERIC columns accept
                     // the bind. Accepts Number (JSON number literal) and String
                     // (form input or JSON string). min/max are compared as
-                    // Long -> BigDecimal.
+                    // Long -> BigDecimal. "currency" added alongside the DDL
+                    // alias in SchemaManager.sqlType() — C3.10 (item A follow-up).
                     java.math.BigDecimal bd;
                     if (raw instanceof java.math.BigDecimal existing) {
                         bd = existing;
@@ -1024,8 +1034,19 @@ public class EntityCrudService {
         String t = f.getType().toLowerCase(Locale.ROOT);
         try {
             return switch (t) {
-                case "int", "integer", "serial" -> Integer.parseInt(v);
+                // C3.10 (item A follow-up) — "number" and "reference" both map to
+                // INTEGER at the DDL layer (see SchemaManager.sqlType()), and
+                // "reference" is exactly how every generated foreign-key column is
+                // typed. Before this, both fell through to the `default -> v` branch
+                // below and bound a raw String against an INTEGER column, which
+                // Postgres rejects with "operator does not exist: integer = character
+                // varying" — a 500 on every filtered child-table fetch.
+                case "int", "integer", "serial", "number", "reference" -> Integer.parseInt(v);
                 case "long", "bigint", "bigserial" -> Long.parseLong(v);
+                // "decimal"/"numeric"/"money"/"float"/"double"/"currency" all map to
+                // NUMERIC(19,4) in SchemaManager.sqlType() — bind a BigDecimal, not a
+                // String, for the same reason as above.
+                case "decimal", "numeric", "money", "float", "double", "currency" -> new java.math.BigDecimal(v);
                 case "boolean" -> ("true".equalsIgnoreCase(v) || "1".equals(v));
                 case "date", "timestamp" -> {
                     // Accept only valid ISO-8601 instant strings; if parsing fails treat as raw
@@ -1120,9 +1141,18 @@ public class EntityCrudService {
                 Object finalValue = filterValue;
                 if (finalValue instanceof String sVal) {
                     Object parsed = parseFilterValue(f, sVal);
-                    if (parsed != null) {
-                        finalValue = parsed;
+                    if (parsed == null) {
+                        // C3.10 — parseFilterValue returns null when a typed column's
+                        // value fails to parse (e.g. filter=amount:=abc against a decimal
+                        // column). Falling back to the raw String here would bind a
+                        // String against a typed SQL column and 500; skip the predicate
+                        // instead, matching how the date/timestamp branch above already
+                        // behaves.
+                        LOG.info("[BUILD_WHERE] Skipping filter for '{}' — value '{}' does not parse as type '{}'",
+                                e.getKey(), sVal, t);
+                        continue;
                     }
+                    finalValue = parsed;
                 }
 
                 // Use LIKE with wildcards for string/text fields, exact match for

@@ -498,15 +498,55 @@ function unwrapList<T>(payload: unknown, key: string): T[] {
  * FIFO, so the longest-waiting record is dealt with first. 403 if the caller is
  * not a checker or app owner for this entity — callers that use this to decide
  * whether to *show* a queue should treat 403 as "empty", not as an error.
+ *
+ * This only ever returns the first page (see `ApprovalService.QUEUE_PAGE_SIZE`,
+ * currently 100). A checker with more pending items than that will not see the
+ * rest through this call — use {@link fetchPendingApprovalsPage} and its
+ * `hasMore` flag to page through the full queue.
  */
 export async function fetchPendingApprovals(
   target: Omit<ApprovalTarget, 'rowId'>,
   token: string
 ): Promise<Array<Record<string, unknown>>> {
-  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending`;
+  return (await fetchPendingApprovalsPage(target, token, 0)).records;
+}
+
+/** One page of the pending-approval queue, as returned by `fetchPendingApprovalsPage`. */
+export interface PendingApprovalsPage {
+  readonly records: Array<Record<string, unknown>>;
+  readonly offset: number;
+  readonly pageSize: number;
+  /** True when this page was full — there is very likely another page behind it. */
+  readonly hasMore: boolean;
+}
+
+/**
+ * A single page of the pending-approval queue, starting at `offset`.
+ *
+ * C3.10 — the queue used to be a single `LIMIT 500` fetch with no way to see
+ * anything past it. The backend now paginates (`QUEUE_PAGE_SIZE`, with
+ * `offset`/`pageSize`/`hasMore` in the response) but nothing on the client
+ * asked for a second page, so a checker with more than one page pending only
+ * ever saw the first. This is the paging door; `CheckerQueuePage` calls it
+ * with an increasing offset while `hasMore` is true.
+ */
+export async function fetchPendingApprovalsPage(
+  target: Omit<ApprovalTarget, 'rowId'>,
+  token: string,
+  offset = 0
+): Promise<PendingApprovalsPage> {
+  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending?offset=${encodeURIComponent(String(offset))}`;
   const res = await authedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) await throwApprovalError(res, 'Fetch pending approvals failed');
-  return unwrapList<Record<string, unknown>>(await res.json(), 'records');
+  const body = await res.json();
+  const records = unwrapList<Record<string, unknown>>(body, 'records');
+  const env = body as { offset?: unknown; pageSize?: unknown; hasMore?: unknown };
+  return {
+    records,
+    offset: typeof env.offset === 'number' ? env.offset : offset,
+    pageSize: typeof env.pageSize === 'number' ? env.pageSize : records.length,
+    hasMore: env.hasMore === true,
+  };
 }
 
 /**

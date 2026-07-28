@@ -15,11 +15,18 @@
  *   A 409 means the record moved underneath us (another checker got there
  *   first, or the maker withdrew it). That is not an error the user caused, so
  *   it refreshes the queue and says so, rather than showing a failure.
+ *
+ * C3.10 — the backend caps a single fetch at `ApprovalService.QUEUE_PAGE_SIZE`
+ * (100) and reports `hasMore` when there is another page behind it. This page
+ * now reads that flag and offers "Load older" rather than silently stopping
+ * at the page boundary — a checker with 150 pending items used to see 100
+ * with no indication anything was missing, while the polling badge (an
+ * uncapped COUNT) correctly said 150.
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { ApprovalTarget } from '@appbana/shared';
 import {
-  fetchPendingApprovals,
+  fetchPendingApprovalsPage,
   approveRecord,
   rejectRecord,
   ApprovalConflictError,
@@ -64,17 +71,20 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
   const { user } = useCurrentUser();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<Row | null>(null);
   const [auditing, setAuditing] = useState<Row | null>(null);
+  const [hasMore, setHasMore] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const pending = await fetchPendingApprovals({ tenantId, appId, entityName }, getRuntimeToken());
-      setRows(Array.isArray(pending) ? pending : []);
+      const page = await fetchPendingApprovalsPage({ tenantId, appId, entityName }, getRuntimeToken(), 0);
+      setRows(page.records);
+      setHasMore(page.hasMore);
     } catch (e) {
       // A 403 here means "not a checker for this entity". That is a legitimate
       // answer, not a failure, and an empty queue communicates it better than
@@ -82,6 +92,7 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
       const status = (e as { status?: number })?.status;
       if (status === 403) {
         setRows([]);
+        setHasMore(false);
       } else {
         setError(e instanceof Error ? e.message : 'Failed to load the approval queue');
       }
@@ -90,7 +101,23 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
     }
   }, [tenantId, appId, entityName]);
 
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true);
+    try {
+      const page = await fetchPendingApprovalsPage({ tenantId, appId, entityName }, getRuntimeToken(), rows.length);
+      setRows((prev) => [...prev, ...page.records]);
+      setHasMore(page.hasMore);
+    } catch (e) {
+      toast.error('Failed to load more', {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [tenantId, appId, entityName, rows.length]);
+
   useEffect(() => { void load(); }, [load]);
+
 
   function targetFor(row: Row): ApprovalTarget {
     return { tenantId, appId, entityName, rowId: rowId(row) };
@@ -153,11 +180,13 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
 
   const columns = displayColumns(rows);
   const label = humanizeHeader(entityName);
+  const loadedCount = hasMore ? `${rows.length}+` : String(rows.length);
+  const subtitle = loading ? undefined : `${loadedCount} awaiting your review`;
 
   return (
     <PageShell
       title={`${label} approvals`}
-      subtitle={loading ? undefined : `${rows.length} awaiting your review`}
+      subtitle={subtitle}
     >
       {loading && <TableSkeleton columns={4} />}
 
@@ -257,6 +286,13 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
               })}
             </tbody>
           </table>
+          {hasMore && (
+            <div className="flex justify-center border-t border-slate-100 p-3">
+              <Button size="sm" variant="ghost" loading={loadingMore} onClick={() => void loadMore()}>
+                Load older
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

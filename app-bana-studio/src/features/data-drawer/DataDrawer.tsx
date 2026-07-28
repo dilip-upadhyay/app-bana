@@ -109,7 +109,7 @@ export function DataDrawer() {
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     };
-    if (sort) params._sort = `${sort.col}:${sort.dir}`;
+    if (sort) params.sort = `${sort.col}:${sort.dir}`;
     fetchEntityRows(selectedKey, token, params)
       .then((res) => {
         setRows(res.rows);

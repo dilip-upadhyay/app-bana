@@ -393,15 +393,28 @@ DELETE /api/{entity}/{id}       â†’ Delete record
 
 ### Query Parameters
 ```
-?limit=50&offset=0             â†’ Pagination
-?search=John                   â†’ Full-text search
-?name=John&status=active       â†’ Field-level filters (AND logic)
-?name:like=%oh%                â†’ Advanced filters (:like, :>, :<, :in)
-?_fields=name,email            â†’ Column projection
-?_sort=name:asc,age:desc       â†’ Sorting
-?_count=true                   â†’ Count only
+?limit=50&offset=0             → Pagination (max limit 500)
+?q=John                        → Full-text-ish search across text columns
+?filter=name:John,status:active → Field-level filters (comma-separated; unknown fields ignored)
+?filter=name:=John             → Exact match — leading '=' on the value. Default (no '=') is
+                                  a case-insensitive substring LIKE, which over-matches identity
+                                  fields (submitted_by:bob would also match "bobby").
+?fields=name,email             → Column projection
+?sort=name:asc,age:desc        → Sorting
+?count=true                    → Count only
+?groupBy=status                → Group rows by one column
 ?_approvalStatus=PENDING       -> Approval-state filter (PENDING is checker-only; 403 otherwise)
 ```
+
+> [!WARNING]
+> The handler reads a **fixed allowlist** of query params (`limit`, `offset`, `q`, `fields`, `sort`, `filter`,
+> `count`, `groupBy`, `_approvalStatus`). A bare field-level param — `?status=active`, `?submitted_by=alice` —
+> is **silently ignored**; the response is 200 with an *unfiltered* body, not an error. Field filters must go
+> through `filter=`. There is no `?_fields=`, `?_sort=`, `?_count=`, or `?name=value` shorthand, despite older
+> docs and some now-fixed callers assuming otherwise (C3.9/C3.10). The runtime's `entity-query.ts`
+> (`toEntityQueryParams`) is the canonical client-side helper — route any new list-fetching UI through it
+> instead of hand-building query params.
+
 
 ### Approval Endpoints (maker-checker)
 ```
