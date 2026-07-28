@@ -82,19 +82,20 @@ public class RevisionFlowTest {
             s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
         }
 
+        // C4.6 — declares BUSINESS FIELDS ONLY. This fixture used to hand-declare all
+        // eight approval columns, and so did its siblings. That is why 281 green backend
+        // tests never caught that nothing in the backend created those columns: every
+        // fixture supplied the invariant the production code was supposed to guarantee,
+        // so the suite could only ever exercise the already-correct shape. Setting the
+        // flag and nothing else is what a real caller does — scaffold_app, create_entity,
+        // Studio, a script — so the whole approval suite below is now also an end-to-end
+        // assertion that SchemaManager materialises the eight columns from the flag alone.
+        // Do not re-add them here.
         schema = new EntitySchema(ENTITY_NAME, List.of(
                 new EntitySchema.Field("id", "integer", true, true, null),
                 new EntitySchema.Field("vendor", "string", false, false, null),
                 new EntitySchema.Field("amount", "decimal", false, false, null),
-                new EntitySchema.Field("notes", "text", false, false, null),
-                new EntitySchema.Field("approval_status", "status", false, false, null),
-                new EntitySchema.Field("approval_revision", "integer", false, false, null),
-                new EntitySchema.Field("approval_parent_id", "text", false, false, null),
-                new EntitySchema.Field("submitted_by", "string", false, false, null),
-                new EntitySchema.Field("submitted_at", "timestamp", false, false, null),
-                new EntitySchema.Field("approved_by", "string", false, false, null),
-                new EntitySchema.Field("approved_at", "timestamp", false, false, null),
-                new EntitySchema.Field("rejection_reason", "text", false, false, null)
+                new EntitySchema.Field("notes", "text", false, false, null)
         ));
         schema.setTenantId(TENANT_ID);
         schema.setAppId(APP_ID);

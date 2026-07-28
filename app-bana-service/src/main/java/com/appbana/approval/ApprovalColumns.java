@@ -115,4 +115,29 @@ public final class ApprovalColumns {
     public static boolean isApprovalColumn(String name) {
         return name != null && FIELD_NAMES.contains(name.toLowerCase(Locale.ROOT));
     }
+
+    /**
+     * Coerces a row id into the type {@code approval_parent_id} is declared as, for binding
+     * into a {@code PreparedStatement}.
+     *
+     * <p>C4.6 — the column is INTEGER so it matches the auto-increment PK it points at. Row
+     * ids are threaded through the routes as {@code String}, so binding one straight into
+     * {@code = ?} makes Postgres reject the entire query with "operator does not exist:
+     * integer = character varying". Centralised here so the coercion cannot drift away from
+     * the type declared in {@link #TYPES}.
+     *
+     * <p>Falls back to the raw string for a non-numeric id rather than throwing: a
+     * UUID-keyed entity would legitimately have a non-numeric parent id, and the caller's
+     * query should fail on its own terms rather than on a parse here.
+     */
+    public static Object parentIdValue(String rowId) {
+        if (rowId == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(rowId.trim());
+        } catch (NumberFormatException e) {
+            return rowId;
+        }
+    }
 }

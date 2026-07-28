@@ -184,92 +184,43 @@ public class SchemaEnricher {
             fields.addAll(0, toInsert);
         }
 
-        // Step 4 — Task C1.2: if approvalRequired is true, inject approval columns
-        boolean approvalRequired = Boolean.TRUE.equals(entity.get("approvalRequired"));
-        if (approvalRequired) {
-            injectApprovalFields(fields, entityName);
-        }
+        // Task C4.6 — the approval columns are NO LONGER injected here.
+        //
+        // They are physical, backend-owned system columns, and SchemaManager now adds
+        // them on both the create and alter paths keyed on schema.isApprovalRequired().
+        // Injecting them here as well would make this a second producer of the same
+        // columns, and it produced the wrong shape: as *declared* fields they ended up
+        // in EntitySchema.getFields(), which silently defeated
+        // EntityCrudService's default list projection (it excludes the approval columns
+        // precisely by iterating getFields()), so every list response on a scaffolded
+        // approval entity leaked all eight. It also disagreed with the backend on type —
+        // approval_parent_id was 'text' here and 'integer' in ApprovalColumns.
+        //
+        // Deleting it also removes a live footgun for the RAG templates (C4.4): a
+        // template that shows the eight columns is now harmless, because the backend
+        // dedupes against declared names instead of this method mangling them.
+        //
+        // The flag itself still travels — CreateEntityTool forwards it (C4.1) and
+        // SchemaManager acts on it. Do not reintroduce injection on this side.
     }
 
     /**
-     * Injects the 8 standard approval columns for entities with approvalRequired: true.
-     *
-     * <p>Task C4.3 — the canonical definition always wins over an LLM-authored one.
-     * This method used to SKIP injecting a column whose name the LLM had already
-     * emitted. That is exactly backwards for the approval columns: if the model
-     * invented its own {@code approval_status} (say with options Yes/No, or as
-     * plain text), the entity came out flagged {@code approvalRequired} but with
-     * a status column the state machine cannot drive — DRAFT/PENDING/APPROVED/
-     * REJECTED were not valid values for it. Same class of hazard the backend hit
-     * in Review #8, where a hand-declared approval column shadowed the synthetic
-     * one and two lookup paths disagreed about which definition was authoritative.
-     * Now a colliding user field is renamed out of the way to {@code workflow_<name>}
-     * (preserving whatever the user actually wanted to model) and the canonical
-     * column is injected unconditionally, so there is exactly one definition and
-     * it is always the platform's.
+     * The eight backend-owned approval column names. Mirror of
+     * {@code com.appbana.approval.ApprovalColumns.NAMES} in app-bana-service, duplicated
+     * because ai-builder is a separate Maven module with no dependency on it (the same
+     * reason {@code app-bana-runtime/src/runtime/approval-columns.ts} exists). ai-builder
+     * must never *create* these — SchemaManager does that — but it must recognise them so
+     * a tool cannot delete one out from under a live approval workflow.
      */
-    private static void injectApprovalFields(List<Map<String, Object>> fields, String entityName) {
-        List<Map<String, Object>> approvalCols = new ArrayList<>();
-
-        approvalCols.add(createField("approval_status", "approval_status", "status", "Approval Status", false, false, false, List.of("DRAFT", "PENDING", "APPROVED", "REJECTED")));
-        approvalCols.add(createField("approval_revision", "approval_revision", T_NUMBER, "Approval Revision", false, false, false, null));
-        approvalCols.add(createField("approval_parent_id", "approval_parent_id", T_TEXT, "Approval Parent ID", false, false, false, null));
-        approvalCols.add(createField("submitted_by", "submitted_by", T_TEXT, "Submitted By", false, false, false, null));
-        approvalCols.add(createField("submitted_at", "submitted_at", T_DATETIME, "Submitted At", false, false, false, null));
-        approvalCols.add(createField("approved_by", "approved_by", T_TEXT, "Approved By", false, false, false, null));
-        approvalCols.add(createField("approved_at", "approved_at", T_DATETIME, "Approved At", false, false, false, null));
-        approvalCols.add(createField("rejection_reason", "rejection_reason", "longtext", "Rejection Reason", false, false, false, null));
-
-        Set<String> reserved = new HashSet<>();
-        for (Map<String, Object> col : approvalCols) {
-            reserved.add(((String) col.get(F_NAME)).toLowerCase());
-        }
-
-        // Step 1 — move any user-authored field that squats on a reserved approval
-        // name aside, rather than letting it suppress the canonical definition.
-        Set<String> takenNames = new HashSet<>();
-        for (Map<String, Object> field : fields) {
-            String name = (String) field.get(F_NAME);
-            if (name != null) takenNames.add(name.toLowerCase());
-        }
-        for (Map<String, Object> field : fields) {
-            String name = (String) field.get(F_NAME);
-            if (name == null || !reserved.contains(name.toLowerCase())) continue;
-
-            String renamed = "workflow_" + name;
-            int suffix = 2;
-            while (takenNames.contains(renamed.toLowerCase()) || reserved.contains(renamed.toLowerCase())) {
-                renamed = "workflow_" + name + "_" + suffix++;
-            }
-            log.warn("[SchemaEnricher] Entity '{}': field '{}' collides with the reserved approval "
-                    + "column of the same name; renaming it to '{}' so the canonical approval "
-                    + "definition stays authoritative", entityName, name, renamed);
-            field.put(F_NAME, renamed);
-            field.put("id", renamed);
-            takenNames.add(renamed.toLowerCase());
-        }
-
-        // Step 2 — the canonical columns are now guaranteed collision-free.
-        for (Map<String, Object> col : approvalCols) {
-            fields.add(col);
-            log.info("[SchemaEnricher] Entity '{}': injecting approval column '{}'", entityName, col.get(F_NAME));
-        }
-    }
-
-    private static Map<String, Object> createField(String id, String name, String type, String label, boolean required, boolean pk, boolean ai, List<String> options) {
-        Map<String, Object> field = new LinkedHashMap<>();
-        field.put("id", id);
-        field.put(F_NAME, name);
-        field.put(F_TYPE, type);
-        field.put(F_LABEL, label);
-        field.put(F_REQUIRED, required);
-        field.put(F_PRIMARY_KEY, pk);
-        field.put(F_AUTO_INC, ai);
-        if (options != null) {
-            field.put("options", new ArrayList<>(options));
-        }
-        return field;
-    }
+    static final Set<String> RESERVED_APPROVAL_COLUMNS = Set.of(
+            "approval_status",
+            "approval_revision",
+            "approval_parent_id",
+            "submitted_by",
+            "submitted_at",
+            "approved_by",
+            "approved_at",
+            "rejection_reason");
 
     /**
      * Step 1c — if a field has type=reference but is missing referenceEntity,

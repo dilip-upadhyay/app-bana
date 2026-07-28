@@ -1986,13 +1986,20 @@ public class GenericEntityRoutes {
                     Map.of("error", "Cannot update record while approval is PENDING"));
         }
 
-        boolean hasParentColumn = schema.getFields().stream()
-                .anyMatch(f -> "approval_parent_id".equalsIgnoreCase(f.getName()));
+        // C4.6 — approvalRequired is the authority for "does this entity support revisions",
+        // not the presence of approval_parent_id in schema.getFields(). SchemaManager now
+        // guarantees the physical column from the flag alone, and the eight approval columns
+        // are deliberately NOT declared schema fields (that is the shape every read path
+        // already assumes). Probing getFields() here reported "no revision support" for every
+        // correctly-provisioned approval entity, silently downgrading what should be a new
+        // DRAFT revision into an in-place edit of a live APPROVED row — a data-integrity
+        // failure, not a cosmetic one, since the approved record is mutated without review.
+        boolean supportsRevisions = schema.isApprovalRequired();
 
-        if (!"APPROVED".equalsIgnoreCase(currentStatus) || !hasParentColumn) {
+        if (!"APPROVED".equalsIgnoreCase(currentStatus) || !supportsRevisions) {
             if ("APPROVED".equalsIgnoreCase(currentStatus)) {
-                LOG.warn("[APPROVAL] Entity {} has no approval_parent_id column — falling back to in-place edit "
-                        + "of APPROVED row {}. Re-run the scaffolder to enable revisions.", schema.getName(), idStr);
+                LOG.warn("[APPROVAL] Entity {} has no approval workflow — falling back to in-place edit "
+                        + "of APPROVED row {}.", schema.getName(), idStr);
             }
             // DRAFT / REJECTED rows are private to the maker: edit in place and return to DRAFT.
             data.put("approval_status", "DRAFT");

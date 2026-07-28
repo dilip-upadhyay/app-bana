@@ -338,6 +338,26 @@ All tools live in `ai-builder/src/main/java/com/appbana/ai/agent/tool/` and impl
 > `approvalRequired=false` on the schema record that all 13 backend guards actually branch on. The entity
 > looked approval-enabled and behaved as if it were not. When you add a tool parameter, assert end-to-end
 > that it survives into the request body — a schema-only test proves nothing.
+
+> [!IMPORTANT]
+> **`SchemaManager` — not `SchemaEnricher` — owns approval-column injection (Task C4.6).** Setting
+> `approvalRequired: true` on a schema is the *only* thing a caller must do; `SchemaManager` materialises
+> the eight physical approval columns on create, on alter, and in the dry-run preview, deduping against
+> whatever the schema already declares. Do not re-add injection on the ai-builder side: it was reachable
+> from only one of the four writers of the flag, which is how `create_entity` came to emit entities that
+> accept records and then 500 on the first workflow action.
+>
+> Two consequences worth knowing before you touch this area:
+> - The eight columns are **physical-only** — deliberately *not* members of `EntitySchema.getFields()`.
+>   Read paths get them from `EntityCrudService.getQueryableFields()`; the insert path writes them through
+>   a separate guarded pass. Never merge `ApprovalColumns.asFields()` into an insert/update/validation
+>   field list, or clients could write `approval_status` directly through the generic entity API.
+> - Never answer "does this entity have an approval workflow?" by probing `getFields()` for
+>   `approval_parent_id` or friends. `schema.isApprovalRequired()` is the authority. Two call sites did
+>   the former and silently downgraded a new DRAFT revision into an in-place edit of a live APPROVED row.
+>
+> When writing tests, set the flag and let `SchemaManager` create the columns. Hand-declaring them in a
+> fixture is what kept this defect invisible across 281 green backend tests.
 ---
 
 ## 8. Critical Rules â€” Multi-Tenant Entity Endpoints

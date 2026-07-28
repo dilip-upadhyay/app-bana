@@ -4,6 +4,7 @@ import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.config.DatasourceConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.appbana.approval.ApprovalColumns;
 import com.appbana.model.EntitySchema;
 
 import java.io.IOException;
@@ -335,6 +336,9 @@ public class SchemaManager {
                         }
                     }
                 }
+
+                // C4.6 — reconcile the approval columns on an EXISTING table.
+                syncApprovalColumns(schema, c, d, table, existing);
             }
         }
         // H4 hardening — enforce declared FK relationships at the DB level.
@@ -342,6 +346,59 @@ public class SchemaManager {
         // exist. Non-fatal on failure: a missing parent table just means the
         // FK will be added on the next ensureTable for the child.
         syncForeignKeys(schema, c, d);
+    }
+
+    /**
+     * C4.6 — make {@code approvalRequired == true} actually imply the eight physical
+     * approval columns exist.
+     *
+     * <p>{@link com.appbana.approval.ApprovalColumns}'s javadoc has always claimed
+     * "the eight system columns <em>SchemaManager injects</em>", but SchemaManager did
+     * not contain the string "approval" at all — the only code that materialised them
+     * was {@code SchemaEnricher} in the separate ai-builder process, reachable from
+     * exactly one of the four writers of the flag. Everything else — {@code create_entity},
+     * {@code batch_update_entities}, Studio, scripts, tests — could set the flag and get
+     * a table with no approval columns. That entity accepts an insert (the forced
+     * DRAFT/revision/submitted_by values are silently dropped, because
+     * {@code insertRecordLegacy} iterates {@code schema.getFields()}) and then 500s on
+     * the first submit/approve/pending-queue call.
+     *
+     * <p>Injection belongs here because this is the single chokepoint every writer of a
+     * schema passes through, so the flag alone is sufficient for present and future
+     * callers.
+     *
+     * <p>Deliberately <b>add-only</b>, and deliberately NOT folded into the user-field
+     * evolution loop above. That loop also migrates column types, and tables created by
+     * the old enricher have {@code approval_parent_id} as VARCHAR(255) where
+     * {@code ApprovalColumns} declares {@code integer} — routing these through it would
+     * emit {@code ALTER COLUMN ... TYPE INTEGER USING col::INTEGER} against live data,
+     * which fails outright on any non-numeric value already stored. These are system
+     * columns whose contents only this server writes; a missing one is a bug to repair,
+     * a differing one is not ours to rewrite underneath a running app.
+     *
+     * <p>These columns are physical-only and never join {@code schema.getFields()} —
+     * see {@code ApprovalColumns.asFields()} and {@code EntityCrudService.getQueryableFields()}
+     * for the read-path merge, and note that the default list projection depends on them
+     * being absent from {@code getFields()} in order to keep excluding them.
+     */
+    private static void syncApprovalColumns(EntitySchema schema, Connection c, String dialect, String table,
+            Map<String, ColumnInfo> existing) throws SQLException {
+        if (!schema.isApprovalRequired()) {
+            return;
+        }
+        for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+            if (existing.containsKey(colKey(f.getName()))) {
+                continue;
+            }
+            String alter = "ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " "
+                    + sqlType(f, dialect, true);
+            LOG.info("[APPROVAL-COLUMNS] Adding missing approval column to {}: {}", table, f.getName());
+            try (Statement s = c.createStatement()) {
+                s.execute(alter);
+                recordMigration(c, schema.getName(), alter);
+            }
+            existing.put(colKey(f.getName()), new ColumnInfo(f.getName(), null, 0));
+        }
     }
 
     /**
@@ -514,6 +571,19 @@ public class SchemaManager {
             if (f.isPrimaryKey())
                 pk = quote(f.getName());
             cols.add(col);
+        }
+        // C4.6 — approvalRequired implies the eight system columns. See
+        // syncApprovalColumns() for why this lives here and not in ai-builder.
+        if (schema.isApprovalRequired()) {
+            Set<String> declared = new HashSet<>();
+            for (EntitySchema.Field f : schema.getFields()) {
+                declared.add(colKey(f.getName()));
+            }
+            for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+                if (declared.add(colKey(f.getName()))) {
+                    cols.add(quote(f.getName()) + " " + sqlType(f, dialect));
+                }
+            }
         }
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE TABLE IF NOT EXISTS ").append(quote(table)).append(" (");
@@ -793,6 +863,18 @@ public class SchemaManager {
                         pk = quote(f.getName());
                     cols.add(col);
                 }
+                // C4.6 — mirror createTable()'s approval-column injection.
+                if (schema.isApprovalRequired()) {
+                    Set<String> declared = new HashSet<>();
+                    for (EntitySchema.Field f : schema.getFields()) {
+                        declared.add(colKey(f.getName()));
+                    }
+                    for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+                        if (declared.add(colKey(f.getName()))) {
+                            cols.add(quote(f.getName()) + " " + sqlType(f, d));
+                        }
+                    }
+                }
                 StringBuilder sb = new StringBuilder();
                 sb.append("CREATE TABLE IF NOT EXISTS ").append(quote(table)).append(" (");
                 sb.append(String.join(", ", cols));
@@ -800,8 +882,7 @@ public class SchemaManager {
                     sb.append(", PRIMARY KEY(").append(pk).append(")");
                 sb.append(")");
                 plan.add(sb.toString());
-                return plan;
-            }
+                return plan;            }
             Map<String, ColumnInfo> existing = new HashMap<>();
             try (ResultSet cols = md.getColumns(null, null, table.toUpperCase(), null)) {
                 while (cols.next()) {
@@ -848,6 +929,16 @@ public class SchemaManager {
                                 : ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name)
                                         + " SET DATA TYPE " + sqlType(f, d));
                         plan.add(alterType);
+                    }
+                }
+            }
+            // C4.6 — mirror syncApprovalColumns() so a preview shows the same plan the
+            // save will execute. Add-only, for the same reason documented there.
+            if (schema.isApprovalRequired()) {
+                for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+                    if (!existing.containsKey(colKey(f.getName()))) {
+                        plan.add("ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " "
+                                + sqlType(f, d, true));
                     }
                 }
             }

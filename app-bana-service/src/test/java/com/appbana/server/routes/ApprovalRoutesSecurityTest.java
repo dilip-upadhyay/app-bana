@@ -325,14 +325,14 @@ public class ApprovalRoutesSecurityTest {
         schema.setApprovalRequired(true);
         SchemaManager.saveSchema(schema);
 
-        // Add the approval columns by hand, as raw DDL — simulating however they
-        // ended up physically present without going through the field-driven
-        // ensureTable() loop (which only ever sees schema.getFields()).
+        // C4.6 — the approval columns are no longer added by hand here. This test used to
+        // ALTER them in as raw DDL to "simulate however they ended up physically present",
+        // because nothing in the backend actually created them. SchemaManager now materialises
+        // all eight from approvalRequired alone, so the scenario this test was constructed to
+        // simulate — physically present, absent from getFields() — is simply what saveSchema()
+        // produces. Re-adding the DDL would now fail with "column already exists".
         try (Connection c = JdbcManager.getConnection("default");
              Statement s = c.createStatement()) {
-            s.execute("ALTER TABLE \"" + tableName + "\" ADD COLUMN \"APPROVAL_STATUS\" VARCHAR(255)");
-            s.execute("ALTER TABLE \"" + tableName + "\" ADD COLUMN \"APPROVAL_REVISION\" INTEGER");
-            s.execute("ALTER TABLE \"" + tableName + "\" ADD COLUMN \"SUBMITTED_BY\" VARCHAR(255)");
             s.execute(
                     "INSERT INTO \"" + tableName + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (1, 10.0, 'REJECTED', 1, 'alice_maker')");
             s.execute(

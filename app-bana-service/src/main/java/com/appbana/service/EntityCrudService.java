@@ -214,6 +214,36 @@ public class EntityCrudService {
             values.add(val);
         }
 
+        // C4.6 — write the server-assigned approval values.
+        //
+        // Before C4.6 the eight approval columns were DECLARED fields (SchemaEnricher put
+        // them in the schema), so the loop above wrote them and this pass was unnecessary.
+        // C4.6 moved injection into SchemaManager and made them physical-only, which is the
+        // shape every read path already assumes (see getQueryableFields() and the default
+        // projection). That silently broke this write path: GenericEntityRoutes'
+        // enforceApprovalPreInsert() puts approval_status=DRAFT / approval_revision=1 /
+        // submitted_by into `data`, and the getFields() loop would drop all three, landing
+        // every new row with a NULL approval_status — which reads as "not DRAFT" to every
+        // workflow guard. Reachable from the single, batch, studio, runtime and env-scoped
+        // POSTs, and from the revision-creation path that seeds a new DRAFT revision row.
+        //
+        // Only keys already present in `data` are written, and enforceApprovalPreInsert()
+        // strips any client-supplied approval column before putting its own values back, so
+        // nothing a caller sends can reach these columns through this branch. That is why
+        // ApprovalColumns.asFields() must NOT be merged into the loop above wholesale — see
+        // the warning on that method.
+        if (schema.isApprovalRequired()) {
+            for (EntitySchema.Field approvalField : ApprovalColumns.asFields()) {
+                String name = approvalField.getName();
+                if (!data.containsKey(name) || cols.contains(quote(name))) {
+                    continue;
+                }
+                cols.add(quote(name));
+                placeholders.add("?");
+                values.add(coerceAndValidate(approvalField, data.get(name)));
+            }
+        }
+
         String tableName = SchemaManager.getPhysicalTableName(schema);
         String sql = "INSERT INTO " + quote(tableName) + " (" + String.join(",", cols) + ") VALUES ("
                 + String.join(",", placeholders) + ")";
@@ -368,18 +398,24 @@ public class EntityCrudService {
      * revision cannot exist: {@code ApprovalService.approveRecord} merges it into the
      * parent and deletes it in the same transaction.
      *
-     * <p>Returns {@code null} when the schema has no {@code approval_parent_id} field
-     * (legacy tables created before C2.3) or when no open revision exists.
+     * <p>Returns {@code null} when the entity has no approval workflow, or when no open
+     * revision exists.
+     *
+     * <p>C4.6 — this used to probe {@code schema.getFields()} for an {@code approval_parent_id}
+     * member. That was a capability check standing in for the real question ("does this entity
+     * have an approval workflow?") and it only worked while SchemaEnricher declared the eight
+     * columns as schema fields. Now that SchemaManager guarantees the physical columns from
+     * {@code approvalRequired} alone, the flag is the authority; probing getFields() would
+     * report "no revision support" for every correctly-provisioned approval entity and silently
+     * downgrade a revision to an in-place edit of a live APPROVED row.
      */
     public Map<String, Object> findOpenRevision(EntitySchema schema, String parentId) throws SQLException {
-        if (schema == null || parentId == null || parentId.isBlank()) {
+        if (schema == null || parentId == null || parentId.isBlank() || !schema.isApprovalRequired()) {
             return null;
         }
         EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
                 .orElse(null);
-        boolean hasParentCol = schema.getFields().stream()
-                .anyMatch(f -> "approval_parent_id".equalsIgnoreCase(f.getName()));
-        if (pk == null || !hasParentCol) {
+        if (pk == null) {
             return null;
         }
 
@@ -390,7 +426,12 @@ public class EntityCrudService {
 
         try (Connection c = schemaConnection(schema);
                 PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, parentId);
+            // C4.6 — approval_parent_id is INTEGER (ApprovalColumns declares it to match the
+            // parent's auto-increment PK type). Binding the id as a String made Postgres reject
+            // the whole query with "operator does not exist: integer = character varying".
+            // It survived before only because fixtures hand-declared the column as text; the
+            // enricher's own VARCHAR(255) spelling disagreed with the PK type it points at.
+            ps.setObject(1, ApprovalColumns.parentIdValue(parentId));
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
                 return list.isEmpty() ? null : list.getFirst();
