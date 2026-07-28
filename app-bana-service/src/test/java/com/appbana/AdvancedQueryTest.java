@@ -1,9 +1,11 @@
 package com.appbana;
 
+import com.appbana.approval.ApprovalColumns;
 import com.appbana.model.EntitySchema;
 import com.appbana.service.EntityCrudService;
 import com.appbana.service.SessionService;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.function.Executable;
 
 import java.io.IOException;
 import java.net.URI;
@@ -341,5 +343,150 @@ public class AdvancedQueryTest {
         JsonNode node = get("/api/default_default_rt_" + type + "?filter=value:=" + encoded + "&count=true");
         assertEquals(1, node.get("total").asLong(),
                 "type '" + type + "' must round-trip insert -> filter without a 500 or a 0-match");
+    }
+
+    // Review #7 — the root cause was that EntitySchema.getFields() is the sole
+    // authority every filter/sort/projection/groupBy path consults, and the 8
+    // approval columns are physical-only (never members of getFields()) for any
+    // approvalRequired entity. This test is parameterized directly over
+    // ApprovalColumns.NAMES (not a hand-copied list of 8 strings) so that adding
+    // a 9th approval column automatically extends coverage here without anyone
+    // remembering to update this test by hand.
+    @Test
+    @Order(12)
+    void approvalColumnsRoundTripInsertToFilterByType() throws Exception {
+        String entityName = "approval_cols_rt";
+        EntitySchema schema = new EntitySchema();
+        schema.setName(entityName);
+        schema.setTenantId("default");
+        schema.setAppId("default");
+        schema.setApprovalRequired(true);
+        schema.setFields(List.of(field("id", "long", true, true), field("amount", "int", false, false)));
+        SchemaManager.saveSchema(schema);
+
+        String table = SchemaManager.getPhysicalTableName(schema).toUpperCase(Locale.ROOT);
+        Map<String, String> ddlType = Map.of(
+                "approval_status", "VARCHAR(255)",
+                "approval_revision", "INTEGER",
+                "approval_parent_id", "INTEGER",
+                "submitted_by", "VARCHAR(255)",
+                "submitted_at", "TIMESTAMP",
+                "approved_by", "VARCHAR(255)",
+                "approved_at", "TIMESTAMP",
+                "rejection_reason", "TEXT");
+        try (java.sql.Connection conn = JdbcManager.getConnection();
+                java.sql.Statement st = conn.createStatement()) {
+            st.execute("DELETE FROM \"" + table + "\"");
+            for (String col : ApprovalColumns.NAMES) {
+                String type = ddlType.get(col);
+                assertNotNull(type, "test is missing a DDL type fixture for approval column '" + col + "'");
+                // Deliberately raw DDL, NOT an EntitySchema.Field — reproducing the
+                // "physical-only" scenario (scaffold_app enrichment /
+                // batch_update_entities) for every approval column, not just the
+                // handful the round-6 fixture happened to add.
+                st.execute("ALTER TABLE \"" + table + "\" ADD COLUMN IF NOT EXISTS \""
+                        + col.toUpperCase(Locale.ROOT) + "\" " + type);
+            }
+        }
+
+        long ts1 = Instant.parse("2026-01-15T10:30:00Z").toEpochMilli();
+        long ts2 = Instant.parse("2026-02-20T08:00:00Z").toEpochMilli();
+        // { value1, value2, exact-filter literal for value1 }
+        Map<String, Object[]> byColumn = Map.of(
+                "approval_status", new Object[] { "REJECTED", "DRAFT", "REJECTED" },
+                "approval_revision", new Object[] { 3, 9, "3" },
+                "approval_parent_id", new Object[] { 101, 202, "101" },
+                "submitted_by", new Object[] { "alice_maker", "carol_maker", "alice_maker" },
+                "submitted_at", new Object[] { new Timestamp(ts1), new Timestamp(ts2), "2026-01-15T10:30:00Z" },
+                "approved_by", new Object[] { "bob_checker", "dave_checker", "bob_checker" },
+                "approved_at", new Object[] { new Timestamp(ts1), new Timestamp(ts2), "2026-01-15T10:30:00Z" },
+                "rejection_reason", new Object[] { "missing-receipt", "wrong-amount", "missing-receipt" });
+
+        List<Executable> checks = new ArrayList<>();
+        for (String column : ApprovalColumns.NAMES) {
+            Object[] cfg = byColumn.get(column);
+            assertNotNull(cfg, "test is missing a values fixture for approval column '" + column + "'");
+            checks.add(() -> assertApprovalColumnRoundTrips(table, entityName, column, cfg[0], cfg[1],
+                    (String) cfg[2]));
+        }
+        assertAll("Every ApprovalColumns.NAMES entry must round-trip insert -> exact filter without a 500", checks);
+
+        // D9 — resolveApprovalStatusFilter()'s validation-failure messages are
+        // written for _approvalStatus=; when the same validation is triggered via
+        // filter=approval_status: instead, the message must name the door the
+        // caller actually used, not the other one.
+        JsonNode invalid = getExpectStatus(
+                "/api/default_default_" + entityName + "?filter=approval_status:BOGUS", 400);
+        String message = invalid.get("error").asText();
+        assertTrue(message.contains("filter=approval_status:"), "unexpected message: " + message);
+        assertFalse(message.contains("_approvalStatus"), "unexpected message: " + message);
+    }
+
+    private static void assertApprovalColumnRoundTrips(String table, String entityName, String column,
+            Object value1, Object value2, String filterLiteral) throws Exception {
+        try (java.sql.Connection conn = JdbcManager.getConnection();
+                java.sql.PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO \"" + table + "\" (\"" + column.toUpperCase(Locale.ROOT) + "\") VALUES (?)")) {
+            ps.setObject(1, value1);
+            ps.executeUpdate();
+            ps.setObject(1, value2);
+            ps.executeUpdate();
+        }
+        String encoded = java.net.URLEncoder.encode(filterLiteral, java.nio.charset.StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        JsonNode node = get("/api/default_default_" + entityName + "?filter=" + column + ":=" + encoded
+                + "&count=true");
+        assertEquals(1, node.get("total").asLong(),
+                "approval column '" + column + "' must round-trip insert -> exact filter without a 500 or a 0-match: "
+                        + node);
+    }
+
+    @Test
+    @Order(13)
+    void unknownFieldNameFailsClosedForFilterSortFieldsAndGroupBy() throws Exception {
+        // Review #7 (D7) — sort=/fields=/groupBy= used to fail OPEN on an unknown
+        // field name (silently dropped/skipped/bucketed into one fake group),
+        // unlike filter= which has failed closed since Review #5. All four must
+        // behave the same way against the "customer" entity's real field list.
+        assertTrue(getExpectStatus("/api/default_default_customer?filter=doesNotExist:=x", 400).has("error"));
+        assertTrue(getExpectStatus("/api/default_default_customer?sort=doesNotExist", 400).has("error"));
+        assertTrue(getExpectStatus("/api/default_default_customer?fields=doesNotExist", 400).has("error"));
+        assertTrue(getExpectStatus("/api/default_default_customer?groupBy=doesNotExist", 400).has("error"));
+    }
+
+    @Test
+    @Order(14)
+    void approvalColumnFilterOnNonApprovalEntityFailsClosed() throws Exception {
+        // Review #7 (D3) — the exemption that lets approval_status/submitted_by/...
+        // bypass the getFields() check is gated on the entity actually having the
+        // approval workflow enabled; "customer" does not, so this must 400 like any
+        // other genuinely unknown field name, not silently succeed.
+        assertTrue(getExpectStatus("/api/default_default_customer?filter=approval_status:=REJECTED", 400)
+                .has("error"));
+    }
+
+    @Test
+    @Order(15)
+    void conflictingApprovalStatusDirectivesFailClosed() throws Exception {
+        // Review #7 (D8) — _approvalStatus=X and filter=approval_status:=Y with
+        // different values used to silently resolve to X with no indication Y was
+        // ignored. Must 400 instead of picking a winner.
+        String entityName = "approval_conflict_rt";
+        EntitySchema schema = new EntitySchema();
+        schema.setName(entityName);
+        schema.setTenantId("default");
+        schema.setAppId("default");
+        schema.setApprovalRequired(true);
+        schema.setFields(
+                List.of(field("id", "long", true, true), field("approval_status", "string", false, false)));
+        SchemaManager.saveSchema(schema);
+
+        assertTrue(getExpectStatus("/api/default_default_" + entityName
+                + "?_approvalStatus=REJECTED&filter=approval_status:=APPROVED", 400).has("error"));
+
+        // The same value through both doors is not a conflict.
+        getExpectStatus(
+                "/api/default_default_" + entityName + "?_approvalStatus=REJECTED&filter=approval_status:=REJECTED",
+                200);
     }
 }

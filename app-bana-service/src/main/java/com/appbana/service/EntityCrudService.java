@@ -448,6 +448,60 @@ public class EntityCrudService {
         }
     }
 
+    /**
+     * Review #7 (root cause) — {@code schema.getFields()} is the sole authority every
+     * filter/sort/projection/groupBy code path resolves a field name against. The 8
+     * approval system columns are physical-only ({@code SchemaManager} creates them in
+     * the table for every approval-required entity) and are never members of
+     * {@code getFields()}. Review #6 patched two call sites (parseFilters/buildWhere)
+     * with a bespoke {@code isApprovalColumn()} branch that treated every one of them as
+     * a free-text/LIKE-able string — which is why {@code approval_revision} (INTEGER)
+     * and {@code submitted_at}/{@code approved_at} (TIMESTAMP) 500'd instead of
+     * filtering, and why {@code sort=}/{@code fields=} on those columns silently no-op'd
+     * (the branch never existed there at all).
+     *
+     * <p>This is the single fieldMap-building step every READ path should use instead:
+     * {@code schema.getFields()} plus {@link ApprovalColumns#asFields()}, but ONLY when
+     * the entity actually has an approval workflow ({@code schema.isApprovalRequired()})
+     * — otherwise a schema with no physical {@code approval_status} etc. column would
+     * 500 with "column does not exist" instead of 400 for an unrecognized field (D3).
+     *
+     * <p><b>Read-path only.</b> Insert/update/validation must keep using
+     * {@code schema.getFields()} directly so a client can never write these columns
+     * through the generic entity API — see {@code enforceApprovalPreInsert()}/
+     * {@code stripApprovalColumns()} in {@code GenericEntityRoutes}. The default
+     * projection (no {@code fields=} requested) must also keep using
+     * {@code schema.getFields()} directly, not this method — otherwise every list
+     * response would silently grow 8 columns and leak approval metadata to every caller
+     * that doesn't ask for it.
+     */
+    private static List<EntitySchema.Field> getQueryableFields(EntitySchema schema) {
+        if (!schema.isApprovalRequired()) {
+            return schema.getFields();
+        }
+        List<EntitySchema.Field> combined = new ArrayList<>(schema.getFields());
+        combined.addAll(ApprovalColumns.asFields());
+        return combined;
+    }
+
+    /**
+     * Resolves {@code name} to its canonical field name (case-insensitive), including
+     * the approval columns per {@link #getQueryableFields}. Returns {@code null} when
+     * unrecognized — callers (e.g. {@code groupBy=}) should fail closed with a 400
+     * rather than silently accepting an arbitrary/unknown column name.
+     */
+    public String resolveQueryableField(EntitySchema schema, String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        for (EntitySchema.Field f : getQueryableFields(schema)) {
+            if (f.getName().equalsIgnoreCase(name)) {
+                return f.getName();
+            }
+        }
+        return null;
+    }
+
     public Map<String, Object> parseFilters(String raw, EntitySchema schema) {
         Map<String, Object> map = new LinkedHashMap<>();
         if (raw == null || raw.isBlank()) {
@@ -466,7 +520,7 @@ public class EntityCrudService {
         LOG.debug("[FILTER] Parsing filter string: {}", raw);
         String[] pairs = raw.split(",");
         Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
-        for (EntitySchema.Field f : schema.getFields()) {
+        for (EntitySchema.Field f : getQueryableFields(schema)) {
             fieldMap.put(f.getName().toLowerCase(Locale.ROOT), f);
             LOG.debug("[FILTER] Schema field: {} (lowercased: {})", f.getName(), f.getName().toLowerCase(Locale.ROOT));
         }
@@ -492,29 +546,22 @@ public class EntityCrudService {
                     name.toLowerCase(Locale.ROOT));
             EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
             if (f == null) {
-                // Review #6 (blocker) — approval system columns (approval_status,
-                // submitted_by, ...) are physical-only: SchemaManager injects them into
-                // the table for every approval-required entity, but they are never
-                // members of schema.getFields(), so the fieldMap lookup above always
-                // misses them. Before Review #5's fail-closed fix, an unknown field
-                // silently produced an unscoped 200 — which is how a filter on these
-                // columns "worked" (by not actually filtering). Rejecting them outright
-                // is worse: it 400s the maker-side "Needs rework" view (filter=
-                // submitted_by:=alice) for everyone. Treat them as free text instead of
-                // throwing — buildWhere() has the matching case for the SQL side.
-                if (ApprovalColumns.isApprovalColumn(name)) {
-                    map.put(name.toLowerCase(Locale.ROOT), exact ? new ExactMatch(val) : val);
-                    continue;
-                }
-                // This used to `continue` (ignore unknown field), which is the exact
-                // same fail-open hazard the null-value check just below closes for a
-                // bad *value*: a typo'd field name (e.g. "?filter=statuss:open" instead
-                // of "status:open") silently produced an unscoped 200 instead of the
-                // caller's intended filter. filter= is the only scoping mechanism for
-                // several callers (child records, saved views, approval queues), so a
-                // typo here is a correctness/data-exposure hazard, not just a UX one.
-                // Fail closed like the value check does, rather than leaving this one
-                // hole in the same fix.
+                // Review #5 (High A) — this used to `continue` (ignore unknown field),
+                // which is the exact same fail-open hazard the null-value check just
+                // below closes for a bad *value*: a typo'd field name (e.g.
+                // "?filter=statuss:open" instead of "status:open") silently produced an
+                // unscoped 200 instead of the caller's intended filter. filter= is the
+                // only scoping mechanism for several callers (child records, saved
+                // views, approval queues), so a typo here is a correctness/data-exposure
+                // hazard, not just a UX one. Fail closed like the value check does,
+                // rather than leaving this one hole in the same fix.
+                //
+                // Review #7 (root cause) — fieldMap above is built from
+                // getQueryableFields(), which already folds in the 8 approval columns
+                // as typed fields when schema.isApprovalRequired(). So this branch is
+                // reached for a genuinely unknown name OR an approval-column name on an
+                // entity that doesn't have the approval workflow enabled (D3) — both
+                // cases are correctly a 400, not a silent pass-through.
                 throw new FieldValidationException(name, "unknown filter field");
             }
             Object parsed = parseFilterValue(f, val);
@@ -593,8 +640,11 @@ public class EntityCrudService {
         if (groupBy == null || groupBy.isBlank()) return Map.of();
         // Resolve to the canonical field name from the schema — the whole
         // point of this lookup is to refuse to trust the raw query-string.
+        // Review #7 (root cause) — getQueryableFields() folds in the 8 approval
+        // columns (when the entity has the approval workflow), so groupBy=
+        // approval_status now resolves instead of being silently rejected here.
         String canonical = null;
-        for (EntitySchema.Field f : schema.getFields()) {
+        for (EntitySchema.Field f : getQueryableFields(schema)) {
             if (f.getName().equalsIgnoreCase(groupBy)) {
                 canonical = f.getName();
                 break;
@@ -639,10 +689,20 @@ public class EntityCrudService {
             String sortParam,
             Map<String, Object> filters) throws SQLException {
         // Projection (preserve order, remove duplicates while keeping first occurrence)
+        //
+        // Review #7 (root cause / D5, D7) — fieldMap is built from
+        // getQueryableFields() so an explicit fields=approval_status resolves
+        // instead of being silently stripped (D5). An unrecognized name in an
+        // EXPLICIT fields= list is now a 400 (D7), matching filter='s fail-closed
+        // behavior — but the DEFAULT (no fields= supplied) projection below
+        // deliberately keeps iterating schema.getFields() directly, not
+        // getQueryableFields(): every list response must keep excluding the 8
+        // approval columns unless a caller explicitly opts in, or approval
+        // metadata would leak into every existing caller's response.
         List<String> projection = new ArrayList<>();
         Set<String> seenProj = new HashSet<>();
         Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
-        for (EntitySchema.Field f : schema.getFields()) {
+        for (EntitySchema.Field f : getQueryableFields(schema)) {
             fieldMap.put(f.getName().toLowerCase(Locale.ROOT), f);
         }
 
@@ -653,16 +713,17 @@ public class EntityCrudService {
                     continue;
                 }
                 EntitySchema.Field f = fieldMap.get(trimmed.toLowerCase(Locale.ROOT));
-                if (f != null) {
-                    String canonical = f.getName();
-                    if (seenProj.add(canonical.toLowerCase(Locale.ROOT))) {
-                        projection.add(canonical);
-                    }
+                if (f == null) {
+                    throw new FieldValidationException(trimmed, "unknown field");
+                }
+                String canonical = f.getName();
+                if (seenProj.add(canonical.toLowerCase(Locale.ROOT))) {
+                    projection.add(canonical);
                 }
             }
         }
 
-        if (projection.isEmpty()) { // default all
+        if (projection.isEmpty()) { // default all — deliberately schema.getFields(), see comment above
             for (EntitySchema.Field f : schema.getFields()) {
                 String canonical = f.getName();
                 if (seenProj.add(canonical.toLowerCase(Locale.ROOT))) {
@@ -693,7 +754,13 @@ public class EntityCrudService {
                 String name = desc ? t.substring(1) : (t.startsWith("+") ? t.substring(1) : t);
                 EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
                 if (f == null) {
-                    continue;
+                    // Review #7 (D4/D7) — used to `continue` (silently drop the sort
+                    // token), returning 200 with "sort":[] and arbitrary order instead
+                    // of the caller's requested one. Same fail-open hazard filter=
+                    // already closed; fieldMap here also now includes the approval
+                    // columns via getQueryableFields(), so a legitimate sort=submitted_at
+                    // resolves instead of hitting this branch at all.
+                    throw new FieldValidationException(name, "unknown sort field");
                 }
                 String key = f.getName().toLowerCase(Locale.ROOT);
                 if (seenSort.add(key)) {
@@ -1126,7 +1193,7 @@ public class EntityCrudService {
 
         if (filters != null && !filters.isEmpty()) {
             Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
-            for (EntitySchema.Field f : schema.getFields()) {
+            for (EntitySchema.Field f : getQueryableFields(schema)) {
                 fieldMap.put(f.getName().toLowerCase(Locale.ROOT), f);
             }
 
@@ -1134,34 +1201,18 @@ public class EntityCrudService {
                 LOG.debug("[BUILD_WHERE] Processing filter entry: key={}, value={}", e.getKey(), e.getValue());
                 EntitySchema.Field f = fieldMap.get(e.getKey().toLowerCase(Locale.ROOT));
                 if (f == null) {
-                    // Review #6 (blocker) — mirrors the parseFilters() case above: an
-                    // approval system column has no EntitySchema.Field, so the fieldMap
-                    // lookup misses it even though parseFilters() legitimately put it in
-                    // this map. Build the predicate directly against the physical column
-                    // name instead of dropping it (which would silently un-scope the
-                    // maker-side "Needs rework" query).
-                    if (ApprovalColumns.isApprovalColumn(e.getKey())) {
-                        boolean exactRequested = false;
-                        Object filterValue = e.getValue();
-                        if (filterValue instanceof ExactMatch em) {
-                            exactRequested = true;
-                            filterValue = em.value();
-                        }
-                        if (filterValue == null) {
-                            continue;
-                        }
-                        String quotedKey = quote(e.getKey());
-                        if (!exactRequested) {
-                            parts.add("UPPER(" + quotedKey + ") LIKE ?");
-                            params.add("%" + String.valueOf(filterValue).toUpperCase(Locale.ROOT) + "%");
-                        } else {
-                            parts.add(quotedKey + " = ?");
-                            params.add(filterValue);
-                        }
-                    } else {
-                        LOG.debug("[BUILD_WHERE] Field '{}' not found in schema, skipping", e.getKey());
-                    }
-                    continue; // unknown, or already handled as an approval column above
+                    // Review #7 (root cause) — fieldMap above already folds in the 8
+                    // approval columns as typed fields (getQueryableFields()), so this
+                    // is a genuinely unknown column (or an approval column on an entity
+                    // without the approval workflow enabled). parseFilters() is the
+                    // fail-closed gate for a caller-supplied filter= string; anything
+                    // that reaches buildWhere() with a key this map doesn't recognize
+                    // was added by a different caller (e.g. applyApprovalStatusFilter)
+                    // that is trusted to only use real column names, so skipping here —
+                    // rather than throwing — is intentional defense-in-depth, not a
+                    // second fail-open hole.
+                    LOG.debug("[BUILD_WHERE] Field '{}' not found in schema, skipping", e.getKey());
+                    continue;
                 }
 
                 // C3.9 — unwrap an explicit exact-match request before any of the

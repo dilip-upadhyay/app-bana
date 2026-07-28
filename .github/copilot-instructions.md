@@ -395,17 +395,32 @@ DELETE /api/{entity}/{id}       â†’ Delete record
 ```
 ?limit=50&offset=0             → Pagination (max limit 500)
 ?q=John                        → Full-text-ish search across text columns
-?filter=name:John,status:active → Field-level filters (comma-separated; an unrecognized field name 400s —
-                                  see Review #5/#6 — except the 8 injected approval columns, which are
-                                  always accepted even though they're absent from EntitySchema.getFields())
+?filter=name:John,status:active → Field-level filters (comma-separated). An unrecognized field name
+                                  400s — see Review #5/#6/#7 — EXCEPT the 8 injected approval columns
+                                  (approval_status, submitted_by, ...), which are accepted even though
+                                  they're absent from EntitySchema.getFields(), but ONLY when the entity
+                                  has approvalRequired: true. The same exemption (and the same 400 for a
+                                  genuine typo) applies to sort=, fields= and groupBy= — see Review #7.
 ?filter=name:=John             → Exact match — leading '=' on the value. Default (no '=') is
                                   a case-insensitive substring LIKE, which over-matches identity
-                                  fields (submitted_by:bob would also match "bobby").
-?fields=name,email             → Column projection
-?sort=name:asc,age:desc        → Sorting
+                                  fields (submitted_by:bob would also match "bobby"). approval_status
+                                  goes through the same DRAFT/PENDING/APPROVED/REJECTED validation
+                                  and checker-only-PENDING gate either way — an invalid value's 400
+                                  names whichever of filter=approval_status: / _approvalStatus= the
+                                  caller actually used (Review #7 D9).
+?fields=name,email             → Column projection. Omitting fields= returns only the declared schema
+                                  fields — approval columns are opt-in via an explicit fields= only, so
+                                  they never leak into a caller that didn't ask for them.
+?sort=-name,+age               → Sorting. NOT `name:asc,age:desc` — that colon syntax is silently
+                                  ignored (a field literally named "name:asc" is looked up, missed, and
+                                  dropped) and was wrong in this doc for six rounds (Review #7 D10). No
+                                  prefix or a leading `+` means ascending; a leading `-` means descending.
 ?count=true                    → Count only
-?groupBy=status                → Group rows by one column
-?_approvalStatus=PENDING       -> Approval-state filter (PENDING is checker-only; 403 otherwise)
+?groupBy=status                → Group rows by one column. An unrecognized column 400s (Review #7 D7) —
+                                  it used to silently bucket every row into one group with an empty key.
+?_approvalStatus=PENDING       -> Approval-state filter (PENDING is checker-only; 403 otherwise).
+                                  Conflicts with a simultaneous filter=approval_status:=X for a
+                                  different X 400 instead of silently picking one (Review #7 D8).
 ```
 
 > [!WARNING]

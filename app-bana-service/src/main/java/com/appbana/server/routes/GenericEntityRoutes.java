@@ -586,6 +586,20 @@ public class GenericEntityRoutes {
             // C2.7 — approval-state filter, checker-only for PENDING.
             String approvalStatusParam = req.query("_approvalStatus");
 
+            // Review #7 (D7) — groupBy used to fail OPEN on an unrecognized column
+            // name: the bucketing loop below reads row.get(groupByParam) directly, so
+            // a typo'd or unknown name matched nothing on every row and produced a
+            // single bucket with an empty key and the full row count — a dashboard
+            // would render that as a legitimate figure. Fail closed like filter=
+            // already does. resolveQueryableField() also recognizes the 8 approval
+            // columns (e.g. groupBy=approval_status) when the entity has the
+            // approval workflow enabled.
+            if (groupByParam != null && !groupByParam.isBlank()
+                    && crud.resolveQueryableField(schema, groupByParam) == null) {
+                res.json(400, Map.of("error", "unknown groupBy field '" + groupByParam + "'"));
+                return;
+            }
+
             Map<String, Object> filters;
             try {
                 filters = crud.parseFilters(filterParam, schema);
@@ -727,6 +741,12 @@ public class GenericEntityRoutes {
                         res.json(200, out);
                     }
                 }
+            } catch (IllegalArgumentException iae) {
+                // Review #7 (D7) — listAdvanced() now fails closed (400) on an
+                // unrecognized sort=/fields= column name, same class of fix as
+                // Review #4's filter= value handling and Review #5's filter= name
+                // handling.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
             } catch (SQLException e) {
                 LOG.error("List failed for entity {}", entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
@@ -1224,6 +1244,9 @@ public class GenericEntityRoutes {
                 } finally {
                     TenantContext.clear();
                 }
+            } catch (IllegalArgumentException iae) {
+                // Review #7 (D7) — see the identical catch on /api/{entity}.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
             } catch (SQLException e) {
                 LOG.error("App-scoped list failed for app={} entity={}", appId, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
@@ -1662,6 +1685,9 @@ public class GenericEntityRoutes {
                 } finally {
                     TenantContext.clear();
                 }
+            } catch (IllegalArgumentException iae) {
+                // Review #7 (D7) — see the identical catch on /api/{entity}.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
             } catch (SQLException e) {
                 LOG.error("Env-scoped list failed for app={} env={} entity={}", appId, env, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
@@ -2123,16 +2149,51 @@ public class GenericEntityRoutes {
      * </ol>
      * Guarding only the first would leave the checker queue enumerable by any maker.
      *
+     * <p>Review #7 — two further hazards on the second door:
+     * <ul>
+     *   <li><b>D9</b> — {@code resolveApprovalStatusFilter()}'s 400 messages ("invalid
+     *       _approvalStatus '...'", "_approvalStatus is not supported: ...") are written
+     *       for the {@code _approvalStatus=} parameter. When the same validation is
+     *       triggered via the generic {@code filter=approval_status:} door instead, the
+     *       message named a parameter the caller never sent. Rewritten below so the 400
+     *       always names whichever door the caller actually used. The 403 checker-only
+     *       PENDING gate is untouched either way — its message never mentioned
+     *       {@code _approvalStatus} and the gate itself must stay exactly as strict for
+     *       both doors (see {@code RevisionFlowTest.genericFilterParamCannotSmuggleAPendingListing}).</li>
+     *   <li><b>D8</b> — supplying both {@code _approvalStatus=X} and
+     *       {@code filter=approval_status:=Y} with different values used to silently
+     *       resolve to {@code X} with no indication {@code Y} was ignored.</li>
+     * </ul>
+     *
      * @param filters mutated in place when an explicit {@code _approvalStatus} was supplied
      * @return true if {@code _approvalStatus} was supplied (callers use this to force the
      *         advanced query path, which is the only one that honours filters)
-     * @throws ApprovalFilterException if the value is invalid or the caller may not see it
+     * @throws ApprovalFilterException if the value is invalid, conflicting, or the caller
+     *         may not see it
      */
     static boolean applyApprovalStatusFilter(EntitySchema schema, String tenantId, String appId,
                                              String raw, Map<String, Object> filters,
                                              String callerUserId, boolean authEnabled) {
         String explicit = resolveApprovalStatusFilter(schema, tenantId, appId, raw, callerUserId, authEnabled);
+
+        // Extract the filter=approval_status: entry, if any, once — both hazards
+        // below need its (unwrapped) value regardless of exact/substring form.
+        Object filterValue = null;
+        if (schema != null && schema.isApprovalRequired() && filters != null) {
+            for (Map.Entry<String, Object> e : filters.entrySet()) {
+                if ("approval_status".equalsIgnoreCase(e.getKey()) && e.getValue() != null) {
+                    filterValue = e.getValue() instanceof EntityCrudService.ExactMatch em ? em.value() : e.getValue();
+                    break;
+                }
+            }
+        }
+
         if (explicit != null) {
+            if (filterValue != null && !explicit.equalsIgnoreCase(String.valueOf(filterValue))) {
+                throw new ApprovalFilterException(400,
+                        "conflicting approval status: _approvalStatus=" + explicit
+                                + " vs filter=approval_status:=" + filterValue);
+            }
             // C3.9 — exact, not the default substring LIKE. The four states do not
             // currently overlap as substrings, but a fifth one that did would
             // silently widen every approval-filtered list.
@@ -2140,19 +2201,19 @@ public class GenericEntityRoutes {
             return true;
         }
 
-        if (schema != null && schema.isApprovalRequired() && filters != null) {
-            for (Map.Entry<String, Object> e : filters.entrySet()) {
-                if ("approval_status".equalsIgnoreCase(e.getKey()) && e.getValue() != null) {
-                    // C3.9 — unwrap an ExactMatch first. Without this the C2.7 checker
-                    // gate would validate the literal string "ExactMatch[value=PENDING]"
-                    // instead of "PENDING", which is a security check quietly looking
-                    // at the wrong value.
-                    Object value = e.getValue() instanceof EntityCrudService.ExactMatch em ? em.value() : e.getValue();
-                    if (value == null) continue;
-                    // Same validation + checker gate as the dedicated parameter.
-                    resolveApprovalStatusFilter(schema, tenantId, appId, String.valueOf(value),
-                            callerUserId, authEnabled);
+        if (filterValue != null) {
+            try {
+                // Same validation + checker gate as the dedicated parameter.
+                resolveApprovalStatusFilter(schema, tenantId, appId, String.valueOf(filterValue),
+                        callerUserId, authEnabled);
+            } catch (ApprovalFilterException afe) {
+                // D9 — rewrite a validation-failure message to name the door the
+                // caller actually used. Leave the checker-gate 403 exactly as is.
+                if (afe.status() == 400) {
+                    throw new ApprovalFilterException(400,
+                            afe.getMessage().replace("_approvalStatus", "filter=approval_status:"));
                 }
+                throw afe;
             }
         }
         return false;
