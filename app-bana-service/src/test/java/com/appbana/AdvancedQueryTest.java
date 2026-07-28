@@ -599,4 +599,49 @@ public class AdvancedQueryTest {
         assertEquals(1L, counts.get("DRAFT"));
         assertEquals(1L, counts.get("APPROVED"));
     }
+
+    @Test
+    @Order(18)
+    void bareGetWithNoQueryParamsProjectsDeclaredFieldsOnlyOnApprovalEntity() throws Exception {
+        // Review #9 (High) — a bare `GET /api/{entity}` with NO query parameters
+        // takes the `!anyAdv` simple-list branch, which calls
+        // EntityCrudService.listAll(EntitySchema) — a plain SELECT * before this
+        // fix. Review #7's default-projection leak guardrail was enforced in
+        // listAdvanced()'s default (no fields=) path but never on THIS branch, so
+        // every approval column (raw, uppercase DB keys) leaked into the response
+        // of the one request shape a parameter-by-parameter sweep never probes:
+        // the caller sending nothing at all. listAll() now projects
+        // schema.getFields() explicitly, same guardrail as listAdvanced().
+        String entityName = "approval_bare_get_rt";
+        EntitySchema schema = new EntitySchema();
+        schema.setName(entityName);
+        schema.setTenantId("default");
+        schema.setAppId("default");
+        schema.setApprovalRequired(true);
+        schema.setFields(List.of(field("id", "long", true, true), field("title", "string", false, false)));
+        SchemaManager.saveSchema(schema);
+
+        String table = SchemaManager.getPhysicalTableName(schema).toUpperCase(Locale.ROOT);
+        try (java.sql.Connection conn = JdbcManager.getConnection();
+                java.sql.Statement st = conn.createStatement()) {
+            st.execute("DELETE FROM \"" + table + "\"");
+            // Deliberately raw DDL, NOT EntitySchema.Field entries — reproducing
+            // the "physical-only" approval columns scenario, same as the other
+            // tests in this suite.
+            st.execute("ALTER TABLE \"" + table + "\" ADD COLUMN IF NOT EXISTS \"APPROVAL_STATUS\" VARCHAR(255)");
+            st.execute("ALTER TABLE \"" + table + "\" ADD COLUMN IF NOT EXISTS \"SUBMITTED_BY\" VARCHAR(255)");
+            st.execute("INSERT INTO \"" + table + "\" (\"TITLE\", \"APPROVAL_STATUS\", \"SUBMITTED_BY\") "
+                    + "VALUES ('widget', 'PENDING', 'alice_maker')");
+        }
+
+        JsonNode rows = get("/api/default_default_" + entityName);
+        assertTrue(rows.isArray(), "bare GET with no query params returns a plain row array: " + rows);
+        assertEquals(1, rows.size());
+        JsonNode row = rows.get(0);
+        List<String> keys = new ArrayList<>();
+        row.fieldNames().forEachRemaining(keys::add);
+        assertEquals(Set.of("id", "title"), new HashSet<>(keys),
+                "bare GET on an approval-required entity must return exactly the declared fields, "
+                        + "no approval columns: " + row);
+    }
 }

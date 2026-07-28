@@ -248,7 +248,30 @@ public class EntityCrudService {
     }
 
     public List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {
-        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema));
+        // Review #9 (High) — this used to be a bare SELECT *, which returns EVERY
+        // physical column on the table, including the 8 approval columns (raw,
+        // uppercase DB keys) for any approval-required entity. Review #7's
+        // default-projection leak guardrail was documented and enforced in
+        // listAdvanced()'s default (no fields=) path, but this method — the ONE
+        // that a bare `GET /api/{entity}` with no query params at all actually
+        // calls — never got the same treatment, so the guardrail held on only
+        // one of the route's two code paths. Project schema.getFields()
+        // explicitly instead, aliased to preserve declared casing, mirroring
+        // listAdvanced()'s default projection exactly — same guardrail, now
+        // enforced on both branches. Falls back to SELECT * only for the
+        // (schema-invalid, shouldn't happen) case of a schema with no fields.
+        List<EntitySchema.Field> fields = schema.getFields();
+        String sql;
+        if (fields == null || fields.isEmpty()) {
+            sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema));
+        } else {
+            List<String> selectCols = new ArrayList<>();
+            for (EntitySchema.Field f : fields) {
+                selectCols.add(quote(f.getName()) + " AS \"" + f.getName() + "\"");
+            }
+            sql = "SELECT " + String.join(",", selectCols) + " FROM "
+                    + quote(SchemaManager.getPhysicalTableName(schema));
+        }
         try (Connection c = schemaConnection(schema);
                 PreparedStatement ps = c.prepareStatement(sql);
                 ResultSet rs = ps.executeQuery()) {

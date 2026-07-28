@@ -418,10 +418,35 @@ DELETE /api/{entity}/{id}       â†’ Delete record
 ?count=true                    → Count only
 ?groupBy=status                → Group rows by one column. An unrecognized column 400s (Review #7 D7) —
                                   it used to silently bucket every row into one group with an empty key.
+                                  Review #8 made groupBy= itself trigger the advanced-query path: a bare
+                                  `?groupBy=X` with no other param used to fall through to the simple
+                                  SELECT-all branch and be silently ignored entirely (no `groups`, no
+                                  `groupCounts`, no error). It now always returns the paginated shape
+                                  (`{rows, total, limit: 50 by default, offset, ...}` plus `groupCounts`)
+                                  instead of a bare array — a public response-shape change, and a silent
+                                  50-row cap on `rows` if the caller doesn't also pass `limit=`. Per-page
+                                  `groups` is populated only when the grouped column is actually present on
+                                  the returned rows (a declared field, or one explicitly requested via
+                                  fields=); for an approval column with no explicit fields=, `groups` is
+                                  omitted rather than fabricated and `groupCounts` (whole-dataset, SQL,
+                                  projection-independent) is the only source of truth (Review #8 High).
+                                  `groupBy=` is only recognized on the top-level `/api/{entity}` route —
+                                  the app-scoped and env-scoped list routes accept and silently ignore it.
 ?_approvalStatus=PENDING       -> Approval-state filter (PENDING is checker-only; 403 otherwise).
                                   Conflicts with a simultaneous filter=approval_status:=X for a
                                   different X 400 instead of silently picking one (Review #7 D8).
 ```
+
+> [!WARNING]
+> A bare `GET /api/{entity}` with **no query parameters at all** takes a different code path
+> (`EntityCrudService.listAll()`) than every other request shape above. Review #7's default-projection
+> leak guardrail (approval columns excluded unless explicitly requested via `fields=`) was enforced in
+> `listAdvanced()`'s default path but not here — `listAll()` used to be a bare `SELECT *`, returning every
+> physical column including all 8 approval columns with raw uppercase DB keys, on any approval-required
+> entity. Fixed in Review #9 to project `schema.getFields()` explicitly, same as `listAdvanced()`'s default
+> projection. **Lesson**: a parameter-by-parameter review sweep has no cell for "the caller sent nothing at
+> all" — that code path must be probed as its own case, not assumed to share behavior with the parameterized
+> paths just because it lives in the same route handler.
 
 > [!WARNING]
 > The handler reads a **fixed allowlist** of query params (`limit`, `offset`, `q`, `fields`, `sort`, `filter`,
