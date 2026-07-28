@@ -466,6 +466,19 @@ export async function rejectRecord(
 }
 
 /**
+ * Unwrap a list endpoint that returns `{ count, <key>: [...] }`.
+ *
+ * ApprovalRoutes wraps both list responses in an envelope rather than returning
+ * a bare array. The array form is still accepted so that a future unwrapping of
+ * the endpoint does not silently produce empty lists here.
+ */
+function unwrapList<T>(payload: unknown, key: string): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  const inner = (payload as Record<string, unknown> | null)?.[key];
+  return Array.isArray(inner) ? (inner as T[]) : [];
+}
+
+/**
  * Every PENDING row of an entity, newest submission first. 403 if the caller is
  * not a checker or app owner for this entity — callers that use this to decide
  * whether to *show* a queue should treat 403 as "empty", not as an error.
@@ -477,7 +490,7 @@ export async function fetchPendingApprovals(
   const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending`;
   const res = await authedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) await throwApprovalError(res, 'Fetch pending approvals failed');
-  return res.json();
+  return unwrapList<Record<string, unknown>>(await res.json(), 'records');
 }
 
 /** A record's approval history, most recent first. */
@@ -489,7 +502,7 @@ export async function fetchApprovalAudit(
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) await throwApprovalError(res, 'Fetch approval history failed');
-  return res.json();
+  return unwrapList<ApprovalAuditEntry>(await res.json(), 'history');
 }
 
 /** What the caller may do with one entity in the maker-checker workflow. */

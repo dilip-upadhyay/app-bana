@@ -30,6 +30,7 @@ import { ApprovalStatusPill } from './ApprovalStatusPill';
 import { isApprovalColumn, readRowValue } from './approval-columns';
 import { Button } from './Button';
 import { RejectDialog } from './RejectDialog';
+import { AuditDrawer } from './AuditDrawer';
 import { EmptyState } from './EmptyState';
 import { TableSkeleton } from './Skeleton';
 import { PageShell } from './PageShell';
@@ -66,6 +67,7 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<Row | null>(null);
+  const [auditing, setAuditing] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -219,6 +221,13 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
                       <div className="flex gap-2 justify-end">
                         <Button
                           size="sm"
+                          variant="ghost"
+                          onClick={() => setAuditing(row)}
+                        >
+                          History
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="secondary"
                           disabled={own || busy}
                           title={own ? 'You submitted this record, so you cannot review it' : undefined}
@@ -257,6 +266,13 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
         submitting={busyId !== null && rejecting !== null}
         onCancel={() => setRejecting(null)}
         onConfirm={(reason) => void handleReject(reason)}
+      />
+
+      <AuditDrawer
+        open={auditing !== null}
+        target={auditing ? targetFor(auditing) : null}
+        recordLabel={auditing ? `${label} #${rowId(auditing)}` : undefined}
+        onClose={() => setAuditing(null)}
       />
     </PageShell>
   );
