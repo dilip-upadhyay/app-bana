@@ -325,4 +325,109 @@ public class RoleRoutesSecurityTest {
         assertEquals(200, updateRes.statusCode());
         assertFalse(UserRoleService.isMaker(tenantId, appId, entityName, appOwner), "Schema update MUST NOT re-grant maker/checker role");
     }
+
+    /**
+     * GET /roles originally shipped with no authentication at all, while POST and DELETE on the
+     * same path were both guarded. The role map reveals who may approve what, and where separation
+     * of duties rests on a single checker, so an unauthenticated read is reconnaissance material
+     * for anyone targeting the approval workflow.
+     */
+    @Test
+    public void testGetRolesRequiresAuthenticationAndAuthorization() throws Exception {
+        String tenantId = "t_getroles";
+        String appId = "app_getroles";
+        String entityName = "Payment";
+        String owner = "owner_user";
+        String maker = "maker_user";
+        String outsider = "outsider_user";
+
+        AppMetadata app = new AppMetadata(appId, "Get Roles App", "1.0.0");
+        app.setTenantId(tenantId);
+        app.setAuthor(owner);
+        AppManager.createApp(tenantId, app);
+
+        EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
+        EntitySchema schema = new EntitySchema(entityName, List.of(idField));
+        schema.setTenantId(tenantId);
+        schema.setAppId(appId);
+        SchemaManager.saveSchema(schema);
+
+        UserRoleService.grantRole(tenantId, appId, entityName, maker, UserRoleService.Role.MAKER, owner);
+
+        String url = BASE_URL + "/api/tenants/" + tenantId + "/apps/" + appId
+                + "/roles?entityName=" + entityName + "&userId=" + maker;
+
+        // 1. No session at all must be rejected, not answered.
+        HttpResponse<String> anonymous = client.send(
+                HttpRequest.newBuilder().uri(URI.create(url)).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, anonymous.statusCode(),
+                "GET /roles must require a session; an anonymous caller could otherwise map the entire approval topology");
+        assertFalse(anonymous.body().contains("\"isChecker\""), "Unauthenticated response must not leak role data");
+
+        // 2. An authenticated but unrelated user must not read someone else's grants.
+        HttpResponse<String> byOutsider = client.send(
+                HttpRequest.newBuilder().uri(URI.create(url))
+                        .header("X-Session-Token", createTestSession(outsider))
+                        .GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, byOutsider.statusCode(), "Only the app owner may read another user's roles");
+
+        // 3. The app owner may read anyone's grants — this is the role-administration path.
+        HttpResponse<String> byOwner = client.send(
+                HttpRequest.newBuilder().uri(URI.create(url))
+                        .header("X-Session-Token", createTestSession(owner))
+                        .GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, byOwner.statusCode());
+        assertTrue(byOwner.body().contains("\"isMaker\":true"));
+
+        // 4. A user may always read their own grants, without being an owner.
+        HttpResponse<String> bySelf = client.send(
+                HttpRequest.newBuilder().uri(URI.create(url))
+                        .header("X-Session-Token", createTestSession(maker))
+                        .GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, bySelf.statusCode(), "A user must be able to discover their own roles");
+        assertTrue(bySelf.body().contains("\"isMaker\":true"));
+    }
+
+    /**
+     * The authorization check runs before the schema lookup on purpose: answering 404 first would
+     * let an unauthorized caller enumerate which entities exist inside an app that is not theirs.
+     */
+    @Test
+    public void testGetRolesDoesNotLeakEntityExistenceToUnauthorizedCallers() throws Exception {
+        String tenantId = "t_enum";
+        String appId = "app_enum";
+        String owner = "enum_owner";
+        String outsider = "enum_outsider";
+
+        AppMetadata app = new AppMetadata(appId, "Enum App", "1.0.0");
+        app.setTenantId(tenantId);
+        app.setAuthor(owner);
+        AppManager.createApp(tenantId, app);
+
+        EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
+        EntitySchema schema = new EntitySchema("RealEntity", List.of(idField));
+        schema.setTenantId(tenantId);
+        schema.setAppId(appId);
+        SchemaManager.saveSchema(schema);
+
+        String outsiderSession = createTestSession(outsider);
+        String base = BASE_URL + "/api/tenants/" + tenantId + "/apps/" + appId + "/roles?userId=someone_else&entityName=";
+
+        HttpResponse<String> existing = client.send(
+                HttpRequest.newBuilder().uri(URI.create(base + "RealEntity"))
+                        .header("X-Session-Token", outsiderSession).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> missing = client.send(
+                HttpRequest.newBuilder().uri(URI.create(base + "NoSuchEntity"))
+                        .header("X-Session-Token", outsiderSession).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(existing.statusCode(), missing.statusCode(),
+                "An unauthorized caller must not be able to tell an existing entity from a missing one by status code");
+        assertEquals(403, existing.statusCode());
+    }
 }

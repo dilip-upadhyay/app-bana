@@ -52,6 +52,12 @@ public class RoleRoutes {
     }
 
     private static void handleGetRoles(Router.HttpRequest req, Router.HttpResponse res, String tenantId, String appId) {
+        String callerUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
+        if (callerUserId == null || callerUserId.isBlank()) {
+            res.json(401, Map.of("error", "Unauthorized: valid session required"));
+            return;
+        }
+
         String entityName = req.query("entityName");
         String userId = req.query("userId");
 
@@ -61,6 +67,18 @@ public class RoleRoutes {
         }
 
         try {
+            // A user may always read their own grants; anyone else's are visible only to the app
+            // owner or system. The role map describes who can approve what and where separation of
+            // duties rests on a single checker, so it is reconnaissance material for an attacker
+            // targeting the workflow — not public metadata.
+            boolean readingOwnRoles = callerUserId.equals(userId);
+            if (!readingOwnRoles && !isAuthorizedToManageRoles(tenantId, appId, entityName, callerUserId)) {
+                res.json(403, Map.of("error", "Forbidden: caller cannot read roles for user " + userId));
+                return;
+            }
+
+            // Deliberately after the authorization check: a 404 would otherwise let an unauthorized
+            // caller enumerate which entities exist in an app that is not theirs.
             EntitySchema schema = SchemaManager.loadSchema(appId, entityName, tenantId);
             if (schema == null) {
                 res.json(404, Map.of("error", "Entity not found: " + entityName));
