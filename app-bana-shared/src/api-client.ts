@@ -186,7 +186,16 @@ export async function fetchEntityRows(
   token: string,
   params: Record<string, string | number> = {}
 ): Promise<{ rows: any[]; total: number }> {
-  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
+  // Review #5 (High A) — EntityCrudService.parseFilters() no longer runs a
+  // second, form-encoding-style decode (URLDecoder) on top of the RFC 3986
+  // percent-decode the JDK HTTP server already performs on the query string;
+  // that second decode was turning a literal '+' (e.g. in a phone number or
+  // timezone offset) into a space. URLSearchParams.toString() encodes a space
+  // as '+' (application/x-www-form-urlencoded), which the server no longer
+  // converts back — replace it with the RFC 3986 escape ('%20') so a filter
+  // value containing a space still round-trips correctly.
+  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString()
+    .replace(/\+/g, '%20');
   const res = await authedFetch(`${BACKEND}/api/${entityKey}?${qs}`, {
     headers: { Authorization: `Bearer ${token}` },
   });

@@ -291,7 +291,7 @@ public class AdvancedQueryTest {
                 { "date", ts, "2026-01-15T10:30:00Z" },
                 { "datetime", ts, "2026-01-15T10:30:00Z" },
                 { "email", "user@example.com", "user@example.com" },
-                { "phone", "555-0100", "555-0100" },
+                { "phone", "+1-555-0100", "+1-555-0100" },
                 { "status", "ACTIVE", "ACTIVE" },
                 { "reference", 5, "5" },
                 { "longtext", "long text content here", "long text content here" },
@@ -327,7 +327,17 @@ public class AdvancedQueryTest {
         row.put("value", insertValue);
         crud.insertRecord(schema, row);
 
-        String encoded = java.net.URLEncoder.encode(filterLiteral, java.nio.charset.StandardCharsets.UTF_8);
+        // Review #5 (High A) — the server now decodes the query string exactly
+        // once, via URI.getQuery() (RFC 3986: %XX only, '+' is a literal
+        // character, not a space). java.net.URLEncoder is form-encoding
+        // (application/x-www-form-urlencoded): it emits '+' for a space and
+        // "%2B" for a literal '+'. Without the extra ".replace(\"+\", \"%20\")"
+        // this test would send literal '+' characters for spaces that the
+        // server would no longer convert back — swap to RFC 3986-conformant
+        // percent-encoding so this test matches how a real client must encode
+        // spaces for this API.
+        String encoded = java.net.URLEncoder.encode(filterLiteral, java.nio.charset.StandardCharsets.UTF_8)
+                .replace("+", "%20");
         JsonNode node = get("/api/default_default_rt_" + type + "?filter=value:=" + encoded + "&count=true");
         assertEquals(1, node.get("total").asLong(),
                 "type '" + type + "' must round-trip insert -> filter without a 500 or a 0-match");

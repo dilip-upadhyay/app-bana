@@ -634,21 +634,49 @@ public class SchemaManager {
         STRING, INTEGER, BIGINT, BOOLEAN, TIMESTAMP, DECIMAL, TEXT, FILE, REFERENCE
     }
 
-    /** Case-insensitive; unrecognized/null type names classify as {@code STRING} (VARCHAR), matching prior behavior. */
+    /**
+     * Case-insensitive; unrecognized/null type names classify as {@code STRING} (VARCHAR), matching prior behavior.
+     *
+     * <p>Review #5 (blocker) — "money", "numeric", "serial" and "bigserial" are deliberately
+     * classified as {@code STRING} here, NOT as their numeric-sounding SQL kind. Before this
+     * classifier existed, {@code sqlType()} had no case for any of the four, so they fell
+     * through its {@code default} to {@code VARCHAR(255)}; that is what every existing tenant
+     * column of these types physically is. {@code SchemaManager} auto-issues
+     * {@code ALTER TABLE ... TYPE ... USING col::TYPE} whenever a schema save finds
+     * desired != current, so classifying them as DECIMAL/INTEGER/BIGINT would silently try to
+     * cast existing free-text data (the documented behavior in the "money"/"currency"/"float"
+     * warning in copilot-instructions.md §11) to a numeric column and break schema saves for
+     * any tenant that has one. None of these four is in the AI Builder's allowed type list, so
+     * there is no upside to reclassifying them today. If they should become real numeric/serial
+     * columns, that needs an explicit migration plan and a corpus check first, not a side effect
+     * of this shared-classifier refactor.
+     */
     public static FieldSqlKind classifyFieldType(String rawType) {
         String t = rawType == null ? "" : rawType.toLowerCase(Locale.ROOT);
         return switch (t) {
-            case "int", "integer", "number", "serial" -> FieldSqlKind.INTEGER;
-            case "long", "bigint", "bigserial" -> FieldSqlKind.BIGINT;
+            case "int", "integer", "number" -> FieldSqlKind.INTEGER;
+            case "long", "bigint" -> FieldSqlKind.BIGINT;
             case "boolean" -> FieldSqlKind.BOOLEAN;
             case "date", "timestamp", "datetime" -> FieldSqlKind.TIMESTAMP;
-            case "decimal", "double", "float", "currency", "numeric", "money" -> FieldSqlKind.DECIMAL;
+            case "decimal", "double", "float", "currency" -> FieldSqlKind.DECIMAL;
             case "text", "longtext" -> FieldSqlKind.TEXT;
             case "file" -> FieldSqlKind.FILE;
             case "reference" -> FieldSqlKind.REFERENCE;
-            default -> FieldSqlKind.STRING;
+            // "serial"/"bigserial"/"money"/"numeric" intentionally NOT listed above — see javadoc.
+            default -> {
+                if (!t.isEmpty() && !STRING_ALIASES.contains(t)) {
+                    LOG.warn("[SCHEMA] Unrecognized field type '{}' — classifying as STRING/VARCHAR(255). "
+                            + "If this is a typo, fix the schema; if it's intentional, add it explicitly "
+                            + "to classifyFieldType() so future readers don't have to guess.", rawType);
+                }
+                yield FieldSqlKind.STRING;
+            }
         };
     }
+
+    /** Known aliases that are *intentionally* STRING-kind — excluded from the unrecognized-type WARN log. */
+    private static final Set<String> STRING_ALIASES = Set.of(
+            "string", "varchar", "email", "phone", "status", "uuid", "money", "numeric", "serial", "bigserial");
 
     private static String sqlType(EntitySchema.Field f, String dialect) {
         return sqlType(f, dialect, false);

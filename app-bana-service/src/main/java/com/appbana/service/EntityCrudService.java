@@ -177,7 +177,7 @@ public class EntityCrudService {
                 // Generate UUID if missing and type is compatible
                 if (!data.containsKey(field.getName())) {
                     String type = field.getType().toLowerCase(Locale.ROOT);
-                    if (type.equals("string") || type.equals("text") || type.equals("uuid") || type.equals("varchar")) {
+                    if (isCharacterKind(type)) {
                         data.put(field.getName(), java.util.UUID.randomUUID().toString());
                     }
                 }
@@ -453,12 +453,15 @@ public class EntityCrudService {
             LOG.debug("[FILTER] No filter string provided");
             return map;
         }
-        // URL-decode the filter string to handle spaces encoded as + or %20
-        try {
-            raw = java.net.URLDecoder.decode(raw, java.nio.charset.StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            LOG.warn("[FILTER] Failed to URL-decode filter string, using as-is: {}", raw);
-        }
+        // Review #5 (High A) — this used to re-decode `raw` here with
+        // java.net.URLDecoder.decode(), on top of the decoding Router already
+        // performs via URI.getQuery() (which decodes %XX percent-escapes per
+        // RFC 3986 before this method ever sees the string). URLDecoder applies
+        // application/x-www-form-urlencoded semantics, where a literal '+' —
+        // already correctly restored from a client's %2B by Router — gets
+        // turned into a space. That silently corrupted phone numbers, timezone
+        // offsets ("+05:30"), base64, and any value containing '+'. The value
+        // arrives already decoded; do not decode it again.
         LOG.debug("[FILTER] Parsing filter string: {}", raw);
         String[] pairs = raw.split(",");
         Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
@@ -488,8 +491,16 @@ public class EntityCrudService {
                     name.toLowerCase(Locale.ROOT));
             EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
             if (f == null) {
-                LOG.debug("[FILTER] Field '{}' not found in schema, skipping", name);
-                continue; // ignore unknown
+                // Review #5 (nit) — this used to `continue` (ignore unknown field),
+                // which is the exact same fail-open hazard the null-value check just
+                // below closes for a bad *value*: a typo'd field name (e.g.
+                // "?filter=statuss:open" instead of "status:open") silently produced
+                // an unscoped 200 instead of the caller's intended filter. filter= is
+                // the only scoping mechanism for several callers (child records,
+                // saved views, approval queues), so a typo here is a correctness/
+                // data-exposure hazard, not just a UX one. Fail closed like the value
+                // check does, rather than leaving this one hole in the same fix.
+                throw new FieldValidationException(name, "unknown filter field '" + name + "'");
             }
             Object parsed = parseFilterValue(f, val);
             if (parsed == null) {
@@ -1030,6 +1041,22 @@ public class EntityCrudService {
         return JdbcManager.getConnection(schema != null ? schema.getDatasourceName() : null);
     }
 
+    /**
+     * Review #5 (High B) — true for any field-type alias that classifies as a plain
+     * character column ({@code STRING} or {@code TEXT}), i.e. eligible for free-text
+     * search / substring LIKE matching / random-UUID PK generation. Deliberately
+     * excludes {@code FILE} (stores an issued fileId, not free text) and every
+     * non-character kind. This is the single place the three former hand-written
+     * {@code equals("string")||equals("text")||equals("varchar")} lists now go through,
+     * so "longtext"/"email"/"phone"/"status" (all STRING/TEXT-kind aliases) are no
+     * longer silently excluded from search/LIKE just because they weren't spelled
+     * "string"/"text"/"varchar" verbatim.
+     */
+    private static boolean isCharacterKind(String type) {
+        SchemaManager.FieldSqlKind kind = SchemaManager.classifyFieldType(type);
+        return kind == SchemaManager.FieldSqlKind.STRING || kind == SchemaManager.FieldSqlKind.TEXT;
+    }
+
     private static Object parseFilterValue(EntitySchema.Field f, String v) {
         String t = f.getType().toLowerCase(Locale.ROOT);
         try {
@@ -1072,7 +1099,7 @@ public class EntityCrudService {
             List<String> likeParts = new ArrayList<>();
             for (EntitySchema.Field f : schema.getFields()) {
                 String t = f.getType().toLowerCase(Locale.ROOT);
-                if (t.equals("string") || t.equals("text") || t.equals("varchar")) {
+                if (isCharacterKind(t)) {
                     likeParts.add("UPPER(" + quote(f.getName()) + ") LIKE ?");
                     params.add("%" + uq + "%");
                 }
@@ -1140,7 +1167,7 @@ public class EntityCrudService {
 
                 // Use LIKE with wildcards for string/text fields, exact match for
                 // others — or when the caller explicitly asked for exact.
-                if (!exactRequested && (t.equals("string") || t.equals("text") || t.equals("varchar"))) {
+                if (!exactRequested && isCharacterKind(t)) {
                     // Case-insensitive LIKE match for string fields
                     LOG.debug("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey,
                             finalValue);

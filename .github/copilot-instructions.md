@@ -489,9 +489,9 @@ decimal     â†’ NUMERIC(19,4)     â† Use for money/prices, NOT "curren
 boolean     â†’ BOOLEAN
 date        â†’ TIMESTAMP (date only)
 datetime    â†’ TIMESTAMP
-email       â†’ VARCHAR(255) with email validation
-phone       â†’ VARCHAR(50)
-status      â†’ VARCHAR(100) with options[]
+email       â†’ VARCHAR(255) (no built-in email-format validation — set `pattern` explicitly if you need one)
+phone       â†’ VARCHAR(255) (length is only honoured for "string"/"varchar"; other STRING-kind aliases are fixed at 255)
+status      â†’ VARCHAR(255) with options[]
 reference   â†’ INTEGER (H4 hardening — must match the parent's PK type for a real FOREIGN KEY)
 ```
 
