@@ -17,6 +17,7 @@ import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { FormActions } from './FormActions';
 import { toast } from './Toaster';
 import { humanizeHeader } from './cell-formatters';
+import { describeSubmitFailure } from './approval-toasts';
 import { PageShell } from './PageShell';
 import { PageActions } from './PageActions';
 import { DatePicker } from './DatePicker';
@@ -800,9 +801,15 @@ function EntityForm(props: Readonly<EntityFormProps>) {
       payload[k] = v === '' || v === undefined ? null : v;
     }
     setSaving(true);
+    // C3.8 — tracks whether the row made it to the database. A submit failure
+    // after a successful insert must not be reported as "Save failed": the
+    // user's typing is safe, and telling them otherwise invites them to retype
+    // it and create a duplicate.
+    let draftSaved = false;
     try {
       const qualified = qualifyEntityKey(entity);
       const created = await insertEntityRow(qualified, payload, getRuntimeToken());
+      draftSaved = true;
       window.dispatchEvent(
         new CustomEvent('appbana:row-inserted', { detail: { entity: qualified } })
       );
@@ -845,6 +852,16 @@ function EntityForm(props: Readonly<EntityFormProps>) {
       });
       return true;
     } catch (err) {
+      // C3.8 — the insert succeeded and only the workflow transition failed.
+      // The record exists as a draft; say so, and return true so the form
+      // clears rather than tempting the user into a duplicate.
+      if (draftSaved) {
+        toast.warning('Saved as draft, but not submitted', {
+          description: `${describeSubmitFailure(err)} Your changes are safe — submit it from the list view.`,
+        });
+        return true;
+      }
+
       // Sprint 3 task 3.1 — Backend 400s with a structured field-error
       // payload get merged into the form's error state so each bad input
       // gets a red outline + inline message, matching the client-side
