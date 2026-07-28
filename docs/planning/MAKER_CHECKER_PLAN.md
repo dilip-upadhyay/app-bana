@@ -283,6 +283,8 @@ shows parent and revision coexisting, and the maker needs to see their pending e
 
 ## Sub-phase C3 — Runtime: approval-aware lists, approve/reject dialog
 
+**Status: ✅ Complete 2026-07-28** (except the Playwright round-trip, tracked below).
+
 **Goal:** Every UI surface reflects approval state. Makers see their queue, checkers see theirs, approve/reject is a single-click action.
 
 | # | Task | Where | Est. |
@@ -298,13 +300,30 @@ shows parent and revision coexisting, and the maker needs to see their pending e
 
 ### Exit criteria — C3
 
-- [ ] Every list page for an approval-required entity shows the status pill on every row.
-- [ ] Maker sees `Save as draft` + `Submit for approval`; checker sees `Approve` + `Reject` on a pending row.
-- [ ] Reject requires a reason (no submit without text).
-- [ ] Checker queue page ranks by oldest-submitted first.
-- [ ] Audit drawer shows every state transition with actor + timestamp.
-- [ ] Global pending-count badge updates within 30s of a submit.
+- [x] Every list page for an approval-required entity shows the status pill on every row.
+- [x] Maker sees `Save as draft` + `Submit for approval`; checker sees `Approve` + `Reject` on a pending row.
+- [x] Reject requires a reason (no submit without text).
+- [x] Checker queue page ranks by oldest-submitted first.
+- [x] Audit drawer shows every state transition with actor + timestamp.
+- [x] Global pending-count badge updates within 30s of a submit.
 - [ ] Playwright: full round-trip (maker A submits → checker B rejects with reason → A resubmits → B approves → row visible in live list) passes.
+
+### Deviations from plan — C3
+
+| Task | Planned | Shipped | Why |
+|---|---|---|---|
+| C3.3 | Route `/queue/{entityName}`, new PageMeta layout `checker_queue` | Shell state, no route, no PageMeta | The queue has no page metadata behind it and its visibility is per-user, so synthesising a PageMeta would mean inventing metadata and filtering it back out per caller. The runtime has no router, so no URL was lost. |
+| C3.4 | `ApprovalDetail.tsx` with side-by-side diff | Approve/reject in place in the queue; no diff view | The diff needs a pre-edit snapshot that `appbana_approvals.diff` does not yet populate. Deferred rather than faked. |
+| C3.6 | "My Drafts" | "Drafts" | Entity tables have no `created_by`; the workflow only records `submitted_by`, which is null for a never-submitted draft. Scoping by submitter would hide most drafts; calling an unscoped list "mine" would be undetectably wrong. "Needs rework" *is* scoped, because a REJECTED row must have been submitted. |
+| C3.7 | `PendingCountService.tsx` | `usePendingCounts.ts` + new `?countOnly=true` on the pending endpoint | A polling badge that reused the queue endpoint would ship up to 500 rows per entity per user per tick to read a number. |
+
+### Defects found and fixed during C3
+
+- `GET /api/tenants/{t}/apps/{a}/roles` had **no authentication**, while POST and DELETE on the same path were guarded by C1.9 — any caller could read any user's maker/checker grants in any tenant (`89aac8e`).
+- `fetchPendingApprovals` and `fetchApprovalAudit` returned the `{count, records}` / `{count, history}` envelope while typed as arrays. The checker queue therefore rendered as permanently empty (`943c18e`).
+- The pending queue was ordered `SUBMITTED_AT DESC`, contradicting the exit criterion above and starving the longest-waiting record (`84561a5`).
+- `/api/users/me` matches `SessionMiddleware.ENTITY_API_PATTERN` as `entity=users, id=me`, which skipped session validation and would have 401'd every caller regardless of token (`d5f5247`).
+- A failed submit-for-approval after a successful insert was reported as "Save failed", inviting the user to retype a record that was already saved as a draft (`8560ac0`).
 
 ---
 
