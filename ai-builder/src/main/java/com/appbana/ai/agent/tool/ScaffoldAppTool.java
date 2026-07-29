@@ -374,9 +374,17 @@ public class ScaffoldAppTool implements Tool {
     String deleteUrl = String.format("%s/appbana-studio/%s/apps/%s",
         baseUrl, context.tenantId(), appId);
 
-    HttpRequest deleteRequest = HttpRequest.newBuilder()
-        .uri(URI.create(deleteUrl))
-        .header("Authorization", "Bearer " + context.token())
+    HttpRequest.Builder deleteBuilder = HttpRequest.newBuilder()
+        .uri(URI.create(deleteUrl));
+
+    // C4.4e -- was unconditional, so a blank token produced a literal "Bearer null" header and the
+    // rollback 401'd, stranding the half-built app it was meant to remove. AgentContext now refuses
+    // to hold a blank token, so this matches the other thirteen sites as defence in depth.
+    if (context.token() != null && !context.token().isEmpty()) {
+      deleteBuilder.header("Authorization", "Bearer " + context.token());
+    }
+
+    HttpRequest deleteRequest = deleteBuilder
         .DELETE()
         .build();
 

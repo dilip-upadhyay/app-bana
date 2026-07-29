@@ -1,6 +1,6 @@
 # Maker-Checker Epic — Implementation Plan
 
-**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c/d, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete — and then C4.4d, where the auth fix shipped alongside it repaired one instance of a five-member defect class. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
+**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c/d/e, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete — then C4.4d, where the auth fix shipped alongside it repaired one instance of a five-member defect class, and then C4.4e, where the fix for *that* turned out to have the same failure mode a third time: the header was made conditional on a token nothing upstream guaranteed. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
 **Owner:** AppBana core team
 **Position in master roadmap:** Phase C of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) and Phase B (Complex UI Epic) completing. Runs *before* Phase D — approvals are AppBana's differentiator (the *product*), while D is enterprise packaging.
 **Trigger:** Every regulated customer-facing workflow — KYC, loan origination, account opening, policy issuance, claims processing — has a mandatory two-person integrity control: a **maker** creates or edits a record and a **checker** approves it before it becomes live. AppBana today has no concept of `submitted`, `pending approval`, `approved`, or `rejected`. Without maker-checker, we cannot ship into any regulated vertical, which is the majority of the customer-onboarding market.
@@ -551,6 +551,70 @@ asking "which components disagree?"; the accompanying auth fix was scoped by ask
 was broken?" — and repaired one instance of a class with five members. When a defect is a missing
 call at a boundary, the unit of repair is *every crossing of that boundary*, enumerated
 mechanically, and the guard belongs on the boundary rather than on the instance.
+
+#### C4.4e — the header was conditional on a token nothing guaranteed
+
+Review round 11 rejected C4.4d. The same lesson applied one level up: C4.4d enumerated mechanically,
+but over a hand-picked set. **Mechanical enumeration over a hand-picked scope is still a hand-picked
+scope; it just feels rigorous.**
+
+**The blocker — a guard checked in one direction only.** Thirteen of the fourteen sites attach the
+header inside `if (token != null && !token.isEmpty())`. Every check confirmed that a *present* token
+reaches the socket; nothing confirmed a token is ever present. It was not guaranteed anywhere:
+`AgentContext.create` accepted `null`; both `AiChatController` and `AgentStreamController`
+null-coalesce *every other field* to a default and pass `token` through raw; `ChatPane.tsx` sends
+`token: token ?? undefined`. A tokenless chat request was therefore accepted, opened `200`, and every
+tool inside it 401'd — **the pre-C4.4d behaviour reproduced symptom for symptom, through the fix.**
+Neither guard could see it: test 1 always supplied a good token, and test 2 only required the literal
+text `header("Authorization"` to appear. `ScaffoldAppTool.rollback` was worse still — it attached the
+header *unconditionally*, so a tokenless rollback sent the literal string `Bearer null`.
+
+**Fixed at the door, not at the sites,** in three layers so that no single omission is load-bearing:
+
+| Layer | Change |
+|---|---|
+| Type | `AgentContext`'s **compact canonical constructor** rejects a null/blank token. Invalid state is now unrepresentable, and the check is inherited by `withVariable` and by any construction path added later — unlike a check in `create`, which the next author routes around by calling the constructor. |
+| Boundary | Both controllers return `401 {"error":"Unauthorized"}` before doing any work — in `AiChatController` *ahead of the pattern-executor short-circuit*, which also creates apps. A 200 cannot trigger the Studio's `appbana:auth:expired` recovery; a 401 can. |
+| Site | `ScaffoldAppTool.rollback` now uses the same conditional as the other thirteen. |
+
+**The masking, deleted.** Round 7 removed one *trigger* of `get_entity_details`' silent fall-through
+(the 401) and left the fall-through itself, so 500, 502, 403 and a mid-restart connection reset all
+still produced "entity not found" for an entity that exists. It now returns an explicit transport/
+authorization error on any non-200, and — critically — returns `Entity 'X' does not exist in app 'Y'`
+instead of falling through on a successful-but-empty lookup. The global `/schema/{bareName}` fallback
+is reachable only when no app is selected, which is the only case where it can succeed: app-scoped
+keys are `{tenantId}_{appId}_{entityName}`, so for a selected app that fallback was *by construction*
+incapable of finding anything. It existed solely to convert errors into a plausible wrong answer.
+
+**The guard covered a directory, not a boundary.** `Files.list` over `agent/tool/` is not "every
+ai-builder request to the backend": there are **25** `HttpRequest.newBuilder()` sites across 17 files
+under `com/appbana/ai`, and the old scan saw 22 in 14. `AiAgent.loadEntitySummary` (line ~1116) calls
+the backend and authenticates correctly today, but was invisible to both tests — as a tool added in a
+subpackage would have been. The scan now walks `com/appbana/ai` recursively and excludes `llm/`
+**by name, with the reason in a javadoc**: `OpenAiLlmService` and `GeminiLlmService` call third-party
+APIs with their own provider keys, so a session token there would be meaningless. That is a decision
+on the record, not an artefact of where the walk happened to start.
+
+**Third test, and all three mutations re-run** —
+`aTokenlessContextCannotProduceARequest` feeds `null`, `""` and `"   "`, and when construction
+succeeds it *drives `ListAppsTool` and reports the leaked request* rather than merely noting a missing
+exception (which is why it is a `try`/`fail` and not `assertThrows` — the consequence is the point):
+
+| Mutation | Result |
+|---|---|
+| Remove the `AgentContext` constructor throw | test 3 only — `AgentContext accepted a blank token (null) and list_apps then sent 1 request(s), the first with Authorization=null` |
+| Delete `DeployAppTool`'s header (a tool test 1 cannot drive) | test 2 only — `[DeployAppTool.java @ line 76]` |
+| Run test 1 with `AgentContext.create(..., null)` | errors at the *construction* line, before any tool executes — it cannot reach the socket at all |
+
+No two of the three tests subsume each other.
+
+**Lesson:** a guard that only ever sees valid input verifies nothing about invalid input. Ask of every
+guard: *what makes its precondition true?* — and if the answer is "nothing", the guard is decoration.
+Prefer making the invalid state unrepresentable in the type over validating at one entry point, since
+the type is inherited by paths that do not exist yet. And when removing a defect, **delete the masking
+that hid it, not just the trigger that exposed it** — the thread running through C4.4c, C4.4d and
+C4.4e is that each fix repaired the defect and left the masking in place, which is precisely why the
+next one stayed invisible.
 
 
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**

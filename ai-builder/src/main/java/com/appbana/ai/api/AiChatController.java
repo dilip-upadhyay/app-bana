@@ -85,6 +85,17 @@ public class AiChatController {
         String tenantId = request.getTenantId() != null ? request.getTenantId() : "default";
         String appId = request.getAppId() != null ? request.getAppId() : "default";
 
+        // C4.4e -- every other field above null-coalesces to a default because it has a safe one.
+        // The token does not: without it every tool call this request makes 401s, and a failing tool
+        // burns an agent iteration and increments consecutiveFailures toward the abort-at-3, so the
+        // user sees the agent give up vaguely instead of being told to log in again. Checked before
+        // the pattern-executor short-circuit below, which also creates apps.
+        if (token == null || token.isBlank()) {
+            log.warn("[CHAT] Rejecting tokenless request from user {}", userId);
+            res.json(401, Map.of("error", "Unauthorized", "message", "Missing session token"));
+            return;
+        }
+
         // 1. Get Contextual Data
         List<ConversationMemory.Conversation> history = conversationMemory != null ? 
             conversationMemory.getSessionHistory(UUID.fromString(sessionId)) : new ArrayList<>();

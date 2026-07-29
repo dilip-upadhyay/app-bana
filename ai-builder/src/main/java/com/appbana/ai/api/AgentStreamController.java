@@ -78,6 +78,16 @@ public class AgentStreamController {
             String sessionId = request.getSessionId() != null ? request.getSessionId() : UUID.randomUUID().toString();
             String token     = request.getToken();
 
+            // C4.4e -- see AiChatController: the token is the one field with no safe default, and a
+            // blank one means every tool call in this stream 401s while the stream itself returns
+            // 200. The Studio's appbana:auth:expired recovery cannot fire on a 200, so an expired
+            // session presents as the agent malfunctioning rather than as a session that ended.
+            if (token == null || token.isBlank()) {
+                log.warn("[STREAM] Rejecting tokenless request from user {}", userId);
+                res.json(401, Map.of("error", "Unauthorized", "message", "Missing session token"));
+                return;
+            }
+
             List<ConversationMemory.Conversation> history;
             try {
                 history = conversationMemory != null

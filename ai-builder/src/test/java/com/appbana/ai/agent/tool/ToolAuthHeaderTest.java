@@ -20,6 +20,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * C4.4d -- every backend request an agent tool makes must carry the caller's session token.
@@ -33,14 +34,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * which misses because it uses the unprefixed entity name -- so the tool answered "entity not
  * found" for an entity that exists.
  *
- * <p>Two tests, because neither alone is sufficient:
+ * <p>Three tests, because no two of them cover each other:
  * <ul>
  *   <li>{@link #everyDrivableToolPutsTheTokenOnTheWire()} proves the header actually reaches the
  *       socket, by recording what a real {@link HttpServer} received. A source scan cannot show
  *       that.</li>
- *   <li>{@link #noToolBuildsARequestWithoutAttachingTheToken()} covers the tools that need an LLM
- *       or a validator to drive and so cannot be exercised here. A behavioural test cannot reach
+ *   <li>{@link #noToolBuildsARequestWithoutAttachingTheToken()} covers the components that need an
+ *       LLM or a validator to drive and so cannot be exercised here. A behavioural test cannot reach
  *       them, which is precisely how tool fourteen would reintroduce this.</li>
+ *   <li>{@link #aTokenlessContextCannotProduceARequest()} covers the direction C4.4d missed
+ *       entirely. Every site attaches the header only {@code if (token != null && !isEmpty())}, and
+ *       nothing upstream established that precondition -- both controllers null-coalesced every
+ *       other field to a default and passed the token through raw, so a tokenless chat request was
+ *       accepted, returned 200, and produced exactly the pre-fix behaviour. Test 1 always supplies a
+ *       good token and test 2 only checks for the literal text, so the guard had been verified in
+ *       one direction only.</li>
  * </ul>
  */
 class ToolAuthHeaderTest {
@@ -119,13 +127,12 @@ class ToolAuthHeaderTest {
     }
 
     @Test
-    @DisplayName("no tool builds an HttpRequest without attaching the token -- including the ones above")
+    @DisplayName("no component builds an HttpRequest to the backend without attaching the token")
     void noToolBuildsARequestWithoutAttachingTheToken() throws IOException {
-        Path toolDir = locateToolSources();
         List<String> offenders = new ArrayList<>();
 
-        try (Stream<Path> sources = Files.list(toolDir)) {
-            for (Path source : sources.filter(p -> p.toString().endsWith(".java")).toList()) {
+        try (Stream<Path> sources = Files.walk(locateAiSources())) {
+            for (Path source : sources.filter(ToolAuthHeaderTest::isScannableSource).toList()) {
                 String text = Files.readString(source);
                 int from = 0;
                 while (true) {
@@ -147,14 +154,68 @@ class ToolAuthHeaderTest {
         }
 
         assertTrue(offenders.isEmpty(),
-                "These tool requests are built without a session token and will 401: " + offenders
+                "These backend requests are built without a session token and will 401: " + offenders
                         + ". Attach it with: if (context.token() != null && !context.token().isEmpty()) "
                         + "builder.header(\"Authorization\", \"Bearer \" + context.token());");
     }
 
+    @Test
+    @DisplayName("a blank token cannot be carried by a context, so no unauthenticated request can leave")
+    void aTokenlessContextCannotProduceARequest() {
+        received.clear();
+
+        // The three shapes the HTTP layer can deliver: absent, empty, and whitespace-only.
+        List<String> blankTokens = new ArrayList<>();
+        blankTokens.add(null);
+        blankTokens.add("");
+        blankTokens.add("   ");
+
+        for (String blank : blankTokens) {
+            try {
+                AgentContext context = AgentContext.create(TENANT, APP_ID, "user-1", "session-1", blank);
+
+                // Reaching here means the constructor guard is gone. Do not just report the missing
+                // throw -- drive a tool and report the consequence, which is the thing that actually
+                // matters and the thing tests 1 and 2 both miss: test 1 always supplies a good token,
+                // and test 2 only requires the literal text header("Authorization") to be present.
+                new ListAppsTool(baseUrl).execute(new LinkedHashMap<>(), context);
+                fail("AgentContext accepted a blank token (" + describe(blank) + ") and list_apps then "
+                        + "sent " + received.size() + " request(s), the first with Authorization="
+                        + (received.isEmpty() ? "n/a" : received.get(0).getValue())
+                        + ". Every tool call such a context authorises 401s, and a failing tool burns "
+                        + "an agent iteration rather than telling the user their session ended.");
+            } catch (IllegalArgumentException expected) {
+                // Correct: the type refuses to represent the broken state.
+            }
+        }
+
+        assertTrue(received.isEmpty(),
+                "A tokenless context must not be able to put anything on the wire, but the stub "
+                        + "received: " + received);
+    }
+
+    private static String describe(String token) {
+        return token == null ? "null" : "\"" + token + "\"";
+    }
+
+    /**
+     * The boundary this guard protects is "an ai-builder component calling the backend", which is
+     * wider than the tool package: {@code AiAgent.loadEntitySummary} issues one too, and a tool added
+     * in a subpackage would be invisible to a non-recursive scan of one folder.
+     *
+     * <p>{@code llm/} is excluded by name and on purpose: {@code OpenAiLlmService} and
+     * {@code GeminiLlmService} call third-party APIs and authenticate with their own provider keys,
+     * so a session token would be meaningless there. That is a decision, not an artefact of where
+     * the scan happens to start.
+     */
+    private static boolean isScannableSource(Path source) {
+        String path = source.toString().replace('\\', '/');
+        return path.endsWith(".java") && !path.contains("/com/appbana/ai/llm/");
+    }
+
     /** Surefire runs with the module dir as cwd; tolerate being launched from the repo root. */
-    private Path locateToolSources() {
-        Path relative = Path.of("src/main/java/com/appbana/ai/agent/tool");
+    private Path locateAiSources() {
+        Path relative = Path.of("src/main/java/com/appbana/ai");
         return Files.isDirectory(relative) ? relative : Path.of("ai-builder").resolve(relative);
     }
 }
