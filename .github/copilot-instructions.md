@@ -288,11 +288,19 @@ The agent enforces a mandatory two-phase app creation process:
 ### Important Agent Configuration
 
 ```java
-// AiAgent.java line ~119
-int effectiveMaxIterations = Math.min(config.getMaxIterations(), 5);
+// AiAgent.java:174 (processWithStream) and :546 (process) — the cap is duplicated, change both
+int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
 ```
-- Maximum 5 iterations per request (cost control)
-- If all tools fail in an iteration, agent logs a warning and retries once more
+- Maximum **10** iterations per request (cost control)
+- If every tool call in an iteration fails, the agent increments `consecutiveFailures` and aborts at
+  **3 consecutive** all-failed iterations — it does not "retry once more" and stop
+
+> [!WARNING]
+> `think()` runs **once per iteration**, so anything paid placed inside it is bought up to 10 times
+> for one identical result. `userMessage` never changes across the loop. Per-request retrieval
+> (e.g. the domain-blueprint RAG lookup) is computed in `process`/`processWithStream` *after* the
+> pattern-match short-circuit and passed into `think()`. See C4.4b in
+> [`docs/planning/MAKER_CHECKER_PLAN.md`](../docs/planning/MAKER_CHECKER_PLAN.md).
 
 ### Tool Execution
 - **Sequential** (mandatory): `create_entity`, `generate_page`, `create_app`
@@ -658,7 +666,7 @@ INITIAL â†’ GATHERING_INFO â†’ CONFIRMING_DETAILS â†’ CREATING â
 - **`ai-builder` test suite** (`100b676`): Testcontainers mapped Qdrant's HTTP port 6333 instead of the gRPC port **6334**, which `QdrantService` actually speaks. Repairing the suite exposed two production bugs: `SchemaType.valueOf` threw on the `field-type` wire value (31 of 47 schemas returned `type == null`), and user preferences were loaded onto the agent context but never referenced by `AiAgent`.
 
 ### âš ï¸ Known Limitations
-- **Agent iteration limit**: Capped at 5 iterations per request. Complex multi-entity scaffolding may hit this limit.
+- **Agent iteration limit**: Capped at 10 iterations per request. Complex multi-entity scaffolding may hit this limit.
 - **Semantic cache**: Enabled by default (`SemanticCache.java`). If you see stale LLM responses, disable it temporarily for debugging.
 - **Schema pluralization**: Entity names must be used exactly as saved â€” no auto-pluralization is applied.
 
