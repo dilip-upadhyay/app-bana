@@ -41,7 +41,7 @@ Last verified 2026-07-30 at C4.6.
 
 | Module | Command | Result |
 |---|---|---|
-| `app-bana` | `mvn -B verify` | 304 tests · 0 failures · 0 errors |
+| `app-bana` | `mvn -B verify` | 306 tests · 0 failures · 0 errors |
 | `ai-builder` | `mvn -B verify` | **157 keyless** / **174 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
 | `app-bana-runtime` | `pnpm test` | 269 tests · 0 failures |
 | CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 157) |

@@ -211,7 +211,9 @@ public class EntityCrudService {
         }
         for (EntitySchema.Field approvalField : ApprovalColumns.asFields()) {
             String name = approvalField.getName();
-            if (declared.contains(name)) {
+            // Both sides normalised: ApprovalColumns.NAMES is lower-case today, so comparing it
+            // raw would work by coincidence rather than by construction.
+            if (declared.contains(name.toLowerCase(Locale.ROOT))) {
                 continue;
             }
             boolean staged = rows.stream().anyMatch(r -> r != null && r.containsKey(name));
@@ -367,22 +369,28 @@ public class EntityCrudService {
     }
 
     /**
-     * C4.6 follow-up — {@code allowApprovalColumns} opts a caller into writing the eight physical
+     * C4.6a/b — {@code allowApprovalColumns} opts a caller into writing the eight physical
      * approval columns.
      *
-     * <p>It defaults to {@code false} for every client-facing PUT, which is what stops a request
-     * body of {@code {"approval_status":"APPROVED"}} from walking a record straight past the
-     * workflow: there is no {@code enforceApprovalPreUpdate} counterpart stripping those keys, so
-     * the exclusion here IS the guard. It is set {@code true} only by the revision branch of
-     * {@code GenericEntityRoutes.applyApprovalPutGuard()}, whose values are entirely
-     * server-constructed.
+     * <p><b>Precondition for passing {@code true}:</b> the caller must already have run
+     * {@code GenericEntityRoutes.applyApprovalPutGuard()} (or otherwise constructed the approval
+     * values itself). That guard calls {@code stripApprovalColumns(data)} unconditionally for any
+     * approval-required entity before it returns, so every approval key still present afterwards
+     * is server-staged. All three client PUT routes satisfy this, which is why they pass
+     * {@code true}.
      *
-     * <p>Without the opt-in that branch silently lost every approval key it staged. The damaging
-     * case is re-editing a REJECTED revision: {@code findOpenRevision} matches DRAFT, PENDING and
-     * REJECTED, so the maker's edit lands on the rejected row, and the
-     * {@code approval_status → DRAFT} reset plus the {@code rejection_reason → null} clear were
-     * both dropped — leaving the revision stuck as REJECTED, carrying a stale reason, and
-     * un-resubmittable.
+     * <p>C4.6a originally justified the {@code false} default as "the exclusion IS the guard
+     * against a forged {@code approval_status=APPROVED}". That was wrong, and a mutation test
+     * disproved it: flipping the default leaked only {@code submitted_by=alice_maker} — the
+     * server's own value — never the forged {@code eve_attacker}, because
+     * {@code stripApprovalColumns} had already removed it. The real effect of the exclusion was
+     * to silently discard the three values the guard deliberately re-stages
+     * ({@code approval_status=DRAFT}, {@code rejection_reason=null}, {@code submitted_by}), so a
+     * maker editing a REJECTED row in place got a 200 with the business edit applied while the
+     * row stayed REJECTED carrying its stale reason.
+     *
+     * <p>The default remains {@code false} as defence-in-depth for any future caller that reaches
+     * this method without running the guard first.
      */
     public int updateById(EntitySchema schema, String id, Map<String, Object> data, boolean allowApprovalColumns)
             throws SQLException {

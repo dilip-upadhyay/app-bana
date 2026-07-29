@@ -63,21 +63,14 @@ public class ApprovalServiceTest {
             s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
         }
 
-        // Create entity physical table with all enriched approval columns
+        // C4.6a — business fields only; setApprovalRequired(true) is what materialises the eight
+        // approval columns. This fixture was benign even before the conversion (it writes rows via
+        // raw INSERT, so it never went through the getFields()-driven builders that carried the
+        // defect), but it was the last one in the repo of the shape that hid C4.6 and C4.6a.
         EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
         EntitySchema.Field amountField = new EntitySchema.Field("amount", "number", false, false, null);
-        EntitySchema.Field statusField = new EntitySchema.Field("approval_status", "string", false, false, null);
-        EntitySchema.Field revisionField = new EntitySchema.Field("approval_revision", "integer", false, false, null);
-        EntitySchema.Field submittedByField = new EntitySchema.Field("submitted_by", "string", false, false, null);
-        EntitySchema.Field submittedAtField = new EntitySchema.Field("submitted_at", "timestamp", false, false, null);
-        EntitySchema.Field approvedByField = new EntitySchema.Field("approved_by", "string", false, false, null);
-        EntitySchema.Field approvedAtField = new EntitySchema.Field("approved_at", "timestamp", false, false, null);
-        EntitySchema.Field rejectionReasonField = new EntitySchema.Field("rejection_reason", "text", false, false, null);
 
-        EntitySchema schema = new EntitySchema(ENTITY_NAME, List.of(
-                idField, amountField, statusField, revisionField,
-                submittedByField, submittedAtField, approvedByField, approvedAtField, rejectionReasonField
-        ));
+        EntitySchema schema = new EntitySchema(ENTITY_NAME, List.of(idField, amountField));
         schema.setTenantId(TENANT_ID);
         schema.setAppId(APP_ID);
         schema.setApprovalRequired(true);

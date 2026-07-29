@@ -886,7 +886,10 @@ public class GenericEntityRoutes {
                 }
 
                 Map<String, Object> before = crud.getById(schema, idStr);
-                int updated = crud.updateById(schema, idStr, data);
+                // C4.6b — applyApprovalPutGuard() above has already stripped every client-supplied
+                // approval column and re-staged only the server's own, so the remaining approval
+                // keys must persist. See EntityCrudService.updateById(..., allowApprovalColumns).
+                int updated = crud.updateById(schema, idStr, data, true);
                 Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
                 if (updated > 0) {
                     AuditLogService.log("UPDATE", schema.getName(), idStr, actor, before, after);
@@ -1404,7 +1407,8 @@ public class GenericEntityRoutes {
 
                 try {
                     Map<String, Object> before = crud.getById(schema, idStr);
-                    int updated = crud.updateById(schema, idStr, data);
+                    // C4.6b — see the generic PUT route; the guard has already stripped client input.
+                    int updated = crud.updateById(schema, idStr, data, true);
                     Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
 
                     if (updated > 0) {
@@ -1825,7 +1829,8 @@ public class GenericEntityRoutes {
 
                 try {
                     Map<String, Object> before = crud.getById(schema, idStr);
-                    int updated = crud.updateById(schema, idStr, data);
+                    // C4.6b — see the generic PUT route; the guard has already stripped client input.
+                    int updated = crud.updateById(schema, idStr, data, true);
                     Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
                     
                     if (updated > 0) {

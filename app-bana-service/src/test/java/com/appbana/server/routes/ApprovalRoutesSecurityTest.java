@@ -537,6 +537,141 @@ public class ApprovalRoutesSecurityTest {
         }
     }
 
+    /**
+     * C4.6a/b — pins the approval-column behaviour of a client PUT on a DRAFT row.
+     *
+     * <p>Two distinct claims, which the original C4.6a rationale conflated:
+     * <ul>
+     *   <li><b>Forged values must never land.</b> {@code stripApprovalColumns()} inside
+     *       {@code applyApprovalPutGuard} is what enforces this — not the column-list exclusion.
+     *       Asserted here by {@code approved_by} / {@code approval_revision} /
+     *       {@code approval_parent_id} / {@code rejection_reason} keeping their seeded values
+     *       despite being forged in the body.</li>
+     *   <li><b>Server-staged values must persist.</b> The guard deliberately re-stages
+     *       {@code approval_status=DRAFT}, {@code rejection_reason=null} and
+     *       {@code submitted_by=<session user>} after stripping. {@code submitted_by} is the
+     *       discriminator: it must become {@code alice_maker} (the session user), NOT
+     *       {@code eve_attacker} (the forged body value), and not stay NULL (which is what the
+     *       C4.6a exclusion caused).</li>
+     * </ul>
+     *
+     * <p>Deliberately targets a <b>DRAFT</b> row. {@code testGenericPutBypassPreventedWhilePending}
+     * cannot cover this: a PENDING row is rejected by the guard before control ever reaches
+     * {@code updateById}, so it exercises the 409, not the column list.
+     */
+    @Test
+    public void testGenericPutOnDraftRowKeepsServerApprovalStateAndDropsForgedValues() throws Exception {
+        // Record 201 is seeded DRAFT / revision 1 with every other approval column NULL.
+        String putUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME + "/201";
+        Map<String, Object> forged = new LinkedHashMap<>();
+        forged.put("amount", 999);
+        forged.put("approval_status", "APPROVED");
+        forged.put("approval_revision", 42);
+        forged.put("approval_parent_id", 7);
+        forged.put("submitted_by", "eve_attacker");
+        forged.put("approved_by", "eve_attacker");
+        forged.put("rejection_reason", "forged");
+
+        HttpRequest putReq = HttpRequest.newBuilder()
+                .uri(URI.create(putUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(forged)))
+                .build();
+
+        HttpResponse<String> putRes = HTTP_CLIENT.send(putReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, putRes.statusCode(), "PUT on a DRAFT row should succeed: " + putRes.body());
+
+        Map<String, Object> expected = new LinkedHashMap<>();
+        expected.put("approval_status", "DRAFT");       // forged APPROVED rejected
+        expected.put("approval_revision", 1);           // forged 42 rejected
+        expected.put("approval_parent_id", null);       // forged 7 rejected
+        expected.put("submitted_by", "alice_maker");    // server-staged, NOT forged eve_attacker
+        expected.put("submitted_at", null);
+        expected.put("approved_by", null);              // forged eve_attacker rejected
+        expected.put("approved_at", null);
+        expected.put("rejection_reason", null);         // forged "forged" rejected
+        assertEquals(ApprovalColumns.NAMES.size(), expected.size(),
+                "Expectation map must cover every approval column — add the new column here");
+
+        String selectCols = ApprovalColumns.NAMES.stream()
+                .map(n -> "\"" + n.toUpperCase(Locale.ROOT) + "\"")
+                .collect(Collectors.joining(", "));
+
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT \"AMOUNT\", " + selectCols + " FROM \"" + TABLE_NAME + "\" WHERE \"ID\" = 201")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "seeded row 201 must still exist");
+
+                // The business edit MUST land — otherwise this test would pass even if the whole
+                // PUT had been rejected, proving nothing about the column list.
+                assertEquals(999, rs.getInt("AMOUNT"), "the non-approval edit must still be applied");
+
+                List<Executable> checks = new ArrayList<>();
+                for (Map.Entry<String, Object> e : expected.entrySet()) {
+                    String col = e.getKey().toUpperCase(Locale.ROOT);
+                    Object want = e.getValue();
+                    Object got = rs.getObject(col);
+                    checks.add(() -> assertEquals(
+                            want == null ? null : String.valueOf(want),
+                            got == null ? null : String.valueOf(got),
+                            "column " + col + ": a forged body value must never land, and a "
+                                    + "server-staged one must never be dropped"));
+                }
+                assertAll("approval columns after a forged PUT", checks);
+            }
+        }
+    }
+
+    /**
+     * C4.6b — the in-place (non-revision) twin of
+     * {@code reEditingARejectedRevisionReturnsItToDraftAndClearsTheReason}.
+     *
+     * <p>A maker editing their own REJECTED row must see it return to DRAFT with the rejection
+     * reason cleared, so it can be resubmitted. {@code applyApprovalPutGuard} stages exactly that,
+     * but the C4.6a column-list exclusion discarded both values, leaving the row stuck as REJECTED.
+     *
+     * <p>{@code RevisionFlowTest.putOnRejectedRowReturnsItToDraftInPlace} asserts on the in-memory
+     * {@code data} map that the guard mutates, never on the database, so it stayed green
+     * throughout — this test goes over HTTP and reads the stored row back.
+     */
+    @Test
+    public void testPutOnRejectedRowReturnsItToDraftInTheDatabase() throws Exception {
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("UPDATE \"" + TABLE_NAME + "\" SET \"APPROVAL_STATUS\" = 'REJECTED', "
+                    + "\"REJECTION_REASON\" = 'amount too high' WHERE \"ID\" = 201");
+        }
+
+        String putUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME + "/201";
+        HttpRequest putReq = HttpRequest.newBuilder()
+                .uri(URI.create(putUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(Map.of("amount", 750))))
+                .build();
+
+        assertEquals(200, HTTP_CLIENT.send(putReq, HttpResponse.BodyHandlers.ofString()).statusCode());
+
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT \"AMOUNT\", \"APPROVAL_STATUS\", \"REJECTION_REASON\", \"SUBMITTED_BY\" FROM \""
+                             + TABLE_NAME + "\" WHERE \"ID\" = 201")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals(750, rs.getInt("AMOUNT"), "the business edit must land");
+                assertEquals("DRAFT", rs.getString("APPROVAL_STATUS"),
+                        "reworking a REJECTED row must return it to DRAFT in the database, not just in "
+                                + "the in-memory map the guard mutates");
+                assertNull(rs.getString("REJECTION_REASON"),
+                        "the stale rejection reason must be cleared so the row can be resubmitted");
+                assertEquals("alice_maker", rs.getString("SUBMITTED_BY"),
+                        "the reworking maker must be recorded as the submitter");
+            }
+        }
+    }
+
     @Test
     public void testGenericPutBypassPreventedWhilePending() throws Exception {
         // First, set record 201 to PENDING state
