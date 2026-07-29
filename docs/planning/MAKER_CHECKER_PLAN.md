@@ -1,6 +1,6 @@
 # Maker-Checker Epic — Implementation Plan
 
-**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 🟡 **code-complete, exit criteria unverified** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). C4's three exit criteria are end-to-end chat behaviours and need the full stack + `OPENAI_API_KEY` + a human reading the reply — no unit test can close them. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
+**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
 **Owner:** AppBana core team
 **Position in master roadmap:** Phase C of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) and Phase B (Complex UI Epic) completing. Runs *before* Phase D — approvals are AppBana's differentiator (the *product*), while D is enterprise packaging.
 **Trigger:** Every regulated customer-facing workflow — KYC, loan origination, account opening, policy issuance, claims processing — has a mandatory two-person integrity control: a **maker** creates or edits a record and a **checker** approves it before it becomes live. AppBana today has no concept of `submitted`, `pending approval`, `approved`, or `rejected`. Without maker-checker, we cannot ship into any regulated vertical, which is the majority of the customer-onboarding market.
@@ -434,6 +434,62 @@ The blueprints deliberately declare **no** approval columns — only the flag. `
 column injection (C4.6); a template that declared them would converge on the same physical table via
 dedupe but would teach the agent the ownership-ambiguous shape C4.6 removed.
 
+#### C4.4c — the blueprint retrieval worked and rendered nothing
+
+Running the exit-criteria gate for the first time produced a Phase 1 reply with no maker-checker in
+it at all, on the query the feature was designed for. One log line separated the two possible
+causes:
+
+```
+[AGENT] Domain blueprints: matched=[customer_onboarding_with_approval, loan_origination_with_approval] rendered=0 chars
+```
+
+Retrieval was perfect — both maker-checker blueprints, ranked #1 and #2, out of ten domain
+templates. The render was empty.
+
+`KnowledgeBaseService.searchResultToSchema` reads `schemaId`, `schemaName`, `description`,
+`schemaType`, `examples` and `schemaMetadata` back out of the Qdrant payload. It never read
+**`category`** — the very key the filtered search matches on, written one method away by
+`indexSchemaInternal`. So *every* schema returned by *every* search in the system had
+`category == null`, and `DomainBlueprintPrompt.render`, which selects domain templates by category,
+discarded all of them and returned `""`. Nothing threw. The prompt simply had nothing in it.
+
+**Fixed** by reading `category` back. Post-fix the same query renders 2269 chars and the Phase 1
+reply proposes the two-person flow in business English.
+
+**Why nine passing tests missed it:** `ApprovalDomainTemplateTest` mocks `getDomainExamples` and
+hands the agent `SchemaDefinition`s it builds itself — and *its fixtures set `category`*. The fixture
+was more complete than production. This is the same shape as the C4.6 finding ("a fixture that
+supplies the invariant under test cannot witness that invariant being broken"), recurring one layer
+up: there, fixtures declared columns production was supposed to inject; here, a fixture populated a
+field production was supposed to read back.
+
+The new guard is structural rather than another assertion about a hand-built object.
+`KnowledgeBaseRoundTripTest` runs a real shipped blueprint through the real indexing path, captures
+**the exact metadata map the writer handed the vector store**, feeds that same map back through the
+real search-result conversion, and asserts the rendered section is non-empty. Producer and consumer
+share one map, so a key written by one and ignored by the other cannot survive — whatever the key is
+called. Mutation: removing the `setCategory` line fails it with
+`expected: <domain-template> but was: <null>`.
+
+Two further defects surfaced from the same gate run, both invisible to unit tests:
+
+- **`GeneratePageTool` never sent the session token.** It was the only writer in the scaffold chain
+  building its request without the `Authorization: Bearer` header that `CreateAppTool` and
+  `CreateEntityTool` both send. App creation and all three entity creations succeeded, then every
+  page 401'd — a half-built app rolled back on an auth error dressed up as a modelling one. It had
+  been latent because nothing previously drove the scaffold path with a real token.
+- **Deploy-time foreign-key failure** (`foreign key constraint ... cannot be implemented`) on
+  `reference` columns whose type does not match the parent's PK. Pre-existing, unrelated to
+  maker-checker, and out of scope for C4 — logged here because the gate is where it surfaced.
+
+**Lesson:** three rounds of review agreed C4.4 was code-complete, and the feature had never once
+produced its intended output. Every hop was individually verified — the blueprint is indexed, the
+metadata round-trips, the section is injected, the lookup is hoisted — and the chain was still
+severed, because "the payload contains `category`" and "the reader asks for `category`" were checked
+by different people at different times and never against each other. The end-to-end gate was not
+a formality after the unit tests; it was the only thing that ran the whole chain.
+
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
 > Accepting `approvalRequired` in the two parameter schemas was necessary but not sufficient. `CreateEntityTool.buildEntityMetadata` constructs the *entire* body POSTed to `/schema` and silently drops anything it does not explicitly copy, so the flag never reached the backend. Because `SchemaEnricher` read the flag independently and injected the 8 approval columns anyway, the failure was invisible from the outside: the physical table came out approval-shaped while the schema record carried `approvalRequired=false`, and all 13 backend guards branch on `schema.isApprovalRequired()` rather than on the presence of the columns. The entity *looked* approval-enabled and behaved as if it were not. Fixed, with `CreateEntityToolApprovalTest` pinning the payload.
 
@@ -479,11 +535,23 @@ dedupe but would teach the agent the ownership-ambiguous shape C4.6 removed.
 
 ### Exit criteria — C4
 
-- [ ] User says *"I want a customer onboarding app"* → agent proposes maker-checker in Phase 1 → user says *"yes"* → scaffold produces approval-required entities. (The checker queue then appears on its own for CHECKER-role users — see the C4.5 deviation; it is not scaffolded.)
-- [ ] User can override: *"no approval flow"* → agent produces flat entities.
-- [ ] Regression: apps that don't imply approval (blog, todo, spice shop) do NOT get the maker-checker prompt.
+Verified 29-07-2026 against the full stack (ai-builder 8081 + backend 8080 + Postgres + Qdrant) with
+a live `OPENAI_API_KEY` and a real session token. All three passed only *after* C4.4c; on the
+pre-C4.4c build every one of them failed.
 
-The three criteria above are all end-to-end chat behaviours and remain unverified — they need the full stack plus `OPENAI_API_KEY` and a human reading the agent's Phase 1 reply. What *is* verified by unit tests today: the flag survives into the `/schema` payload, both tool schemas advertise it with an intact decision rule, and a colliding LLM-authored approval column is renamed rather than allowed to shadow the canonical one.
+- [x] User says *"I want a customer onboarding app"* → agent proposes maker-checker in Phase 1 → user says *"yes"* → scaffold produces approval-required entities. (The checker queue then appears on its own for CHECKER-role users — see the C4.5 deviation; it is not scaffolded.)
+  - Phase 1 reply: *"allowing one team member to create customer records, which another team member must approve before they go live"* — business English, no `approvalRequired`, no column names.
+  - On *"Yes, let's build it!"*: `create_entity` called with `approvalRequired=true` for `CustomerApplication` **only**, matching the blueprint's `approvalRequiredEntities`.
+  - Persisted: `appbana_schemas.json->>'approvalRequired'` is `true` for `CustomerApplication`, `false` for `OnboardingDocument` and `OnboardingNote`.
+  - Materialised: all eight approval columns present on the physical table (`APPROVAL_STATUS`, `APPROVAL_REVISION`, `APPROVAL_PARENT_ID`, `SUBMITTED_BY`, `SUBMITTED_AT`, `APPROVED_BY`, `APPROVED_AT`, `REJECTION_REASON`) — and absent from the other two.
+- [x] User can override: *"no approval flow"* → agent produces flat entities.
+  - *"...but no approval flow — keep it simple, one person does everything"* → two flat entities, no approval language anywhere in the reply. The override beats the retrieved blueprint.
+- [x] Regression: apps that don't imply approval (blog, todo, spice shop) do NOT get the maker-checker prompt.
+  - *"a spice shop app to sell spices online"* → `matched=[ecommerce, restaurant]`. The maker-checker blueprints were not retrieved at all, so the feared absence of a relevance floor in `getDomainExamples` did not bite; ranking alone was sufficient. Reply contains no approval concepts.
+
+The flag surviving into the `/schema` payload, both tool schemas advertising it with an intact
+decision rule, and the colliding-column rename remain covered by unit tests.
+
 
 ---
 

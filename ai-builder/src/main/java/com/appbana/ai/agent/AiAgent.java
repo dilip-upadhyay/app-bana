@@ -709,10 +709,18 @@ public class AiAgent {
      */
     private String buildDomainBlueprintSection(String userMessage) {
         if (knowledgeBase == null || userMessage == null || userMessage.isBlank()) {
+            log.info("[AGENT] Domain blueprints: skipped (no knowledge base or empty message)");
             return "";
         }
         List<SchemaDefinition> blueprints = knowledgeBase.getDomainExamples(userMessage, 2);
-        return DomainBlueprintPrompt.render(blueprints);
+        String rendered = DomainBlueprintPrompt.render(blueprints);
+        // Logged because the two failure modes of this feature are indistinguishable from the
+        // outside: "retrieval returned nothing" and "retrieval returned blueprints the model then
+        // ignored" both look like a prompt with no maker-checker in it. Naming the matched
+        // blueprints separates them without re-running the paid lookup.
+        log.info("[AGENT] Domain blueprints: matched={} rendered={} chars",
+                blueprints.stream().map(SchemaDefinition::getName).toList(), rendered.length());
+        return rendered;
     }
 
     /**

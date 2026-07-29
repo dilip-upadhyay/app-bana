@@ -494,6 +494,15 @@ public class KnowledgeBaseService {
             schema.setName((String) metadata.get("schemaName"));
             schema.setDescription((String) metadata.get("description"));
 
+            // C4.4c — category is written into the payload by indexSchema and is the key every
+            // filtered search matches on, but it was never read back, so EVERY schema returned by
+            // every search had category == null. That is silent: nothing throws, the caller just
+            // sees a schema that claims to belong to no category. It severed
+            // DomainBlueprintPrompt.render(), which selects the domain templates by category and
+            // therefore discarded a correctly-retrieved, correctly-ranked pair of maker-checker
+            // blueprints and returned "". Retrieval logged a match; the prompt got 0 chars.
+            schema.setCategory((String) metadata.get("category"));
+
             // Parse schema type safely — Qdrant returns the wire value ("field-type"), which is
             // NOT the enum constant name (ENTITY_FIELD), so valueOf() would throw and silently
             // leave the type null on every field-type hit.

@@ -235,9 +235,20 @@ public class GeneratePageTool implements Tool {
 
             String jsonBody = objectMapper.writeValueAsString(pageMetadata);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .header("Content-Type", "application/json")
+                    .header("Content-Type", "application/json");
+
+            // C4.4c — this tool was the only writer in the scaffold chain that never sent the
+            // caller's session token, so CreateAppTool and CreateEntityTool would succeed and page
+            // generation would then 401, leaving a half-built app: entities and tables created,
+            // no pages, and a rollback triggered by an auth error rather than a modelling one.
+            String token = context.token();
+            if (token != null && !token.isEmpty()) {
+                requestBuilder.header("Authorization", "Bearer " + token);
+            }
+
+            HttpRequest request = requestBuilder
                     .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
 
