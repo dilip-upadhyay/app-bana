@@ -1,0 +1,41 @@
+# .dockerignore — exclude files that don't belong in any Docker build context.
+# Speeds up builds and prevents secrets from leaking into image layers.
+
+# ── Version control ──────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Build outputs (will be rebuilt inside Docker) ────────────────────────────
+**/target/
+**/dist/
+**/build/
+**/*.jar
+**/*.class
+
+# ── Node dependencies (reinstalled inside Docker) ────────────────────────────
+**/node_modules/
+
+# ── IDE / OS noise ───────────────────────────────────────────────────────────
+.idea/
+.vscode/
+**/*.iml
+.DS_Store
+Thumbs.db
+
+# ── Logs & runtime data ──────────────────────────────────────────────────────
+**/*.log
+**/*.pid
+dev-logs/
+logs/
+data/
+qdrant_storage/
+
+# ── Test artifacts ───────────────────────────────────────────────────────────
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+e2e/.auth/
+
+# ── Secrets / local env ──────────────────────────────────────────────────────
+.env
+.env.*
