@@ -409,7 +409,26 @@ returning only `name`/`type`/`description`.
 
 **Lesson:** before choosing the layer to test at, grep for callers of the entry point — the same
 query that produced this task's best insight (`git grep builder-database -- '*.java'` → empty) would
-have returned empty for `buildPrompt` in the same second.
+have returned empty for `buildPrompt` in the same second. Grep for **call sites**, not for the
+symbol: three files (`ToolRegistry:97`, `ConversationSpec:14`, `DialogueManager:161`) carry javadoc
+reading `{@code AiAgent.buildAgentPrompt()}` for a method with zero callers. A symbol search returns
+those comments and they read as confirmation. Documentation is written by the producer and stays
+locally coherent after the chain is cut — it is evidence about intent, never about reachability.
+
+#### C4.4b — the retrieval was paid for once per iteration
+
+C4.4a wired the lookup into `think()`, which runs once per agent iteration (up to 10). `userMessage`
+is fixed for the whole loop and `getDomainExamples` has no cache, so an n-iteration request bought n
+identical OpenAI embedding calls and n identical Qdrant searches to build n identical strings. Not a
+correctness bug — the prompt was right — but a paid network round-trip multiplied by the iteration
+cap, on the hot path.
+
+**Fixed by** computing the section once in each entry point, after the pattern-match short-circuit
+(so a pattern-matched request pays nothing), and passing it into `think()`. Guarded by
+`theBlueprintLookupIsPaidForOncePerRequestNotPerIteration`, which drives a real 2-iteration loop and
+asserts `times(1)` on the knowledge base and `times(2)` on the LLM — a claim about the consumer, so
+it fails if the lookup is re-inlined anywhere per-iteration. Mutation: re-inlining into `think()`
+turns exactly that one test red.
 
 The blueprints deliberately declare **no** approval columns — only the flag. `SchemaManager` owns
 column injection (C4.6); a template that declared them would converge on the same physical table via
@@ -577,7 +596,7 @@ The three criteria above are all end-to-end chat behaviours and remain unverifie
 - `ai-builder/src/main/java/com/appbana/ai/llm/AdvancedPromptEngine.java` — C4
 - `ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaSchemaLoader.java` — C4.4 (the two blueprints)
 - `ai-builder/src/main/java/com/appbana/ai/knowledge/DomainBlueprintPrompt.java` — C4.4a (renderer)
-- `ai-builder/src/main/java/com/appbana/ai/agent/AiAgent.java` — C4.4a (the only live injection point)
+- `ai-builder/src/main/java/com/appbana/ai/agent/AiAgent.java` — C4.4a (the only live injection point), C4.4b (memoised per request)
 - `ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaPromptEnhancer.java` — C4.4 (dead path; delegates)
 - `ai-builder/src/main/java/com/appbana/ai/knowledge/KnowledgeBaseService.java` — C4.4 (approval signal into the embedding)
 - ~~`builder-database/customer-onboarding-with-approval.json`~~ — see the C4.4 deviation: `builder-database/` is not read by any code

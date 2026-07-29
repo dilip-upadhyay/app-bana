@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -255,5 +256,36 @@ class ApprovalDomainTemplateTest {
         assertFalse(rendered.contains("{nested=value}"),
                 "Java map toString() is not the field DSL and the tools cannot parse it");
         assertFalse(rendered.contains("Broken:"), "the malformed entity is skipped entirely");
+    }
+
+    // ------------------------------------------------------------------ cost
+
+    /**
+     * Round-6 finding: the retrieval was first wired inside {@code think()}, which runs once per
+     * agent iteration. {@code userMessage} is fixed for the whole loop and {@code getDomainExamples}
+     * has no cache, so an n-iteration request bought n identical embedding calls and n identical
+     * Qdrant searches to produce n identical strings.
+     *
+     * <p>This asserts on the consumer — how many times the knowledge base is actually asked — rather
+     * than on where the call happens to sit, so it still fails if the lookup is later re-inlined into
+     * {@code think()} or into any other per-iteration position.
+     */
+    @Test
+    void theBlueprintLookupIsPaidForOncePerRequestNotPerIteration() throws Exception {
+        when(knowledgeBaseService.getDomainExamples(anyString(), anyInt()))
+                .thenReturn(List.of(template("loan_origination_with_approval",
+                        Map.of("LoanApplication", "applicant_name:text"), List.of("LoanApplication"))));
+
+        // Iteration 1 calls an unregistered tool, which fails without aborting the loop
+        // (consecutiveFailures = 1 of 3); iteration 2 finishes. Two turns, one request.
+        when(llmService.chatWithJsonMode(anyString())).thenReturn(
+                "{\"thinking\": \"look first\", \"tool_calls\": [{\"name\": \"list_apps\", \"arguments\": {}}]}",
+                LLM_STOP_RESPONSE);
+
+        agent.process("scaffold a lending app with sign-off",
+                AgentContext.create("tenant1", "app1", "user1", "session1", "test-token"));
+
+        verify(llmService, times(2)).chatWithJsonMode(anyString());
+        verify(knowledgeBaseService, times(1)).getDomainExamples(anyString(), anyInt());
     }
 }

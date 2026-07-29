@@ -166,6 +166,11 @@ public class AiAgent {
                 }
             }
 
+            // Retrieved once per request: userMessage is fixed for the whole loop, and this is a
+            // paid embedding + vector search. Computed after the pattern-match short-circuit so a
+            // pattern-matched request pays nothing.
+            String blueprintSection = buildDomainBlueprintSection(userMessage);
+
             int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
             int consecutiveFailures = 0;
             Set<String> failedSignatures = new HashSet<>();
@@ -182,7 +187,7 @@ public class AiAgent {
                     return AgentResponse.error("Agent timeout after " + elapsed + "ms", steps, elapsed);
                 }
 
-                AgentThought thought = think(userMessage, steps, context, llmService, images);
+                AgentThought thought = think(userMessage, steps, context, llmService, images, blueprintSection);
                 if (thought == null) {
                     String msg = "Sorry — I couldn't get a response from the AI model. Please try again in a moment.";
                     emitter.token(msg);
@@ -532,6 +537,11 @@ public class AiAgent {
                 }
             }
 
+            // Retrieved once per request: userMessage is fixed for the whole loop, and this is a
+            // paid embedding + vector search. Computed after the pattern-match short-circuit so a
+            // pattern-matched request pays nothing.
+            String blueprintSection = buildDomainBlueprintSection(userMessage);
+
             // Fail-safe limit
             int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
             
@@ -549,7 +559,7 @@ public class AiAgent {
                 }
 
                 // 1. THINK - Ask LLM what to do
-                AgentThought thought = think(userMessage, steps, context, llmService, images);
+                AgentThought thought = think(userMessage, steps, context, llmService, images, blueprintSection);
 
                 if (thought == null) {
                     log.error("[AGENT] Failed to get thought from LLM");
@@ -689,6 +699,13 @@ public class AiAgent {
      * <p>No try/catch: {@link KnowledgeBaseService#getDomainExamples} already swallows its own
      * failures and returns an empty list, so RAG being down degrades to a prompt without examples
      * rather than a failed request.
+     *
+     * <p><b>Call this once per request, not once per iteration.</b> It costs an OpenAI embedding
+     * call plus a Qdrant search, and {@code userMessage} does not change across the agent loop, so
+     * calling it from {@code think()} bought the same string up to ten times at ten times the price.
+     * Both entry points compute it before their loop and pass the result down;
+     * {@code ApprovalDomainTemplateTest.theBlueprintLookupIsPaidForOncePerRequestNotPerIteration}
+     * fails if it is ever re-inlined.
      */
     private String buildDomainBlueprintSection(String userMessage) {
         if (knowledgeBase == null || userMessage == null || userMessage.isBlank()) {
@@ -702,7 +719,8 @@ public class AiAgent {
      * Determine next action via LLM with multimodal support
      */
     private AgentThought think(String userMessage, List<AgentResponse.AgentStep> previousSteps,
-                              AgentContext context, LlmService llmService, List<String> images) {
+                              AgentContext context, LlmService llmService, List<String> images,
+                              String blueprintSection) {
         try {
             // Build prompt
             StringBuilder promptBuilder = new StringBuilder();
@@ -715,8 +733,7 @@ public class AiAgent {
             promptBuilder.append("### AVAILABLE TOOLS ###\n");
             promptBuilder.append(toolRegistry.getToolDescriptions()).append("\n\n");
 
-            String blueprintSection = buildDomainBlueprintSection(userMessage);
-            if (!blueprintSection.isEmpty()) {
+            if (blueprintSection != null && !blueprintSection.isEmpty()) {
                 promptBuilder.append("### SIMILAR APP BLUEPRINTS ###\n");
                 promptBuilder.append(blueprintSection).append("\n\n");
             }
