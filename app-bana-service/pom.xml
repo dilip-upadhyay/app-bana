@@ -163,7 +163,7 @@
             </resource>
         </resources>
         <plugins>
-            <!-- Compiler plugin configured to use ${java.version}; removed <release> to avoid unsupported release 25 until plugin fully supports -->
+            <!-- Compiler plugin configured to use ${java.version} (Java 25 LTS); <release> is set below -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
