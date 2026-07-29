@@ -295,7 +295,8 @@ public class BatchUpdateEntitiesTool implements Tool {
      */
     @SuppressWarnings("unchecked")
     private boolean removeFields(String tenantId, String appId, String entityName, Map<String, Object> update,
-            String token) throws Exception {        List<Map<String, Object>> fieldsToRemove = (List<Map<String, Object>>) update.get("fields");
+            String token) throws Exception {
+        List<Map<String, Object>> fieldsToRemove = (List<Map<String, Object>>) update.get("fields");
         if (fieldsToRemove == null || fieldsToRemove.isEmpty()) {
             log.warn("[BatchUpdateEntities] No fields specified for remove_fields operation");
             return false;
@@ -452,7 +453,8 @@ public class BatchUpdateEntitiesTool implements Tool {
     /**
      * Fetch entity from backend via GET /schema/{tenantId}_{appId}_{entityName}.
      */
-    private Map<String, Object> fetchEntity(String tenantId, String appId, String entityName, String token)            throws Exception {
+    private Map<String, Object> fetchEntity(String tenantId, String appId, String entityName, String token)
+            throws Exception {
         String key = buildSchemaKey(tenantId, appId, entityName);
         String url = String.format("%s/schema/%s", baseUrl, key);
 

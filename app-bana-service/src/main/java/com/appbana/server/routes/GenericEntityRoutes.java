@@ -2054,7 +2054,11 @@ public class GenericEntityRoutes {
             String revisionId;
             if (openRevision != null) {
                 revisionId = String.valueOf(rowValue(openRevision, pkName));
-                crud.updateById(schema, revisionId, revisionData);
+                // C4.6 follow-up — opt in to writing the approval columns. Every value below is
+                // server-constructed; without the flag updateById derives its SET list from
+                // schema.getFields(), which no longer contains the approval columns, so a
+                // re-edited REJECTED revision kept its REJECTED status and stale rejection_reason.
+                crud.updateById(schema, revisionId, revisionData, true);
             } else {
                 Object generated = crud.insertRecord(schema, revisionData);
                 revisionId = generated != null ? String.valueOf(generated) : null;

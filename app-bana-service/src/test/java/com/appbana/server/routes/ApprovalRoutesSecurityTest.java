@@ -3,6 +3,7 @@ package com.appbana.server.routes;
 import com.appbana.ApiServer;
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
+import com.appbana.approval.ApprovalColumns;
 import com.appbana.approval.UserRoleService;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -22,8 +24,12 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -106,20 +112,19 @@ public class ApprovalRoutesSecurityTest {
             s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
         }
 
+        // C4.6 — business fields ONLY. The eight approval columns are declared by nothing but
+        // setApprovalRequired(true) below; SchemaManager materialises them physically.
+        //
+        // This fixture used to hand-declare seven of the eight as EntitySchema.Fields, which is
+        // precisely the mechanism C4.6 set out to eliminate: declared approval columns land in
+        // schema.getFields(), so every getFields()-driven SQL builder picked them up and looked
+        // correct. That hid a live defect in insertBatch() — the only batch test in the codebase
+        // is testBatchPostBypassPrevented below, and it was green for the wrong reason. A fixture
+        // that supplies the invariant under test cannot witness the invariant being broken.
         EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
         EntitySchema.Field amountField = new EntitySchema.Field("amount", "integer", false, false, null);
-        EntitySchema.Field statusField = new EntitySchema.Field("approval_status", "string", false, false, null);
-        EntitySchema.Field revisionField = new EntitySchema.Field("approval_revision", "integer", false, false, null);
-        EntitySchema.Field submittedByField = new EntitySchema.Field("submitted_by", "string", false, false, null);
-        EntitySchema.Field submittedAtField = new EntitySchema.Field("submitted_at", "timestamp", false, false, null);
-        EntitySchema.Field approvedByField = new EntitySchema.Field("approved_by", "string", false, false, null);
-        EntitySchema.Field approvedAtField = new EntitySchema.Field("approved_at", "timestamp", false, false, null);
-        EntitySchema.Field rejectionReasonField = new EntitySchema.Field("rejection_reason", "text", false, false, null);
 
-        EntitySchema schema = new EntitySchema(ENTITY_NAME, List.of(
-                idField, amountField, statusField, revisionField,
-                submittedByField, submittedAtField, approvedByField, approvedAtField, rejectionReasonField
-        ));
+        EntitySchema schema = new EntitySchema(ENTITY_NAME, List.of(idField, amountField));
         schema.setTenantId(TENANT_ID);
         schema.setAppId(APP_ID);
         schema.setApprovalRequired(true);
@@ -482,24 +487,50 @@ public class ApprovalRoutesSecurityTest {
         HttpResponse<String> batchRes = HTTP_CLIENT.send(batchReq, HttpResponse.BodyHandlers.ofString());
         assertEquals(201, batchRes.statusCode(), "Batch insert should return 201: " + batchRes.body());
 
-        // Verify BOTH records are forced to DRAFT, not APPROVED (query by server-set submitted_by)
+        // Verify BOTH records are forced to DRAFT, not APPROVED (query by server-set submitted_by).
+        //
+        // C4.6 follow-up — assertions are driven off ApprovalColumns.NAMES so that a ninth column
+        // is covered automatically, and every column is reported in one run rather than failing on
+        // the first. Before the writableFields() fix this read back all-NULL: insertBatch built its
+        // column list from schema.getFields(), which no longer contains the approval columns, so
+        // the server-assigned values staged by enforceApprovalPreInsert were never bound. It looked
+        // green only because this fixture used to hand-declare them as schema fields.
+        String selectCols = ApprovalColumns.NAMES.stream()
+                .map(n -> "\"" + n.toUpperCase(Locale.ROOT) + "\"")
+                .collect(Collectors.joining(", "));
+        Map<String, Object> expected = new LinkedHashMap<>();
+        expected.put("approval_status", "DRAFT");
+        expected.put("approval_revision", 1);
+        expected.put("approval_parent_id", null);
+        expected.put("submitted_by", "alice_maker");
+        expected.put("submitted_at", null);
+        expected.put("approved_by", null);
+        expected.put("approved_at", null);
+        expected.put("rejection_reason", null);
+        assertEquals(ApprovalColumns.NAMES.size(), expected.size(),
+                "Expectation map must cover every approval column — add the new column here");
+
         try (Connection c = JdbcManager.getConnection("default");
              PreparedStatement ps = c.prepareStatement(
-                     "SELECT \"APPROVAL_STATUS\", \"SUBMITTED_BY\", \"APPROVED_BY\" FROM \"" + TABLE_NAME +
+                     "SELECT \"AMOUNT\", " + selectCols + " FROM \"" + TABLE_NAME +
                      "\" WHERE \"AMOUNT\" IN (500, 600) ORDER BY \"AMOUNT\"")) {
             try (var rs = ps.executeQuery()) {
                 int rowCount = 0;
                 while (rs.next()) {
                     rowCount++;
-                    String status = rs.getString("APPROVAL_STATUS");
-                    String submittedBy = rs.getString("SUBMITTED_BY");
-                    String approvedBy = rs.getString("APPROVED_BY");
-                    assertEquals("DRAFT", status,
-                            "Batch element must be forced to DRAFT, not APPROVED (amount=" + (rowCount == 1 ? 500 : 600) + ")");
-                    assertEquals("alice_maker", submittedBy,
-                            "Batch element submitted_by must be session user alice_maker, not hacker_user");
-                    assertNull(approvedBy,
-                            "Batch element approved_by must be null — forged value must be stripped");
+                    int amount = rs.getInt("AMOUNT");
+                    List<Executable> checks = new ArrayList<>();
+                    for (Map.Entry<String, Object> e : expected.entrySet()) {
+                        String col = e.getKey().toUpperCase(Locale.ROOT);
+                        Object want = e.getValue();
+                        Object got = rs.getObject(col);
+                        checks.add(() -> assertEquals(
+                                want == null ? null : String.valueOf(want),
+                                got == null ? null : String.valueOf(got),
+                                "amount=" + amount + " column " + col
+                                        + " must hold the server-assigned value, not a forged or dropped one"));
+                    }
+                    assertAll("approval columns for amount=" + amount, checks);
                 }
                 assertEquals(2, rowCount, "Both batch records must have been inserted");
             }
@@ -683,19 +714,10 @@ public class ApprovalRoutesSecurityTest {
         String hyphenTenantId = "t-81919f7d";
         String uuidEntity = "InvoiceOrder";
 
+        // C4.6 — flag-only, same rationale as setupSchemaAndRoles().
         EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
-        EntitySchema.Field statusField = new EntitySchema.Field("approval_status", "string", false, false, null);
-        EntitySchema.Field revisionField = new EntitySchema.Field("approval_revision", "integer", false, false, null);
-        EntitySchema.Field submittedByField = new EntitySchema.Field("submitted_by", "string", false, false, null);
-        EntitySchema.Field submittedAtField = new EntitySchema.Field("submitted_at", "timestamp", false, false, null);
-        EntitySchema.Field approvedByField = new EntitySchema.Field("approved_by", "string", false, false, null);
-        EntitySchema.Field approvedAtField = new EntitySchema.Field("approved_at", "timestamp", false, false, null);
-        EntitySchema.Field rejectionReasonField = new EntitySchema.Field("rejection_reason", "text", false, false, null);
 
-        EntitySchema schema = new EntitySchema(uuidEntity, List.of(
-                idField, statusField, revisionField, submittedByField,
-                submittedAtField, approvedByField, approvedAtField, rejectionReasonField
-        ));
+        EntitySchema schema = new EntitySchema(uuidEntity, List.of(idField));
         schema.setTenantId(hyphenTenantId);
         schema.setAppId(uuidAppId);
         schema.setApprovalRequired(true);

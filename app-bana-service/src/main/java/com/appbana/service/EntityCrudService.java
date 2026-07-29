@@ -164,17 +164,72 @@ public class EntityCrudService {
         return insertRecordLegacy(schema, data);
     }
 
+    /**
+     * The complete writable column list for {@code rows} — every declared field except an
+     * auto-increment PK, plus any approval column the server has already staged into the row.
+     *
+     * <p>C4.6 follow-up — this is the single builder {@code insertRecordLegacy}, {@link #insertBatch}
+     * and the approval-revision branch of {@link #updateById} all derive their column list from. It
+     * exists because deriving that list from {@code schema.getFields()} alone is now wrong for
+     * approval-required entities: C4.6 made the eight approval columns physical-only, so
+     * {@code getFields()} no longer mentions them, and the server-assigned
+     * {@code approval_status} / {@code approval_revision} / {@code submitted_by} values staged by
+     * {@code GenericEntityRoutes} were being silently dropped on the floor — landing rows with a
+     * NULL status that {@code ApprovalService.Status.fromValue(null)} then reads back as DRAFT, so
+     * nothing downstream complained. The single-record insert was fixed in the C4.6 commit; the
+     * batch insert and the revision update were not. Centralising the rule here is what stops a
+     * fourth write path repeating it.
+     *
+     * <p><b>Security</b> — an approval column is included only when the row map already contains
+     * that key, and only callers that opt in reach this for updates. That is what keeps this
+     * consistent with {@code ApprovalColumns.asFields()}'s "never merge these into an insert field
+     * list" warning: {@code enforceApprovalPreInsert()} strips every client-supplied approval value
+     * before putting the server's own values back, so on insert paths the only approval keys that
+     * can be present are ones the server itself staged. A forged {@code approval_status=APPROVED}
+     * in a request body never survives to this point.
+     *
+     * <p>Presence is evaluated across the whole batch (union, not per row) because one
+     * {@code PreparedStatement} is shared by every element, so the column list must be fixed for
+     * all of them; an element missing a key simply binds null.
+     */
+    static List<EntitySchema.Field> writableFields(EntitySchema schema, List<Map<String, Object>> rows) {
+        List<EntitySchema.Field> out = new ArrayList<>();
+        for (EntitySchema.Field f : schema.getFields()) {
+            if (f.isPrimaryKey() && f.isAutoIncrement()) {
+                continue;
+            }
+            out.add(f);
+        }
+        if (!schema.isApprovalRequired()) {
+            return out;
+        }
+        Set<String> declared = new HashSet<>();
+        for (EntitySchema.Field f : out) {
+            if (f.getName() != null) {
+                declared.add(f.getName().toLowerCase(Locale.ROOT));
+            }
+        }
+        for (EntitySchema.Field approvalField : ApprovalColumns.asFields()) {
+            String name = approvalField.getName();
+            if (declared.contains(name)) {
+                continue;
+            }
+            boolean staged = rows.stream().anyMatch(r -> r != null && r.containsKey(name));
+            if (staged) {
+                out.add(approvalField);
+            }
+        }
+        return out;
+    }
+
     private Object insertRecordLegacy(EntitySchema schema, Map<String, Object> data) throws SQLException {
-        List<EntitySchema.Field> fields = schema.getFields();
+        List<EntitySchema.Field> fields = writableFields(schema, List.of(data));
         List<String> cols = new ArrayList<>();
         List<String> placeholders = new ArrayList<>();
         List<Object> values = new ArrayList<>();
 
         for (EntitySchema.Field field : fields) {
             if (field.isPrimaryKey()) {
-                if (field.isAutoIncrement()) {
-                    continue; // skip if auto
-                }
                 // Generate UUID if missing and type is compatible
                 if (!data.containsKey(field.getName())) {
                     String type = field.getType().toLowerCase(Locale.ROOT);
@@ -212,36 +267,6 @@ public class EntityCrudService {
             placeholders.add("?");
             Object val = coerceAndValidate(field, raw);
             values.add(val);
-        }
-
-        // C4.6 — write the server-assigned approval values.
-        //
-        // Before C4.6 the eight approval columns were DECLARED fields (SchemaEnricher put
-        // them in the schema), so the loop above wrote them and this pass was unnecessary.
-        // C4.6 moved injection into SchemaManager and made them physical-only, which is the
-        // shape every read path already assumes (see getQueryableFields() and the default
-        // projection). That silently broke this write path: GenericEntityRoutes'
-        // enforceApprovalPreInsert() puts approval_status=DRAFT / approval_revision=1 /
-        // submitted_by into `data`, and the getFields() loop would drop all three, landing
-        // every new row with a NULL approval_status — which reads as "not DRAFT" to every
-        // workflow guard. Reachable from the single, batch, studio, runtime and env-scoped
-        // POSTs, and from the revision-creation path that seeds a new DRAFT revision row.
-        //
-        // Only keys already present in `data` are written, and enforceApprovalPreInsert()
-        // strips any client-supplied approval column before putting its own values back, so
-        // nothing a caller sends can reach these columns through this branch. That is why
-        // ApprovalColumns.asFields() must NOT be merged into the loop above wholesale — see
-        // the warning on that method.
-        if (schema.isApprovalRequired()) {
-            for (EntitySchema.Field approvalField : ApprovalColumns.asFields()) {
-                String name = approvalField.getName();
-                if (!data.containsKey(name) || cols.contains(quote(name))) {
-                    continue;
-                }
-                cols.add(quote(name));
-                placeholders.add("?");
-                values.add(coerceAndValidate(approvalField, data.get(name)));
-            }
         }
 
         String tableName = SchemaManager.getPhysicalTableName(schema);
@@ -338,14 +363,40 @@ public class EntityCrudService {
     }
 
     public int updateById(EntitySchema schema, String id, Map<String, Object> data) throws SQLException {
+        return updateById(schema, id, data, false);
+    }
+
+    /**
+     * C4.6 follow-up — {@code allowApprovalColumns} opts a caller into writing the eight physical
+     * approval columns.
+     *
+     * <p>It defaults to {@code false} for every client-facing PUT, which is what stops a request
+     * body of {@code {"approval_status":"APPROVED"}} from walking a record straight past the
+     * workflow: there is no {@code enforceApprovalPreUpdate} counterpart stripping those keys, so
+     * the exclusion here IS the guard. It is set {@code true} only by the revision branch of
+     * {@code GenericEntityRoutes.applyApprovalPutGuard()}, whose values are entirely
+     * server-constructed.
+     *
+     * <p>Without the opt-in that branch silently lost every approval key it staged. The damaging
+     * case is re-editing a REJECTED revision: {@code findOpenRevision} matches DRAFT, PENDING and
+     * REJECTED, so the maker's edit lands on the rejected row, and the
+     * {@code approval_status → DRAFT} reset plus the {@code rejection_reason → null} clear were
+     * both dropped — leaving the revision stuck as REJECTED, carrying a stale reason, and
+     * un-resubmittable.
+     */
+    public int updateById(EntitySchema schema, String id, Map<String, Object> data, boolean allowApprovalColumns)
+            throws SQLException {
         EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
                 .orElse(null);
         if (pk == null) {
             return 0;
         }
+        List<EntitySchema.Field> candidates = allowApprovalColumns
+                ? writableFields(schema, List.of(data))
+                : schema.getFields();
         List<String> set = new ArrayList<>();
         List<Object> vals = new ArrayList<>();
-        for (EntitySchema.Field f : schema.getFields()) {
+        for (EntitySchema.Field f : candidates) {
             if (f.isPrimaryKey()) {
                 continue;
             }
@@ -909,14 +960,9 @@ public class EntityCrudService {
     }
 
     public Map<String, Object> insertBatch(EntitySchema schema, List<Map<String, Object>> batch) throws SQLException {
-        List<EntitySchema.Field> fields = schema.getFields();
-        List<EntitySchema.Field> insertable = new ArrayList<>();
-        for (EntitySchema.Field f : fields) {
-            if (f.isPrimaryKey() && f.isAutoIncrement()) {
-                continue;
-            }
-            insertable.add(f);
-        }
+        // C4.6 follow-up — shared with insertRecordLegacy so the approval columns cannot be
+        // dropped on one insert path and honoured on the other. See writableFields().
+        List<EntitySchema.Field> insertable = writableFields(schema, batch);
 
         String cols = String.join(",", insertable.stream().map(f -> quote(f.getName())).toList());
         String placeholders = String.join(",", Collections.nCopies(insertable.size(), "?"));

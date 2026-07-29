@@ -882,7 +882,8 @@ public class SchemaManager {
                     sb.append(", PRIMARY KEY(").append(pk).append(")");
                 sb.append(")");
                 plan.add(sb.toString());
-                return plan;            }
+                return plan;
+            }
             Map<String, ColumnInfo> existing = new HashMap<>();
             try (ResultSet cols = md.getColumns(null, null, table.toUpperCase(), null)) {
                 while (cols.next()) {

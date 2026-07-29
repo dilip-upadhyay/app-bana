@@ -129,7 +129,7 @@ Two mechanisms combined:
 |---|---|---|
 | `approval_status` | `VARCHAR(20)` | `DRAFT` / `PENDING` / `APPROVED` / `REJECTED` |
 | `approval_revision` | `INTEGER` | Monotonic revision counter (1 for first record) |
-| `approval_parent_id` | `VARCHAR(255)` NULL | For revisions, points at the currently-live approved row |
+| `approval_parent_id` | `INTEGER` NULL | For revisions, points at the currently-live approved row |
 | `submitted_by` | `VARCHAR(255)` NULL | User ID |
 | `submitted_at` | `TIMESTAMP` NULL | |
 | `approved_by` | `VARCHAR(255)` NULL | Checker user ID |
@@ -360,7 +360,15 @@ shows parent and revision coexisting, and the maker needs to see their pending e
 > - `GenericEntityRoutes.applyApprovalPutGuard` and `EntityCrudService.findOpenRevision` both answered "does this entity support revisions?" by probing `getFields()` for `approval_parent_id`. Post-C4.6 that reported *no* for every correctly-provisioned approval entity, downgrading what should be a new DRAFT revision into an in-place edit of a live APPROVED row. `approvalRequired` is now the authority in both.
 > - `approval_parent_id` is INTEGER (matching the PK it points at), but `findOpenRevision` bound the id as a String — masked until now because fixtures declared the column as text. Coercion is centralised in `ApprovalColumns.parentIdValue`.
 >
-> **Why the existing suite never caught any of this:** every approval fixture hand-declared the eight columns, so the tests supplied the exact invariant production code was supposed to guarantee. 281 green backend tests could only ever exercise the already-correct shape. Those fixtures now set the flag and nothing else, which makes the whole approval suite an end-to-end assertion on the injection.
+> **Why the existing suite never caught any of this:** every approval fixture hand-declared the eight columns, so the tests supplied the exact invariant production code was supposed to guarantee. 281 green backend tests could only ever exercise the already-correct shape.
+>
+> **C4.6a (follow-up) — the fixture conversion was incomplete, and it hid two more instances of the same defect.** The C4.6 commit message and this plan both claimed "those fixtures now set the flag and nothing else". That was true of `RevisionFlowTest` and of one `ApprovalRoutesSecurityTest` fixture, and **false** of the other two in that file, which still declared seven of the eight columns. Because the only batch-insert test in the codebase lives there, the declared columns kept re-entering `getFields()` and the following stayed invisible:
+> - `EntityCrudService.insertBatch` built its column list from `getFields()` exactly as `insertRecordLegacy` had, so every server-assigned approval value was dropped. Blast radius: `GenerateMockDataTool` posts to `/api/{entity}/batch`, so every AI-seeded approval app got NULL-status rows — and `ApprovalService.Status.fromValue(null)` returns `DRAFT`, so `submit` on those rows returned 200 and nothing surfaced the corruption.
+> - `EntityCrudService.updateById` had the same shape, reached from the revision branch of `applyApprovalPutGuard`. Re-editing a **REJECTED** revision silently lost the `approval_status → DRAFT` reset and the `rejection_reason → null` clear, stranding the revision as un-resubmittable. `repeatedPutsReuseTheSameOpenRevision` covered that code path but asserted only the business column.
+>
+> Both now derive their column list from one builder, `EntityCrudService.writableFields()`. `updateById` takes an explicit `allowApprovalColumns` opt-in that defaults to `false`, because there is no `enforceApprovalPreUpdate` counterpart — the exclusion on client-facing PUTs *is* the guard against a body of `{"approval_status":"APPROVED"}`.
+>
+> **Lesson:** "the sweep is complete" is itself a testable claim, and cheaper to check than to have a reviewer disprove. A fixture that supplies the invariant under test cannot witness that invariant being broken — so converting fixtures is not cleanup, it is the experiment.
 
 > **Deviation from plan — C4.5 as written is not implementable.**
 > C4.5 assumes the checker queue is a page with `PageMeta` behind it. It is not: C3.3 shipped the queue as **shell state with no route and no `PageMeta`**, because its contents are per-user (a checker sees only rows they are eligible to approve) and the runtime has no router, so synthesising page metadata would mean inventing it at scaffold time and filtering it back out per caller. `GeneratePageTool` therefore has nothing meaningful to emit. The queue already appears automatically for any user holding the CHECKER role the moment an approval-required entity exists — which is the outcome C4.5 wanted — so **no scaffold-time work is required**. C4.5 is closed as obsolete rather than implemented. If the runtime gains a router later, revisit as a routing task, not a scaffolding one.
