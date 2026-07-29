@@ -1,6 +1,6 @@
 # Maker-Checker Epic — Implementation Plan
 
-**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
+**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c/d, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete — and then C4.4d, where the auth fix shipped alongside it repaired one instance of a five-member defect class. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
 **Owner:** AppBana core team
 **Position in master roadmap:** Phase C of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) and Phase B (Complex UI Epic) completing. Runs *before* Phase D — approvals are AppBana's differentiator (the *product*), while D is enterprise packaging.
 **Trigger:** Every regulated customer-facing workflow — KYC, loan origination, account opening, policy issuance, claims processing — has a mandatory two-person integrity control: a **maker** creates or edits a record and a **checker** approves it before it becomes live. AppBana today has no concept of `submitted`, `pending approval`, `approved`, or `rejected`. Without maker-checker, we cannot ship into any regulated vertical, which is the majority of the customer-onboarding market.
@@ -474,11 +474,12 @@ called. Mutation: removing the `setCategory` line fails it with
 
 Two further defects surfaced from the same gate run, both invisible to unit tests:
 
-- **`GeneratePageTool` never sent the session token.** It was the only writer in the scaffold chain
+- **`GeneratePageTool` never sent the session token.** It was the only *writer* in the scaffold chain
   building its request without the `Authorization: Bearer` header that `CreateAppTool` and
   `CreateEntityTool` both send. App creation and all three entity creations succeeded, then every
   page 401'd — a half-built app rolled back on an auth error dressed up as a modelling one. It had
   been latent because nothing previously drove the scaffold path with a real token.
+  **See C4.4d below: fixing only the writer was itself an incomplete fix.**
 - **Deploy-time foreign-key failure** (`foreign key constraint ... cannot be implemented`) on
   `reference` columns whose type does not match the parent's PK. Pre-existing, unrelated to
   maker-checker, and out of scope for C4 — logged here because the gate is where it surfaced.
@@ -489,6 +490,68 @@ metadata round-trips, the section is injected, the lookup is hoisted — and the
 severed, because "the payload contains `category`" and "the reader asks for `category`" were checked
 by different people at different times and never against each other. The end-to-end gate was not
 a formality after the unit tests; it was the only thing that ran the whole chain.
+
+#### C4.4d — the auth fix stopped at writers; five requests were unauthenticated
+
+Review round 7 accepted C4.4c and rejected the auth fix shipped alongside it. The claim
+*"`GeneratePageTool` was the only writer missing the header"* was true as written, and the wrong
+frame: the defect class is *a tool issuing a backend request without the session token*, and
+scoping the sweep to writers left the read tools untouched. This is the round-2 shape again
+(`insertRecordLegacy` fixed, `insertBatch` missed) — one instance repaired, siblings not enumerated.
+
+Enumerating every `HttpRequest.newBuilder()` in the tool package found **five** unauthenticated
+sites, not the three the review named:
+
+| Tool | Effect of the missing header |
+|---|---|
+| `list_apps` | 401 on every invocation |
+| `list_pages` | 401 on every invocation |
+| `list_workflows` | 401 on every invocation |
+| `list_entities` (app-context branch) | 401; the `/schema` fallback branch in the same file *does* authenticate |
+| `get_entity_details` (app-context branch) | 401 **silently swallowed** |
+
+The two the review missed are the more interesting ones, because each file contains a *second*
+request that does send the token. A per-file question — "does this tool authenticate?" — answers
+yes for both while the branch the agent actually takes when an app is selected 401s.
+
+`get_entity_details` is the worst case and the only one that returns a wrong answer rather than an
+error: its 401 fails the `statusCode() == 200` check and falls through to the global `/schema`
+lookup, which authenticates correctly but searches by the bare entity name with no
+`{tenantId}_{appId}_` prefix — so it misses too, and the tool reports "entity not found" for an
+entity that demonstrably exists. The other four surface as a failed tool call, which burns an agent
+iteration and increments `consecutiveFailures` toward the abort-at-3, so the user sees the agent
+give up vaguely instead of an auth error.
+
+**Why the gate missed it:** all three C4 exit criteria are create/scaffold flows. None of them asks
+*"what apps do I have?"* — the same reason the token defect stayed latent in `GeneratePageTool`
+until something finally drove that path.
+
+**The guard is two tests, because neither is sufficient alone** —
+[`ToolAuthHeaderTest`](../../ai-builder/src/test/java/com/appbana/ai/agent/tool/ToolAuthHeaderTest.java):
+
+1. `everyDrivableToolPutsTheTokenOnTheWire` stands up a real `HttpServer`, drives the five tools,
+   and asserts every request it *received* carried the header. This is the seam test: it proves the
+   header reaches the socket, which no amount of source inspection can. It also asserts each tool
+   made at least one request, so it cannot pass vacuously for a tool that fails before calling out.
+2. `noToolBuildsARequestWithoutAttachingTheToken` scans the tool sources for every
+   `HttpRequest.newBuilder()` and requires an `Authorization` header within the same builder. This
+   covers the nine tools that need an LLM or a validator to drive and so cannot be exercised
+   behaviourally — which is exactly where tool number fourteen would reintroduce this.
+
+Both mutations were run. Neutering `ListAppsTool`'s header guard (leaving the source text intact)
+fails test 1 only; deleting `DeployAppTool`'s header — a tool test 1 cannot reach — fails test 2
+only, naming the file and line. Neither test subsumes the other.
+
+Live-verified against the running stack on the exact route `ListAppsTool` builds:
+`GET /appbana-studio/{tenant}/apps` returns `401 {"error":"Unauthorized","message":"Missing session
+token"}` with no header and `200` with the app listed with one.
+
+**Lesson:** the fix for a seam defect has the same failure mode as the defect. C4.4c was found by
+asking "which components disagree?"; the accompanying auth fix was scoped by asking "which component
+was broken?" — and repaired one instance of a class with five members. When a defect is a missing
+call at a boundary, the unit of repair is *every crossing of that boundary*, enumerated
+mechanically, and the guard belongs on the boundary rather than on the instance.
+
 
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
 > Accepting `approvalRequired` in the two parameter schemas was necessary but not sufficient. `CreateEntityTool.buildEntityMetadata` constructs the *entire* body POSTed to `/schema` and silently drops anything it does not explicitly copy, so the flag never reached the backend. Because `SchemaEnricher` read the flag independently and injected the 8 approval columns anyway, the failure was invisible from the outside: the physical table came out approval-shaped while the schema record carried `approvalRequired=false`, and all 13 backend guards branch on `schema.isApprovalRequired()` rather than on the presence of the columns. The entity *looked* approval-enabled and behaved as if it were not. Fixed, with `CreateEntityToolApprovalTest` pinning the payload.

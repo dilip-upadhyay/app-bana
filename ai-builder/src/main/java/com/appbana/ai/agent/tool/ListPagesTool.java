@@ -70,11 +70,17 @@ public class ListPagesTool implements Tool {
             // Fetch app metadata which contains pages
             String url = baseUrl + "/appbana-studio/" + tenantId + "/apps/" + appId;
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .header("Accept", "application/json")
-                    .GET()
-                    .build();
+                    .header("Accept", "application/json");
+
+            // C4.4d -- see ListAppsTool: this route requires a session token.
+            String token = context.token();
+            if (token != null && !token.isEmpty()) {
+                requestBuilder.header("Authorization", "Bearer " + token);
+            }
+
+            HttpRequest request = requestBuilder.GET().build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             long executionTime = System.currentTimeMillis() - startTime;

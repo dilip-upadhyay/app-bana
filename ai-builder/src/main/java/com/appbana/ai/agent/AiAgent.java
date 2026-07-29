@@ -709,7 +709,9 @@ public class AiAgent {
      */
     private String buildDomainBlueprintSection(String userMessage) {
         if (knowledgeBase == null || userMessage == null || userMessage.isBlank()) {
-            log.info("[AGENT] Domain blueprints: skipped (no knowledge base or empty message)");
+            // debug, not info: a deployment without Qdrant hits this on every single request, so
+            // at info it is permanent noise reporting a configuration rather than an event.
+            log.debug("[AGENT] Domain blueprints: skipped (no knowledge base or empty message)");
             return "";
         }
         List<SchemaDefinition> blueprints = knowledgeBase.getDomainExamples(userMessage, 2);

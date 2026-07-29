@@ -80,11 +80,20 @@ public class GetEntityDetailsTool implements Tool {
 
                 String url = baseUrl + "/appbana-studio/" + tenantId + "/apps/" + appId;
 
-                HttpRequest request = HttpRequest.newBuilder()
+                // C4.4d -- worst of the five: a 401 here is not surfaced. The status != 200
+                // path falls through to the global /schema fallback (which does authenticate),
+                // and that lookup uses the bare entity name with no tenant/app prefix, so it
+                // misses too. The tool then reports "entity not found" -- a wrong answer rather
+                // than an auth error, for an entity that exists.
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(url))
-                        .header("Accept", "application/json")
-                        .GET()
-                        .build();
+                        .header("Accept", "application/json");
+
+                if (context.token() != null && !context.token().isEmpty()) {
+                    requestBuilder.header("Authorization", "Bearer " + context.token());
+                }
+
+                HttpRequest request = requestBuilder.GET().build();
 
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 long executionTime = System.currentTimeMillis() - startTime;

@@ -42,9 +42,9 @@ Last verified 2026-07-30 at C4.6.
 | Module | Command | Result |
 |---|---|---|
 | `app-bana` | `mvn -B verify` | 306 tests · 0 failures · 0 errors |
-| `ai-builder` | `mvn -B verify` | **167 keyless** / **184 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
+| `ai-builder` | `mvn -B verify` | **169 keyless** / **186 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
 | `app-bana-runtime` | `pnpm test` | 269 tests · 0 failures |
-| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 167) |
+| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 169) |
 
 **Review #10 fix (2026-07-29):** CI used to trigger only on push/PR against `main`/`master`, so work on a
 feature branch with no open PR against `main` was never covered by CI — flagged as the highest-leverage
@@ -60,7 +60,7 @@ different total depending on whether `OPENAI_API_KEY` is set, so a single number
 someone. Three classes — `KnowledgeBaseServiceIntegrationTest` (5), `EmbeddingServiceIntegrationTest` (7)
 and `AppBanaPromptEnhancerIntegrationTest` (5) — gate on the key via `Assumptions.assumeTrue` **at class
 level**, so without it they report `tests=0` and do **not** appear as skipped. They contribute 17 tests, not
-2 skips. Hence 167 keyless / 184 with the key (was 157 / 174 before C4.4 + C4.4a + C4.4b + C4.4c added 10 tests).
+2 skips. Hence 169 keyless / 186 with the key (was 157 / 174 before C4.4 + C4.4a + C4.4b + C4.4c + C4.4d added 12 tests).
 
 This previously read `145` and was then "corrected" to `168` with a note claiming the suite had been
 silently red. That framing was wrong and is retracted: **145 was the correct keyless/CI number at the
@@ -176,6 +176,27 @@ See the [full plan](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) for stage-by-stage 
 ---
 
 ## 📌 Backlog
+
+**Found by the C4 end-to-end gate, confirmed real, deliberately out of scope for C4:**
+
+- **Deploy-time FK failure.** `org.postgresql.util.PSQLException: foreign key constraint "FK_APP_..."
+  cannot be implemented` on `reference` columns whose SQL type does not match the parent's PK type
+  (the H4 hardening rule). Reproducible; triggers a successful `ScaffoldAppTool` rollback, so the
+  app is lost at deploy. Unrelated to maker-checker.
+- **Agent-created apps are missing from `appbana_apps`.** `appbana_schemas` holds entities for six
+  distinct `app_id`s under tenant `t-e850b8c8`, while `appbana_apps` has no row for any of them — so
+  `list_apps` and any app-listing UI cannot see apps the agent built, even though their entities and
+  physical tables exist. A direct authenticated `POST /appbana-studio/{tenant}/apps` *does* persist a
+  row, so the route works; the agent path is what diverges. Cause not yet established — do not assume
+  it is the same as the C4.4d auth defect. Same seam family: the app record and its schemas disagree.
+- **63-character physical table-name truncation.** `..._CUSTOMERAPPLICATION` is stored as
+  `..._CUSTOMERAPP` to fit Postgres' identifier limit. Two entities with a long shared prefix in the
+  same app would collide silently.
+- **Two-phase protocol is prompt-enforced only.** Observed skipping Phase 1 and calling `scaffold_app`
+  on the first turn. `AiAgent.resolveAllowedTools` and `extractAppName` are both unused — the
+  state-machine gating they were written for is the unfinished DialogueManager Story 3.1.
+- **`SearchKnowledgeTool` drops `entities` metadata**, returning only name/type/description. Same
+  producer/consumer seam as C4.4c, one tool over.
 
 - **Merge `feature/ai-schema-quality` into `main`**
 - Story 3.2 — LLM Error Recovery loops (prevent max iteration starvation on repeated tool failures)

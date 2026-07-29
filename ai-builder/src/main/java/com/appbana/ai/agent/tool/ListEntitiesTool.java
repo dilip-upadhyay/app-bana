@@ -66,11 +66,18 @@ public class ListEntitiesTool implements Tool {
 
                 String url = baseUrl + "/appbana-studio/" + tenantId + "/apps/" + appId;
 
-                HttpRequest request = HttpRequest.newBuilder()
+                // C4.4d -- the CASE 2 fallback below already sends the token; this branch did
+                // not, so a per-file check ("does this tool authenticate?") answered yes while
+                // the branch the agent actually takes when an app is selected 401'd.
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(url))
-                        .header("Accept", "application/json")
-                        .GET()
-                        .build();
+                        .header("Accept", "application/json");
+
+                if (context.token() != null && !context.token().isEmpty()) {
+                    requestBuilder.header("Authorization", "Bearer " + context.token());
+                }
+
+                HttpRequest request = requestBuilder.GET().build();
 
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 long executionTime = System.currentTimeMillis() - startTime;
