@@ -228,6 +228,14 @@ class ToolAuthHeaderTest {
      *
      * <p>Adding a fourteenth call site anywhere else that forgets the check fails THIS test, instead
      * of waiting for a reviewer to re-run the enumeration by hand in round #15.
+     *
+     * <p>Review #15: the match is on the literal text {@code statusCode() == 401}, not on the
+     * semantics of the comparison. A stylistic variant at a real, correctly-guarded call site --
+     * {@code 401 == resp.statusCode()}, {@code HttpURLConnection.HTTP_UNAUTHORIZED}, or hoisting
+     * {@code int sc = resp.statusCode()} before comparing -- reads as a missing check and fails this
+     * test. That is a false *positive*, and it is the fail-safe direction: the build stops and someone
+     * looks, instead of a rewritten check silently going uncounted. If you hit this, match the
+     * existing literal spelling rather than loosening this test's pattern to accept variants.
      */
     @Test
     @DisplayName("every HttpRequest.newBuilder() site under com.appbana.ai checks for 401, except the documented allow-list")

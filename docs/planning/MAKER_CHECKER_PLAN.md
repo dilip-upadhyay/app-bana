@@ -766,6 +766,41 @@ ready-made, the instinct is to consume it as a to-do list and let it evaporate."
 guard once it is re-runnable and wired into the test suite; otherwise it is a very good one-time answer
 to a question nobody will remember to ask again the same way.
 
+#### Review #15 — Approved; the C4.4 auth family closes, and a mutation-testing pitfall caught against itself
+
+Review #15 attacked the one design decision that could have made Review #14's guard decorative: it
+injected a *second*, unchecked `HttpRequest.newBuilder()` call into `ScaffoldAppTool.java` — a file
+already on the allow-list, the exact case a naive "is this file exempt?" implementation would wave
+through — and confirmed the guard still failed, naming the file and the exact arithmetic. Two tests
+failed on that mutation, not one: the new census and the pre-existing behavioural header source-scan,
+confirming they check different properties (site attaches a token / site handles a rejected one) and
+neither subsumes the other. Verdict: **Approved**, no production change, tree clean, 178/0/2 confirmed.
+
+**One javadoc sentence added in response to a 🟢 nit:** the guard matches the literal text
+`statusCode() == 401`; a stylistic variant at a genuinely-correct call site (`401 == resp.statusCode()`,
+`HttpURLConnection.HTTP_UNAUTHORIZED`, or hoisting the status into a local before comparing) reads as a
+missing check and fails the build. Documented in
+`ToolAuthHeaderTest.everyRequestSiteChecksFor401ExceptTheDocumentedAllowList`'s javadoc as a deliberate
+fail-safe direction — match the existing spelling rather than loosen the test. The other 🟢 nit
+("counting is a proxy for pairing, not per-site coverage") was left as pure knowledge, per the review's
+own framing, layered against the fact that the per-site source scan already covers that gap.
+
+**Meta-observation, worth keeping — a mutation test has to verify its own mutation landed.** The
+reviewer's first attempt at the `ScaffoldAppTool` mutation used a string-replace anchor that didn't
+exist in the file; the replace silently no-op'd, the guard ran against the unmodified source, and
+passed — producing, for a moment, false evidence that the new test was decorative. This is the exact
+same defect shape the whole epic has been about (`linkEntityToApp` returning `void` on 401 looked like
+success; `loadEntitySummary` caching `""` looked like an app with no entities): a check that never ran
+looks identical, from outside, to a check that ran and passed. The fix is one line at every layer:
+assert the setup actually happened before trusting the result of what depends on it. Applied here: print
+the post-mutation occurrence count and abort if it isn't exactly one more than before, before trusting a
+red or green verdict from the guard itself.
+
+**Outstanding, unchanged across every round of this epic:** the C3 maker-checker Playwright round-trip
+(maker submits → checker rejects → resubmit → approve) remains the one unticked exit criterion, and CI
+still runs `mvn -B verify` only — no vitest, no Playwright. The new guard lives in the Maven reactor, so
+it is enforced on every push; the frontend guards still are not.
+
 
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
 > Accepting `approvalRequired` in the two parameter schemas was necessary but not sufficient. `CreateEntityTool.buildEntityMetadata` constructs the *entire* body POSTed to `/schema` and silently drops anything it does not explicitly copy, so the flag never reached the backend. Because `SchemaEnricher` read the flag independently and injected the 8 approval columns anyway, the failure was invisible from the outside: the physical table came out approval-shaped while the schema record carried `approvalRequired=false`, and all 13 backend guards branch on `schema.isApprovalRequired()` rather than on the presence of the columns. The entity *looked* approval-enabled and behaved as if it were not. Fixed, with `CreateEntityToolApprovalTest` pinning the payload.

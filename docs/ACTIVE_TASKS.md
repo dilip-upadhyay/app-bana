@@ -214,6 +214,15 @@ See the [full plan](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) for stage-by-stage 
   deliberately-unchecked rollback delete). See [MAKER_CHECKER_PLAN.md § Review #14](planning/MAKER_CHECKER_PLAN.md).
   Two 🟢 non-blocking nits from the same review were left unfixed by design ("not worth a round on
   their own"): worth picking up next time either loop is opened, not tracked as a separate item here.
+- **Review #15: approved, no production change.** Confirmed the Review #14 allow-list is count-exact
+  (a second unchecked call injected into an already-allow-listed file still fails the guard, naming it),
+  and that two independent tests fire on that mutation, not one. Added one javadoc sentence to the
+  guard test documenting that a stylistic 401-check variant (`401 == resp.statusCode()`,
+  `HTTP_UNAUTHORIZED`, a hoisted status local) reads as a missing check and fails the build — a
+  deliberate fail-safe false-positive, not a bug. C4.4 auth family closed. See
+  [MAKER_CHECKER_PLAN.md § Review #15](planning/MAKER_CHECKER_PLAN.md). Still outstanding, unchanged:
+  the C3 Playwright maker→checker round-trip spec, and CI still runs `mvn -B verify` only (no
+  vitest/Playwright in CI).
 - **63-character physical table-name truncation.** `..._CUSTOMERAPPLICATION` is stored as
   `..._CUSTOMERAPP` to fit Postgres' identifier limit. Two entities with a long shared prefix in the
   same app would collide silently.
