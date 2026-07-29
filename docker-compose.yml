@@ -1,0 +1,124 @@
+# AppBana — full-stack Docker Compose
+#
+# Required environment variables (set in a .env file or export before running):
+#   OPENAI_API_KEY   — your OpenAI API key
+#
+# Optional overrides:
+#   OPENAI_MODEL     — default: gpt-4o-mini
+#   DB_PASSWORD      — default: appbana_dev_2026
+#
+# Usage:
+#   docker compose up --build
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: appbana
+      POSTGRES_USER: appbana
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-appbana_dev_2026}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appbana"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"   # HTTP / REST API
+      - "6334:6334"   # gRPC (used by ai-builder)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend services ────────────────────────────────────────────────────────
+
+  app-bana-service:
+    build:
+      context: .
+      dockerfile: app-bana-service/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/appbana
+      DATABASE_USER: appbana
+      DATABASE_PASSWORD: ${DB_PASSWORD:-appbana_dev_2026}
+      AI_PROVIDER: openai
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+
+  ai-builder:
+    build:
+      context: .
+      dockerfile: ai-builder/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/appbana
+      DATABASE_USER: appbana
+      DATABASE_PASSWORD: ${DB_PASSWORD:-appbana_dev_2026}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6334"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      AI_PORT: "8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+
+  # ── Frontend services ───────────────────────────────────────────────────────
+
+  app-bana-studio:
+    build:
+      context: .
+      dockerfile: app-bana-studio/Dockerfile
+    ports:
+      - "5174:80"
+    depends_on:
+      app-bana-service:
+        condition: service_healthy
+      ai-builder:
+        condition: service_healthy
+
+  app-bana-runtime:
+    build:
+      context: .
+      dockerfile: app-bana-runtime/Dockerfile
+    ports:
+      - "5175:80"
+    depends_on:
+      app-bana-service:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  qdrant_data:
