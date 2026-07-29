@@ -37,14 +37,14 @@
 
 ## ✅ Build health (single source — do not duplicate these counts elsewhere)
 
-Last verified 2026-07-31 at Review #13 (`ai-builder` re-verified on JDK 25 after the Java 21→25 upgrade).
+Last verified 2026-07-31 at Review #14 (`ai-builder` re-verified on JDK 25 after the Java 21→25 upgrade).
 
 | Module | Command | Result |
 |---|---|---|
 | `app-bana` | `mvn -B verify` | 306 tests · 0 failures · 0 errors |
-| `ai-builder` | `mvn -B verify` | **177 keyless** / **194 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
+| `ai-builder` | `mvn -B verify` | **178 keyless** / **195 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
 | `app-bana-runtime` | `pnpm test` | 269 tests · 0 failures |
-| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 177) |
+| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 178) |
 
 > [!IMPORTANT]
 > **The build now requires JDK 25.** Commit `c07f62f` moved `<java.version>` from 21 to 25 in the parent
@@ -68,7 +68,7 @@ different total depending on whether `OPENAI_API_KEY` is set, so a single number
 someone. Three classes — `KnowledgeBaseServiceIntegrationTest` (5), `EmbeddingServiceIntegrationTest` (7)
 and `AppBanaPromptEnhancerIntegrationTest` (5) — gate on the key via `Assumptions.assumeTrue` **at class
 level**, so without it they report `tests=0` and do **not** appear as skipped. They contribute 17 tests, not
-2 skips. Hence 177 keyless / 194 with the key (was 157 / 174 before C4.4 + C4.4a + C4.4b + C4.4c + C4.4d + C4.4e added 13 tests to reach 170 / 187; C4.4f then added 2 more `AiAgentTest` auth-abort cases to reach 172 / 189; Review #13 then added 3 `CreateEntityToolLinkFailureTest` cases + 2 more `AiAgentTest` auth-abort cases to reach 177 / 194).
+2 skips. Hence 178 keyless / 195 with the key (was 157 / 174 before C4.4 + C4.4a + C4.4b + C4.4c + C4.4d + C4.4e added 13 tests to reach 170 / 187; C4.4f then added 2 more `AiAgentTest` auth-abort cases to reach 172 / 189; Review #13 then added 3 `CreateEntityToolLinkFailureTest` cases + 2 more `AiAgentTest` auth-abort cases to reach 177 / 194; Review #14 then added 1 `ToolAuthHeaderTest` census guard test to reach 178 / 195).
 
 This previously read `145` and was then "corrected" to `168` with a note claiming the suite had been
 silently red. That framing was wrong and is retracted: **145 was the correct keyless/CI number at the
@@ -206,6 +206,14 @@ See the [full plan](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) for stage-by-stage 
   block from the prompt with no abort at all. Both now throw `BackendAuthException` on 401, propagated
   through `think()`'s catch and both loop call sites to the same session-ended abort as the C4.4f
   tool-result path. See [MAKER_CHECKER_PLAN.md § Review #13](planning/MAKER_CHECKER_PLAN.md).
+- ~~**Review #13's 401 census (27 sites, 3 exceptions) was run by hand and never re-runnable.**~~
+  **Fixed in Review #14** — approved verdict; all three Review #13 fixes confirmed correct by mutation
+  testing. New `ToolAuthHeaderTest.everyRequestSiteChecksFor401ExceptTheDocumentedAllowList` counts
+  `HttpRequest.newBuilder(`/`statusCode() == 401` per file under `com.appbana.ai` and asserts they
+  match, except a documented 3-file allow-list (both LLM provider services, and `ScaffoldAppTool`'s
+  deliberately-unchecked rollback delete). See [MAKER_CHECKER_PLAN.md § Review #14](planning/MAKER_CHECKER_PLAN.md).
+  Two 🟢 non-blocking nits from the same review were left unfixed by design ("not worth a round on
+  their own"): worth picking up next time either loop is opened, not tracked as a separate item here.
 - **63-character physical table-name truncation.** `..._CUSTOMERAPPLICATION` is stored as
   `..._CUSTOMERAPP` to fit Postgres' identifier limit. Two entities with a long shared prefix in the
   same app would collide silently.

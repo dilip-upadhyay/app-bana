@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * which misses because it uses the unprefixed entity name -- so the tool answered "entity not
  * found" for an entity that exists.
  *
- * <p>Three tests, because no two of them cover each other:
+ * <p>Four tests, because no two of them cover each other:
  * <ul>
  *   <li>{@link #everyDrivableToolPutsTheTokenOnTheWire()} proves the header actually reaches the
  *       socket, by recording what a real {@link HttpServer} received. A source scan cannot show
@@ -49,6 +49,14 @@ import static org.junit.jupiter.api.Assertions.fail;
  *       accepted, returned 200, and produced exactly the pre-fix behaviour. Test 1 always supplies a
  *       good token and test 2 only checks for the literal text, so the guard had been verified in
  *       one direction only.</li>
+ *   <li>{@link #everyRequestSiteChecksFor401ExceptTheDocumentedAllowList()} -- Review #13/#14: five
+ *       rounds (C4.4c/d/e/f, #13) each fixed the specific 401-handling defect a reviewer had just
+ *       found and left the next one, one helper deeper, for the round after. The review that finally
+ *       closed the class did it by counting operations, not naming nouns: every
+ *       {@code HttpRequest.newBuilder(} site in {@code com.appbana.ai}, paired against every
+ *       {@code statusCode() == 401} check, per file. This test is that count turned into a guard
+ *       instead of a one-off command, so a fourteenth helper that forgets the check fails the build
+ *       instead of waiting for round #15.</li>
  * </ul>
  */
 class ToolAuthHeaderTest {
@@ -196,6 +204,74 @@ class ToolAuthHeaderTest {
 
     private static String describe(String token) {
         return token == null ? "null" : "\"" + token + "\"";
+    }
+
+    /**
+     * Review #13/#14 (C4.4c-#13 meta-lesson) -- the durable fix for a "guard checked at the wrong
+     * boundary" defect class is a census, not a description. Every prior round in this family (a
+     * missing header, a swallowed 401, a helper the tool-level fix didn't reach) was found by
+     * enumerating {@code HttpRequest.newBuilder(} call sites by hand and was re-findable by the same
+     * enumeration next round, because nothing turned the count into an assertion.
+     *
+     * <p>For every {@code .java} file under {@code com/appbana/ai} (recursively -- a file in a new
+     * subpackage is not exempt), this counts {@code HttpRequest.newBuilder(} sites and
+     * {@code statusCode() == 401} checks and requires them to match, EXCEPT the three files below,
+     * each with the exact gap it is allowed and the reason on record:
+     * <ul>
+     *   <li>{@code llm/GeminiLlmService.java}, {@code llm/OpenAiLlmService.java} -- third-party LLM
+     *       APIs authenticated with their own provider key; there is no session token to be invalid.</li>
+     *   <li>{@code agent/tool/ScaffoldAppTool.java} -- {@code rollback()}'s delete call deliberately
+     *       skips the check: rollback only runs after a failure the caller already handled, and its
+     *       own auth catch (at the call site, before the generic catch) means a 401 during rollback
+     *       itself is reported, not silently retried.</li>
+     * </ul>
+     *
+     * <p>Adding a fourteenth call site anywhere else that forgets the check fails THIS test, instead
+     * of waiting for a reviewer to re-run the enumeration by hand in round #15.
+     */
+    @Test
+    @DisplayName("every HttpRequest.newBuilder() site under com.appbana.ai checks for 401, except the documented allow-list")
+    void everyRequestSiteChecksFor401ExceptTheDocumentedAllowList() throws IOException {
+        // Path (relative to com/appbana/ai, forward-slashed) -> the exact allowed
+        // (requestSites - authChecks) gap for that file, with the reason above.
+        Map<String, Integer> allowedGap = Map.of(
+                "llm/GeminiLlmService.java", 1,
+                "llm/OpenAiLlmService.java", 1,
+                "agent/tool/ScaffoldAppTool.java", 1);
+
+        Path root = locateAiSources();
+        List<String> unexplained = new ArrayList<>();
+
+        try (Stream<Path> sources = Files.walk(root)) {
+            for (Path source : sources.filter(p -> p.toString().endsWith(".java")).toList()) {
+                String text = Files.readString(source);
+                int requestSites = countOccurrences(text, "HttpRequest.newBuilder(");
+                int authChecks = countOccurrences(text, "statusCode() == 401");
+                int gap = requestSites - authChecks;
+
+                String key = root.relativize(source).toString().replace('\\', '/');
+                int allowed = allowedGap.getOrDefault(key, 0);
+                if (gap != allowed) {
+                    unexplained.add(key + ": " + requestSites + " request site(s), " + authChecks
+                            + " 401 check(s), gap=" + gap + " (allowed=" + allowed + ")");
+                }
+            }
+        }
+
+        assertTrue(unexplained.isEmpty(),
+                "Every HttpRequest.newBuilder() call site under com.appbana.ai must check for a 401 "
+                        + "response, except the documented allow-list in this test's javadoc. "
+                        + "Unexplained mismatch(es): " + unexplained);
+    }
+
+    private static int countOccurrences(String haystack, String needle) {
+        int count = 0;
+        int index = 0;
+        while ((index = haystack.indexOf(needle, index)) != -1) {
+            count++;
+            index += needle.length();
+        }
+        return count;
     }
 
     /**

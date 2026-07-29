@@ -732,6 +732,40 @@ in the codebase is one row in a table, with one column for "detects 401" and one
 correctly" — a defect class closes when every row is checked, not when every *name someone has used so
 far* is checked.
 
+#### Review #14 — Approved; the census that closed Review #13 was still just a command, not a guard
+
+Review #14 re-verified all three Review #13 fixes by mutation testing (reverting each one and confirming
+the specific regression test goes red with the expected message) and found no defect in any of them —
+first "Approved" verdict in this family. It flagged one thing left undone from Review #13's own stated
+scope: Review #13's census (27 `HttpRequest.newBuilder()` sites, 24 correct 401 checks, 3 named
+exceptions) was run by hand, wired into the write-up, and then never turned into anything that runs
+again. Nothing stops a fourteenth call site from omitting the check; the only way to notice would be
+re-running the same by-hand enumeration next round.
+
+**Fix:** `ToolAuthHeaderTest.everyRequestSiteChecksFor401ExceptTheDocumentedAllowList` (new test) walks
+`com/appbana/ai` recursively, and for every `.java` file counts occurrences of `HttpRequest.newBuilder(`
+and `statusCode() == 401`. The two counts must match, per file, except an explicit allow-list with the
+gap and the reason for each written directly into the test's javadoc and its assertion message:
+- `llm/GeminiLlmService.java`, `llm/OpenAiLlmService.java` (gap 1 each) — third-party provider APIs,
+  authenticated with their own provider key; there is no session token to be invalid.
+- `agent/tool/ScaffoldAppTool.java` (gap 1) — `rollback()`'s delete deliberately skips the check; it
+  only runs after a failure the caller already handled, and a 401 during rollback itself is reported by
+  its own call-site catch, not silently retried.
+
+Mutation-verified before landing: temporarily changed `CreateEntityTool`'s GET-side check from
+`getRes.statusCode() == 401` to an unreachable literal, re-ran only the new test, confirmed it failed
+naming `agent/tool/CreateEntityTool.java` with the exact expected/actual gap, then reverted.
+
+**Two non-blocking 🟢 nits noted, deliberately not fixed this round** (per the review: "not worth a
+round on their own — worth doing next time either loop is opened"): tracked as backlog in
+[`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md), not written up further here.
+
+**Meta-lesson:** *"the census existed, it worked, it was in the review — and what got implemented was
+the three fixes it pointed at, not the census itself. Even when the durable artefact is handed over
+ready-made, the instinct is to consume it as a to-do list and let it evaporate."* A census is only a
+guard once it is re-runnable and wired into the test suite; otherwise it is a very good one-time answer
+to a question nobody will remember to ask again the same way.
+
 
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
 > Accepting `approvalRequired` in the two parameter schemas was necessary but not sufficient. `CreateEntityTool.buildEntityMetadata` constructs the *entire* body POSTed to `/schema` and silently drops anything it does not explicitly copy, so the flag never reached the backend. Because `SchemaEnricher` read the flag independently and injected the 8 approval columns anyway, the failure was invisible from the outside: the physical table came out approval-shaped while the schema record carried `approvalRequired=false`, and all 13 backend guards branch on `schema.isApprovalRequired()` rather than on the presence of the columns. The entity *looked* approval-enabled and behaved as if it were not. Fixed, with `CreateEntityToolApprovalTest` pinning the payload.
