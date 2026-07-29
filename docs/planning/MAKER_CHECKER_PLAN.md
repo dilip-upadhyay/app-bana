@@ -801,6 +801,38 @@ red or green verdict from the guard itself.
 still runs `mvn -B verify` only — no vitest, no Playwright. The new guard lives in the Maven reactor, so
 it is enforced on every push; the frontend guards still are not.
 
+#### Review #16 — Approved; the C4.4 auth family is closed
+
+Doc-only change (Review #15's javadoc sentence). Re-verified: 178/0/2 unchanged, tree clean, the
+27-site/24-check/gap-3 census matches HEAD, and `ScaffoldAppTool` is still exactly 3 sites / 2 checks —
+confirming the `allowed=1` allow-list entry hasn't drifted stale since Review #15. One 🟢 curiosity noted
+and explicitly marked as zero action: the new javadoc's `{@code statusCode() == 401}` literal makes this
+test file the one place that would self-pollute the count if `locateAiSources()`'s walk root were ever
+widened past `src/main/java` — inert today, worth remembering if that method is ever generalised.
+
+**Verdict:** the C4.4 authentication family is closed — every defect fixed, each fix mutation-verified,
+and the enumeration that found them converted into a test proven (Review #15) to bite on the hardest
+case, not only the obvious one.
+
+**What outlives the epic, neither introduced by it:** the C3 Playwright maker→checker round-trip
+(open since Review #10), and CI running `mvn -B verify` only — the runtime's 269 vitest tests and the
+Playwright suite (whose `hardening-*.spec.ts` files self-skip on a health-check failure, silently
+turning "could not run" into "passed") are not in CI. The frontend legs of the auth work verified across
+this epic are exactly the parts CI cannot see.
+
+**Meta-observation — the structural shift that closed the family, marked for reuse in C5 and beyond:**
+Rounds 1–13 each found a defect, got exactly that defect fixed, and the next round found the next
+instance of the same family one layer deeper — competent every time, and the pattern never broke,
+because every round's output was a *description*, and a description gets consumed as a to-do list and
+evaporates. Round 14 was the first round whose output was an artefact rather than a finding: a census,
+handed over as data. Round 15 turned that census into a test. Round 16 is documentation of why the test
+is shaped the way it is. Three rounds, one production line changed between them, and a family that had
+produced a defect in five consecutive commits produced none. **The generalizable tell: the moment a
+finding can be expressed as "N sites, M correct," that subtraction is the deliverable — leaving it in
+prose guarantees someone re-derives it by hand later, or doesn't.** Apply this the next time a review
+finds the third instance of anything, in C5 or otherwise: stop shipping the fix alone and ship the
+enumeration as a re-runnable guard in the same change.
+
 
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
 > Accepting `approvalRequired` in the two parameter schemas was necessary but not sufficient. `CreateEntityTool.buildEntityMetadata` constructs the *entire* body POSTed to `/schema` and silently drops anything it does not explicitly copy, so the flag never reached the backend. Because `SchemaEnricher` read the flag independently and injected the 8 approval columns anyway, the failure was invisible from the outside: the physical table came out approval-shaped while the schema record carried `approvalRequired=false`, and all 13 backend guards branch on `schema.isApprovalRequired()` rather than on the presence of the columns. The entity *looked* approval-enabled and behaved as if it were not. Fixed, with `CreateEntityToolApprovalTest` pinning the payload.

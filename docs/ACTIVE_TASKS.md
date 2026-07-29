@@ -223,6 +223,16 @@ See the [full plan](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) for stage-by-stage 
   [MAKER_CHECKER_PLAN.md § Review #15](planning/MAKER_CHECKER_PLAN.md). Still outstanding, unchanged:
   the C3 Playwright maker→checker round-trip spec, and CI still runs `mvn -B verify` only (no
   vitest/Playwright in CI).
+- ~~**C4.4 AI Builder auth-handling family (401 detection at every `HttpRequest.newBuilder()` site).**~~
+  **Closed in Review #16** — doc-only round, re-verified 178/0/2 and the 27-site/24-check/gap-3 census
+  unchanged at HEAD, confirmed the `ScaffoldAppTool` allow-list entry hasn't gone stale. Every defect in
+  this family (C4.4c through Review #13) is fixed, mutation-verified, and the enumeration that found
+  them is now a re-runnable guard (Review #14/#15). See
+  [MAKER_CHECKER_PLAN.md § Review #16](planning/MAKER_CHECKER_PLAN.md) for the closing meta-observation
+  on why rounds 14–16 broke the 13-round pattern of "fix, then find the next instance one layer down."
+  **Still outstanding, neither introduced by nor closed by this epic:** the C3 Playwright maker→checker
+  round-trip spec (open since Review #10), and CI running `mvn -B verify` only — the vitest suite and
+  Playwright (whose `hardening-*.spec.ts` files self-skip on a health-check failure) are not in CI.
 - **63-character physical table-name truncation.** `..._CUSTOMERAPPLICATION` is stored as
   `..._CUSTOMERAPP` to fit Postgres' identifier limit. Two entities with a long shared prefix in the
   same app would collide silently.
