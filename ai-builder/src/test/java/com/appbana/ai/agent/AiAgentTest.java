@@ -4,11 +4,14 @@ import com.appbana.ai.agent.tool.*;
 import com.appbana.ai.llm.LlmRegistry;
 import com.appbana.ai.llm.LlmService;
 import com.appbana.ai.llm.OpenAiLlmService;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -413,6 +416,97 @@ class AiAgentTest {
         assertNotNull(message);
         assertTrue(message.toLowerCase().contains("session"), "Expected a session-ended message: " + message);
         assertFalse(message.toLowerCase().contains("rephrase"), "Must not say 'rephrase': " + message);
+    }
+
+    /**
+     * Review #13 -- {@code AiAgent.loadEntitySummary} runs inside {@code think()}'s prompt
+     * building, BEFORE the LLM is ever called and before any tool executes, so the existing
+     * tool-result-based {@code isAuthFailure()} abort (tested above) never sees a 401 here. This
+     * used to be swallowed into {@code log.debug} + an empty cached summary, so a dead session
+     * silently dropped the entity block from the prompt and the LLM answered from nothing --
+     * confidently wrong ("your app has no entities"), with no abort and no auth signal at all.
+     * Asserting {@code times(0)} on the LLM mock is the point: this must abort BEFORE the LLM is
+     * ever invoked, not merely produce the right final message after invoking it anyway.
+     */
+    @Test
+    void testAgentLoop_LoadEntitySummaryAuthFailureAbortsBeforeAnyLlmCall() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/appbana-studio/", exchange -> {
+            byte[] bytes = "{\"error\":\"unauthorized\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(401, bytes.length);
+            try (var os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        });
+        server.start();
+        try {
+            agent.withBackendBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
+            String userMessage = "How many characters can I enter in Department?";
+            AgentContext context = AgentContext.create("tenant1", "app-42", "user1", "session1", "test-token");
+
+            AgentResponse response = agent.process(userMessage, context);
+
+            assertFalse(response.isSuccess());
+            assertNotNull(response.getError());
+            assertTrue(response.getError().toLowerCase().contains("session"),
+                    "Expected a session-ended message, got: " + response.getError());
+            assertFalse(response.getError().toLowerCase().contains("rephrase"),
+                    "Auth failure must not be reported as a generic 'please rephrase' error: " + response.getError());
+            verify(llmService, times(0)).chatWithJsonMode(anyString());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    /** Same scenario, streaming loop -- must also emit `auth_expired`, not merely `done`. */
+    @Test
+    void testAgentLoopStream_LoadEntitySummaryAuthFailureEmitsAuthExpiredBeforeAnyLlmCall() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/appbana-studio/", exchange -> {
+            byte[] bytes = "{\"error\":\"unauthorized\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(401, bytes.length);
+            try (var os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        });
+        server.start();
+        try {
+            agent.withBackendBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
+            String userMessage = "How many characters can I enter in Department?";
+            AgentContext context = AgentContext.create("tenant1", "app-42", "user1", "session1", "test-token");
+
+            List<String> emittedEventNames = new java.util.ArrayList<>();
+            List<Object> emittedPayloads = new java.util.ArrayList<>();
+            StreamEmitter fakeEmitter = new StreamEmitter() {
+                @Override
+                public void emit(String eventName, Object payload) {
+                    emittedEventNames.add(eventName);
+                    emittedPayloads.add(payload);
+                }
+
+                @Override
+                public void complete() {
+                    // no-op for this test
+                }
+            };
+
+            AgentResponse response = agent.processWithStream(userMessage, context, null, null, fakeEmitter);
+
+            assertFalse(response.isSuccess());
+            verify(llmService, times(0)).chatWithJsonMode(anyString());
+            assertTrue(emittedEventNames.contains("auth_expired"),
+                    "Expected an auth_expired SSE event, got: " + emittedEventNames);
+            assertTrue(emittedEventNames.contains("done"));
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> authExpiredPayload = (Map<String, Object>) emittedPayloads.get(
+                    emittedEventNames.indexOf("auth_expired"));
+            String message = (String) authExpiredPayload.get("message");
+            assertNotNull(message);
+            assertTrue(message.toLowerCase().contains("session"), "Expected a session-ended message: " + message);
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test

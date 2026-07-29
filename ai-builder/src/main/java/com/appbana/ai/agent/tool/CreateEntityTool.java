@@ -199,53 +199,58 @@ public class CreateEntityTool implements Tool {
   }
 
   // Method to link entity to app
-  private void linkEntityToApp(String appId, String tenantId, String token, String entityName) {
-    try {
-      String appUrl = String.format("%s/appbana-studio/%s/apps/%s", baseUrl, tenantId, appId);
+  // Review #13 (C4.4f follow-up): this used to swallow every failure (including 401) into a
+  // log.error + silent return, so create_entity reported success while the entity was never
+  // actually linked to the app. It now throws on ANY non-2xx (BackendAuthException for 401,
+  // a plain RuntimeException otherwise) so the failure propagates to execute()'s try/catch and
+  // the tool reports the failure instead of a false success.
+  private void linkEntityToApp(String appId, String tenantId, String token, String entityName) throws Exception {
+    String appUrl = String.format("%s/appbana-studio/%s/apps/%s", baseUrl, tenantId, appId);
 
-      // 1. Fetch App
-      HttpRequest getReq = HttpRequest.newBuilder()
+    // 1. Fetch App
+    HttpRequest getReq = HttpRequest.newBuilder()
+        .uri(URI.create(appUrl))
+        .header("Authorization", "Bearer " + token)
+        .GET()
+        .build();
+
+    HttpResponse<String> getRes = httpClient.send(getReq, HttpResponse.BodyHandlers.ofString());
+    if (getRes.statusCode() == 401) {
+      throw new BackendAuthException(getName() + ": link-entity-to-app GET returned 401");
+    }
+    if (getRes.statusCode() != 200) {
+      throw new IllegalStateException("Failed to fetch app for linking: " + getRes.body());
+    }
+
+    Map<String, Object> appData = new com.fasterxml.jackson.databind.ObjectMapper().readValue(getRes.body(),
+        Map.class);
+
+    // 2. Add to schemas list
+    List<String> schemas = (List<String>) appData.get("schemas");
+    if (schemas == null) {
+      schemas = new java.util.ArrayList<>();
+    }
+    if (!schemas.contains(entityName)) {
+      schemas.add(entityName);
+      appData.put("schemas", schemas);
+
+      // 3. Save App
+      String updateBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(appData);
+      HttpRequest putReq = HttpRequest.newBuilder()
           .uri(URI.create(appUrl))
+          .header("Content-Type", "application/json")
           .header("Authorization", "Bearer " + token)
-          .GET()
+          .PUT(HttpRequest.BodyPublishers.ofString(updateBody))
           .build();
 
-      HttpResponse<String> getRes = httpClient.send(getReq, HttpResponse.BodyHandlers.ofString());
-      if (getRes.statusCode() != 200) {
-        log.error("Failed to fetch app for linking: {}", getRes.body());
-        return;
+      HttpResponse<String> putRes = httpClient.send(putReq, HttpResponse.BodyHandlers.ofString());
+      if (putRes.statusCode() == 401) {
+        throw new BackendAuthException(getName() + ": link-entity-to-app PUT returned 401");
       }
-
-      Map<String, Object> appData = new com.fasterxml.jackson.databind.ObjectMapper().readValue(getRes.body(),
-          Map.class);
-
-      // 2. Add to schemas list
-      List<String> schemas = (List<String>) appData.get("schemas");
-      if (schemas == null) {
-        schemas = new java.util.ArrayList<>();
+      if (putRes.statusCode() != 200) {
+        throw new IllegalStateException("Failed to link entity to app: " + putRes.body());
       }
-      if (!schemas.contains(entityName)) {
-        schemas.add(entityName);
-        appData.put("schemas", schemas);
-
-        // 3. Save App
-        String updateBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(appData);
-        HttpRequest putReq = HttpRequest.newBuilder()
-            .uri(URI.create(appUrl))
-            .header("Content-Type", "application/json")
-            .header("Authorization", "Bearer " + token)
-            .PUT(HttpRequest.BodyPublishers.ofString(updateBody))
-            .build();
-
-        HttpResponse<String> putRes = httpClient.send(putReq, HttpResponse.BodyHandlers.ofString());
-        if (putRes.statusCode() == 200) {
-          log.info("Linked entity {} to app {}", entityName, appId);
-        } else {
-          log.error("Failed to link entity to app: {}", putRes.body());
-        }
-      }
-    } catch (Exception e) {
-      log.error("Error linking entity to app", e);
+      log.info("Linked entity {} to app {}", entityName, appId);
     }
   }
 

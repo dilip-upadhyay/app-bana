@@ -670,6 +670,68 @@ service, discoverable only by making the call and seeing what comes back. Presen
 because they are cheap and total; validity is the one that actually protects anything, and it is always
 the harder one to reach.
 
+#### Review #13 — the boundary the fix draws is always the noun the last review named, and the defect is one noun down
+
+C4.4f's fix was scoped to "tools": every `Tool.execute()` now catches `BackendAuthException` before its
+generic `catch (Exception e)`. Review #13 found the exact orphan-shaped defect it had just fixed —
+schema/record written, a dependent linkage silently lost, tool reports success anyway — **one tool over**,
+inside a *method* that isn't itself a tool: `CreateEntityTool.linkEntityToApp` makes a GET (fetch the app)
+and a PUT (save it back with the entity linked) and had wrapped both in a try/catch that logged any
+failure, including 401, and returned `void`. `execute()`'s 2xx-on-`/schema` branch reached
+`ToolResult.success(...)` regardless of whether the link step actually happened.
+
+It found a second instance in a place "tools" cannot even describe: `AiAgent.loadEntitySummary` — called
+from `buildExecutionContext()`, called from `think()`, called from *both* agent loops — fetches the
+app to build the "ENTITIES IN THIS APP" prompt block, and silently swallowed every non-200 (401
+included) into `log.debug` plus a cached empty string. This runs during **prompt building, before any
+tool executes**, so the tool-result-based `isAuthFailure()` abort from C4.4f can never see it: on a dead
+session the entity block just vanishes from the prompt, the LLM answers from nothing, no tool is ever
+called, no auth check fires, and the user gets a confidently wrong answer ("your app has no entities").
+
+**Fix, same shape as C4.4f, applied to both:**
+- `linkEntityToApp` now declares `throws Exception` and throws `BackendAuthException` on a 401 from
+  either the GET or the PUT, and a plain `IllegalStateException` on any other non-2xx — no more
+  try/catch to swallow either into a log line. `execute()`'s existing `catch (BackendAuthException) {…}
+  catch (Exception e) {…}` (already correctly ordered by C4.4f) needed zero changes to handle it.
+- `loadEntitySummary` now throws `BackendAuthException` specifically on 401 (every *other* non-200
+  still logs-and-returns-empty as before — this fix is scoped to the auth case the reviewer found, not
+  a blanket "any failure aborts the conversation"). `think()`'s blanket `catch (Exception e) { return
+  null; }` sat directly between that throw and both loop call sites, so it gained a
+  `catch (BackendAuthException authEx) { throw authEx; }` **before** the generic catch (required order:
+  more specific catch first). Both `process()` and `processWithStream()` now wrap their `think(...)` call
+  in a `try { … } catch (BackendAuthException authEx) { … }` that aborts with the exact same
+  `SESSION_ENDED_MESSAGE` (new shared constant — also closes the C4.4f nit about the message being
+  duplicated verbatim in four places) as the tool-result path, and — for the streaming loop —
+  `emitter.authExpired(...)`.
+
+**Regression tests:**
+- `CreateEntityToolLinkFailureTest` (new file) drives the real HTTP path with a stub `HttpServer`
+  (source-scan cannot prove a swallowed exception was actually swallowed) asserting a 401 on the link GET
+  *or* PUT makes `create_entity` report `isAuthFailure()==true`/`isSuccess()==false`, and that a 500
+  (non-auth) still fails the tool rather than merely logging.
+- `AiAgentTest.testAgentLoop_LoadEntitySummaryAuthFailureAbortsBeforeAnyLlmCall` and its streaming
+  counterpart stand up a stub backend returning 401 on the app-fetch GET, and assert the agent aborts
+  with the session-ended message **and `verify(llmService, times(0))`** — the LLM must never be called,
+  not merely receive the right final message after being called anyway.
+
+**Reviewer's own methodology, worth keeping:** the review enumerated all 27 `HttpRequest.newBuilder()`
+call sites across 17 files under `com.appbana.ai` (2 excluded by design — LLM provider services), and
+of the remaining 25, 21 already handled 401 correctly and exactly 3 did not (the two above, plus
+`ScaffoldAppTool.rollback`, judged safe/unreachable on the auth path by design). Enumerating *operations*
+(every HTTP call site) rather than *nouns* (tools, or "the loop", or whatever the last review happened to
+name) is what makes that closure claim — *"fix these three and the class is closed, with nothing left for
+me to find in it"* — actually checkable, instead of one more round of careful reading that will, per this
+epic's track record, find the next noun down.
+
+**Meta-lesson:** across C4.4c → C4.4f, each review scoped its fix to the noun the *previous* review had
+named (first "header attachment", then "tools", now — almost — "AiAgent"), and each time the defect
+that survived lived at the next noun down inside that boundary (a helper inside a tool; a prompt-building
+fetch inside the agent that no fix ever called a "tool" because it isn't one). The mechanical antidote is
+to stop enumerating nouns and start counting operations: every `HttpRequest.newBuilder()` (or equivalent)
+in the codebase is one row in a table, with one column for "detects 401" and one for "acts on it
+correctly" — a defect class closes when every row is checked, not when every *name someone has used so
+far* is checked.
+
 
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
 > Accepting `approvalRequired` in the two parameter schemas was necessary but not sufficient. `CreateEntityTool.buildEntityMetadata` constructs the *entire* body POSTed to `/schema` and silently drops anything it does not explicitly copy, so the flag never reached the backend. Because `SchemaEnricher` read the flag independently and injected the 8 approval columns anyway, the failure was invisible from the outside: the physical table came out approval-shaped while the schema record carried `approvalRequired=false`, and all 13 backend guards branch on `schema.isApprovalRequired()` rather than on the presence of the columns. The entity *looked* approval-enabled and behaved as if it were not. Fixed, with `CreateEntityToolApprovalTest` pinning the payload.
