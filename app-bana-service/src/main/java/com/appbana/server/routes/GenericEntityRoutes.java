@@ -1999,13 +1999,13 @@ public class GenericEntityRoutes {
         // correctly-provisioned approval entity, silently downgrading what should be a new
         // DRAFT revision into an in-place edit of a live APPROVED row — a data-integrity
         // failure, not a cosmetic one, since the approved record is mutated without review.
-        boolean supportsRevisions = schema.isApprovalRequired();
-
-        if (!"APPROVED".equalsIgnoreCase(currentStatus) || !supportsRevisions) {
-            if ("APPROVED".equalsIgnoreCase(currentStatus)) {
-                LOG.warn("[APPROVAL] Entity {} has no approval workflow — falling back to in-place edit "
-                        + "of APPROVED row {}.", schema.getName(), idStr);
-            }
+        //
+        // C4.6c — C4.6 left behind `boolean supportsRevisions = schema.isApprovalRequired()`
+        // and a `|| !supportsRevisions` disjunct here. The method already returned at the top
+        // unless that flag is true, so the disjunct was dead and the legacy-fallback WARN it
+        // guarded was unreachable. Every entity reaching this line supports revisions; there is
+        // no in-place-edit fallback for an APPROVED row, and there must not be one.
+        if (!"APPROVED".equalsIgnoreCase(currentStatus)) {
             // DRAFT / REJECTED rows are private to the maker: edit in place and return to DRAFT.
             data.put("approval_status", "DRAFT");
             data.put("rejection_reason", null);

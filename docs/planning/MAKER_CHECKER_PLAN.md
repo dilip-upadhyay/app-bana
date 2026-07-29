@@ -260,8 +260,17 @@ creating another row, so form autosave cannot spam the table.
 If a revision's parent has been deleted meanwhile, the dangling `approval_parent_id` is nulled and
 the revision simply becomes the live row (logged as a WARN) — data is never dropped.
 
-**Legacy tables** created before C2.3 have no `approval_parent_id` column. `applyApprovalPutGuard`
-detects this, logs a WARN and falls back to the old in-place edit rather than failing.
+~~**Legacy tables** created before C2.3 have no `approval_parent_id` column. `applyApprovalPutGuard`
+detects this, logs a WARN and falls back to the old in-place edit rather than failing.~~
+
+**C4.6c — retraction: that fallback no longer exists and, since C4.6, could not execute.** The
+detection it describes was a `schema.getFields()` probe for `approval_parent_id`, which C4.6 replaced
+with `schema.isApprovalRequired()` — tautologically true by the time control reaches that line, so the
+branch was dead and the WARN unreachable. The dead code is now removed. Legacy tables are handled
+earlier and more reliably instead: `SchemaManager.syncApprovalColumns` materialises the column on any
+schema save, so a pre-C2.3 table is migrated rather than special-cased at write time. There is no
+in-place-edit fallback for an APPROVED row, and there must not be one — that fallback was the
+data-integrity failure C4.6 fixed.
 
 ### Implemented behaviour — `?_approvalStatus=` (C2.7)
 
