@@ -86,6 +86,10 @@ public class CreateEntityTool implements Tool {
                 "required": ["name", "type", "required"]
               }
             },
+            "approvalRequired": {
+              "type": "boolean",
+              "description": "Phase C4 — set true to put this entity behind a two-person (maker-checker) approval workflow. Rows are then created as DRAFT, must be submitted for approval, and are invisible to normal reads until a DIFFERENT user approves them. Use for regulated records: customer onboarding, KYC, loan/credit applications, expense claims, purchase orders, policy issuance, contracts, employee onboarding, payments. Do NOT set it for reference/lookup tables or low-risk data (blog posts, todos, product catalogues). Only set it after the user has agreed to the approval flow in the Phase 1 specification."
+            },
             "appId": {
               "type": "string",
               "description": "Target App ID. If not provided, uses current context."
@@ -243,7 +247,11 @@ public class CreateEntityTool implements Tool {
   /**
    * Build entity metadata from tool arguments
    */
-  private Map<String, Object> buildEntityMetadata(Map<String, Object> arguments) {
+  // Package-private (not private) so CreateEntityToolApprovalTest can assert the
+  // exact body this tool POSTs to /schema without standing up an HTTP stub. This
+  // method decides what survives into the backend schema, so it is worth testing
+  // directly — Task C4.1 exists because a field silently failed to survive it.
+  Map<String, Object> buildEntityMetadata(Map<String, Object> arguments) {
     Map<String, Object> metadata = new HashMap<>();
 
     String name = (String) arguments.get("name");
@@ -252,6 +260,21 @@ public class CreateEntityTool implements Tool {
     metadata.put("displayName", arguments.getOrDefault("displayName", name));
     metadata.put("fields", arguments.get("fields"));
     metadata.put("datasource", "default");
+
+    // Task C4.1 — forward the approval flag to the backend's EntitySchema.
+    // This method builds the ENTIRE body POSTed to /schema, so anything not
+    // copied here is silently dropped. Before C4.1 'approvalRequired' was one
+    // of those: SchemaEnricher already injected the 8 approval columns when the
+    // flag was present, so the physical table came out approval-shaped, but the
+    // schema record itself had approvalRequired=false — and every backend guard
+    // (GenericEntityRoutes, ApprovalService, EntityCrudService) branches on
+    // schema.isApprovalRequired(), not on the presence of the columns. The
+    // result was an entity that LOOKED approval-enabled and behaved as if it
+    // were not. Only forward an explicit true; never emit the key otherwise, so
+    // non-approval entities keep exactly the payload shape they had before.
+    if (Boolean.TRUE.equals(arguments.get("approvalRequired"))) {
+      metadata.put("approvalRequired", true);
+    }
 
     return metadata;
   }

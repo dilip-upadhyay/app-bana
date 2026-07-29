@@ -186,7 +186,16 @@ export async function fetchEntityRows(
   token: string,
   params: Record<string, string | number> = {}
 ): Promise<{ rows: any[]; total: number }> {
-  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
+  // Review #5 (High A) — EntityCrudService.parseFilters() no longer runs a
+  // second, form-encoding-style decode (URLDecoder) on top of the RFC 3986
+  // percent-decode the JDK HTTP server already performs on the query string;
+  // that second decode was turning a literal '+' (e.g. in a phone number or
+  // timezone offset) into a space. URLSearchParams.toString() encodes a space
+  // as '+' (application/x-www-form-urlencoded), which the server no longer
+  // converts back — replace it with the RFC 3986 escape ('%20') so a filter
+  // value containing a space still round-trips correctly.
+  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString()
+    .replace(/\+/g, '%20');
   const res = await authedFetch(`${BACKEND}/api/${entityKey}?${qs}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -241,12 +250,27 @@ export async function insertEntityRow(
  * Backend returns `{ updated: number }`. Throws {@link ApiFieldError} on 400
  * so the caller can render inline field errors.
  */
+/**
+ * Result of a PUT. Approval-required entities can answer with a *revision*
+ * rather than an in-place update: editing an APPROVED record creates a new
+ * DRAFT row (C2.3) and leaves the original untouched. Callers that ignore
+ * `revision` will tell the user "Saved" and then show them unchanged values.
+ */
+export interface UpdateEntityRowResult {
+  readonly updated: number;
+  readonly revision?: boolean;
+  readonly revisionId?: string;
+  readonly parentId?: string;
+  readonly approvalStatus?: string;
+  readonly approvalRevision?: number;
+}
+
 export async function updateEntityRow(
   entityKey: string,
   id: string | number,
   row: Record<string, unknown>,
   token: string
-): Promise<{ updated: number }> {
+): Promise<UpdateEntityRowResult> {
   const res = await authedFetch(`${BACKEND}/api/${entityKey}/${encodeURIComponent(String(id))}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -339,6 +363,279 @@ async function throwEntityError(res: Response, prefix: string): Promise<never> {
   const err = new Error(`${prefix}: ${res.status} ${message}`);
   (err as Error & { status?: number }).status = res.status;
   throw err;
+}
+
+// ── Approvals (maker-checker, Phase C2/C3) ───────────────────────────────────
+
+/**
+ * Thrown when the backend returns 409 from an approval transition — i.e. the
+ * record is not in a state the requested transition allows.
+ *
+ * This is a *conflict*, not a permission failure, and callers must treat it
+ * differently: a 403 means "you may never do this", a 409 means "someone else
+ * got there first, reload and look again". The backend draws the same
+ * distinction via `ApprovalConflictException`.
+ */
+export class ApprovalConflictError extends Error {
+  readonly status = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApprovalConflictError';
+  }
+}
+
+/** The four states of the approval state machine, as persisted by the backend. */
+export type ApprovalStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
+/** Identifies a single record in the approval workflow. */
+export interface ApprovalTarget {
+  readonly tenantId: string;
+  readonly appId: string;
+  /** Bare entity name (e.g. `Invoice`), NOT the qualified `{tenant}_{app}_{entity}` key. */
+  readonly entityName: string;
+  readonly rowId: string | number;
+}
+
+/** One entry in a record's approval history. Column names are lower-cased by the backend. */
+export interface ApprovalAuditEntry {
+  readonly id?: string;
+  readonly action?: string;
+  readonly status?: string;
+  readonly revision?: number;
+  readonly actor_user_id?: string;
+  readonly comments?: string | null;
+  readonly created_at?: string | number | null;
+  readonly [key: string]: unknown;
+}
+
+function approvalBase(t: ApprovalTarget): string {
+  return `${BACKEND}/api/tenants/${encodeURIComponent(t.tenantId)}`
+    + `/apps/${encodeURIComponent(t.appId)}`
+    + `/entities/${encodeURIComponent(t.entityName)}`;
+}
+
+function recordBase(t: ApprovalTarget): string {
+  return `${approvalBase(t)}/records/${encodeURIComponent(String(t.rowId))}`;
+}
+
+/**
+ * Normalise an approval failure. 409 becomes {@link ApprovalConflictError} so
+ * the UI can offer "reload" rather than "you lack permission"; everything else
+ * falls through to the shared handler, which preserves `.status`.
+ */
+async function throwApprovalError(res: Response, prefix: string): Promise<never> {
+  if (res.status === 409) {
+    const raw = await res.text().catch(() => '');
+    let message = raw;
+    try {
+      message = (JSON.parse(raw) as { error?: string }).error ?? raw;
+    } catch {
+      /* keep raw */
+    }
+    throw new ApprovalConflictError(message || `${prefix}: conflict`);
+  }
+  return throwEntityError(res, prefix);
+}
+
+async function approvalPost(
+  url: string,
+  body: Record<string, unknown> | null,
+  token: string,
+  prefix: string
+): Promise<Record<string, unknown>> {
+  const res = await authedFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) await throwApprovalError(res, prefix);
+  return res.json();
+}
+
+/** Move a DRAFT (or REJECTED) record into PENDING. Maker action. */
+export async function submitForApproval(
+  target: ApprovalTarget,
+  token: string,
+  comments?: string
+): Promise<Record<string, unknown>> {
+  return approvalPost(
+    `${recordBase(target)}/submit`,
+    comments ? { comments } : {},
+    token,
+    'Submit for approval failed'
+  );
+}
+
+/** Approve a PENDING record. Checker action; the backend enforces separation of duties. */
+export async function approveRecord(
+  target: ApprovalTarget,
+  token: string,
+  comments?: string
+): Promise<Record<string, unknown>> {
+  return approvalPost(
+    `${recordBase(target)}/approve`,
+    comments ? { comments } : {},
+    token,
+    'Approve failed'
+  );
+}
+
+/** Reject a PENDING record back to its maker. `reason` is required by the backend. */
+export async function rejectRecord(
+  target: ApprovalTarget,
+  token: string,
+  reason: string
+): Promise<Record<string, unknown>> {
+  return approvalPost(`${recordBase(target)}/reject`, { reason }, token, 'Reject failed');
+}
+
+/**
+ * Unwrap a list endpoint that returns `{ count, <key>: [...] }`.
+ *
+ * ApprovalRoutes wraps both list responses in an envelope rather than returning
+ * a bare array. The array form is still accepted so that a future unwrapping of
+ * the endpoint does not silently produce empty lists here.
+ */
+function unwrapList<T>(payload: unknown, key: string): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  const inner = (payload as Record<string, unknown> | null)?.[key];
+  return Array.isArray(inner) ? (inner as T[]) : [];
+}
+
+/**
+ * Every PENDING row of an entity, oldest submission first — a review queue is
+ * FIFO, so the longest-waiting record is dealt with first. 403 if the caller is
+ * not a checker or app owner for this entity — callers that use this to decide
+ * whether to *show* a queue should treat 403 as "empty", not as an error.
+ *
+ * This only ever returns the first page (see `ApprovalService.QUEUE_PAGE_SIZE`,
+ * currently 100). A checker with more pending items than that will not see the
+ * rest through this call — use {@link fetchPendingApprovalsPage} and its
+ * `hasMore` flag to page through the full queue.
+ */
+export async function fetchPendingApprovals(
+  target: Omit<ApprovalTarget, 'rowId'>,
+  token: string
+): Promise<Array<Record<string, unknown>>> {
+  return (await fetchPendingApprovalsPage(target, token, 0)).records;
+}
+
+/** One page of the pending-approval queue, as returned by `fetchPendingApprovalsPage`. */
+export interface PendingApprovalsPage {
+  readonly records: Array<Record<string, unknown>>;
+  readonly offset: number;
+  readonly pageSize: number;
+  /** True when this page was full — there is very likely another page behind it. */
+  readonly hasMore: boolean;
+}
+
+/**
+ * A single page of the pending-approval queue, starting at `offset`.
+ *
+ * C3.10 — the queue used to be a single `LIMIT 500` fetch with no way to see
+ * anything past it. The backend now paginates (`QUEUE_PAGE_SIZE`, with
+ * `offset`/`pageSize`/`hasMore` in the response) but nothing on the client
+ * asked for a second page, so a checker with more than one page pending only
+ * ever saw the first. This is the paging door; `CheckerQueuePage` calls it
+ * with an increasing offset while `hasMore` is true.
+ */
+export async function fetchPendingApprovalsPage(
+  target: Omit<ApprovalTarget, 'rowId'>,
+  token: string,
+  offset = 0
+): Promise<PendingApprovalsPage> {
+  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending?offset=${encodeURIComponent(String(offset))}`;
+  const res = await authedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) await throwApprovalError(res, 'Fetch pending approvals failed');
+  const body = await res.json();
+  const records = unwrapList<Record<string, unknown>>(body, 'records');
+  const env = body as { offset?: unknown; pageSize?: unknown; hasMore?: unknown };
+  return {
+    records,
+    offset: typeof env.offset === 'number' ? env.offset : offset,
+    pageSize: typeof env.pageSize === 'number' ? env.pageSize : records.length,
+    hasMore: env.hasMore === true,
+  };
+}
+
+/**
+ * How many records await this caller's review. Asks the backend for a count
+ * only: this drives a polling badge, and fetching the full queue every tick
+ * just to read its length would be wasteful.
+ *
+ * Returns 0 rather than throwing on 403 — "you are not a checker here" means a
+ * count of zero, and a badge is not the place to report a permission problem.
+ */
+export async function fetchPendingApprovalCount(
+  target: Omit<ApprovalTarget, 'rowId'>,
+  token: string
+): Promise<number> {
+  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending?countOnly=true`;
+  const res = await authedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 403) return 0;
+  if (!res.ok) await throwApprovalError(res, 'Fetch pending count failed');
+  const body = await res.json();
+  const count = (body as { count?: unknown })?.count;
+  return typeof count === 'number' ? count : 0;
+}
+
+/** A record's approval history, most recent first. */
+export async function fetchApprovalAudit(
+  target: ApprovalTarget,
+  token: string
+): Promise<ApprovalAuditEntry[]> {
+  const res = await authedFetch(`${recordBase(target)}/approvals/audit`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) await throwApprovalError(res, 'Fetch approval history failed');
+  return unwrapList<ApprovalAuditEntry>(await res.json(), 'history');
+}
+
+/** What the caller may do with one entity in the maker-checker workflow. */
+export interface EntityRoleGrant {
+  readonly roles: string[];
+  readonly isMaker: boolean;
+  readonly isChecker: boolean;
+}
+
+/**
+ * Identity plus per-entity workflow roles for the signed-in user.
+ * `entityRoles` is keyed by bare entity name and only populated when an
+ * `appId` was supplied — roles are scoped to a single app.
+ */
+export interface CurrentUser {
+  readonly userId: string;
+  readonly email?: string;
+  readonly name?: string;
+  readonly tenantId: string;
+  readonly appId?: string;
+  readonly isAppOwner?: boolean;
+  readonly entityRoles: Record<string, EntityRoleGrant>;
+}
+
+/**
+ * Task C3.3 — "who am I, and what may I do here?" in one call.
+ *
+ * Pass the app scope to get `entityRoles`; without it you get identity only.
+ * The per-entity alternative (`/api/tenants/../roles`) costs a round trip per
+ * entity on every page load and pushes the BOTH-expands-to-maker+checker rule
+ * into the client.
+ */
+export async function fetchCurrentUser(
+  token: string,
+  scope?: { tenantId?: string; appId?: string }
+): Promise<CurrentUser> {
+  const qs = new URLSearchParams();
+  if (scope?.tenantId) qs.set('tenantId', scope.tenantId);
+  if (scope?.appId) qs.set('appId', scope.appId);
+  const suffix = qs.toString() ? `?${qs}` : '';
+
+  const res = await authedFetch(`${BACKEND}/api/users/me${suffix}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) await throwEntityError(res, 'Fetch current user failed');
+  const raw = (await res.json()) as CurrentUser;
+  return { ...raw, entityRoles: raw.entityRoles ?? {} };
 }
 
 // â”€â”€ Chat sessions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

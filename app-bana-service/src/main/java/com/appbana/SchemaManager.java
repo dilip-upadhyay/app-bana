@@ -4,6 +4,7 @@ import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.config.DatasourceConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.appbana.approval.ApprovalColumns;
 import com.appbana.model.EntitySchema;
 
 import java.io.IOException;
@@ -335,6 +336,9 @@ public class SchemaManager {
                         }
                     }
                 }
+
+                // C4.6 — reconcile the approval columns on an EXISTING table.
+                syncApprovalColumns(schema, c, d, table, existing);
             }
         }
         // H4 hardening — enforce declared FK relationships at the DB level.
@@ -342,6 +346,59 @@ public class SchemaManager {
         // exist. Non-fatal on failure: a missing parent table just means the
         // FK will be added on the next ensureTable for the child.
         syncForeignKeys(schema, c, d);
+    }
+
+    /**
+     * C4.6 — make {@code approvalRequired == true} actually imply the eight physical
+     * approval columns exist.
+     *
+     * <p>{@link com.appbana.approval.ApprovalColumns}'s javadoc has always claimed
+     * "the eight system columns <em>SchemaManager injects</em>", but SchemaManager did
+     * not contain the string "approval" at all — the only code that materialised them
+     * was {@code SchemaEnricher} in the separate ai-builder process, reachable from
+     * exactly one of the four writers of the flag. Everything else — {@code create_entity},
+     * {@code batch_update_entities}, Studio, scripts, tests — could set the flag and get
+     * a table with no approval columns. That entity accepts an insert (the forced
+     * DRAFT/revision/submitted_by values are silently dropped, because
+     * {@code insertRecordLegacy} iterates {@code schema.getFields()}) and then 500s on
+     * the first submit/approve/pending-queue call.
+     *
+     * <p>Injection belongs here because this is the single chokepoint every writer of a
+     * schema passes through, so the flag alone is sufficient for present and future
+     * callers.
+     *
+     * <p>Deliberately <b>add-only</b>, and deliberately NOT folded into the user-field
+     * evolution loop above. That loop also migrates column types, and tables created by
+     * the old enricher have {@code approval_parent_id} as VARCHAR(255) where
+     * {@code ApprovalColumns} declares {@code integer} — routing these through it would
+     * emit {@code ALTER COLUMN ... TYPE INTEGER USING col::INTEGER} against live data,
+     * which fails outright on any non-numeric value already stored. These are system
+     * columns whose contents only this server writes; a missing one is a bug to repair,
+     * a differing one is not ours to rewrite underneath a running app.
+     *
+     * <p>These columns are physical-only and never join {@code schema.getFields()} —
+     * see {@code ApprovalColumns.asFields()} and {@code EntityCrudService.getQueryableFields()}
+     * for the read-path merge, and note that the default list projection depends on them
+     * being absent from {@code getFields()} in order to keep excluding them.
+     */
+    private static void syncApprovalColumns(EntitySchema schema, Connection c, String dialect, String table,
+            Map<String, ColumnInfo> existing) throws SQLException {
+        if (!schema.isApprovalRequired()) {
+            return;
+        }
+        for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+            if (existing.containsKey(colKey(f.getName()))) {
+                continue;
+            }
+            String alter = "ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " "
+                    + sqlType(f, dialect, true);
+            LOG.info("[APPROVAL-COLUMNS] Adding missing approval column to {}: {}", table, f.getName());
+            try (Statement s = c.createStatement()) {
+                s.execute(alter);
+                recordMigration(c, schema.getName(), alter);
+            }
+            existing.put(colKey(f.getName()), new ColumnInfo(f.getName(), null, 0));
+        }
     }
 
     /**
@@ -515,6 +572,19 @@ public class SchemaManager {
                 pk = quote(f.getName());
             cols.add(col);
         }
+        // C4.6 — approvalRequired implies the eight system columns. See
+        // syncApprovalColumns() for why this lives here and not in ai-builder.
+        if (schema.isApprovalRequired()) {
+            Set<String> declared = new HashSet<>();
+            for (EntitySchema.Field f : schema.getFields()) {
+                declared.add(colKey(f.getName()));
+            }
+            for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+                if (declared.add(colKey(f.getName()))) {
+                    cols.add(quote(f.getName()) + " " + sqlType(f, dialect));
+                }
+            }
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE TABLE IF NOT EXISTS ").append(quote(table)).append(" (");
         sb.append(String.join(", ", cols));
@@ -616,6 +686,68 @@ public class SchemaManager {
         }
     }
 
+    /**
+     * Review #4 (round 4 of the field-type-coercion defect family) — the DDL
+     * mapping here ({@link #sqlType}) and the value-coercion switches in
+     * {@code EntityCrudService} ({@code coerceAndValidateRaw},
+     * {@code parseFilterValue}) had drifted into three independent hand-maintained
+     * switch statements on the same raw type string. Round 3 added
+     * "serial"/"bigserial"/"money"/"numeric" to the coercion switches but not
+     * here, and none of the three switches recognized "datetime" consistently.
+     * This enum + {@link #classifyFieldType} is the single source of truth for
+     * "which SQL-ish kind does this schema type name belong to" — sqlType() and
+     * every EntityCrudService coercion switch now consult it instead of keeping
+     * their own alias lists, so a type added to one can no longer silently miss
+     * the other two.
+     */
+    public enum FieldSqlKind {
+        STRING, INTEGER, BIGINT, BOOLEAN, TIMESTAMP, DECIMAL, TEXT, FILE, REFERENCE
+    }
+
+    /**
+     * Case-insensitive; unrecognized/null type names classify as {@code STRING} (VARCHAR), matching prior behavior.
+     *
+     * <p>Review #5 (blocker) — "money", "numeric", "serial" and "bigserial" are deliberately
+     * classified as {@code STRING} here, NOT as their numeric-sounding SQL kind. Before this
+     * classifier existed, {@code sqlType()} had no case for any of the four, so they fell
+     * through its {@code default} to {@code VARCHAR(255)}; that is what every existing tenant
+     * column of these types physically is. {@code SchemaManager} auto-issues
+     * {@code ALTER TABLE ... TYPE ... USING col::TYPE} whenever a schema save finds
+     * desired != current, so classifying them as DECIMAL/INTEGER/BIGINT would silently try to
+     * cast existing free-text data (the documented behavior in the "money"/"currency"/"float"
+     * warning in copilot-instructions.md §11) to a numeric column and break schema saves for
+     * any tenant that has one. None of these four is in the AI Builder's allowed type list, so
+     * there is no upside to reclassifying them today. If they should become real numeric/serial
+     * columns, that needs an explicit migration plan and a corpus check first, not a side effect
+     * of this shared-classifier refactor.
+     */
+    /** Known aliases that are *intentionally* STRING-kind — excluded from the unrecognized-type WARN log. */
+    private static final Set<String> STRING_ALIASES = Set.of(
+            "string", "varchar", "email", "phone", "status", "uuid", "money", "numeric", "serial", "bigserial");
+
+    public static FieldSqlKind classifyFieldType(String rawType) {
+        String t = rawType == null ? "" : rawType.toLowerCase(Locale.ROOT);
+        return switch (t) {
+            case "int", "integer", "number" -> FieldSqlKind.INTEGER;
+            case "long", "bigint" -> FieldSqlKind.BIGINT;
+            case "boolean" -> FieldSqlKind.BOOLEAN;
+            case "date", "timestamp", "datetime" -> FieldSqlKind.TIMESTAMP;
+            case "decimal", "double", "float", "currency" -> FieldSqlKind.DECIMAL;
+            case "text", "longtext" -> FieldSqlKind.TEXT;
+            case "file" -> FieldSqlKind.FILE;
+            case "reference" -> FieldSqlKind.REFERENCE;
+            // "serial"/"bigserial"/"money"/"numeric" intentionally NOT listed above — see javadoc.
+            default -> {
+                if (!t.isEmpty() && !STRING_ALIASES.contains(t)) {
+                    LOG.warn("[SCHEMA] Unrecognized field type '{}' — classifying as STRING/VARCHAR(255). "
+                            + "If this is a typo, fix the schema; if it's intentional, add it explicitly "
+                            + "to classifyFieldType() so future readers don't have to guess.", rawType);
+                }
+                yield FieldSqlKind.STRING;
+            }
+        };
+    }
+
     private static String sqlType(EntitySchema.Field f, String dialect) {
         return sqlType(f, dialect, false);
     }
@@ -626,80 +758,33 @@ public class SchemaManager {
 
         // For ALTER statements, we can't use SERIAL/BIGSERIAL, must use INTEGER/BIGINT
         boolean useSerial = aiPk && !forAlter;
+        boolean isPg = "postgres".equals(dialect) || "postgresql".equals(dialect);
 
-        if ("postgres".equals(dialect) || "postgresql".equals(dialect)) {
-            switch (t) {
-                case "string":
-                case "varchar":
+        return switch (classifyFieldType(t)) {
+            case STRING -> {
+                // "string"/"varchar" respect an explicit length; every other alias
+                // that classifies as STRING (email, phone, status, and anything
+                // unrecognized) keeps the fixed VARCHAR(255) this always returned,
+                // to avoid silently resizing existing columns for schemas nobody
+                // asked to widen/narrow.
+                if (t.equals("string") || t.equals("varchar")) {
                     int len = (f.getLength() != null) ? f.getLength() : 255;
-                    return "VARCHAR(" + len + ")";
-                case "int":
-                case "integer":
-                case "number": // Handle 'number' as INTEGER
-                    return useSerial ? "SERIAL" : "INTEGER";
-                case "long":
-                case "bigint":
-                    return useSerial ? "BIGSERIAL" : "BIGINT";
-                case "boolean":
-                    return "BOOLEAN";
-                case "date":
-                case "timestamp":
-                case "datetime":
-                    return "TIMESTAMP";
-                case "decimal":
-                case "double":
-                case "float":
-                case "currency": // Handle 'currency' as NUMERIC
-                    return "NUMERIC(19,4)";
-                case "text":
-                case "longtext":
-                    return "TEXT";
-                case "file":
-                    // Phase B3 — stores the fileId issued by /api/files/upload (UUID w/o dashes = 32 chars).
-                    return "VARCHAR(64)";
-                case "reference":
-                    // H4 hardening — reference columns must match the parent's PK type
-                    // (SERIAL/INTEGER) so a real FOREIGN KEY constraint can be added.
-                    return "INTEGER";
-                default:
-                    return "VARCHAR(255)";
+                    yield "VARCHAR(" + len + ")" + (!isPg && aiPk ? " AUTO_INCREMENT" : "");
+                }
+                yield "VARCHAR(255)";
             }
-        }
-        switch (t) {
-            case "string":
-            case "varchar":
-                int len = (f.getLength() != null) ? f.getLength() : 255;
-                return "VARCHAR(" + len + ")" + (aiPk ? " AUTO_INCREMENT" : "");
-            case "int":
-            case "integer":
-            case "number":
-                return "INT" + (aiPk ? " AUTO_INCREMENT" : "");
-            case "long":
-            case "bigint":
-                return "BIGINT" + (aiPk ? " AUTO_INCREMENT" : "");
-            case "boolean":
-                return "BOOLEAN";
-            case "date":
-            case "timestamp":
-            case "datetime":
-                return "TIMESTAMP";
-            case "decimal":
-            case "double":
-            case "float":
-            case "currency":
-                return "DECIMAL(19,4)";
-            case "text":
-            case "longtext":
-                return "CLOB";
-            case "file":
-                return "VARCHAR(64)";
-            case "reference":
-                // H4 hardening — reference columns must match the parent's PK type
-                // (SERIAL/INTEGER) so a real FOREIGN KEY constraint can be added.
-                return "INT";
-            default:
-                return "VARCHAR(255)";
-        }
+            case INTEGER -> isPg ? (useSerial ? "SERIAL" : "INTEGER") : ("INT" + (aiPk ? " AUTO_INCREMENT" : ""));
+            case BIGINT -> isPg ? (useSerial ? "BIGSERIAL" : "BIGINT") : ("BIGINT" + (aiPk ? " AUTO_INCREMENT" : ""));
+            case BOOLEAN -> "BOOLEAN";
+            case TIMESTAMP -> "TIMESTAMP";
+            case DECIMAL -> isPg ? "NUMERIC(19,4)" : "DECIMAL(19,4)";
+            case TEXT -> isPg ? "TEXT" : "CLOB";
+            // Phase B3 — stores the fileId issued by /api/files/upload (UUID w/o dashes = 32 chars).
+            case FILE -> "VARCHAR(64)";
+            // H4 hardening — reference columns must match the parent's PK type
+            // (SERIAL/INTEGER) so a real FOREIGN KEY constraint can be added.
+            case REFERENCE -> isPg ? "INTEGER" : "INT";
+        };
     }
 
     private static String normalizeSqlType(String s) {
@@ -778,6 +863,18 @@ public class SchemaManager {
                         pk = quote(f.getName());
                     cols.add(col);
                 }
+                // C4.6 — mirror createTable()'s approval-column injection.
+                if (schema.isApprovalRequired()) {
+                    Set<String> declared = new HashSet<>();
+                    for (EntitySchema.Field f : schema.getFields()) {
+                        declared.add(colKey(f.getName()));
+                    }
+                    for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+                        if (declared.add(colKey(f.getName()))) {
+                            cols.add(quote(f.getName()) + " " + sqlType(f, d));
+                        }
+                    }
+                }
                 StringBuilder sb = new StringBuilder();
                 sb.append("CREATE TABLE IF NOT EXISTS ").append(quote(table)).append(" (");
                 sb.append(String.join(", ", cols));
@@ -833,6 +930,16 @@ public class SchemaManager {
                                 : ("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(info.name)
                                         + " SET DATA TYPE " + sqlType(f, d));
                         plan.add(alterType);
+                    }
+                }
+            }
+            // C4.6 — mirror syncApprovalColumns() so a preview shows the same plan the
+            // save will execute. Add-only, for the same reason documented there.
+            if (schema.isApprovalRequired()) {
+                for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+                    if (!existing.containsKey(colKey(f.getName()))) {
+                        plan.add("ALTER TABLE " + quote(table) + " ADD " + quote(f.getName()) + " "
+                                + sqlType(f, d, true));
                     }
                 }
             }

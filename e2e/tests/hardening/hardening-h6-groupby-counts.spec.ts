@@ -7,9 +7,12 @@
  * only carried a per-page `groups` map, so counts >= page size were
  * silently wrong.
  *
- * Also verifies the SQL-injection guard: an unknown / malicious column
- * name yields an empty `groupCounts` map instead of interpolating raw
- * text into SQL.
+ * Also verifies the fail-closed guard added in Review #7 (D7): an unknown
+ * / malicious column name is now a 400, not a 200 with an empty
+ * `groupCounts` map. (Pre-Review #7 this silently interpolated nothing
+ * into SQL and returned 200 with empty counts — see Review #9's Medium
+ * finding: this spec asserted the OLD 200 contract and would have failed
+ * the moment it ran, except e2e self-skips when the backend isn't up.)
  */
 import { expect, test } from '@playwright/test';
 import {
@@ -74,7 +77,7 @@ test.describe('H6 — SQL GROUP BY counts across full dataset', () => {
     }
   });
 
-  test('unknown / malicious groupBy column returns empty groupCounts, not SQL error', async () => {
+  test('unknown / malicious groupBy column is rejected with 400, not a silent empty result', async () => {
     const fx = await newHardeningFixture('h6-inject');
     if (!fx) { test.skip(true, 'Registration rate-limited'); return; }
 
@@ -93,10 +96,12 @@ test.describe('H6 — SQL GROUP BY counts across full dataset', () => {
         `${BACKEND_URL}/api/${key}?groupBy=${malicious}&limit=10`,
         { headers: { Authorization: `Bearer ${fx.token}` } },
       );
-      expect(res.status(), 'must not blow up — injection is guarded').toBe(200);
+      // Review #7 (D7) — groupBy used to fail OPEN (200, empty groupCounts) on
+      // an unrecognized/malicious column name. It now fails closed (400)
+      // before any SQL is built, matching filter='s existing behavior.
+      expect(res.status(), 'unknown/malicious groupBy column must 400, not silently no-op').toBe(400);
       const body = await res.json();
-      const counts = (body.groupCounts as Record<string, number> | undefined) ?? {};
-      expect(Object.keys(counts).length, 'malicious column must produce empty counts').toBe(0);
+      expect(body.error).toContain('unknown groupBy field');
     } finally {
       await disposeFixture(fx);
     }

@@ -65,11 +65,20 @@ public class ListAppsTool implements Tool {
 
             String url = baseUrl + "/appbana-studio/" + tenantId + "/apps";
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .header("Accept", "application/json")
-                    .GET()
-                    .build();
+                    .header("Accept", "application/json");
+
+            // C4.4d -- this route requires a session token. Without it every list_apps call
+            // 401s, and a failing tool burns an agent iteration and increments
+            // consecutiveFailures toward the abort-at-3, so the user sees a vague give-up
+            // rather than an auth error.
+            String token = context.token();
+            if (token != null && !token.isEmpty()) {
+                requestBuilder.header("Authorization", "Bearer " + token);
+            }
+
+            HttpRequest request = requestBuilder.GET().build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             long executionTime = System.currentTimeMillis() - startTime;

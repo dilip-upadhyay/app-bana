@@ -75,6 +75,10 @@ public class ScaffoldAppTool implements Tool {
                 "properties": {
                   "name": {"type": "string"},
                   "displayName": {"type": "string"},
+                  "approvalRequired": {
+                    "type": "boolean",
+                    "description": "Phase C4 — set true to put this entity behind a two-person (maker-checker) approval workflow. Rows are then created as DRAFT, must be submitted for approval, and are invisible to normal reads until a DIFFERENT user approves them. Use for regulated records: customer onboarding, KYC, loan/credit applications, expense claims, purchase orders, policy issuance, contracts, employee onboarding, payments. Do NOT set it for reference/lookup tables or low-risk data (blog posts, todos, product catalogues). Only set it after the user has agreed to the approval flow in the Phase 1 specification."
+                  },
                   "fields": {
                     "type": "array",
                     "items": {

@@ -63,21 +63,14 @@ public class ApprovalServiceTest {
             s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
         }
 
-        // Create entity physical table with all enriched approval columns
+        // C4.6a — business fields only; setApprovalRequired(true) is what materialises the eight
+        // approval columns. This fixture was benign even before the conversion (it writes rows via
+        // raw INSERT, so it never went through the getFields()-driven builders that carried the
+        // defect), but it was the last one in the repo of the shape that hid C4.6 and C4.6a.
         EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
         EntitySchema.Field amountField = new EntitySchema.Field("amount", "number", false, false, null);
-        EntitySchema.Field statusField = new EntitySchema.Field("approval_status", "string", false, false, null);
-        EntitySchema.Field revisionField = new EntitySchema.Field("approval_revision", "integer", false, false, null);
-        EntitySchema.Field submittedByField = new EntitySchema.Field("submitted_by", "string", false, false, null);
-        EntitySchema.Field submittedAtField = new EntitySchema.Field("submitted_at", "timestamp", false, false, null);
-        EntitySchema.Field approvedByField = new EntitySchema.Field("approved_by", "string", false, false, null);
-        EntitySchema.Field approvedAtField = new EntitySchema.Field("approved_at", "timestamp", false, false, null);
-        EntitySchema.Field rejectionReasonField = new EntitySchema.Field("rejection_reason", "text", false, false, null);
 
-        EntitySchema schema = new EntitySchema(ENTITY_NAME, List.of(
-                idField, amountField, statusField, revisionField,
-                submittedByField, submittedAtField, approvedByField, approvedAtField, rejectionReasonField
-        ));
+        EntitySchema schema = new EntitySchema(ENTITY_NAME, List.of(idField, amountField));
         schema.setTenantId(TENANT_ID);
         schema.setAppId(APP_ID);
         schema.setApprovalRequired(true);
@@ -115,6 +108,80 @@ public class ApprovalServiceTest {
         List<Map<String, Object>> queue = ApprovalService.getPendingQueue(TENANT_ID, APP_ID, ENTITY_NAME, "checker_bob");
         assertEquals(1, queue.size());
         assertEquals("101", queue.get(0).get("id").toString());
+    }
+
+    /**
+     * C3.7 exit criterion: the checker queue ranks oldest-submitted first.
+     * It shipped as DESC, under which the longest-waiting record sinks to the
+     * bottom of the queue and starves — the opposite of what an approval SLA is
+     * for.
+     */
+    @Test
+    public void testPendingQueueIsOldestFirst() throws Exception {
+        String maker = "fifo_maker";
+        String checker = "fifo_checker";
+        UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, maker, UserRoleService.Role.MAKER, "system");
+        UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, checker, UserRoleService.Role.CHECKER, "system");
+
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\") VALUES (102, 10.0, 'DRAFT', 1)");
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\") VALUES (103, 20.0, 'DRAFT', 1)");
+        }
+
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "101", maker, "first");
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "102", maker, "second");
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "103", maker, "third");
+
+        // submitted_at is set by the service; force distinct, out-of-insertion-order
+        // timestamps so the assertion tests the ORDER BY rather than insertion order.
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("UPDATE \"" + TABLE_NAME + "\" SET \"SUBMITTED_AT\" = TIMESTAMP '2026-01-03 10:00:00' WHERE \"ID\" = 101");
+            s.execute("UPDATE \"" + TABLE_NAME + "\" SET \"SUBMITTED_AT\" = TIMESTAMP '2026-01-01 10:00:00' WHERE \"ID\" = 102");
+            s.execute("UPDATE \"" + TABLE_NAME + "\" SET \"SUBMITTED_AT\" = TIMESTAMP '2026-01-02 10:00:00' WHERE \"ID\" = 103");
+        }
+
+        List<Map<String, Object>> queue = ApprovalService.getPendingQueue(TENANT_ID, APP_ID, ENTITY_NAME, checker);
+        assertEquals(3, queue.size());
+        assertEquals("102", queue.get(0).get("id").toString(), "The longest-waiting record must be reviewed first");
+        assertEquals("103", queue.get(1).get("id").toString());
+        assertEquals("101", queue.get(2).get("id").toString());
+    }
+
+    /**
+     * The badge and the queue must agree, and both must exclude the caller's own
+     * submissions.
+     *
+     * <p>C3.9 — separation of duties means a checker can never approve what they
+     * submitted, so counting those rows offered work the backend would then refuse:
+     * the badge said "2" and the queue presented nothing actionable. A badge that
+     * overstates trains users to ignore it. This pins the two predicates together,
+     * because the failure mode is precisely them drifting apart.
+     */
+    @Test
+    public void testQueueAndCountBothExcludeTheCallersOwnSubmissions() throws Exception {
+        String other = "sod_other_maker";
+        String reviewer = "sod_reviewer";
+        UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, other, UserRoleService.Role.MAKER, "system");
+        // BOTH so the reviewer can submit as well as review — that is the whole
+        // point: their own submission must not appear in their own queue.
+        UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, reviewer, UserRoleService.Role.BOTH, "system");
+
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\") VALUES (110, 10.0, 'DRAFT', 1)");
+        }
+
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "101", other, "someone else's work");
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, "110", reviewer, "my own work");
+
+        List<Map<String, Object>> queue = ApprovalService.getPendingQueue(TENANT_ID, APP_ID, ENTITY_NAME, reviewer);
+        assertEquals(1, queue.size(), "The reviewer's own submission must not appear in their queue");
+        assertEquals("101", queue.get(0).get("id").toString());
+
+        int count = ApprovalService.getPendingCount(TENANT_ID, APP_ID, ENTITY_NAME, reviewer);
+        assertEquals(queue.size(), count, "The badge count must match what the queue actually offers");
     }
 
     @Test

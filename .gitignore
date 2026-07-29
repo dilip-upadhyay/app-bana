@@ -43,5 +43,15 @@ node_modules/
 /app-bana-ui/src/main/resources/ui/dist/
 /app-bana-ui/package-lock.json
 
+# --- TypeScript build artifacts ---
+# `tsc -b` emits these next to their sources in the pnpm workspace packages.
+# They are pure build output: the .tsbuildinfo files churn on every compile and
+# the vite.config.{js,d.ts} pair is generated from vite.config.ts.
+*.tsbuildinfo
+app-bana-studio/vite.config.js
+app-bana-studio/vite.config.d.ts
+app-bana-runtime/vite.config.js
+app-bana-runtime/vite.config.d.ts
+
 # --- Secrets / env ---
 .env

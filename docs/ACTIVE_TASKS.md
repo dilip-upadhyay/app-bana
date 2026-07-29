@@ -10,7 +10,7 @@
 | **A2 — Runtime Foundations** | Runtime UX Sprint 3: R/U/D primitives (detail view, edit mode, delete + undo, wired row actions), reference combobox, unified Button primitive, tenant branding actually applied, `PageMeta.kind` metadata, backend-error → field-error mapping, `StudioTableLive` refactor, toast contract, mobile QA + a11y quick wins. Closes the "polished shell / no CRUD" gap surfaced by the 2026-07-26 architect review and delivers the primitives Phase B4 will consume. | [RUNTIME_UX_OVERHAUL_PLAN.md §Sprint 3](./planning/RUNTIME_UX_OVERHAUL_PLAN.md#sprint-3--runtime-foundations) | ✅ Complete — Tasks 3.1–3.12 shipped 2026-07-27 · **Post-review triage (2026-07-27):** GeneratePageTool emits `kind`/`entityKey`, typed `FieldValidationException` replaces regex-parsed error path, dead `PAGE_EDIT/DELETE_EVENT` handlers deleted, `applyBrandRamp` helper extracted (7 tests), delete-flow copy rewritten from "Undo" → "Recreate" to reflect actual behavior, e2e CRUD round-trip spec added (2/2 pass). See follow-up section below for deferred items. |
 | **B — Complex UI Epic** | 5 sub-phases (B1..B5): wizards · conditional fields · file upload (backend included) · master-detail · list views (filter/group/saved views) | [COMPLEX_UI_PLAN.md](./planning/COMPLEX_UI_PLAN.md) | 🟡 Feature-complete + **hardening in progress** — B1 wizards (`8efc539`), B2 conditional fields (`e8a9c9a`), B3 file upload (`dd84257`), B4 master-detail (`60a64aa`), B5 list views (`4ce56d0`). Technical-architect review 2026-07-28 flagged 8 hardening gaps (H1..H8) before Phase C. Hardening sprint status below. |
 | **B.H — Hardening Sprint** (pre-C gate) | 8 items surfaced by the technical-architect review of Phase A + Complex UI Epic. Each item is a wire-level regression that would compound in Phase C's approval workflows. | [COMPLEX_UI_PLAN.md](./planning/COMPLEX_UI_PLAN.md) | ✅ Complete — **H1 file tenant isolation** (`cb7a4d1`) · **H2 auto-inject `parentId` + interactive ChildTable** (`d73bfcd`) · **H3 wire FilterBar + SavedViewsBar into StudioTableLive** (`e3a129a`) · **H4 real FOREIGN KEY constraints from SchemaManager** (`f3b3a2c`) · **H5 hidden-field validation strip** (`02ad025`) · **H6 SQL GROUP BY across full dataset** (`a0702ca`) · **H7 Playwright hardening spec suite (5 files, 8 tests)** (`83bcc6b`) · **H8 docs refresh**. Backend 220/220 tests · runtime vitest 147/147 · e2e 8/8 discoverable. |
-| **C — Maker-Checker Epic** | 5 sub-phases (C1..C5): DB + role model · state machine + guard · approval UI + audit · AI Builder integration · notifications | [MAKER_CHECKER_PLAN.md](./planning/MAKER_CHECKER_PLAN.md) | 🟡 **In Progress** — **C1 DB Migration & Role Model (Signed off 2026-07-27, commits `73f3f2c`, `68a12f9`, `0019795`, `75da675`)** · **C2 State Machine & Permissions Guard COMPLETE** (C2.1 `ApprovalService`, C2.2 `ApprovalRoutes`, C2.3 status injection in `8617265`/`4e0651a`; security remediation `2103637`→`426a45b`; **C2.3 revision handling + C2.7 `?_approvalStatus=` filter closed 2026-07-28** — the two items missing from the original sign-off; four review defects fixed in `62957f8`). Backend suite 269/269 green. **Next: C3 Runtime UI.** |
+| **C — Maker-Checker Epic** | 5 sub-phases (C1..C5): DB + role model · state machine + guard · approval UI + audit · AI Builder integration · notifications | [MAKER_CHECKER_PLAN.md](./planning/MAKER_CHECKER_PLAN.md) | 🟡 **In Progress** — **C1 DB Migration & Role Model (Signed off 2026-07-27, commits `73f3f2c`, `68a12f9`, `0019795`, `75da675`)** · **C2 State Machine & Permissions Guard ✅ COMPLETE — all exit criteria met** (C2.1 `ApprovalService`, C2.2 `ApprovalRoutes`, C2.3 status injection in `8617265`/`4e0651a`; security remediation `2103637`→`426a45b`; **C2.3 revision handling + C2.7 `?_approvalStatus=` filter closed 2026-07-28** — the two items missing from the original sign-off; four review defects fixed in `62957f8`; **409-on-conflict + audit ordering closed in `894446f`**, retiring the last deviation). Backend suite 270/270 green. **C3 Runtime Approval UI ✅ COMPLETE 2026-07-28** — C3.1 status pill (`0cc86d0`), C3.2 draft/submit form bar (`2239be1`), C3.3 `GET /api/users/me` role discovery (`d5f5247`), C3.3/C3.4 checker queue + reject dialog (`838a61f`), C3.5 audit drawer (`943c18e`), C3.7 pending-approval nav badge + FIFO queue ordering (`84561a5`), C3.6 draft / needs-rework system views (`cc4981d`), C3.8 approval toasts (`8560ac0`). Also closed an unauthenticated `GET /roles` (`89aac8e`). Backend 281/281 · runtime 246/246. **C4 AI Builder integration 🟡 in progress 2026-07-29** — C4.1 `approvalRequired` accepted by `scaffold_app` + `create_entity` and forwarded into the `/schema` payload (it was previously read by `SchemaEnricher` but dropped by `CreateEntityTool.buildEntityMetadata`, so entities came out approval-shaped with `approvalRequired=false`); C4.3 `SchemaEnricher` now renames an LLM-authored field that squats on a reserved approval column to `workflow_<name>` and injects the canonical definition unconditionally, instead of letting the collision suppress it; C4.2 agent prompt teaches the Phase 1 approval proposal, the entity-level flag, and when *not* to offer it. **C4.6 (2026-07-30) supersedes the schema half of C4.1 and all of C4.3** — the review of `5ce6bb4` found C4.1 had closed only half of a two-sided invariant: nothing owned `approvalRequired == true` ⟹ the eight physical approval columns exist. Injection lived in `SchemaEnricher`, in the *ai-builder* process, reachable from only one of four writers of the flag, so `create_entity` (newly able to set it) emitted entities that accepted inserts and then 500'd on the first workflow action. `SchemaManager` now owns injection at the single chokepoint every writer passes through (create, alter, and both dry-run preview branches); `SchemaEnricher` no longer injects at all, which also defuses C4.3's unconditional rename before C4.4's templates could encode it. Consumers fixed in the same pass: the insert path and two revision-capability checks that inferred support from `schema.getFields()`. **Remaining: C4.4 RAG domain templates. C4.5 closed as obsolete — the checker queue is shell state with no `PageMeta`, so there is nothing for `GeneratePageTool` to emit (see plan deviation).** |
 | **D — Enterprise Capabilities** | 4 sub-phases (D1..D4): enterprise SSO (OIDC/Azure B2C) · dashboards + 6 widget primitives (with 60 s in-process cache) · durable notifications + SSE broadcaster · multi-level sidebar + header actions + branded login (D4 assumes A2 §3.9 wired branding CSS vars) | [ENTERPRISE_CAPABILITIES_PLAN.md](./planning/ENTERPRISE_CAPABILITIES_PLAN.md) | 📝 Plan drafted 2026-07-26 |
 | **Stage 5 — Production Deploy** | Rescoped 2026-07-26. 5 sub-tasks: 5.1 subdomain hosting · 5.2 containerization (Docker + Compose + ACA/K8s) · 5.3 secrets externalization · 5.4 Redis-backed sessions + rate limit · 5.5 structured logs + metrics + deep health + OTel | [AI_NATIVE_UI_REBUILD_PLAN.md §Stage 5](./planning/AI_NATIVE_UI_REBUILD_PLAN.md#stage-5--production-deploy) | 📝 Rescope drafted 2026-07-26 |
 | **Phase E — Integration + Advanced Backlog** | 8 items (E1..E8), ~87 hr total, no committed order — cloud storage adapters · outbound integration framework · async job queue · CSV/Excel import/export · Postgres FTS · GDPR / PII · WebSocket · API versioning. Customer-demand-driven. | [BACKEND_BACKLOG.md](./planning/BACKEND_BACKLOG.md) | 📝 Backlog drafted 2026-07-26 |
@@ -32,6 +32,53 @@
 **Optional schedule compression:** C1 (DB + role model) and C2 (state machine + guard) are pure backend work and could run in parallel with B if we want to shave ~1 week. C3 onward genuinely wants B done first. Not doing this by default — keeping the phases clean — but flagging the option.
 
 **Why Phase D was ever added:** a screenshot-by-screenshot comparison with a live enterprise SaaS on 2026-07-26 showed that A + B + C alone deliver a solid CRUD builder with a differentiated approval workflow, but not a product an enterprise IT department procures without a fight. Enterprise SSO is a categorical gate; dashboards are the first screen executives see; a branded login + multi-level sidebar is what makes an app feel "real" in the first 5 seconds. D is now positioned as the final polish before first-enterprise-customer close, not as a prerequisite for the differentiator.
+
+---
+
+## ✅ Build health (single source — do not duplicate these counts elsewhere)
+
+Last verified 2026-07-30 at C4.6.
+
+| Module | Command | Result |
+|---|---|---|
+| `app-bana` | `mvn -B verify` | 306 tests · 0 failures · 0 errors |
+| `ai-builder` | `mvn -B verify` | **169 keyless** / **186 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
+| `app-bana-runtime` | `pnpm test` | 269 tests · 0 failures |
+| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 169) |
+
+**Review #10 fix (2026-07-29):** CI used to trigger only on push/PR against `main`/`master`, so work on a
+feature branch with no open PR against `main` was never covered by CI — flagged as the highest-leverage
+open item after 10 review rounds. CI now triggers on push and PR against every branch, and a new
+`frontend` job runs `pnpm --filter @appbana/shared build` (type-check), `pnpm --filter app-bana-studio
+build`, `pnpm --filter @appbana/runtime test` (vitest) and `pnpm --filter @appbana/runtime build` — none
+of which need secrets. **Still not covered:** the Playwright e2e suite in `e2e/`, which needs the full
+stack (Postgres, Qdrant, ai-builder, backend, Studio, Runtime) running plus `OPENAI_API_KEY` — a bigger
+lift requiring a repo secret, tracked as a follow-up rather than attempted in this pass.
+
+**ai-builder count: why there are two numbers (corrected 2026-07-30).** The `ai-builder` suite reports a
+different total depending on whether `OPENAI_API_KEY` is set, so a single number here is always wrong for
+someone. Three classes — `KnowledgeBaseServiceIntegrationTest` (5), `EmbeddingServiceIntegrationTest` (7)
+and `AppBanaPromptEnhancerIntegrationTest` (5) — gate on the key via `Assumptions.assumeTrue` **at class
+level**, so without it they report `tests=0` and do **not** appear as skipped. They contribute 17 tests, not
+2 skips. Hence 169 keyless / 186 with the key (was 157 / 174 before C4.4 + C4.4a + C4.4b + C4.4c + C4.4d added 12 tests).
+
+This previously read `145` and was then "corrected" to `168` with a note claiming the suite had been
+silently red. That framing was wrong and is retracted: **145 was the correct keyless/CI number at the
+time.** The `KnowledgeBaseServiceIntegrationTest` assertion that had drifted (`assertEquals(39, ...)` against
+a corpus grown to 47) could only fail on a developer machine with the key set — CI never executed it. It now
+derives its expectation from `schemaLoader.getAllSchemas().size()`, which is the property actually worth
+testing ("everything the loader offers got indexed") and which will not re-break when C4.4 adds domain
+templates. **That fix still cannot run in CI**, so this class can drift again without anyone noticing;
+re-verify it by hand whenever the RAG corpus changes, until the key is available as a repo secret.
+(Confirmed 2026-07-30: C4.4 added two templates and the derived assertion absorbed it with no edit.)
+
+The 2 `ai-builder` skips are in `ScaffoldAppToolTest` and are unrelated to `OPENAI_API_KEY`.
+
+**Local prerequisites:** `docker start appbana-postgres` for `app-bana`; Docker running (Testcontainers
+spins up Qdrant) for `ai-builder`. CI provisions PostgreSQL as a service container.
+
+**Verify `ai-builder` with `clean`** — an incremental `mvn -q compile` hides Lombok setter-resolution
+errors, because Lombok suppresses a generated setter when any method of that name already exists.
 
 ---
 
@@ -129,6 +176,27 @@ See the [full plan](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) for stage-by-stage 
 ---
 
 ## 📌 Backlog
+
+**Found by the C4 end-to-end gate, confirmed real, deliberately out of scope for C4:**
+
+- **Deploy-time FK failure.** `org.postgresql.util.PSQLException: foreign key constraint "FK_APP_..."
+  cannot be implemented` on `reference` columns whose SQL type does not match the parent's PK type
+  (the H4 hardening rule). Reproducible; triggers a successful `ScaffoldAppTool` rollback, so the
+  app is lost at deploy. Unrelated to maker-checker.
+- **Agent-created apps are missing from `appbana_apps`.** `appbana_schemas` holds entities for six
+  distinct `app_id`s under tenant `t-e850b8c8`, while `appbana_apps` has no row for any of them — so
+  `list_apps` and any app-listing UI cannot see apps the agent built, even though their entities and
+  physical tables exist. A direct authenticated `POST /appbana-studio/{tenant}/apps` *does* persist a
+  row, so the route works; the agent path is what diverges. Cause not yet established — do not assume
+  it is the same as the C4.4d auth defect. Same seam family: the app record and its schemas disagree.
+- **63-character physical table-name truncation.** `..._CUSTOMERAPPLICATION` is stored as
+  `..._CUSTOMERAPP` to fit Postgres' identifier limit. Two entities with a long shared prefix in the
+  same app would collide silently.
+- **Two-phase protocol is prompt-enforced only.** Observed skipping Phase 1 and calling `scaffold_app`
+  on the first turn. `AiAgent.resolveAllowedTools` and `extractAppName` are both unused — the
+  state-machine gating they were written for is the unfinished DialogueManager Story 3.1.
+- **`SearchKnowledgeTool` drops `entities` metadata**, returning only name/type/description. Same
+  producer/consumer seam as C4.4c, one tool over.
 
 - **Merge `feature/ai-schema-quality` into `main`**
 - Story 3.2 — LLM Error Recovery loops (prevent max iteration starvation on repeated tool failures)

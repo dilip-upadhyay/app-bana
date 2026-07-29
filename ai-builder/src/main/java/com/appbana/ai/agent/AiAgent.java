@@ -9,6 +9,7 @@ import com.appbana.ai.agent.PatternExecutor;
 import com.appbana.ai.cache.SemanticCache;
 import com.appbana.ai.dialogue.ConversationSpec;
 import com.appbana.ai.dialogue.DialogueManager;
+import com.appbana.ai.knowledge.DomainBlueprintPrompt;
 import com.appbana.ai.knowledge.KnowledgeBaseService;
 import com.appbana.ai.knowledge.SchemaDefinition;
 import com.appbana.ai.llm.LlmService;
@@ -165,6 +166,11 @@ public class AiAgent {
                 }
             }
 
+            // Retrieved once per request: userMessage is fixed for the whole loop, and this is a
+            // paid embedding + vector search. Computed after the pattern-match short-circuit so a
+            // pattern-matched request pays nothing.
+            String blueprintSection = buildDomainBlueprintSection(userMessage);
+
             int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
             int consecutiveFailures = 0;
             Set<String> failedSignatures = new HashSet<>();
@@ -181,7 +187,7 @@ public class AiAgent {
                     return AgentResponse.error("Agent timeout after " + elapsed + "ms", steps, elapsed);
                 }
 
-                AgentThought thought = think(userMessage, steps, context, llmService, images);
+                AgentThought thought = think(userMessage, steps, context, llmService, images, blueprintSection);
                 if (thought == null) {
                     String msg = "Sorry — I couldn't get a response from the AI model. Please try again in a moment.";
                     emitter.token(msg);
@@ -531,6 +537,11 @@ public class AiAgent {
                 }
             }
 
+            // Retrieved once per request: userMessage is fixed for the whole loop, and this is a
+            // paid embedding + vector search. Computed after the pattern-match short-circuit so a
+            // pattern-matched request pays nothing.
+            String blueprintSection = buildDomainBlueprintSection(userMessage);
+
             // Fail-safe limit
             int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
             
@@ -548,7 +559,7 @@ public class AiAgent {
                 }
 
                 // 1. THINK - Ask LLM what to do
-                AgentThought thought = think(userMessage, steps, context, llmService, images);
+                AgentThought thought = think(userMessage, steps, context, llmService, images, blueprintSection);
 
                 if (thought == null) {
                     log.error("[AGENT] Failed to get thought from LLM");
@@ -675,10 +686,51 @@ public class AiAgent {
     }
 
     /**
+     * C4.4a — inject worked examples of similar apps (including which entities need a maker-checker
+     * approval flow) into the live agent prompt.
+     *
+     * <p>This is the <b>only</b> route from the knowledge base into the model's prompt.
+     * {@code AppBanaPromptEnhancer}/{@code AdvancedPromptEngine.buildPrompt} look like that route
+     * and are not: {@code buildPrompt} has zero call sites, and {@code AiChatController} takes the
+     * engine as a constructor parameter it never stores. Until now this class had the same gap in
+     * miniature — {@code AiServer} has always called {@code withKnowledgeBase(...)}, and the field
+     * was assigned and never read.
+     *
+     * <p>No try/catch: {@link KnowledgeBaseService#getDomainExamples} already swallows its own
+     * failures and returns an empty list, so RAG being down degrades to a prompt without examples
+     * rather than a failed request.
+     *
+     * <p><b>Call this once per request, not once per iteration.</b> It costs an OpenAI embedding
+     * call plus a Qdrant search, and {@code userMessage} does not change across the agent loop, so
+     * calling it from {@code think()} bought the same string up to ten times at ten times the price.
+     * Both entry points compute it before their loop and pass the result down;
+     * {@code ApprovalDomainTemplateTest.theBlueprintLookupIsPaidForOncePerRequestNotPerIteration}
+     * fails if it is ever re-inlined.
+     */
+    private String buildDomainBlueprintSection(String userMessage) {
+        if (knowledgeBase == null || userMessage == null || userMessage.isBlank()) {
+            // debug, not info: a deployment without Qdrant hits this on every single request, so
+            // at info it is permanent noise reporting a configuration rather than an event.
+            log.debug("[AGENT] Domain blueprints: skipped (no knowledge base or empty message)");
+            return "";
+        }
+        List<SchemaDefinition> blueprints = knowledgeBase.getDomainExamples(userMessage, 2);
+        String rendered = DomainBlueprintPrompt.render(blueprints);
+        // Logged because the two failure modes of this feature are indistinguishable from the
+        // outside: "retrieval returned nothing" and "retrieval returned blueprints the model then
+        // ignored" both look like a prompt with no maker-checker in it. Naming the matched
+        // blueprints separates them without re-running the paid lookup.
+        log.info("[AGENT] Domain blueprints: matched={} rendered={} chars",
+                blueprints.stream().map(SchemaDefinition::getName).toList(), rendered.length());
+        return rendered;
+    }
+
+    /**
      * Determine next action via LLM with multimodal support
      */
     private AgentThought think(String userMessage, List<AgentResponse.AgentStep> previousSteps,
-                              AgentContext context, LlmService llmService, List<String> images) {
+                              AgentContext context, LlmService llmService, List<String> images,
+                              String blueprintSection) {
         try {
             // Build prompt
             StringBuilder promptBuilder = new StringBuilder();
@@ -690,6 +742,11 @@ public class AiAgent {
 
             promptBuilder.append("### AVAILABLE TOOLS ###\n");
             promptBuilder.append(toolRegistry.getToolDescriptions()).append("\n\n");
+
+            if (blueprintSection != null && !blueprintSection.isEmpty()) {
+                promptBuilder.append("### SIMILAR APP BLUEPRINTS ###\n");
+                promptBuilder.append(blueprintSection).append("\n\n");
+            }
 
             String preferencesSection = buildUserPreferencesSection(context);
             if (!preferencesSection.isEmpty()) {

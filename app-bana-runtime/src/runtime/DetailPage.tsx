@@ -16,13 +16,14 @@
  * single self-contained file with zero coupling to page-meta shape.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { EntityField, EntitySchema, PageMeta } from '@appbana/shared';
+import type { ApprovalTarget, EntityField, EntitySchema, PageMeta } from '@appbana/shared';
 import {
   ApiFieldError,
   deleteEntityRow,
   getEntityRow,
   getEntitySchema,
   insertEntityRow,
+  resolveAppContext,
   updateEntityRow,
 } from '@appbana/shared';
 import { Button } from './Button';
@@ -34,6 +35,8 @@ import { formatDate } from './cell-formatters';
 import { entityNameFromKey } from './page-classifier';
 import { renderChildTablesFromPage } from './Renderer';
 import { RecordContextProvider } from './RecordContext';
+import { RecordApprovalPanel } from './RecordApprovalPanel';
+import { readRowValue, APPROVAL_STATUS_COLUMN } from './approval-columns';
 
 interface Props {
   readonly page: PageMeta;
@@ -209,6 +212,43 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
 
   const entityLabel = entityNameFromKey(entityKey) || 'Record';
 
+  // C3.9 — the maker's approval surface needs the unqualified entity name plus
+  // the tenant/app the record lives in, which is the shape the approval
+  // endpoints take. Null when the runtime cannot resolve a context, in which
+  // case the panel degrades to nothing rather than issuing bad URLs.
+  const approvalTarget = useMemo<ApprovalTarget | null>(() => {
+    const ctx = resolveAppContext(window.location);
+    if (!ctx || !entityKey || !recordId) return null;
+    return {
+      tenantId: ctx.tenantId,
+      appId: ctx.appId,
+      entityName: entityNameFromKey(entityKey) || entityKey,
+      rowId: recordId,
+    };
+  }, [entityKey, recordId]);
+
+  const refreshRecord = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY) ?? '';
+    try {
+      const fresh = await getEntityRow(entityKey, recordId, token);
+      if (!mountedRef.current) return;
+      setRecord(fresh);
+      setDraft(fresh ?? {});
+      window.dispatchEvent(new CustomEvent('appbana:row-updated', {
+        detail: { entity: entityKey, id: recordId },
+      }));
+    } catch {
+      // A failed refresh must not look like a failed action — the caller has
+      // already reported the outcome of the action itself.
+    }
+  }, [entityKey, recordId]);
+
+  // A PENDING record is owned by the checker; the backend refuses PUTs on it
+  // (applyApprovalPutGuard → BLOCKED_PENDING). Offering Edit would be an
+  // invitation to retype a form that cannot be saved.
+  const approvalStatus = readRowValue(record, APPROVAL_STATUS_COLUMN);
+  const editLocked = String(approvalStatus ?? '').toUpperCase() === 'PENDING';
+
   const setField = useCallback((name: string, value: unknown) => {
     setDraft((prev) => ({ ...prev, [name]: value }));
     setFieldErrors((prev) => {
@@ -223,7 +263,7 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
     setSaving(true);
     try {
       const token = localStorage.getItem(TOKEN_KEY) ?? '';
-      await updateEntityRow(entityKey, recordId, draft, token);
+      const result = await updateEntityRow(entityKey, recordId, draft, token);
       // Refresh the canonical record after save.
       const fresh = await getEntityRow(entityKey, recordId, token);
       if (!mountedRef.current) return;
@@ -231,7 +271,23 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
       setDraft(fresh ?? draft);
       setMode('view');
       setFieldErrors({});
-      toast.success('Saved');
+
+      // C3.9 — an approval-required entity answers an edit of an APPROVED
+      // record with a *revision*: a separate DRAFT row (C2.3). The original is
+      // deliberately left untouched. Reporting a bare "Saved" here and then
+      // re-rendering the unchanged parent told the user their edit had been
+      // lost. Say what actually happened, and give them the way to act on it.
+      if (result.revision && result.revisionId) {
+        toast.success('Saved as a new draft revision', {
+          description: 'The approved record is unchanged until a checker approves your revision.',
+          action: {
+            label: 'Open revision',
+            onClick: () => nav?.navigateToRecord(page, String(result.revisionId)),
+          },
+        });
+      } else {
+        toast.success('Saved');
+      }
       window.dispatchEvent(new CustomEvent('appbana:row-updated', {
         detail: { entity: entityKey, id: recordId },
       }));
@@ -249,7 +305,7 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
     } finally {
       if (mountedRef.current) setSaving(false);
     }
-  }, [schema, record, entityKey, recordId, draft]);
+  }, [schema, record, entityKey, recordId, draft, nav, page]);
 
   const handleDelete = useCallback(async () => {
     if (!record) return;
@@ -345,7 +401,14 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
           )}
           {mode === 'view' ? (
             <>
-              <Button variant="secondary" onClick={() => setMode('edit')}>Edit</Button>
+              <Button
+                variant="secondary"
+                onClick={() => setMode('edit')}
+                disabled={editLocked}
+                title={editLocked ? 'This record is awaiting approval and cannot be edited' : undefined}
+              >
+                Edit
+              </Button>
               <Button variant="danger" onClick={handleDelete}>Delete</Button>
             </>
           ) : (
@@ -369,6 +432,16 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
         </>
       }
     >
+      {/* C3.9 — the maker's approval surface: current state, the checker's
+          rejection reason, the audit trail, and the submit/resubmit action
+          that C3 never built. Renders nothing for non-approval entities. */}
+      <RecordApprovalPanel
+        record={record}
+        target={approvalTarget}
+        recordLabel={`${entityLabel} #${recordId}`}
+        onChanged={() => { void refreshRecord(); }}
+      />
+
       <div className="appbana-page-card">
         {mode === 'view'
           ? editableFields.map((f) => (

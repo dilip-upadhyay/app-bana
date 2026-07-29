@@ -81,12 +81,21 @@ class KnowledgeBaseServiceIntegrationTest {
     void testIndexAndSearch_RealEmbeddings() throws Exception {
         System.out.println("\n=== Test 1: Index and Search with Real Embeddings ===");
 
+        // Derived, not hardcoded. This assertion used to read `assertEquals(39, ...)`
+        // and had drifted to a hard failure (actual: 47) because the corpus grew and
+        // nothing tied the number to its source. The property worth testing is
+        // "everything the loader offers got indexed", which is exactly what the
+        // service promises; the literal count is an implementation detail that
+        // legitimately changes every time a domain template is added.
+        int expectedSchemas = schemaLoader.getAllSchemas().size();
+        assertTrue(expectedSchemas > 0, "schema corpus must not be empty");
+
         // Index all schemas
         knowledgeBaseService.indexAllSchemas();
 
         // Verify indexing
         assertTrue(knowledgeBaseService.isInitialized());
-        assertEquals(39, knowledgeBaseService.getIndexedCount());
+        assertEquals(expectedSchemas, knowledgeBaseService.getIndexedCount());
 
         System.out.println("✓ Indexed " + knowledgeBaseService.getIndexedCount() + " schemas");
 
@@ -95,7 +104,7 @@ class KnowledgeBaseServiceIntegrationTest {
         assertTrue(qdrantService.collectionExists(collectionName));
 
         long pointCount = vectorStoreService.getCount(collectionName);
-        assertEquals(39, pointCount);
+        assertEquals(expectedSchemas, pointCount);
 
         System.out.println("✓ Qdrant collection has " + pointCount + " points");
     }
@@ -216,7 +225,7 @@ class KnowledgeBaseServiceIntegrationTest {
 
         // Verify re-indexing
         assertTrue(knowledgeBaseService.isInitialized());
-        assertEquals(39, knowledgeBaseService.getIndexedCount());
+        assertEquals(schemaLoader.getAllSchemas().size(), knowledgeBaseService.getIndexedCount());
 
         long finalCount = vectorStoreService.getCount(collectionName);
         System.out.println("Final point count: " + finalCount);

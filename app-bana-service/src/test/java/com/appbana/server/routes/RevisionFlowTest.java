@@ -82,19 +82,20 @@ public class RevisionFlowTest {
             s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
         }
 
+        // C4.6 — declares BUSINESS FIELDS ONLY. This fixture used to hand-declare all
+        // eight approval columns, and so did its siblings. That is why 281 green backend
+        // tests never caught that nothing in the backend created those columns: every
+        // fixture supplied the invariant the production code was supposed to guarantee,
+        // so the suite could only ever exercise the already-correct shape. Setting the
+        // flag and nothing else is what a real caller does — scaffold_app, create_entity,
+        // Studio, a script — so the whole approval suite below is now also an end-to-end
+        // assertion that SchemaManager materialises the eight columns from the flag alone.
+        // Do not re-add them here.
         schema = new EntitySchema(ENTITY_NAME, List.of(
                 new EntitySchema.Field("id", "integer", true, true, null),
                 new EntitySchema.Field("vendor", "string", false, false, null),
                 new EntitySchema.Field("amount", "decimal", false, false, null),
-                new EntitySchema.Field("notes", "text", false, false, null),
-                new EntitySchema.Field("approval_status", "status", false, false, null),
-                new EntitySchema.Field("approval_revision", "integer", false, false, null),
-                new EntitySchema.Field("approval_parent_id", "text", false, false, null),
-                new EntitySchema.Field("submitted_by", "string", false, false, null),
-                new EntitySchema.Field("submitted_at", "timestamp", false, false, null),
-                new EntitySchema.Field("approved_by", "string", false, false, null),
-                new EntitySchema.Field("approved_at", "timestamp", false, false, null),
-                new EntitySchema.Field("rejection_reason", "text", false, false, null)
+                new EntitySchema.Field("notes", "text", false, false, null)
         ));
         schema.setTenantId(TENANT_ID);
         schema.setAppId(APP_ID);
@@ -309,6 +310,56 @@ public class RevisionFlowTest {
         assertEquals("amount too high", str(revision, "rejection_reason"));
     }
 
+    /**
+     * C4.6 follow-up — re-editing a REJECTED revision must return it to DRAFT and clear the
+     * stale rejection reason.
+     *
+     * <p>This is the update-side twin of the batch-insert defect. {@code findOpenRevision}
+     * matches DRAFT, PENDING <em>and</em> REJECTED, so a maker's follow-up edit lands on the
+     * rejected row via {@code updateById} rather than creating a new one. That method derived
+     * its SET list from {@code schema.getFields()}, which after C4.6 no longer contains the
+     * approval columns, so every approval value the route staged was dropped: the revision
+     * stayed REJECTED, kept the old reason, and could never be resubmitted — the maker's only
+     * recovery path was gone.
+     *
+     * <p>{@code repeatedPutsReuseTheSameOpenRevision} already covered this code path but
+     * asserted only the business column, so it stayed green throughout.
+     */
+    @Test
+    public void reEditingARejectedRevisionReturnsItToDraftAndClearsTheReason() throws Exception {
+        String liveId = seedApprovedRow("Acme", 100.0);
+
+        GenericEntityRoutes.ApprovalPutResult created = GenericEntityRoutes.applyApprovalPutGuard(
+                crud, schema, liveId, body("amount", 250.0), MAKER);
+        String revisionId = String.valueOf(created.body().get("revisionId"));
+
+        ApprovalService.submitForApproval(TENANT_ID, APP_ID, ENTITY_NAME, revisionId, MAKER, "please review");
+        ApprovalService.rejectRecord(TENANT_ID, APP_ID, ENTITY_NAME, revisionId, CHECKER, "amount too high");
+
+        // The maker reworks the rejected revision.
+        GenericEntityRoutes.ApprovalPutResult reworked = GenericEntityRoutes.applyApprovalPutGuard(
+                crud, schema, liveId, body("amount", 180.0), MAKER);
+
+        assertEquals(GenericEntityRoutes.ApprovalPutAction.REVISION, reworked.action());
+        assertEquals(revisionId, String.valueOf(reworked.body().get("revisionId")),
+                "the rework must reuse the rejected revision row, not spawn a new one");
+
+        Map<String, Object> revision = crud.getById(schema, revisionId);
+        assertEquals(180.0, dbl(revision, "amount"), 0.0001, "the business edit must land");
+        assertEquals("DRAFT", str(revision, "approval_status"),
+                "a reworked revision must return to DRAFT so it can be resubmitted");
+        assertNull(val(revision, "rejection_reason"),
+                "the stale rejection reason must be cleared, not carried into the new draft");
+        assertEquals(liveId, str(revision, "approval_parent_id"),
+                "the revision must stay linked to its parent");
+        assertEquals(MAKER, str(revision, "submitted_by"));
+
+        // And it really is resubmittable now.
+        assertDoesNotThrow(() -> ApprovalService.submitForApproval(
+                TENANT_ID, APP_ID, ENTITY_NAME, revisionId, MAKER, "reworked"));
+        assertEquals("PENDING", str(crud.getById(schema, revisionId), "approval_status"));
+    }
+
     @Test
     public void putOnPendingRowIsBlocked() throws Exception {
         String id = seedRow("Acme", 100.0, "PENDING");
@@ -451,7 +502,10 @@ public class RevisionFlowTest {
         Map<String, Object> filters = new LinkedHashMap<>();
         assertTrue(GenericEntityRoutes.applyApprovalStatusFilter(
                 schema, TENANT_ID, APP_ID, "pending", filters, CHECKER, true));
-        assertEquals("PENDING", filters.get("approval_status"));
+        // C3.9 — wrapped in ExactMatch so buildWhere emits `= ?` rather than the
+        // default `LIKE '%PENDING%'`. Asserting the wrapper, not just the value,
+        // keeps the exactness from being dropped by a later refactor.
+        assertEquals(new EntityCrudService.ExactMatch("PENDING"), filters.get("approval_status"));
     }
 
     @Test

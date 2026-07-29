@@ -314,6 +314,22 @@ public class BatchUpdateEntitiesTool implements Tool {
             return false;
         }
 
+        // Task C4.6 — refuse to delete a backend-owned approval column from an entity
+        // that still has approvalRequired: true. SchemaManager guarantees those eight
+        // columns exist whenever the flag is set; this tool is the one write path that
+        // can break that invariant from the other side, because it removes columns
+        // rather than failing to add them. Dropping approval_status from a live
+        // approval entity leaves records that insert fine and then 500 on submit,
+        // approve and the checker queue — the exact failure C4.6 exists to eliminate.
+        List<String> reserved = reservedApprovalColumnsIn(entity, fieldNamesToRemove);
+        if (!reserved.isEmpty()) {
+            log.warn("[BatchUpdateEntities] Refusing to remove approval column(s) {} from '{}': the entity "
+                    + "has approvalRequired=true, and these columns are required by the approval workflow. "
+                    + "Turn off approvals for the entity first if that is really the intent.",
+                    reserved, entityName);
+            return false;
+        }
+
         // Filter out removed fields
         List<Map<String, Object>> existingFields = (List<Map<String, Object>>) entity.get("fields");
         List<Map<String, Object>> remainingFields = new ArrayList<>();
@@ -407,6 +423,31 @@ public class BatchUpdateEntitiesTool implements Tool {
     private static String buildSchemaKey(String tenantId, String appId, String entityName) {
         String tp = (tenantId == null || tenantId.isBlank()) ? "default" : tenantId;
         return tp + "_" + appId + "_" + entityName;
+    }
+
+    /**
+     * Task C4.6 — the reserved approval columns a {@code remove_fields} update would delete
+     * from an entity that still has {@code approvalRequired: true}, sorted, or empty if the
+     * removal is safe.
+     *
+     * <p>Extracted from {@link #removeFields} so the guard is reachable without an HTTP
+     * round-trip to the backend. This is the one ai-builder write path that can break the
+     * {@code approvalRequired ⟺ eight physical columns} invariant from the removal side:
+     * SchemaManager guarantees the columns exist whenever the flag is set, but nothing stops
+     * this tool from dropping them again while leaving the flag true.
+     *
+     * <p>Returns empty when the entity has no approval workflow — removing a user-defined
+     * field that merely happens to share one of these names is legitimate there.
+     */
+    static List<String> reservedApprovalColumnsIn(Map<String, Object> entity, Set<String> fieldNamesToRemove) {
+        if (entity == null || fieldNamesToRemove == null || !Boolean.TRUE.equals(entity.get("approvalRequired"))) {
+            return List.of();
+        }
+        return fieldNamesToRemove.stream()
+                .filter(n -> n != null
+                        && SchemaEnricher.RESERVED_APPROVAL_COLUMNS.contains(n.trim().toLowerCase(Locale.ROOT)))
+                .sorted()
+                .toList();
     }
 
     /**

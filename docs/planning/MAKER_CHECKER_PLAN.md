@@ -1,6 +1,6 @@
 # Maker-Checker Epic — Implementation Plan
 
-**Status:** 📝 Spec approved 2026-07-26 · ⏳ Execution not started
+**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c/d, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete — and then C4.4d, where the auth fix shipped alongside it repaired one instance of a five-member defect class. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
 **Owner:** AppBana core team
 **Position in master roadmap:** Phase C of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) and Phase B (Complex UI Epic) completing. Runs *before* Phase D — approvals are AppBana's differentiator (the *product*), while D is enterprise packaging.
 **Trigger:** Every regulated customer-facing workflow — KYC, loan origination, account opening, policy issuance, claims processing — has a mandatory two-person integrity control: a **maker** creates or edits a record and a **checker** approves it before it becomes live. AppBana today has no concept of `submitted`, `pending approval`, `approved`, or `rejected`. Without maker-checker, we cannot ship into any regulated vertical, which is the majority of the customer-onboarding market.
@@ -129,7 +129,7 @@ Two mechanisms combined:
 |---|---|---|
 | `approval_status` | `VARCHAR(20)` | `DRAFT` / `PENDING` / `APPROVED` / `REJECTED` |
 | `approval_revision` | `INTEGER` | Monotonic revision counter (1 for first record) |
-| `approval_parent_id` | `VARCHAR(255)` NULL | For revisions, points at the currently-live approved row |
+| `approval_parent_id` | `INTEGER` NULL | For revisions, points at the currently-live approved row |
 | `submitted_by` | `VARCHAR(255)` NULL | User ID |
 | `submitted_at` | `TIMESTAMP` NULL | |
 | `approved_by` | `VARCHAR(255)` NULL | Checker user ID |
@@ -260,8 +260,17 @@ creating another row, so form autosave cannot spam the table.
 If a revision's parent has been deleted meanwhile, the dangling `approval_parent_id` is nulled and
 the revision simply becomes the live row (logged as a WARN) — data is never dropped.
 
-**Legacy tables** created before C2.3 have no `approval_parent_id` column. `applyApprovalPutGuard`
-detects this, logs a WARN and falls back to the old in-place edit rather than failing.
+~~**Legacy tables** created before C2.3 have no `approval_parent_id` column. `applyApprovalPutGuard`
+detects this, logs a WARN and falls back to the old in-place edit rather than failing.~~
+
+**C4.6c — retraction: that fallback no longer exists and, since C4.6, could not execute.** The
+detection it describes was a `schema.getFields()` probe for `approval_parent_id`, which C4.6 replaced
+with `schema.isApprovalRequired()` — tautologically true by the time control reaches that line, so the
+branch was dead and the WARN unreachable. The dead code is now removed. Legacy tables are handled
+earlier and more reliably instead: `SchemaManager.syncApprovalColumns` materialises the column on any
+schema save, so a pre-C2.3 table is migrated rather than special-cased at write time. There is no
+in-place-edit fallback for an APPROVED row, and there must not be one — that fallback was the
+data-integrity failure C4.6 fixed.
 
 ### Implemented behaviour — `?_approvalStatus=` (C2.7)
 
@@ -283,6 +292,8 @@ shows parent and revision coexisting, and the maker needs to see their pending e
 
 ## Sub-phase C3 — Runtime: approval-aware lists, approve/reject dialog
 
+**Status: ✅ Complete 2026-07-28** (except the Playwright round-trip, tracked below).
+
 **Goal:** Every UI surface reflects approval state. Makers see their queue, checkers see theirs, approve/reject is a single-click action.
 
 | # | Task | Where | Est. |
@@ -298,13 +309,30 @@ shows parent and revision coexisting, and the maker needs to see their pending e
 
 ### Exit criteria — C3
 
-- [ ] Every list page for an approval-required entity shows the status pill on every row.
-- [ ] Maker sees `Save as draft` + `Submit for approval`; checker sees `Approve` + `Reject` on a pending row.
-- [ ] Reject requires a reason (no submit without text).
-- [ ] Checker queue page ranks by oldest-submitted first.
-- [ ] Audit drawer shows every state transition with actor + timestamp.
-- [ ] Global pending-count badge updates within 30s of a submit.
+- [x] Every list page for an approval-required entity shows the status pill on every row.
+- [x] Maker sees `Save as draft` + `Submit for approval`; checker sees `Approve` + `Reject` on a pending row.
+- [x] Reject requires a reason (no submit without text).
+- [x] Checker queue page ranks by oldest-submitted first.
+- [x] Audit drawer shows every state transition with actor + timestamp.
+- [x] Global pending-count badge updates within 30s of a submit.
 - [ ] Playwright: full round-trip (maker A submits → checker B rejects with reason → A resubmits → B approves → row visible in live list) passes.
+
+### Deviations from plan — C3
+
+| Task | Planned | Shipped | Why |
+|---|---|---|---|
+| C3.3 | Route `/queue/{entityName}`, new PageMeta layout `checker_queue` | Shell state, no route, no PageMeta | The queue has no page metadata behind it and its visibility is per-user, so synthesising a PageMeta would mean inventing metadata and filtering it back out per caller. The runtime has no router, so no URL was lost. |
+| C3.4 | `ApprovalDetail.tsx` with side-by-side diff | Approve/reject in place in the queue; no diff view | The diff needs a pre-edit snapshot that `appbana_approvals.diff` does not yet populate. Deferred rather than faked. |
+| C3.6 | "My Drafts" | "Drafts" | Entity tables have no `created_by`; the workflow only records `submitted_by`, which is null for a never-submitted draft. Scoping by submitter would hide most drafts; calling an unscoped list "mine" would be undetectably wrong. "Needs rework" *is* scoped, because a REJECTED row must have been submitted. |
+| C3.7 | `PendingCountService.tsx` | `usePendingCounts.ts` + new `?countOnly=true` on the pending endpoint | A polling badge that reused the queue endpoint would ship up to 500 rows per entity per user per tick to read a number. |
+
+### Defects found and fixed during C3
+
+- `GET /api/tenants/{t}/apps/{a}/roles` had **no authentication**, while POST and DELETE on the same path were guarded by C1.9 — any caller could read any user's maker/checker grants in any tenant (`89aac8e`).
+- `fetchPendingApprovals` and `fetchApprovalAudit` returned the `{count, records}` / `{count, history}` envelope while typed as arrays. The checker queue therefore rendered as permanently empty (`943c18e`).
+- The pending queue was ordered `SUBMITTED_AT DESC`, contradicting the exit criterion above and starving the longest-waiting record (`84561a5`).
+- `/api/users/me` matches `SessionMiddleware.ENTITY_API_PATTERN` as `entity=users, id=me`, which skipped session validation and would have 401'd every caller regardless of token (`d5f5247`).
+- A failed submit-for-approval after a successful insert was reported as "Save failed", inviting the user to retype a record that was already saved as a draft (`8560ac0`).
 
 ---
 
@@ -317,14 +345,276 @@ shows parent and revision coexisting, and the maker needs to see their pending e
 | C4.1 | `ScaffoldAppTool` + `CreateEntityTool` parameter schemas accept `approvalRequired: boolean` per entity | [`ScaffoldAppTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/ScaffoldAppTool.java), [`CreateEntityTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/CreateEntityTool.java) | 45 min |
 | C4.2 | Agent prompt — when the domain implies approval (customer onboarding, loan application, KYC, expense claim, purchase order, policy issuance, employee onboarding, contract), the agent's Phase 1 spec proposal includes: *"This app will use a two-person approval flow — one team member creates a customer profile, another approves it before it goes live. Sound right?"* | [`AdvancedPromptEngine.java`](../../ai-builder/src/main/java/com/appbana/ai/llm/AdvancedPromptEngine.java) + explicit RAG few-shot | 60 min |
 | C4.3 | `SchemaEnricher` — validate that entities flagged `approvalRequired` don't also request incompatible custom `status` fields (auto-resolve: rename the user's status to `workflow_status` and inject `approval_status` cleanly) | [`SchemaEnricher.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/SchemaEnricher.java) | 45 min |
-| C4.4 | Two new RAG domain templates — `customer-onboarding-with-approval.json`, `loan-origination-with-approval.json` — showing the agent what an approval-required schema + page set looks like | `builder-database/` | 60 min |
+| C4.4 | Two new RAG domain templates — `customer_onboarding_with_approval`, `loan_origination_with_approval` — showing the agent what an approval-required schema + page set looks like | ~~`builder-database/`~~ → [`AppBanaSchemaLoader.java`](../../ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaSchemaLoader.java) + [`AppBanaPromptEnhancer.java`](../../ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaPromptEnhancer.java) | 60 min |
 | C4.5 | Auto-generate checker queue page — when `scaffold_app` sees `approvalRequired: true` on any entity, `GeneratePageTool` also emits a `checker_queue` page for that entity | [`GeneratePageTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java) | 30 min |
+| C4.6 | **Added 2026-07-30 by review of `5ce6bb4`.** Give the `approvalRequired` ⇒ eight-physical-columns invariant a single owner: inject in `SchemaManager` (the chokepoint every writer of the flag passes through), delete injection from `SchemaEnricher`, and fix the consumers that inferred approval capability from `schema.getFields()` | [`SchemaManager.java`](../../app-bana-service/src/main/java/com/appbana/SchemaManager.java), [`EntityCrudService.java`](../../app-bana-service/src/main/java/com/appbana/service/EntityCrudService.java), [`GenericEntityRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/GenericEntityRoutes.java), [`SchemaEnricher.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/SchemaEnricher.java) | — |
+
+**Progress (2026-07-30):** C4.1 ✅ · C4.2 ✅ · C4.3 ⚠️ superseded by C4.6 · C4.6 ✅ · C4.4 ✅ · C4.5 ❌ closed as obsolete (see deviations below). C4.6 was sequenced before C4.4 deliberately — see the C4.3/C4.6 deviation.
+
+### C4.4 deviation — the stated location was inert, and so was the delivery path
+
+~~The templates were to be authored as `customer-onboarding-with-approval.json` and
+`loan-origination-with-approval.json` under `builder-database/`.~~ **Both halves of that were wrong,
+and each would have shipped an artifact that looks correct and reaches nothing:**
+
+1. **`builder-database/` is not loaded by any code.** All 17 repo-wide references to it are docs,
+   READMEs, or self-references. The live loader is `AppBanaSchemaLoader.loadDomainTemplates()`, where
+   the eight existing domain templates are Java-embedded and registered under category
+   `domain-template`. Two new JSON files would have been a verbatim repeat of C4.1 — a parameter
+   accepted, apparently correct, silently dropped before the consumer.
+2. **Even correctly located, the content could not reach the model.** Domain templates carry the wire
+   type `"domain-template"`, which has no `SchemaDefinition.SchemaType` constant, so
+   `getTypeAsEnum()` returns `null` and `AppBanaPromptEnhancer.buildSchemaContext()` discarded every
+   template at its `.filter(s -> s.getTypeAsEnum() != null)` before any render branch ran. The only
+   trace reaching the prompt was each template's search keywords via `buildExamplesSection` — which
+   are echoes of the user's own query and carry no structure. `KnowledgeBaseService` also exposes
+   `getDomainExamples()`, purpose-built for this and with **zero callers**, and `SearchKnowledgeTool`
+   returns only `name`/`type`/`description`, dropping the `entities` metadata entirely.
+
+**Delivered instead:** the two blueprints in `AppBanaSchemaLoader`, an `addDomainTemplate` overload
+carrying `approvalRequiredEntities`, that signal appended to `buildSearchableText()` so it is in the
+**embedding** (a query like "loan approval workflow" must outrank the plain `finance` template), and
+`DomainBlueprintPrompt.render()` invoked from `AiAgent.think()` so entity structure and the flag
+actually reach the model.
+
+#### C4.4a — the first fix rendered into a prompt nobody builds
+
+Review of `c7a5adb` found the tests drove `AppBanaPromptEnhancer.enhancePrompt`, which nothing calls.
+Tracing it out revealed the delivery path was **entirely severed**, not merely filtered:
+
+| Hop | Status |
+|---|---|
+| `AdvancedPromptEngine.buildPrompt(...)` | **zero call sites repo-wide** |
+| `AiChatController` | takes `AdvancedPromptEngine` as a constructor parameter it never stores |
+| `AppBanaPromptEnhancer.enhancePrompt` | reachable only from `buildPrompt` — therefore dead |
+| `AiAgent.knowledgeBase` | assigned by `AiServer:189` via `withKnowledgeBase(...)`, **never read** |
+| `AiAgent.think()` | the live prompt — contained no RAG of any kind |
+
+So the C4.4 renderer sat on a branch no request executes, and the review's own "the feature genuinely
+works, both entry points funnel into `buildSchemaContext`" was optimistic: there is no second entry
+point. `buildSchemaContext` has exactly one caller, which has exactly one caller, which has none.
+
+**Fixed by** extracting `DomainBlueprintPrompt` and calling it from `AiAgent.think()` through the
+already-wired-but-unread `knowledgeBase` field, via `getDomainExamples()` — which was itself a
+zero-caller method built for exactly this. Two dead paths became live; `AppBanaPromptEnhancer` now
+delegates to the same renderer and is documented as dead.
+
+The tests now capture the literal string passed to `llmService.chatWithJsonMode(...)`. Mutation check:
+restoring `knowledgeBase` to unread turns exactly the three prompt-content tests red and leaves the
+five layer-independent ones green.
+
+**Still dead, deliberately not fixed:** `AdvancedPromptEngine.buildPrompt` /
+`AppBanaPromptEnhancer.enhancePrompt` (delete or wire in a later task), and `SearchKnowledgeTool`
+returning only `name`/`type`/`description`.
+
+**Lesson:** before choosing the layer to test at, grep for callers of the entry point — the same
+query that produced this task's best insight (`git grep builder-database -- '*.java'` → empty) would
+have returned empty for `buildPrompt` in the same second. Grep for **call sites**, not for the
+symbol: three files (`ToolRegistry:97`, `ConversationSpec:14`, `DialogueManager:161`) carry javadoc
+reading `{@code AiAgent.buildAgentPrompt()}` for a method with zero callers. A symbol search returns
+those comments and they read as confirmation. Documentation is written by the producer and stays
+locally coherent after the chain is cut — it is evidence about intent, never about reachability.
+
+#### C4.4b — the retrieval was paid for once per iteration
+
+C4.4a wired the lookup into `think()`, which runs once per agent iteration (up to 10). `userMessage`
+is fixed for the whole loop and `getDomainExamples` has no cache, so an n-iteration request bought n
+identical OpenAI embedding calls and n identical Qdrant searches to build n identical strings. Not a
+correctness bug — the prompt was right — but a paid network round-trip multiplied by the iteration
+cap, on the hot path.
+
+**Fixed by** computing the section once in each entry point, after the pattern-match short-circuit
+(so a pattern-matched request pays nothing), and passing it into `think()`. Guarded by
+`theBlueprintLookupIsPaidForOncePerRequestNotPerIteration`, which drives a real 2-iteration loop and
+asserts `times(1)` on the knowledge base and `times(2)` on the LLM — a claim about the consumer, so
+it fails if the lookup is re-inlined anywhere per-iteration. Mutation: re-inlining into `think()`
+turns exactly that one test red.
+
+The blueprints deliberately declare **no** approval columns — only the flag. `SchemaManager` owns
+column injection (C4.6); a template that declared them would converge on the same physical table via
+dedupe but would teach the agent the ownership-ambiguous shape C4.6 removed.
+
+#### C4.4c — the blueprint retrieval worked and rendered nothing
+
+Running the exit-criteria gate for the first time produced a Phase 1 reply with no maker-checker in
+it at all, on the query the feature was designed for. One log line separated the two possible
+causes:
+
+```
+[AGENT] Domain blueprints: matched=[customer_onboarding_with_approval, loan_origination_with_approval] rendered=0 chars
+```
+
+Retrieval was perfect — both maker-checker blueprints, ranked #1 and #2, out of ten domain
+templates. The render was empty.
+
+`KnowledgeBaseService.searchResultToSchema` reads `schemaId`, `schemaName`, `description`,
+`schemaType`, `examples` and `schemaMetadata` back out of the Qdrant payload. It never read
+**`category`** — the very key the filtered search matches on, written one method away by
+`indexSchemaInternal`. So *every* schema returned by *every* search in the system had
+`category == null`, and `DomainBlueprintPrompt.render`, which selects domain templates by category,
+discarded all of them and returned `""`. Nothing threw. The prompt simply had nothing in it.
+
+**Fixed** by reading `category` back. Post-fix the same query renders 2269 chars and the Phase 1
+reply proposes the two-person flow in business English.
+
+**Why nine passing tests missed it:** `ApprovalDomainTemplateTest` mocks `getDomainExamples` and
+hands the agent `SchemaDefinition`s it builds itself — and *its fixtures set `category`*. The fixture
+was more complete than production. This is the same shape as the C4.6 finding ("a fixture that
+supplies the invariant under test cannot witness that invariant being broken"), recurring one layer
+up: there, fixtures declared columns production was supposed to inject; here, a fixture populated a
+field production was supposed to read back.
+
+The new guard is structural rather than another assertion about a hand-built object.
+`KnowledgeBaseRoundTripTest` runs a real shipped blueprint through the real indexing path, captures
+**the exact metadata map the writer handed the vector store**, feeds that same map back through the
+real search-result conversion, and asserts the rendered section is non-empty. Producer and consumer
+share one map, so a key written by one and ignored by the other cannot survive — whatever the key is
+called. Mutation: removing the `setCategory` line fails it with
+`expected: <domain-template> but was: <null>`.
+
+Two further defects surfaced from the same gate run, both invisible to unit tests:
+
+- **`GeneratePageTool` never sent the session token.** It was the only *writer* in the scaffold chain
+  building its request without the `Authorization: Bearer` header that `CreateAppTool` and
+  `CreateEntityTool` both send. App creation and all three entity creations succeeded, then every
+  page 401'd — a half-built app rolled back on an auth error dressed up as a modelling one. It had
+  been latent because nothing previously drove the scaffold path with a real token.
+  **See C4.4d below: fixing only the writer was itself an incomplete fix.**
+- **Deploy-time foreign-key failure** (`foreign key constraint ... cannot be implemented`) on
+  `reference` columns whose type does not match the parent's PK. Pre-existing, unrelated to
+  maker-checker, and out of scope for C4 — logged here because the gate is where it surfaced.
+
+**Lesson:** three rounds of review agreed C4.4 was code-complete, and the feature had never once
+produced its intended output. Every hop was individually verified — the blueprint is indexed, the
+metadata round-trips, the section is injected, the lookup is hoisted — and the chain was still
+severed, because "the payload contains `category`" and "the reader asks for `category`" were checked
+by different people at different times and never against each other. The end-to-end gate was not
+a formality after the unit tests; it was the only thing that ran the whole chain.
+
+#### C4.4d — the auth fix stopped at writers; five requests were unauthenticated
+
+Review round 7 accepted C4.4c and rejected the auth fix shipped alongside it. The claim
+*"`GeneratePageTool` was the only writer missing the header"* was true as written, and the wrong
+frame: the defect class is *a tool issuing a backend request without the session token*, and
+scoping the sweep to writers left the read tools untouched. This is the round-2 shape again
+(`insertRecordLegacy` fixed, `insertBatch` missed) — one instance repaired, siblings not enumerated.
+
+Enumerating every `HttpRequest.newBuilder()` in the tool package found **five** unauthenticated
+sites, not the three the review named:
+
+| Tool | Effect of the missing header |
+|---|---|
+| `list_apps` | 401 on every invocation |
+| `list_pages` | 401 on every invocation |
+| `list_workflows` | 401 on every invocation |
+| `list_entities` (app-context branch) | 401; the `/schema` fallback branch in the same file *does* authenticate |
+| `get_entity_details` (app-context branch) | 401 **silently swallowed** |
+
+The two the review missed are the more interesting ones, because each file contains a *second*
+request that does send the token. A per-file question — "does this tool authenticate?" — answers
+yes for both while the branch the agent actually takes when an app is selected 401s.
+
+`get_entity_details` is the worst case and the only one that returns a wrong answer rather than an
+error: its 401 fails the `statusCode() == 200` check and falls through to the global `/schema`
+lookup, which authenticates correctly but searches by the bare entity name with no
+`{tenantId}_{appId}_` prefix — so it misses too, and the tool reports "entity not found" for an
+entity that demonstrably exists. The other four surface as a failed tool call, which burns an agent
+iteration and increments `consecutiveFailures` toward the abort-at-3, so the user sees the agent
+give up vaguely instead of an auth error.
+
+**Why the gate missed it:** all three C4 exit criteria are create/scaffold flows. None of them asks
+*"what apps do I have?"* — the same reason the token defect stayed latent in `GeneratePageTool`
+until something finally drove that path.
+
+**The guard is two tests, because neither is sufficient alone** —
+[`ToolAuthHeaderTest`](../../ai-builder/src/test/java/com/appbana/ai/agent/tool/ToolAuthHeaderTest.java):
+
+1. `everyDrivableToolPutsTheTokenOnTheWire` stands up a real `HttpServer`, drives the five tools,
+   and asserts every request it *received* carried the header. This is the seam test: it proves the
+   header reaches the socket, which no amount of source inspection can. It also asserts each tool
+   made at least one request, so it cannot pass vacuously for a tool that fails before calling out.
+2. `noToolBuildsARequestWithoutAttachingTheToken` scans the tool sources for every
+   `HttpRequest.newBuilder()` and requires an `Authorization` header within the same builder. This
+   covers the nine tools that need an LLM or a validator to drive and so cannot be exercised
+   behaviourally — which is exactly where tool number fourteen would reintroduce this.
+
+Both mutations were run. Neutering `ListAppsTool`'s header guard (leaving the source text intact)
+fails test 1 only; deleting `DeployAppTool`'s header — a tool test 1 cannot reach — fails test 2
+only, naming the file and line. Neither test subsumes the other.
+
+Live-verified against the running stack on the exact route `ListAppsTool` builds:
+`GET /appbana-studio/{tenant}/apps` returns `401 {"error":"Unauthorized","message":"Missing session
+token"}` with no header and `200` with the app listed with one.
+
+**Lesson:** the fix for a seam defect has the same failure mode as the defect. C4.4c was found by
+asking "which components disagree?"; the accompanying auth fix was scoped by asking "which component
+was broken?" — and repaired one instance of a class with five members. When a defect is a missing
+call at a boundary, the unit of repair is *every crossing of that boundary*, enumerated
+mechanically, and the guard belongs on the boundary rather than on the instance.
+
+
+> **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
+> Accepting `approvalRequired` in the two parameter schemas was necessary but not sufficient. `CreateEntityTool.buildEntityMetadata` constructs the *entire* body POSTed to `/schema` and silently drops anything it does not explicitly copy, so the flag never reached the backend. Because `SchemaEnricher` read the flag independently and injected the 8 approval columns anyway, the failure was invisible from the outside: the physical table came out approval-shaped while the schema record carried `approvalRequired=false`, and all 13 backend guards branch on `schema.isApprovalRequired()` rather than on the presence of the columns. The entity *looked* approval-enabled and behaved as if it were not. Fixed, with `CreateEntityToolApprovalTest` pinning the payload.
+
+> **Deviation from plan — C4.3 was inverted, then superseded by C4.6.**
+> The task reads "validate that entities flagged `approvalRequired` don't also request incompatible custom `status` fields". The real hazard was narrower and worse: `SchemaEnricher.injectApprovalFields` used to *skip* injecting any column whose name already existed, so an LLM that invented its own `approval_status` (type `text`, options `Yes`/`No`) suppressed the canonical definition entirely. C4.3 inverted that to inject unconditionally and rename the colliding user field to `workflow_<name>`.
+>
+> **That inversion was itself a defect, and the whole mechanism has since been deleted.** A lenient→strict change shipped without a census of its inputs: the very next task, C4.4, adds RAG templates showing the agent what an approval schema looks like — and the natural way to write one is to declare the eight columns. Under unconditional rename, every such template would have produced eight junk `workflow_*` columns in every table of every app built from it, permanently. Under the old skip-if-exists rule that same template was a harmless no-op.
+>
+> C4.6 removes the conflict at its root: `SchemaEnricher` no longer injects approval columns at all, and `SchemaManager` — which every writer of the flag passes through — materialises them, deduping against whatever the schema already declares. A template that declares the columns and one that omits them now converge on the same physical table. `SchemaEnricher.RESERVED_APPROVAL_COLUMNS` survives as a recognition-only constant (a documented mirror of `ApprovalColumns.NAMES`, since ai-builder has no Maven dependency on `app-bana-service`), used by `BatchUpdateEntitiesTool` to refuse deleting an approval column while the flag is still set.
+
+> **Deviation from plan — C4.6 was not in the original spec.**
+> C4.1 made `approvalRequired` reachable from `create_entity`, but only half the invariant was owned: `ApprovalColumns`' javadoc claimed "the eight system columns **SchemaManager injects**", while `SchemaManager` contained no reference to approvals whatsoever. The sole producer was `SchemaEnricher`, in the separate ai-builder process, on the `scaffold_app` path only — one of four writers of the flag (the others being `create_entity`, `batch_update_entities`, and any direct `POST /schema` from Studio, a script or a test). Before C4.1 the gap was harmless *by accident*, because the flag was being dropped anyway; C4.1 removed that accidental protection without moving the injection, so `create_entity` began emitting entities that accept records and then fail on the first workflow action.
+>
+> Fixing the producer exposed three consumers that had silently depended on the columns being *declared schema fields* — which they only ever were on enricher-built entities:
+> - `EntityCrudService.insertRecordLegacy` builds its column list from `schema.getFields()`, so the server-assigned `approval_status=DRAFT` / `approval_revision=1` / `submitted_by` that `enforceApprovalPreInsert` injects were being dropped, landing every new row with a NULL status.
+> - `GenericEntityRoutes.applyApprovalPutGuard` and `EntityCrudService.findOpenRevision` both answered "does this entity support revisions?" by probing `getFields()` for `approval_parent_id`. Post-C4.6 that reported *no* for every correctly-provisioned approval entity, downgrading what should be a new DRAFT revision into an in-place edit of a live APPROVED row. `approvalRequired` is now the authority in both.
+> - `approval_parent_id` is INTEGER (matching the PK it points at), but `findOpenRevision` bound the id as a String — masked until now because fixtures declared the column as text. Coercion is centralised in `ApprovalColumns.parentIdValue`.
+>
+> **Why the existing suite never caught any of this:** every approval fixture hand-declared the eight columns, so the tests supplied the exact invariant production code was supposed to guarantee. 281 green backend tests could only ever exercise the already-correct shape.
+>
+> **C4.6a (follow-up) — the fixture conversion was incomplete, and it hid two more instances of the same defect.** The C4.6 commit message and this plan both claimed "those fixtures now set the flag and nothing else". That was true of `RevisionFlowTest` and of one `ApprovalRoutesSecurityTest` fixture, and **false** of the other two in that file, which still declared seven of the eight columns. Because the only batch-insert test in the codebase lives there, the declared columns kept re-entering `getFields()` and the following stayed invisible:
+> - `EntityCrudService.insertBatch` built its column list from `getFields()` exactly as `insertRecordLegacy` had, so every server-assigned approval value was dropped. Blast radius: `GenerateMockDataTool` posts to `/api/{entity}/batch`, so every AI-seeded approval app got NULL-status rows — and `ApprovalService.Status.fromValue(null)` returns `DRAFT`, so `submit` on those rows returned 200 and nothing surfaced the corruption.
+> - `EntityCrudService.updateById` had the same shape, reached from the revision branch of `applyApprovalPutGuard`. Re-editing a **REJECTED** revision silently lost the `approval_status → DRAFT` reset and the `rejection_reason → null` clear, stranding the revision as un-resubmittable. `repeatedPutsReuseTheSameOpenRevision` covered that code path but asserted only the business column.
+>
+> Both now derive their column list from one builder, `EntityCrudService.writableFields()`. `updateById` takes an explicit `allowApprovalColumns` opt-in.
+>
+> **Lesson:** "the sweep is complete" is itself a testable claim, and cheaper to check than to have a reviewer disprove. A fixture that supplies the invariant under test cannot witness that invariant being broken — so converting fixtures is not cleanup, it is the experiment.
+>
+> ~~`allowApprovalColumns` defaults to `false`, because there is no `enforceApprovalPreUpdate` counterpart — the exclusion on client-facing PUTs *is* the guard against a body of `{"approval_status":"APPROVED"}`.~~
+>
+> **C4.6b — retraction: the sentence struck through above was wrong, and writing the test that was supposed to *confirm* it disproved it instead.** Review round 3 asked for the `false` default to be pinned by a test rather than a comment. Mutating the default to `true` should have leaked a forged `approval_status=APPROVED`. It leaked exactly one column — `submitted_by=alice_maker`, the **server's own** value — and never the forged `eve_attacker`.
+>
+> The reason: `applyApprovalPutGuard` calls `stripApprovalColumns(data)` unconditionally for any approval-required entity before it returns, and all three client PUT routes run it. **That strip is the guard**; the column-list exclusion was never load-bearing for security. What the exclusion actually did was discard the three values the guard deliberately *re-stages* immediately after stripping — `approval_status=DRAFT`, `rejection_reason=null`, `submitted_by=<session user>`.
+>
+> So C4.6a fixed the revision path and left the identical bug on the in-place path: **a maker editing their own REJECTED row got a 200 with the business edit applied, while the row stayed REJECTED carrying its stale rejection reason** — the same un-resubmittable dead end C4.6a set out to fix, one branch over. The three PUT routes now pass `allowApprovalColumns=true`, which is safe precisely because the guard has already stripped client input. The `false` default is retained as defence-in-depth for a future caller that skips the guard.
+>
+> `RevisionFlowTest.putOnRejectedRowReturnsItToDraftInPlace` covered this exact scenario and stayed green throughout, because it asserts on the in-memory `data` map that the guard mutates rather than on the stored row — the guard's staging was always correct; the persistence was not.
+>
+> **Lesson:** a security claim stated as a mechanism ("the exclusion is the guard") rather than an outcome ("forged values must not persist; server-staged ones must") can be false while the outcome it describes is true, and the codebase will look fine either way. Mutation-testing the guard is what separated the two — and it cost one edit and one test run.
+
+> **Deviation from plan — C4.5 as written is not implementable.**
+> C4.5 assumes the checker queue is a page with `PageMeta` behind it. It is not: C3.3 shipped the queue as **shell state with no route and no `PageMeta`**, because its contents are per-user (a checker sees only rows they are eligible to approve) and the runtime has no router, so synthesising page metadata would mean inventing it at scaffold time and filtering it back out per caller. `GeneratePageTool` therefore has nothing meaningful to emit. The queue already appears automatically for any user holding the CHECKER role the moment an approval-required entity exists — which is the outcome C4.5 wanted — so **no scaffold-time work is required**. C4.5 is closed as obsolete rather than implemented. If the runtime gains a router later, revisit as a routing task, not a scaffolding one.
 
 ### Exit criteria — C4
 
-- [ ] User says *"I want a customer onboarding app"* → agent proposes maker-checker in Phase 1 → user says *"yes"* → scaffold produces approval-required entities + checker queue pages automatically.
-- [ ] User can override: *"no approval flow"* → agent produces flat entities.
-- [ ] Regression: apps that don't imply approval (blog, todo, spice shop) do NOT get the maker-checker prompt.
+Verified 29-07-2026 against the full stack (ai-builder 8081 + backend 8080 + Postgres + Qdrant) with
+a live `OPENAI_API_KEY` and a real session token. All three passed only *after* C4.4c; on the
+pre-C4.4c build every one of them failed.
+
+- [x] User says *"I want a customer onboarding app"* → agent proposes maker-checker in Phase 1 → user says *"yes"* → scaffold produces approval-required entities. (The checker queue then appears on its own for CHECKER-role users — see the C4.5 deviation; it is not scaffolded.)
+  - Phase 1 reply: *"allowing one team member to create customer records, which another team member must approve before they go live"* — business English, no `approvalRequired`, no column names.
+  - On *"Yes, let's build it!"*: `create_entity` called with `approvalRequired=true` for `CustomerApplication` **only**, matching the blueprint's `approvalRequiredEntities`.
+  - Persisted: `appbana_schemas.json->>'approvalRequired'` is `true` for `CustomerApplication`, `false` for `OnboardingDocument` and `OnboardingNote`.
+  - Materialised: all eight approval columns present on the physical table (`APPROVAL_STATUS`, `APPROVAL_REVISION`, `APPROVAL_PARENT_ID`, `SUBMITTED_BY`, `SUBMITTED_AT`, `APPROVED_BY`, `APPROVED_AT`, `REJECTION_REASON`) — and absent from the other two.
+- [x] User can override: *"no approval flow"* → agent produces flat entities.
+  - *"...but no approval flow — keep it simple, one person does everything"* → two flat entities, no approval language anywhere in the reply. The override beats the retrieved blueprint.
+- [x] Regression: apps that don't imply approval (blog, todo, spice shop) do NOT get the maker-checker prompt.
+  - *"a spice shop app to sell spices online"* → `matched=[ecommerce, restaurant]`. The maker-checker blueprints were not retrieved at all, so the feared absence of a relevance floor in `getDomainExamples` did not bite; ranking alone was sufficient. Reply contains no approval concepts.
+
+The flag surviving into the `/schema` payload, both tool schemas advertising it with an intact
+decision rule, and the colliding-column rename remain covered by unit tests.
+
 
 ---
 
@@ -435,8 +725,13 @@ shows parent and revision coexisting, and the maker needs to see their pending e
 - `ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java` — C4
 - `ai-builder/src/main/java/com/appbana/ai/agent/tool/SchemaEnricher.java` — C1, C4
 - `ai-builder/src/main/java/com/appbana/ai/llm/AdvancedPromptEngine.java` — C4
-- `builder-database/customer-onboarding-with-approval.json` — C4 (new RAG example)
-- `builder-database/loan-origination-with-approval.json` — C4 (new RAG example)
+- `ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaSchemaLoader.java` — C4.4 (the two blueprints)
+- `ai-builder/src/main/java/com/appbana/ai/knowledge/DomainBlueprintPrompt.java` — C4.4a (renderer)
+- `ai-builder/src/main/java/com/appbana/ai/agent/AiAgent.java` — C4.4a (the only live injection point), C4.4b (memoised per request)
+- `ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaPromptEnhancer.java` — C4.4 (dead path; delegates)
+- `ai-builder/src/main/java/com/appbana/ai/knowledge/KnowledgeBaseService.java` — C4.4 (approval signal into the embedding)
+- ~~`builder-database/customer-onboarding-with-approval.json`~~ — see the C4.4 deviation: `builder-database/` is not read by any code
+- ~~`builder-database/loan-origination-with-approval.json`~~ — same
 
 ---
 

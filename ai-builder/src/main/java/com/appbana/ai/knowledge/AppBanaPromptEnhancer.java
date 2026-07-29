@@ -216,7 +216,22 @@ public class AppBanaPromptEnhancer {
             }
         }
 
+        context.append(buildDomainTemplateSection(schemas));
+
         return context.toString();
+    }
+
+    /**
+     * C4.4 — render retrieved domain blueprints, including which entities need maker-checker.
+     *
+     * <p><b>This method is on a dead path.</b> Its only caller is {@link #enhancePrompt}, whose only
+     * caller is {@code AdvancedPromptEngine.buildPrompt}, which has zero call sites repo-wide. Kept
+     * so this class stays internally consistent, but the live rendering happens in
+     * {@code AiAgent.think()} via {@link DomainBlueprintPrompt#render(List)} — change behaviour
+     * there, and do not verify a prompt claim through this entry point.
+     */
+    String buildDomainTemplateSection(List<SchemaDefinition> schemas) {
+        return DomainBlueprintPrompt.render(schemas);
     }
 
     /**

@@ -95,7 +95,7 @@ C2 was signed off with two plan items silently unimplemented. Both are now close
 | C2.7 | `?_approvalStatus=` did not exist | Implemented on all three GET list route families, with `PENDING` restricted to checkers. The `?filter=approval_status:…` side door is routed through the same check |
 | — | `APPROVAL_COLUMNS` omitted `approval_parent_id`, so clients could forge it | Added to the strip-list |
 
-New test file `RevisionFlowTest.java` (20 tests). Backend suite: **269/269 pass** (was 249/249).
+New test file `RevisionFlowTest.java` (20 tests). Backend suite: **270/270 pass** (was 249/249).
 
 A code review of the first commit (`88dbbaa`) surfaced four further defects, fixed in `62957f8`:
 missing-parent merge reported a dead row id as live; `clearRevisionPointer` swallowed an exception
@@ -103,8 +103,69 @@ inside an open transaction and turned a rollback into a reported success; concur
 same parent each inserted a revision (now serialised by a `SELECT … FOR UPDATE` mutex); and 64KB
 audit-diff truncation destroyed the irreplaceable `before` snapshot (now sheds `after` first).
 
+A second review round (`894446f`) closed the last open C2 exit criterion: `ApprovalRoutes` mapped
+every `IllegalStateException` to 403, so workflow conflicts were indistinguishable from permission
+errors. `ApprovalConflictException` — a subtype, so existing callers are unaffected — now maps to
+**409**. `getAuditTrail` also switched to most-recent-first as C2.6 specifies. **All C2 exit
+criteria are now met.**
+
 Deliberate deviation: no `superseded_by` column. See the note in
 [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) §C2.
+
+---
+
+## Build and CI repair (2026-07-28)
+
+Two long-standing breakages were fixed after C2 landed. Neither was caused by the C2 work — both
+had been failing silently for some time.
+
+### `ai-builder` test suite (`100b676`)
+
+The module had 5 failures + 14 errors and was failing `mvn install` at the reactor root. Now
+**145 run, 0 failures, 0 errors, 2 skipped** (the skips are `OPENAI_API_KEY`-gated integration
+tests, which now use `Assumptions.assumeTrue` instead of throwing).
+
+Root causes: Testcontainers mapped Qdrant's port 6333 (HTTP/REST) but `QdrantService` speaks gRPC
+on 6334, so every container-backed test died — `VectorStoreServiceTest` had been effectively dead
+because its `@BeforeAll` always threw, letting its assertions rot undetected. Two tests acted on
+collections they never created. `KnowledgeBaseServiceTest` still stubbed `embed()` after production
+moved to `embedBatch()`. Mockito's `anyString()` does not match `null`, and `AiAgent.process`
+delegates with `provider == null`.
+
+Repairing the tests exposed **two real production bugs** they had been masking:
+
+| Bug | Impact | Fix |
+|---|---|---|
+| `KnowledgeBaseService.searchResultToSchema` called `SchemaType.valueOf` on the wire value, but the constant is `ENTITY_FIELD` while the wire value is `"field-type"` | Every field-type search hit — 31 of 47 schemas — came back with `type == null` | Added `SchemaType.fromValue(String)` |
+| `AiChatController` loaded user preferences onto the agent context, but `AiAgent` never referenced them | Preferences were collected and silently discarded; they never reached the model | Added `AiAgent.buildUserPreferencesSection`, wired into `think()` |
+
+### CI pipeline (`894446f`, `13bd762`)
+
+CI had been red for some time. Two independent causes:
+
+1. **No database.** `mvn -B verify` ran with no PostgreSQL, but the Java suites talk to a real
+   database on `localhost:5432` using the credentials in the tracked `config.json`. Added a
+   `postgres:16` service container with a health check to
+   [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+2. **The migration chain could not run against a fresh database.** With Postgres provisioned, CI
+   then failed at changeset V10 with `relation "appbana_schemas" does not exist`.
+   `appbana_schemas`, `appbana_migrations` and `appbana_audit` were created lazily by
+   `JdbcManager.ensureMetaTable()`, which `ApiServer.startJdk()` calls **after** Liquibase. Every
+   long-lived dev database already had them from a historical bootstrap order, so the gap was
+   invisible locally. New changeset **V0** creates them before V1, idempotently. V10 was left
+   untouched — editing it would change its checksum and break every database that has run it.
+
+> This was a **deployment** bug, not merely a CI one: no new environment could be provisioned from
+> the migration chain alone. Stage 5 (Production Deploy) would have hit it directly.
+
+Verified in both directions: an empty database migrated and passed 270/270 (previously impossible),
+and the existing database re-ran at 270/270 confirming V0 is a no-op.
+
+`PasswordServiceTest.testConstantTimeComparison` was also de-flaked — it took a single wall-clock
+sample per branch with no warm-up, so JIT and runner contention alone could breach the 2× ratio. It
+now warms up and compares medians of 7 samples.
+
+**Build state: `app-bana` 270/270 · `ai-builder` 145 (2 skipped) · CI green at `13bd762`.**
 
 ---
 

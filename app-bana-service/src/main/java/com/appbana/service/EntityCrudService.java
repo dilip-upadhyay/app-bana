@@ -2,6 +2,7 @@ package com.appbana.service;
 
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
+import com.appbana.approval.ApprovalColumns;
 import com.appbana.model.EntitySchema;
 import com.appbana.model.TenantContext;
 import org.slf4j.Logger;
@@ -163,21 +164,78 @@ public class EntityCrudService {
         return insertRecordLegacy(schema, data);
     }
 
+    /**
+     * The complete writable column list for {@code rows} — every declared field except an
+     * auto-increment PK, plus any approval column the server has already staged into the row.
+     *
+     * <p>C4.6 follow-up — this is the single builder {@code insertRecordLegacy}, {@link #insertBatch}
+     * and the approval-revision branch of {@link #updateById} all derive their column list from. It
+     * exists because deriving that list from {@code schema.getFields()} alone is now wrong for
+     * approval-required entities: C4.6 made the eight approval columns physical-only, so
+     * {@code getFields()} no longer mentions them, and the server-assigned
+     * {@code approval_status} / {@code approval_revision} / {@code submitted_by} values staged by
+     * {@code GenericEntityRoutes} were being silently dropped on the floor — landing rows with a
+     * NULL status that {@code ApprovalService.Status.fromValue(null)} then reads back as DRAFT, so
+     * nothing downstream complained. The single-record insert was fixed in the C4.6 commit; the
+     * batch insert and the revision update were not. Centralising the rule here is what stops a
+     * fourth write path repeating it.
+     *
+     * <p><b>Security</b> — an approval column is included only when the row map already contains
+     * that key, and only callers that opt in reach this for updates. That is what keeps this
+     * consistent with {@code ApprovalColumns.asFields()}'s "never merge these into an insert field
+     * list" warning: {@code enforceApprovalPreInsert()} strips every client-supplied approval value
+     * before putting the server's own values back, so on insert paths the only approval keys that
+     * can be present are ones the server itself staged. A forged {@code approval_status=APPROVED}
+     * in a request body never survives to this point.
+     *
+     * <p>Presence is evaluated across the whole batch (union, not per row) because one
+     * {@code PreparedStatement} is shared by every element, so the column list must be fixed for
+     * all of them; an element missing a key simply binds null.
+     */
+    static List<EntitySchema.Field> writableFields(EntitySchema schema, List<Map<String, Object>> rows) {
+        List<EntitySchema.Field> out = new ArrayList<>();
+        for (EntitySchema.Field f : schema.getFields()) {
+            if (f.isPrimaryKey() && f.isAutoIncrement()) {
+                continue;
+            }
+            out.add(f);
+        }
+        if (!schema.isApprovalRequired()) {
+            return out;
+        }
+        Set<String> declared = new HashSet<>();
+        for (EntitySchema.Field f : out) {
+            if (f.getName() != null) {
+                declared.add(f.getName().toLowerCase(Locale.ROOT));
+            }
+        }
+        for (EntitySchema.Field approvalField : ApprovalColumns.asFields()) {
+            String name = approvalField.getName();
+            // Both sides normalised: ApprovalColumns.NAMES is lower-case today, so comparing it
+            // raw would work by coincidence rather than by construction.
+            if (declared.contains(name.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            boolean staged = rows.stream().anyMatch(r -> r != null && r.containsKey(name));
+            if (staged) {
+                out.add(approvalField);
+            }
+        }
+        return out;
+    }
+
     private Object insertRecordLegacy(EntitySchema schema, Map<String, Object> data) throws SQLException {
-        List<EntitySchema.Field> fields = schema.getFields();
+        List<EntitySchema.Field> fields = writableFields(schema, List.of(data));
         List<String> cols = new ArrayList<>();
         List<String> placeholders = new ArrayList<>();
         List<Object> values = new ArrayList<>();
 
         for (EntitySchema.Field field : fields) {
             if (field.isPrimaryKey()) {
-                if (field.isAutoIncrement()) {
-                    continue; // skip if auto
-                }
                 // Generate UUID if missing and type is compatible
                 if (!data.containsKey(field.getName())) {
                     String type = field.getType().toLowerCase(Locale.ROOT);
-                    if (type.equals("string") || type.equals("text") || type.equals("uuid") || type.equals("varchar")) {
+                    if (isCharacterKind(type)) {
                         data.put(field.getName(), java.util.UUID.randomUUID().toString());
                     }
                 }
@@ -247,7 +305,30 @@ public class EntityCrudService {
     }
 
     public List<Map<String, Object>> listAll(EntitySchema schema) throws SQLException {
-        String sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema));
+        // Review #9 (High) — this used to be a bare SELECT *, which returns EVERY
+        // physical column on the table, including the 8 approval columns (raw,
+        // uppercase DB keys) for any approval-required entity. Review #7's
+        // default-projection leak guardrail was documented and enforced in
+        // listAdvanced()'s default (no fields=) path, but this method — the ONE
+        // that a bare `GET /api/{entity}` with no query params at all actually
+        // calls — never got the same treatment, so the guardrail held on only
+        // one of the route's two code paths. Project schema.getFields()
+        // explicitly instead, aliased to preserve declared casing, mirroring
+        // listAdvanced()'s default projection exactly — same guardrail, now
+        // enforced on both branches. Falls back to SELECT * only for the
+        // (schema-invalid, shouldn't happen) case of a schema with no fields.
+        List<EntitySchema.Field> fields = schema.getFields();
+        String sql;
+        if (fields == null || fields.isEmpty()) {
+            sql = "SELECT * FROM " + quote(SchemaManager.getPhysicalTableName(schema));
+        } else {
+            List<String> selectCols = new ArrayList<>();
+            for (EntitySchema.Field f : fields) {
+                selectCols.add(quote(f.getName()) + " AS \"" + f.getName() + "\"");
+            }
+            sql = "SELECT " + String.join(",", selectCols) + " FROM "
+                    + quote(SchemaManager.getPhysicalTableName(schema));
+        }
         try (Connection c = schemaConnection(schema);
                 PreparedStatement ps = c.prepareStatement(sql);
                 ResultSet rs = ps.executeQuery()) {
@@ -284,14 +365,46 @@ public class EntityCrudService {
     }
 
     public int updateById(EntitySchema schema, String id, Map<String, Object> data) throws SQLException {
+        return updateById(schema, id, data, false);
+    }
+
+    /**
+     * C4.6a/b — {@code allowApprovalColumns} opts a caller into writing the eight physical
+     * approval columns.
+     *
+     * <p><b>Precondition for passing {@code true}:</b> the caller must already have run
+     * {@code GenericEntityRoutes.applyApprovalPutGuard()} (or otherwise constructed the approval
+     * values itself). That guard calls {@code stripApprovalColumns(data)} unconditionally for any
+     * approval-required entity before it returns, so every approval key still present afterwards
+     * is server-staged. All three client PUT routes satisfy this, which is why they pass
+     * {@code true}.
+     *
+     * <p>C4.6a originally justified the {@code false} default as "the exclusion IS the guard
+     * against a forged {@code approval_status=APPROVED}". That was wrong, and a mutation test
+     * disproved it: flipping the default leaked only {@code submitted_by=alice_maker} — the
+     * server's own value — never the forged {@code eve_attacker}, because
+     * {@code stripApprovalColumns} had already removed it. The real effect of the exclusion was
+     * to silently discard the three values the guard deliberately re-stages
+     * ({@code approval_status=DRAFT}, {@code rejection_reason=null}, {@code submitted_by}), so a
+     * maker editing a REJECTED row in place got a 200 with the business edit applied while the
+     * row stayed REJECTED carrying its stale reason.
+     *
+     * <p>The default remains {@code false} as defence-in-depth for any future caller that reaches
+     * this method without running the guard first.
+     */
+    public int updateById(EntitySchema schema, String id, Map<String, Object> data, boolean allowApprovalColumns)
+            throws SQLException {
         EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
                 .orElse(null);
         if (pk == null) {
             return 0;
         }
+        List<EntitySchema.Field> candidates = allowApprovalColumns
+                ? writableFields(schema, List.of(data))
+                : schema.getFields();
         List<String> set = new ArrayList<>();
         List<Object> vals = new ArrayList<>();
-        for (EntitySchema.Field f : schema.getFields()) {
+        for (EntitySchema.Field f : candidates) {
             if (f.isPrimaryKey()) {
                 continue;
             }
@@ -344,18 +457,24 @@ public class EntityCrudService {
      * revision cannot exist: {@code ApprovalService.approveRecord} merges it into the
      * parent and deletes it in the same transaction.
      *
-     * <p>Returns {@code null} when the schema has no {@code approval_parent_id} field
-     * (legacy tables created before C2.3) or when no open revision exists.
+     * <p>Returns {@code null} when the entity has no approval workflow, or when no open
+     * revision exists.
+     *
+     * <p>C4.6 — this used to probe {@code schema.getFields()} for an {@code approval_parent_id}
+     * member. That was a capability check standing in for the real question ("does this entity
+     * have an approval workflow?") and it only worked while SchemaEnricher declared the eight
+     * columns as schema fields. Now that SchemaManager guarantees the physical columns from
+     * {@code approvalRequired} alone, the flag is the authority; probing getFields() would
+     * report "no revision support" for every correctly-provisioned approval entity and silently
+     * downgrade a revision to an in-place edit of a live APPROVED row.
      */
     public Map<String, Object> findOpenRevision(EntitySchema schema, String parentId) throws SQLException {
-        if (schema == null || parentId == null || parentId.isBlank()) {
+        if (schema == null || parentId == null || parentId.isBlank() || !schema.isApprovalRequired()) {
             return null;
         }
         EntitySchema.Field pk = schema.getFields().stream().filter(EntitySchema.Field::isPrimaryKey).findFirst()
                 .orElse(null);
-        boolean hasParentCol = schema.getFields().stream()
-                .anyMatch(f -> "approval_parent_id".equalsIgnoreCase(f.getName()));
-        if (pk == null || !hasParentCol) {
+        if (pk == null) {
             return null;
         }
 
@@ -366,7 +485,12 @@ public class EntityCrudService {
 
         try (Connection c = schemaConnection(schema);
                 PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, parentId);
+            // C4.6 — approval_parent_id is INTEGER (ApprovalColumns declares it to match the
+            // parent's auto-increment PK type). Binding the id as a String made Postgres reject
+            // the whole query with "operator does not exist: integer = character varying".
+            // It survived before only because fixtures hand-declared the column as text; the
+            // enricher's own VARCHAR(255) spelling disagreed with the PK type it points at.
+            ps.setObject(1, ApprovalColumns.parentIdValue(parentId));
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = toList(rs);
                 return list.isEmpty() ? null : list.getFirst();
@@ -447,52 +571,176 @@ public class EntityCrudService {
         }
     }
 
+    /**
+     * Review #7 (root cause) — {@code schema.getFields()} is the sole authority every
+     * filter/sort/projection/groupBy code path resolves a field name against. The 8
+     * approval system columns are physical-only ({@code SchemaManager} creates them in
+     * the table for every approval-required entity) and are never members of
+     * {@code getFields()}. Review #6 patched two call sites (parseFilters/buildWhere)
+     * with a bespoke {@code isApprovalColumn()} branch that treated every one of them as
+     * a free-text/LIKE-able string — which is why {@code approval_revision} (INTEGER)
+     * and {@code submitted_at}/{@code approved_at} (TIMESTAMP) 500'd instead of
+     * filtering, and why {@code sort=}/{@code fields=} on those columns silently no-op'd
+     * (the branch never existed there at all).
+     *
+     * <p>This is the single fieldMap-building step every READ path should use instead:
+     * {@code schema.getFields()} plus {@link ApprovalColumns#asFields()}, but ONLY when
+     * the entity actually has an approval workflow ({@code schema.isApprovalRequired()})
+     * — otherwise a schema with no physical {@code approval_status} etc. column would
+     * 500 with "column does not exist" instead of 400 for an unrecognized field (D3).
+     *
+     * <p><b>Read-path only.</b> Insert/update/validation must keep using
+     * {@code schema.getFields()} directly so a client can never write these columns
+     * through the generic entity API — see {@code enforceApprovalPreInsert()}/
+     * {@code stripApprovalColumns()} in {@code GenericEntityRoutes}. The default
+     * projection (no {@code fields=} requested) must also keep using
+     * {@code schema.getFields()} directly, not this method — otherwise every list
+     * response would silently grow 8 columns and leak approval metadata to every caller
+     * that doesn't ask for it.
+     */
+    private static List<EntitySchema.Field> getQueryableFields(EntitySchema schema) {
+        if (!schema.isApprovalRequired()) {
+            return schema.getFields();
+        }
+        List<EntitySchema.Field> combined = new ArrayList<>(schema.getFields());
+        // Review #8 (Nit) — if a schema declares one of the 8 approval columns as
+        // a real field of its own (ApprovalRoutesSecurityTest's fixture does this),
+        // appending the synthetic definition unconditionally put both in this list.
+        // fieldMap-building callers (parseFilters/listAdvanced) put()-last-wins so
+        // the synthetic one silently shadowed the declared one, while
+        // resolveQueryableField()'s loop is first-wins and returned the declared
+        // one — two lookup paths disagreeing about which Field object is
+        // authoritative for the same name. Harmless today because
+        // ApprovalColumns.TYPES matches the physical DDL column-for-column, but
+        // skip the synthetic field outright when the name is already declared so
+        // both paths agree by construction instead of by coincidence.
+        Set<String> declared = new HashSet<>();
+        for (EntitySchema.Field f : schema.getFields()) {
+            declared.add(f.getName().toLowerCase(Locale.ROOT));
+        }
+        for (EntitySchema.Field f : ApprovalColumns.asFields()) {
+            if (declared.add(f.getName().toLowerCase(Locale.ROOT))) {
+                combined.add(f);
+            }
+        }
+        return combined;
+    }
+
+    /**
+     * Resolves {@code name} to its canonical field name (case-insensitive), including
+     * the approval columns per {@link #getQueryableFields}. Returns {@code null} when
+     * unrecognized — callers (e.g. {@code groupBy=}) should fail closed with a 400
+     * rather than silently accepting an arbitrary/unknown column name.
+     */
+    public String resolveQueryableField(EntitySchema schema, String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        for (EntitySchema.Field f : getQueryableFields(schema)) {
+            if (f.getName().equalsIgnoreCase(name)) {
+                return f.getName();
+            }
+        }
+        return null;
+    }
+
     public Map<String, Object> parseFilters(String raw, EntitySchema schema) {
         Map<String, Object> map = new LinkedHashMap<>();
         if (raw == null || raw.isBlank()) {
-            LOG.info("[FILTER] No filter string provided");
+            LOG.debug("[FILTER] No filter string provided");
             return map;
         }
-        // URL-decode the filter string to handle spaces encoded as + or %20
-        try {
-            raw = java.net.URLDecoder.decode(raw, java.nio.charset.StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            LOG.warn("[FILTER] Failed to URL-decode filter string, using as-is: {}", raw);
-        }
-        LOG.info("[FILTER] Parsing filter string: {}", raw);
+        // Review #5 (High A) — this used to re-decode `raw` here with
+        // java.net.URLDecoder.decode(), on top of the decoding Router already
+        // performs via URI.getQuery() (which decodes %XX percent-escapes per
+        // RFC 3986 before this method ever sees the string). URLDecoder applies
+        // application/x-www-form-urlencoded semantics, where a literal '+' —
+        // already correctly restored from a client's %2B by Router — gets
+        // turned into a space. That silently corrupted phone numbers, timezone
+        // offsets ("+05:30"), base64, and any value containing '+'. The value
+        // arrives already decoded; do not decode it again.
+        LOG.debug("[FILTER] Parsing filter string: {}", raw);
         String[] pairs = raw.split(",");
         Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
-        for (EntitySchema.Field f : schema.getFields()) {
+        for (EntitySchema.Field f : getQueryableFields(schema)) {
             fieldMap.put(f.getName().toLowerCase(Locale.ROOT), f);
-            LOG.info("[FILTER] Schema field: {} (lowercased: {})", f.getName(), f.getName().toLowerCase(Locale.ROOT));
+            LOG.debug("[FILTER] Schema field: {} (lowercased: {})", f.getName(), f.getName().toLowerCase(Locale.ROOT));
         }
         for (String p : pairs) {
             int idx = p.indexOf(":");
             if (idx <= 0) {
-                LOG.info("[FILTER] Skipping invalid pair (no colon or at start): {}", p);
+                LOG.debug("[FILTER] Skipping invalid pair (no colon or at start): {}", p);
                 continue;
             }
             String name = p.substring(0, idx).trim();
             String val = p.substring(idx + 1).trim();
             if (name.isEmpty()) {
-                LOG.info("[FILTER] Skipping pair with empty name");
+                LOG.debug("[FILTER] Skipping pair with empty name");
                 continue;
             }
-            LOG.info("[FILTER] Looking up field '{}' (lowercased: '{}') in schema", name,
+            // C3.9 — a leading '=' on the value requests an exact comparison
+            // instead of the default substring LIKE. See ExactMatch.
+            boolean exact = val.startsWith("=");
+            if (exact) {
+                val = val.substring(1).trim();
+            }
+            LOG.debug("[FILTER] Looking up field '{}' (lowercased: '{}') in schema", name,
                     name.toLowerCase(Locale.ROOT));
             EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
             if (f == null) {
-                LOG.info("[FILTER] Field '{}' not found in schema, skipping", name);
-                continue; // ignore unknown
+                // Review #5 (High A) — this used to `continue` (ignore unknown field),
+                // which is the exact same fail-open hazard the null-value check just
+                // below closes for a bad *value*: a typo'd field name (e.g.
+                // "?filter=statuss:open" instead of "status:open") silently produced an
+                // unscoped 200 instead of the caller's intended filter. filter= is the
+                // only scoping mechanism for several callers (child records, saved
+                // views, approval queues), so a typo here is a correctness/data-exposure
+                // hazard, not just a UX one. Fail closed like the value check does,
+                // rather than leaving this one hole in the same fix.
+                //
+                // Review #7 (root cause) — fieldMap above is built from
+                // getQueryableFields(), which already folds in the 8 approval columns
+                // as typed fields when schema.isApprovalRequired(). So this branch is
+                // reached for a genuinely unknown name OR an approval-column name on an
+                // entity that doesn't have the approval workflow enabled (D3) — both
+                // cases are correctly a 400, not a silent pass-through.
+                throw new FieldValidationException(name, "unknown filter field");
             }
             Object parsed = parseFilterValue(f, val);
-            LOG.info("[FILTER] Parsed filter: {}={} (type: {}, parsed value: {})", f.getName(), val, f.getType(),
+            if (parsed == null) {
+                // Review #4 (High A) — a filter value that fails to coerce for the
+                // field's type used to be stored as null here and then silently
+                // dropped by buildWhere() (fail-open: 200 with an unscoped or
+                // under-scoped result). filter= is the only scoping mechanism for
+                // several callers (child records, saved views, approval queues),
+                // so failing open is a correctness/data-exposure hazard, not just
+                // a UX one. Fail closed instead: reject the whole request with
+                // 400 and say exactly which field/value was bad.
+                throw new FieldValidationException(f.getName(),
+                        "invalid value '" + val + "' for type '" + f.getType() + "'");
+            }
+            LOG.debug("[FILTER] Parsed filter: {}={} (type: {}, parsed value: {})", f.getName(), val, f.getType(),
                     parsed);
-            map.put(f.getName(), parsed); // canonical
+            map.put(f.getName(), exact ? new ExactMatch(parsed) : parsed); // canonical
         }
-        LOG.info("[FILTER] Final filter map: {}", map);
+        LOG.debug("[FILTER] Final filter map: {}", map);
         return map;
     }
+
+    /**
+     * Marks a filter value that must be compared with {@code =} rather than the
+     * default case-insensitive {@code LIKE '%value%'}.
+     *
+     * <p>C3.9 — string filters default to a substring match, which is right for a
+     * user typing into a search box and wrong for anything identity-shaped. The
+     * approval "Needs rework" view scopes a list to {@code submitted_by}, and
+     * under a substring match the user {@code bob} would also see every record
+     * submitted by {@code bobby}. Silently, and with a 200.
+     *
+     * <p>Written on the wire as a leading {@code =} on the value:
+     * {@code filter=submitted_by:=bob}.
+     */
+    public record ExactMatch(Object value) {}
 
     public long countOnly(EntitySchema schema, String q, Map<String, Object> filters) throws SQLException {
         StringBuilder where = new StringBuilder();
@@ -534,8 +782,11 @@ public class EntityCrudService {
         if (groupBy == null || groupBy.isBlank()) return Map.of();
         // Resolve to the canonical field name from the schema — the whole
         // point of this lookup is to refuse to trust the raw query-string.
+        // Review #7 (root cause) — getQueryableFields() folds in the 8 approval
+        // columns (when the entity has the approval workflow), so groupBy=
+        // approval_status now resolves instead of being silently rejected here.
         String canonical = null;
-        for (EntitySchema.Field f : schema.getFields()) {
+        for (EntitySchema.Field f : getQueryableFields(schema)) {
             if (f.getName().equalsIgnoreCase(groupBy)) {
                 canonical = f.getName();
                 break;
@@ -580,10 +831,20 @@ public class EntityCrudService {
             String sortParam,
             Map<String, Object> filters) throws SQLException {
         // Projection (preserve order, remove duplicates while keeping first occurrence)
+        //
+        // Review #7 (root cause / D5, D7) — fieldMap is built from
+        // getQueryableFields() so an explicit fields=approval_status resolves
+        // instead of being silently stripped (D5). An unrecognized name in an
+        // EXPLICIT fields= list is now a 400 (D7), matching filter='s fail-closed
+        // behavior — but the DEFAULT (no fields= supplied) projection below
+        // deliberately keeps iterating schema.getFields() directly, not
+        // getQueryableFields(): every list response must keep excluding the 8
+        // approval columns unless a caller explicitly opts in, or approval
+        // metadata would leak into every existing caller's response.
         List<String> projection = new ArrayList<>();
         Set<String> seenProj = new HashSet<>();
         Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
-        for (EntitySchema.Field f : schema.getFields()) {
+        for (EntitySchema.Field f : getQueryableFields(schema)) {
             fieldMap.put(f.getName().toLowerCase(Locale.ROOT), f);
         }
 
@@ -594,16 +855,17 @@ public class EntityCrudService {
                     continue;
                 }
                 EntitySchema.Field f = fieldMap.get(trimmed.toLowerCase(Locale.ROOT));
-                if (f != null) {
-                    String canonical = f.getName();
-                    if (seenProj.add(canonical.toLowerCase(Locale.ROOT))) {
-                        projection.add(canonical);
-                    }
+                if (f == null) {
+                    throw new FieldValidationException(trimmed, "unknown field");
+                }
+                String canonical = f.getName();
+                if (seenProj.add(canonical.toLowerCase(Locale.ROOT))) {
+                    projection.add(canonical);
                 }
             }
         }
 
-        if (projection.isEmpty()) { // default all
+        if (projection.isEmpty()) { // default all — deliberately schema.getFields(), see comment above
             for (EntitySchema.Field f : schema.getFields()) {
                 String canonical = f.getName();
                 if (seenProj.add(canonical.toLowerCase(Locale.ROOT))) {
@@ -634,7 +896,13 @@ public class EntityCrudService {
                 String name = desc ? t.substring(1) : (t.startsWith("+") ? t.substring(1) : t);
                 EntitySchema.Field f = fieldMap.get(name.toLowerCase(Locale.ROOT));
                 if (f == null) {
-                    continue;
+                    // Review #7 (D4/D7) — used to `continue` (silently drop the sort
+                    // token), returning 200 with "sort":[] and arbitrary order instead
+                    // of the caller's requested one. Same fail-open hazard filter=
+                    // already closed; fieldMap here also now includes the approval
+                    // columns via getQueryableFields(), so a legitimate sort=submitted_at
+                    // resolves instead of hitting this branch at all.
+                    throw new FieldValidationException(name, "unknown sort field");
                 }
                 String key = f.getName().toLowerCase(Locale.ROOT);
                 if (seenSort.add(key)) {
@@ -700,14 +968,9 @@ public class EntityCrudService {
     }
 
     public Map<String, Object> insertBatch(EntitySchema schema, List<Map<String, Object>> batch) throws SQLException {
-        List<EntitySchema.Field> fields = schema.getFields();
-        List<EntitySchema.Field> insertable = new ArrayList<>();
-        for (EntitySchema.Field f : fields) {
-            if (f.isPrimaryKey() && f.isAutoIncrement()) {
-                continue;
-            }
-            insertable.add(f);
-        }
+        // C4.6 follow-up — shared with insertRecordLegacy so the approval columns cannot be
+        // dropped on one insert path and honoured on the other. See writableFields().
+        List<EntitySchema.Field> insertable = writableFields(schema, batch);
 
         String cols = String.join(",", insertable.stream().map(f -> quote(f.getName())).toList());
         String placeholders = String.join(",", Collections.nCopies(insertable.size(), "?"));
@@ -841,8 +1104,15 @@ public class EntityCrudService {
             return null;
         }
         try {
-            return switch (t) {
-                case "int", "integer" -> {
+            // Review #4 (round 4 of the field-type-coercion defect family) —
+            // dispatch on SchemaManager.classifyFieldType(), the single shared
+            // type->kind mapping also consulted by sqlType() and
+            // parseFilterValue() below, instead of maintaining a third
+            // independent alias list here. This is what closes the "datetime"
+            // blocker: it was missing from this switch and parseFilterValue's,
+            // even though sqlType() already mapped it to TIMESTAMP.
+            return switch (SchemaManager.classifyFieldType(t)) {
+                case INTEGER, REFERENCE -> {
                     if (raw instanceof Number) {
                         long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin())
@@ -882,7 +1152,7 @@ public class EntityCrudService {
                         throw new IllegalArgumentException("field '" + f.getName() + "' invalid integer format");
                     }
                 }
-                case "long", "bigint", "bigserial" -> {
+                case BIGINT -> {
                     if (raw instanceof Number) {
                         long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin())
@@ -898,7 +1168,7 @@ public class EntityCrudService {
                         throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                     yield lv;
                 }
-                case "decimal", "numeric", "money", "float", "double" -> {
+                case DECIMAL -> {
                     // Coerce to BigDecimal so Postgres NUMERIC columns accept
                     // the bind. Accepts Number (JSON number literal) and String
                     // (form input or JSON string). min/max are compared as
@@ -923,7 +1193,7 @@ public class EntityCrudService {
                         throw new IllegalArgumentException("field '" + f.getName() + "' above max");
                     yield bd;
                 }
-                case "boolean" -> {
+                case BOOLEAN -> {
                     if (raw instanceof Boolean) {
                         yield raw;
                     }
@@ -934,7 +1204,7 @@ public class EntityCrudService {
                         yield false;
                     throw new IllegalArgumentException("field '" + f.getName() + "' invalid boolean");
                 }
-                case "date", "timestamp" -> {
+                case TIMESTAMP -> {
                     // if already a date/timestamp, just return
                     if (raw instanceof java.util.Date) {
                         if (raw instanceof Timestamp) yield raw;
@@ -966,19 +1236,10 @@ public class EntityCrudService {
                         }
                     }
                 }
-                case "text", "string" -> {
-                    String str = raw.toString();
-                    if (f.getLength() != null && str.length() > f.getLength())
-                        throw new IllegalArgumentException(
-                                "field '" + f.getName() + "' length exceeds " + f.getLength());
-                    if (f.getPattern() != null && !f.getPattern().isEmpty() && !"null".equals(f.getPattern())) {
-                        if (!Pattern.compile(f.getPattern()).matcher(str).matches())
-                            throw new IllegalArgumentException("field '" + f.getName() + "' does not match pattern");
-                    }
-                    yield str;
-                }
-                default -> {
-                    // string/text or other unhandled types
+                case TEXT, FILE, STRING -> {
+                    // Covers "text"/"string" plus every alias that classifies as
+                    // STRING (email, phone, status, file, and anything
+                    // unrecognized) — all just need length/pattern validation.
                     String str = raw.toString();
                     if (f.getLength() != null && str.length() > f.getLength())
                         throw new IllegalArgumentException(
@@ -999,22 +1260,41 @@ public class EntityCrudService {
         return JdbcManager.getConnection(schema != null ? schema.getDatasourceName() : null);
     }
 
+    /**
+     * Review #5 (High B) — true for any field-type alias that classifies as a plain
+     * character column ({@code STRING} or {@code TEXT}), i.e. eligible for free-text
+     * search / substring LIKE matching / random-UUID PK generation. Deliberately
+     * excludes {@code FILE} (stores an issued fileId, not free text) and every
+     * non-character kind. This is the single place the three former hand-written
+     * {@code equals("string")||equals("text")||equals("varchar")} lists now go through,
+     * so "longtext"/"email"/"phone"/"status" (all STRING/TEXT-kind aliases) are no
+     * longer silently excluded from search/LIKE just because they weren't spelled
+     * "string"/"text"/"varchar" verbatim.
+     */
+    private static boolean isCharacterKind(String type) {
+        SchemaManager.FieldSqlKind kind = SchemaManager.classifyFieldType(type);
+        return kind == SchemaManager.FieldSqlKind.STRING || kind == SchemaManager.FieldSqlKind.TEXT;
+    }
+
     private static Object parseFilterValue(EntitySchema.Field f, String v) {
         String t = f.getType().toLowerCase(Locale.ROOT);
         try {
-            return switch (t) {
-                case "int", "integer", "serial" -> Integer.parseInt(v);
-                case "long", "bigint", "bigserial" -> Long.parseLong(v);
-                case "boolean" -> ("true".equalsIgnoreCase(v) || "1".equals(v));
-                case "date", "timestamp" -> {
-                    // Accept only valid ISO-8601 instant strings; if parsing fails treat as raw
-                    try {
-                        yield Timestamp.from(Instant.parse(v));
-                    } catch (Exception ignored) {
-                        yield v;
-                    }
-                }
-                default -> v;
+            // Review #4 — same shared classifyFieldType() dispatch as
+            // coerceAndValidateRaw()/sqlType(); see the comment there. This also
+            // closes High-A for dates specifically: an unparseable
+            // date/timestamp/datetime value used to fall back to the raw String
+            // (`yield v`) instead of null, which was the one kind that DIDN'T get
+            // treated as a parse failure — it just bound the literal string
+            // against a TIMESTAMP column (500) or slipped past as a literal.
+            // Every kind now fails the same way — null — which parseFilters()
+            // turns into a 400 instead of a silently dropped predicate.
+            return switch (SchemaManager.classifyFieldType(t)) {
+                case INTEGER, REFERENCE -> Integer.parseInt(v);
+                case BIGINT -> Long.parseLong(v);
+                case DECIMAL -> new java.math.BigDecimal(v);
+                case BOOLEAN -> ("true".equalsIgnoreCase(v) || "1".equals(v));
+                case TIMESTAMP -> Timestamp.from(Instant.parse(v));
+                case TEXT, FILE, STRING -> v;
             };
         } catch (Exception e) {
             // If parsing fails for a typed field (e.g. integer), return null to indicate
@@ -1031,14 +1311,14 @@ public class EntityCrudService {
             StringBuilder where,
             List<Object> params) {
         List<String> parts = new ArrayList<>();
-        LOG.info("[BUILD_WHERE] Building WHERE clause. q={}, filters={}", q, filters);
+        LOG.debug("[BUILD_WHERE] Building WHERE clause. q={}, filters={}", q, filters);
 
         if (q != null && !q.isBlank()) {
             String uq = q.trim().toUpperCase(Locale.ROOT);
             List<String> likeParts = new ArrayList<>();
             for (EntitySchema.Field f : schema.getFields()) {
                 String t = f.getType().toLowerCase(Locale.ROOT);
-                if (t.equals("string") || t.equals("text") || t.equals("varchar")) {
+                if (isCharacterKind(t)) {
                     likeParts.add("UPPER(" + quote(f.getName()) + ") LIKE ?");
                     params.add("%" + uq + "%");
                 }
@@ -1050,60 +1330,80 @@ public class EntityCrudService {
 
         if (filters != null && !filters.isEmpty()) {
             Map<String, EntitySchema.Field> fieldMap = new HashMap<>();
-            for (EntitySchema.Field f : schema.getFields()) {
+            for (EntitySchema.Field f : getQueryableFields(schema)) {
                 fieldMap.put(f.getName().toLowerCase(Locale.ROOT), f);
             }
 
             for (Map.Entry<String, Object> e : filters.entrySet()) {
-                LOG.info("[BUILD_WHERE] Processing filter entry: key={}, value={}", e.getKey(), e.getValue());
+                LOG.debug("[BUILD_WHERE] Processing filter entry: key={}, value={}", e.getKey(), e.getValue());
                 EntitySchema.Field f = fieldMap.get(e.getKey().toLowerCase(Locale.ROOT));
                 if (f == null) {
-                    LOG.info("[BUILD_WHERE] Field '{}' not found in schema, skipping", e.getKey());
-                    continue; // unknown
+                    // Review #7 (root cause) — fieldMap above already folds in the 8
+                    // approval columns as typed fields (getQueryableFields()), so this
+                    // is a genuinely unknown column (or an approval column on an entity
+                    // without the approval workflow enabled). parseFilters() is the
+                    // fail-closed gate for a caller-supplied filter= string; anything
+                    // that reaches buildWhere() with a key this map doesn't recognize
+                    // was added by a different caller (e.g. applyApprovalStatusFilter)
+                    // that is trusted to only use real column names, so skipping here —
+                    // rather than throwing — is intentional defense-in-depth, not a
+                    // second fail-open hole.
+                    LOG.debug("[BUILD_WHERE] Field '{}' not found in schema, skipping", e.getKey());
+                    continue;
+                }
+
+                // C3.9 — unwrap an explicit exact-match request before any of the
+                // type handling below looks at the value.
+                boolean exactRequested = false;
+                Object filterValue = e.getValue();
+                if (filterValue instanceof ExactMatch em) {
+                    exactRequested = true;
+                    filterValue = em.value();
                 }
 
                 String t = f.getType().toLowerCase(Locale.ROOT);
-                if ((t.equalsIgnoreCase("date") || t.equalsIgnoreCase("timestamp"))
-                        && e.getValue() instanceof String sVal) {
-                    boolean valid = false;
-                    try {
-                        Instant.parse(sVal);
-                        valid = true;
-                    } catch (Exception ignored) {
-                    }
-                    if (!valid) {
-                        LOG.info("[BUILD_WHERE] Skipping invalid date/timestamp filter: {}", sVal);
-                        continue; // skip predicate, prevents DB parse error
-                    }
-                }
-
+                // Review #4 — the date/timestamp-specific Instant.parse pre-check
+                // that used to live here is now dead code: parseFilters(), the
+                // only normal producer of this map, already rejects an
+                // unparseable date/timestamp/datetime value with a 400 before
+                // buildWhere() ever runs. Removed rather than left stale.
                 String quotedKey = quote(f.getName());
 
                 // If filter value is NULL (parsing failed), we skip it to avoid DB errors
-                if (e.getValue() == null) {
+                if (filterValue == null) {
                     LOG.warn("[BUILD_WHERE] Filter value for '{}' is null (parsing failed?), skipping predicate.",
                             e.getKey());
                     continue;
                 }
 
                 // Coerce filter value to match column type if it's a string from JSON
-                Object finalValue = e.getValue();
+                Object finalValue = filterValue;
                 if (finalValue instanceof String sVal) {
                     Object parsed = parseFilterValue(f, sVal);
-                    if (parsed != null) {
-                        finalValue = parsed;
+                    if (parsed == null) {
+                        // C3.10 — parseFilterValue returns null when a typed column's
+                        // value fails to parse (e.g. filter=amount:=abc against a decimal
+                        // column). Falling back to the raw String here would bind a
+                        // String against a typed SQL column and 500; skip the predicate
+                        // instead, matching how the date/timestamp branch above already
+                        // behaves.
+                        LOG.debug("[BUILD_WHERE] Skipping filter for '{}' — value '{}' does not parse as type '{}'",
+                                e.getKey(), sVal, t);
+                        continue;
                     }
+                    finalValue = parsed;
                 }
 
-                // Use LIKE with wildcards for string/text fields, exact match for others
-                if (t.equals("string") || t.equals("text") || t.equals("varchar")) {
+                // Use LIKE with wildcards for string/text fields, exact match for
+                // others — or when the caller explicitly asked for exact.
+                if (!exactRequested && isCharacterKind(t)) {
                     // Case-insensitive LIKE match for string fields
-                    LOG.info("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey,
+                    LOG.debug("[BUILD_WHERE] Adding LIKE filter condition: UPPER({}) LIKE ? (param: %{}%)", quotedKey,
                             finalValue);
                     parts.add("UPPER(" + quotedKey + ") LIKE ?");
                     params.add("%" + String.valueOf(finalValue).toUpperCase(Locale.ROOT) + "%");
                 } else {
-                    LOG.info("[BUILD_WHERE] Adding exact filter condition: {} = ? (param: {} [type: {}])", quotedKey,
+                    LOG.debug("[BUILD_WHERE] Adding exact filter condition: {} = ? (param: {} [type: {}])", quotedKey,
                             finalValue, finalValue != null ? finalValue.getClass().getSimpleName() : "null");
                     parts.add(quotedKey + " = ?");
                     params.add(finalValue);
@@ -1113,8 +1413,8 @@ public class EntityCrudService {
 
         if (!parts.isEmpty()) {
             where.append(" WHERE ").append(String.join(" AND ", parts));
-            LOG.info("[BUILD_WHERE] Final WHERE clause: {}", where);
-            LOG.info("[BUILD_WHERE] Final params: {}", params);
+            LOG.debug("[BUILD_WHERE] Final WHERE clause: {}", where);
+            LOG.debug("[BUILD_WHERE] Final params: {}", params);
         }
     }
 }

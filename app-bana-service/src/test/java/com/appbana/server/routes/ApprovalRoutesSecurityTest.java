@@ -3,6 +3,7 @@ package com.appbana.server.routes;
 import com.appbana.ApiServer;
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
+import com.appbana.approval.ApprovalColumns;
 import com.appbana.approval.UserRoleService;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -22,8 +24,12 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -106,20 +112,19 @@ public class ApprovalRoutesSecurityTest {
             s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
         }
 
+        // C4.6 — business fields ONLY. The eight approval columns are declared by nothing but
+        // setApprovalRequired(true) below; SchemaManager materialises them physically.
+        //
+        // This fixture used to hand-declare seven of the eight as EntitySchema.Fields, which is
+        // precisely the mechanism C4.6 set out to eliminate: declared approval columns land in
+        // schema.getFields(), so every getFields()-driven SQL builder picked them up and looked
+        // correct. That hid a live defect in insertBatch() — the only batch test in the codebase
+        // is testBatchPostBypassPrevented below, and it was green for the wrong reason. A fixture
+        // that supplies the invariant under test cannot witness the invariant being broken.
         EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
         EntitySchema.Field amountField = new EntitySchema.Field("amount", "integer", false, false, null);
-        EntitySchema.Field statusField = new EntitySchema.Field("approval_status", "string", false, false, null);
-        EntitySchema.Field revisionField = new EntitySchema.Field("approval_revision", "integer", false, false, null);
-        EntitySchema.Field submittedByField = new EntitySchema.Field("submitted_by", "string", false, false, null);
-        EntitySchema.Field submittedAtField = new EntitySchema.Field("submitted_at", "timestamp", false, false, null);
-        EntitySchema.Field approvedByField = new EntitySchema.Field("approved_by", "string", false, false, null);
-        EntitySchema.Field approvedAtField = new EntitySchema.Field("approved_at", "timestamp", false, false, null);
-        EntitySchema.Field rejectionReasonField = new EntitySchema.Field("rejection_reason", "text", false, false, null);
 
-        EntitySchema schema = new EntitySchema(ENTITY_NAME, List.of(
-                idField, amountField, statusField, revisionField,
-                submittedByField, submittedAtField, approvedByField, approvedAtField, rejectionReasonField
-        ));
+        EntitySchema schema = new EntitySchema(ENTITY_NAME, List.of(idField, amountField));
         schema.setTenantId(TENANT_ID);
         schema.setAppId(APP_ID);
         schema.setApprovalRequired(true);
@@ -231,6 +236,194 @@ public class ApprovalRoutesSecurityTest {
         assertTrue(doubleSubmit.body().contains("already in PENDING"));
     }
 
+    /**
+     * C3.9 — proves on the wire that a bare field query param is inert and that
+     * {@code filter=} is the door that works.
+     *
+     * <p>This is the defect behind the "Needs rework" view showing every maker's
+     * rejected records. The runtime sent {@code ?submitted_by=alice}; the handler
+     * reads a fixed param allowlist and never looks at it, so the scoping was
+     * dropped in transit and the response came back 200 with an unscoped body.
+     * Nothing failed and nothing logged — the list was simply wider than asked
+     * for. A test that only read the code could not have caught it, so this one
+     * asserts the row counts either side of the difference.
+     */
+    @Test
+    public void testBareFieldParamIsIgnoredButFilterParamScopesTheList() throws Exception {
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (301, 10.0, 'REJECTED', 1, 'alice_maker')");
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (302, 20.0, 'REJECTED', 1, 'someone_else')");
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (303, 30.0, 'REJECTED', 1, 'someone_else')");
+            // A user id that *contains* alice_maker. Under the default substring
+            // LIKE this row would be handed to alice as if it were hers.
+            s.execute("INSERT INTO \"" + TABLE_NAME + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (304, 40.0, 'REJECTED', 1, 'alice_maker_2')");
+        }
+
+        String base = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME;
+
+        // What the runtime used to send. The param is silently discarded.
+        HttpResponse<String> bare = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?_approvalStatus=REJECTED&submitted_by=alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, bare.statusCode(), bare.body());
+        assertEquals(4, countRecords(bare.body()),
+                "A bare field param is not read by the handler, so the list comes back unscoped");
+
+        // A plain filter clause reaches the database but substring-matches, which
+        // is wrong for an identity: alice_maker_2's record comes back too.
+        HttpResponse<String> loose = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?_approvalStatus=REJECTED&filter=submitted_by:alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, loose.statusCode(), loose.body());
+        assertEquals(2, countRecords(loose.body()),
+                "String filters default to a substring match, which over-matches user ids");
+
+        // What it sends now: leading '=' requests an exact comparison.
+        HttpResponse<String> filtered = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?_approvalStatus=REJECTED&filter=submitted_by:=alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, filtered.statusCode(), filtered.body());
+        assertEquals(1, countRecords(filtered.body()),
+                "An exact filter scopes the list to exactly the caller's own rejected records");
+    }
+
+    /**
+     * Review #6 (blocker) — the eight approval columns are physical-only: {@code
+     * approvalRequired} entities get them added to the table by the AI Builder's
+     * {@code scaffold_app} enrichment step, not by {@code SchemaManager}, so any
+     * entity whose approval workflow was turned on any other way (a raw {@code
+     * create_entity} call, a later {@code batch_update_entities}, a direct schema
+     * edit) can have the physical columns without them ever appearing in {@code
+     * EntitySchema.getFields()}. Unlike the fixture in {@code
+     * testBareFieldParamIsIgnoredButFilterParamScopesTheList} above — which declares
+     * {@code submitted_by} etc. as real fields and so was never exposed to the bug —
+     * this test deliberately does not, to reproduce the reported scenario exactly.
+     *
+     * <p>Before this fix, {@code filter=submitted_by:=alice_maker} — the literal
+     * request {@code approval-views.ts}'s "Needs rework" view sends — 400'd for
+     * every entity in that state, because {@code parseFilters()}'s unknown-field
+     * check (Review #5) had no way to tell "typo'd field name" apart from
+     * "legitimate approval column absent from the schema's field list".
+     */
+    @Test
+    public void testApprovalColumnFilterWorksWhenAbsentFromSchemaFields() throws Exception {
+        String entityName = "UndeclaredApprovalCols";
+        String tableName = "APP_" + TENANT_ID.toUpperCase() + "_" + APP_ID.toUpperCase() + "_"
+                + entityName.toUpperCase();
+
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("DROP TABLE IF EXISTS \"" + tableName + "\"");
+        }
+
+        // Deliberately NO EntitySchema.Field for any of the 8 approval columns —
+        // only the user-defined fields, matching the "physical-only" scenario.
+        EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
+        EntitySchema.Field amountField = new EntitySchema.Field("amount", "integer", false, false, null);
+        EntitySchema schema = new EntitySchema(entityName, List.of(idField, amountField));
+        schema.setTenantId(TENANT_ID);
+        schema.setAppId(APP_ID);
+        schema.setApprovalRequired(true);
+        SchemaManager.saveSchema(schema);
+
+        // C4.6 — the approval columns are no longer added by hand here. This test used to
+        // ALTER them in as raw DDL to "simulate however they ended up physically present",
+        // because nothing in the backend actually created them. SchemaManager now materialises
+        // all eight from approvalRequired alone, so the scenario this test was constructed to
+        // simulate — physically present, absent from getFields() — is simply what saveSchema()
+        // produces. Re-adding the DDL would now fail with "column already exists".
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute(
+                    "INSERT INTO \"" + tableName + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (1, 10.0, 'REJECTED', 1, 'alice_maker')");
+            s.execute(
+                    "INSERT INTO \"" + tableName + "\" (\"ID\", \"AMOUNT\", \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\") VALUES (2, 20.0, 'REJECTED', 1, 'someone_else')");
+        }
+
+        UserRoleService.grantRole(TENANT_ID, APP_ID, entityName, "alice_maker", UserRoleService.Role.BOTH, "system");
+
+        String base = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + entityName;
+
+        // The exact request approval-views.ts's "Needs rework" view sends.
+        HttpResponse<String> rework = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?_approvalStatus=REJECTED&filter=submitted_by:=alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, rework.statusCode(),
+                "filter=submitted_by:=... must not 400 just because submitted_by is absent from getFields(): "
+                        + rework.body());
+        assertEquals(1, countRecords(rework.body()),
+                "The filter must still scope the list to the caller's own rejected records");
+
+        // A genuine typo'd field name must still 400 — the Review #5 fail-closed fix
+        // for real unknown fields must not have been reopened by this exemption.
+        HttpResponse<String> typo = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "?filter=submittedd_by:=alice_maker"))
+                .header("X-Session-Token", makerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, typo.statusCode(), "A genuinely unknown field name must still be rejected");
+    }
+
+    /**
+     * C3.9 — the count-only response must not carry an empty {@code records} array.
+     *
+     * <p>It used to, alongside a non-zero {@code count}. Any caller applying the
+     * normal queue semantics to that body saw an empty queue and a badge that
+     * contradicted it. An absent key makes the caller notice; a lying one does not.
+     */
+    @Test
+    public void testCountOnlyResponseDoesNotFakeAnEmptyRecordList() throws Exception {
+        HttpResponse<String> submit = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID
+                        + "/entities/" + ENTITY_NAME + "/records/201/submit"))
+                .header("X-Session-Token", makerSessionToken)
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, submit.statusCode(), submit.body());
+
+        String pendingUrl = BASE_URL + "/api/tenants/" + TENANT_ID + "/apps/" + APP_ID
+                + "/entities/" + ENTITY_NAME + "/approvals/pending";
+
+        HttpResponse<String> countOnly = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(pendingUrl + "?countOnly=true"))
+                .header("X-Session-Token", checkerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, countOnly.statusCode(), countOnly.body());
+
+        Map<String, Object> body = MAPPER.readValue(countOnly.body(), new TypeReference<>() {});
+        assertEquals(1, ((Number) body.get("count")).intValue());
+        assertFalse(body.containsKey("records"),
+                "A count-only response must omit records entirely rather than send an empty list");
+        assertEquals(Boolean.TRUE, body.get("countOnly"));
+
+        // And the full queue, for the same checker, agrees with that count.
+        HttpResponse<String> full = HTTP_CLIENT.send(HttpRequest.newBuilder()
+                .uri(URI.create(pendingUrl))
+                .header("X-Session-Token", checkerSessionToken)
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, full.statusCode(), full.body());
+        assertEquals(1, countRecords(full.body()), "The badge and the queue must not disagree");
+    }
+
+    /** Row count from any of the list shapes the API uses: `rows`, `records`, or a bare array. */
+    private int countRecords(String json) throws Exception {
+        String trimmed = json.trim();
+        if (trimmed.startsWith("[")) {
+            return MAPPER.readValue(trimmed, new TypeReference<List<Object>>() {}).size();
+        }
+        Map<String, Object> body = MAPPER.readValue(trimmed, new TypeReference<>() {});
+        for (String key : List.of("rows", "records")) {
+            if (body.get(key) instanceof List<?> list) {
+                return list.size();
+            }
+        }
+        throw new AssertionError("No row list in response: " + json);
+    }
+
     @Test
     public void testGenericPostBypassPrevented() throws Exception {
         String postUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME;
@@ -294,26 +487,187 @@ public class ApprovalRoutesSecurityTest {
         HttpResponse<String> batchRes = HTTP_CLIENT.send(batchReq, HttpResponse.BodyHandlers.ofString());
         assertEquals(201, batchRes.statusCode(), "Batch insert should return 201: " + batchRes.body());
 
-        // Verify BOTH records are forced to DRAFT, not APPROVED (query by server-set submitted_by)
+        // Verify BOTH records are forced to DRAFT, not APPROVED (query by server-set submitted_by).
+        //
+        // C4.6 follow-up — assertions are driven off ApprovalColumns.NAMES so that a ninth column
+        // is covered automatically, and every column is reported in one run rather than failing on
+        // the first. Before the writableFields() fix this read back all-NULL: insertBatch built its
+        // column list from schema.getFields(), which no longer contains the approval columns, so
+        // the server-assigned values staged by enforceApprovalPreInsert were never bound. It looked
+        // green only because this fixture used to hand-declare them as schema fields.
+        String selectCols = ApprovalColumns.NAMES.stream()
+                .map(n -> "\"" + n.toUpperCase(Locale.ROOT) + "\"")
+                .collect(Collectors.joining(", "));
+        Map<String, Object> expected = new LinkedHashMap<>();
+        expected.put("approval_status", "DRAFT");
+        expected.put("approval_revision", 1);
+        expected.put("approval_parent_id", null);
+        expected.put("submitted_by", "alice_maker");
+        expected.put("submitted_at", null);
+        expected.put("approved_by", null);
+        expected.put("approved_at", null);
+        expected.put("rejection_reason", null);
+        assertEquals(ApprovalColumns.NAMES.size(), expected.size(),
+                "Expectation map must cover every approval column — add the new column here");
+
         try (Connection c = JdbcManager.getConnection("default");
              PreparedStatement ps = c.prepareStatement(
-                     "SELECT \"APPROVAL_STATUS\", \"SUBMITTED_BY\", \"APPROVED_BY\" FROM \"" + TABLE_NAME +
+                     "SELECT \"AMOUNT\", " + selectCols + " FROM \"" + TABLE_NAME +
                      "\" WHERE \"AMOUNT\" IN (500, 600) ORDER BY \"AMOUNT\"")) {
             try (var rs = ps.executeQuery()) {
                 int rowCount = 0;
                 while (rs.next()) {
                     rowCount++;
-                    String status = rs.getString("APPROVAL_STATUS");
-                    String submittedBy = rs.getString("SUBMITTED_BY");
-                    String approvedBy = rs.getString("APPROVED_BY");
-                    assertEquals("DRAFT", status,
-                            "Batch element must be forced to DRAFT, not APPROVED (amount=" + (rowCount == 1 ? 500 : 600) + ")");
-                    assertEquals("alice_maker", submittedBy,
-                            "Batch element submitted_by must be session user alice_maker, not hacker_user");
-                    assertNull(approvedBy,
-                            "Batch element approved_by must be null — forged value must be stripped");
+                    int amount = rs.getInt("AMOUNT");
+                    List<Executable> checks = new ArrayList<>();
+                    for (Map.Entry<String, Object> e : expected.entrySet()) {
+                        String col = e.getKey().toUpperCase(Locale.ROOT);
+                        Object want = e.getValue();
+                        Object got = rs.getObject(col);
+                        checks.add(() -> assertEquals(
+                                want == null ? null : String.valueOf(want),
+                                got == null ? null : String.valueOf(got),
+                                "amount=" + amount + " column " + col
+                                        + " must hold the server-assigned value, not a forged or dropped one"));
+                    }
+                    assertAll("approval columns for amount=" + amount, checks);
                 }
                 assertEquals(2, rowCount, "Both batch records must have been inserted");
+            }
+        }
+    }
+
+    /**
+     * C4.6a/b — pins the approval-column behaviour of a client PUT on a DRAFT row.
+     *
+     * <p>Two distinct claims, which the original C4.6a rationale conflated:
+     * <ul>
+     *   <li><b>Forged values must never land.</b> {@code stripApprovalColumns()} inside
+     *       {@code applyApprovalPutGuard} is what enforces this — not the column-list exclusion.
+     *       Asserted here by {@code approved_by} / {@code approval_revision} /
+     *       {@code approval_parent_id} / {@code rejection_reason} keeping their seeded values
+     *       despite being forged in the body.</li>
+     *   <li><b>Server-staged values must persist.</b> The guard deliberately re-stages
+     *       {@code approval_status=DRAFT}, {@code rejection_reason=null} and
+     *       {@code submitted_by=<session user>} after stripping. {@code submitted_by} is the
+     *       discriminator: it must become {@code alice_maker} (the session user), NOT
+     *       {@code eve_attacker} (the forged body value), and not stay NULL (which is what the
+     *       C4.6a exclusion caused).</li>
+     * </ul>
+     *
+     * <p>Deliberately targets a <b>DRAFT</b> row. {@code testGenericPutBypassPreventedWhilePending}
+     * cannot cover this: a PENDING row is rejected by the guard before control ever reaches
+     * {@code updateById}, so it exercises the 409, not the column list.
+     */
+    @Test
+    public void testGenericPutOnDraftRowKeepsServerApprovalStateAndDropsForgedValues() throws Exception {
+        // Record 201 is seeded DRAFT / revision 1 with every other approval column NULL.
+        String putUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME + "/201";
+        Map<String, Object> forged = new LinkedHashMap<>();
+        forged.put("amount", 999);
+        forged.put("approval_status", "APPROVED");
+        forged.put("approval_revision", 42);
+        forged.put("approval_parent_id", 7);
+        forged.put("submitted_by", "eve_attacker");
+        forged.put("approved_by", "eve_attacker");
+        forged.put("rejection_reason", "forged");
+
+        HttpRequest putReq = HttpRequest.newBuilder()
+                .uri(URI.create(putUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(forged)))
+                .build();
+
+        HttpResponse<String> putRes = HTTP_CLIENT.send(putReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, putRes.statusCode(), "PUT on a DRAFT row should succeed: " + putRes.body());
+
+        Map<String, Object> expected = new LinkedHashMap<>();
+        expected.put("approval_status", "DRAFT");       // forged APPROVED rejected
+        expected.put("approval_revision", 1);           // forged 42 rejected
+        expected.put("approval_parent_id", null);       // forged 7 rejected
+        expected.put("submitted_by", "alice_maker");    // server-staged, NOT forged eve_attacker
+        expected.put("submitted_at", null);
+        expected.put("approved_by", null);              // forged eve_attacker rejected
+        expected.put("approved_at", null);
+        expected.put("rejection_reason", null);         // forged "forged" rejected
+        assertEquals(ApprovalColumns.NAMES.size(), expected.size(),
+                "Expectation map must cover every approval column — add the new column here");
+
+        String selectCols = ApprovalColumns.NAMES.stream()
+                .map(n -> "\"" + n.toUpperCase(Locale.ROOT) + "\"")
+                .collect(Collectors.joining(", "));
+
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT \"AMOUNT\", " + selectCols + " FROM \"" + TABLE_NAME + "\" WHERE \"ID\" = 201")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "seeded row 201 must still exist");
+
+                // The business edit MUST land — otherwise this test would pass even if the whole
+                // PUT had been rejected, proving nothing about the column list.
+                assertEquals(999, rs.getInt("AMOUNT"), "the non-approval edit must still be applied");
+
+                List<Executable> checks = new ArrayList<>();
+                for (Map.Entry<String, Object> e : expected.entrySet()) {
+                    String col = e.getKey().toUpperCase(Locale.ROOT);
+                    Object want = e.getValue();
+                    Object got = rs.getObject(col);
+                    checks.add(() -> assertEquals(
+                            want == null ? null : String.valueOf(want),
+                            got == null ? null : String.valueOf(got),
+                            "column " + col + ": a forged body value must never land, and a "
+                                    + "server-staged one must never be dropped"));
+                }
+                assertAll("approval columns after a forged PUT", checks);
+            }
+        }
+    }
+
+    /**
+     * C4.6b — the in-place (non-revision) twin of
+     * {@code reEditingARejectedRevisionReturnsItToDraftAndClearsTheReason}.
+     *
+     * <p>A maker editing their own REJECTED row must see it return to DRAFT with the rejection
+     * reason cleared, so it can be resubmitted. {@code applyApprovalPutGuard} stages exactly that,
+     * but the C4.6a column-list exclusion discarded both values, leaving the row stuck as REJECTED.
+     *
+     * <p>{@code RevisionFlowTest.putOnRejectedRowReturnsItToDraftInPlace} asserts on the in-memory
+     * {@code data} map that the guard mutates, never on the database, so it stayed green
+     * throughout — this test goes over HTTP and reads the stored row back.
+     */
+    @Test
+    public void testPutOnRejectedRowReturnsItToDraftInTheDatabase() throws Exception {
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("UPDATE \"" + TABLE_NAME + "\" SET \"APPROVAL_STATUS\" = 'REJECTED', "
+                    + "\"REJECTION_REASON\" = 'amount too high' WHERE \"ID\" = 201");
+        }
+
+        String putUrl = BASE_URL + "/api/" + TENANT_ID + "_" + APP_ID + "_" + ENTITY_NAME + "/201";
+        HttpRequest putReq = HttpRequest.newBuilder()
+                .uri(URI.create(putUrl))
+                .header("X-Session-Token", makerSessionToken)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(Map.of("amount", 750))))
+                .build();
+
+        assertEquals(200, HTTP_CLIENT.send(putReq, HttpResponse.BodyHandlers.ofString()).statusCode());
+
+        try (Connection c = JdbcManager.getConnection("default");
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT \"AMOUNT\", \"APPROVAL_STATUS\", \"REJECTION_REASON\", \"SUBMITTED_BY\" FROM \""
+                             + TABLE_NAME + "\" WHERE \"ID\" = 201")) {
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals(750, rs.getInt("AMOUNT"), "the business edit must land");
+                assertEquals("DRAFT", rs.getString("APPROVAL_STATUS"),
+                        "reworking a REJECTED row must return it to DRAFT in the database, not just in "
+                                + "the in-memory map the guard mutates");
+                assertNull(rs.getString("REJECTION_REASON"),
+                        "the stale rejection reason must be cleared so the row can be resubmitted");
+                assertEquals("alice_maker", rs.getString("SUBMITTED_BY"),
+                        "the reworking maker must be recorded as the submitter");
             }
         }
     }
@@ -495,19 +849,10 @@ public class ApprovalRoutesSecurityTest {
         String hyphenTenantId = "t-81919f7d";
         String uuidEntity = "InvoiceOrder";
 
+        // C4.6 — flag-only, same rationale as setupSchemaAndRoles().
         EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
-        EntitySchema.Field statusField = new EntitySchema.Field("approval_status", "string", false, false, null);
-        EntitySchema.Field revisionField = new EntitySchema.Field("approval_revision", "integer", false, false, null);
-        EntitySchema.Field submittedByField = new EntitySchema.Field("submitted_by", "string", false, false, null);
-        EntitySchema.Field submittedAtField = new EntitySchema.Field("submitted_at", "timestamp", false, false, null);
-        EntitySchema.Field approvedByField = new EntitySchema.Field("approved_by", "string", false, false, null);
-        EntitySchema.Field approvedAtField = new EntitySchema.Field("approved_at", "timestamp", false, false, null);
-        EntitySchema.Field rejectionReasonField = new EntitySchema.Field("rejection_reason", "text", false, false, null);
 
-        EntitySchema schema = new EntitySchema(uuidEntity, List.of(
-                idField, statusField, revisionField, submittedByField,
-                submittedAtField, approvedByField, approvedAtField, rejectionReasonField
-        ));
+        EntitySchema schema = new EntitySchema(uuidEntity, List.of(idField));
         schema.setTenantId(hyphenTenantId);
         schema.setAppId(uuidAppId);
         schema.setApprovalRequired(true);

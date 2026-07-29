@@ -23,6 +23,7 @@ import {
   singularize,
   type PageKind,
 } from './page-classifier';
+import { formatBadgeCount } from './usePendingCounts';
 
 interface RuntimeSidebarProps {
   readonly pages: PageMeta[];
@@ -30,6 +31,17 @@ interface RuntimeSidebarProps {
   readonly onSelect: (page: PageMeta) => void;
   /** Optional close handler — supplied when rendered inside the mobile drawer. */
   readonly onClose?: () => void;
+  /**
+   * Task C3.3 — bare entity names the signed-in user may check. Rendered as an
+   * "Approvals" section above the page groups: reviewing other people's work is
+   * a distinct job from browsing your own data, and burying it inside the
+   * entity groups would make an outstanding queue easy to miss.
+   */
+  readonly checkerEntities?: readonly string[];
+  readonly currentQueueEntity?: string | null;
+  readonly onSelectQueue?: (entityName: string) => void;
+  /** Task C3.7 — pending count per entity, keyed as in `checkerEntities`. */
+  readonly pendingCounts?: Readonly<Record<string, number>>;
 }
 
 /** Zero-dep icons. 24×24 viewbox, currentColor stroke, Lucide conventions. */
@@ -92,6 +104,13 @@ const ICONS = {
       <line x1="9"  y1="17" x2="15" y2="17" />
     </svg>
   ),
+  check: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 11l3 3 8-8" />
+      <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+    </svg>
+  ),
 } as const;
 
 function iconForKind(kind: PageKind): ReactNode {
@@ -151,13 +170,58 @@ export function RuntimeSidebar({
   currentPageId,
   onSelect,
   onClose,
+  checkerEntities = [],
+  currentQueueEntity = null,
+  onSelectQueue,
+  pendingCounts = {},
 }: RuntimeSidebarProps) {
   const groups = groupPages(pages);
   const showHeaders = groups.length > 1 || (groups.length === 1 && groups[0].entity !== null);
+  const showApprovals = checkerEntities.length > 0 && Boolean(onSelectQueue);
 
   return (
     <nav className="appbana-sidebar" aria-label="App pages">
       <div className="flex flex-col gap-4 p-3">
+        {showApprovals && (
+          <section className="flex flex-col gap-0.5" aria-label="Approvals">
+            <h3 className="appbana-sidebar-section" title="Approvals">Approvals</h3>
+            <ul className="flex flex-col gap-0.5">
+              {checkerEntities.map((entity) => {
+                const active = currentQueueEntity === entity;
+                const pending = pendingCounts[entity] ?? 0;
+                const badge = formatBadgeCount(pending);
+                // The count belongs in the accessible name, not only in a
+                // decorative pill: a screen reader user should not have to open
+                // the queue to learn there is nothing in it.
+                const label = `${pluralize(singularize(entity))} to review`;
+                const ariaLabel = pending > 0 ? `${label}, ${pending} pending` : label;
+                return (
+                  <li key={entity}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectQueue?.(entity);
+                        onClose?.();
+                      }}
+                      className={`appbana-sidebar-link ${active ? 'appbana-sidebar-link-active' : ''}`}
+                      aria-current={active ? 'page' : undefined}
+                      aria-label={ariaLabel}
+                      title={ariaLabel}
+                      data-approval-queue-link={entity}
+                      data-pending-count={pending}
+                    >
+                      <span className="appbana-sidebar-icon">{ICONS.check}</span>
+                      <span className="truncate">{label}</span>
+                      {badge && (
+                        <span className="appbana-nav-badge" aria-hidden="true">{badge}</span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
         {groups.length === 0 && (
           <p className="px-3 py-2 text-xs text-gray-400">No pages yet.</p>
         )}

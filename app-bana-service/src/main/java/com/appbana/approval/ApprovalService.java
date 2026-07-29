@@ -371,11 +371,26 @@ public class ApprovalService {
         }
     }
 
+    /** Page size for the checker queue. Also the cap the badge count agrees with. */
+    public static final int QUEUE_PAGE_SIZE = 100;
+
     /**
-     * Gets all pending records across an entity table for the Checker Queue.
+     * Gets pending records across an entity table for the Checker Queue.
      * Enforces role authorization (callerUserId must be CHECKER or App Owner/System).
+     *
+     * <p>C3.9 — paged, and the caller's own submissions are excluded. Separation of
+     * duties means a checker can never approve what they submitted, so including
+     * those rows offered work the backend would refuse. The previous fixed
+     * {@code LIMIT 500} with no offset silently truncated a longer queue, and the
+     * C3.7 switch to FIFO made that worse rather than better: the oldest 500 pin
+     * the top of the list and newer work becomes permanently invisible.
      */
     public static List<Map<String, Object>> getPendingQueue(String tenantId, String appId, String entityName, String callerUserId) throws Exception {
+        return getPendingQueue(tenantId, appId, entityName, callerUserId, 0);
+    }
+
+    public static List<Map<String, Object>> getPendingQueue(String tenantId, String appId, String entityName,
+                                                           String callerUserId, int offset) throws Exception {
         if (callerUserId == null || callerUserId.isBlank()) {
             throw new IllegalStateException("Unauthorized: Caller user ID required");
         }
@@ -386,22 +401,66 @@ public class ApprovalService {
         String tableName = getTableName(tenantId, appId, entityName);
         List<Map<String, Object>> results = new ArrayList<>();
 
-        String sql = "SELECT * FROM \"" + tableName + "\" WHERE \"APPROVAL_STATUS\" = 'PENDING' ORDER BY \"SUBMITTED_AT\" DESC LIMIT 500";
+        // C3.7: oldest submission first. A review queue is FIFO — under DESC the
+        // longest-waiting record sinks to the bottom and starves, which is exactly
+        // what an approval SLA exists to prevent.
+        String sql = "SELECT * FROM \"" + tableName + "\""
+                + " WHERE \"APPROVAL_STATUS\" = 'PENDING'"
+                + " AND (\"SUBMITTED_BY\" IS NULL OR \"SUBMITTED_BY\" <> ?)"
+                + " ORDER BY \"SUBMITTED_AT\" ASC LIMIT ? OFFSET ?";
 
         try (Connection conn = JdbcManager.getConnection(tenantId);
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-
-            int colCount = rs.getMetaData().getColumnCount();
-            while (rs.next()) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                for (int i = 1; i <= colCount; i++) {
-                    row.put(rs.getMetaData().getColumnName(i).toLowerCase(Locale.ROOT), rs.getObject(i));
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, callerUserId);
+            ps.setInt(2, QUEUE_PAGE_SIZE);
+            ps.setInt(3, Math.max(0, offset));
+            try (ResultSet rs = ps.executeQuery()) {
+                int colCount = rs.getMetaData().getColumnCount();
+                while (rs.next()) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    for (int i = 1; i <= colCount; i++) {
+                        row.put(rs.getMetaData().getColumnName(i).toLowerCase(Locale.ROOT), rs.getObject(i));
+                    }
+                    results.add(row);
                 }
-                results.add(row);
             }
         }
         return results;
+    }
+
+    /**
+     * Number of records awaiting this caller's review, for the nav badge (C3.7).
+     *
+     * <p>A dedicated COUNT exists because the badge polls: reusing
+     * {@link #getPendingQueue} would ship a full page of materialised rows per
+     * entity per user every polling interval purely to read their length.
+     * Authorization is identical to the queue itself.
+     *
+     * <p>C3.9 — the predicate must match {@link #getPendingQueue} exactly. It used
+     * to count every PENDING row including the caller's own submissions, which
+     * separation of duties forbids them from approving: the badge said "3" and the
+     * queue then offered nothing actionable. A badge that overstates is worse than
+     * no badge, because users stop trusting it and stop opening the queue.
+     */
+    public static int getPendingCount(String tenantId, String appId, String entityName, String callerUserId) throws Exception {
+        if (callerUserId == null || callerUserId.isBlank()) {
+            throw new IllegalStateException("Unauthorized: Caller user ID required");
+        }
+        if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId)) {
+            throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have CHECKER or owner rights on entity " + entityName);
+        }
+
+        String tableName = getTableName(tenantId, appId, entityName);
+        String sql = "SELECT COUNT(*) FROM \"" + tableName + "\""
+                + " WHERE \"APPROVAL_STATUS\" = 'PENDING'"
+                + " AND (\"SUBMITTED_BY\" IS NULL OR \"SUBMITTED_BY\" <> ?)";
+        try (Connection conn = JdbcManager.getConnection(tenantId);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, callerUserId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
     }
 
     /**

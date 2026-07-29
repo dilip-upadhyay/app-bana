@@ -206,7 +206,10 @@ The single source of truth for all runtime configuration:
 - **PostgreSQL 16** running locally
 - DB name: `appbana`
 - User: `appbana` / Password: `appbana_dev_2026`
-- Schema migrations managed by **Liquibase** (not Flyway) â€” changesets live in `app-bana-service/src/main/resources/db/changelog/`
+- Schema migrations use **two different tools**, one per Java module — do not assume:
+  - `app-bana-service` â†’ **Liquibase**. Changesets in `app-bana-service/src/main/resources/db/changelog/db.changelog-master.xml`, SQL in `.../db/migration/` (`V0`, `V1`, â€¦). Run from `ApiServer.startJdk()`.
+  - `ai-builder` â†’ **Flyway**. SQL in `ai-builder/src/main/resources/db/migration/` (`V001`, `V002`, â€¦).
+  - Both share the path suffix `db/migration/` and both share the `appbana` database. The zero-padded (`V001`) vs unpadded (`V1`) numbering is the quickest way to tell which module a file belongs to.
 
 ---
 
@@ -285,11 +288,19 @@ The agent enforces a mandatory two-phase app creation process:
 ### Important Agent Configuration
 
 ```java
-// AiAgent.java line ~119
-int effectiveMaxIterations = Math.min(config.getMaxIterations(), 5);
+// AiAgent.java:174 (processWithStream) and :546 (process) — the cap is duplicated, change both
+int effectiveMaxIterations = Math.min(config.getMaxIterations(), 10);
 ```
-- Maximum 5 iterations per request (cost control)
-- If all tools fail in an iteration, agent logs a warning and retries once more
+- Maximum **10** iterations per request (cost control)
+- If every tool call in an iteration fails, the agent increments `consecutiveFailures` and aborts at
+  **3 consecutive** all-failed iterations — it does not "retry once more" and stop
+
+> [!WARNING]
+> `think()` runs **once per iteration**, so anything paid placed inside it is bought up to 10 times
+> for one identical result. `userMessage` never changes across the loop. Per-request retrieval
+> (e.g. the domain-blueprint RAG lookup) is computed in `process`/`processWithStream` *after* the
+> pattern-match short-circuit and passed into `think()`. See C4.4b in
+> [`docs/planning/MAKER_CHECKER_PLAN.md`](../docs/planning/MAKER_CHECKER_PLAN.md).
 
 ### Tool Execution
 - **Sequential** (mandatory): `create_entity`, `generate_page`, `create_app`
@@ -305,9 +316,9 @@ All tools live in `ai-builder/src/main/java/com/appbana/ai/agent/tool/` and impl
 
 | Tool Name | Class | Purpose |
 |-----------|-------|---------|
-| `scaffold_app` | `ScaffoldAppTool` | **Primary tool** â€” Creates entire app (App + Entities + Pages) in one shot |
+| `scaffold_app` | `ScaffoldAppTool` | **Primary tool** — Creates entire app (App + Entities + Pages) in one shot. Each entity accepts `approvalRequired: boolean` (Phase C4) |
 | `create_app` | `CreateAppTool` | Creates just the app shell |
-| `create_entity` | `CreateEntityTool` | Creates a single entity/table |
+| `create_entity` | `CreateEntityTool` | Creates a single entity/table. Accepts `approvalRequired: boolean` (Phase C4) |
 | `generate_page` | `GeneratePageTool` | Generates a UI page for an entity |
 | `list_apps` | `ListAppsTool` | Lists all apps for this tenant |
 | `list_entities` | `ListEntitiesTool` | Lists entities in an app |
@@ -326,7 +337,35 @@ All tools live in `ai-builder/src/main/java/com/appbana/ai/agent/tool/` and impl
 3. Add clear JSON schema for parameters â€” the LLM reads this to know how to call the tool
 4. Always handle `ConnectException` â€” the ai-builder and app-bana-service are separate processes
 5. Return `ToolResult.error(name, message)` on failure â€” never throw exceptions silently
+> [!WARNING]
+> **Adding a parameter to a tool's JSON schema does not make it reach the backend.** A tool typically has a
+> separate method that builds the HTTP body (e.g. `CreateEntityTool.buildEntityMetadata`) by copying named
+> keys one at a time — anything not explicitly copied there is dropped with no error. Task C4.1 exists
+> because `approvalRequired` was accepted, read by `SchemaEnricher` (which injected the 8 approval columns,
+> so the table came out approval-shaped) and then dropped before the `/schema` POST, leaving
+> `approvalRequired=false` on the schema record that all 13 backend guards actually branch on. The entity
+> looked approval-enabled and behaved as if it were not. When you add a tool parameter, assert end-to-end
+> that it survives into the request body — a schema-only test proves nothing.
 
+> [!IMPORTANT]
+> **`SchemaManager` — not `SchemaEnricher` — owns approval-column injection (Task C4.6).** Setting
+> `approvalRequired: true` on a schema is the *only* thing a caller must do; `SchemaManager` materialises
+> the eight physical approval columns on create, on alter, and in the dry-run preview, deduping against
+> whatever the schema already declares. Do not re-add injection on the ai-builder side: it was reachable
+> from only one of the four writers of the flag, which is how `create_entity` came to emit entities that
+> accept records and then 500 on the first workflow action.
+>
+> Two consequences worth knowing before you touch this area:
+> - The eight columns are **physical-only** — deliberately *not* members of `EntitySchema.getFields()`.
+>   Read paths get them from `EntityCrudService.getQueryableFields()`; the insert path writes them through
+>   a separate guarded pass. Never merge `ApprovalColumns.asFields()` into an insert/update/validation
+>   field list, or clients could write `approval_status` directly through the generic entity API.
+> - Never answer "does this entity have an approval workflow?" by probing `getFields()` for
+>   `approval_parent_id` or friends. `schema.isApprovalRequired()` is the authority. Two call sites did
+>   the former and silently downgraded a new DRAFT revision into an in-place edit of a live APPROVED row.
+>
+> When writing tests, set the flag and let `SchemaManager` create the columns. Hand-declaring them in a
+> fixture is what kept this defect invisible across 281 green backend tests.
 ---
 
 ## 8. Critical Rules â€” Multi-Tenant Entity Endpoints
@@ -390,15 +429,98 @@ DELETE /api/{entity}/{id}       â†’ Delete record
 
 ### Query Parameters
 ```
-?limit=50&offset=0             â†’ Pagination
-?search=John                   â†’ Full-text search
-?name=John&status=active       â†’ Field-level filters (AND logic)
-?name:like=%oh%                â†’ Advanced filters (:like, :>, :<, :in)
-?_fields=name,email            â†’ Column projection
-?_sort=name:asc,age:desc       â†’ Sorting
-?_count=true                   â†’ Count only
-?_approvalStatus=PENDING       -> Approval-state filter (PENDING is checker-only; 403 otherwise)
+?limit=50&offset=0             → Pagination (max limit 500)
+?q=John                        → Full-text-ish search across text columns
+?filter=name:John,status:active → Field-level filters (comma-separated). An unrecognized field name
+                                  400s — see Review #5/#6/#7 — EXCEPT the 8 injected approval columns
+                                  (approval_status, submitted_by, ...), which are accepted even though
+                                  they're absent from EntitySchema.getFields(), but ONLY when the entity
+                                  has approvalRequired: true. The same exemption (and the same 400 for a
+                                  genuine typo) applies to sort=, fields= and groupBy= — see Review #7.
+?filter=name:=John             → Exact match — leading '=' on the value. Default (no '=') is
+                                  a case-insensitive substring LIKE, which over-matches identity
+                                  fields (submitted_by:bob would also match "bobby"). approval_status
+                                  goes through the same DRAFT/PENDING/APPROVED/REJECTED validation
+                                  and checker-only-PENDING gate either way — an invalid value's 400
+                                  names whichever of filter=approval_status: / _approvalStatus= the
+                                  caller actually used (Review #7 D9).
+?fields=name,email             → Column projection. Omitting fields= returns only the declared schema
+                                  fields — approval columns are opt-in via an explicit fields= only, so
+                                  they never leak into a caller that didn't ask for them.
+?sort=-name,+age               → Sorting. NOT `name:asc,age:desc` — that colon syntax is silently
+                                  ignored (a field literally named "name:asc" is looked up, missed, and
+                                  dropped) and was wrong in this doc for six rounds (Review #7 D10). No
+                                  prefix or a leading `+` means ascending; a leading `-` means descending.
+?count=true                    → Count only
+?groupBy=status                → Group rows by one column. An unrecognized column 400s (Review #7 D7) —
+                                  it used to silently bucket every row into one group with an empty key.
+                                  Review #8 made groupBy= itself trigger the advanced-query path: a bare
+                                  `?groupBy=X` with no other param used to fall through to the simple
+                                  SELECT-all branch and be silently ignored entirely (no `groups`, no
+                                  `groupCounts`, no error). It now always returns the paginated shape
+                                  (`{rows, total, limit: 50 by default, offset, ...}` plus `groupCounts`)
+                                  instead of a bare array — a public response-shape change, and a silent
+                                  50-row cap on `rows` if the caller doesn't also pass `limit=`. Per-page
+                                  `groups` is populated only when the grouped column is actually present on
+                                  the returned rows (a declared field, or one explicitly requested via
+                                  fields=); for an approval column with no explicit fields=, `groups` is
+                                  omitted rather than fabricated and `groupCounts` (whole-dataset, SQL,
+                                  projection-independent) is the only source of truth (Review #8 High).
+                                  `groupBy=` is only recognized on the top-level `/api/{entity}` route —
+                                  the app-scoped and env-scoped list routes accept and silently ignore it.
+?_approvalStatus=PENDING       -> Approval-state filter (PENDING is checker-only; 403 otherwise).
+                                  Conflicts with a simultaneous filter=approval_status:=X for a
+                                  different X 400 instead of silently picking one (Review #7 D8).
 ```
+
+> [!WARNING]
+> A bare `GET /api/{entity}` with **no query parameters at all** takes a different code path
+> (`EntityCrudService.listAll()`) than every other request shape above. Review #7's default-projection
+> leak guardrail (approval columns excluded unless explicitly requested via `fields=`) was enforced in
+> `listAdvanced()`'s default path but not here — `listAll()` used to be a bare `SELECT *`, returning every
+> physical column including all 8 approval columns with raw uppercase DB keys, on any approval-required
+> entity. Fixed in Review #9 to project `schema.getFields()` explicitly, same as `listAdvanced()`'s default
+> projection. **Lesson**: a parameter-by-parameter review sweep has no cell for "the caller sent nothing at
+> all" — that code path must be probed as its own case, not assumed to share behavior with the parameterized
+> paths just because it lives in the same route handler.
+
+> [!WARNING]
+> The handler reads a **fixed allowlist** of query params (`limit`, `offset`, `q`, `fields`, `sort`, `filter`,
+> `count`, `groupBy`, `_approvalStatus`). A bare field-level param — `?status=active`, `?submitted_by=alice` —
+> is **silently ignored**; the response is 200 with an *unfiltered* body, not an error. Field filters must go
+> through `filter=`. There is no `?_fields=`, `?_sort=`, `?_count=`, or `?name=value` shorthand, despite older
+> docs and some now-fixed callers assuming otherwise (C3.9/C3.10). The runtime's `entity-query.ts`
+> (`toEntityQueryParams`) is the canonical client-side helper — route any new list-fetching UI through it
+> instead of hand-building query params.
+
+> [!WARNING]
+> **`filter=` values must be RFC 3986 percent-encoded, not form-encoded.** The server decodes the query
+> string exactly once (`URI.getQuery()`), which treats a literal `+` as a literal `+`, not a space. A space
+> in a filter value MUST be sent as `%20`. Do **not** build this query string with a bare
+> `URLSearchParams(...).toString()` — its default `application/x-www-form-urlencoded` output encodes a space
+> as `+`, which the server will store as a literal `+`, not decode back to a space, silently corrupting the
+> filter (zero matches, no error). `app-bana-shared/api-client.ts`'s `fetchEntityRows()` post-processes with
+> `.replace(/\+/g, '%20')` for exactly this reason — copy that pattern (or route through `toEntityQueryParams`)
+> for any new caller that builds a `filter=` string with `URLSearchParams`.
+
+
+### Approval Endpoints (maker-checker)
+```
+POST   /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/submit
+POST   /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/approve
+POST   /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/reject    (body: {"reason": "..."} — required)
+GET    /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/approvals/pending      (checker-only queue)
+GET    /api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/approvals/audit  (most-recent-first)
+```
+
+Status codes are deliberately distinct — do not collapse them:
+
+| Code | Meaning |
+|------|---------|
+| 401 | No valid session |
+| 403 | Authorization failure — missing MAKER/CHECKER role, or separation-of-duties violation (maker approving own row) |
+| **409** | **Workflow conflict** — record is not in the required state (e.g. approving a non-`PENDING` row, submitting an already-`PENDING` row, losing an approve/reject race). Thrown as `ApprovalConflictException` |
+| 400 | Malformed request — record not found, missing rejection reason |
 
 ### AI Endpoints
 ```
@@ -455,10 +577,10 @@ decimal     â†’ NUMERIC(19,4)     â† Use for money/prices, NOT "curren
 boolean     â†’ BOOLEAN
 date        â†’ TIMESTAMP (date only)
 datetime    â†’ TIMESTAMP
-email       â†’ VARCHAR(255) with email validation
-phone       â†’ VARCHAR(50)
-status      â†’ VARCHAR(100) with options[]
-reference   â†’ VARCHAR(255) referencing another entity
+email       â†’ VARCHAR(255) (no built-in email-format validation — set `pattern` explicitly if you need one)
+phone       â†’ VARCHAR(255) (length is only honoured for "string"/"varchar"; other STRING-kind aliases are fixed at 255)
+status      â†’ VARCHAR(255) with options[]
+reference   â†’ INTEGER (H4 hardening — must match the parent's PK type for a real FOREIGN KEY)
 ```
 
 > [!WARNING]
@@ -475,6 +597,17 @@ AppBana uses **safe, non-destructive migrations**:
 - New fields â†’ `ALTER TABLE ADD COLUMN`
 - Renamed fields â†’ `ALTER TABLE RENAME COLUMN` (tracked via `existingName` property)
 - No production drops â€” data is preserved
+
+**Liquibase changesets** (`app-bana-service` only — `ai-builder` uses Flyway, see §4) live in
+`app-bana-service/src/main/resources/db/changelog/` and run from `ApiServer.startJdk()` *before* any
+service initialises. Two rules:
+
+1. **Never edit a changeset that has already been applied.** Liquibase checksums each one; editing it
+   breaks every existing database. Add a new changeset instead.
+2. **The chain must migrate an empty database.** A changeset may only reference objects created by an
+   earlier changeset — never one created lazily at runtime by Java. `V0__bootstrap_meta_tables.sql`
+   exists because V10 violated this and no fresh environment could be provisioned. Verify by pointing
+   `config.json` at a brand-new database and running the suite.
 
 ---
 
@@ -529,9 +662,11 @@ INITIAL â†’ GATHERING_INFO â†’ CONFIRMING_DETAILS â†’ CREATING â
 - **Mock data 404 bug**: `GenerateMockDataTool` now correctly prefixes entity URLs with `tenantId_appId_`
 - **Boot race condition**: `start-everything.bat` now kills all stale Java/Node processes before starting
 - **Scaffold entity fields**: `ScaffoldAppTool` now propagates `entityFields` to `GeneratePageTool` for `tableProps`
+- **Fresh-database provisioning** (`13bd762`): `appbana_schemas` / `appbana_migrations` / `appbana_audit` were created lazily by `JdbcManager.ensureMetaTable()`, which runs *after* Liquibase, so changeset V10 could never migrate an empty database. Changeset **V0** now creates them first. Never edit an already-applied changeset to fix this class of problem — it changes the checksum and breaks every existing database.
+- **`ai-builder` test suite** (`100b676`): Testcontainers mapped Qdrant's HTTP port 6333 instead of the gRPC port **6334**, which `QdrantService` actually speaks. Repairing the suite exposed two production bugs: `SchemaType.valueOf` threw on the `field-type` wire value (31 of 47 schemas returned `type == null`), and user preferences were loaded onto the agent context but never referenced by `AiAgent`.
 
 ### âš ï¸ Known Limitations
-- **Agent iteration limit**: Capped at 5 iterations per request. Complex multi-entity scaffolding may hit this limit.
+- **Agent iteration limit**: Capped at 10 iterations per request. Complex multi-entity scaffolding may hit this limit.
 - **Semantic cache**: Enabled by default (`SemanticCache.java`). If you see stale LLM responses, disable it temporarily for debugging.
 - **Schema pluralization**: Entity names must be used exactly as saved â€” no auto-pluralization is applied.
 

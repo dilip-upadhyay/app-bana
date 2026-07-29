@@ -277,6 +277,14 @@ public class KnowledgeBaseService {
                     entities.forEach((entityName, fields) ->
                             text.append(entityName).append("(").append(fields).append(") "));
                 }
+                // C4.4 — the approval signal has to be in the EMBEDDED text, not only in the
+                // payload: "loan approval workflow" must retrieve this blueprint ahead of the
+                // plain "finance" one, and retrieval ranks on this string alone.
+                Object approval = schema.getMetadata().get("approvalRequiredEntities");
+                if (approval instanceof Collection<?> names && !names.isEmpty()) {
+                    text.append(" - Maker-checker approval required (two-person, four-eyes) for: ");
+                    text.append(names.stream().map(String::valueOf).collect(Collectors.joining(", ")));
+                }
             }
             // Entity field types: include HTML input type
             if (schema.getTypeAsEnum() == SchemaDefinition.SchemaType.ENTITY_FIELD) {
@@ -485,6 +493,15 @@ public class KnowledgeBaseService {
             schema.setId((String) metadata.get("schemaId"));
             schema.setName((String) metadata.get("schemaName"));
             schema.setDescription((String) metadata.get("description"));
+
+            // C4.4c — category is written into the payload by indexSchema and is the key every
+            // filtered search matches on, but it was never read back, so EVERY schema returned by
+            // every search had category == null. That is silent: nothing throws, the caller just
+            // sees a schema that claims to belong to no category. It severed
+            // DomainBlueprintPrompt.render(), which selects the domain templates by category and
+            // therefore discarded a correctly-retrieved, correctly-ranked pair of maker-checker
+            // blueprints and returned "". Retrieval logged a match; the prompt got 0 chars.
+            schema.setCategory((String) metadata.get("category"));
 
             // Parse schema type safely — Qdrant returns the wire value ("field-type"), which is
             // NOT the enum constant name (ENTITY_FIELD), so valueOf() would throw and silently

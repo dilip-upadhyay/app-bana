@@ -4,6 +4,7 @@ import com.appbana.AuditLogService;
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
 import com.appbana.api.Router;
+import com.appbana.approval.ApprovalColumns;
 import com.appbana.approval.ApprovalService;
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
@@ -585,7 +586,30 @@ public class GenericEntityRoutes {
             // C2.7 — approval-state filter, checker-only for PENDING.
             String approvalStatusParam = req.query("_approvalStatus");
 
-            Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+            // Review #7 (D7) — groupBy used to fail OPEN on an unrecognized column
+            // name: the bucketing loop below reads row.get(groupByParam) directly, so
+            // a typo'd or unknown name matched nothing on every row and produced a
+            // single bucket with an empty key and the full row count — a dashboard
+            // would render that as a legitimate figure. Fail closed like filter=
+            // already does. resolveQueryableField() also recognizes the 8 approval
+            // columns (e.g. groupBy=approval_status) when the entity has the
+            // approval workflow enabled.
+            if (groupByParam != null && !groupByParam.isBlank()
+                    && crud.resolveQueryableField(schema, groupByParam) == null) {
+                res.json(400, Map.of("error", "unknown groupBy field '" + groupByParam + "'"));
+                return;
+            }
+
+            Map<String, Object> filters;
+            try {
+                filters = crud.parseFilters(filterParam, schema);
+            } catch (IllegalArgumentException iae) {
+                // Review #4 (High A) — parseFilters() now fails closed (400) on an
+                // unparseable typed filter value instead of silently dropping the
+                // predicate and returning an under-scoped 200.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
+                return;
+            }
             boolean approvalFilterApplied;
             try {
                 approvalFilterApplied = applyApprovalStatusFilter(schema, null, null, approvalStatusParam, filters,
@@ -598,10 +622,16 @@ public class GenericEntityRoutes {
 
             Integer limit = null;
             Integer offset = null;
+            boolean hasGroupBy = groupByParam != null && !groupByParam.isBlank();
+            // Review #8 (High) — groupBy was not itself part of this advanced-path
+            // trigger, so a bare `?groupBy=X` with no other query param fell into
+            // the "!anyAdv" simple-list branch below, which never runs the groupBy
+            // bucketing/countByGroup logic at all: a 200 with a plain row array,
+            // no `groups`, no `groupCounts`, and no indication groupBy was ignored.
             boolean anyAdv = countOnly || q != null || fieldsParam != null || sortParam != null || filterParam != null
-                    || limitS != null || offsetS != null || approvalFilterApplied;
+                    || limitS != null || offsetS != null || approvalFilterApplied || hasGroupBy;
             if (limitS != null || offsetS != null || q != null || fieldsParam != null || sortParam != null
-                    || filterParam != null || approvalFilterApplied) {
+                    || filterParam != null || approvalFilterApplied || hasGroupBy) {
                 try {
                     limit = limitS != null ? Integer.parseInt(limitS) : 50;
                 } catch (Exception ignore) {
@@ -675,31 +705,58 @@ public class GenericEntityRoutes {
                         //
                         // H6 hardening: also compute TRUE per-group counts across
                         // the whole filtered dataset (not just the current page)
-                        // via a real SQL GROUP BY. The `groups` field remains a
-                        // per-page bucketing for backwards compat; the new
-                        // `groupCounts` map is what UIs should show for accurate
-                        // totals ("Active (127)", "Pending (43)", ...) even when
-                        // there are more rows than the page size.
+                        // via a real SQL GROUP BY. The `groupCounts` map is what
+                        // UIs should show for accurate totals ("Active (127)",
+                        // "Pending (43)", ...) even when there are more rows than
+                        // the page size.
                         if (groupByParam != null && !groupByParam.isBlank()) {
                             Object rowsObj = out.get("rows");
                             if (rowsObj instanceof List<?> rowsList) {
-                                Map<String, List<Object>> buckets = new LinkedHashMap<>();
-                                for (Object item : rowsList) {
-                                    if (item instanceof Map<?, ?> row) {
-                                        Object key = row.get(groupByParam);
-                                        String keyStr = key == null ? "" : String.valueOf(key);
-                                        buckets.computeIfAbsent(keyStr, k -> new ArrayList<>()).add(item);
+                                // Review #8 (High) — `groupByParam` resolves through
+                                // getQueryableFields() (Review #7), which includes the 8
+                                // approval columns, but those are deliberately excluded
+                                // from the default projection the `rows` above were
+                                // fetched with (see the leak guardrail in
+                                // EntityCrudService#listAdvanced). Bucketing on
+                                // row.get(groupByParam) here used to silently read a key
+                                // that was never in the row map, collapsing every group
+                                // into a single "" bucket while `groupCounts` (SQL,
+                                // unaffected by projection) reported the true per-group
+                                // breakdown a few lines later in the SAME response body
+                                // — a UI reading `groups` saw a lie next to the truth in
+                                // `groupCounts`. Only bucket in Java when the resolved
+                                // column is actually present on the fetched rows;
+                                // otherwise omit `groups` entirely rather than fabricate
+                                // a wrong one — `groupCounts` remains the correct,
+                                // always-present source of truth for totals.
+                                String canonicalGroupBy = crud.resolveQueryableField(schema, groupByParam);
+                                boolean keyAvailableOnRow = canonicalGroupBy != null
+                                        && (rowsList.isEmpty()
+                                                || (rowsList.get(0) instanceof Map<?, ?> firstRow
+                                                        && firstRow.containsKey(canonicalGroupBy)));
+                                if (keyAvailableOnRow) {
+                                    Map<String, List<Object>> buckets = new LinkedHashMap<>();
+                                    for (Object item : rowsList) {
+                                        if (item instanceof Map<?, ?> row) {
+                                            Object key = row.get(canonicalGroupBy);
+                                            String keyStr = key == null ? "" : String.valueOf(key);
+                                            buckets.computeIfAbsent(keyStr, k -> new ArrayList<>()).add(item);
+                                        }
                                     }
+                                    List<Map<String, Object>> groups = new ArrayList<>(buckets.size());
+                                    for (Map.Entry<String, List<Object>> entry : buckets.entrySet()) {
+                                        Map<String, Object> g = new LinkedHashMap<>();
+                                        g.put("key", entry.getKey());
+                                        g.put("count", entry.getValue().size());
+                                        g.put("rows", entry.getValue());
+                                        groups.add(g);
+                                    }
+                                    out.put("groups", groups);
+                                } else {
+                                    LOG.debug("[GROUP-BY] '{}' not present on the projected rows for {}; "
+                                            + "omitting per-page `groups` and relying on `groupCounts` only",
+                                            groupByParam, entity);
                                 }
-                                List<Map<String, Object>> groups = new ArrayList<>(buckets.size());
-                                for (Map.Entry<String, List<Object>> entry : buckets.entrySet()) {
-                                    Map<String, Object> g = new LinkedHashMap<>();
-                                    g.put("key", entry.getKey());
-                                    g.put("count", entry.getValue().size());
-                                    g.put("rows", entry.getValue());
-                                    groups.add(g);
-                                }
-                                out.put("groups", groups);
                                 out.put("groupBy", groupByParam);
                                 // H6 — true, whole-dataset counts. Silently skipped
                                 // (empty map) if the column doesn't exist on the
@@ -717,6 +774,12 @@ public class GenericEntityRoutes {
                         res.json(200, out);
                     }
                 }
+            } catch (IllegalArgumentException iae) {
+                // Review #7 (D7) — listAdvanced() now fails closed (400) on an
+                // unrecognized sort=/fields= column name, same class of fix as
+                // Review #4's filter= value handling and Review #5's filter= name
+                // handling.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
             } catch (SQLException e) {
                 LOG.error("List failed for entity {}", entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
@@ -823,7 +886,10 @@ public class GenericEntityRoutes {
                 }
 
                 Map<String, Object> before = crud.getById(schema, idStr);
-                int updated = crud.updateById(schema, idStr, data);
+                // C4.6b — applyApprovalPutGuard() above has already stripped every client-supplied
+                // approval column and re-staged only the server's own, so the remaining approval
+                // keys must persist. See EntityCrudService.updateById(..., allowApprovalColumns).
+                int updated = crud.updateById(schema, idStr, data, true);
                 Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
                 if (updated > 0) {
                     AuditLogService.log("UPDATE", schema.getName(), idStr, actor, before, after);
@@ -1146,7 +1212,15 @@ public class GenericEntityRoutes {
             LOG.info("[STUDIO-LIST] entity={}, filter={}, sort={}, limit={}, offset={}", 
                      entity, filterParam, sortParam, limitS, offsetS);
 
-            Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+            Map<String, Object> filters;
+            try {
+                filters = crud.parseFilters(filterParam, schema);
+            } catch (IllegalArgumentException iae) {
+                // Review #4 (High A) — fail closed (400) instead of silently
+                // dropping an unparseable typed filter predicate.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
+                return;
+            }
 
             // C2.7 — approval-state filter, checker-only for PENDING.
             String approvalStatusParam = req.query("_approvalStatus");
@@ -1206,6 +1280,9 @@ public class GenericEntityRoutes {
                 } finally {
                     TenantContext.clear();
                 }
+            } catch (IllegalArgumentException iae) {
+                // Review #7 (D7) — see the identical catch on /api/{entity}.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
             } catch (SQLException e) {
                 LOG.error("App-scoped list failed for app={} entity={}", appId, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
@@ -1330,7 +1407,8 @@ public class GenericEntityRoutes {
 
                 try {
                     Map<String, Object> before = crud.getById(schema, idStr);
-                    int updated = crud.updateById(schema, idStr, data);
+                    // C4.6b — see the generic PUT route; the guard has already stripped client input.
+                    int updated = crud.updateById(schema, idStr, data, true);
                     Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
 
                     if (updated > 0) {
@@ -1601,7 +1679,15 @@ public class GenericEntityRoutes {
                         offset = 0;
                     }
 
-                    Map<String, Object> filters = crud.parseFilters(filterParam, schema);
+                    Map<String, Object> filters;
+                    try {
+                        filters = crud.parseFilters(filterParam, schema);
+                    } catch (IllegalArgumentException iae) {
+                        // Review #4 (High A) — fail closed (400) instead of silently
+                        // dropping an unparseable typed filter predicate.
+                        res.json(400, ErrorHandler.fieldValidationError(iae));
+                        return;
+                    }
 
                     // C2.7 — approval-state filter, checker-only for PENDING.
                     String approvalStatusParam = req.query("_approvalStatus");
@@ -1636,6 +1722,9 @@ public class GenericEntityRoutes {
                 } finally {
                     TenantContext.clear();
                 }
+            } catch (IllegalArgumentException iae) {
+                // Review #7 (D7) — see the identical catch on /api/{entity}.
+                res.json(400, ErrorHandler.fieldValidationError(iae));
             } catch (SQLException e) {
                 LOG.error("Env-scoped list failed for app={} env={} entity={}", appId, env, entity, e);
                 res.json(500, ErrorHandler.errorDetails(e));
@@ -1740,7 +1829,8 @@ public class GenericEntityRoutes {
 
                 try {
                     Map<String, Object> before = crud.getById(schema, idStr);
-                    int updated = crud.updateById(schema, idStr, data);
+                    // C4.6b — see the generic PUT route; the guard has already stripped client input.
+                    int updated = crud.updateById(schema, idStr, data, true);
                     Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
                     
                     if (updated > 0) {
@@ -1829,22 +1919,13 @@ public class GenericEntityRoutes {
         });
     }
 
-    private static final List<String> APPROVAL_COLUMNS = List.of(
-            "approval_status", "APPROVAL_STATUS",
-            "approval_revision", "APPROVAL_REVISION",
-            "approval_parent_id", "APPROVAL_PARENT_ID",
-            "submitted_by", "SUBMITTED_BY",
-            "submitted_at", "SUBMITTED_AT",
-            "approved_by", "APPROVED_BY",
-            "approved_at", "APPROVED_AT",
-            "rejection_reason", "REJECTION_REASON"
-    );
+    // Review #6 — both lists now delegate to ApprovalColumns, the single canonical
+    // source (previously duplicated verbatim here and drifted independently from the
+    // set EntityCrudService.parseFilters()/buildWhere() needed).
+    private static final List<String> APPROVAL_COLUMNS = ApprovalColumns.NAMES_BOTH_CASES;
 
     /** Lower-cased approval column names, for schema-field comparisons. */
-    private static final Set<String> APPROVAL_FIELD_NAMES = Set.of(
-            "approval_status", "approval_revision", "approval_parent_id",
-            "submitted_by", "submitted_at", "approved_by", "approved_at", "rejection_reason"
-    );
+    private static final Set<String> APPROVAL_FIELD_NAMES = ApprovalColumns.FIELD_NAMES;
 
     private static final Set<String> VALID_APPROVAL_STATUSES = Set.of("DRAFT", "PENDING", "APPROVED", "REJECTED");
 
@@ -1910,14 +1991,21 @@ public class GenericEntityRoutes {
                     Map.of("error", "Cannot update record while approval is PENDING"));
         }
 
-        boolean hasParentColumn = schema.getFields().stream()
-                .anyMatch(f -> "approval_parent_id".equalsIgnoreCase(f.getName()));
-
-        if (!"APPROVED".equalsIgnoreCase(currentStatus) || !hasParentColumn) {
-            if ("APPROVED".equalsIgnoreCase(currentStatus)) {
-                LOG.warn("[APPROVAL] Entity {} has no approval_parent_id column — falling back to in-place edit "
-                        + "of APPROVED row {}. Re-run the scaffolder to enable revisions.", schema.getName(), idStr);
-            }
+        // C4.6 — approvalRequired is the authority for "does this entity support revisions",
+        // not the presence of approval_parent_id in schema.getFields(). SchemaManager now
+        // guarantees the physical column from the flag alone, and the eight approval columns
+        // are deliberately NOT declared schema fields (that is the shape every read path
+        // already assumes). Probing getFields() here reported "no revision support" for every
+        // correctly-provisioned approval entity, silently downgrading what should be a new
+        // DRAFT revision into an in-place edit of a live APPROVED row — a data-integrity
+        // failure, not a cosmetic one, since the approved record is mutated without review.
+        //
+        // C4.6c — C4.6 left behind `boolean supportsRevisions = schema.isApprovalRequired()`
+        // and a `|| !supportsRevisions` disjunct here. The method already returned at the top
+        // unless that flag is true, so the disjunct was dead and the legacy-fallback WARN it
+        // guarded was unreachable. Every entity reaching this line supports revisions; there is
+        // no in-place-edit fallback for an APPROVED row, and there must not be one.
+        if (!"APPROVED".equalsIgnoreCase(currentStatus)) {
             // DRAFT / REJECTED rows are private to the maker: edit in place and return to DRAFT.
             data.put("approval_status", "DRAFT");
             data.put("rejection_reason", null);
@@ -1971,7 +2059,11 @@ public class GenericEntityRoutes {
             String revisionId;
             if (openRevision != null) {
                 revisionId = String.valueOf(rowValue(openRevision, pkName));
-                crud.updateById(schema, revisionId, revisionData);
+                // C4.6 follow-up — opt in to writing the approval columns. Every value below is
+                // server-constructed; without the flag updateById derives its SET list from
+                // schema.getFields(), which no longer contains the approval columns, so a
+                // re-edited REJECTED revision kept its REJECTED status and stale rejection_reason.
+                crud.updateById(schema, revisionId, revisionData, true);
             } else {
                 Object generated = crud.insertRecord(schema, revisionData);
                 revisionId = generated != null ? String.valueOf(generated) : null;
@@ -2106,27 +2198,71 @@ public class GenericEntityRoutes {
      * </ol>
      * Guarding only the first would leave the checker queue enumerable by any maker.
      *
+     * <p>Review #7 — two further hazards on the second door:
+     * <ul>
+     *   <li><b>D9</b> — {@code resolveApprovalStatusFilter()}'s 400 messages ("invalid
+     *       _approvalStatus '...'", "_approvalStatus is not supported: ...") are written
+     *       for the {@code _approvalStatus=} parameter. When the same validation is
+     *       triggered via the generic {@code filter=approval_status:} door instead, the
+     *       message named a parameter the caller never sent. Rewritten below so the 400
+     *       always names whichever door the caller actually used. The 403 checker-only
+     *       PENDING gate is untouched either way — its message never mentioned
+     *       {@code _approvalStatus} and the gate itself must stay exactly as strict for
+     *       both doors (see {@code RevisionFlowTest.genericFilterParamCannotSmuggleAPendingListing}).</li>
+     *   <li><b>D8</b> — supplying both {@code _approvalStatus=X} and
+     *       {@code filter=approval_status:=Y} with different values used to silently
+     *       resolve to {@code X} with no indication {@code Y} was ignored.</li>
+     * </ul>
+     *
      * @param filters mutated in place when an explicit {@code _approvalStatus} was supplied
      * @return true if {@code _approvalStatus} was supplied (callers use this to force the
      *         advanced query path, which is the only one that honours filters)
-     * @throws ApprovalFilterException if the value is invalid or the caller may not see it
+     * @throws ApprovalFilterException if the value is invalid, conflicting, or the caller
+     *         may not see it
      */
     static boolean applyApprovalStatusFilter(EntitySchema schema, String tenantId, String appId,
                                              String raw, Map<String, Object> filters,
                                              String callerUserId, boolean authEnabled) {
         String explicit = resolveApprovalStatusFilter(schema, tenantId, appId, raw, callerUserId, authEnabled);
-        if (explicit != null) {
-            filters.put("approval_status", explicit);
-            return true;
-        }
 
+        // Extract the filter=approval_status: entry, if any, once — both hazards
+        // below need its (unwrapped) value regardless of exact/substring form.
+        Object filterValue = null;
         if (schema != null && schema.isApprovalRequired() && filters != null) {
             for (Map.Entry<String, Object> e : filters.entrySet()) {
                 if ("approval_status".equalsIgnoreCase(e.getKey()) && e.getValue() != null) {
-                    // Same validation + checker gate as the dedicated parameter.
-                    resolveApprovalStatusFilter(schema, tenantId, appId, String.valueOf(e.getValue()),
-                            callerUserId, authEnabled);
+                    filterValue = e.getValue() instanceof EntityCrudService.ExactMatch em ? em.value() : e.getValue();
+                    break;
                 }
+            }
+        }
+
+        if (explicit != null) {
+            if (filterValue != null && !explicit.equalsIgnoreCase(String.valueOf(filterValue))) {
+                throw new ApprovalFilterException(400,
+                        "conflicting approval status: _approvalStatus=" + explicit
+                                + " vs filter=approval_status:=" + filterValue);
+            }
+            // C3.9 — exact, not the default substring LIKE. The four states do not
+            // currently overlap as substrings, but a fifth one that did would
+            // silently widen every approval-filtered list.
+            filters.put("approval_status", new EntityCrudService.ExactMatch(explicit));
+            return true;
+        }
+
+        if (filterValue != null) {
+            try {
+                // Same validation + checker gate as the dedicated parameter.
+                resolveApprovalStatusFilter(schema, tenantId, appId, String.valueOf(filterValue),
+                        callerUserId, authEnabled);
+            } catch (ApprovalFilterException afe) {
+                // D9 — rewrite a validation-failure message to name the door the
+                // caller actually used. Leave the checker-gate 403 exactly as is.
+                if (afe.status() == 400) {
+                    throw new ApprovalFilterException(400,
+                            afe.getMessage().replace("_approvalStatus", "filter=approval_status:"));
+                }
+                throw afe;
             }
         }
         return false;

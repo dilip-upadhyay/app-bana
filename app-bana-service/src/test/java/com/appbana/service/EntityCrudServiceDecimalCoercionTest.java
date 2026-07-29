@@ -89,12 +89,24 @@ class EntityCrudServiceDecimalCoercionTest {
     }
 
     @Test
-    void numericTypeAliasCoercesToo() throws Exception {
+    void numericTypeAliasCoercesAsStringNotDecimal() throws Exception {
+        // Review #5 (blocker) — "numeric" (and "money"/"serial"/"bigserial") are
+        // deliberately NOT decimal/integer aliases. Before the shared
+        // classifyFieldType() classifier existed, sqlType() had no case for any
+        // of the four, so a "numeric" column physically IS VARCHAR(255) for
+        // every existing tenant. Round 3 had added "numeric" to this coercion
+        // switch only, which would have made SchemaManager issue
+        // `ALTER TABLE ... TYPE NUMERIC(19,4) USING col::numeric` on the next
+        // schema save for such a table, breaking it for any tenant whose
+        // "numeric" column ever held non-numeric free text (which the old
+        // fallback-to-VARCHAR(255) behavior explicitly allowed). Coercing it as
+        // a plain string keeps insert/filter behavior consistent with the DDL
+        // that already exists.
         EntitySchema.Field f = decimalField("qty");
         f.setType("numeric"); // alias
         Object out = coerce(f, "3.14");
-        assertInstanceOf(BigDecimal.class, out);
-        assertEquals(0, ((BigDecimal) out).compareTo(new BigDecimal("3.14")));
+        assertInstanceOf(String.class, out);
+        assertEquals("3.14", out);
     }
 
     @Test
