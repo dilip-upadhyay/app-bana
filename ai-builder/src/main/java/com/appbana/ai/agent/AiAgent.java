@@ -220,10 +220,21 @@ public class AiAgent {
                     List<ToolResult> results = executeToolsWithStream(thought.getToolCalls(), context, emitter);
                     boolean allToolsFailed = true;
                     boolean loopDetected = false;
+                    boolean authFailureDetected = false;
 
                     for (ToolResult result : results) {
                         String signature = result.getToolName() + ":" + result.getArguments();
                         if (!result.isSuccess()) {
+                            if (result.isAuthFailure()) {
+                                // C4.4e Review #12 -- a present-but-invalid (expired/revoked) token
+                                // looks identical to any other tool failure from here on unless we
+                                // check for it explicitly. Left unchecked this is indistinguishable
+                                // from "the backend is having a bad day" and would silently burn
+                                // consecutiveFailures toward the generic "please rephrase" message
+                                // below -- three paid LLM round-trips to tell the user the wrong
+                                // thing about why nothing is working.
+                                authFailureDetected = true;
+                            }
                             if (failedSignatures.contains(signature)) {
                                 result.setError("CRITICAL: Repeated failure. " + result.getError());
                             }
@@ -242,6 +253,21 @@ public class AiAgent {
                             }
                         }
                         step.addToolResult(result);
+                    }
+
+                    if (authFailureDetected) {
+                        // Abort on iteration 1 -- do not wait for consecutiveFailures>=3. A backend
+                        // session isn't going to become valid again by retrying, and every retry is
+                        // a paid LLM call spent producing a wrong diagnosis.
+                        steps.add(step);
+                        String msg = "Your session has ended, so I can't continue with that request. "
+                                + "Please sign in again to keep working.";
+                        log.warn("[AGENT-STREAM] Aborting on auth failure (iteration {}): {}",
+                                iteration, results.stream().filter(ToolResult::isAuthFailure)
+                                        .findFirst().map(ToolResult::getError).orElse(""));
+                        emitter.authExpired(msg);
+                        emitter.done(context.sessionId(), msg);
+                        return AgentResponse.error(msg, steps, System.currentTimeMillis() - startTime);
                     }
 
                     if (loopDetected) {
@@ -580,10 +606,17 @@ public class AiAgent {
                 if (thought.hasToolCalls()) {
                     List<ToolResult> results = executeTools(thought.getToolCalls(), context);
                     boolean allToolsFailed = true;
+                    boolean authFailureDetected = false;
 
                     for (ToolResult result : results) {
                         String signature = result.getToolName() + ":" + result.getArguments();
                         if (!result.isSuccess()) {
+                            if (result.isAuthFailure()) {
+                                // C4.4e Review #12 -- see the matching check in processWithStream.
+                                // Same reasoning: a 401 here means the session ended, not that the
+                                // backend is flaky. Abort now instead of burning consecutiveFailures.
+                                authFailureDetected = true;
+                            }
                             if (failedSignatures.contains(signature)) {
                                 result.setError("CRITICAL: Repeated failure. " + result.getError());
                             }
@@ -593,6 +626,14 @@ public class AiAgent {
                             allToolsFailed = false;
                         }
                         step.addToolResult(result);
+                    }
+
+                    if (authFailureDetected) {
+                        steps.add(step);
+                        String msg = "Your session has ended, so I can't continue with that request. "
+                                + "Please sign in again to keep working.";
+                        log.warn("[AGENT] Aborting on auth failure (iteration {})", iteration);
+                        return AgentResponse.error(msg, steps, System.currentTimeMillis() - startTime);
                     }
 
                     if (allToolsFailed) {

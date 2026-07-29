@@ -132,8 +132,14 @@ public class UpdateAppTool implements Tool {
                 data.put("updated", body);
                 return ToolResult.success(getName(), data, 0);
             }
+            if (resp.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": update_app returned 401");
+            }
             return ToolResult.error(getName(),
                     "Update failed with status " + resp.statusCode() + ": " + resp.body());
+        } catch (BackendAuthException authEx) {
+            log.warn("[UpdateAppTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[UpdateAppTool] Execution failed", e);
             return ToolResult.error(getName(), "Failed to update app: " + e.getMessage());

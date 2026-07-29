@@ -130,11 +130,16 @@ public class ListPagesTool implements Tool {
                 result.put("message", formattedMessage.toString());
 
                 return ToolResult.success(getName(), result, executionTime);
+            } else if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": list_pages returned 401");
             } else {
                 log.error("[ListPagesTool] Failed to fetch app: {} - {}", response.statusCode(), response.body());
                 return ToolResult.error(getName(), "Failed to fetch app pages: " + response.statusCode());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[ListPagesTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[ListPagesTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());

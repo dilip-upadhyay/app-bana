@@ -86,6 +86,13 @@ export function ChatPane() {
         if (ev.event === 'tool_call_end' && ev.data.status === 'ok') {
           refreshPreview();
         }
+        if (ev.event === 'auth_expired') {
+          // C4.4e Review #12 — a tool inside this already-open (200) stream hit a backend 401.
+          // The transport-level `appbana:auth:expired` recovery (dispatched by authedFetch on an
+          // *outer* 401) can never fire for this case, so dispatch the same event manually and
+          // let AuthGate.tsx's existing listener handle the rest with zero changes there.
+          window.dispatchEvent(new CustomEvent('appbana:auth:expired'));
+        }
         if (ev.event === 'done') {
           if (ev.data.conversationId) setSessionId(ev.data.conversationId);
           // Safety net: if the backend never sent a token but has a finalMessage,

@@ -1,6 +1,6 @@
 # Maker-Checker Epic — Implementation Plan
 
-**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c/d/e, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete — then C4.4d, where the auth fix shipped alongside it repaired one instance of a five-member defect class, and then C4.4e, where the fix for *that* turned out to have the same failure mode a third time: the header was made conditional on a token nothing upstream guaranteed. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
+**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c/d/e/f, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete — then C4.4d, where the auth fix shipped alongside it repaired one instance of a five-member defect class, then C4.4e, where the fix for *that* turned out to have the same failure mode a third time (the header was made conditional on a token nothing upstream guaranteed), and then C4.4f, where round 12 asked the next question — a present token can still be *invalid* mid-conversation, and the agent loop itself now aborts on iteration 1 with a distinct "session ended" message and SSE `auth_expired` event instead of surfacing that as a generic 3-strikes failure. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
 **Owner:** AppBana core team
 **Position in master roadmap:** Phase C of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) and Phase B (Complex UI Epic) completing. Runs *before* Phase D — approvals are AppBana's differentiator (the *product*), while D is enterprise packaging.
 **Trigger:** Every regulated customer-facing workflow — KYC, loan origination, account opening, policy issuance, claims processing — has a mandatory two-person integrity control: a **maker** creates or edits a record and a **checker** approves it before it becomes live. AppBana today has no concept of `submitted`, `pending approval`, `approved`, or `rejected`. Without maker-checker, we cannot ship into any regulated vertical, which is the majority of the customer-onboarding market.
@@ -615,6 +615,60 @@ the type is inherited by paths that do not exist yet. And when removing a defect
 that hid it, not just the trigger that exposed it** — the thread running through C4.4c, C4.4d and
 C4.4e is that each fix repaired the defect and left the masking in place, which is precisely why the
 next one stayed invisible.
+
+#### C4.4f — presence vs validity: a token can go bad mid-conversation, after the door already let it through
+
+Review round 12 accepted C4.4e's "is a token present" invariant and asked the next question: a *present*
+token can still be *invalid* — expired or revoked — at any point in an already-running conversation. The
+SSE stream opens with a 200 (the token was present and, at that instant, valid), and a tool call several
+iterations later gets a 401 from the backend. `authedFetch()`'s existing `appbana:auth:expired` recovery
+fires on the *opening* request's transport status; it cannot see a 401 discovered inside a stream that
+already returned 200. Before this round, that 401 was indistinguishable from any other tool failure: it
+burned an iteration, incremented `consecutiveFailures`, and — if it kept happening for 3 iterations — the
+agent gave up with "I'm having trouble, could you rephrase?", which is actively misleading for a dead
+session.
+
+**Fix — an unchecked exception carries the signal through helpers that can't change their return type.**
+`ToolResult` gained `authFailure` (Lombok `isAuthFailure()`) and a `ToolResult.authError(name, msg)`
+factory. New `BackendAuthException` (unchecked) is thrown at the exact point any of the 14 tools detects
+a 401, however deeply nested behind a private helper — some of those helpers return `boolean` or a
+nullable `Map` and already use that return shape to mean "not found"/"other failure", so threading a new
+parameter through every signature would have been a much larger change. Each tool's outer `execute()`
+catches `BackendAuthException` **before** its generic `catch (Exception e)` and returns
+`ToolResult.authError(...)`.
+
+Both `AiAgent` loops (`process`, `processWithStream`) check `result.isAuthFailure()` per tool result and,
+if set, abort **immediately after iteration 1** — bypassing the `consecutiveFailures>=3` gate entirely —
+with *"Your session has ended, so I can't continue with that request. Please sign in again to keep
+working."*, never the generic rephrase message. `StreamEmitter` gained a 6th event, `authExpired(message)`
+→ `{event: "auth_expired", data: {message}}`, which `ChatPane.tsx` maps to
+`window.dispatchEvent(new CustomEvent('appbana:auth:expired'))` — the same recovery `AuthGate.tsx` already
+listens for, now reachable from inside an open stream, not just from the opening request.
+
+**Hardest file:** `BatchUpdateEntitiesTool`'s per-update loop deliberately treats an auth failure
+differently from every other exception in that loop — it does not append to `failedUpdates` and continue
+to the next item; it returns immediately. A dead token fails every remaining update identically, so
+finishing the loop would only produce N confusing per-item 401 strings instead of one clear signal.
+
+**An unrelated orphan-app bug, found while touching `ScaffoldAppTool` for this round:** when
+`context.appId()` was already set (a caller re-using an id), the tool reused it without checking an
+`appbana_apps` row actually existed for that id, so entities/pages could be created under an id with no
+backing app record. Fixed with `appRowExists()` (GET the app; 401 also throws `BackendAuthException`) and
+`createAppRowWithId()` (POST with `id` forced to the caller's id — the one place this class of tool must
+*not* mint a fresh UUID).
+
+**Regression tests** (`AiAgentTest`): `testAgentLoop_AuthFailureAbortsOnFirstIterationNotThird` and
+`testAgentLoopStream_AuthFailureAbortsAndEmitsAuthExpiredEvent` register a tool that always returns
+`ToolResult.authError(...)`, then assert the LLM was called exactly **once** (not up to 3 times), the
+returned message contains "session" and never "rephrase", and — for the streaming variant — that an
+`auth_expired` event was actually emitted alongside `done`.
+
+**Meta-lesson (carried forward from C4.4c/d/e):** the invariant that gets enforced first is the one that
+is easy to state in one line with no I/O — "a token must be present" is checkable locally, for free.
+"A token must be *valid*" is the property the system actually depends on, and validity lives in another
+service, discoverable only by making the call and seeing what comes back. Presence-checks are seductive
+because they are cheap and total; validity is the one that actually protects anything, and it is always
+the harder one to reach.
 
 
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**

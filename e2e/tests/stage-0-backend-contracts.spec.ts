@@ -6,7 +6,9 @@
  *
  *   1. GET /api/tenants/{tenantId}/branding    (public, tenant-branding)
  *   2. GET /api/app-context                    (subdomain-ready context)
- *   3. POST /api/ai/chat/agent/stream          (SSE with 5-event contract)
+ *   3. POST /api/ai/chat/agent/stream          (SSE with 6-event contract,
+ *                                               requires a session token —
+ *                                               C4.4e Review #12)
  *
  * Prerequisites: backend 8080, ai-builder 8081 must be running.
  */
@@ -140,15 +142,50 @@ test('runtime entity API /batch sub-path is public — no 401', async ({ request
   expect(res.status()).toBeLessThan(500);
 });
 
+/**
+ * Registers + logs in a fresh user against the core backend and returns a live
+ * session token. Mirrors hardening/fixtures.ts's newHardeningFixture() but
+ * skips app creation — the SSE contract test only needs a valid token.
+ */
+async function getFreshSessionToken(): Promise<string> {
+  const api = await request.newContext();
+  try {
+    const stamp = Date.now();
+    const suffix = Math.random().toString(36).slice(2, 8);
+    const email = `stage0-sse+${stamp}-${suffix}@appbana.test`;
+    const password = `Passw0rd-${stamp}`;
+
+    const reg = await api.post(`${BACKEND_URL}/api/auth/register`, {
+      data: { email, password, name: `stage0-sse ${stamp}` },
+    });
+    if (!reg.ok()) {
+      throw new Error(`register failed HTTP ${reg.status()}: ${await reg.text()}`);
+    }
+
+    const login = await api.post(`${BACKEND_URL}/api/auth/login`, {
+      data: { email, password },
+    });
+    if (!login.ok()) {
+      throw new Error(`login failed HTTP ${login.status()}: ${await login.text()}`);
+    }
+    const loginBody = await login.json();
+    return loginBody.token as string;
+  } finally {
+    await api.dispose();
+  }
+}
+
 test('SSE endpoint returns text/event-stream with the 5-event contract and exactly one done', async () => {
   test.setTimeout(60_000);
 
+  const token = await getFreshSessionToken();
   const payload = {
     message:   'hi',
     sessionId: crypto.randomUUID(),
     userId:    'e2e-stage-0',
     tenantId:  'default',
     appId:     '',
+    token,
   };
 
   const res = await fetch(`${AI_URL}/api/ai/chat/agent/stream`, {
@@ -194,9 +231,34 @@ test('SSE endpoint returns text/event-stream with the 5-event contract and exact
   expect.soft(only('state'), 'expected at least 1 state event').toBeGreaterThanOrEqual(1);
   expect.soft(only('token'), 'expected at least 1 token event').toBeGreaterThanOrEqual(1);
 
-  // Every event name must be from the documented 5-event contract
-  const allowed = new Set(['token', 'tool_call_start', 'tool_call_end', 'state', 'done']);
+  // Every event name must be from the documented event contract (the base 5
+  // plus `auth_expired`, added by C4.4e Review #12 for mid-stream 401s).
+  const allowed = new Set(['token', 'tool_call_start', 'tool_call_end', 'state', 'done', 'auth_expired']);
   for (const name of seenEvents) {
     expect.soft(allowed.has(name), `unexpected SSE event name: ${name}`).toBe(true);
   }
+});
+
+// C4.4e Review #12 (DoD item 4) — the SSE endpoint requires a session token
+// (AgentStreamController rejects a missing/blank token before opening the
+// stream at all). A tokenless request must 401, never silently open a stream.
+test('SSE endpoint rejects a tokenless request with 401', async () => {
+  const payload = {
+    message:   'hi',
+    sessionId: crypto.randomUUID(),
+    userId:    'e2e-stage-0-tokenless',
+    tenantId:  'default',
+    appId:     '',
+    // token intentionally omitted
+  };
+
+  const res = await fetch(`${AI_URL}/api/ai/chat/agent/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+    body: JSON.stringify(payload),
+  });
+
+  expect(res.status).toBe(401);
+  const body = await res.json();
+  expect(String(body.error ?? '')).toMatch(/unauthorized/i);
 });

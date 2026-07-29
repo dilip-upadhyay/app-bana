@@ -13,6 +13,12 @@ import java.util.Map;
  *   event: tool_call_start  → { id, name, args }
  *   event: tool_call_end    → { id, status: "ok"|"error", result }
  *   event: state            → { conversationState: "GATHERING_REQUIREMENTS" }
+ *   event: auth_expired     → { message: "..." } -- C4.4e Review #12: a tool inside an
+ *                              already-open (200) stream got a 401 from the backend, meaning the
+ *                              session token was present but invalid/expired/revoked. Distinct
+ *                              from `done` with an error message so the frontend can map it
+ *                              straight to the existing `appbana:auth:expired` recovery instead of
+ *                              rendering it as just another failed chat turn.
  *   event: done             → { conversationId, finalMessage }
  */
 public interface StreamEmitter {
@@ -39,6 +45,15 @@ public interface StreamEmitter {
 
     default void state(String conversationState) {
         emit("state", Map.of("conversationState", conversationState));
+    }
+
+    /**
+     * C4.4e Review #12 -- signal that a backend 401 was hit mid-conversation (see the class
+     * javadoc's event contract). The frontend should treat this exactly like the existing
+     * transport-level {@code appbana:auth:expired} recovery, not like a normal chat error.
+     */
+    default void authExpired(String message) {
+        emit("auth_expired", Map.of("message", message != null ? message : ""));
     }
 
     default void done(String conversationId, String finalMessage) {

@@ -102,6 +102,10 @@ public class GetEntityDetailsTool implements Tool {
                 // a transport error into "entity not found": a wrong answer about an entity that
                 // exists, which is how the missing auth header survived unnoticed.
                 if (response.statusCode() != 200) {
+                    if (response.statusCode() == 401) {
+                        throw new BackendAuthException(getName() + ": app-context lookup for '"
+                                + targetEntityName + "' returned 401");
+                    }
                     log.error("[GetEntityDetailsTool] App-context lookup for '{}' in app '{}' failed: {} - {}",
                             targetEntityName, appId, response.statusCode(), response.body());
                     return ToolResult.error(getName(),
@@ -159,10 +163,15 @@ public class GetEntityDetailsTool implements Tool {
             } else if (response.statusCode() == 404) {
                 return ToolResult.error(getName(),
                         "Entity '" + targetEntityName + "' not found in current app or global schema.");
+            } else if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": global lookup for '" + targetEntityName + "' returned 401");
             } else {
                 return ToolResult.error(getName(), "API error: " + response.statusCode());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[GetEntityDetailsTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[GetEntityDetailsTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());

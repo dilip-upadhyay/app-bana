@@ -37,14 +37,14 @@
 
 ## ✅ Build health (single source — do not duplicate these counts elsewhere)
 
-Last verified 2026-07-30 at C4.4e (`ai-builder` re-verified on JDK 25 after the Java 21→25 upgrade).
+Last verified 2026-07-31 at C4.4f (`ai-builder` re-verified on JDK 25 after the Java 21→25 upgrade).
 
 | Module | Command | Result |
 |---|---|---|
 | `app-bana` | `mvn -B verify` | 306 tests · 0 failures · 0 errors |
-| `ai-builder` | `mvn -B verify` | **170 keyless** / **187 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
+| `ai-builder` | `mvn -B verify` | **172 keyless** / **189 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
 | `app-bana-runtime` | `pnpm test` | 269 tests · 0 failures |
-| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 170) |
+| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 172) |
 
 > [!IMPORTANT]
 > **The build now requires JDK 25.** Commit `c07f62f` moved `<java.version>` from 21 to 25 in the parent
@@ -68,7 +68,7 @@ different total depending on whether `OPENAI_API_KEY` is set, so a single number
 someone. Three classes — `KnowledgeBaseServiceIntegrationTest` (5), `EmbeddingServiceIntegrationTest` (7)
 and `AppBanaPromptEnhancerIntegrationTest` (5) — gate on the key via `Assumptions.assumeTrue` **at class
 level**, so without it they report `tests=0` and do **not** appear as skipped. They contribute 17 tests, not
-2 skips. Hence 170 keyless / 187 with the key (was 157 / 174 before C4.4 + C4.4a + C4.4b + C4.4c + C4.4d + C4.4e added 13 tests).
+2 skips. Hence 172 keyless / 189 with the key (was 157 / 174 before C4.4 + C4.4a + C4.4b + C4.4c + C4.4d + C4.4e added 13 tests to reach 170 / 187; C4.4f then added 2 more `AiAgentTest` auth-abort cases to reach 172 / 189).
 
 This previously read `145` and was then "corrected" to `168` with a note claiming the suite had been
 silently red. That framing was wrong and is retracted: **145 was the correct keyless/CI number at the
@@ -191,16 +191,12 @@ See the [full plan](./planning/AI_NATIVE_UI_REBUILD_PLAN.md) for stage-by-stage 
   cannot be implemented` on `reference` columns whose SQL type does not match the parent's PK type
   (the H4 hardening rule). Reproducible; triggers a successful `ScaffoldAppTool` rollback, so the
   app is lost at deploy. Unrelated to maker-checker.
-- **Agent-created apps are missing from `appbana_apps`.** `appbana_schemas` holds entities for six
-  distinct `app_id`s under tenant `t-e850b8c8`, while `appbana_apps` has no row for any of them — so
-  `list_apps` and any app-listing UI cannot see apps the agent built, even though their entities and
-  physical tables exist. A direct authenticated `POST /appbana-studio/{tenant}/apps` *does* persist a
-  row, so the route works; the agent path is what diverges. Cause not yet established — do not assume
-  it is the same as the C4.4d auth defect. Same seam family: the app record and its schemas disagree.
-  **Lead (review #11, hypothesis not finding):** `ScaffoldAppTool.java:191` re-uses a client-supplied
-  `appId` and skips `CreateAppTool` entirely, without verifying an `appbana_apps` row exists for it —
-  a stale persisted `currentApp` in the Studio's Zustand store would drive exactly this. Worth ~10
-  minutes to confirm or eliminate before hunting elsewhere.
+- ~~**Agent-created apps are missing from `appbana_apps`.**~~ **Fixed in C4.4f.** The lead in review
+  #11 was correct: `ScaffoldAppTool.java` re-used a client-supplied `appId` and skipped `CreateAppTool`
+  entirely, without verifying an `appbana_apps` row existed for it. Fixed with two new helpers —
+  `appRowExists()` (GET the app; treats 401 as an auth failure, not "doesn't exist") and
+  `createAppRowWithId()` (POST with `id` forced to the caller's id, deliberately not a fresh UUID) —
+  called when `context.appId()` is already set. See [MAKER_CHECKER_PLAN.md § C4.4f](planning/MAKER_CHECKER_PLAN.md).
 - **63-character physical table-name truncation.** `..._CUSTOMERAPPLICATION` is stored as
   `..._CUSTOMERAPP` to fit Postgres' identifier limit. Two entities with a long shared prefix in the
   same app would collide silently.

@@ -135,12 +135,17 @@ public class GenerateMockDataTool implements Tool {
                 result.put("details", response.body()); // Optionally include the backend response
                 
                 return ToolResult.success(getName(), result, executionTime);
+            } else if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": generate_mock_data returned 401");
             } else {
                 log.error("[GenerateMockDataTool] API error: {} - {}", response.statusCode(), response.body());
                 return ToolResult.error(getName(),
                         "API error: " + response.statusCode() + " - " + response.body());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[GenerateMockDataTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[GenerateMockDataTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());

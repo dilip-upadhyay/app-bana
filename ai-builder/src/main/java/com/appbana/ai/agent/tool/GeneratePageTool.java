@@ -269,6 +269,8 @@ public class GeneratePageTool implements Tool {
                 result.put("status", "created");
 
                 return ToolResult.success(getName(), result, executionTime);
+            } else if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": generate_page returned 401");
             } else {
                 log.error("[GeneratePageTool] API error: {} - {}",
                         response.statusCode(), response.body());
@@ -276,6 +278,9 @@ public class GeneratePageTool implements Tool {
                         "API error: " + response.statusCode() + " - " + response.body());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[GeneratePageTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[GeneratePageTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());

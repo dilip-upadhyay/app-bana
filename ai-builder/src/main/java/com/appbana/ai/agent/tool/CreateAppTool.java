@@ -117,12 +117,17 @@ public class CreateAppTool implements Tool {
         result.put("status", "created");
 
         return ToolResult.success(getName(), result, executionTime);
+      } else if (response.statusCode() == 401) {
+        throw new BackendAuthException(getName() + ": create_app returned 401");
       } else {
         log.error("[CreateAppTool] API error: {} - {}", response.statusCode(), response.body());
         return ToolResult.error(getName(),
             "Failed to create app: " + response.statusCode() + " - " + response.body());
       }
 
+    } catch (BackendAuthException authEx) {
+      log.warn("[CreateAppTool] {}", authEx.getMessage());
+      return ToolResult.authError(getName(), authEx.getMessage());
     } catch (Exception e) {
       log.error("[CreateAppTool] Execution failed", e);
       return ToolResult.error(getName(), "Error creating app: " + e.getMessage());

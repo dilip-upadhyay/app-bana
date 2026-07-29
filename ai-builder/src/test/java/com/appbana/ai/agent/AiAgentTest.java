@@ -274,6 +274,147 @@ class AiAgentTest {
         assertEquals("This is not JSON", response.getFinalAnswer());
     }
 
+    /**
+     * C4.4e Review #12 (DoD item 3) — a tool returning a 401-shaped ToolResult
+     * (ToolResult.authError, isAuthFailure()==true) must abort the non-streaming loop
+     * on iteration 1, not iteration 3 (the generic consecutiveFailures>=3 path), and
+     * the message must say the session ended -- not "rephrase or try again".
+     */
+    @Test
+    void testAgentLoop_AuthFailureAbortsOnFirstIterationNotThird() throws Exception {
+        // Arrange
+        String userMessage = "List my apps";
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
+
+        Tool authFailingTool = new Tool() {
+            @Override
+            public String getName() {
+                return "list_apps";
+            }
+
+            @Override
+            public String getDescription() {
+                return "List apps";
+            }
+
+            @Override
+            public String getParameterSchema() {
+                return "{}";
+            }
+
+            @Override
+            public ToolResult execute(Map<String, Object> arguments, AgentContext ctx) {
+                return ToolResult.authError("list_apps", "list_apps: list_apps returned 401");
+            }
+        };
+        toolRegistry.register(authFailingTool);
+
+        String llmResponse = """
+                {
+                  "thinking": "I'll list the apps",
+                  "tool_calls": [
+                    {"name": "list_apps", "arguments": {}}
+                  ]
+                }
+                """;
+        when(llmService.chatWithJsonMode(anyString())).thenReturn(llmResponse);
+
+        // Act
+        AgentResponse response = agent.process(userMessage, context);
+
+        // Assert -- aborted on iteration 1, not 3: only one LLM call happened.
+        assertFalse(response.isSuccess());
+        assertEquals(1, response.getIterationCount());
+        verify(llmService, times(1)).chatWithJsonMode(anyString());
+
+        // The message must say the session ended, not the generic "please rephrase".
+        assertNotNull(response.getError());
+        assertTrue(response.getError().toLowerCase().contains("session"),
+                "Expected a session-ended message, got: " + response.getError());
+        assertFalse(response.getError().toLowerCase().contains("rephrase"),
+                "Auth failure must not be reported as a generic 'please rephrase' error: " + response.getError());
+    }
+
+    /**
+     * Same scenario, streaming loop -- also verifies a distinct SSE `auth_expired` event is
+     * emitted (which the Studio's ChatPane maps to the `appbana:auth:expired` recovery), not
+     * folded silently into a generic `done` with no signal to distinguish it.
+     */
+    @Test
+    void testAgentLoopStream_AuthFailureAbortsAndEmitsAuthExpiredEvent() throws Exception {
+        // Arrange
+        String userMessage = "List my apps";
+        AgentContext context = AgentContext.create("tenant1", "app1", "user1", "session1", "test-token");
+
+        Tool authFailingTool = new Tool() {
+            @Override
+            public String getName() {
+                return "list_apps";
+            }
+
+            @Override
+            public String getDescription() {
+                return "List apps";
+            }
+
+            @Override
+            public String getParameterSchema() {
+                return "{}";
+            }
+
+            @Override
+            public ToolResult execute(Map<String, Object> arguments, AgentContext ctx) {
+                return ToolResult.authError("list_apps", "list_apps: list_apps returned 401");
+            }
+        };
+        toolRegistry.register(authFailingTool);
+
+        String llmResponse = """
+                {
+                  "thinking": "I'll list the apps",
+                  "tool_calls": [
+                    {"name": "list_apps", "arguments": {}}
+                  ]
+                }
+                """;
+        when(llmService.chatWithJsonMode(anyString())).thenReturn(llmResponse);
+
+        List<String> emittedEventNames = new java.util.ArrayList<>();
+        List<Object> emittedPayloads = new java.util.ArrayList<>();
+        StreamEmitter fakeEmitter = new StreamEmitter() {
+            @Override
+            public void emit(String eventName, Object payload) {
+                emittedEventNames.add(eventName);
+                emittedPayloads.add(payload);
+            }
+
+            @Override
+            public void complete() {
+                // no-op for this test
+            }
+        };
+
+        // Act
+        AgentResponse response = agent.processWithStream(userMessage, context, null, null, fakeEmitter);
+
+        // Assert -- aborted on iteration 1, not 3.
+        assertFalse(response.isSuccess());
+        assertEquals(1, response.getIterationCount());
+        verify(llmService, times(1)).chatWithJsonMode(anyString());
+
+        assertTrue(emittedEventNames.contains("auth_expired"),
+                "Expected an auth_expired SSE event, got: " + emittedEventNames);
+        assertTrue(emittedEventNames.contains("done"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> authExpiredPayload = (Map<String, Object>) emittedPayloads.get(
+                emittedEventNames.indexOf("auth_expired"));
+        String message = (String) authExpiredPayload.get("message");
+        assertNotNull(message);
+        assertTrue(message.toLowerCase().contains("session"), "Expected a session-ended message: " + message);
+        assertFalse(message.toLowerCase().contains("rephrase"), "Must not say 'rephrase': " + message);
+    }
+
     @Test
     void testAgentContext_Immutability() {
         // Arrange

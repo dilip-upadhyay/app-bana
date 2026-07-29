@@ -181,12 +181,17 @@ public class CreateEntityTool implements Tool {
         result.put("fieldCount", ((List<?>) arguments.get("fields")).size());
 
         return ToolResult.success(getName(), result, executionTime);
+      } else if (response.statusCode() == 401) {
+        throw new BackendAuthException(getName() + ": create_entity returned 401");
       } else {
         log.error("[CreateEntityTool] API error: {} - {}", response.statusCode(), response.body());
         return ToolResult.error(getName(),
             "API error: " + response.statusCode() + " - " + response.body());
       }
 
+    } catch (BackendAuthException authEx) {
+      log.warn("[CreateEntityTool] {}", authEx.getMessage());
+      return ToolResult.authError(getName(), authEx.getMessage());
     } catch (Exception e) {
       log.error("[CreateEntityTool] Execution failed", e);
       return ToolResult.error(getName(), "Execution error: " + e.getMessage());

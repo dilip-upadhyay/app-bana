@@ -166,6 +166,16 @@ public class BatchUpdateEntitiesTool implements Tool {
                         failedUpdates.add(entityName + ":" + operation);
                         log.warn("[BatchUpdateEntities] ❌ {} - {} failed", entityName, operation);
                     }
+                } catch (BackendAuthException authEx) {
+                    // C4.4e Review #12 -- a 401 here means the token died mid-batch, not that this
+                    // one update was invalid. Every remaining update in the batch would fail
+                    // identically, so folding this into failedUpdates and continuing (as a normal
+                    // per-item failure) would burn through the rest of the list producing N
+                    // confusing "backend returned 401" strings instead of one clear signal the
+                    // agent loop can act on. Abort the whole batch instead.
+                    log.warn("[BatchUpdateEntities] Aborting batch -- session expired on update {}/{} ({}:{}): {}",
+                            i + 1, updates.size(), entityName, operation, authEx.getMessage());
+                    return ToolResult.authError(getName(), authEx.getMessage());
                 } catch (Exception e) {
                     failedUpdates.add(entityName + ":" + operation + " - " + e.getMessage());
                     log.error("[BatchUpdateEntities] ❌ {} - {} error: {}", entityName, operation, e.getMessage());
@@ -198,6 +208,9 @@ public class BatchUpdateEntitiesTool implements Tool {
                 return ToolResult.success(getName(), resultData, duration);
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[BatchUpdateEntities] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[BatchUpdateEntities] Fatal error", e);
             return ToolResult.error(getName(), "Batch update failed: " + e.getMessage());
@@ -472,6 +485,8 @@ public class BatchUpdateEntitiesTool implements Tool {
         } else if (response.statusCode() == 404) {
             log.warn("[BatchUpdateEntities] Entity schema not found at {}", url);
             return null;
+        } else if (response.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": fetching entity '" + entityName + "' returned 401");
         } else {
             log.error("[BatchUpdateEntities] Failed to fetch entity {}: {} - {}", url, response.statusCode(),
                     response.body());
@@ -501,6 +516,9 @@ public class BatchUpdateEntitiesTool implements Tool {
         if (response.statusCode() >= 200 && response.statusCode() < 300) {
             return true;
         }
+        if (response.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": saving entity '" + entity.get("name") + "' returned 401");
+        }
         log.error("[BatchUpdateEntities] Failed to save entity {}: {} - {}", entity.get("name"),
                 response.statusCode(), response.body());
         return false;
@@ -520,6 +538,9 @@ public class BatchUpdateEntitiesTool implements Tool {
             rb.header("Authorization", "Bearer " + token);
         }
         HttpResponse<String> response = httpClient.send(rb.DELETE().build(), HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": deleting entity '" + entityName + "' returned 401");
+        }
         return response.statusCode() >= 200 && response.statusCode() < 300;
     }
 
@@ -814,6 +835,9 @@ public class BatchUpdateEntitiesTool implements Tool {
             Map<String, Object> body = objectMapper.readValue(resp.body(), Map.class);
             return body;
         }
+        if (resp.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": fetching app metadata for '" + appId + "' returned 401");
+        }
         log.warn("[BatchUpdateEntities] Failed to fetch app metadata for {}: {} - {}", appId,
                 resp.statusCode(), resp.body());
         return null;
@@ -834,6 +858,9 @@ public class BatchUpdateEntitiesTool implements Tool {
                 rb.PUT(HttpRequest.BodyPublishers.ofString(json)).build(),
                 HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() >= 200 && resp.statusCode() < 300) return true;
+        if (resp.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": saving page '" + pageId + "' returned 401");
+        }
         log.warn("[BatchUpdateEntities] savePage {} failed: {} - {}", pageId, resp.statusCode(), resp.body());
         return false;
     }

@@ -114,12 +114,17 @@ public class ListWorkflowsTool implements Tool {
                 result.put("message", formattedMessage.toString());
 
                 return ToolResult.success(getName(), result, executionTime);
+            } else if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": list_workflows returned 401");
             } else {
                 log.error("[ListWorkflowsTool] Failed to fetch workflows: {} - {}", response.statusCode(),
                         response.body());
                 return ToolResult.error(getName(), "Failed to fetch workflows: " + response.statusCode());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[ListWorkflowsTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[ListWorkflowsTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());

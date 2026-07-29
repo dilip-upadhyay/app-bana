@@ -738,6 +738,11 @@ export type SseEvent =
   | { event: 'token';           data: { text: string } }
   | { event: 'tool_call_start'; data: { id: string; name: string; args: unknown } }
   | { event: 'tool_call_end';   data: { id: string; status: 'ok' | 'error'; result: unknown } }
+  // C4.4e Review #12 — a tool inside an already-open (200) stream hit a backend 401: the
+  // session token was present but invalid/expired/revoked. Distinct from a normal `done` so
+  // callers can trigger the same recovery as the transport-level `appbana:auth:expired` event
+  // that `authedFetch` dispatches for an *outer* 401 (see ChatPane.tsx).
+  | { event: 'auth_expired';    data: { message: string } }
   | { event: 'done';            data: { conversationId: string; finalMessage: string } };
 
 // ─── Phase B5 — Saved views ────────────────────────────────────────────────

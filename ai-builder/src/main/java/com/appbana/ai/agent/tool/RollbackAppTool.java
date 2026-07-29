@@ -103,10 +103,15 @@ public class RollbackAppTool implements Tool {
 
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
                 return ToolResult.success(getName(), "Successfully rolled back the application to version " + version + ".", 0);
+            } else if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": rollback_app returned 401");
             } else {
                 return ToolResult.error(getName(), "Rollback failed with status " + response.statusCode() + ": " + response.body());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[RollbackAppTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[RollbackAppTool] Execution failed", e);
             return ToolResult.error(getName(), "Failed to rollback: " + e.getMessage());
