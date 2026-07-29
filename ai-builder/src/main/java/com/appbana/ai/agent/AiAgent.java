@@ -9,6 +9,7 @@ import com.appbana.ai.agent.PatternExecutor;
 import com.appbana.ai.cache.SemanticCache;
 import com.appbana.ai.dialogue.ConversationSpec;
 import com.appbana.ai.dialogue.DialogueManager;
+import com.appbana.ai.knowledge.DomainBlueprintPrompt;
 import com.appbana.ai.knowledge.KnowledgeBaseService;
 import com.appbana.ai.knowledge.SchemaDefinition;
 import com.appbana.ai.llm.LlmService;
@@ -675,6 +676,29 @@ public class AiAgent {
     }
 
     /**
+     * C4.4a — inject worked examples of similar apps (including which entities need a maker-checker
+     * approval flow) into the live agent prompt.
+     *
+     * <p>This is the <b>only</b> route from the knowledge base into the model's prompt.
+     * {@code AppBanaPromptEnhancer}/{@code AdvancedPromptEngine.buildPrompt} look like that route
+     * and are not: {@code buildPrompt} has zero call sites, and {@code AiChatController} takes the
+     * engine as a constructor parameter it never stores. Until now this class had the same gap in
+     * miniature — {@code AiServer} has always called {@code withKnowledgeBase(...)}, and the field
+     * was assigned and never read.
+     *
+     * <p>No try/catch: {@link KnowledgeBaseService#getDomainExamples} already swallows its own
+     * failures and returns an empty list, so RAG being down degrades to a prompt without examples
+     * rather than a failed request.
+     */
+    private String buildDomainBlueprintSection(String userMessage) {
+        if (knowledgeBase == null || userMessage == null || userMessage.isBlank()) {
+            return "";
+        }
+        List<SchemaDefinition> blueprints = knowledgeBase.getDomainExamples(userMessage, 2);
+        return DomainBlueprintPrompt.render(blueprints);
+    }
+
+    /**
      * Determine next action via LLM with multimodal support
      */
     private AgentThought think(String userMessage, List<AgentResponse.AgentStep> previousSteps,
@@ -690,6 +714,12 @@ public class AiAgent {
 
             promptBuilder.append("### AVAILABLE TOOLS ###\n");
             promptBuilder.append(toolRegistry.getToolDescriptions()).append("\n\n");
+
+            String blueprintSection = buildDomainBlueprintSection(userMessage);
+            if (!blueprintSection.isEmpty()) {
+                promptBuilder.append("### SIMILAR APP BLUEPRINTS ###\n");
+                promptBuilder.append(blueprintSection).append("\n\n");
+            }
 
             String preferencesSection = buildUserPreferencesSection(context);
             if (!preferencesSection.isEmpty()) {

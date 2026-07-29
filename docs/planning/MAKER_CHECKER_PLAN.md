@@ -374,13 +374,42 @@ and each would have shipped an artifact that looks correct and reaches nothing:*
 **Delivered instead:** the two blueprints in `AppBanaSchemaLoader`, an `addDomainTemplate` overload
 carrying `approvalRequiredEntities`, that signal appended to `buildSearchableText()` so it is in the
 **embedding** (a query like "loan approval workflow" must outrank the plain `finance` template), and
-`AppBanaPromptEnhancer.buildDomainTemplateSection()` so entity structure and the flag actually render.
+`DomainBlueprintPrompt.render()` invoked from `AiAgent.think()` so entity structure and the flag
+actually reach the model.
 
-The fix was verified at the layer the claim is made for — `ApprovalDomainTemplateTest` drives the
-public `enhancePrompt()`, not the render helper — and mutation-checked by reinstating the
-`getTypeAsEnum() != null` filter, which turns exactly the three prompt-layer tests red and leaves the
-two loader tests green. Asserting only that the loader holds the templates would have passed both
-before and after the fix, which is precisely how eight templates stayed invisible.
+#### C4.4a — the first fix rendered into a prompt nobody builds
+
+Review of `c7a5adb` found the tests drove `AppBanaPromptEnhancer.enhancePrompt`, which nothing calls.
+Tracing it out revealed the delivery path was **entirely severed**, not merely filtered:
+
+| Hop | Status |
+|---|---|
+| `AdvancedPromptEngine.buildPrompt(...)` | **zero call sites repo-wide** |
+| `AiChatController` | takes `AdvancedPromptEngine` as a constructor parameter it never stores |
+| `AppBanaPromptEnhancer.enhancePrompt` | reachable only from `buildPrompt` — therefore dead |
+| `AiAgent.knowledgeBase` | assigned by `AiServer:189` via `withKnowledgeBase(...)`, **never read** |
+| `AiAgent.think()` | the live prompt — contained no RAG of any kind |
+
+So the C4.4 renderer sat on a branch no request executes, and the review's own "the feature genuinely
+works, both entry points funnel into `buildSchemaContext`" was optimistic: there is no second entry
+point. `buildSchemaContext` has exactly one caller, which has exactly one caller, which has none.
+
+**Fixed by** extracting `DomainBlueprintPrompt` and calling it from `AiAgent.think()` through the
+already-wired-but-unread `knowledgeBase` field, via `getDomainExamples()` — which was itself a
+zero-caller method built for exactly this. Two dead paths became live; `AppBanaPromptEnhancer` now
+delegates to the same renderer and is documented as dead.
+
+The tests now capture the literal string passed to `llmService.chatWithJsonMode(...)`. Mutation check:
+restoring `knowledgeBase` to unread turns exactly the three prompt-content tests red and leaves the
+five layer-independent ones green.
+
+**Still dead, deliberately not fixed:** `AdvancedPromptEngine.buildPrompt` /
+`AppBanaPromptEnhancer.enhancePrompt` (delete or wire in a later task), and `SearchKnowledgeTool`
+returning only `name`/`type`/`description`.
+
+**Lesson:** before choosing the layer to test at, grep for callers of the entry point — the same
+query that produced this task's best insight (`git grep builder-database -- '*.java'` → empty) would
+have returned empty for `buildPrompt` in the same second.
 
 The blueprints deliberately declare **no** approval columns — only the flag. `SchemaManager` owns
 column injection (C4.6); a template that declared them would converge on the same physical table via
@@ -547,7 +576,9 @@ The three criteria above are all end-to-end chat behaviours and remain unverifie
 - `ai-builder/src/main/java/com/appbana/ai/agent/tool/SchemaEnricher.java` — C1, C4
 - `ai-builder/src/main/java/com/appbana/ai/llm/AdvancedPromptEngine.java` — C4
 - `ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaSchemaLoader.java` — C4.4 (the two blueprints)
-- `ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaPromptEnhancer.java` — C4.4 (renders them into the prompt)
+- `ai-builder/src/main/java/com/appbana/ai/knowledge/DomainBlueprintPrompt.java` — C4.4a (renderer)
+- `ai-builder/src/main/java/com/appbana/ai/agent/AiAgent.java` — C4.4a (the only live injection point)
+- `ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaPromptEnhancer.java` — C4.4 (dead path; delegates)
 - `ai-builder/src/main/java/com/appbana/ai/knowledge/KnowledgeBaseService.java` — C4.4 (approval signal into the embedding)
 - ~~`builder-database/customer-onboarding-with-approval.json`~~ — see the C4.4 deviation: `builder-database/` is not read by any code
 - ~~`builder-database/loan-origination-with-approval.json`~~ — same

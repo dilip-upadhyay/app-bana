@@ -42,9 +42,9 @@ Last verified 2026-07-30 at C4.6.
 | Module | Command | Result |
 |---|---|---|
 | `app-bana` | `mvn -B verify` | 306 tests · 0 failures · 0 errors |
-| `ai-builder` | `mvn -B verify` | **163 keyless** / **180 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
+| `ai-builder` | `mvn -B verify` | **165 keyless** / **182 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
 | `app-bana-runtime` | `pnpm test` | 269 tests · 0 failures |
-| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 163) |
+| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 165) |
 
 **Review #10 fix (2026-07-29):** CI used to trigger only on push/PR against `main`/`master`, so work on a
 feature branch with no open PR against `main` was never covered by CI — flagged as the highest-leverage
@@ -60,7 +60,7 @@ different total depending on whether `OPENAI_API_KEY` is set, so a single number
 someone. Three classes — `KnowledgeBaseServiceIntegrationTest` (5), `EmbeddingServiceIntegrationTest` (7)
 and `AppBanaPromptEnhancerIntegrationTest` (5) — gate on the key via `Assumptions.assumeTrue` **at class
 level**, so without it they report `tests=0` and do **not** appear as skipped. They contribute 17 tests, not
-2 skips. Hence 163 keyless / 180 with the key (was 157 / 174 before C4.4 added 6 tests).
+2 skips. Hence 165 keyless / 182 with the key (was 157 / 174 before C4.4 + C4.4a added 8 tests).
 
 This previously read `145` and was then "corrected" to `168` with a note claiming the suite had been
 silently red. That framing was wrong and is retracted: **145 was the correct keyless/CI number at the
