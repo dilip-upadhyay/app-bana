@@ -277,6 +277,14 @@ public class KnowledgeBaseService {
                     entities.forEach((entityName, fields) ->
                             text.append(entityName).append("(").append(fields).append(") "));
                 }
+                // C4.4 — the approval signal has to be in the EMBEDDED text, not only in the
+                // payload: "loan approval workflow" must retrieve this blueprint ahead of the
+                // plain "finance" one, and retrieval ranks on this string alone.
+                Object approval = schema.getMetadata().get("approvalRequiredEntities");
+                if (approval instanceof Collection<?> names && !names.isEmpty()) {
+                    text.append(" - Maker-checker approval required (two-person, four-eyes) for: ");
+                    text.append(names.stream().map(String::valueOf).collect(Collectors.joining(", ")));
+                }
             }
             // Entity field types: include HTML input type
             if (schema.getTypeAsEnum() == SchemaDefinition.SchemaType.ENTITY_FIELD) {

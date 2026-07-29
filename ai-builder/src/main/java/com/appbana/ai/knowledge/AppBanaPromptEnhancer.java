@@ -216,7 +216,62 @@ public class AppBanaPromptEnhancer {
             }
         }
 
+        context.append(buildDomainTemplateSection(schemas));
+
         return context.toString();
+    }
+
+    /**
+     * C4.4 — render retrieved domain blueprints, including which entities need maker-checker.
+     *
+     * <p>Domain templates carry the wire type {@code "domain-template"}, which has no
+     * {@link SchemaDefinition.SchemaType} constant, so {@code getTypeAsEnum()} returns null for them
+     * and the grouping in {@link #buildSchemaContext} discards them before any branch runs. They were
+     * therefore indexed, retrievable, and invisible: the only trace reaching the model was their
+     * search keywords via {@code buildExamplesSection}, which are echoes of the user's own words and
+     * carry no structure. This method reads the raw list instead of the grouped map for that reason —
+     * do not "tidy" it to consume {@code byType}.
+     */
+    String buildDomainTemplateSection(List<SchemaDefinition> schemas) {
+        List<SchemaDefinition> templates = schemas.stream()
+                .filter(s -> s != null && "domain-template".equals(s.getCategory()))
+                .toList();
+
+        if (templates.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder section = new StringBuilder(
+                "\nSimilar app blueprints (adapt to the user's wording; do not copy names verbatim):\n");
+
+        for (SchemaDefinition template : templates) {
+            section.append(String.format("- %s: %s\n", template.getName(), template.getDescription()));
+
+            Map<String, Object> metadata = template.getMetadata();
+            if (metadata == null) {
+                continue;
+            }
+
+            if (metadata.get("entities") instanceof Map<?, ?> entities) {
+                // "\n", not "%n": %n emits \r\n on Windows, which would make this one section
+                // disagree with every other section in the prompt depending on build host.
+                entities.forEach((entityName, fields) ->
+                        section.append("    ").append(entityName).append(": ").append(fields).append("\n"));
+            }
+
+            // Collection<?>, not Set<String>: this round-trips through JSON in the Qdrant payload.
+            if (metadata.get("approvalRequiredEntities") instanceof Collection<?> names && !names.isEmpty()) {
+                String joined = names.stream().map(String::valueOf).collect(Collectors.joining(", "));
+                section.append("    approvalRequired: true — pass this for ").append(joined)
+                        .append(" when calling scaffold_app. In Phase 1, describe it in plain business ")
+                        .append("language (\"one team member creates it, another approves it before it ")
+                        .append("goes live\") and confirm before building. Do NOT add approval_status, ")
+                        .append("submitted_by or approval_parent_id as fields — the platform creates ")
+                        .append("those from the flag.\n");
+            }
+        }
+
+        return section.toString();
     }
 
     /**

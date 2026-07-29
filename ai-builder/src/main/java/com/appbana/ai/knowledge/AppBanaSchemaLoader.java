@@ -276,12 +276,79 @@ public class AppBanaSchemaLoader {
                                 "Account", "name:text, account_type:status[Asset|Liability|Revenue|Expense], balance:decimal",
                                 "Transaction", "account:reference->Account, amount:decimal, transaction_date:datetime, description:text, type:status[Credit|Debit]",
                                 "Invoice", "client_name:text, issue_date:date, due_date:date, total_amount:decimal, status:status[Draft|Sent|Paid|Overdue]"));
+
+                // C4.4 — the two maker-checker blueprints. LinkedHashMap, not Map.of: the render
+                // order reaches the prompt, and the entity a reviewer approves should lead.
+                //
+                // These deliberately do NOT declare approval_status / submitted_by / approval_parent_id
+                // as fields. Setting approvalRequired is the whole contract — SchemaManager
+                // materialises the eight physical columns from the flag alone (C4.6). A template that
+                // declared them would still converge on the same table thanks to dedupe, but it would
+                // teach the agent a shape that makes SchemaManager look like it isn't the owner.
+                Map<String, String> onboarding = new LinkedHashMap<>();
+                onboarding.put("CustomerApplication",
+                        "full_name:text, email:email, phone:phone, date_of_birth:date, address:longtext, "
+                        + "id_document_ref:text, risk_rating:status[Low|Medium|High], application_date:datetime");
+                onboarding.put("OnboardingDocument",
+                        "application:reference->CustomerApplication, "
+                        + "document_type:status[Passport|Driving Licence|Utility Bill|Bank Statement], "
+                        + "file_ref:text, verified:boolean");
+                onboarding.put("OnboardingNote",
+                        "application:reference->CustomerApplication, note:longtext, created_at:datetime");
+
+                addDomainTemplate("customer_onboarding_with_approval",
+                        "Customer onboarding / KYC / client account opening with a two-person (maker-checker) "
+                        + "approval flow — one team member creates the customer record and another approves it "
+                        + "before it goes live",
+                        List.of("customer onboarding", "KYC", "client onboarding", "account opening",
+                                "know your customer", "maker checker", "approval workflow", "four eyes"),
+                        onboarding,
+                        List.of("CustomerApplication"));
+
+                Map<String, String> loan = new LinkedHashMap<>();
+                loan.put("LoanApplication",
+                        "applicant_name:text, email:email, phone:phone, loan_amount:decimal, "
+                        + "term_months:number, purpose:status[Home|Auto|Personal|Business], "
+                        + "annual_income:decimal, credit_score:number, application_date:datetime");
+                loan.put("LoanDocument",
+                        "application:reference->LoanApplication, "
+                        + "document_type:status[Payslip|Tax Return|Bank Statement|ID Proof], "
+                        + "file_ref:text, verified:boolean");
+                loan.put("Disbursement",
+                        "application:reference->LoanApplication, disbursed_amount:decimal, "
+                        + "disbursed_on:date, method:status[Bank Transfer|Cheque]");
+
+                addDomainTemplate("loan_origination_with_approval",
+                        "Loan origination / credit application / lending with a two-person (maker-checker) "
+                        + "approval flow — a loan officer captures the application and disbursement, and a "
+                        + "credit officer approves each before it takes effect",
+                        List.of("loan origination", "loan application", "credit application", "lending",
+                                "mortgage", "underwriting", "maker checker", "approval workflow"),
+                        loan,
+                        List.of("LoanApplication", "Disbursement"));
         }
 
         private void addDomainTemplate(String id, String description,
                         List<String> searchKeywords, Map<String, String> entities) {
+                addDomainTemplate(id, description, searchKeywords, entities, List.of());
+        }
+
+        /**
+         * C4.4 — {@code approvalRequiredEntities} names the entities in this blueprint that must be
+         * scaffolded with {@code approvalRequired: true}.
+         *
+         * <p>Stored as a {@code List}, not a {@code Set}: this metadata is serialised to JSON into the
+         * Qdrant payload and read back by {@code searchResultToSchema}, so a set would return as a list
+         * anyway. Every reader must therefore treat it as an ordered {@code Collection<?>} of strings.
+         */
+        private void addDomainTemplate(String id, String description,
+                        List<String> searchKeywords, Map<String, String> entities,
+                        List<String> approvalRequiredEntities) {
                 Map<String, Object> metadata = new HashMap<>();
                 metadata.put("entities", entities);
+                if (approvalRequiredEntities != null && !approvalRequiredEntities.isEmpty()) {
+                        metadata.put("approvalRequiredEntities", approvalRequiredEntities);
+                }
 
                 SchemaDefinition schema = SchemaDefinition.builder()
                         .id("domain_" + id)

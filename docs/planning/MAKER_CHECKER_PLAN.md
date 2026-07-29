@@ -345,11 +345,46 @@ shows parent and revision coexisting, and the maker needs to see their pending e
 | C4.1 | `ScaffoldAppTool` + `CreateEntityTool` parameter schemas accept `approvalRequired: boolean` per entity | [`ScaffoldAppTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/ScaffoldAppTool.java), [`CreateEntityTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/CreateEntityTool.java) | 45 min |
 | C4.2 | Agent prompt — when the domain implies approval (customer onboarding, loan application, KYC, expense claim, purchase order, policy issuance, employee onboarding, contract), the agent's Phase 1 spec proposal includes: *"This app will use a two-person approval flow — one team member creates a customer profile, another approves it before it goes live. Sound right?"* | [`AdvancedPromptEngine.java`](../../ai-builder/src/main/java/com/appbana/ai/llm/AdvancedPromptEngine.java) + explicit RAG few-shot | 60 min |
 | C4.3 | `SchemaEnricher` — validate that entities flagged `approvalRequired` don't also request incompatible custom `status` fields (auto-resolve: rename the user's status to `workflow_status` and inject `approval_status` cleanly) | [`SchemaEnricher.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/SchemaEnricher.java) | 45 min |
-| C4.4 | Two new RAG domain templates — `customer-onboarding-with-approval.json`, `loan-origination-with-approval.json` — showing the agent what an approval-required schema + page set looks like | `builder-database/` | 60 min |
+| C4.4 | Two new RAG domain templates — `customer_onboarding_with_approval`, `loan_origination_with_approval` — showing the agent what an approval-required schema + page set looks like | ~~`builder-database/`~~ → [`AppBanaSchemaLoader.java`](../../ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaSchemaLoader.java) + [`AppBanaPromptEnhancer.java`](../../ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaPromptEnhancer.java) | 60 min |
 | C4.5 | Auto-generate checker queue page — when `scaffold_app` sees `approvalRequired: true` on any entity, `GeneratePageTool` also emits a `checker_queue` page for that entity | [`GeneratePageTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java) | 30 min |
 | C4.6 | **Added 2026-07-30 by review of `5ce6bb4`.** Give the `approvalRequired` ⇒ eight-physical-columns invariant a single owner: inject in `SchemaManager` (the chokepoint every writer of the flag passes through), delete injection from `SchemaEnricher`, and fix the consumers that inferred approval capability from `schema.getFields()` | [`SchemaManager.java`](../../app-bana-service/src/main/java/com/appbana/SchemaManager.java), [`EntityCrudService.java`](../../app-bana-service/src/main/java/com/appbana/service/EntityCrudService.java), [`GenericEntityRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/GenericEntityRoutes.java), [`SchemaEnricher.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/SchemaEnricher.java) | — |
 
-**Progress (2026-07-30):** C4.1 ✅ · C4.2 ✅ · C4.3 ⚠️ superseded by C4.6 · C4.6 ✅ · C4.4 ⬜ · C4.5 ❌ closed as obsolete (see deviations below). C4.4 is the only task remaining, and C4.6 was sequenced before it deliberately — see the C4.3/C4.6 deviation.
+**Progress (2026-07-30):** C4.1 ✅ · C4.2 ✅ · C4.3 ⚠️ superseded by C4.6 · C4.6 ✅ · C4.4 ✅ · C4.5 ❌ closed as obsolete (see deviations below). C4.6 was sequenced before C4.4 deliberately — see the C4.3/C4.6 deviation.
+
+### C4.4 deviation — the stated location was inert, and so was the delivery path
+
+~~The templates were to be authored as `customer-onboarding-with-approval.json` and
+`loan-origination-with-approval.json` under `builder-database/`.~~ **Both halves of that were wrong,
+and each would have shipped an artifact that looks correct and reaches nothing:**
+
+1. **`builder-database/` is not loaded by any code.** All 17 repo-wide references to it are docs,
+   READMEs, or self-references. The live loader is `AppBanaSchemaLoader.loadDomainTemplates()`, where
+   the eight existing domain templates are Java-embedded and registered under category
+   `domain-template`. Two new JSON files would have been a verbatim repeat of C4.1 — a parameter
+   accepted, apparently correct, silently dropped before the consumer.
+2. **Even correctly located, the content could not reach the model.** Domain templates carry the wire
+   type `"domain-template"`, which has no `SchemaDefinition.SchemaType` constant, so
+   `getTypeAsEnum()` returns `null` and `AppBanaPromptEnhancer.buildSchemaContext()` discarded every
+   template at its `.filter(s -> s.getTypeAsEnum() != null)` before any render branch ran. The only
+   trace reaching the prompt was each template's search keywords via `buildExamplesSection` — which
+   are echoes of the user's own query and carry no structure. `KnowledgeBaseService` also exposes
+   `getDomainExamples()`, purpose-built for this and with **zero callers**, and `SearchKnowledgeTool`
+   returns only `name`/`type`/`description`, dropping the `entities` metadata entirely.
+
+**Delivered instead:** the two blueprints in `AppBanaSchemaLoader`, an `addDomainTemplate` overload
+carrying `approvalRequiredEntities`, that signal appended to `buildSearchableText()` so it is in the
+**embedding** (a query like "loan approval workflow" must outrank the plain `finance` template), and
+`AppBanaPromptEnhancer.buildDomainTemplateSection()` so entity structure and the flag actually render.
+
+The fix was verified at the layer the claim is made for — `ApprovalDomainTemplateTest` drives the
+public `enhancePrompt()`, not the render helper — and mutation-checked by reinstating the
+`getTypeAsEnum() != null` filter, which turns exactly the three prompt-layer tests red and leaves the
+two loader tests green. Asserting only that the loader holds the templates would have passed both
+before and after the fix, which is precisely how eight templates stayed invisible.
+
+The blueprints deliberately declare **no** approval columns — only the flag. `SchemaManager` owns
+column injection (C4.6); a template that declared them would converge on the same physical table via
+dedupe but would teach the agent the ownership-ambiguous shape C4.6 removed.
 
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
 > Accepting `approvalRequired` in the two parameter schemas was necessary but not sufficient. `CreateEntityTool.buildEntityMetadata` constructs the *entire* body POSTed to `/schema` and silently drops anything it does not explicitly copy, so the flag never reached the backend. Because `SchemaEnricher` read the flag independently and injected the 8 approval columns anyway, the failure was invisible from the outside: the physical table came out approval-shaped while the schema record carried `approvalRequired=false`, and all 13 backend guards branch on `schema.isApprovalRequired()` rather than on the presence of the columns. The entity *looked* approval-enabled and behaved as if it were not. Fixed, with `CreateEntityToolApprovalTest` pinning the payload.
@@ -511,8 +546,11 @@ The three criteria above are all end-to-end chat behaviours and remain unverifie
 - `ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java` — C4
 - `ai-builder/src/main/java/com/appbana/ai/agent/tool/SchemaEnricher.java` — C1, C4
 - `ai-builder/src/main/java/com/appbana/ai/llm/AdvancedPromptEngine.java` — C4
-- `builder-database/customer-onboarding-with-approval.json` — C4 (new RAG example)
-- `builder-database/loan-origination-with-approval.json` — C4 (new RAG example)
+- `ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaSchemaLoader.java` — C4.4 (the two blueprints)
+- `ai-builder/src/main/java/com/appbana/ai/knowledge/AppBanaPromptEnhancer.java` — C4.4 (renders them into the prompt)
+- `ai-builder/src/main/java/com/appbana/ai/knowledge/KnowledgeBaseService.java` — C4.4 (approval signal into the embedding)
+- ~~`builder-database/customer-onboarding-with-approval.json`~~ — see the C4.4 deviation: `builder-database/` is not read by any code
+- ~~`builder-database/loan-origination-with-approval.json`~~ — same
 
 ---
 
