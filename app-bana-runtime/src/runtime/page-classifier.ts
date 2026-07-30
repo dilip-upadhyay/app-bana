@@ -107,6 +107,21 @@ export function entityNameFromKey(entityKey: string): string {
 }
 
 /**
+ * Normalize an entity token for comparison: singularize, lowercase, and
+ * strip whitespace. Required because `entityNameFromKey()` yields a
+ * PascalCase, space-free token (e.g. "ITAccessRequest") while
+ * `extractEntity()` yields a title-cased, space-separated one derived from
+ * the page name (e.g. "It Access Request") — without stripping spaces here,
+ * every multi-word entity name ("Equipment Request", "IT Access Request",
+ * "Onboarding Task") fails to match and silently hides Edit/Add routing
+ * (and everything gated behind it, e.g. reaching a record's Detail page to
+ * Submit/Approve it) for that entity only.
+ */
+function normalizeEntityToken(word: string): string {
+  return singularize(word).toLowerCase().replace(/\s+/g, '');
+}
+
+/**
  * Find the "Add {entity}" page in the app's page list, if any. Case-insensitive
  * match on the singularised entity token. Returns `null` when no matching
  * page exists (e.g. the app was scaffolded without an add-page).
@@ -116,13 +131,13 @@ export function findAddPageForEntity(
   pages: readonly PageMeta[],
 ): PageMeta | null {
   if (!entityName || !pages.length) return null;
-  const target = singularize(entityName).toLowerCase();
+  const target = normalizeEntityToken(entityName);
   for (const p of pages) {
     const kind = classifyKind(p.name);
     if (kind !== 'add') continue;
     const entity = extractEntity(p.name, kind);
     if (!entity) continue;
-    if (singularize(entity).toLowerCase() === target) return p;
+    if (normalizeEntityToken(entity) === target) return p;
   }
   return null;
 }
@@ -140,13 +155,13 @@ export function findDetailPageForEntity(
   pages: readonly PageMeta[],
 ): PageMeta | null {
   if (!entityName || !pages.length) return null;
-  const target = singularize(entityName).toLowerCase();
+  const target = normalizeEntityToken(entityName);
   for (const p of pages) {
     if (p.kind === 'detail') {
       // Trust the authored kind but still verify the entity matches so a
       // Customer row doesn't route to the Order detail page.
       const derived = extractEntity(p.name, 'detail');
-      if (derived && singularize(derived).toLowerCase() === target) return p;
+      if (derived && normalizeEntityToken(derived) === target) return p;
       // Kind-only match (no entity in the name) — accept when there is
       // only one detail page for the app.
       if (!derived) return p;
@@ -157,7 +172,7 @@ export function findDetailPageForEntity(
     if (kind !== 'detail') continue;
     const entity = extractEntity(p.name, kind);
     if (!entity) continue;
-    if (singularize(entity).toLowerCase() === target) return p;
+    if (normalizeEntityToken(entity) === target) return p;
   }
   return null;
 }
