@@ -44,12 +44,13 @@ import { TableSkeleton } from './Skeleton';
 import { useRuntimeNavigation } from './runtime-navigation';
 import { useConfirm } from './ConfirmDialog';
 import { useEntityRows } from './useEntityRows';
-import { TableHeader } from './TableHeader';
+import { TableHeader, type ColumnSort, type ReferenceOption } from './TableHeader';
 import { PaginationBar } from './PaginationBar';
 import { FilterBar } from './FilterBar';
 import { SavedViewsBar } from './SavedViewsBar';
 import { buildApprovalSystemViews, isSystemView } from './approval-views';
 import { toEntityQueryParams } from './entity-query';
+import { useDebouncedValue } from './useDebouncedValue';
 import { useCurrentUser } from './useCurrentUser';
 import {
   entityNameFromKey,
@@ -103,13 +104,42 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const { user, isMaker, isChecker } = useCurrentUser();
 
+  // Column-filter/sort/scale hardening — every-column filtering + a single
+  // click-to-sort column, both server-side (never a client-side sort/filter
+  // of the already-fetched page, which would be meaningless once a table has
+  // millions of rows behind server-side pagination).
+  const [columnFilterValues, setColumnFilterValues] = useState<Record<string, unknown>>({});
+  const debouncedColumnFilterValues = useDebouncedValue(columnFilterValues, 400);
+  const handleColumnFilterChange = useCallback((field: string, value: unknown) => {
+    setColumnFilterValues((prev) => {
+      const next = { ...prev };
+      if (value === undefined || value === null) delete next[field];
+      else next[field] = value;
+      return next;
+    });
+  }, []);
+
+  const [sort, setSort] = useState<ColumnSort | null>(null);
+  const handleSortToggle = useCallback((field: string) => {
+    setSort((prev) => {
+      if (prev?.field !== field) return { field, direction: 'asc' };
+      if (prev.direction === 'asc') return { field, direction: 'desc' };
+      return null;
+    });
+  }, []);
+
   // C3.9 — filters go out as `filter=name:value`, not as bare `?name=value`.
   // The backend reads a fixed param allowlist and drops everything outside it,
   // so bare params were being discarded in transit and the list came back
   // unfiltered with a 200. See entity-query.ts for the full account.
+  const combinedFilterValues = useMemo(() => {
+    const merged: Record<string, unknown> = { ...filterValues, ...debouncedColumnFilterValues };
+    if (sort) merged.sort = sort.direction === 'desc' ? `-${sort.field}` : sort.field;
+    return merged;
+  }, [filterValues, debouncedColumnFilterValues, sort]);
   const { params: fetchParams, rejected: rejectedFilters } = useMemo(
-    () => toEntityQueryParams(filterValues),
-    [filterValues],
+    () => toEntityQueryParams(combinedFilterValues),
+    [combinedFilterValues],
   );
 
   // Default-behavior fix — the plain List page never showed a Status column
@@ -383,6 +413,21 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     return () => { cancelled = true; };
   }, [fields, entityKey]);
 
+  // Column-filter/sort hardening — type + reference-option lookups the new
+  // TableHeader filter row needs. Derived straight from data already in hand
+  // (`fields`, `fkMaps`), so this never issues a network request of its own.
+  const typeForColumn = useCallback((name: string): string | undefined => {
+    const meta = fields.find((f) => f.name === name);
+    return meta?.type ?? inferTypeFromName(name);
+  }, [fields]);
+  const referenceOptionsForColumn = useCallback((name: string): readonly ReferenceOption[] | undefined => {
+    const map = fkMaps[name];
+    if (!map) return undefined;
+    return Array.from(map.entries())
+      .map(([value, optLabel]) => ({ value, label: optLabel }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [fkMaps]);
+
   const label = String(
     node.label ?? props.label ?? (entityKey ? `${humanizeHeader(entityKey.split('_').pop())} List` : 'Data Table'),
   );
@@ -596,6 +641,13 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
             <TableHeader
               columns={displayFieldNames}
               labelFor={(name) => fieldByName.get(name)?.label}
+              filterableColumns={displayFieldNames.filter((n) => !isApprovalStatusColumn(n))}
+              typeFor={typeForColumn}
+              referenceOptionsFor={referenceOptionsForColumn}
+              sort={sort}
+              onSortToggle={handleSortToggle}
+              filterValues={columnFilterValues}
+              onFilterChange={handleColumnFilterChange}
             />
             {(() => {
               const groupByField = typeof props.groupBy === 'string' ? props.groupBy : '';

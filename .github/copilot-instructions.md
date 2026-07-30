@@ -444,6 +444,15 @@ DELETE /api/{entity}/{id}       â†’ Delete record
                                   and checker-only-PENDING gate either way — an invalid value's 400
                                   names whichever of filter=approval_status: / _approvalStatus= the
                                   caller actually used (Review #7 D9).
+?filter=price:100..300         → Range filter — "min..max" (double-dot separator), parsed by
+                                  EntityCrudService.parseRange and only accepted for orderable column
+                                  kinds (integer/bigint/decimal/timestamp/reference). Either bound may be
+                                  omitted for an open-ended range (`price:100..` or `price:..300`); both
+                                  empty (`price:..`) is a 400, same as any other empty filter value. The
+                                  runtime's TableHeader.tsx / entity-query.ts (`range()`) is the canonical
+                                  client-side helper for building this — route any new range-capable
+                                  filter UI through it. A comma inside either bound is rejected, not
+                                  silently truncated, same hazard as a plain filter value (see below).
 ?fields=name,email             → Column projection. Omitting fields= returns only the declared schema
                                   fields — approval columns are opt-in via an explicit fields= only, so
                                   they never leak into a caller that didn't ask for them.

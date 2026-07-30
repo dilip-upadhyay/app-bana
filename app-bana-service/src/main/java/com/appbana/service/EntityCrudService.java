@@ -706,6 +706,19 @@ public class EntityCrudService {
                 // cases are correctly a 400, not a silent pass-through.
                 throw new FieldValidationException(name, "unknown filter field");
             }
+            // Scale/column-filter hardening — a "min..max" double-dot range,
+            // e.g. filter=amount:10..100, filter=created_at:2026-01-01..2026-02-01.
+            // Checked before the generic parseFilterValue() call below because a
+            // bare Integer.parseInt/BigDecimal/Instant.parse on "10..100" would
+            // just fail to parse and produce a correct-but-unhelpful "invalid
+            // value" 400 instead of being recognised as a range request. A single
+            // '.' cannot collide with this (fractional-second timestamps use one
+            // dot, never two), so ".." is an unambiguous delimiter.
+            int dotdot = val.indexOf("..");
+            if (dotdot >= 0) {
+                map.put(f.getName(), parseRange(f, val, dotdot));
+                continue;
+            }
             Object parsed = parseFilterValue(f, val);
             if (parsed == null) {
                 // Review #4 (High A) — a filter value that fails to coerce for the
@@ -741,6 +754,52 @@ public class EntityCrudService {
      * {@code filter=submitted_by:=bob}.
      */
     public record ExactMatch(Object value) {}
+
+    /**
+     * A "min..max" double-dot range filter — the column-filter/scale hardening
+     * pass that added per-column filtering to the runtime's list tables.
+     *
+     * <p>Either bound may be omitted for an open-ended range: {@code min} null
+     * means "no lower bound" ({@code col <= max} only), {@code max} null means
+     * "no upper bound" ({@code col >= min} only). At least one of the two is
+     * always non-null — {@link #parseRange} rejects a range with neither.
+     *
+     * <p>Only meaningful for orderable column kinds (integer/bigint/decimal/
+     * timestamp/reference); requesting a range on a string/boolean column is a
+     * 400, not a silently-ignored predicate.
+     */
+    public record Range(Object min, Object max) {}
+
+    /**
+     * Parses the "min..max" syntax found in {@link #parseFilters}. {@code val}
+     * is the full raw value (already stripped of a leading '=', though a range
+     * and an exact-match marker are not meant to be combined) and {@code dotdot}
+     * is the index of the delimiting "..".
+     */
+    private static Range parseRange(EntitySchema.Field f, String val, int dotdot) {
+        SchemaManager.FieldSqlKind kind = SchemaManager.classifyFieldType(f.getType());
+        boolean orderable = switch (kind) {
+            case INTEGER, BIGINT, DECIMAL, TIMESTAMP, REFERENCE -> true;
+            default -> false;
+        };
+        if (!orderable) {
+            throw new FieldValidationException(f.getName(),
+                    "range filters ('min..max') are only supported for numeric/date fields, not '" + f.getType()
+                            + "'");
+        }
+        String lo = val.substring(0, dotdot).trim();
+        String hi = val.substring(dotdot + 2).trim();
+        Object loVal = lo.isEmpty() ? null : parseFilterValue(f, lo);
+        Object hiVal = hi.isEmpty() ? null : parseFilterValue(f, hi);
+        if ((!lo.isEmpty() && loVal == null) || (!hi.isEmpty() && hiVal == null)) {
+            throw new FieldValidationException(f.getName(),
+                    "invalid range value '" + val + "' for type '" + f.getType() + "'");
+        }
+        if (loVal == null && hiVal == null) {
+            throw new FieldValidationException(f.getName(), "range filter '" + val + "' needs at least one bound");
+        }
+        return new Range(loVal, hiVal);
+    }
 
     public long countOnly(EntitySchema schema, String q, Map<String, Object> filters) throws SQLException {
         StringBuilder where = new StringBuilder();
@@ -1392,6 +1451,19 @@ public class EntityCrudService {
                 if (filterValue instanceof ExactMatch em) {
                     exactRequested = true;
                     filterValue = em.value();
+                } else if (filterValue instanceof Range range) {
+                    // A range is always a comparison, never a LIKE/exact match —
+                    // handled entirely separately from the rest of this loop body.
+                    String quotedRangeKey = quote(f.getName());
+                    if (range.min() != null) {
+                        parts.add(quotedRangeKey + " >= ?");
+                        params.add(range.min());
+                    }
+                    if (range.max() != null) {
+                        parts.add(quotedRangeKey + " <= ?");
+                        params.add(range.max());
+                    }
+                    continue;
                 }
 
                 String t = f.getType().toLowerCase(Locale.ROOT);

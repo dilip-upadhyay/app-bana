@@ -48,8 +48,18 @@ export function useEntityRows(
     }
   }, [paramsKey]);
 
+  // Guards against out-of-order network responses: rapid successive filter/
+  // sort/page changes each kick off their own fetch, and nothing guarantees
+  // they resolve in the order they were sent. Without this, a slower older
+  // request can resolve after a newer one and silently overwrite the UI with
+  // stale rows/total — found live-testing rapid column-filter changes, where
+  // clearing a filter back to "no filter" could stick on the old filtered
+  // count if an earlier in-flight request settled last.
+  const requestIdRef = useRef(0);
+
   const load = useCallback(async () => {
     if (!entityKey) return;
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError('');
     try {
@@ -59,12 +69,14 @@ export function useEntityRows(
         offset: (page - 1) * pageSize,
       };
       const result = await fetchEntityRows(qualifyEntityKey(entityKey), getRuntimeToken(), params);
+      if (requestIdRef.current !== requestId) return; // a newer request has since been issued — ignore this stale response
       setRows(result.rows);
       setTotal(result.total);
     } catch (e) {
+      if (requestIdRef.current !== requestId) return;
       setError(e instanceof Error ? e.message : 'Failed to load data');
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === requestId) setLoading(false);
     }
     // paramsKey is included so filter changes trigger a fetch even when the
     // caller passes a fresh object literal each render.

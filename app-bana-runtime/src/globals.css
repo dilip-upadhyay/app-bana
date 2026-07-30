@@ -340,6 +340,7 @@
   /* ---- Left navigation sidebar ---------------------------------------- */
   .appbana-sidebar-container {
     @apply w-64 shrink-0 border-r border-gray-200 bg-white;
+    transition: width 150ms ease;
   }
   .appbana-sidebar {
     @apply h-full;
@@ -374,6 +375,18 @@
   .appbana-sidebar-icon > svg {
     @apply w-full h-full;
   }
+  /* Desktop collapse-toggle button — sits above the nav links inside
+     .appbana-sidebar-container. Hidden below md (see the button's own
+     `hidden md:inline-flex` classes); the sm-md icon-rail range already
+     collapses via width, so a toggle there would be a confusing no-op. */
+  .appbana-sidebar-toggle {
+    @apply w-8 h-8 mx-3 mt-3 mb-1
+           items-center justify-center
+           rounded-md text-gray-400
+           border border-transparent
+           hover:bg-gray-50 hover:text-gray-700
+           focus:outline-none focus:ring-2 focus:ring-indigo-500;
+  }
 
   /* Sprint 2 Task 2.10 — collapsed icon-rail between sm and md.
      Full sidebar (w-64) at md+; icon-only rail (w-14) between sm and md;
@@ -399,6 +412,37 @@
        button gives a native tooltip on hover for orientation. */
     .appbana-sidebar-container .appbana-sidebar-link > span:not(.appbana-sidebar-icon) {
       display: none;
+    }
+  }
+
+  /* Sidebar-collapse pass — user-toggleable icon-rail at md+, platform-wide
+     default for every app's runtime shell (AppRuntimeShell.tsx owns the
+     `is-collapsed` class + localStorage persistence; RuntimeSidebar.tsx
+     itself is untouched). Scoped to its own min-width: 768px block — rather
+     than reusing selectors from the sm-md rail above — so this never
+     interacts with that separate, width-triggered auto-rail rule. */
+  @media (min-width: 768px) {
+    .appbana-sidebar-container.is-collapsed {
+      width: 3.5rem;
+    }
+    .appbana-sidebar-container.is-collapsed .appbana-sidebar > div {
+      padding: 0.5rem;
+    }
+    .appbana-sidebar-container.is-collapsed .appbana-sidebar-section {
+      display: none;
+    }
+    .appbana-sidebar-container.is-collapsed .appbana-sidebar-link {
+      justify-content: center;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+      gap: 0;
+    }
+    .appbana-sidebar-container.is-collapsed .appbana-sidebar-link > span:not(.appbana-sidebar-icon) {
+      display: none;
+    }
+    .appbana-sidebar-container.is-collapsed .appbana-sidebar-toggle {
+      margin-left: auto;
+      margin-right: auto;
     }
   }
 

@@ -27,6 +27,7 @@ import { PendingCountsProvider, usePendingCountsValue } from './PendingCountsPro
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
+const SIDEBAR_COLLAPSED_KEY = 'appbana_sidebar_collapsed';
 
 /** True when this runtime is embedded in the studio iframe (has a real cross-frame parent). */
 function isEmbedded(): boolean {
@@ -47,6 +48,11 @@ function storedToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+/** Sidebar-collapse pass — platform-wide default for every app's runtime shell. */
+function storedSidebarCollapsed(): boolean {
+  return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+}
+
 export function AppRuntimeShell() {
   const [token, setTokenState] = useState<string | null>(storedToken);
   const [app, setApp] = useState<AppMeta | null>(null);
@@ -54,6 +60,9 @@ export function AppRuntimeShell() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Sidebar-collapse pass — desktop-only rail toggle, persisted across visits.
+  // Default false (expanded) is the least-surprising choice for a first visit.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(storedSidebarCollapsed);
   const [branding, setBranding] = useState<TenantBranding | null>(null);
   // Sprint 3 task 3.3 — selected record id for detail-view overlay.
   const [selectedRecord, setSelectedRecord] = useState<
@@ -269,8 +278,40 @@ export function AppRuntimeShell() {
       <div className="flex flex-1 min-h-0">
         {/* Sidebar: full at md+, icon-rail at sm-to-md, hidden below sm.
             The visual collapse is CSS-driven — see .appbana-sidebar-container
-            @media (max-width: 767.98px) in globals.css. */}
-        <aside className="hidden sm:block appbana-sidebar-container">
+            @media (max-width: 767.98px) in globals.css. The optional
+            is-collapsed class (desktop-only, min-width: 768px) is the
+            sidebar-collapse pass — a platform-wide default for every app's
+            runtime shell, not a per-app opt-in. */}
+        <aside className={`hidden sm:block appbana-sidebar-container${sidebarCollapsed ? ' is-collapsed' : ''}`}>
+          <button
+            type="button"
+            className="hidden md:inline-flex appbana-sidebar-toggle"
+            data-appbana-sidebar-toggle
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-pressed={sidebarCollapsed}
+            onClick={() => {
+              setSidebarCollapsed((prev) => {
+                const next = !prev;
+                localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+                return next;
+              });
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              style={{ transform: sidebarCollapsed ? 'rotate(180deg)' : undefined }}
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
           <ApprovalAwareSidebar
             pages={(app.pages ?? []) as PageMeta[]}
             currentPageId={queueEntity ? null : (currentPage?.id ?? null)}

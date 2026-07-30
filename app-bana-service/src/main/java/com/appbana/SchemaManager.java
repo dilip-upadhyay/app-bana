@@ -346,14 +346,149 @@ public class SchemaManager {
         // exist. Non-fatal on failure: a missing parent table just means the
         // FK will be added on the next ensureTable for the child.
         syncForeignKeys(schema, c, d);
+
+        // Scale hardening — every declared (+ approval, when enabled) column gets
+        // a supporting index so filter=/sort=/approval queues stay index-backed
+        // as tables grow. Non-fatal: an indexing failure is a performance issue,
+        // never a correctness one, so it must not block the schema save.
+        syncIndexes(schema, c, d, table);
     }
 
     /**
-     * C4.6 — make {@code approvalRequired == true} actually imply the eight physical
-     * approval columns exist.
+     * Scale hardening (millions-of-rows column filtering/sorting) — every
+     * indexable field on the entity gets a supporting index so the runtime's new
+     * per-column filter/sort UI (and the existing approval queues) stay fast as
+     * tables grow, instead of degrading to sequential scans.
      *
-     * <p>{@link com.appbana.approval.ApprovalColumns}'s javadoc has always claimed
-     * "the eight system columns <em>SchemaManager injects</em>", but SchemaManager did
+     * <p>Two index families are created, both {@code IF NOT EXISTS} so this is
+     * cheap to re-run on every {@code ensureTable} call, including the self-heal
+     * path on an already-existing table:
+     * <ul>
+     *   <li>a plain B-tree on every indexable column — serves {@code =}, the new
+     *       {@code Range} ({@code col >= ? AND col <= ?}) filters, {@code ORDER BY},
+     *       and FK/status lookups.</li>
+     *   <li>on Postgres only, a trigram GIN index ({@code pg_trgm}'s
+     *       {@code gin_trgm_ops}) on STRING/TEXT-kind columns. This is the piece
+     *       that actually matters at scale: the default filter behavior
+     *       ({@link EntityCrudService}'s {@code buildWhere}) is a case-insensitive
+     *       substring {@code ILIKE '%value%'}, which a B-tree cannot serve at
+     *       all — Postgres has no way to use a B-tree for a leading-wildcard
+     *       LIKE. A trigram GIN index is what turns that into an index scan
+     *       instead of a sequential scan once a table has millions of rows.</li>
+     * </ul>
+     *
+     * <p>Primary keys are skipped (already uniquely indexed) and {@code FILE}-kind
+     * columns are skipped (store an opaque issued fileId, never filtered/sorted on).
+     *
+     * <p>Deliberately does NOT use {@code CREATE INDEX CONCURRENTLY}: that requires
+     * running outside any transaction, which does not fit the plain
+     * {@code Statement}-per-DDL-call pattern the rest of {@code ensureTable} already
+     * uses. For the table sizes this runs against today a regular (briefly
+     * lock-taking) {@code CREATE INDEX} is an acceptable tradeoff; revisit if a
+     * tenant table is ever altered while already holding a very large amount of data.
+     *
+     * <p>Index names are derived from a short hash of table+column+kind rather than
+     * naive concatenation-then-truncate: physical table names are already routinely
+     * near the 63-char Postgres identifier limit (the UUID-heavy multi-tenant naming
+     * scheme), so two different columns' naively-truncated index names can collide,
+     * silently leaving one of the two columns with no index at all (`CREATE INDEX IF
+     * NOT EXISTS` treats "a relation with this name already exists" as success,
+     * regardless of what it actually indexes). See {@link #indexName}.
+     */
+    private static void syncIndexes(EntitySchema schema, Connection c, String dialect, String table) {
+        boolean isPg = "postgres".equals(dialect) || "postgresql".equals(dialect);
+
+        List<EntitySchema.Field> fields = new ArrayList<>(schema.getFields());
+        if (schema.isApprovalRequired()) {
+            fields.addAll(ApprovalColumns.asFields());
+        }
+
+        boolean trgmReady = false;
+        if (isPg) {
+            try (Statement s = c.createStatement()) {
+                s.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+                trgmReady = true;
+            } catch (SQLException e) {
+                LOG.warn("[INDEX] Could not enable pg_trgm extension ({}); skipping trigram indexes for {}",
+                        e.getMessage(), table);
+            }
+        }
+
+        for (EntitySchema.Field f : fields) {
+            if (f.isPrimaryKey()) {
+                continue; // already uniquely indexed
+            }
+            FieldSqlKind kind = classifyFieldType(f.getType());
+            if (kind == FieldSqlKind.FILE) {
+                continue; // opaque fileId, never filtered/sorted on
+            }
+            String col = f.getName();
+
+            String btreeSql = "CREATE INDEX IF NOT EXISTS " + quote(indexName(table, col, "btree"))
+                    + " ON " + quote(table) + " (" + quote(col) + ")";
+            execIndexDdl(c, schema, table, btreeSql);
+
+            if (trgmReady && (kind == FieldSqlKind.STRING || kind == FieldSqlKind.TEXT)) {
+                String trgmSql = "CREATE INDEX IF NOT EXISTS " + quote(indexName(table, col, "trgm"))
+                        + " ON " + quote(table) + " USING gin (" + quote(col) + " gin_trgm_ops)";
+                execIndexDdl(c, schema, table, trgmSql);
+            }
+        }
+    }
+
+    /** Runs one index-creation statement, logging and continuing on failure. */
+    private static void execIndexDdl(Connection c, EntitySchema schema, String table, String sql) {
+        try (Statement s = c.createStatement()) {
+            s.execute(sql);
+            recordMigration(c, schema.getName(), sql);
+        } catch (SQLException e) {
+            LOG.warn("[INDEX] Failed to create index on {} ({}): {}", table, sql, e.getMessage());
+        }
+    }
+
+    /**
+     * Builds a collision-safe, <=63-char index identifier. {@code quote()}
+     * uppercases whatever is passed to it (matching the rest of this class'
+     * uppercase physical-identifier convention), so casing here is irrelevant.
+     *
+     * <p>A short SHA-256-derived hash of {@code table+"."+col+"."+kind} is
+     * appended after a truncated human-readable label, so two columns whose
+     * naive "IDX_&lt;table&gt;_&lt;col&gt;" names would truncate to the same
+     * 63 characters (routine once the table name alone is near the limit)
+     * still get distinct, stable index names.
+     */
+    private static String indexName(String table, String col, String kind) {
+        String digest = shortHash(table + "." + col + "." + kind);
+        String label = "IDX_" + col + "_" + kind;
+        int budget = 63 - 1 - digest.length(); // 1 for the joining underscore
+        if (label.length() > budget) {
+            label = label.substring(0, Math.max(0, budget));
+        }
+        return label + "_" + digest;
+    }
+
+    /** First 10 hex chars (5 bytes) of a SHA-256 digest — collision-safe for this use, not security-sensitive. */
+    private static String shortHash(String input) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 5; i++) {
+                sb.append(String.format("%02x", hash[i]));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 is a mandatory JDK algorithm; this is unreachable in practice.
+            return Integer.toHexString(input.hashCode());
+        }
+    }
+
+    /**
+     * Materialises the eight approval-workflow columns (see {@link ApprovalColumns})
+     * onto a table whose schema has {@code approvalRequired() == true}, if they are
+     * not already present. This is the single chokepoint for that injection; before
+     * it existed here, a table created through any writer other than one specific path
+     * ended up with physical columns that did
      * not contain the string "approval" at all — the only code that materialised them
      * was {@code SchemaEnricher} in the separate ai-builder process, reachable from
      * exactly one of the four writers of the flag. Everything else — {@code create_entity},
