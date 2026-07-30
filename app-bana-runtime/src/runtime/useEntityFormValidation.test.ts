@@ -143,6 +143,23 @@ describe('isEffectivelyVisible', () => {
     expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(false);
   });
 
+  // Regression: DatePicker.tsx's hidden value-carrier input is the ONLY place
+  // its ISO date value lives (the visible control is a name-less readOnly
+  // display box). Blanket-excluding type="hidden" silently dropped every
+  // date/datetime field from every form submission.
+  it('DatePicker hidden carrier input (data-appbana-datepicker-value) is NOT excluded by the hidden-type rule', () => {
+    const form = fakeEl({});
+    const input = fakeEl({ type: 'hidden', dataset: { appbanaDatepickerValue: 'true' }, parentElement: form });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(true);
+  });
+
+  it('DatePicker hidden carrier input is still hidden when an ancestor is a hidden wizard step', () => {
+    const form = fakeEl({});
+    const step = fakeEl({ style: { display: 'none' }, parentElement: form });
+    const input = fakeEl({ type: 'hidden', dataset: { appbanaDatepickerValue: 'true' }, parentElement: step });
+    expect(isEffectivelyVisible(input as unknown as HTMLElement, form as unknown as HTMLFormElement)).toBe(false);
+  });
+
   it('ancestor with display:none hides the input (WizardShell inactive step)', () => {
     const form = fakeEl({});
     const step = fakeEl({ style: { display: 'none' }, parentElement: form });
