@@ -107,8 +107,12 @@ public class ApprovalRoutesSecurityTest {
     public void setupSchemaAndRoles() throws Exception {
         try (Connection c = JdbcManager.getConnection("default");
              Statement s = c.createStatement()) {
-            s.execute("DELETE FROM appbana_user_roles");
-            s.execute("DELETE FROM appbana_approvals");
+            // Scoped to this test's OWN fixture tenant -- a blanket "DELETE FROM
+            // appbana_user_roles"/"appbana_approvals" (no WHERE) wipes every real app's role
+            // grants and approval history in the shared dev Postgres instance on every
+            // `mvn test` run.
+            s.execute("DELETE FROM appbana_user_roles WHERE tenant_id = '" + TENANT_ID + "'");
+            s.execute("DELETE FROM appbana_approvals WHERE tenant_id = '" + TENANT_ID + "'");
             s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
         }
 

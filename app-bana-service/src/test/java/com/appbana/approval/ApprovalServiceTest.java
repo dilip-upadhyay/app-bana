@@ -58,8 +58,13 @@ public class ApprovalServiceTest {
     public void cleanAndSeedTable() throws Exception {
         try (Connection c = JdbcManager.getConnection("default");
              Statement s = c.createStatement()) {
-            s.execute("DELETE FROM appbana_user_roles");
-            s.execute("DELETE FROM appbana_approvals");
+            // Scoped to this test's OWN fixture tenant -- a blanket "DELETE FROM
+            // appbana_user_roles" (no WHERE) wipes every real app's role grants in the
+            // shared dev Postgres instance on every `mvn test` run. See the sibling fix
+            // in RoleRoutesAuthorizationTest/RoleRoutesSecurityTest for the appbana_apps/
+            // appbana_schemas version of this same bug.
+            s.execute("DELETE FROM appbana_user_roles WHERE tenant_id = '" + TENANT_ID + "'");
+            s.execute("DELETE FROM appbana_approvals WHERE tenant_id = '" + TENANT_ID + "'");
             s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
         }
 
