@@ -1,9 +1,11 @@
 package com.appbana.server.routes;
 
+import com.appbana.SchemaManager;
 import com.appbana.UserManager;
 import com.appbana.api.Router;
 import com.appbana.approval.UserRoleService;
 import com.appbana.config.ConfigManager;
+import com.appbana.model.EntitySchema;
 import com.appbana.model.User;
 import com.appbana.security.AppAuthorization;
 import com.appbana.service.AuthService;
@@ -116,13 +118,27 @@ public class UserRoutes {
 
         Map<String, Object> byEntity = new LinkedHashMap<>();
         for (Map.Entry<String, Set<UserRoleService.Role>> e : raw.entrySet()) {
+            String entityName = e.getKey();
+
+            // SchemaRoutes.java unconditionally grants the creator Role.BOTH on every new
+            // entity, regardless of whether that entity has an approval workflow enabled.
+            // Without this filter, every entity the caller created shows up as "reviewable"
+            // in the runtime sidebar, and the runtime then queries /approvals/pending for
+            // entities that have no approval_status column at all -- a 500, not an empty
+            // queue. Only entities with approvalRequired=true actually expose maker/checker
+            // affordances to the runtime.
+            EntitySchema schema = SchemaManager.loadSchema(appId, entityName, tenantId);
+            if (schema == null || !schema.isApprovalRequired()) {
+                continue;
+            }
+
             Set<UserRoleService.Role> roles = e.getValue();
             List<String> names = new ArrayList<>();
             for (UserRoleService.Role r : roles) {
                 names.add(r.getValue());
             }
             names.sort(String::compareTo);
-            byEntity.put(e.getKey(), Map.of(
+            byEntity.put(entityName, Map.of(
                     "roles", names,
                     "isMaker", roles.contains(UserRoleService.Role.MAKER),
                     "isChecker", roles.contains(UserRoleService.Role.CHECKER)

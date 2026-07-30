@@ -2,7 +2,9 @@ package com.appbana.server.routes;
 
 import com.appbana.ApiServer;
 import com.appbana.JdbcManager;
+import com.appbana.SchemaManager;
 import com.appbana.approval.UserRoleService;
+import com.appbana.model.EntitySchema;
 import com.appbana.service.SessionService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,6 +68,19 @@ public class UserRoutesTest {
         checkerToken = SessionService.createSession("carol_checker").sessionId();
         makerToken = SessionService.createSession("mike_maker").sessionId();
         strangerToken = SessionService.createSession("sam_stranger").sessionId();
+
+        // UserRoutes only reports a grant for entities that actually have an approval
+        // workflow enabled (see UserRoutes#collectEntityRoles) — a raw appbana_user_roles
+        // row with no matching approvalRequired=true schema is intentionally filtered out.
+        // Both entities under test need a real schema for that filter to pass.
+        EntitySchema.Field idField = new EntitySchema.Field("id", "integer", true, true, null);
+        for (String entityName : List.of("Invoice", "Vendor")) {
+            EntitySchema schema = new EntitySchema(entityName, List.of(idField));
+            schema.setTenantId(TENANT_ID);
+            schema.setAppId(APP_ID);
+            schema.setApprovalRequired(true);
+            SchemaManager.saveSchema(schema);
+        }
     }
 
     @BeforeEach

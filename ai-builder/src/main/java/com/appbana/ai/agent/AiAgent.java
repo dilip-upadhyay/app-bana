@@ -385,10 +385,17 @@ public class AiAgent {
                                                      StreamEmitter emitter) {
         if (toolCalls.isEmpty()) return Collections.emptyList();
 
+        // generate_mock_data is included here too: entities frequently reference each other
+        // via FK 'reference' fields (e.g. Employee.department, OnboardingTask.employee). When the
+        // LLM emits multiple generate_mock_data calls in one iteration to seed a parent and its
+        // dependents together, running them in parallel races the parent insert against the
+        // dependent insert and the dependent's FK constraint fails (or references a row that
+        // doesn't exist yet). Sequential execution guarantees parent rows are committed first.
         boolean requiresSequential = toolCalls.stream()
                 .anyMatch(call -> call.getName().equals("create_entity") ||
                         call.getName().equals("generate_page") ||
-                        call.getName().equals("create_app"));
+                        call.getName().equals("create_app") ||
+                        call.getName().equals("generate_mock_data"));
 
         List<ToolResult> results = new ArrayList<>();
 
@@ -884,11 +891,14 @@ public class AiAgent {
 
         // Check if sequential execution is required for safety
         // CreateEntityTool and GeneratePageTool modify shared app metadata and are not
-        // thread-safe
+        // thread-safe. generate_mock_data is included too: parallel batches racing across
+        // FK-dependent entities (e.g. Employee vs OnboardingTask.employee) can insert a
+        // dependent row before its parent row is committed, failing the FK constraint.
         boolean requiresSequential = toolCalls.stream()
                 .anyMatch(call -> call.getName().equals("create_entity") ||
                         call.getName().equals("generate_page") ||
-                        call.getName().equals("create_app")); // create_app usually singleton but safe to serialize
+                        call.getName().equals("create_app") || // create_app usually singleton but safe to serialize
+                        call.getName().equals("generate_mock_data"));
 
         if (requiresSequential) {
             log.info("[AGENT] Forcing sequential execution for {} tool(s) to prevent race conditions",

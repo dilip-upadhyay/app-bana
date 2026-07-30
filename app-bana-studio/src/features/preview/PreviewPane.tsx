@@ -18,12 +18,17 @@ export function PreviewPane() {
     ? `${RUNTIME_BASE}/run/${tenantId ?? 'default'}/${currentApp.id}`
     : null;
 
-  // Reload iframe when previewRefreshToken changes (after tool completes)
+  // Reload iframe when previewRefreshToken changes (after tool completes), the
+  // app changes, OR the session token changes (e.g. re-login after expiry).
+  // Without `token` here, re-authenticating while the same app stays selected
+  // never reloads the iframe, so it never re-fires 'ready' and the postMessage
+  // handshake below never has anything to respond to — the iframe is stuck
+  // showing "Failed to get app: 401" with the stale/expired token forever.
   useEffect(() => {
     if (iframeRef.current && runtimeUrl) {
       iframeRef.current.src = runtimeUrl + `?t=${previewRefreshToken}`;
     }
-  }, [previewRefreshToken, runtimeUrl]);
+  }, [previewRefreshToken, runtimeUrl, token]);
 
   // postMessage bridge: token handshake
   useEffect(() => {

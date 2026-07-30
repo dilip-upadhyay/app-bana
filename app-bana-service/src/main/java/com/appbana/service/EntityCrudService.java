@@ -1157,15 +1157,20 @@ public class EntityCrudService {
                         long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin())
                             throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                        if (f.getMax() != null && lv > f.getMax())
-                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        // Strict validation only if max > min (handles AI-generated 0/0 defaults)
+                        if (f.getMax() != null && (f.getMin() == null || f.getMax() > f.getMin())) {
+                            if (lv > f.getMax())
+                                throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        }
                         yield lv;
                     }
                     long lv = Long.parseLong(raw.toString());
                     if (f.getMin() != null && lv < f.getMin())
                         throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                    if (f.getMax() != null && lv > f.getMax())
-                        throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    if (f.getMax() != null && (f.getMin() == null || f.getMax() > f.getMin())) {
+                        if (lv > f.getMax())
+                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    }
                     yield lv;
                 }
                 case DECIMAL -> {
@@ -1188,9 +1193,11 @@ public class EntityCrudService {
                     if (f.getMin() != null
                             && bd.compareTo(java.math.BigDecimal.valueOf(f.getMin())) < 0)
                         throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                    if (f.getMax() != null
-                            && bd.compareTo(java.math.BigDecimal.valueOf(f.getMax())) > 0)
-                        throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    // Strict validation only if max > min (handles AI-generated 0/0 defaults)
+                    if (f.getMax() != null && (f.getMin() == null || f.getMax() > f.getMin())) {
+                        if (bd.compareTo(java.math.BigDecimal.valueOf(f.getMax())) > 0)
+                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    }
                     yield bd;
                 }
                 case BOOLEAN -> {

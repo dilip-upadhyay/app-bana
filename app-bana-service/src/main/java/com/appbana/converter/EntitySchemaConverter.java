@@ -138,6 +138,17 @@ public class EntitySchemaConverter {
             field.setMax((long) fieldNode.get("max").asDouble());
         }
 
+        // Phase B4 master-detail metadata — must survive the frontend->backend
+        // conversion or every reference field silently loses its FK target and
+        // delete-cascade policy (found live: scaffold_app's Department.head_of_department
+        // -> Employee reference had no referenceEntity carried through at all).
+        if (fieldNode.has("referenceEntity")) {
+            field.setReferenceEntity(fieldNode.get("referenceEntity").asText());
+        }
+        if (fieldNode.has("onDelete")) {
+            field.setOnDelete(fieldNode.get("onDelete").asText());
+        }
+
         return field;
     }
 
@@ -149,7 +160,7 @@ public class EntitySchemaConverter {
      */
     private static String mapFieldType(String frontendType, JsonNode fieldNode) {
         return switch (frontendType.toLowerCase()) {
-            case "text", "email", "phone", "select", "dropdown" -> "string";
+            case "text", "email", "phone", "select", "dropdown", "status" -> "string";
             case "autoincrement" -> "long"; // Auto-increment fields are always long
             case "number" -> {
                 // Check if autoIncrement to use long for ID fields
@@ -157,12 +168,27 @@ public class EntitySchemaConverter {
                         fieldNode.get("autoIncrement").asBoolean();
                 yield isAutoIncrement ? "long" : "int";
             }
-            case "textarea" -> "text";
+            // "longtext" is a distinct approved schema type (TEXT/CLOB, unbounded) —
+            // it must NOT collapse into "textarea"'s "text" case by accident, but it
+            // maps to the same backend kind, so both are listed explicitly.
+            case "textarea", "longtext" -> "text";
             case "date" -> "date";
             case "datetime", "timestamp" -> "timestamp";
             case "boolean", "checkbox" -> "boolean";
             case "int", "integer" -> "int";
             case "long", "bigint" -> "long";
+            // "decimal" was previously falling through to the default "string" case,
+            // silently turning every money/decimal field (salary, cost, price...) into
+            // a VARCHAR(255) column instead of NUMERIC(19,4). Found live via the
+            // Employee Onboarding scaffold test (salary/estimated_cost fields).
+            case "decimal", "double", "float", "currency" -> "decimal";
+            // "reference" was previously falling through to the default "string" case,
+            // silently turning every FK field into a VARCHAR(255) column — which then
+            // made SchemaManager.syncForeignKeys' FK constraint fail with an
+            // "incompatible types: character varying and integer" error against the
+            // parent's INTEGER primary key. Found live via the Employee Onboarding
+            // scaffold test (Department.head_of_department -> Employee reference).
+            case "reference" -> "reference";
             default -> {
                 LOG.warn("[CONVERTER] Unknown field type: {}, defaulting to string", frontendType);
                 yield "string";

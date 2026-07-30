@@ -70,6 +70,16 @@ export function AppRuntimeShell() {
   const modeRef = useRef<RuntimeMode>('browse');
   const highlightedNodeRef = useRef<string | null>(null);
   const isMounted = useRef(true);
+  // Guards against a stale in-flight loadApp() request clobbering state after
+  // a newer one already resolved. Reproduced live: on re-login inside the
+  // studio iframe, the runtime mounts with the OLD token from localStorage
+  // (401s immediately), then the postMessage handshake delivers the fresh
+  // token and a second loadApp() fires and succeeds — but if the first
+  // (stale-token, 401) request's promise settles after the second one, its
+  // `catch` block still ran and overwrote the just-set `app`/`error` state,
+  // leaving the iframe stuck on "Failed to get app: 401" forever even though
+  // the fresh token was valid the whole time.
+  const latestTokenRef = useRef<string | null>(null);
 
   // --- Resolve context from URL path ---
   const ctx = resolveAppContext(window.location);
@@ -137,11 +147,12 @@ export function AppRuntimeShell() {
       setLoading(false);
       return;
     }
+    latestTokenRef.current = tk;
     setLoading(true);
     setError(null);
     try {
       const appData = await getApp(ctx.tenantId, ctx.appId, tk);
-      if (!isMounted.current) return;
+      if (!isMounted.current || latestTokenRef.current !== tk) return;
       // Backend returns two shapes for pages:
       //   pages:     string[] of page IDs (legacy)
       //   pagesData: full PageMeta objects
@@ -154,11 +165,11 @@ export function AppRuntimeShell() {
       const firstPage = ((normalized.pages ?? []) as PageMeta[])[0] ?? null;
       setCurrentPage(firstPage);
     } catch (e) {
-      if (!isMounted.current) return;
+      if (!isMounted.current || latestTokenRef.current !== tk) return;
       setError(e instanceof Error ? e.message : 'Failed to load app');
       postToStudio({ type: 'error', message: String(e) });
     } finally {
-      if (isMounted.current) setLoading(false);
+      if (isMounted.current && latestTokenRef.current === tk) setLoading(false);
     }
   }, [ctx?.tenantId, ctx?.appId]);
 
