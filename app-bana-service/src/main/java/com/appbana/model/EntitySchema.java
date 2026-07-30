@@ -17,6 +17,20 @@ public class EntitySchema {
     private String tenantId; // Owner Tenant ID for global uniqueness
     private boolean approvalRequired; // Task C1.3 — approval workflow enabled for this entity
 
+    // Two-level checker chain — platform-wide, per-entity opt-in. Boxed rather than a
+    // primitive int so that schemas persisted before this field existed (i.e. every
+    // existing schema JSON blob) deserialize to `null`, not to `0`. `0` would not equal
+    // either valid level and would need its own defaulting branch everywhere this is
+    // read; `null` cleanly means "not set" and is normalised to 1 by
+    // getEffectiveApprovalLevels(). Only meaningful when approvalRequired == true.
+    private Integer approvalLevels;
+
+    /** 1 (single checker, default) or 2 (checker-1 then checker-2). Never null. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public int getEffectiveApprovalLevels() {
+        return (approvalLevels != null && approvalLevels == 2) ? 2 : 1;
+    }
+
     public EntitySchema() {
     }
 

@@ -59,6 +59,8 @@ export function makerHintFor(state: ApprovalState | null): string {
       return 'This record is a draft. It is not visible as approved work until a checker approves it.';
     case 'PENDING':
       return 'Submitted. It is now with a checker — you cannot change it until they approve or return it.';
+    case 'PENDING_L2':
+      return 'Approved at level 1. It is now with a final (level-2) checker — you cannot change it until they approve or return it.';
     case 'REJECTED':
       return 'A checker returned this for rework. Edit it, then resubmit.';
     case 'APPROVED':
@@ -115,7 +117,7 @@ export function RecordApprovalPanel(props: Readonly<RecordApprovalPanelProps>) {
     <section className="appbana-approval-panel" data-approval-state={state ?? 'UNKNOWN'}>
       <div className="appbana-approval-panel-head">
         <ApprovalStatusPill value={rawStatus} />
-        {submittedLabel && state === 'PENDING' && (
+        {submittedLabel && (state === 'PENDING' || state === 'PENDING_L2') && (
           <span className="appbana-approval-panel-meta">{`Submitted ${submittedLabel}`}</span>
         )}
         <div className="appbana-approval-panel-actions">

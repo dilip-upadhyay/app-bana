@@ -941,9 +941,9 @@ public class GenericEntityRoutes {
                         Object statusObj = existing.get("approval_status");
                         if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
                         String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
-                        if ("PENDING".equalsIgnoreCase(currentStatus)) {
-                            LOG.warn("[SECURITY] DELETE blocked: entity={} id={} is in PENDING state", entity, idStr);
-                            res.json(400, Map.of("error", "Cannot delete record while approval is PENDING"));
+                        if (isPendingApprovalStatus(currentStatus)) {
+                            LOG.warn("[SECURITY] DELETE blocked: entity={} id={} is in {} state", entity, idStr, currentStatus);
+                            res.json(400, Map.of("error", "Cannot delete record while approval is " + currentStatus.toUpperCase(Locale.ROOT)));
                             return;
                         }
                     }
@@ -1018,9 +1018,10 @@ public class GenericEntityRoutes {
                     if (schema.isApprovalRequired() && before != null) {
                         Object statusObj = before.get("approval_status");
                         if (statusObj == null) statusObj = before.get("APPROVAL_STATUS");
+                        // preserved: PENDING_L2 handling applied below via isPendingApprovalStatus()
                         String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
-                        if ("PENDING".equalsIgnoreCase(currentStatus)) {
-                            LOG.warn("[SECURITY] Bulk-delete blocked for entity={} id={}: record is PENDING", entity, idStr);
+                        if (isPendingApprovalStatus(currentStatus)) {
+                            LOG.warn("[SECURITY] Bulk-delete blocked for entity={} id={}: record is {}", entity, idStr, currentStatus);
                             blockedIds.add(idVal);
                             continue; // skip this ID — do NOT delete
                         }
@@ -1467,9 +1468,9 @@ public class GenericEntityRoutes {
                             Object statusObj = existing.get("approval_status");
                             if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
                             String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
-                            if ("PENDING".equalsIgnoreCase(currentStatus)) {
-                                LOG.warn("[SECURITY] Studio DELETE blocked: app={} entity={} id={} is PENDING", appId, entity, idStr);
-                                res.json(400, Map.of("error", "Cannot delete record while approval is PENDING"));
+                            if (isPendingApprovalStatus(currentStatus)) {
+                                LOG.warn("[SECURITY] Studio DELETE blocked: app={} entity={} id={} is {}", appId, entity, idStr, currentStatus);
+                                res.json(400, Map.of("error", "Cannot delete record while approval is " + currentStatus.toUpperCase(Locale.ROOT)));
                                 return;
                             }
                         }
@@ -1880,9 +1881,9 @@ public class GenericEntityRoutes {
                             Object statusObj = existing.get("approval_status");
                             if (statusObj == null) statusObj = existing.get("APPROVAL_STATUS");
                             String currentStatus = statusObj != null ? String.valueOf(statusObj) : "DRAFT";
-                            if ("PENDING".equalsIgnoreCase(currentStatus)) {
-                                LOG.warn("[SECURITY] Env DELETE blocked: app={} env={} entity={} id={} is PENDING", appId, env, entity, idStr);
-                                res.json(400, Map.of("error", "Cannot delete record while approval is PENDING"));
+                            if (isPendingApprovalStatus(currentStatus)) {
+                                LOG.warn("[SECURITY] Env DELETE blocked: app={} env={} entity={} id={} is {}", appId, env, entity, idStr, currentStatus);
+                                res.json(400, Map.of("error", "Cannot delete record while approval is " + currentStatus.toUpperCase(Locale.ROOT)));
                                 return;
                             }
                         }
@@ -1927,7 +1928,18 @@ public class GenericEntityRoutes {
     /** Lower-cased approval column names, for schema-field comparisons. */
     private static final Set<String> APPROVAL_FIELD_NAMES = ApprovalColumns.FIELD_NAMES;
 
-    private static final Set<String> VALID_APPROVAL_STATUSES = Set.of("DRAFT", "PENDING", "APPROVED", "REJECTED");
+    private static final Set<String> VALID_APPROVAL_STATUSES = Set.of("DRAFT", "PENDING", "PENDING_L2", "APPROVED", "REJECTED");
+
+    /**
+     * Two-level checker chain — PENDING_L2 is, from every one of these guards' point of view,
+     * exactly as "still awaiting a checker" as PENDING: edits/deletes must be blocked and the
+     * row must not be enumerable to a maker. Centralised here so a future third state (or a
+     * change to this list) cannot be applied to one call site and missed on another, which is
+     * exactly how this codebase's past approval-column bugs happened (see repo notes).
+     */
+    private static boolean isPendingApprovalStatus(String status) {
+        return "PENDING".equalsIgnoreCase(status) || "PENDING_L2".equalsIgnoreCase(status);
+    }
 
     /** What the caller should do after {@link #applyApprovalPutGuard} has inspected a PUT. */
     enum ApprovalPutAction {
@@ -1986,9 +1998,9 @@ public class GenericEntityRoutes {
         String currentStatus = approvalString(existing, "approval_status", "DRAFT");
         int rev = approvalInt(existing, "approval_revision", 1);
 
-        if ("PENDING".equalsIgnoreCase(currentStatus)) {
+        if (isPendingApprovalStatus(currentStatus)) {
             return new ApprovalPutResult(ApprovalPutAction.BLOCKED_PENDING,
-                    Map.of("error", "Cannot update record while approval is PENDING"));
+                    Map.of("error", "Cannot update record while approval is " + currentStatus.toUpperCase(Locale.ROOT)));
         }
 
         // C4.6 — approvalRequired is the authority for "does this entity support revisions",
@@ -2021,7 +2033,7 @@ public class GenericEntityRoutes {
         try (EntityCrudService.RowLock lock = crud.lockRow(schema, idStr)) {
             Map<String, Object> openRevision = crud.findOpenRevision(schema, idStr);
             if (openRevision != null
-                    && "PENDING".equalsIgnoreCase(approvalString(openRevision, "approval_status", "DRAFT"))) {
+                    && isPendingApprovalStatus(approvalString(openRevision, "approval_status", "DRAFT"))) {
                 return new ApprovalPutResult(ApprovalPutAction.CONFLICT, Map.of(
                         "error", "A revision of this record is already awaiting approval",
                         "revisionId", String.valueOf(rowValue(openRevision, primaryKeyName(schema)))));
@@ -2149,9 +2161,13 @@ public class GenericEntityRoutes {
      *   <li>Absent/blank → {@code null} (no filter applied).</li>
      *   <li>Entity has no approval workflow → 400. Silently ignoring it would return the
      *       full unfiltered table, which a caller asking for PENDING must never receive.</li>
-     *   <li>Value outside DRAFT/PENDING/APPROVED/REJECTED → 400.</li>
+     *   <li>Value outside DRAFT/PENDING/PENDING_L2/APPROVED/REJECTED → 400.</li>
      *   <li>{@code PENDING} → caller must hold the checker role (or own the app). The pending
      *       queue is the checker's view; makers must not be able to enumerate it.</li>
+     *   <li>{@code PENDING_L2} (two-level checker chain only) → caller must hold the
+     *       CHECKER_L2 role (or own the app). A level-1 checker must not be able to
+     *       enumerate the level-2 queue, since separation of duties across the chain
+     *       depends on the two being distinct people.</li>
      * </ul>
      *
      * @return the canonical upper-case status to filter on, or {@code null}
@@ -2168,7 +2184,7 @@ public class GenericEntityRoutes {
         String status = raw.trim().toUpperCase(Locale.ROOT);
         if (!VALID_APPROVAL_STATUSES.contains(status)) {
             throw new ApprovalFilterException(400,
-                    "invalid _approvalStatus '" + raw + "' (expected DRAFT, PENDING, APPROVED or REJECTED)");
+                    "invalid _approvalStatus '" + raw + "' (expected DRAFT, PENDING, PENDING_L2, APPROVED or REJECTED)");
         }
 
         if ("PENDING".equals(status) && authEnabled) {
@@ -2183,8 +2199,22 @@ public class GenericEntityRoutes {
                         "forbidden: only checkers may list PENDING records for " + schema.getName());
             }
         }
+
+        if ("PENDING_L2".equals(status) && authEnabled) {
+            String t = (tenantId != null && !tenantId.isBlank()) ? tenantId : schema.getTenantId();
+            String a = (appId != null && !appId.isBlank()) ? appId : schema.getAppId();
+            boolean allowed = callerUserId != null && !callerUserId.isBlank()
+                    && ApprovalService.hasCheckerL2OrOwnerPermission(t, a, schema.getName(), callerUserId);
+            if (!allowed) {
+                LOG.warn("[SECURITY] _approvalStatus=PENDING_L2 denied for user={} on entity={}",
+                        callerUserId, schema.getName());
+                throw new ApprovalFilterException(403,
+                        "forbidden: only level-2 checkers may list PENDING_L2 records for " + schema.getName());
+            }
+        }
         return status;
     }
+
 
     /**
      * C2.7 — applies and authorizes the approval-state list filter.

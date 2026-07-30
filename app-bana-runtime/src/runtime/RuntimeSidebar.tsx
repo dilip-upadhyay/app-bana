@@ -24,6 +24,7 @@ import {
   type PageKind,
 } from './page-classifier';
 import { formatBadgeCount } from './usePendingCounts';
+import { parseCheckerEntityKey } from './approval-columns';
 
 interface RuntimeSidebarProps {
   readonly pages: PageMeta[];
@@ -193,7 +194,10 @@ export function RuntimeSidebar({
                 // The count belongs in the accessible name, not only in a
                 // decorative pill: a screen reader user should not have to open
                 // the queue to learn there is nothing in it.
-                const label = `${pluralize(singularize(entity))} to review`;
+                const { entityName, level } = parseCheckerEntityKey(entity);
+                const label = level === 2
+                  ? `${pluralize(singularize(entityName))} — final review`
+                  : `${pluralize(singularize(entityName))} to review`;
                 const ariaLabel = pending > 0 ? `${label}, ${pending} pending` : label;
                 return (
                   <li key={entity}>

@@ -66,3 +66,28 @@ export function rowsHaveApprovalColumns(rows: ReadonlyArray<Record<string, unkno
   if (!first) return false;
   return Object.keys(first).some((k) => k.toLowerCase() === APPROVAL_STATUS_COLUMN);
 }
+
+/** Suffix appended to an entity name to key a level-2 checker queue entry. */
+export const CHECKER_L2_SUFFIX = '::L2';
+
+/**
+ * Two-level checker chain — `checkerEntities`/`pendingCounts`/`queueEntity`
+ * encode "this is the level-2 queue for X" as the plain string `"X::L2"`
+ * rather than a richer shape, so every existing `string[]` /
+ * `Record<string, number>` consumer keeps working unchanged. Callers that
+ * care about the level (fetching, labelling, titling) parse it back out here.
+ */
+export interface ParsedCheckerEntityKey {
+  /** The bare entity name, with any `::L2` suffix stripped. */
+  readonly entityName: string;
+  /** 1 for the standard queue, 2 for the level-2 (final signoff) queue. */
+  readonly level: 1 | 2;
+}
+
+export function parseCheckerEntityKey(key: string): ParsedCheckerEntityKey {
+  if (key.endsWith(CHECKER_L2_SUFFIX)) {
+    return { entityName: key.slice(0, -CHECKER_L2_SUFFIX.length), level: 2 };
+  }
+  return { entityName: key, level: 1 };
+}
+

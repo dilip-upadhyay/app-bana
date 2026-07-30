@@ -79,6 +79,11 @@ public class BatchUpdateEntitiesTool implements Tool {
                             "type": "boolean",
                             "description": "Required for operation='set_approval'. true enables maker-checker approval (SchemaManager injects the 8 approval columns), false disables it."
                           },
+                          "approvalLevels": {
+                            "type": "integer",
+                            "enum": [1, 2],
+                            "description": "Optional for operation='set_approval' when approvalRequired=true. 1 (default) is the standard single-checker workflow; 2 requires a DIFFERENT checker-2 to give final signoff after checker-1 approves."
+                          },
                           "fields": {
                             "type": "array",
                             "description": "Fields to add, remove, or update",
@@ -269,6 +274,19 @@ public class BatchUpdateEntitiesTool implements Tool {
         }
 
         entity.put("approvalRequired", approvalRequiredArg);
+
+        // approvalLevels only means anything alongside approvalRequired=true.
+        if (Boolean.TRUE.equals(approvalRequiredArg)) {
+            Object levelsArg = update.get("approvalLevels");
+            int levels = (levelsArg instanceof Number n) ? n.intValue() : 1;
+            if (levels == 2) {
+                entity.put("approvalLevels", 2);
+            } else {
+                entity.remove("approvalLevels");
+            }
+        } else {
+            entity.remove("approvalLevels");
+        }
         return saveEntity(entity, token);
     }
 

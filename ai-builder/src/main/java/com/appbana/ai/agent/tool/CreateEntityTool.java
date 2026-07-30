@@ -90,6 +90,11 @@ public class CreateEntityTool implements Tool {
               "type": "boolean",
               "description": "Phase C4 — set true to put this entity behind a two-person (maker-checker) approval workflow. Rows are then created as DRAFT, must be submitted for approval, and are invisible to normal reads until a DIFFERENT user approves them. Use for regulated records: customer onboarding, KYC, loan/credit applications, expense claims, purchase orders, policy issuance, contracts, employee onboarding, payments. Do NOT set it for reference/lookup tables or low-risk data (blog posts, todos, product catalogues). Only set it after the user has agreed to the approval flow in the Phase 1 specification."
             },
+            "approvalLevels": {
+              "type": "integer",
+              "enum": [1, 2],
+              "description": "Only meaningful when approvalRequired is true. 1 (default) is the standard single-checker workflow. Set to 2 for a two-level checker chain (checker-1 approves first, then a DIFFERENT checker-2 gives final signoff) — use for higher-stakes records such as large payments, policy issuance, or contract signoff where a single reviewer isn't enough. A checker-2 reject sends the record back to checker-1 for re-review rather than rejecting it outright."
+            },
             "appId": {
               "type": "string",
               "description": "Target App ID. If not provided, uses current context."
@@ -284,6 +289,15 @@ public class CreateEntityTool implements Tool {
     // non-approval entities keep exactly the payload shape they had before.
     if (Boolean.TRUE.equals(arguments.get("approvalRequired"))) {
       metadata.put("approvalRequired", true);
+
+      // approvalLevels only means anything alongside approvalRequired=true, so it is
+      // nested inside this branch rather than forwarded unconditionally. Only 2 is worth
+      // sending explicitly — 1 is the backend's own default (see EntitySchema.getEffectiveApprovalLevels()).
+      Object levelsArg = arguments.get("approvalLevels");
+      int levels = (levelsArg instanceof Number n) ? n.intValue() : 1;
+      if (levels == 2) {
+        metadata.put("approvalLevels", 2);
+      }
     }
 
     return metadata;

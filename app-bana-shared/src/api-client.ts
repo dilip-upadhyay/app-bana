@@ -515,9 +515,10 @@ function unwrapList<T>(payload: unknown, key: string): T[] {
  */
 export async function fetchPendingApprovals(
   target: Omit<ApprovalTarget, 'rowId'>,
-  token: string
+  token: string,
+  level: 1 | 2 = 1
 ): Promise<Array<Record<string, unknown>>> {
-  return (await fetchPendingApprovalsPage(target, token, 0)).records;
+  return (await fetchPendingApprovalsPage(target, token, 0, level)).records;
 }
 
 /** One page of the pending-approval queue, as returned by `fetchPendingApprovalsPage`. */
@@ -542,9 +543,11 @@ export interface PendingApprovalsPage {
 export async function fetchPendingApprovalsPage(
   target: Omit<ApprovalTarget, 'rowId'>,
   token: string,
-  offset = 0
+  offset = 0,
+  level: 1 | 2 = 1
 ): Promise<PendingApprovalsPage> {
-  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending?offset=${encodeURIComponent(String(offset))}`;
+  const levelParam = level === 2 ? '&level=2' : '';
+  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending?offset=${encodeURIComponent(String(offset))}${levelParam}`;
   const res = await authedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) await throwApprovalError(res, 'Fetch pending approvals failed');
   const body = await res.json();
@@ -568,9 +571,11 @@ export async function fetchPendingApprovalsPage(
  */
 export async function fetchPendingApprovalCount(
   target: Omit<ApprovalTarget, 'rowId'>,
-  token: string
+  token: string,
+  level: 1 | 2 = 1
 ): Promise<number> {
-  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending?countOnly=true`;
+  const levelParam = level === 2 ? '&level=2' : '';
+  const url = `${approvalBase({ ...target, rowId: '' })}/approvals/pending?countOnly=true${levelParam}`;
   const res = await authedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (res.status === 403) return 0;
   if (!res.ok) await throwApprovalError(res, 'Fetch pending count failed');
@@ -596,6 +601,10 @@ export interface EntityRoleGrant {
   readonly roles: string[];
   readonly isMaker: boolean;
   readonly isChecker: boolean;
+  /** Two-level checker chain — distinct from `isChecker`; never implied by a 'both' grant. */
+  readonly isCheckerL2?: boolean;
+  /** 1 (default, single checker) or 2 (checker-1 then checker-2). */
+  readonly approvalLevels?: number;
 }
 
 /**

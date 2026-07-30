@@ -142,6 +142,11 @@ public class ApprovalRoutes {
             }
 
             try {
+                // Two-level checker chain — ?level=2 asks for the level-2 (final signoff) queue
+                // instead of the default level-1 one. Anything other than "2" is treated as 1,
+                // preserving today's behaviour for every entity that doesn't opt into two levels.
+                int level = "2".equals(req.query("level")) ? 2 : 1;
+
                 // C3.7: the nav badge polls, so it asks for a count only rather than
                 // dragging every pending row across the wire on every tick.
                 //
@@ -150,11 +155,12 @@ public class ApprovalRoutes {
                 // with the normal queue semantics saw an empty queue and a badge that
                 // disagreed with it. An absent key forces the caller to notice.
                 if (Boolean.parseBoolean(req.query("countOnly"))) {
-                    int count = ApprovalService.getPendingCount(tenantId, appId, entityName, callerUserId);
+                    int count = ApprovalService.getPendingCount(tenantId, appId, entityName, callerUserId, level);
                     res.json(200, Map.of(
                             "tenantId", tenantId,
                             "appId", appId,
                             "entityName", entityName,
+                            "level", level,
                             "count", count,
                             "countOnly", true
                     ));
@@ -172,11 +178,12 @@ public class ApprovalRoutes {
                 }
 
                 List<Map<String, Object>> pending =
-                        ApprovalService.getPendingQueue(tenantId, appId, entityName, callerUserId, offset);
+                        ApprovalService.getPendingQueue(tenantId, appId, entityName, callerUserId, offset, level);
                 res.json(200, Map.of(
                         "tenantId", tenantId,
                         "appId", appId,
                         "entityName", entityName,
+                        "level", level,
                         "count", pending.size(),
                         "offset", offset,
                         "pageSize", ApprovalService.QUEUE_PAGE_SIZE,

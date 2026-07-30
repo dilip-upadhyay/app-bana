@@ -141,7 +141,10 @@ public class UserRoutes {
             byEntity.put(entityName, Map.of(
                     "roles", names,
                     "isMaker", roles.contains(UserRoleService.Role.MAKER),
-                    "isChecker", roles.contains(UserRoleService.Role.CHECKER)
+                    "isChecker", roles.contains(UserRoleService.Role.CHECKER),
+                    // Two-level checker chain — deliberately NOT implied by BOTH; see UserRoleService.Role.
+                    "isCheckerL2", roles.contains(UserRoleService.Role.CHECKER_L2),
+                    "approvalLevels", schema.getEffectiveApprovalLevels()
             ));
         }
         return byEntity;

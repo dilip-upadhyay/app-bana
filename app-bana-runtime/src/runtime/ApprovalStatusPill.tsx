@@ -22,7 +22,7 @@
 import * as React from 'react';
 import type { StatusTone } from './cell-formatters';
 
-export type ApprovalState = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
+export type ApprovalState = 'DRAFT' | 'PENDING' | 'PENDING_L2' | 'APPROVED' | 'REJECTED';
 
 interface ApprovalPresentation {
   readonly label: string;
@@ -40,6 +40,11 @@ const PRESENTATION: Record<ApprovalState, ApprovalPresentation> = {
     label: 'Pending approval',
     tone: 'warning',
     title: 'Submitted and awaiting a checker',
+  },
+  PENDING_L2: {
+    label: 'Pending final approval',
+    tone: 'warning',
+    title: 'Approved at level 1 — awaiting final signoff from a level-2 checker',
   },
   APPROVED: {
     label: 'Approved',
