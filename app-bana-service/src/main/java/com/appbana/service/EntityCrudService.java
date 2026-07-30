@@ -984,7 +984,18 @@ public class EntityCrudService {
             for (Map<String, Object> row : batch) {
                 int idx = 1;
                 for (EntitySchema.Field f : insertable) {
-                    Object raw = row.get(f.getName());
+                    String fieldName = f.getName();
+                    Object raw = row.get(fieldName);
+                    // Audit field auto-injection — mirrors insertRecordLegacy. Without this,
+                    // rows written through the batch insert path (e.g. AI-generated mock data)
+                    // silently persisted NULL created_at/updated_at while the single-record
+                    // insert path always populated them, a discrepancy invisible until a caller
+                    // actually displayed those columns.
+                    if (raw == null || (raw instanceof String s && s.isBlank())) {
+                        if ("created_at".equalsIgnoreCase(fieldName) || "updated_at".equalsIgnoreCase(fieldName)) {
+                            raw = new Timestamp(System.currentTimeMillis());
+                        }
+                    }
                     Object val = coerceAndValidate(f, raw);
                     ps.setObject(idx++, val);
                 }
