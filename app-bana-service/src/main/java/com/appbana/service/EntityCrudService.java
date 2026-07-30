@@ -1224,7 +1224,14 @@ public class EntityCrudService {
                     String rs = raw.toString();
                     if (rs.isBlank()) yield null;
                     try {
-                        yield Instant.parse(rs);
+                        // Must be Timestamp.from(...), not the bare Instant — the JDBC
+                        // driver's setObject() can't infer a SQL type for java.time.Instant
+                        // and 500s with "Can't infer the SQL type to use for an instance of
+                        // java.time.Instant" on every save of an untouched ISO-8601 TIMESTAMP
+                        // field (e.g. re-saving a record whose upload_date/created_at came
+                        // back from a prior GET in offset form). See parseFilterValue()'s
+                        // TIMESTAMP case just below in this file for the same conversion.
+                        yield Timestamp.from(Instant.parse(rs));
                     } catch (Exception ex) {
                         try {
                             // Try yyyy/MM/dd or yyyy-MM-dd
@@ -1232,7 +1239,15 @@ public class EntityCrudService {
                             if (clean.length() == 10) {
                                 yield java.sql.Date.valueOf(clean);
                             }
-                            yield Timestamp.valueOf(clean.replace("T", " "));
+                            String withSpace = clean.replace("T", " ");
+                            // Native HTML5 <input type="datetime-local"> always submits
+                            // "yyyy-MM-ddTHH:mm" — no seconds, no offset. Timestamp.valueOf
+                            // requires seconds, so pad them in rather than 500ing every edit
+                            // of a datetime field made through the runtime's edit forms.
+                            if (withSpace.matches("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$")) {
+                                withSpace = withSpace + ":00";
+                            }
+                            yield Timestamp.valueOf(withSpace);
                         } catch (Exception ex2) {
                             try {
                                 long millis = Long.parseLong(rs);
