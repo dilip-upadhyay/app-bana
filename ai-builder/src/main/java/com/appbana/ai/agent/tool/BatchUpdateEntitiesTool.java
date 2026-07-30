@@ -45,7 +45,8 @@ public class BatchUpdateEntitiesTool implements Tool {
     @Override
     public String getDescription() {
         return "Updates multiple entities in a single batch operation. " +
-                "Use this when you need to modify 2+ entities at once (e.g., adding fields to multiple tables). " +
+                "Use this when you need to modify 2+ entities at once (e.g., adding fields to multiple tables, " +
+                "or turning on/off maker-checker approval workflow via set_approval). " +
                 "MUCH more efficient than calling update_entity multiple times.";
     }
 
@@ -71,8 +72,12 @@ public class BatchUpdateEntitiesTool implements Tool {
                           },
                           "operation": {
                             "type": "string",
-                            "enum": ["add_fields", "remove_fields", "update_fields", "rename_entity"],
-                            "description": "Type of update operation"
+                            "enum": ["add_fields", "remove_fields", "update_fields", "rename_entity", "set_approval"],
+                            "description": "Type of update operation. Use 'set_approval' to turn the maker-checker approval workflow on or off for an EXISTING entity (pass 'approvalRequired': true/false); this is the only supported way to change approval status after an entity has already been created — add_fields/update_fields do not touch it."
+                          },
+                          "approvalRequired": {
+                            "type": "boolean",
+                            "description": "Required for operation='set_approval'. true enables maker-checker approval (SchemaManager injects the 8 approval columns), false disables it."
                           },
                           "fields": {
                             "type": "array",
@@ -232,10 +237,39 @@ public class BatchUpdateEntitiesTool implements Tool {
                 return updateFields(tenantId, appId, entityName, update, token);
             case "rename_entity":
                 return renameEntity(tenantId, appId, entityName, update, token);
+            case "set_approval":
+                return setApproval(tenantId, appId, entityName, update, token);
             default:
                 log.warn("[BatchUpdateEntities] Unknown operation: {}", operation);
                 return false;
         }
+    }
+
+    /**
+     * Enable or disable maker-checker approval on an existing entity.
+     *
+     * <p>This is the only supported way to flip {@code approvalRequired} after an entity has
+     * already been created via create_entity/scaffold_app — update_fields intentionally only
+     * touches the {@code fields} array, never entity-level flags. Per Section 7 of the repo's
+     * copilot instructions, setting the flag on the saved schema is the whole contract:
+     * SchemaManager materialises (or leaves in place) the eight physical approval columns on
+     * the next save, so we don't touch fields here at all.
+     */
+    private boolean setApproval(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
+        Object approvalRequiredArg = update.get("approvalRequired");
+        if (!(approvalRequiredArg instanceof Boolean)) {
+            log.warn("[BatchUpdateEntities] set_approval requires a boolean 'approvalRequired' argument");
+            return false;
+        }
+
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
+        if (entity == null) {
+            return false;
+        }
+
+        entity.put("approvalRequired", approvalRequiredArg);
+        return saveEntity(entity, token);
     }
 
     /**
