@@ -175,11 +175,15 @@ These types land in `app-bana-shared` **before** any sub-phase begins so runtime
 
 ### Exit criteria — B1
 
-- [ ] `scaffold_app` for "customer onboarding" produces at least one wizard-layout page.
-- [ ] User can move Next / Prev without losing entered data.
-- [ ] Refreshing the browser mid-wizard restores state.
-- [ ] Submitting a wizard writes exactly one row to the parent entity (not one row per step).
-- [ ] Playwright: full wizard flow (4 steps, submit, verify row) passes.
+> Implementation shipped in `8efc539`. Every box stays unticked because **no automated test asserts
+> any of them**: [`WizardShell.tsx`](../../app-bana-runtime/src/runtime/WizardShell.tsx) has no test
+> file, and the `e2e/tests/wizard-flow.spec.ts` named in the testing strategy was never written.
+
+- [ ] `scaffold_app` for "customer onboarding" produces at least one wizard-layout page. (Agent output unasserted.)
+- [ ] User can move Next / Prev without losing entered data. (Implemented; unverified.)
+- [ ] Refreshing the browser mid-wizard restores state. (Implemented; unverified.)
+- [ ] Submitting a wizard writes exactly one row to the parent entity (not one row per step). (Implemented; unverified.)
+- [ ] Playwright: full wizard flow (4 steps, submit, verify row) passes. (Spec does not exist.)
 
 ---
 
@@ -204,10 +208,10 @@ These types land in `app-bana-shared` **before** any sub-phase begins so runtime
 
 ### Exit criteria — B2
 
-- [ ] `evaluateExpression` unit tests: 100% branch coverage on every operator.
-- [ ] Runtime shows/hides a field within 16ms of the triggering field changing (no flicker).
-- [ ] Zod validation ignores fields hidden by `showWhen: false`.
-- [ ] User can say "show Business Tax ID only when customer type is business" and the agent produces the correct schema.
+- [x] `evaluateExpression` unit tests: 100% branch coverage on every operator. ([`conditions.test.ts`](../../app-bana-runtime/src/runtime/conditions.test.ts) exercises all 11 operators — `equals`, `notEquals`, `in`, `notIn`, `gt`, `lt`, `gte`, `lte`, `contains`, `isEmpty`, `isNotEmpty` — each with a true and a false case. The literal percentage is unmeasured: `@vitest/coverage-v8` is not installed.)
+- [ ] Runtime shows/hides a field within 16ms of the triggering field changing (no flicker). (No timing assertion exists, and none is writable under the no-DOM-shim test setup.)
+- [x] Zod validation ignores fields hidden by `showWhen: false`. ([`ConditionalField.tsx`](../../app-bana-runtime/src/runtime/ConditionalField.tsx) removes the subtree from the DOM; the H5 visibility strip that then skips it is covered by [`useEntityFormValidation.test.ts`](../../app-bana-runtime/src/runtime/useEntityFormValidation.test.ts).)
+- [ ] User can say "show Business Tax ID only when customer type is business" and the agent produces the correct schema. (Agent output unasserted.)
 
 ---
 
@@ -242,11 +246,16 @@ These types land in `app-bana-shared` **before** any sub-phase begins so runtime
 
 ### Exit criteria — B3
 
-- [ ] Upload a 5 MB PDF via the runtime → row saves with `fileId` → detail view shows PDF filename with download link.
-- [ ] Upload an image → thumbnail appears in the list view.
-- [ ] Uploading a file over the size limit shows an inline error, no request fired.
-- [ ] Cross-tenant access to a file URL returns 403.
-- [ ] Agent produces a `file`-typed field when user says "customers upload their passport".
+> Implementation shipped in `dd84257`, but
+> [`FileRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/FileRoutes.java)
+> has **no `FileRoutesTest.java`** despite this plan's own testing strategy naming one — so the
+> cross-tenant isolation criterion below is currently an *untested security claim*.
+
+- [ ] Upload a 5 MB PDF via the runtime → row saves with `fileId` → detail view shows PDF filename with download link. (Implemented; unverified.)
+- [ ] Upload an image → thumbnail appears in the list view. (Implemented; unverified.)
+- [ ] Uploading a file over the size limit shows an inline error, no request fired. (Implemented; unverified.)
+- [ ] Cross-tenant access to a file URL returns 403. (**No test covers this.** Verify manually before relying on it.)
+- [ ] Agent produces a `file`-typed field when user says "customers upload their passport". (Agent output unasserted.)
 
 ---
 
@@ -287,10 +296,15 @@ If any of these primitives is not shipped when B4 starts, B4 is blocked, not deg
 
 ### Exit criteria — B4
 
-- [ ] Customer detail page has an "Addresses" tab containing an inline editable table of `Address` rows.
-- [ ] Adding a new Address from within the Customer detail page persists with the correct FK.
-- [ ] Deleting a Customer with existing Addresses shows a friendly "This customer has 3 addresses — delete them first" error, not a raw FK violation.
-- [ ] Agent produces the master-detail structure when user says "Customer has multiple addresses and multiple contact persons".
+> Implementation shipped in `60a64aa`.
+> [`ChildTable.test.tsx`](../../app-bana-runtime/src/runtime/ChildTable.test.tsx) covers only
+> `renderChildTablesFromPage` node discovery and `RecordContext` propagation — not the rendered tab,
+> the inline editor, or any write path.
+
+- [ ] Customer detail page has an "Addresses" tab containing an inline editable table of `Address` rows. (Only the `child_table` node discovery is tested; the tab and inline editor are not.)
+- [ ] Adding a new Address from within the Customer detail page persists with the correct FK. (Implemented; the write path has no test.)
+- [ ] Deleting a Customer with existing Addresses shows a friendly "This customer has 3 addresses — delete them first" error, not a raw FK violation. (Implemented; unverified.)
+- [ ] Agent produces the master-detail structure when user says "Customer has multiple addresses and multiple contact persons". (Agent output unasserted.)
 
 ---
 
@@ -323,11 +337,28 @@ If any of these primitives is not shipped when B4 starts, B4 is blocked, not deg
 
 ### Exit criteria — B5
 
-- [ ] User can filter the Customers list by `Status = Pending KYC` via a chip.
-- [ ] User can group Customers by `Business Type` and see counts per group.
-- [ ] User can save the current filter set as "My Pending Queue" and it appears as a chip.
-- [ ] Aggregate footer shows `Sum of Loan Amount = $2.4M` when the aggregate is configured.
-- [ ] Agent generates a list page with `Status: Pending` filter pre-applied when user says "checker queue page".
+> Implementation shipped in `4ce56d0`; [`FilterBar`](../../app-bana-runtime/src/runtime/FilterBar.tsx)
+> and [`SavedViewsBar`](../../app-bana-runtime/src/runtime/SavedViewsBar.tsx) were wired into
+> `StudioTableLive` by H3 (`e3a129a`). Neither has a test file, and no `e2e/tests/list-views.spec.ts`
+> exists.
+
+- [ ] User can filter the Customers list by `Status = Pending KYC` via a chip. (Shipped and wired; the only assertion anywhere is the *negative* case — that `FilterBar` renders nothing when the page declares no filters.)
+- [x] User can group Customers by `Business Type` and see counts per group. (Whole-dataset counts proven by [`EntityCrudGroupByTest.java`](../../app-bana-service/src/test/java/com/appbana/service/EntityCrudGroupByTest.java). Note the runtime *additionally* buckets only the current page client-side, so `groupCounts` from the API is the authoritative total — see §9 of [`copilot-instructions.md`](../../.github/copilot-instructions.md).)
+- [ ] User can save the current filter set as "My Pending Queue" and it appears as a chip. (System views are covered by [`ApprovalViews.test.tsx`](../../app-bana-runtime/src/runtime/ApprovalViews.test.tsx); *user-created* views are not, and [`SavedViewRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/SavedViewRoutes.java) has **no `SavedViewRoutesTest.java`** despite the testing strategy below naming one.)
+- [ ] Aggregate footer shows `Sum of Loan Amount = $2.4M` when the aggregate is configured. (**Not implemented — see the deviation note below.**)
+- [ ] Agent generates a list page with `Status: Pending` filter pre-applied when user says "checker queue page". ([`GeneratePageTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java) accepts and propagates `filters`; whether the agent *emits* them for that phrasing is unasserted.)
+
+> [!WARNING]
+> **Dead contract — the `aggregates` footer (B5.3).** `AggregateDef` is declared in
+> [`metadata.ts`](../../app-bana-shared/src/metadata.ts), and `GeneratePageTool` accepts an
+> `aggregates` parameter and propagates it into both `tableProps` and `page` — but **nothing under
+> `app-bana-runtime/src/` reads it** (a repo-wide search for `aggregates` there returns zero hits).
+> The agent can therefore emit a page whose stored metadata specifies a footer, the backend persists
+> it faithfully, and the runtime silently renders nothing, with no error anywhere.
+>
+> Either implement the footer or remove `aggregates` from the tool schema. A parameter that is
+> accepted, typed, and persisted but never consumed is exactly the failure shape that hid the
+> `approvalRequired` defect — see §7 of [`copilot-instructions.md`](../../.github/copilot-instructions.md).
 
 ---
 
