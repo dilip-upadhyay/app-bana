@@ -36,8 +36,18 @@ public class Main {
             if (serverType == null || serverType.isBlank()) serverType = "jdk";
             switch (serverType.toLowerCase()) {
                 case "tomcat":
-                    TomcatServer.start(port);
-                    System.out.println("AppBana (Tomcat) running on port " + port + ". Use /schema to POST schemas and /api/{entity} to access data.");
+                    // S0.4 / M1 (TENANT_ISOLATION_SECURITY_PLAN.md): Router.handle(HttpServletRequest,...)
+                    // — the overload TomcatServer wires up — calls route handlers directly with NO
+                    // middleware chain at all, so rate limiting AND session/auth validation would be
+                    // silently disabled for every request. TomcatServer has no test coverage and no
+                    // other caller in this codebase; until that overload runs the same middleware chain
+                    // as handle(HttpExchange) (the "jdk" path), refuse to start rather than serve
+                    // traffic with authentication effectively off.
+                    LOG.error("serverType=\"tomcat\" is disabled: Router's servlet-based handle() " +
+                            "bypasses the session/auth and rate-limit middleware entirely (see " +
+                            "TENANT_ISOLATION_SECURITY_PLAN.md finding M1 / task S0.4). Set serverType " +
+                            "to \"jdk\" (or remove it from config.json) to start the server.");
+                    System.exit(1);
                     break;
                 case "jdk":
                 default:
