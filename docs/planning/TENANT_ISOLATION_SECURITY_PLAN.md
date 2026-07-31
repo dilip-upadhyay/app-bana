@@ -1,6 +1,6 @@
 # Tenant & App Isolation Security Plan
 
-**Status:** 📝 DRAFT — 🔴 **Review round 1 complete (2026-07-31): S0 inserted, S1–S3 rescoped, do not start S0/S1 without reading the findings below.**
+**Status:** 📝 DRAFT — 🔴 **Review round 2 complete (2026-07-31): S0/S1/S2/S4 accepted as written; S3 needs one more task (Runtime principal migration, S3.7) before it can be estimated or started — see Review round 2 below.**
 **Owner:** AppBana core team
 **Position in master roadmap:** Cross-cutting security hardening track. Should land **before** any wider multi-tenant GA / enterprise rollout, and logically **before** relying on [Maker-Checker](./MAKER_CHECKER_PLAN.md) as a security control — maker-checker protects against a rogue insider *inside* a tenant/app; without the isolation fixed here, an outsider in a completely different tenant can reach the same rows directly, bypassing roles entirely.
 **Trigger:** A security audit (2026-07-31), triggered by the question *"is Tenant A fully isolated from Tenant B, and is each of Tenant A's apps isolated from its siblings?"*, found the answer is **no** on both axes at the authentication/authorization layer, despite the physical data model already being correctly tenant/app-scoped. Full verified evidence trail is recorded in repo agent-memory (`security-multi-tenant-isolation.md`) and condensed in [Current state](#current-state-verified-findings) below.
@@ -20,17 +20,18 @@
 3. [Non-goals](#non-goals)
 4. [Current state (verified findings)](#current-state-verified-findings)
 5. [Review round 1 — blockers and additional findings](#review-round-1--blockers-and-additional-findings)
-6. [Target model](#target-model)
-7. [Data model additions](#data-model-additions)
-8. [Sub-phase S0 — Unify identity resolution + route census](#sub-phase-s0--unify-identity-resolution--route-census)
-9. [Sub-phase S1 — Tenant boundary on app management](#sub-phase-s1--tenant-boundary-on-app-management)
-10. [Sub-phase S2 — Per-app membership model](#sub-phase-s2--per-app-membership-model)
-11. [Sub-phase S3 — Entity data API enforcement](#sub-phase-s3--entity-data-api-enforcement)
-12. [Sub-phase S4 — Credential hygiene](#sub-phase-s4--credential-hygiene)
-13. [Sub-phase S5 — Capstone tests + ai-builder trust chain](#sub-phase-s5--capstone-tests--ai-builder-trust-chain)
-14. [Cross-cutting concerns](#cross-cutting-concerns)
-15. [File-level change map](#file-level-change-map)
-16. [Open decisions still needed from product](#open-decisions-still-needed-from-product)
+6. [Review round 2 — blockers and additional findings](#review-round-2--blockers-and-additional-findings)
+7. [Target model](#target-model)
+8. [Data model additions](#data-model-additions)
+9. [Sub-phase S0 — Unify identity resolution + route census](#sub-phase-s0--unify-identity-resolution--route-census)
+10. [Sub-phase S1 — Tenant boundary on app management](#sub-phase-s1--tenant-boundary-on-app-management)
+11. [Sub-phase S2 — Per-app membership model](#sub-phase-s2--per-app-membership-model)
+12. [Sub-phase S3 — Entity data API enforcement](#sub-phase-s3--entity-data-api-enforcement)
+13. [Sub-phase S4 — Credential hygiene](#sub-phase-s4--credential-hygiene)
+14. [Sub-phase S5 — Capstone tests + ai-builder trust chain](#sub-phase-s5--capstone-tests--ai-builder-trust-chain)
+15. [Cross-cutting concerns](#cross-cutting-concerns)
+16. [File-level change map](#file-level-change-map)
+17. [Open decisions still needed from product](#open-decisions-still-needed-from-product)
 
 ---
 
@@ -47,16 +48,26 @@ extractor these guards would be built on is blind to the header every real clien
 route inventory this plan was scoped against was incomplete — both are fixed before S1, not during it.
 See [Review round 1](#review-round-1--blockers-and-additional-findings) for full detail.
 
+**Review round 2 (2026-07-31) accepted S0/S1/S2/S4 as written and added one blocking task to S3.**
+Tracing actual client call graphs (not just route shapes) found the shipped `app-bana-runtime` doesn't
+use the scoped-session login this plan's target model assumed — it authenticates via the platform login
+and loads its app metadata via a Studio management route. Without S3.7 (new), finishing S3 exactly as
+originally scoped would 403 every real deployed app. See
+[Review round 2](#review-round-2--blockers-and-additional-findings) for full detail.
+
 | # | Sub-phase | Deliverable | Est. |
 |---|---|---|---|
-| S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route as the authoritative scope for S1–S3 | ~5 hr |
+| S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route (now including a "known callers" column) as the authoritative scope for S1–S3 | ~5 hr |
 | S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data | ~6.5 hr |
 | S2 | Per-app membership model | `appbana_app_members` table, `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill | ~8 hr |
-| S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session | ~9 hr |
+| S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session, **and the shipped Runtime is actually migrated onto that scoped session (S3.7)** | ~11 hr |
 | S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~4.5 hr |
 | S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~3 hr |
 
-**Total scope:** ~36 hours (was ~27 hr before review round 1 — the increase is S0 plus the widened S1/S3 scope, not new goals). S0 → S1 → S2 → S3 is the strict serial path. S4 is independent and parallel-safe. S5 needs S1–S3 finished; its ai-builder half can start once S2 exists.
+**Total scope:** ~38 hours (was ~27 hr pre-review, ~36 hr after round 1; round 2 adds ~2 hr, almost
+entirely S3.7). S0 → S1 → S2 → S3 is the strict serial path. S4 is independent and parallel-safe. S5
+needs S1–S3 finished; its ai-builder half can start once S2 exists. Within S3 itself, S3.7 has its own
+internal dependency: it needs `scopedAppId` to actually be populated (S3.1/S3.3) before it can be built.
 
 ---
 
@@ -86,6 +97,11 @@ It is not true at the layer that actually decides who may call the API that reac
    class of gap (`GenericEntityRoutes`'s "B8/B9 FIX" comments) are, as a result, already rejecting real
    traffic with 401 today. This isn't hypothetical future risk; it's a live functional bug this plan's
    own investigation happened to uncover.
+6. **The deployed Runtime authenticates and loads its app through routes this plan almost guarded
+   against the wrong client.** Review round 2 traced actual caller graphs (not just route shapes) and
+   found `app-bana-runtime` never calls the scoped runtime login this plan's own target model assumed —
+   it uses the platform login and a Studio management route instead. Without an explicit migration task
+   (S3.7), finishing S3 exactly as originally written would 403 every real deployed app the day it ships.
 
 ---
 
@@ -217,6 +233,78 @@ re-auditing route-by-route a second time.
 
 ---
 
+## Review round 2 — blockers and additional findings
+
+**Reviewer:** Tech Lead / Architect review, 2026-07-31, second pass. Method: read the fully revised
+plan, diffed every task table against the routes it now names, and — the axis round 1's census
+didn't have — **traced which client actually calls each route**, across `app-bana-studio`,
+`app-bana-runtime`, `app-bana-shared`, `e2e`, and `ai-builder`.
+
+Round 1's dispositions held up under this second pass: `/api/templates` was confirmed to have zero
+callers anywhere in the repo (H4's pushback stands), and making `isAppOwnerOrSystem` membership-aware
+rather than adding a parallel guard was confirmed to be the better design (H6). S0, S1, S2, and S4 are
+accepted as written. I re-verified the new findings below directly against source before accepting them.
+
+### 🔴 Blocker (new)
+
+**R2-1 — S3's accepted principals exclude the principal the shipped Runtime actually presents.**
+Confirmed by direct read of `app-bana-runtime/src/runtime/AppRuntimeShell.tsx` and
+`app-bana-shared/src/api-client.ts`:
+
+| What the plan's target model assumes | What the shipped code does |
+|---|---|
+| Runtime end-users log in via `GenericAppAuthController` (`POST /api/runtime/auth/login`) | That route has **zero callers**. `AppRuntimeShell.handleLogin` calls the shared `login()`, which calls `POST /api/auth/login` — the **platform** login, producing an ordinary tenant-wide session |
+| A runtime session is "valid only for that app's entity routes, never for `AppRoutes`/Studio management endpoints" (Target model) | The Runtime's *only* way to load its own app is `AppRuntimeShell.loadApp` → `getApp()` → `GET /appbana-studio/{tenantId}/apps/{appId}` — an `AppRoutes`/Studio management endpoint |
+
+Two breakages follow once S1–S3 are enforced as written:
+1. **Deployed apps become unrenderable.** Whatever session the Runtime ends up holding, it must call
+   an `AppRoutes` route to fetch its page metadata — and the plan's own rule forbids a scoped session
+   from ever touching `AppRoutes`.
+2. **S3.2's allow-rule 403s every real end-user.** Rule (i) requires `appbana_app_members` membership
+   (end-users aren't builders and will never be members); rule (ii) requires a `scopedAppId` session
+   that nothing today mints (because login never reaches `GenericAppAuthController`). A real end-user
+   matches neither, and `publicRead` (S3.5) only rescues `GET`s on apps explicitly marked public —
+   every runtime write stays broken regardless.
+
+This is B1's failure mode one level up: **a guard specified against an assumed client instead of the
+shipped one.** S3 was about to harden an endpoint with no callers while leaving the path the Runtime
+actually uses unmodelled. Fixed by a new task, S3.7 (see below) — S3 is not fully scoped/estimated
+without it.
+
+### 🟠 High (new)
+
+| # | Finding | Verified | Fixed in |
+|---|---|---|---|
+| R2-2 | S1.9 (round 1) said to keep one `.../full` registration "explicitly marked PUBLIC for runtime." Both `env/{env}/full` registrations (and the sibling `.../full`) have **no callers anywhere in the repo** — R2-1 established the Runtime uses the Studio route instead. Inheriting a public exemption from a stale comment isn't the same as the route being needed. | ✅ confirmed no caller in `app-bana-studio`, `app-bana-runtime`, `app-bana-shared`, `e2e`, or `ai-builder`; confirmed both registrations exist in `AppRoutes.java` | S1.9 (revised — guard or delete, don't just dedupe) |
+| R2-3 | The tests that look like coverage for the public-runtime case are tautological. `SessionMiddlewareTest`'s `testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert on `/api/apps/hr-management-app/full` and `/api/apps/hr-management-app/env/DEV/full` — path shapes with **no `{tenantId}` segment**, which no registered route actually has (the real routes are `/api/{tenantId}/apps/{id}/full` and `/api/{tenantId}/apps/{id}/env/{env}/full`). They stay green no matter what S1.9 does to the real routes. Separately, `testTemplatesPathExcluded` positively asserts `/api/templates` needs no session at all — S1.6 makes writes require auth, so this test must be split, not left to silently regress to "green because unchanged." | ✅ confirmed by direct read of both the test file and the real route registrations | S1.12 (new) |
+
+### 🟡 Medium (new)
+
+| # | Finding | Fixed in |
+|---|---|---|
+| R2-4 | `extractServiceToken` already treats `Authorization: Bearer` as a possible **admin/service** token, and its own javadoc's safety claim for `hasAdmin()` rests specifically on "never reads X-Session-Token or cookies" — not on Bearer being exclusively one thing. S0.1 gives that same header a second meaning (a session id). The regression test (S0.1b) must prove the two interpretations never collide, and S0.1 must preserve the existing priority order (service-token check before any new Bearer-as-session-id fallback), not replace it. | S0.1, S0.1b (both revised) |
+| R2-5 | S0.3's "assert route count from `Router` reflection matches census row count" passes when a commit deletes one route and adds another — the exact shape of an ordinary refactor. Must assert on the **set** of route signatures (method + path), not a count. | S0.3 (revised) |
+
+### 🟢 Nit
+
+**R2-6** — `api-client.ts`'s `login()`/`register()` default `tenantId` to `'default'` when the backend
+response omits it. Today this is harmless-looking; post-S1 it would silently turn into a confusing 403
+against the user's real tenant instead of a clear error at login time. One line, folded into S1 while
+S1 is being tested anyway.
+
+### Meta-observation — adopted
+
+Round 1's census classified routes by *who could call them*; it had no column for *who actually does*.
+That single gap produced R2-1, R2-2, and R2-3: `/full` was flagged as merely unguarded without noticing
+it's uncalled, and S3's two-principal model was validated against the plan's own description of the
+Runtime instead of the Runtime's source. **Adopted directly: S0.2's census gains a "known callers"
+column** (which of `app-bana-studio` / `app-bana-runtime` / `app-bana-shared` / `ai-builder` / `e2e`
+actually invoke each route, or "none found"). A route with no known caller is a guard-or-delete
+decision, not a default-to-public one — and this column is what would have caught R2-1 before S3 was
+estimated at all, not after.
+
+---
+
 ## Target model
 
 Two distinct callers hit the same entity-data API today, and the fix must keep telling them apart:
@@ -248,6 +336,12 @@ never interchangeable. A Runtime session for App 1 must be rejected by App 2's e
 though both apps belong to the same tenant — this is what actually delivers "the tenant's apps are
 independent of each other" for end-users, not just for the Studio builder.
 
+> **Correction (review round 2):** the "Runtime end-user session" path above (issued by
+> `GenericAppAuthController`, scoped via `scopedAppId`) is the **target** this plan builds — it is not
+> what the shipped `app-bana-runtime` uses today. The real client authenticates via the platform login
+> and loads its app metadata via a Studio management route, neither of which this diagram accounts for.
+> See [Review round 2, R2-1](#review-round-2--blockers-and-additional-findings) and the new S3.7.
+
 ---
 
 ## Data model additions
@@ -277,7 +371,9 @@ this same column — not built in v1.
   tenant-boundary check.
 - Add optional `scopedAppId` (null for a normal Studio session; set to a specific `appId` for a Runtime
   end-user session created by `GenericAppAuthController`). A non-null `scopedAppId` means this session
-  is valid **only** for that app's entity routes, never for `AppRoutes`/Studio management endpoints.
+  is valid **only** for that app's entity routes, plus the one `AppRoutes` exception S3.7 carves out for
+  loading its own app's metadata — never any other `AppRoutes`/Studio management endpoint. Nothing mints
+  this session type today (review round 2, R2-1); S3.7 is what makes the Runtime actually request one.
 
 ### Backfill requirement
 
@@ -299,19 +395,23 @@ name. Review round 1 found both were false.
 | # | Task | Where | Est. |
 |---|---|---|---|
 | S0.0 | **Prerequisite.** Fix the Maven toolchain so `mvn test` compiles under this repo's configured `release` version — currently fails with "release version 25 not supported." No exit-criteria test in S0–S5 can run until this is fixed. | build config (`pom.xml` / toolchain) | 30–90 min (unscoped until root-caused) |
-| S0.1 | `AuthService.resolveIdentity(req, cfg)` — a single method accepting `X-Session-Token`, `Authorization: Bearer`, and the `session_id` cookie (same three forms `SessionMiddleware.extractSessionToken` already supports), returning a resolved principal. Replace `extractUserId`'s broken X-Session-Token-only Priority 3 fallback with a call to this method; `SessionMiddleware.create()` also delegates to it so there is exactly one implementation of "how do we read the caller's credential" in the codebase. | new method in `AuthService.java` (or a small extracted `IdentityResolver`), `SessionMiddleware.java` | 90 min |
-| S0.1b | Regression test: all three token forms, sent against the same valid session, yield the same principal on a route excluded from `SessionMiddleware` (e.g. `/api/{tenantId}/apps/{appId}/{entity}`). This is the test that would have caught B1. | new test | 30 min |
-| S0.2 | Machine-generated route census: enumerate every `router.get/post/put/delete(...)` registration across every `*Routes.java` file. Columns: path, middleware-excluded?, identity gate present?, tenant/app check present?, tenant/app source (`path` \| `query` \| `body` \| `header` \| `none`). Predicate is **any client-controlled tenant/app identifier**, not just path params (fixes H5). Attach the generated table to this plan. | new `RouteCensus` (small script or JUnit-generated report), appended to this doc | 120 min |
-| S0.3 | A test that fails when a route is registered without a corresponding census entry (e.g. asserts route count from `Router` reflection matches census row count). This is what stops the "found gaps sit just outside the plan's own boundary" pattern from recurring on a route added next month. | new test | 60 min |
+| S0.1 | `AuthService.resolveIdentity(req, cfg)` — a single method accepting `X-Session-Token`, `Authorization: Bearer`, and the `session_id` cookie (same three forms `SessionMiddleware.extractSessionToken` already supports), returning a resolved principal. Replace `extractUserId`'s broken X-Session-Token-only Priority 3 fallback with a call to this method; `SessionMiddleware.create()` also delegates to it so there is exactly one implementation of "how do we read the caller's credential" in the codebase. **Must preserve the existing priority order** (review round 2, R2-4): `extractServiceToken` already treats a Bearer value as a possible admin/service token, so a Bearer-carried session id is only attempted *after* ruling out the admin/service-token interpretation, never instead of it. | new method in `AuthService.java` (or a small extracted `IdentityResolver`), `SessionMiddleware.java` | 100 min |
+| S0.1b | Regression test: all three token forms, sent against the same valid session, yield the same principal on a route excluded from `SessionMiddleware` (e.g. `/api/{tenantId}/apps/{appId}/{entity}`). This is the test that would have caught B1. **Add three more cases (review round 2, R2-4):** an admin/service token sent via Bearer with `X-User-Id` still resolves to that `X-User-Id` through priority 1; a session id sent via Bearer (not equal to the admin token) resolves through the new fallback to that session's user; and neither value is ever misread as the other. | new test | 45 min |
+| S0.2 | Machine-generated route census: enumerate every `router.get/post/put/delete(...)` registration across every `*Routes.java` file. Columns: path, middleware-excluded?, identity gate present?, tenant/app check present?, tenant/app source (`path` \| `query` \| `body` \| `header` \| `none`), **known callers** (which of `app-bana-studio` / `app-bana-runtime` / `app-bana-shared` / `ai-builder` / `e2e` actually invoke it, or "none found" — review round 2 meta-observation). Predicate is **any client-controlled tenant/app identifier**, not just path params (fixes H5). A route with no known caller is flagged for a guard-or-delete decision, not left to default to whatever its current state happens to be. Attach the generated table to this plan. | new `RouteCensus` (small script or JUnit-generated report), appended to this doc | 150 min |
+| S0.3 | A test that fails when a route is registered without a corresponding census entry. **Assert on the set of route signatures (HTTP method + path) from `Router` reflection matching the census exactly, not a row/route count** (review round 2, R2-5: a count is unchanged when a commit deletes one route and adds another — an ordinary refactor would pass silently). This is what stops the "found gaps sit just outside the plan's own boundary" pattern from recurring on a route added, renamed, or removed next month. | new test | 75 min |
 | S0.4 | Fix or fence `Router.handle(HttpServletRequest, HttpServletResponse)` (M1): either route it through the same middleware chain `handle(HttpExchange)` uses, or make `serverType=jdk` an explicit, enforced deployment constraint (fail fast at startup if `serverType` is set to anything else while this gap remains). Confirmed by direct read: this overload calls `r.handler.accept(...)` directly with no reference to any middleware. | `Router.java`, `Main.java` | 45 min |
 
 ### Exit criteria — S0
 
 - [ ] `mvn test` compiles and runs on this repo's toolchain.
 - [ ] All three credential forms resolve to the same principal on at least one middleware-excluded route.
-- [ ] The route census exists, is attached to this plan, and lists every registered route with a
-      non-empty tenant/app-source classification.
-- [ ] Registering a new route without updating the census fails CI.
+- [ ] A Bearer-carried admin/service token still resolves via priority 1, never misread as a session
+      lookup; a Bearer-carried session id never satisfies `hasAdmin()` (review round 2, R2-4).
+- [ ] The route census exists, is attached to this plan, lists every registered route with a non-empty
+      tenant/app-source classification, and has its **known-callers** column populated for every row —
+      not left blank (review round 2 meta-observation).
+- [ ] Registering, renaming, or removing a route without updating the census fails CI (set comparison,
+      not a count — review round 2, R2-5).
 - [ ] `serverType` other than `jdk` either goes through the same middleware or refuses to start.
 
 **Everything in S1–S3 below is scoped by the S0.2 census, not by the finding tables above** — the
@@ -336,9 +436,11 @@ guarding in these two files alone.
 | S1.6 | Gate `POST/PUT/DELETE /api/templates` (H4) behind an authenticated (admin, for now) identity — reads stay public pending the open decision on whether templates get a tenant dimension. | `AppRoutes.java` | 30 min |
 | S1.7 | `POST /api/files/upload` (H2): require a resolved identity and derive `tenantId`/`appId` from it (or from the authenticated user's own app membership once S2 lands) instead of trusting the request body. Add an upload-path test to `FileRoutesTenantIsolationTest`, which today only covers downloads. | `FileRoutes.java` | 45 min |
 | S1.8 | `SavedViewRoutes` (H3): require a resolved identity on all three routes; add `tenant_id`/`app_id`/`owner_user_id` to `DELETE_SQL`'s `WHERE` clause (today: `view_id` alone). | `SavedViewRoutes.java` | 45 min |
-| S1.9 | Drive-by: remove the duplicate `GET /api/{tenantId}/apps/{id}/env/{env}/full` registration (keep the one explicitly marked PUBLIC for runtime); fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite` (M2) to use `extractServiceToken()` instead, per `AuthService`'s own documented contract. | `AppRoutes.java`, `SchemaRoutes.java` | 45 min |
+| S1.9 | Dedupe the two byte-identical `GET /api/{tenantId}/apps/{id}/env/{env}/full` registrations into one, **and guard both it and its `.../full` sibling with the same S1.3 tenant+membership check — not a public carve-out** (review round 2, R2-2: confirmed zero callers anywhere in `app-bana-studio`, `app-bana-runtime`, `app-bana-shared`, `e2e`, or `ai-builder`; a stale "PUBLIC RUNTIME API" comment is not a reason to keep an unauthenticated route). If a deliberately public app-metadata endpoint is wanted later, add it explicitly under S3.5's `publicRead` flag rather than reviving this one. Also fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite` (M2) to use `extractServiceToken()` instead, per `AuthService`'s own documented contract. | `AppRoutes.java`, `SchemaRoutes.java` | 60 min |
 | S1.10 | Startup warning: log a loud, repeated `WARN` while `AuthService.authEnabled(cfg)==false` so this is never silently shipped to production | `ApiServer.java` startup path | 30 min |
 | S1.11 | `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest` — tenant B's session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas | new tests | 90 min |
+| S1.12 | **(New, review round 2, R2-3)** Fix `SessionMiddlewareTest`'s tautological assertions: `testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes missing the `{tenantId}` segment every real route has, so they stay green regardless of what S1.9 does to the actual routes — rewrite against the real shapes and flip the expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into a read-still-excluded case and a write-requires-auth case, since S1.6 makes writes require auth but this test currently asserts the whole path needs no session. | `SessionMiddlewareTest.java` | 30 min |
+| S1.13 | **(New, review round 2, R2-6)** `login()`/`register()` in `api-client.ts` default `tenantId` to `'default'` when the backend response omits it — post-S1 this silently becomes a confusing 403 against the user's real tenant instead of a clear login-time error. Throw instead of defaulting when the response is missing it. | `app-bana-shared/src/api-client.ts` | 15 min |
 
 ### Exit criteria — S1
 
@@ -349,6 +451,10 @@ guarding in these two files alone.
 - [ ] `POST/PUT/DELETE /api/templates` require an authenticated admin identity.
 - [ ] `POST /api/files/upload` and all of `SavedViewRoutes` require a resolved identity; the saved-view
       delete path is scoped by tenant+app+owner, not `view_id` alone.
+- [ ] Both `GET .../full` routes require the same tenant+membership check as the rest of `AppRoutes` —
+      no more unauthenticated 200, and only one registration remains (review round 2, R2-2).
+- [ ] `SessionMiddlewareTest`'s public-runtime and templates assertions match the real route shapes and
+      post-S1 behavior, not a shape no route has (review round 2, R2-3).
 - [ ] Tenant A's own users are unaffected on every route above.
 - [ ] Server logs a visible warning on every boot where global auth is disabled.
 
@@ -410,6 +516,16 @@ env-scoped `/api/{t}/apps/{a}/env/{env}/{entity}(/{id})` family (6 routes). Two 
 the latter family are also middleware-excluded — anonymous, cross-tenant reads today. S3.4 below is
 re-specified against the S0.2 census, enumerated, not against a grep for `authEnabled`.
 
+**Scope correction (review round 2, R2-1):** S3's two accepted principals — a Studio member, or a
+`scopedAppId` runtime session — were designed against the plan's own target model, not against what
+`app-bana-runtime` actually sends. Traced end to end: the shipped Runtime logs in via the platform
+`POST /api/auth/login` (never `GenericAppAuthController`) and loads its app via `GET
+/appbana-studio/{t}/apps/{id}` (an `AppRoutes` route, not an entity route). Neither principal covers
+this client, so S3 as originally written would 403 every real deployed app. **S3 is not fully
+scoped/estimated without S3.7**, added at the end of this list — see there for the fix. (S3.7 is listed
+last only because it depends on `scopedAppId` existing from S3.1/S3.3; it is not lower priority than
+the other tasks.)
+
 | # | Task | Where | Est. |
 |---|---|---|---|
 | S3.1 | Use S2's `scopedAppId` field on `SessionData` for runtime sessions (already reserved in S1.1's model) | `SessionService.java` | 30 min |
@@ -418,6 +534,7 @@ re-specified against the S0.2 census, enumerated, not against a grep for `authEn
 | S3.4 | Wire `EntityAccessGuard` into **every route in `GenericEntityRoutes`, per the S0.2 census** — the 16+ existing `authEnabled` blocks *and* the 11 routes in the studio-scoped and env-scoped families that have no block to replace. Auth is now always evaluated for all three families, not conditionally skipped for some. | [`GenericEntityRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/GenericEntityRoutes.java) | 150 min |
 | S3.5 | Add an explicit `publicRead: boolean` flag on app/entity metadata (default `false`) for the legitimate "this app's data should be publicly browsable" use case — without this, S3 would break intentionally-public apps | `AppMetadata`/`EntitySchema` + `SchemaRoutes.java` | 45 min |
 | S3.6 | Tests: `CrossTenantEntityAccessTest`, `CrossAppEntityAccessTest` (App 1 member cannot touch App 2's entities in the *same* tenant) — run against **all three route families**, not just `/api/{entity}` — plus `RuntimeSessionScopedToSingleAppTest` and `LoginDoesNotLeakEntityExistenceTest` (M6) | new tests | 120 min |
+| S3.7 | **(New, review round 2, R2-1 — blocking, not optional)** Migrate the Runtime client onto the scoped-session model this phase actually builds: (a) frontend — add a `runtimeLogin(tenantId, appId, email, password)` call in `api-client.ts` hitting `POST /api/runtime/auth/login` (today unused), and switch `AppRuntimeShell.handleLogin` to call it instead of the shared platform `login()`; (b) backend — `GET /appbana-studio/{tenantId}/apps/{id}` must accept a second allow-path alongside its existing S1.3/S2.6 Studio-membership check: a scoped runtime session whose `scopedAppId` and session `tenantId` both equal the path values, for that one app, read-only — the same "scoped session allowed on its own app" shape S3.2's rule (ii) already applies to entity routes, extended to this one `AppRoutes` GET only. Depends on S3.1/S3.3 (needs `scopedAppId` to exist and actually be populated first). | `app-bana-shared/src/api-client.ts`, `app-bana-runtime/src/runtime/AppRuntimeShell.tsx`, `AppRoutes.java` | 105 min |
 
 ### Exit criteria — S3
 
@@ -432,6 +549,10 @@ re-specified against the S0.2 census, enumerated, not against a grep for `authEn
       absence no longer means "no check happens".
 - [ ] `GenericAppAuthController.login` returns the same status/body shape for "app doesn't exist" and
       "wrong password" — it can no longer be used to enumerate other tenants' apps/entities.
+- [ ] The shipped `app-bana-runtime` — not a hypothetical scoped client — successfully logs in and
+      loads its own app end-to-end against a running backend (5175 against 8080), and a scoped session
+      for App 1 still gets 403 loading App 2's metadata or calling any other `AppRoutes` route
+      (review round 2, R2-1). Verified in the running apps, not guard unit tests alone.
 
 ---
 
@@ -512,7 +633,12 @@ After S3, that stops working by design. This must ship with:
   the test that actually answers the question this plan started from, and should be kept green
   permanently, not run once.
 - **Route census (S0.2/S0.3):** generated once, enforced continuously — a new route without a census
-  entry fails CI rather than relying on the next manual audit to notice.
+  entry fails CI rather than relying on the next manual audit to notice; the census's known-callers
+  column (review round 2) is what tells S1–S3 "guard" vs. "guard or delete" for a given route.
+- **S3.7 specifically must be verified against the actual running `app-bana-runtime` (5175) hitting a
+  real `app-bana-service` (8080), not guard unit tests alone** — B1 and R2-1 are both instances of a
+  guard that looked correct in isolation but was built against an assumed client instead of the shipped
+  one; a unit test that also assumes the client would not have caught either.
 - This agent's own working notes (not a tracked repo file) record a standing project convention: once
   implementation begins, fixes must additionally be verified through the actual browser UI (Studio 5174
   / Runtime 5175), not backend/API tests alone.
@@ -548,13 +674,18 @@ something real to assert; the ai-builder half can start as soon as S2's membersh
 **Modified files (backend):**
 - `SessionService.java` — `tenantId` + `scopedAppId` on `SessionData` (S1, S3)
 - `AuthenticationController.java` — populate `tenantId` at login (S1)
-- `AuthService.java` — new `resolveIdentity()` (S0.1); fix six `extractToken`→`hasRead/hasWrite` call
-  sites in `SchemaRoutes.java` to use `extractServiceToken()` instead (S1.9, M2)
+- `AuthService.java` — new `resolveIdentity()` (S0.1, preserving priority order per R2-4); fix six
+  `extractToken`→`hasRead/hasWrite` call sites in `SchemaRoutes.java` to use `extractServiceToken()`
+  instead (S1.9, M2)
 - `SessionMiddleware.java` — delegate to `resolveIdentity()` (S0.1); fix the dead `/api/csrf/token`
   exclusion entry (S4.3)
+- `SessionMiddlewareTest.java` — rewrite the tautological public-runtime/templates assertions to match
+  real route shapes and post-S1 behavior (S1.12, R2-3)
 - `Router.java` — fix or fence the servlet `handle(...)` overload that bypasses all middleware (S0.4)
 - `AppRoutes.java` — guard wiring across the full route set, not just list/get/update/delete (S1, S2);
-  gate `/api/templates` writes (S1.6); remove duplicate `env/{env}/full` registration (S1.9)
+  gate `/api/templates` writes (S1.6); dedupe and guard both `.../full` routes instead of keeping a
+  public carve-out (S1.9, R2-2); accept a scoped runtime session for its own app's `GET
+  /appbana-studio/{t}/apps/{id}` only (S3.7, R2-1)
 - `SchemaRoutes.java` — add ownership check to `DELETE /schema/{name}` (S1.4); fix `/api/debug/schemas`
   exclusion (S1.5)
 - `SavedViewRoutes.java` — require identity; scope `DELETE_SQL` by tenant+app+owner (S1.8)
@@ -573,6 +704,10 @@ something real to assert; the ai-builder half can start as soon as S2's membersh
 
 **Frontend:**
 - `app-bana-studio/src/features/**` (session/workspace store) — verify no client-side "all tenant apps" assumption remains (S2)
+- `app-bana-shared/src/api-client.ts` — add `runtimeLogin()` (S3.7, R2-1); stop silently defaulting
+  `tenantId` to `'default'` on a login/register response that omits it (S1.13, R2-6)
+- `app-bana-runtime/src/runtime/AppRuntimeShell.tsx` — `handleLogin` calls the new scoped `runtimeLogin`
+  instead of the shared platform `login()` (S3.7, R2-1)
 
 **AI Builder:**
 - `ai-builder/src/main/java/com/appbana/ai/api/AiChatController.java` — verified identity instead of trusted body fields (S5)
@@ -605,4 +740,4 @@ starts on the affected phase:
 
 ---
 
-*Last updated: 2026-07-31 (review round 1 incorporated) · Author: AppBana core team · Status: DRAFT — awaiting approval before S0 begins.*
+*Last updated: 2026-07-31 (review round 2 incorporated) · Author: AppBana core team · Status: DRAFT — awaiting approval before S0 begins.*
