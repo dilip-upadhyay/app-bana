@@ -934,6 +934,293 @@ tables identify *why* this work is needed; the census is what tells S1–S3 *whe
 
 ---
 
+## S0.2 Route census (generated 2026-08-01)
+
+**Methodology:** Every `router.get/post/put/delete(...)` registration across all 14 `*Routes.java`
+files was enumerated by direct file reads (not grep sampling), classified against
+`SessionMiddleware.isExcludedPath`'s actual rule order (reproduced below), and checked for an
+identity-gate call, a tenant/app enforcement comparison, and the source of any client-controlled
+tenant/app identifier (predicate: **any** such identifier — path, query, body, or header — not just
+literal `{tenantId}` path params, per H5). "Known callers" was verified by grep across
+`app-bana-studio/src`, `app-bana-runtime/src`, `app-bana-shared/src`, `ai-builder/src`, and `e2e/`.
+**Which `Router` overload is actually live was independently confirmed this session** (not assumed):
+`logs/backend.log` from a live `start-everything` boot reads `"AppBana (JDK HTTP) running on port
+8080"`, confirming `Router.handle(HttpExchange)` — which runs the middleware chain — is what's
+running, not the servlet overload from M1/S0.4 that bypasses it. The classification below is valid
+for this environment on that basis.
+
+**`SessionMiddleware.isExcludedPath` rule order** (exact precedence, first match wins):
+1. Path contains `/roles`, equals `/schema`, contains `/approvals`, or ends with `/submit`,
+   `/approve`, `/reject` → **NOT excluded** (always requires a session), regardless of anything below.
+2. Path equals `/api/users/me` or starts with `/api/users/me/` → **NOT excluded**.
+3. Path matches `^/api/[A-Za-z0-9_.-]+(/([A-Za-z0-9_.-]+))?/?$` (1–2 segments after `/api/`) →
+   **EXCLUDED**.
+4. Path starts with `/api/` and contains `/apps/` → **EXCLUDED**.
+5. Path matches a literal `EXCLUDED_PATHS` entry (`/api/auth/login`, `/api/auth/register`,
+   `/api/auth/refresh`, `/health`, `/ready`, `/ui/`, `/openapi.json`, `/api/csrf/token`,
+   `/api/templates`, `/api/apps/`, `/api/ai/`, `/api/tenants/*/branding`, `/api/app-context`,
+   `/*.html`, `/*.js`, `/*.css`, `/assets/`) → **EXCLUDED**.
+6. Else **NOT excluded** (default — requires a valid session).
+
+Column legend: **Mw-excl.** = middleware-excluded (skips `SessionMiddleware`'s session check
+entirely) · **Id. gate** = an identity-resolution call is present in the handler · **T/A check** =
+an actual comparison of the target tenant/app against the caller's own identity/ownership, used to
+allow-or-deny (not just a read-back or a default fallback) · **T/A source** = how the tenant and/or
+app identifier this route acts on reaches the handler.
+
+### GenericEntityRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| GET | `/audit` | No (default) | Yes (`hasRead`, conditional on `authEnabled`) | No | query (optional) | none found | none |
+| GET | `/api/field-permissions` | Yes (rule 3) | Yes (`hasAdmin`, conditional) | No | query (optional) | none found | none |
+| GET | `/api/field-permissions/readable` | Yes (rule 3) | Yes (`extractUserId`, conditional) | No | query (`entity` required) | none found | `entity` query param; `PermissionService` initialized |
+| GET | `/api/field-permissions/editable` | Yes (rule 3) | Yes (`extractUserId`, conditional) | No | query (`entity` required) | none found | same as above |
+| GET | `/api/field-permissions/{id}` | Yes (rule 3) | Yes (`hasAdmin`, conditional) | No | none (own PK, not tenant/app) | none found | row must exist |
+| POST | `/api/field-permissions` | Yes (rule 3) | Yes (`hasAdmin`, conditional) | No | body | none found | `roleId`/`entityName`/`fieldName` required |
+| PUT | `/api/field-permissions/{id}` | Yes (rule 3) | Yes (`hasAdmin`, conditional) | No | none | none found | row must exist |
+| DELETE | `/api/field-permissions/{id}` | Yes (rule 3) | Yes (`hasAdmin`, conditional) | No | none | none found | row must exist |
+| POST | `/api/{entity}` | Yes (rule 3) | Yes (`hasAdmin` + `extractUserId` for `submitted_by`) | No | path (packed `{tenantId}_{appId}_{entityName}` key) | studio, runtime, shared, e2e | schema must be registered under this key |
+| POST | `/api/{entity}/batch` | Yes (rule 3) | Yes (`hasAdmin` + `extractUserId` per element) | No | path | ai-builder, e2e | schema must exist; body ≤1000 elements |
+| GET | `/api/{entity}` | Yes (rule 3) | Yes (`hasRead` + `extractUserId` for field filtering) | **Partial** — only on the `_approvalStatus=PENDING*` branch (checker/owner role check) | path + query | studio, runtime, shared, e2e | schema must exist |
+| GET | `/api/{entity}/{id}` | Yes (rule 3) | Yes (`hasRead` + `extractUserId`) | No | path | runtime, shared, e2e | schema + row must exist |
+| PUT | `/api/{entity}/{id}` | Yes (rule 3) | Yes (`hasAdmin` + `extractUserId`) | No | path | runtime, shared, e2e | schema + row must exist |
+| DELETE | `/api/{entity}/{id}` | Yes (rule 3) | Yes (`hasAdmin`) | No | path | runtime, shared, e2e | schema must exist; not `PENDING` if approval-required |
+| POST | `/api/{entity}/bulk-delete` | Yes (rule 3) | Yes (`hasAdmin` + `extractUserId` for audit) | No | path + body (`ids`) | none found | schema must exist; body ≤1000 ids |
+| POST | `/api/{entity}/bulk-export` | Yes (rule 3) | Yes (`hasRead` + `extractUserId`) | No | path + body (`ids`) | none found | schema must exist; body ≤5000 ids |
+| POST | `/appbana-studio/{tenantId}/apps/{appId}/{entity}` | No (default) | Yes (`extractUserId`, 401 if blank) | **No — IDOR** | path | none found | valid session; schema must exist |
+| GET | `/appbana-studio/{tenantId}/apps/{appId}/{entity}` | No (default) | **No** (relies solely on `SessionMiddleware`, any tenant's session passes) | **No — IDOR** | path | none found | valid session; schema must exist |
+| GET | `/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}` | No (default) | **No** | **No — IDOR** | path | none found | valid session; schema + row must exist |
+| PUT | `/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}` | No (default) | Yes (`extractUserId`, 401 if blank) | **No — IDOR** | path | none found | valid session; schema + row must exist |
+| DELETE | `/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}` | No (default) | Yes (`extractUserId`, 401 if blank) | **No — IDOR** | path | none found | valid session; schema must exist |
+| POST | `/api/{tenantId}/apps/{appId}/{entity}` | Yes (rule 4) | Yes (`extractUserId`, 401 if blank) | **No — IDOR** | path | none found | valid session; schema must exist |
+| POST | `/api/{tenantId}/apps/{appId}/env/{env}/{entity}` | Yes (rule 4) | Yes (`extractUserId`, 401 if blank) | **No — IDOR** | path | none found | valid session; schema must exist |
+| GET | `/api/{tenantId}/apps/{appId}/env/{env}/{entity}` | Yes (rule 4) | **No — ⚠️ zero auth of any kind** | No | path | none found | schema must exist |
+| GET | `/api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}` | Yes (rule 4) | **No — ⚠️ zero auth of any kind** | No | path | none found | schema must exist |
+| PUT | `/api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}` | Yes (rule 4) | Yes (`extractUserId`, 401 if blank) | **No — IDOR** | path | none found | schema must exist |
+| DELETE | `/api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}` | Yes (rule 4) | Yes (`extractUserId`, 401 if blank) | **No — IDOR** | path | none found | schema must exist |
+
+### AppRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| POST | `/api/{tenantId}/apps/{id}/publish` | Yes (rule 4) | Weak (`extractUserId`, defaults to `"system"` on null) | No | path + query (`env`) | shared→studio (`Header.tsx`), ai-builder (`DeployAppTool`), e2e | app must exist; `env` ∈ DEV/SIT/PROD |
+| PUT | `/api/{tenantId}/apps/{id}/deploy/local` | Yes (rule 4) | **No** | No | path | none found | app must exist |
+| POST | `/api/{tenantId}/apps/{id}/commits` | Yes (rule 4) | Weak (defaults to `"system"`) | No | path + body | none found | none enforced |
+| POST | `/api/{tenantId}/apps/{id}/commits/rollback` | Yes (rule 4) | **No** | No | path + body (`version`) | ai-builder (`RollbackAppTool`) | body `version` required |
+| POST | `/api/{tenantId}/apps/{id}/versions` | Yes (rule 4) | Weak (no null-check) | No | path + body | none found | none enforced |
+| GET | `/api/{tenantId}/apps/{id}/versions` | Yes (rule 4) | **No** | No | path | none found | none |
+| POST | `/api/{tenantId}/apps/{id}/deploy/{versionId}` | Yes (rule 4) | Weak (no null-check) | No | path + query/body (`env`) | none found | `versionId` must reference an existing version |
+| GET | `/api/{tenantId}/apps/{id}/pipeline` | Yes (rule 4) | **No** | No | path | none found | none |
+| GET | `/api/{tenantId}/apps/{id}/env/{env}/full` (1st reg., live) | Yes (rule 4) | **No** | No | path | none found | prior deployment snapshot must exist |
+| POST | `/api/{tenantId}/apps/{id}/restore-schemas` | Yes (rule 4) | **No** | No | path + query (`env`) | none found | prior deployment snapshot must exist |
+| GET | `/appbana-studio/{tenantId}/apps` | No (default) | **No** (relies solely on session) | No | path (`tenantId` only) | shared→studio (`ChatPane`, `Header`), ai-builder (`ListAppsTool`) | none |
+| GET | `/appbana-studio/{tenantId}/apps/{id}` | No (default) | **No** | **No — any valid session, any tenant, passes** | path | shared→runtime (`AppRuntimeShell`), 8 ai-builder tools | app must exist |
+| GET | `/api/{tenantId}/apps/{id}/full` (public runtime API) | Yes (rule 4) | No (intentionally public) | No | path | **none found** — Runtime actually calls the Studio route above instead | app must exist |
+| GET | `/api/{tenantId}/apps/{id}/env/{env}/full` (2nd reg., **dead code**) | Yes (rule 4) | **No** | No | path | none found — unreachable (Router first-match-wins) | moot |
+| POST | `/appbana-studio/{tenantId}/apps` | No (default) | **Yes** — real gate, 401 if blank; sets `author` from caller (anti-spoof) | N/A (creation) | path + body (`id`, `name`) | shared→studio (`Header`), ai-builder (`CreateAppTool`, `ScaffoldAppTool`), e2e | body `id` unique, non-blank |
+| PUT | `/appbana-studio/{tenantId}/apps/{id}` | No (default) | **No** | No | path | ai-builder (`UpdateAppTool`, `CreateEntityTool`) — no Studio/Runtime UI path | app must exist |
+| DELETE | `/appbana-studio/{tenantId}/apps/{id}` | No (default) | **No** | No | path | ai-builder (`ScaffoldAppTool` rollback-only), e2e cleanup — no Studio/Runtime UI path | app must exist |
+| GET | `/appbana-studio/{tenantId}/apps/{id}/workflow` | No (default) | **No** | No | path | ai-builder (`ListWorkflowsTool`) | returns `{}` if none |
+| PUT | `/appbana-studio/{tenantId}/apps/{id}/workflow` | No (default) | **No** | No | path + body | none found | none enforced (blind upsert) |
+| GET | `/appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}` | No (default) | **No** | No | path | none found (`getPage()` client wrapper exists but is never called) | app/page must exist |
+| PUT | `/appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}` | No (default) | **No** | No | path + body | ai-builder (`GeneratePageTool`, `BatchUpdateEntitiesTool`) | none enforced (blind upsert) |
+| DELETE | `/appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}` | No (default) | **No** | No | path | none found | app/page must exist |
+| GET | `/api/templates` | Yes (rules 3+5) | **No** | No | N/A (no tenant/app param) | none found | none |
+| GET | `/api/templates/{id}` | Yes (rule 3) | **No** | No | N/A | none found | must exist |
+| POST | `/api/templates` | Yes (rule 3) | **No** | No | N/A | none found | none enforced |
+| PUT | `/api/templates/{id}` | Yes (rule 3) | **No** | No | N/A | none found | none enforced |
+| DELETE | `/api/templates/{id}` | Yes (rule 3) | **No** | No | N/A | none found | none enforced |
+
+*Footnote: `SessionMiddleware`'s own comment claims `/appbana-studio/*` is "currently public for
+development," but no rule in the actual `isExcludedPath` logic matches that prefix — it falls to the
+rule-6 default (session required). Code behavior, not the stale comment, is reflected above.*
+
+### ApprovalRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| POST | `/api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/submit` | No (rule 1) | Yes (`extractUserId`, 401) | No (delegates to `ApprovalService`'s per-tuple MAKER/BOTH role check, not a tenant match) | path | runtime (`RecordApprovalPanel`, `StudioTableLive`) | row exists, DRAFT/REJECTED; caller holds MAKER/BOTH role |
+| POST | `.../records/{id}/approve` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`CheckerQueuePage`, `StudioTableLive`) | row PENDING; caller CHECKER/CHECKER_L2; caller ≠ submitter |
+| POST | `.../records/{id}/reject` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`CheckerQueuePage`, `StudioTableLive`) | row PENDING; caller CHECKER; body `reason` required |
+| GET | `.../approvals/pending` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`CheckerQueuePage`, `usePendingCounts`) | caller holds CHECKER/CHECKER_L2 role |
+| GET | `.../records/{id}/approvals/audit` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`AuditDrawer`) | row exists; caller holds some role on the tuple |
+
+### SchemaRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| GET | `/api/endpoints` | Yes (rule 3) | Conditional `hasRead` (off by default) | No | none | none found | none |
+| GET | `/openapi.json` | Yes (rule 5) | Conditional `hasRead` (off by default) | No | none | none found | none — spans all tenants |
+| GET | `/schema` | No (rule 1) | Conditional `hasRead` (off by default) | No | none — lists ALL tenants' schema names | studio (`DataDrawer`), ai-builder (`ListEntitiesTool`) | none |
+| GET | `/schema/{name}` | No (rule 6 default) | Conditional `hasRead` (off by default) | **No — any session can fetch any other tenant's schema by key** | path (packed key) | studio, runtime, ai-builder, e2e | schema with that key must exist |
+| POST | `/schema` | No (rule 1) | **Yes** — mandatory `extractUserId` (401) + `isAppOwnerOrSystem` (403) | **Yes** (ownership-only, not tenant-match) | **body** (`tenantId`/`appId` JSON fields — canonical body-sourced example) | ai-builder (`CreateEntityTool`, `BatchUpdateEntitiesTool`), e2e — **no Studio/Runtime UI caller** | app must exist with matching `author`, or caller `"system"` |
+| DELETE | `/schema/{name}` | No (rule 6 default) | **No unconditional gate at all** (only a conditional `hasWrite`, off by default) | **No — zero ownership check (unlike POST)** | path (packed key) | ai-builder (`BatchUpdateEntitiesTool`), e2e — no Studio/Runtime UI caller | schema must exist; **⚠️ any authenticated user of any tenant can delete/drop any other tenant's entity by guessing its key** |
+| GET | `/api/debug/schemas` | Yes (rule 3) | **No — fully public, no session required at all** | No | none | none found | none — cross-tenant schema-summary listing |
+| GET | `/api/debug/schemas/names` | No (rule 6 default — 3 segments) | **No** in-handler (but session required by middleware) | No | none | none found | returns ALL schema keys system-wide to any authenticated user |
+
+### RoleRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| GET | `/api/tenants/{tenantId}/apps/{appId}/roles` | No (rule 1) | Yes (`extractUserId`, 401) | No (ownership-only via `isAppOwnerOrSystem`, or self-read bypass) | path | **none found** | app exists with caller as author/system, or self-query |
+| POST | `/api/tenants/{tenantId}/apps/{appId}/roles` | No (rule 1) | Yes (`extractUserId`, 401) | No (ownership-only, pre-lookup ordering; body `tenantId` explicitly discarded) | path | **none found** | app exists with caller as author/system; target entity schema exists |
+| DELETE | `/api/tenants/{tenantId}/apps/{appId}/roles` | No (rule 1) | Yes (`extractUserId`, 401) | No (ownership-only) | path | **none found** | app exists with caller as author/system; role row must exist |
+
+### UserRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| GET | `/api/users/me` | No (rule 2) | Yes (`extractUserId`, 401) | No (`isAppOwnerOrSystem`/`tenantId` are read-back only, never gate the request) | query (response-scoping only, not a gate) | runtime (`useCurrentUser` hook — `AppRuntimeShell`, `CheckerQueuePage`, `PendingCountsProvider`, `StudioTableLive`) — **not called anywhere in studio** | valid session only |
+
+### AuthRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| POST | `/api/auth/register` | Yes (rule 3) | No (N/A — establishes identity) | No | none (tenantId always `null` client-side) | shared→studio (`AuthGate`), e2e (5 specs) | email must not already exist |
+| POST | `/api/auth/login` | Yes (rule 3) | No (N/A) | No | none | shared→studio (`AuthGate`), e2e | user row + matching plaintext password |
+| GET | `/api/auth/profile` | Yes (rule 3, not on literal list — segment-count side effect) | **No — dead code**, reads a `"session"` attribute nothing ever sets | No | none | **none found — always 401s, unreachable** | n/a |
+| POST | `/api/runtime/auth/login` | No (default — 3 segments, no `/apps/`) | No handler check; **self-contradictory**: not middleware-excluded, so requires a pre-existing session the intended anonymous end-user can't have | No | body (`appId`, `tenantId`, `entity`) | **none found** — Runtime's real login uses `/api/auth/login` instead | caller must already hold a session (contradicts its own purpose) |
+| GET | `/api/csrf-token` | Yes (rule 3; literal-list entry is stale/mismatched, moot) | No — accepts unvalidated `X-Session-Id` | No | header (unvalidated) | none found | none |
+| POST | `/api/csrf-validate` | Yes (rule 3) | No | No | header | none found | a token previously issued by csrf-token for same id |
+
+### AiRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| POST | `/api/ai/chat` | Yes (rule 3) | No — dead placeholder stub | No | none | **none found** — real chat lives entirely in the separate `ai-builder` service | none — static canned response |
+| POST | `/api/ai/chat/agent` | Yes (rule 5) | No — dead placeholder stub | No | none | **none found** for this stub (ai-builder registers its own real route at the same path on a different port) | none — static canned response |
+
+### WorkflowRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| POST | `/api/workflows` | Yes (rule 3) | **No** | No | body (`appId`, optional, unvalidated) | **none found** | none enforced; `created_by` hardcoded `"system"` |
+| GET | `/api/workflows` | Yes (rule 3) | **No** | No | query (`appId`, optional — omit for every workflow system-wide) | **none found** | none |
+| GET | `/api/workflows/{id}` | Yes (rule 3) | **No** | No | path (no cross-check vs. row's own `app_id`) | **none found** | must exist |
+| POST | `/api/workflows/{id}/publish` | No (default — 3 segments) | **No** | No | path | **none found** | must exist, `status='DRAFT'` |
+| POST | `/api/workflows/{id}/start` | No (default) | **No** | No | path + body | **none found** | id must exist |
+| GET | `/api/my-tasks` | Yes (rule 3) | **No — `userId` is a plain unauthenticated query param** (`// TODO: Get from JWT`) | No | query (`userId`, spoofable) | **none found** | user/role row exists |
+| POST | `/api/my-tasks/{tokenId}/complete` | No (default — 3 segments) | **No — `userId` hardcoded `"system"`**, no ownership check | No | path | **none found** | pending token must exist |
+| GET | `/api/my-requests` | Yes (rule 3) | **No — same unauthenticated `userId` pattern** | No | query (spoofable) | **none found** | none |
+| GET | `/api/workflow-instances` | Yes (rule 3) | **No** | No | query (**no `appId`/tenant filter supported at all** despite the row having an `app_id` column) | **none found** | none |
+
+*This entire 9-route family has zero real callers anywhere in studio/runtime/shared/ai-builder/e2e —
+see "no known caller" list below. Highest-severity guard-or-delete cluster in this census: multiple
+routes are simultaneously public (middleware-excluded) and trust unauthenticated client-supplied
+identity.*
+
+### SavedViewRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| GET | `/api/saved-views` | Yes (rule 3) | **No** — list is not even filtered by `owner_user_id` despite the file's own header comment claiming it is | No | query (`tenantId`, `appId`, `entityKey` — any caller with a guessed triple sees every owner's views) | runtime (`SavedViewsBar` in `StudioTableLive`) | ≥1 saved-view row for that triple |
+| POST | `/api/saved-views` | Yes (rule 3) | **Yes, but bypassable** — defaults `ownerUserId` from `req.getAttribute("userId")` but a client-supplied `ownerUserId` in the body silently overrides it | No | body (`tenantId`, `appId`, `entityKey`, spoofable `ownerUserId`) | runtime (`SavedViewsBar`) | none — no existence validation |
+| DELETE | `/api/saved-views/{viewId}` | Yes (rule 3) | **No** | **No — not even a viewId-ownership check; `DELETE FROM ... WHERE view_id = ?` with no tenant/app/owner clause at all** | path (`viewId` only) | runtime (`SavedViewsBar`) | view must exist — **⚠️ any caller with any valid `viewId` can delete any other tenant's/user's saved view** |
+
+### FileRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| POST | `/api/files/upload` | Yes (rule 3) | Weak — `req.getAttribute("userId")` read for an audit column only, no 401 on null | **No** — `tenantId`/`appId` from body validated only against a shape regex, no owner/existence check | body (`tenantId`, `appId`) | runtime (`FileUploadField.tsx`) | none — always accepts |
+| GET | `/api/files/{tenantId}/{appId}/{fileId}` | **No** (4 segments exceeds rule 3's 1–2 segment limit — class Javadoc is stale here, still describes an older 2-segment shape) | **No** — no identity call at all | **Yes, but data-consistency only, not caller-authorization** — `WHERE file_id=? AND tenant_id=? AND app_id=?` must all match, else 404 (deliberately not 403, to avoid an existence-leak); does **not** verify the caller/session belongs to `tenantId` | path (`tenantId`, `appId`, `fileId`) | runtime (`FileUploadField.tsx`, `StudioTableLive.tsx`) | row matching all 3 values must exist; protection rests on `fileId` being an unguessable UUID, not on authorization |
+
+**⚠️ Test/implementation mismatch found and independently verified this session:**
+`e2e/tests/hardening/hardening-h1-file-tenant-isolation.spec.ts` POSTs multipart to
+`${BACKEND_URL}/api/files/${tenantId}/${appId}/upload` (a 3-segment path with tenant/app **before**
+`upload`) — but the only registered upload route is `POST /api/files/upload` (**zero** path params;
+tenant/app must be JSON body fields). Confirmed via direct grep of both files — no route matches the
+test's URL shape. The test's first assertion (`expect(upload.status()).toBeLessThan(300)`) should
+receive a 404 and fail immediately, meaning **the H1 file-tenant-isolation hardening test is either
+currently failing, silently skipped, or not part of the executed suite** — it is very likely not
+actually proving what its own docstring claims ("tenant A's files must never be downloadable by
+tenant B"). This needs investigation as its own follow-up (not fixed here — S0.2 is a census, not a
+fix); flagged prominently because it directly undermines confidence in existing tenant-isolation test
+coverage, which is the entire subject of this plan.
+
+### AppContextRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| GET | `/api/app-context` | Yes (rules 3+5) | **No** | No — never denies, falls back to defaults | query (`tenantId`, `appId`, `host`) | shared defines `fetchAppContext()` but **zero call sites anywhere in the repo** — all real callers use the unrelated client-side `resolveAppContext(window.location)` instead | none |
+
+### HealthRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| GET | `/health` | Yes (rule 5) | No | No | none | e2e (pre-flight ping only, 5 specs) | none |
+| GET | `/ready` | Yes (rule 5) | No | No | none | **none found** | working JDBC connection (else 503 body, not thrown) |
+
+### TenantBrandingRoutes.java
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| GET | `/api/tenants/{tenantId}/branding` | Yes (rule 5, wildcard) | No (by design — public display data only) | No — any caller may fetch any tenant's branding | path (`tenantId`) | studio (`AuthGate`, `Header`), runtime (`LoginPage`, `AppRuntimeShell`), shared (`fetchBranding`), e2e | none — unknown tenantId returns defaults, not an error |
+
+### Routes with no known caller (flag for guard-or-delete decision)
+
+- `GET /audit`, all 4 `/api/field-permissions*` GET/PUT/DELETE routes, `POST /api/field-permissions`,
+  `POST /api/{entity}/bulk-delete`, `POST /api/{entity}/bulk-export` (GenericEntityRoutes)
+- All 5 `/appbana-studio/{tenantId}/apps/{appId}/{entity}...` routes and all 4
+  `/api/{tenantId}/apps/{appId}/{entity|env}...` write routes (GenericEntityRoutes) — **plus the two
+  fully-unauthenticated env-scoped GET routes flagged above**
+- `PUT .../deploy/local`, `POST .../commits`, `POST .../versions`, `GET .../versions`,
+  `POST .../deploy/{versionId}`, `GET .../pipeline`, `GET .../env/{env}/full` (1st, live),
+  `POST .../restore-schemas`, `GET /api/{tenantId}/apps/{id}/full`, `GET .../env/{env}/full` (2nd,
+  dead code), `PUT .../workflow`, `GET`/`DELETE .../pages/{pageId}`, all 5 `/api/templates*` routes
+  (AppRoutes)
+- `GET /api/endpoints`, `GET /openapi.json`, `GET /api/debug/schemas`, `GET /api/debug/schemas/names`
+  (SchemaRoutes)
+- All 3 routes in RoleRoutes.java (entire file has zero known callers, despite the Maker-Checker plan
+  depending on it)
+- `GET /api/auth/profile` (dead code), `POST /api/runtime/auth/login`, `GET /api/csrf-token`,
+  `POST /api/csrf-validate` (AuthRoutes)
+- Both routes in AiRoutes.java (superseded by the real `ai-builder` service)
+- **All 9 routes in WorkflowRoutes.java** (highest-priority cluster — see file section above)
+- `GET /ready` (HealthRoutes)
+- `GET /api/app-context` (AppContextRoutes — has a defined client wrapper but zero call sites)
+
+### Critical findings surfaced by this census (beyond the route-inventory purpose itself)
+
+1. **Two fully-unauthenticated data routes**: `GET /api/{tenantId}/apps/{appId}/env/{env}/{entity}`
+   and `.../{entity}/{id}` (GenericEntityRoutes) are simultaneously middleware-excluded AND have no
+   in-handler identity gate — reachable with **zero** authentication of any kind, not just zero
+   tenant check.
+2. **`GET /api/debug/schemas`** (SchemaRoutes) is likewise fully public and returns a cross-tenant
+   schema summary to anyone.
+3. **`DELETE /schema/{name}`** (SchemaRoutes) has no ownership check at all, unlike its `POST`
+   sibling — any authenticated user of any tenant can delete (and optionally drop the table of) any
+   other tenant's entity by guessing its key.
+4. **`DELETE /api/saved-views/{viewId}`** has no tenant/app/owner clause in its SQL whatsoever — any
+   caller with any valid `viewId` can delete any other tenant's saved view. `POST /api/saved-views`'s
+   `ownerUserId` default is also client-overridable.
+5. **The entire `WorkflowRoutes` family (9/9 routes)** has no identity gate, no tenant/app enforcement
+   (despite instances having an `app_id` column), and zero known callers anywhere in the codebase —
+   the single highest-priority guard-or-delete cluster in this census.
+6. **File upload/download test-vs-implementation mismatch** (see FileRoutes section) — the existing
+   H1 hardening e2e test targets a URL shape that doesn't match the registered route, meaning this
+   plan's baseline "is file tenant isolation already tested" assumption needs verification, not
+   trust.
+7. **Two dead-code routes confirmed**: `GET /api/auth/profile` (reads an attribute nothing sets,
+   always 401s) and the second, byte-identical registration of
+   `GET /api/{tenantId}/apps/{id}/env/{env}/full` in AppRoutes.java (unreachable — `Router` is
+   first-match-wins and the first registration always wins).
+8. **`POST /api/runtime/auth/login`** is self-contradictory by construction: it is not
+   middleware-excluded, so it demands a valid pre-existing platform session before its handler (which
+   exists specifically to *establish* a session for an anonymous end-user) ever runs. Zero callers;
+   confirms the Runtime's real login uses ordinary `/api/auth/login` instead, consistent with review
+   round 3's finding.
+9. **`GET /appbana-studio/{tenantId}/apps/{id}`** — the route the real Runtime shell actually calls
+   to load app metadata — has no tenant check at all: any valid session, for any tenant, can fetch any
+   other tenant's app metadata by id. This is the concrete route review round 2's S3.7 finding was
+   about.
+
+**None of the above are fixed in this task** — S0.2 is a census, not a remediation. Every item above
+is now traceable to a specific S1/S2/S3 task (or, for the zero-caller clusters, a guard-or-delete
+product decision) rather than sitting as an unscoped worry.
+
+---
+
 ## Sub-phase S1 — Tenant boundary on app management
 
 **Goal:** No session can act on a tenant other than its own, anywhere in `AppRoutes` or
