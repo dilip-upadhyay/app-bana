@@ -1,20 +1,11 @@
 /**
- * TableHeader.tsx — Sprint 3 task 3.12; extended by the column-filter/sort/
- * scale hardening pass.
+ * Header row for entity tables. Kept dumb: the caller owns all state (sort
+ * direction, filter values) and this only renders controls and reports intent
+ * via callbacks.
  *
- * Header row for entity tables. Still kept dumb: the caller owns all state
- * (sort direction, filter values) and this component only renders controls
- * and reports intent via callbacks — same philosophy as `FilterBar.tsx`.
- *
- * All new props are optional so a caller that only ever passed `columns` +
- * `labelFor` (the original contract) keeps rendering exactly as before.
- * When `onFilterChange` is supplied, a second `<tr>` of per-column filter
- * controls renders below the labels — the "filter on every column" feature.
- * When `onSortToggle` is supplied, column labels become click targets that
- * cycle asc → desc → none, driving the server-side `sort=` param (see
- * `entity-query.ts` / `useEntityRows.ts`) — filtering/sorting at the scale
- * this is built for (potentially millions of rows) must stay server-side,
- * never a client-side sort/filter of an in-memory array.
+ * Sorting and filtering drive server-side `sort=`/`filter=` params rather than
+ * reordering the fetched page, because that page is one `limit`/`offset` slice
+ * of a dataset that may hold millions of rows.
  */
 import { humanizeHeader } from './cell-formatters';
 import { range } from './entity-query';
@@ -29,7 +20,6 @@ export interface ColumnSort {
   readonly direction: 'asc' | 'desc';
 }
 
-/** One reference-field dropdown option — id/label pair sourced from the FK label cache. */
 export interface ReferenceOption {
   readonly value: string;
   readonly label: string;
@@ -39,16 +29,14 @@ export interface TableHeaderProps {
   readonly columns: readonly string[];
   readonly labelFor: (name: string) => string | undefined;
   /**
-   * Column names that get a sort affordance + filter control. Defaults to
-   * all `columns`. Used to exclude columns with their own dedicated
-   * filtering UI (e.g. `approval_status`, already served by SavedViewsBar's
-   * system views) from the generic mechanism, to avoid two competing filter
-   * paths for the same column.
+   * Columns that get a sort affordance + filter control. Defaults to all
+   * `columns`. Used to exclude columns that already have dedicated filtering UI
+   * (e.g. `approval_status`, served by SavedViewsBar's system views), so the two
+   * paths never compete for the same column.
    */
   readonly filterableColumns?: readonly string[];
-  /** Field type per column (from schema metadata) — selects which control renders. */
   readonly typeFor?: (name: string) => string | undefined;
-  /** For `type === 'reference'` columns — options sourced from the already-fetched FK label cache (no extra request). */
+  /** Sourced from the already-fetched FK label cache, so this costs no extra request. */
   readonly referenceOptionsFor?: (name: string) => readonly ReferenceOption[] | undefined;
   readonly sort?: ColumnSort | null;
   readonly onSortToggle?: (field: string) => void;
@@ -134,14 +122,12 @@ const inputCls =
   'w-full min-w-0 px-1.5 py-1 rounded border border-slate-200 bg-white text-slate-900 text-xs '
   + 'focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400';
 
-/** Accessible name for a sortable column header button. */
 function sortAriaLabel(label: string, active: 'asc' | 'desc' | null): string {
   if (active === 'asc') return `Sort by ${label}, currently ascending`;
   if (active === 'desc') return `Sort by ${label}, currently descending`;
   return `Sort by ${label}`;
 }
 
-/** Decorative sort-direction glyph for a column header. */
 function sortGlyph(active: 'asc' | 'desc' | null): string {
   if (active === 'asc') return '▲';
   if (active === 'desc') return '▼';
@@ -157,7 +143,6 @@ interface ColumnFilterControlProps {
   readonly onChange: (next: unknown) => void;
 }
 
-/** Reads the `{min, max}` bounds out of a `RangeFilterValue`, or undefined for neither. */
 function rangeBounds(value: unknown): { min?: unknown; max?: unknown } | undefined {
   if (value && typeof value === 'object' && '__range' in (value as Record<string, unknown>)) {
     return (value as { __range: { min?: unknown; max?: unknown } }).__range;
@@ -165,14 +150,12 @@ function rangeBounds(value: unknown): { min?: unknown; max?: unknown } | undefin
   return undefined;
 }
 
-/** Stringifies a range bound for display in a text/number/date input, without risking "[object Object]". */
 function boundToDisplayString(bound: unknown): string {
   if (bound == null) return '';
   if (typeof bound === 'string' || typeof bound === 'number') return String(bound);
   return '';
 }
 
-/** Renders the type-appropriate filter control for one column. */
 function ColumnFilterControl({ name, label, type, referenceOptions, value, onChange }: Readonly<ColumnFilterControlProps>) {
   if (type === 'boolean') {
     return (
@@ -208,13 +191,12 @@ function ColumnFilterControl({ name, label, type, referenceOptions, value, onCha
   }
 
   if (type === 'number' || type === 'decimal' || type === 'int' || type === 'integer' || type === 'long') {
-    // Read straight from the `value` prop rather than local state — this
-    // control gets unmounted/remounted whenever the parent's loading skeleton
-    // swaps back in (see StudioTableLive.tsx's `{loading && <TableSkeleton/>}`),
-    // which happens on every filter change since it triggers a refetch. Local
-    // draft state was found live-testing to silently reset to '' on that
-    // remount and then feed its stale '' back into the *other* bound's onChange
-    // the next time the user typed, quietly dropping a just-applied filter.
+    // Derive from the `value` prop, never local state: this control is unmounted
+    // and remounted on every filter change, because the parent swaps the whole
+    // table for a loading skeleton while refetching. Local draft state resets to
+    // '' on that remount, and the next bound's onChange then reads the other
+    // bound through a stale closure over '' — silently dropping a just-typed
+    // filter. Found live-testing; the unit suite has no DOM and cannot reach it.
     const bounds = rangeBounds(value);
     const minVal = boundToDisplayString(bounds?.min);
     const maxVal = boundToDisplayString(bounds?.max);
@@ -245,8 +227,7 @@ function ColumnFilterControl({ name, label, type, referenceOptions, value, onCha
   }
 
   if (type === 'date' || type === 'datetime') {
-    // Same value-prop-derived approach as the number range above — see the
-    // comment there for why local draft state is unsafe here.
+    // Prop-derived for the same reason as the number range above.
     const bounds = rangeBounds(value);
     const minVal = boundToDisplayString(bounds?.min).slice(0, 10);
     const maxVal = boundToDisplayString(bounds?.max).slice(0, 10);
@@ -278,7 +259,7 @@ function ColumnFilterControl({ name, label, type, referenceOptions, value, onCha
     );
   }
 
-  // Default: text-contains substring filter (string/longtext/email/phone/status/unknown).
+  // Fallback for string/longtext/email/phone/status/unknown.
   return (
     <input
       type="text"

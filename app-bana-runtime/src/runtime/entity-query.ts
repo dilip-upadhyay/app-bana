@@ -70,13 +70,11 @@ function isExact(value: unknown): value is ExactFilterValue {
 }
 
 /**
- * Marks a min/max range filter — the column-filter/scale hardening pass.
- *
  * Written on the wire as "min..max" (double-dot separator), parsed by
  * `EntityCrudService.parseRange` and only accepted for orderable column
  * kinds (integer/bigint/decimal/timestamp/reference). Either bound may be
- * omitted for an open-ended range; passing both `undefined`/`null` means
- * "no filter" and is dropped like any other empty value.
+ * omitted for an open-ended range; both empty means "no filter" and is
+ * dropped like any other empty value.
  */
 export interface RangeFilterValue {
   readonly __range: { readonly min?: unknown; readonly max?: unknown };

@@ -706,14 +706,11 @@ public class EntityCrudService {
                 // cases are correctly a 400, not a silent pass-through.
                 throw new FieldValidationException(name, "unknown filter field");
             }
-            // Scale/column-filter hardening — a "min..max" double-dot range,
-            // e.g. filter=amount:10..100, filter=created_at:2026-01-01..2026-02-01.
-            // Checked before the generic parseFilterValue() call below because a
-            // bare Integer.parseInt/BigDecimal/Instant.parse on "10..100" would
-            // just fail to parse and produce a correct-but-unhelpful "invalid
-            // value" 400 instead of being recognised as a range request. A single
-            // '.' cannot collide with this (fractional-second timestamps use one
-            // dot, never two), so ".." is an unambiguous delimiter.
+            // Checked before parseFilterValue() below, because a bare
+            // Integer.parseInt/BigDecimal/Instant.parse on "10..100" would fail
+            // to parse and produce a correct-but-unhelpful "invalid value" 400
+            // instead of being recognised as a range. A single '.' cannot
+            // collide (fractional-second timestamps use one dot, never two).
             int dotdot = val.indexOf("..");
             if (dotdot >= 0) {
                 map.put(f.getName(), parseRange(f, val, dotdot));
@@ -756,24 +753,17 @@ public class EntityCrudService {
     public record ExactMatch(Object value) {}
 
     /**
-     * A "min..max" double-dot range filter — the column-filter/scale hardening
-     * pass that added per-column filtering to the runtime's list tables.
+     * A "min..max" double-dot range filter, e.g. {@code filter=amount:10..100}.
      *
-     * <p>Either bound may be omitted for an open-ended range: {@code min} null
-     * means "no lower bound" ({@code col <= max} only), {@code max} null means
-     * "no upper bound" ({@code col >= min} only). At least one of the two is
-     * always non-null — {@link #parseRange} rejects a range with neither.
-     *
-     * <p>Only meaningful for orderable column kinds (integer/bigint/decimal/
-     * timestamp/reference); requesting a range on a string/boolean column is a
+     * <p>Either bound may be null for an open-ended range; {@link #parseRange}
+     * rejects a range with neither. Only orderable kinds (integer/bigint/decimal/
+     * timestamp/reference) are accepted — a range on a string/boolean column is a
      * 400, not a silently-ignored predicate.
      */
     public record Range(Object min, Object max) {}
 
     /**
-     * Parses the "min..max" syntax found in {@link #parseFilters}. {@code val}
-     * is the full raw value (already stripped of a leading '=', though a range
-     * and an exact-match marker are not meant to be combined) and {@code dotdot}
+     * Parses the "min..max" syntax found in {@link #parseFilters}. {@code dotdot}
      * is the index of the delimiting "..".
      */
     private static Range parseRange(EntitySchema.Field f, String val, int dotdot) {

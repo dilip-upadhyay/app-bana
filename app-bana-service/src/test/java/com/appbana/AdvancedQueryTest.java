@@ -73,12 +73,9 @@ public class AdvancedQueryTest {
                 field("age", "int", false, false)));
         SchemaManager.saveSchema(numeric);
 
-        // Same rationale as the line_item cleanup below — customer/logs/numeric_only
-        // are dedicated test fixture tables on the shared dev Postgres instance, and
-        // Liquibase/flywayCleanOnStart only manage schema, not data, so rows accumulate
-        // across repeated `mvn test` invocations. The new Range-filter tests (Orders
-        // 19-27) assert small exact/bounded counts, so — like Orders 6-10 already do
-        // for line_item — these tables must start empty on every run.
+        // These are fixture tables on the shared dev Postgres, and Liquibase only
+        // manages schema, not data, so rows accumulate across `mvn test` runs. The
+        // range tests assert exact counts, so they must start empty.
         try (java.sql.Connection conn = JdbcManager.getConnection();
                 java.sql.Statement st = conn.createStatement()) {
             st.execute("DELETE FROM \"" + SchemaManager.getPhysicalTableName(customer).toUpperCase(Locale.ROOT)
@@ -661,8 +658,7 @@ public class AdvancedQueryTest {
                         + "no approval columns: " + row);
     }
 
-    // Column-filter/sort/scale hardening — the "min..max" double-dot range
-    // operator (filter=field:min..max). customer.age is seeded 20..24 across
+    // Range operator (filter=field:min..max). customer.age is seeded 20..24 across
     // 5 rows (see setup()); line_item.unit_price is seeded 9.99 / 4.50 / 100.00.
 
     @Test
@@ -731,12 +727,9 @@ public class AdvancedQueryTest {
     @Test
     @Order(27)
     void syncIndexesCreatesBtreeAndTrigramIndexesOnPostgres() throws Exception {
-        // Scale hardening — every ensureTable() call (see saveSchema() in
-        // setup()) should leave the customer table with more than just its PK
-        // index: a plain B-tree per column, plus (Postgres-only) a pg_trgm GIN
-        // index on the STRING columns (firstName, lastName) so the default
-        // substring ILIKE filter isn't a full table scan once this table has
-        // millions of rows.
+        // Every ensureTable() call should leave the table with more than its PK
+        // index: a B-tree per column, plus a pg_trgm GIN index on the STRING
+        // columns so the default substring ILIKE filter isn't a full scan.
         EntitySchema customer = new EntitySchema();
         customer.setName("customer");
         customer.setTenantId("default");

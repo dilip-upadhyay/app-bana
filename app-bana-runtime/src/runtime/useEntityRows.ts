@@ -48,13 +48,10 @@ export function useEntityRows(
     }
   }, [paramsKey]);
 
-  // Guards against out-of-order network responses: rapid successive filter/
-  // sort/page changes each kick off their own fetch, and nothing guarantees
-  // they resolve in the order they were sent. Without this, a slower older
-  // request can resolve after a newer one and silently overwrite the UI with
-  // stale rows/total — found live-testing rapid column-filter changes, where
-  // clearing a filter back to "no filter" could stick on the old filtered
-  // count if an earlier in-flight request settled last.
+  // Guards against out-of-order responses: rapid filter/sort/page changes each
+  // start their own fetch, and nothing guarantees they resolve in order. A slow
+  // older request settling last would otherwise overwrite the UI with stale
+  // rows — e.g. clearing a filter but keeping the old filtered count.
   const requestIdRef = useRef(0);
 
   const load = useCallback(async () => {

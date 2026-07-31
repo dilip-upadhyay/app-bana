@@ -104,10 +104,9 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const { user, isMaker, isChecker } = useCurrentUser();
 
-  // Column-filter/sort/scale hardening — every-column filtering + a single
-  // click-to-sort column, both server-side (never a client-side sort/filter
-  // of the already-fetched page, which would be meaningless once a table has
-  // millions of rows behind server-side pagination).
+  // Filtering and sorting are resolved server-side. Sorting the already-fetched
+  // page client-side would be meaningless once a table has millions of rows
+  // behind server-side pagination.
   const [columnFilterValues, setColumnFilterValues] = useState<Record<string, unknown>>({});
   const debouncedColumnFilterValues = useDebouncedValue(columnFilterValues, 400);
   const handleColumnFilterChange = useCallback((field: string, value: unknown) => {
@@ -413,9 +412,8 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     return () => { cancelled = true; };
   }, [fields, entityKey]);
 
-  // Column-filter/sort hardening — type + reference-option lookups the new
-  // TableHeader filter row needs. Derived straight from data already in hand
-  // (`fields`, `fkMaps`), so this never issues a network request of its own.
+  // Derived straight from data already in hand (`fields`, `fkMaps`), so the
+  // filter row never issues a network request of its own.
   const typeForColumn = useCallback((name: string): string | undefined => {
     const meta = fields.find((f) => f.name === name);
     return meta?.type ?? inferTypeFromName(name);

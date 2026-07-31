@@ -18,6 +18,15 @@
   props. Recorded as a standing rule in
   [`.github/copilot-instructions.md` §10](../.github/copilot-instructions.md#10-frontend-architecture).
 
+- `831a990` — docs: sync the doc set with `0ceb9e6`. Real test counts (331 backend / 276 runtime),
+  §10 rewritten off the retired `app-bana-ui/` content, and `SchemaManager.syncIndexes` documented
+  in §11 for the first time.
+
+- Comment cleanup across the ten files `0ceb9e6` touched: dropped changelog-in-code labels ("the
+  column-filter/sort/scale hardening pass") and doc comments that only restated the symbol name,
+  keeping the rationale a reader cannot recover from the code. Net −78 lines, no behaviour change,
+  both suites re-run green.
+
 ---
 
 ## Earlier this cycle

@@ -48,7 +48,6 @@ function storedToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-/** Sidebar-collapse pass — platform-wide default for every app's runtime shell. */
 function storedSidebarCollapsed(): boolean {
   return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
 }
@@ -60,8 +59,7 @@ export function AppRuntimeShell() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  // Sidebar-collapse pass — desktop-only rail toggle, persisted across visits.
-  // Default false (expanded) is the least-surprising choice for a first visit.
+  // Desktop-only rail toggle, persisted across visits. Defaults to expanded.
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(storedSidebarCollapsed);
   const [branding, setBranding] = useState<TenantBranding | null>(null);
   // Sprint 3 task 3.3 — selected record id for detail-view overlay.
@@ -278,10 +276,9 @@ export function AppRuntimeShell() {
       <div className="flex flex-1 min-h-0">
         {/* Sidebar: full at md+, icon-rail at sm-to-md, hidden below sm.
             The visual collapse is CSS-driven — see .appbana-sidebar-container
-            @media (max-width: 767.98px) in globals.css. The optional
-            is-collapsed class (desktop-only, min-width: 768px) is the
-            sidebar-collapse pass — a platform-wide default for every app's
-            runtime shell, not a per-app opt-in. */}
+            in globals.css. The width-triggered rail (max-width: 767.98px) and
+            the user-toggled is-collapsed rail (min-width: 768px) live in
+            separate media blocks so they can never both apply. */}
         <aside className={`hidden sm:block appbana-sidebar-container${sidebarCollapsed ? ' is-collapsed' : ''}`}>
           <button
             type="button"

@@ -1,11 +1,7 @@
 /**
- * useDebouncedValue.ts — column-filter/scale hardening pass.
- *
- * Generic debounce hook. Used so per-column filter inputs (text/number/date)
- * feel instant to type into while the actual network request — which must
- * hit the server, not filter a client-side array, since tables can hold
- * millions of rows — only fires after the caller stops changing the value
- * for `delayMs`.
+ * Generic debounce hook. Lets per-column filter inputs feel instant to type
+ * into while the actual request — which must hit the server, since tables can
+ * hold millions of rows — only fires once the value stops changing.
  */
 import { useEffect, useState } from 'react';
 

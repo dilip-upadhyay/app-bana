@@ -415,12 +415,10 @@
     }
   }
 
-  /* Sidebar-collapse pass — user-toggleable icon-rail at md+, platform-wide
-     default for every app's runtime shell (AppRuntimeShell.tsx owns the
-     `is-collapsed` class + localStorage persistence; RuntimeSidebar.tsx
-     itself is untouched). Scoped to its own min-width: 768px block — rather
-     than reusing selectors from the sm-md rail above — so this never
-     interacts with that separate, width-triggered auto-rail rule. */
+  /* User-toggleable icon-rail at md+. AppRuntimeShell.tsx owns the
+     `is-collapsed` class + localStorage persistence. Scoped to its own
+     min-width: 768px block — rather than reusing selectors from the sm-md
+     rail above — so it never interacts with that width-triggered auto-rail. */
   @media (min-width: 768px) {
     .appbana-sidebar-container.is-collapsed {
       width: 3.5rem;

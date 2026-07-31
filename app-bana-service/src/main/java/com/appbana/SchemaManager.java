@@ -347,53 +347,28 @@ public class SchemaManager {
         // FK will be added on the next ensureTable for the child.
         syncForeignKeys(schema, c, d);
 
-        // Scale hardening — every declared (+ approval, when enabled) column gets
-        // a supporting index so filter=/sort=/approval queues stay index-backed
-        // as tables grow. Non-fatal: an indexing failure is a performance issue,
-        // never a correctness one, so it must not block the schema save.
+        // Non-fatal: an indexing failure is a performance issue, never a
+        // correctness one, so it must not block the schema save.
         syncIndexes(schema, c, d, table);
     }
 
     /**
-     * Scale hardening (millions-of-rows column filtering/sorting) — every
-     * indexable field on the entity gets a supporting index so the runtime's new
-     * per-column filter/sort UI (and the existing approval queues) stay fast as
-     * tables grow, instead of degrading to sequential scans.
+     * Creates a supporting index for every indexable field so the runtime's
+     * per-column filter/sort UI and the approval queues stay index-backed as
+     * tables grow. Both families are {@code IF NOT EXISTS}, so this is cheap to
+     * re-run on every {@code ensureTable} call, including the self-heal path.
      *
-     * <p>Two index families are created, both {@code IF NOT EXISTS} so this is
-     * cheap to re-run on every {@code ensureTable} call, including the self-heal
-     * path on an already-existing table:
-     * <ul>
-     *   <li>a plain B-tree on every indexable column — serves {@code =}, the new
-     *       {@code Range} ({@code col >= ? AND col <= ?}) filters, {@code ORDER BY},
-     *       and FK/status lookups.</li>
-     *   <li>on Postgres only, a trigram GIN index ({@code pg_trgm}'s
-     *       {@code gin_trgm_ops}) on STRING/TEXT-kind columns. This is the piece
-     *       that actually matters at scale: the default filter behavior
-     *       ({@link EntityCrudService}'s {@code buildWhere}) is a case-insensitive
-     *       substring {@code ILIKE '%value%'}, which a B-tree cannot serve at
-     *       all — Postgres has no way to use a B-tree for a leading-wildcard
-     *       LIKE. A trigram GIN index is what turns that into an index scan
-     *       instead of a sequential scan once a table has millions of rows.</li>
-     * </ul>
+     * <p>The B-tree serves {@code =}, {@link EntityCrudService.Range} bounds and
+     * {@code ORDER BY}. The Postgres-only trigram GIN index is the part that
+     * matters at scale: the default filter is a case-insensitive substring
+     * {@code ILIKE '%value%'}, and no B-tree can serve a leading-wildcard LIKE.
      *
-     * <p>Primary keys are skipped (already uniquely indexed) and {@code FILE}-kind
-     * columns are skipped (store an opaque issued fileId, never filtered/sorted on).
+     * <p>Deliberately not {@code CREATE INDEX CONCURRENTLY} — that must run
+     * outside any transaction, which does not fit the {@code Statement}-per-DDL
+     * pattern the rest of {@code ensureTable} uses. Revisit if a tenant table is
+     * ever altered while already holding a very large amount of data.
      *
-     * <p>Deliberately does NOT use {@code CREATE INDEX CONCURRENTLY}: that requires
-     * running outside any transaction, which does not fit the plain
-     * {@code Statement}-per-DDL-call pattern the rest of {@code ensureTable} already
-     * uses. For the table sizes this runs against today a regular (briefly
-     * lock-taking) {@code CREATE INDEX} is an acceptable tradeoff; revisit if a
-     * tenant table is ever altered while already holding a very large amount of data.
-     *
-     * <p>Index names are derived from a short hash of table+column+kind rather than
-     * naive concatenation-then-truncate: physical table names are already routinely
-     * near the 63-char Postgres identifier limit (the UUID-heavy multi-tenant naming
-     * scheme), so two different columns' naively-truncated index names can collide,
-     * silently leaving one of the two columns with no index at all (`CREATE INDEX IF
-     * NOT EXISTS` treats "a relation with this name already exists" as success,
-     * regardless of what it actually indexes). See {@link #indexName}.
+     * @see #indexName for why index names carry a hash suffix
      */
     private static void syncIndexes(EntitySchema schema, Connection c, String dialect, String table) {
         boolean isPg = "postgres".equals(dialect) || "postgresql".equals(dialect);
@@ -436,26 +411,25 @@ public class SchemaManager {
         }
     }
 
-    /** Runs one index-creation statement, logging and continuing on failure. */
     private static void execIndexDdl(Connection c, EntitySchema schema, String table, String sql) {
         try (Statement s = c.createStatement()) {
             s.execute(sql);
             recordMigration(c, schema.getName(), sql);
         } catch (SQLException e) {
+            // An index is a performance concern, never a correctness one, so a
+            // failure here must not fail the schema save.
             LOG.warn("[INDEX] Failed to create index on {} ({}): {}", table, sql, e.getMessage());
         }
     }
 
     /**
-     * Builds a collision-safe, <=63-char index identifier. {@code quote()}
-     * uppercases whatever is passed to it (matching the rest of this class'
-     * uppercase physical-identifier convention), so casing here is irrelevant.
+     * Builds a collision-safe, <=63-char index identifier.
      *
-     * <p>A short SHA-256-derived hash of {@code table+"."+col+"."+kind} is
-     * appended after a truncated human-readable label, so two columns whose
-     * naive "IDX_&lt;table&gt;_&lt;col&gt;" names would truncate to the same
-     * 63 characters (routine once the table name alone is near the limit)
-     * still get distinct, stable index names.
+     * <p>Physical table names already run near Postgres's 63-char identifier
+     * limit, so two columns' naively-truncated index names can collide — and
+     * {@code CREATE INDEX IF NOT EXISTS} treats an existing name as success
+     * regardless of what it actually indexes, silently leaving one column
+     * unindexed. Appending a hash of table+column+kind keeps them distinct.
      */
     private static String indexName(String table, String col, String kind) {
         String digest = shortHash(table + "." + col + "." + kind);
@@ -467,7 +441,7 @@ public class SchemaManager {
         return label + "_" + digest;
     }
 
-    /** First 10 hex chars (5 bytes) of a SHA-256 digest — collision-safe for this use, not security-sensitive. */
+    /** First 10 hex chars of a SHA-256 digest — collision-safe here, not security-sensitive. */
     private static String shortHash(String input) {
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
