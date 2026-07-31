@@ -2,7 +2,7 @@
 
 **Source design doc:** [`TENANT_ISOLATION_SECURITY_PLAN.md`](./TENANT_ISOLATION_SECURITY_PLAN.md) (DRAFT, six review rounds closed, `92b20ba`). This document does not repeat that plan's rationale, review history, or the evidence behind each finding — it exists purely to break the plan's six sub-phases into independently-committable, independently-reviewable units of work, track their status, and record what actually landed.
 
-**How to review this:** each task below lands as its own commit on `feature/tenant-security`, with a commit message prefixed `feat(S#.#):` / `test(S#.#):` / `fix(S#.#):` / `docs(S#.#):` naming the task ID — use `git log --oneline --grep="S1.2"` (etc.) to find a specific task's commit, or `git log --oneline` for the full sequence. A task is only marked ✅ once its own exit-criteria checks pass and (where the task touches a route or UI-visible behavior) it has been driven through the real Studio/Runtime UI per this repo's testing convention, not backend tests alone.
+**How to review this:** each task below lands as its own commit on `feature/tenant-security`, with a commit message prefixed `feat(S#.#):` / `test(S#.#):` / `fix(S#.#):` / `docs(S#.#):` naming the task ID — use `git log --oneline --grep="S1.2"` (etc.) to find a specific task's commit, or `git log --oneline` for the full sequence. A task is only marked ✅ once its own exit-criteria checks pass and (where the task touches a route or UI-visible behavior) it has been driven through the real Studio/Runtime UI per this repo's testing convention, not backend tests alone. See **Testing doctrine** below for exactly how each task is proven — including the small number that have no end-user UI surface at all, which are labeled as such, never silently skipped.
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
@@ -11,6 +11,26 @@
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
 - S4 is independent/parallel-safe. S5 is last (needs S1–S3; its ai-builder half can start once S2 exists).
+
+---
+
+## Testing doctrine — every task is proven live in the browser, not by tests alone
+
+This repo's standing rule (`/memories/repo/testing-conventions.md`): verification means opening Studio (5174) or Runtime (5175), performing the exact action a real user would, and observing the actual rendered result — never a backend/API/DB check substituting for that. This section makes the rule concrete for every task above, so ✅ always means "actually clicked/typed through it," not "a test asserted it."
+
+**Three honest categories — tagged inline in each script below, not one blanket rule:**
+
+1. **[Cat. 1] Real, existing UI surface → must be driven live.** Confirmed to exist today by reading the actual source: Header's app switcher (`Header.tsx`), Studio's chat-driven create/scaffold/edit flow (`ChatPane.tsx`), Studio's `DataDrawer` (entity rows), Runtime's own login form (`AppRuntimeShell.tsx`), Runtime's `FileUploadField` (drag-and-drop), Runtime's `SavedViewsBar` (save/select filter views), Runtime's `StudioTableLive` entity grids. Any task whose behavior surfaces through one of these gets a real click-through script — no shortcuts.
+2. **[Cat. 2] Ops/service mechanism with no end-user path by product design → verified as an operator, not a "user."** Debug routes, the break-glass admin/service token, audit-log storage, the dead `.../full` route (confirmed zero real callers in earlier review rounds), startup log lines, and CI-only drift/reflection tests are not things any end user ever reaches — through a button *or* a chat command (confirmed: no `delete_entity`/`invite_member`/service-token-login tool is registered anywhere, and AppBana's whole surface is chat-tool-driven, not hidden-menu-driven). There is no flow to shortcut here, so these are verified with a direct, deliberate HTTP call using the real credential against the real running backend, and always labeled as such — never passed off as a UI click-through.
+3. **[Cat. 3] Real end-user capability the product hasn't built UI (or a chat tool) for yet → flagged, not assumed.** Exactly two tasks: **S1.6** (`/api/templates` writes) and **S2.7** (membership grant/revoke — no members/invite panel or AI tool exists anywhere). Building UI for these is scope beyond this security plan. Flagged in-place below; needs your decision before those two are marked done.
+
+### Standing UI test fixture (created once at the start of execution, reused across every checkpoint)
+Three real accounts, registered through Studio's actual sign-up screen — not the API. This dev environment already assigns every self-registered user their own distinct `tenantId` (confirmed in `data/users.json`, e.g. `t-3353c7f8`), so plain self-registration IS the "two tenants" fixture, no seeding script needed:
+- **User A** — owns "QA Tenant A App" (one entity, e.g. `Widget`: name/price). Plays the legitimate owner in every deny scenario.
+- **User B** — owns "QA Tenant B App" (one entity, e.g. `Gadget`). Plays the foreign-tenant session in every scenario.
+- **User C** — registered once S2.6/S3.7 need a granted, non-owner identity; granted `member`/`end-user` role on User A's app via whichever mechanism the S2.7 decision lands on.
+
+Credentials are recorded in session memory once actually created — not fabricated here since nothing has been implemented yet.
 
 ---
 
@@ -32,6 +52,14 @@
 - [ ] Route census exists, attached to the plan doc, every row has non-empty tenant/app-source, known-callers, and data-preconditions columns.
 - [ ] Adding/renaming/removing a route without updating the census fails CI (set comparison).
 - [ ] `serverType != jdk` either shares the middleware chain or refuses to start.
+
+### UI verification script — S0
+- **S0.0** [Cat. 2 — build tooling, no UI surface] `mvn -q -DskipTests compile` (then full `mvn test`) succeeds on a clean shell; `start-everything` boots all four services. Live proof folds into S0.1 (first task sharing this code path).
+- **S0.1** [Cat. 1] Open Studio at http://localhost:5174, log in as an existing/fixture user, confirm the app switcher populates and a chat message round-trips — this exercises `resolveIdentity` on every request; a silent break shows up as a failed login or empty switcher.
+- **S0.1b** [Cat. 2 — same code path as S0.1] No separate script; green test + S0.1's smoke pass together are the proof.
+- **S0.2** [Cat. 2 — generated report, not behavior] Read the generated census table for completeness against the actual registered route set — a structural review, not a browser action.
+- **S0.3** [Cat. 2 — CI gate] Temporarily add/remove a dummy route locally, confirm the test fails, then revert. Not UI-observable by nature.
+- **S0.4** [Cat. 2, dormant branch by design] Confirm `config.json`'s `serverType` is `jdk` here (the fail-fast branch is intentionally never exercised in this environment). Live proof is the same Studio login smoke as S0.1.
 
 ---
 
@@ -69,6 +97,21 @@
 - [ ] A valid service/admin token is admitted by `TenantAccessGuard` regardless of path tenant.
 - [ ] **Release-process criterion:** S1 is not deployed alone to any environment serving live deployed-app traffic — ships as one unit with S2.
 
+### UI verification script — S1
+- **S1.1** [Cat. 2 — no observable behavior alone] Proof deferred to S1.3.
+- **S1.2** [Cat. 2 — guard class not wired to a route yet] Proof deferred to S1.3.
+- **S1.3** [Cat. 1 — first real cross-tenant checkpoint] Log into Studio as **User B**; open the Header app switcher — User A's app must not appear. Type User A's app URL/id directly into the address bar while logged in as User B — must show a blocked/error state, never App-A's real content. Confirm the non-regression case: User A opens/edits/publishes/deletes their own app normally.
+- **S1.4** [Cat. 2 — confirmed no delete-entity chat tool or button anywhere in the product] Direct HTTP call from the real logged-in browser tab's own JS context (real session cookie/token, not a hand-built bearer context) — `DELETE /schema/{name}` as User B against User A's schema → 403; as User A against their own → success.
+- **S1.5** [Cat. 2 — debug route, no UI] Same direct-call method as S1.4, against `GET /api/debug/schemas`.
+- **S1.6** [Cat. 3 — flagged; pending your decision] See Testing doctrine above.
+- **S1.7** [Cat. 1] On Runtime (5175), for an app with a `file`-type field, log in as an end-user, use the real drag-and-drop `FileUploadField` to upload a small file, confirm the success toast and that the link resolves. Confirm the stored tenant/app comes from the session, not any client-supplied value.
+- **S1.8** [Cat. 1] On a Runtime entity list page, save a view via the real `SavedViewsBar` as User A; log in as User B, confirm it's not listed. The delete-someone-else's-view case has no button by definition — direct-call proof as in S1.4.
+- **S1.9** [Cat. 2 — confirmed zero real callers for `.../full`; `readToken` is a service credential with no UI login anywhere] Structural proof: grep confirms no remaining `hasRead`/`getReadToken()` callers; direct-call check that the six converted routes now require `hasAdmin`.
+- **S1.10** [Cat. 2 — ops log line] Start the backend with auth disabled, confirm the repeated WARN line in the terminal — an operator check, not a browser check.
+- **S1.11 / S1.12** [Cat. 2 — automated tests] Formalize the scenarios already proven live in S1.3/S1.8; no new script.
+- **S1.13** [Cat. 1 happy path / Cat. 2 failure branch] Proof: normal Studio login smoke. The fail-closed branch needs the backend to omit `tenantId`, not naturally triggerable against the real running backend — verified by its unit test only, noted rather than skipped silently.
+- **S1.14** [Cat. 2 — no login screen for a raw admin/service token exists, by product design] Direct-call proof: the real `adminToken` from `config.json` as a header against a Tenant-A-owned route with no Studio session presented — confirms bypass still works.
+
 ---
 
 ## Sub-phase S2 — Per-app membership model
@@ -95,6 +138,17 @@
 - [ ] An `end-user` member lists/gets the app but 403s on update/delete/release-management.
 - [ ] A user with membership on an app outside their own tenant sees that app in their own switcher/list.
 
+### UI verification script — S2
+- **S2.1 / S2.2** [Cat. 2 — schema/service class, not wired to a route yet] Proof deferred to S2.3/S2.6.
+- **S2.3** [Cat. 1, partial until S2.7 lands] Create a brand-new app via Studio's real chat-driven create flow as User A. Full confirmation that User A got an owner row needs S2.7's read route (DB check only as secondary corroboration); until then, indirect proof is that User A can still manage the app they just created.
+- **S2.4** [Cat. 1 — against real pre-existing data, not the fixture] Take an app already in this dev database from before this migration existed (an account already in `data/users.json`), log in as its original creator through Studio's real login form after the migration runs, confirm they can still open/edit it — the single most important check in S2, since it's real data.
+- **S2.5** [Cat. 2 — no isolated action] Proof deferred to S2.6/S2.9.
+- **S2.6** [Cat. 1 — the central S2 checkpoint] Grant User B `member` on App-A (mechanism per the S2.7 decision). Log in as User B: App-A appears in the switcher and opens; clicking update/delete/publish/deploy from the real Studio UI must be blocked (403) despite the grant. Repeat with an `end-user`-role grant on a second app and confirm the same read-admit/write-deny split.
+- **S2.7** [Cat. 3 — flagged; pending your decision] No members/invite panel exists anywhere in Studio today. See Testing doctrine above.
+- **S2.8** [Cat. 1] The Header app switcher itself. Log in as User B, open it, confirm only User B's own apps plus any cross-tenant memberships (S2.6) appear.
+- **S2.9** [Cat. 2 — automated tests] Formalizes S2.6/S2.7's already-proven scenarios.
+- **S2.10** [Cat. 1 — same surface as S2.8] Proof is the same switcher click-through after S2.6's grant.
+
 ---
 
 ## Sub-phase S3 — Entity data API enforcement
@@ -119,6 +173,14 @@
 - [ ] `GenericAppAuthController.login` returns identical status/body for "app doesn't exist" vs. "wrong password".
 - [ ] The shipped `app-bana-runtime` logs in (existing platform login, unchanged) and loads its own app end-to-end against a running backend using an `end-user`-role membership row; the same end-user 403s updating/deleting the app or loading a second app they aren't a member of. **Verified in the running apps (5175/8080), not guard unit tests alone.**
 
+### UI verification script — S3
+- **S3.1 / S3.2** [Cat. 2 — reserved field / guard class, not wired yet] Proof deferred to S3.3/S3.4.
+- **S3.3** [Cat. 1] Runtime's real login form for a deployed app with its own end-user table. Confirm correct credentials succeed; confirm a wrong password on a real account and a request for a nonexistent account show the identical on-screen message/status (cross-check via the browser network tab).
+- **S3.4** [Cat. 1 — both sides] Studio: as User B (no membership on App-A), Studio's `DataDrawer` for App-A's entity must fail/be empty. Runtime: an end-user session scoped to App-A works on App-A's own `StudioTableLive` grid; the same session 403s if pointed at App-B's entity route via a direct URL edit.
+- **S3.5** [Cat. 1 for the read side] Mark one entity `publicRead: true` (via chat, or a direct schema PATCH if Studio has no toggle yet — flag if so), then load that Runtime page in a fresh, fully logged-out browser tab and confirm it renders with no session, while a non-`publicRead` entity on the same app still requires login.
+- **S3.6** [Cat. 2 for route-family shapes with no dedicated screen, Cat. 1 for the ones that do] Formalizes S3.4's scenarios; any route family without a Runtime/Studio consumer is noted as such, not faked.
+- **S3.7** [Cat. 1 — the primary proof for all of S3, explicitly called for by the plan's own exit criteria] Grant a fresh User C `end-user` role on App-A, log into Runtime as User C, list/view App-A's data (must succeed), attempt an edit/delete or navigate to a second app with no grant (must 403 both) — in the running apps, not guard unit tests alone.
+
 ---
 
 ## Sub-phase S4 — Credential hygiene *(independent, parallel-safe)*
@@ -139,6 +201,15 @@
 - [ ] `SECURITY_FEATURES.md` matches what's actually running.
 - [ ] `appbana_audit` rows carry `tenant_id`/`app_id`; `actor` is never a raw token/session id.
 
+### UI verification script — S4
+- **S4.1** [Cat. 1 — against a real existing plaintext row] Log into Studio with one of `data/users.json`'s existing plaintext-password accounts using its real password, confirm login still succeeds, re-inspect the stored value afterward and confirm it's now a bcrypt hash, then log in a second time to confirm the now-hashed row still authenticates.
+- **S4.2** [Cat. 1 — same pattern, Runtime end-user login] Using S3.3's fixture end-user account.
+- **S4.3** [Cat. 2 — dead-code removal, no behavior change] Basic Studio login smoke (bearer-token auth unaffected).
+- **S4.4** [Cat. 2 — documentation, not code] Read-through against S4.1–S4.3's actual landed behavior; not UI-testable by nature.
+- **S4.5** [Cat. 2 — automated tests] Formalizes S4.1/S4.2's already-proven scenarios.
+- **S4.6** [Cat. 2 — no audit-log viewer exists anywhere in Studio/Runtime] Perform any normal UI action (e.g., S1.3's app edit), then inspect the resulting audit row directly and confirm `tenant_id`/`app_id` are populated.
+- **S4.7** [Cat. 2 — same reason as S4.6] Same method; confirm `actor` is the real userId, not a raw token.
+
 ---
 
 ## Sub-phase S5 — Capstone tests + ai-builder trust chain *(last — needs S1–S3)*
@@ -153,6 +224,11 @@
 - [ ] Capstone cross-tenant suite passes, wired into CI (not a one-off manual run).
 - [ ] ai-builder no longer trusts client-supplied tenant/app identity for any tool call.
 
+### UI verification script — S5
+- **S5.1** [Cat. 1] As User B, use Studio's real ChatPane against App-A's context (however it's reachable, which after S1–S3 it shouldn't be), confirm the AI agent's tool calls are rejected/re-scoped server-side rather than trusting whatever the client sent.
+- **S5.2** [Cat. 2 — automated capstone suite] Formalizes the full set of scenarios already individually proven live across S1–S3's own checkpoints; doesn't newly prove anything a browser hasn't already shown.
+- **S5.3** [Cat. 2 — documentation] Not UI-testable by nature.
+
 ---
 
 ## Open product decisions this tracker will hit before certain tasks
@@ -162,6 +238,7 @@ These block nothing in S0, but the tasks noted should pause for a product answer
 2. **First-run local/dev experience post-S3** — affects S2.4/S3 rollout docs only, not the guard code itself.
 3. **Runtime end-user password write path (S4.2)** — needs a short investigation (folded into S4.2 itself) into every place a runtime end-user's password column is written, not just login.
 4. **`/api/templates` reads — shared catalog or per-tenant?** — S1.6 proceeds with "writes gated, reads stay public" per the plan's own adopted default; revisit only if product says otherwise.
+5. **⏸️ BLOCKS S1.6 and S2.7 specifically — no product UI (or chat tool) exists for either capability today, confirmed by source read.** Templates writes (S1.6) and membership grant/revoke (S2.7) have no button and no AI-tool path anywhere in Studio/Runtime/`ToolRegistry`. Options: (a) verify these two via a direct, real-credentialed HTTP call as a named, documented exception to the UI-first rule (Testing doctrine Cat. 3) — zero added scope; or (b) build minimal UI for one or both (e.g., a small "Members" panel in `Header.tsx`) — real scope beyond the security plan, own estimate needed. Defaulting to nothing until you answer; S1.6/S2.7 stay ⬜ past their code landing if code lands before this is answered.
 
 ---
 
