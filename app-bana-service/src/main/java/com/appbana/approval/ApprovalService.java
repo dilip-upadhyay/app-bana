@@ -53,6 +53,8 @@ public class ApprovalService {
     public enum Status {
         DRAFT("DRAFT"),
         PENDING("PENDING"),
+        /** Two-level checker chain only: level-1 approved, awaiting level-2 signoff. */
+        PENDING_L2("PENDING_L2"),
         APPROVED("APPROVED"),
         REJECTED("REJECTED");
 
@@ -105,6 +107,27 @@ public class ApprovalService {
     }
 
     /**
+     * Two-level checker chain: returns true if the given user has the CHECKER_L2 role
+     * (final signoff) OR is the app owner / system. Mirrors {@link #hasCheckerOrOwnerPermission}
+     * for the level-1 role.
+     */
+    public static boolean hasCheckerL2OrOwnerPermission(String tenantId, String appId, String entityName, String userId) {
+        return UserRoleService.isCheckerL2(tenantId, appId, entityName, userId)
+                || AppAuthorization.isAppOwnerOrSystem(tenantId, appId, userId);
+    }
+
+    /**
+     * How many checker levels this entity requires (1 or 2). Loads the schema fresh rather
+     * than trusting a caller-supplied value, since the level gates who is allowed to act.
+     * Defaults to 1 (today's single-level behaviour) if the schema cannot be resolved.
+     */
+    public static int resolveApprovalLevels(String tenantId, String appId, String entityName) {
+        String key = (tenantId != null ? tenantId : "default") + "_" + (appId != null ? appId : "default") + "_" + entityName;
+        EntitySchema schema = SchemaManager.loadSchema(key);
+        return schema != null ? schema.getEffectiveApprovalLevels() : 1;
+    }
+
+    /**
      * H6 — Named helper: returns true if the given user has MAKER role OR is the app owner / system.
      */
     public static boolean hasMakerOrOwnerPermission(String tenantId, String appId, String entityName, String userId) {
@@ -144,8 +167,8 @@ public class ApprovalService {
                 }
 
                 Status currentStatus = Status.fromValue(currentStateStr);
-                if (currentStatus == Status.PENDING) {
-                    throw new ApprovalConflictException("Record " + rowId + " is already in PENDING approval state");
+                if (currentStatus == Status.PENDING || currentStatus == Status.PENDING_L2) {
+                    throw new ApprovalConflictException("Record " + rowId + " is already in " + currentStatus.getValue() + " approval state");
                 }
 
                 // Increment revision on resubmit after rejection or state update
@@ -190,14 +213,23 @@ public class ApprovalService {
     }
 
     /**
-     * Approves a PENDING record (PENDING -> APPROVED).
+     * Approves a PENDING record.
+     *
+     * <p>Single-level entities (the default): PENDING -&gt; APPROVED, requires the CHECKER role.
+     *
+     * <p>Two-level entities ({@code approvalLevels == 2}): the same call also drives the second
+     * hop, keyed on the row's <em>current</em> state rather than on anything the caller passes:
+     * <ul>
+     *   <li>PENDING -&gt; PENDING_L2, requires CHECKER (level-1). Not yet live; no revision merge.</li>
+     *   <li>PENDING_L2 -&gt; APPROVED, requires CHECKER_L2 (level-2, final signoff). Separation of
+     *       duties extends across the chain: the level-2 approver may be neither the submitter
+     *       nor the level-1 approver who advanced it to PENDING_L2 (read back from APPROVED_BY,
+     *       which the PENDING-&gt;PENDING_L2 hop stamps with the level-1 approver's id).</li>
+     * </ul>
      */
     public static Map<String, Object> approveRecord(String tenantId, String appId, String entityName, String rowId, String checkerUserId, String comments) throws Exception {
-        if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, checkerUserId)) {
-            throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER role on entity " + entityName);
-        }
-
         String tableName = getTableName(tenantId, appId, entityName);
+        int levels = resolveApprovalLevels(tenantId, appId, entityName);
 
         try (Connection conn = JdbcManager.getConnection(tenantId)) {
             conn.setAutoCommit(false);
@@ -206,6 +238,7 @@ public class ApprovalService {
                 int currentRevision = 1;
                 String submittedBy = null;
                 String parentRowId = null;
+                String priorApproverId = null;
 
                 String selectSql = "SELECT * FROM \"" + tableName + "\" WHERE \"ID\" = ? FOR UPDATE";
                 try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
@@ -219,43 +252,68 @@ public class ApprovalService {
                         if (currentRevision <= 0) currentRevision = 1;
                         submittedBy = rs.getString("SUBMITTED_BY");
                         parentRowId = readOptionalString(rs, "APPROVAL_PARENT_ID");
+                        priorApproverId = readOptionalString(rs, "APPROVED_BY");
                     }
                 }
 
-                if (!"PENDING".equalsIgnoreCase(currentStateStr)) {
-                    throw new ApprovalConflictException("Cannot approve record " + rowId + ": state is " + currentStateStr + " (must be PENDING)");
+                Status currentStatus = Status.fromValue(currentStateStr);
+                boolean atLevel2 = currentStatus == Status.PENDING_L2;
+
+                if (currentStatus != Status.PENDING && currentStatus != Status.PENDING_L2) {
+                    throw new ApprovalConflictException("Cannot approve record " + rowId + ": state is " + currentStateStr + " (must be PENDING" + (levels == 2 ? " or PENDING_L2" : "") + ")");
+                }
+
+                if (atLevel2) {
+                    if (!hasCheckerL2OrOwnerPermission(tenantId, appId, entityName, checkerUserId)) {
+                        throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER_L2 role on entity " + entityName);
+                    }
+                } else if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, checkerUserId)) {
+                    throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER role on entity " + entityName);
                 }
 
                 // CRITICAL SEPARATION OF DUTIES ENFORCEMENT:
-                // Approver CANNOT be the same user who submitted the record for approval!
+                // Approver CANNOT be the same user who submitted the record for approval, and at
+                // level 2 CANNOT be the same user who already approved it at level 1 either.
                 if (submittedBy != null && submittedBy.equalsIgnoreCase(checkerUserId)) {
                     throw new IllegalStateException("Separation of duties violation: Maker cannot approve their own submission.");
                 }
+                if (atLevel2 && priorApproverId != null && priorApproverId.equalsIgnoreCase(checkerUserId)) {
+                    throw new IllegalStateException("Separation of duties violation: the level-2 checker cannot be the same user who approved at level 1.");
+                }
 
-                // Update record status to APPROVED
-                String updateSql = "UPDATE \"" + tableName + "\" SET \"APPROVAL_STATUS\" = 'APPROVED', \"APPROVED_BY\" = ?, \"APPROVED_AT\" = NOW(), \"REJECTION_REASON\" = NULL WHERE \"ID\" = ?";
+                boolean advancesToLevel2 = !atLevel2 && levels == 2;
+                String nextStatus = advancesToLevel2 ? "PENDING_L2" : "APPROVED";
+                String actorRole = atLevel2 ? "CHECKER_L2" : "CHECKER";
+
+                // PENDING -> PENDING_L2 stamps APPROVED_BY/APPROVED_AT with the level-1 approver so
+                // the level-2 SoD check above can read it back; PENDING_L2 -> APPROVED overwrites it
+                // with the level-2 approver, which is the row's final, live state.
+                String updateSql = "UPDATE \"" + tableName + "\" SET \"APPROVAL_STATUS\" = ?, \"APPROVED_BY\" = ?, \"APPROVED_AT\" = NOW(), \"REJECTION_REASON\" = NULL WHERE \"ID\" = ?";
                 try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
-                    ps.setString(1, checkerUserId);
-                    ps.setObject(2, parseRowId(rowId));
+                    ps.setString(1, nextStatus);
+                    ps.setString(2, checkerUserId);
+                    ps.setObject(3, parseRowId(rowId));
                     ps.executeUpdate();
                 }
 
                 String diffJson = MAPPER.writeValueAsString(Map.of(
                         "rowId", rowId,
-                        "fromState", "PENDING",
-                        "toState", "APPROVED",
+                        "fromState", currentStateStr,
+                        "toState", nextStatus,
                         "submittedBy", submittedBy != null ? submittedBy : "",
                         "approvedBy", checkerUserId
                 ));
 
                 // Audit log entry
-                logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, "PENDING", "APPROVED", checkerUserId, "CHECKER", comments, diffJson);
+                logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, currentStateStr, nextStatus, checkerUserId, actorRole, comments, diffJson);
 
                 // C2.3 — this row is a revision of a live APPROVED row. Fold it back into the
                 // parent (which keeps its id, so foreign keys stay intact) and drop the
-                // revision row. Same transaction => the replacement is atomic.
+                // revision row. Only once the row has reached its FINAL APPROVED state — an
+                // intermediate PENDING_L2 hop must not merge yet, since the record is not
+                // actually approved until level 2 signs off. Same transaction => atomic.
                 String supersededParentId = null;
-                if (parentRowId != null && !parentRowId.isBlank()) {
+                if ("APPROVED".equals(nextStatus) && parentRowId != null && !parentRowId.isBlank()) {
                     boolean merged = mergeRevisionIntoParent(conn, tenantId, appId, entityName, tableName,
                             rowId, parentRowId, currentRevision, checkerUserId, submittedBy, comments);
                     // When the parent had already been deleted the revision itself stays live, so the
@@ -266,14 +324,14 @@ public class ApprovalService {
                 }
 
                 conn.commit();
-                LOG.info("[ApprovalService] Approved record {} in {} by checker {}", rowId, tableName, checkerUserId);
+                LOG.info("[ApprovalService] Record {} in {} moved {} -> {} by {} {}", rowId, tableName, currentStateStr, nextStatus, actorRole, checkerUserId);
 
                 Map<String, Object> result = new LinkedHashMap<>();
                 result.put("tenantId", tenantId);
                 result.put("appId", appId);
                 result.put("entityName", entityName);
                 result.put("rowId", supersededParentId != null ? supersededParentId : rowId);
-                result.put("status", "APPROVED");
+                result.put("status", nextStatus);
                 result.put("approvedBy", checkerUserId);
                 if (supersededParentId != null) {
                     result.put("mergedFromRevisionRowId", rowId);
@@ -288,13 +346,17 @@ public class ApprovalService {
     }
 
     /**
-     * Rejects a PENDING record (PENDING -> REJECTED).
+     * Rejects a PENDING (or, for two-level entities, PENDING_L2) record.
+     *
+     * <p>Level-1 reject is terminal: PENDING -&gt; REJECTED, back to the maker, unchanged from the
+     * single-level workflow.
+     *
+     * <p>Level-2 reject is NOT terminal: PENDING_L2 -&gt; PENDING, sent back to the level-1 checker
+     * for re-review rather than all the way back to the maker. {@code rejection_reason} is set so
+     * the level-1 checker sees why; {@code approved_by}/{@code approved_at} are cleared since the
+     * row is, once again, simply awaiting a first approval.
      */
     public static Map<String, Object> rejectRecord(String tenantId, String appId, String entityName, String rowId, String checkerUserId, String reason) throws Exception {
-        if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, checkerUserId)) {
-            throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER role on entity " + entityName);
-        }
-
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("Rejection reason is required");
         }
@@ -307,8 +369,9 @@ public class ApprovalService {
                 String currentStateStr = "PENDING";
                 int currentRevision = 1;
                 String submittedBy = null;
+                String priorApproverId = null;
 
-                String selectSql = "SELECT \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\" FROM \"" + tableName + "\" WHERE \"ID\" = ? FOR UPDATE";
+                String selectSql = "SELECT \"APPROVAL_STATUS\", \"APPROVAL_REVISION\", \"SUBMITTED_BY\", \"APPROVED_BY\" FROM \"" + tableName + "\" WHERE \"ID\" = ? FOR UPDATE";
                 try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
                     ps.setObject(1, parseRowId(rowId));
                     try (ResultSet rs = ps.executeQuery()) {
@@ -319,48 +382,74 @@ public class ApprovalService {
                         currentRevision = rs.getInt("APPROVAL_REVISION");
                         if (currentRevision <= 0) currentRevision = 1;
                         submittedBy = rs.getString("SUBMITTED_BY");
+                        priorApproverId = readOptionalString(rs, "APPROVED_BY");
                     }
                 }
 
-                if (!"PENDING".equalsIgnoreCase(currentStateStr)) {
-                    throw new ApprovalConflictException("Cannot reject record " + rowId + ": state is " + currentStateStr + " (must be PENDING)");
+                Status currentStatus = Status.fromValue(currentStateStr);
+                boolean atLevel2 = currentStatus == Status.PENDING_L2;
+
+                if (currentStatus != Status.PENDING && currentStatus != Status.PENDING_L2) {
+                    throw new ApprovalConflictException("Cannot reject record " + rowId + ": state is " + currentStateStr + " (must be PENDING or PENDING_L2)");
+                }
+
+                if (atLevel2) {
+                    if (!hasCheckerL2OrOwnerPermission(tenantId, appId, entityName, checkerUserId)) {
+                        throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER_L2 role on entity " + entityName);
+                    }
+                } else if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, checkerUserId)) {
+                    throw new IllegalStateException("Forbidden: User '" + checkerUserId + "' does not have CHECKER role on entity " + entityName);
                 }
 
                 // CRITICAL SEPARATION OF DUTIES ENFORCEMENT:
                 if (submittedBy != null && submittedBy.equalsIgnoreCase(checkerUserId)) {
                     throw new IllegalStateException("Separation of duties violation: Maker cannot reject their own submission.");
                 }
+                if (atLevel2 && priorApproverId != null && priorApproverId.equalsIgnoreCase(checkerUserId)) {
+                    throw new IllegalStateException("Separation of duties violation: the level-2 checker cannot be the same user who approved at level 1.");
+                }
 
-                // Update record status to REJECTED
-                String updateSql = "UPDATE \"" + tableName + "\" SET \"APPROVAL_STATUS\" = 'REJECTED', \"APPROVED_BY\" = ?, \"APPROVED_AT\" = NOW(), \"REJECTION_REASON\" = ? WHERE \"ID\" = ?";
+                String nextStatus = atLevel2 ? "PENDING" : "REJECTED";
+                String actorRole = atLevel2 ? "CHECKER_L2" : "CHECKER";
+
+                String updateSql = atLevel2
+                        // Sent back to level-1: this is a re-review, not a terminal rejection, so the
+                        // row returns to plain PENDING with no approver on record yet.
+                        ? "UPDATE \"" + tableName + "\" SET \"APPROVAL_STATUS\" = 'PENDING', \"APPROVED_BY\" = NULL, \"APPROVED_AT\" = NULL, \"REJECTION_REASON\" = ? WHERE \"ID\" = ?"
+                        : "UPDATE \"" + tableName + "\" SET \"APPROVAL_STATUS\" = 'REJECTED', \"APPROVED_BY\" = ?, \"APPROVED_AT\" = NOW(), \"REJECTION_REASON\" = ? WHERE \"ID\" = ?";
                 try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
-                    ps.setString(1, checkerUserId);
-                    ps.setString(2, reason);
-                    ps.setObject(3, parseRowId(rowId));
+                    if (atLevel2) {
+                        ps.setString(1, reason);
+                        ps.setObject(2, parseRowId(rowId));
+                    } else {
+                        ps.setString(1, checkerUserId);
+                        ps.setString(2, reason);
+                        ps.setObject(3, parseRowId(rowId));
+                    }
                     ps.executeUpdate();
                 }
 
                 String diffJson = MAPPER.writeValueAsString(Map.of(
                         "rowId", rowId,
-                        "fromState", "PENDING",
-                        "toState", "REJECTED",
+                        "fromState", currentStateStr,
+                        "toState", nextStatus,
                         "submittedBy", submittedBy != null ? submittedBy : "",
                         "rejectedBy", checkerUserId,
                         "reason", reason
                 ));
 
                 // Audit log entry
-                logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, "PENDING", "REJECTED", checkerUserId, "CHECKER", reason, diffJson);
+                logAuditEntry(conn, tenantId, appId, entityName, rowId, currentRevision, currentStateStr, nextStatus, checkerUserId, actorRole, reason, diffJson);
 
                 conn.commit();
-                LOG.info("[ApprovalService] Rejected record {} in {} by checker {} with reason: {}", rowId, tableName, checkerUserId, reason);
+                LOG.info("[ApprovalService] Record {} in {} moved {} -> {} by {} {} with reason: {}", rowId, tableName, currentStateStr, nextStatus, actorRole, checkerUserId, reason);
 
                 return Map.of(
                         "tenantId", tenantId,
                         "appId", appId,
                         "entityName", entityName,
                         "rowId", rowId,
-                        "status", "REJECTED",
+                        "status", nextStatus,
                         "rejectedBy", checkerUserId,
                         "reason", reason
                 );
@@ -391,10 +480,26 @@ public class ApprovalService {
 
     public static List<Map<String, Object>> getPendingQueue(String tenantId, String appId, String entityName,
                                                            String callerUserId, int offset) throws Exception {
+        return getPendingQueue(tenantId, appId, entityName, callerUserId, offset, 1);
+    }
+
+    /**
+     * Two-level checker chain — {@code level == 2} returns the level-2 (final signoff) queue
+     * instead of the level-1 one: PENDING_L2 rows, authorized against CHECKER_L2, additionally
+     * excluding rows the caller themselves already approved at level 1 (separation of duties
+     * extends across the chain, not just against the original maker).
+     */
+    public static List<Map<String, Object>> getPendingQueue(String tenantId, String appId, String entityName,
+                                                           String callerUserId, int offset, int level) throws Exception {
         if (callerUserId == null || callerUserId.isBlank()) {
             throw new IllegalStateException("Unauthorized: Caller user ID required");
         }
-        if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId)) {
+        boolean l2 = level == 2;
+        if (l2) {
+            if (!hasCheckerL2OrOwnerPermission(tenantId, appId, entityName, callerUserId)) {
+                throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have CHECKER_L2 or owner rights on entity " + entityName);
+            }
+        } else if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId)) {
             throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have CHECKER or owner rights on entity " + entityName);
         }
 
@@ -404,22 +509,26 @@ public class ApprovalService {
         // C3.7: oldest submission first. A review queue is FIFO — under DESC the
         // longest-waiting record sinks to the bottom and starves, which is exactly
         // what an approval SLA exists to prevent.
+        String statusFilter = l2 ? "PENDING_L2" : "PENDING";
         String sql = "SELECT * FROM \"" + tableName + "\""
-                + " WHERE \"APPROVAL_STATUS\" = 'PENDING'"
+                + " WHERE \"APPROVAL_STATUS\" = '" + statusFilter + "'"
                 + " AND (\"SUBMITTED_BY\" IS NULL OR \"SUBMITTED_BY\" <> ?)"
+                + (l2 ? " AND (\"APPROVED_BY\" IS NULL OR \"APPROVED_BY\" <> ?)" : "")
                 + " ORDER BY \"SUBMITTED_AT\" ASC LIMIT ? OFFSET ?";
 
         try (Connection conn = JdbcManager.getConnection(tenantId);
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, callerUserId);
-            ps.setInt(2, QUEUE_PAGE_SIZE);
-            ps.setInt(3, Math.max(0, offset));
+            int i = 1;
+            ps.setString(i++, callerUserId);
+            if (l2) ps.setString(i++, callerUserId);
+            ps.setInt(i++, QUEUE_PAGE_SIZE);
+            ps.setInt(i, Math.max(0, offset));
             try (ResultSet rs = ps.executeQuery()) {
                 int colCount = rs.getMetaData().getColumnCount();
                 while (rs.next()) {
                     Map<String, Object> row = new LinkedHashMap<>();
-                    for (int i = 1; i <= colCount; i++) {
-                        row.put(rs.getMetaData().getColumnName(i).toLowerCase(Locale.ROOT), rs.getObject(i));
+                    for (int c = 1; c <= colCount; c++) {
+                        row.put(rs.getMetaData().getColumnName(c).toLowerCase(Locale.ROOT), rs.getObject(c));
                     }
                     results.add(row);
                 }
@@ -443,20 +552,33 @@ public class ApprovalService {
      * no badge, because users stop trusting it and stop opening the queue.
      */
     public static int getPendingCount(String tenantId, String appId, String entityName, String callerUserId) throws Exception {
+        return getPendingCount(tenantId, appId, entityName, callerUserId, 1);
+    }
+
+    /** Two-level checker chain — {@code level == 2} counts the level-2 queue instead. */
+    public static int getPendingCount(String tenantId, String appId, String entityName, String callerUserId, int level) throws Exception {
         if (callerUserId == null || callerUserId.isBlank()) {
             throw new IllegalStateException("Unauthorized: Caller user ID required");
         }
-        if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId)) {
+        boolean l2 = level == 2;
+        if (l2) {
+            if (!hasCheckerL2OrOwnerPermission(tenantId, appId, entityName, callerUserId)) {
+                throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have CHECKER_L2 or owner rights on entity " + entityName);
+            }
+        } else if (!hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId)) {
             throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have CHECKER or owner rights on entity " + entityName);
         }
 
         String tableName = getTableName(tenantId, appId, entityName);
+        String statusFilter = l2 ? "PENDING_L2" : "PENDING";
         String sql = "SELECT COUNT(*) FROM \"" + tableName + "\""
-                + " WHERE \"APPROVAL_STATUS\" = 'PENDING'"
-                + " AND (\"SUBMITTED_BY\" IS NULL OR \"SUBMITTED_BY\" <> ?)";
+                + " WHERE \"APPROVAL_STATUS\" = '" + statusFilter + "'"
+                + " AND (\"SUBMITTED_BY\" IS NULL OR \"SUBMITTED_BY\" <> ?)"
+                + (l2 ? " AND (\"APPROVED_BY\" IS NULL OR \"APPROVED_BY\" <> ?)" : "");
         try (Connection conn = JdbcManager.getConnection(tenantId);
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, callerUserId);
+            if (l2) ps.setString(2, callerUserId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getInt(1) : 0;
             }
@@ -465,14 +587,15 @@ public class ApprovalService {
 
     /**
      * Gets audit history entries for a given record.
-     * Enforces role authorization (callerUserId must be MAKER, CHECKER, or App Owner/System).
+     * Enforces role authorization (callerUserId must be MAKER, CHECKER, CHECKER_L2, or App Owner/System).
      */
     public static List<Map<String, Object>> getAuditTrail(String tenantId, String appId, String entityName, String rowId, String callerUserId) throws Exception {
         if (callerUserId == null || callerUserId.isBlank()) {
             throw new IllegalStateException("Unauthorized: Caller user ID required");
         }
         boolean isMaker = UserRoleService.isMaker(tenantId, appId, entityName, callerUserId);
-        boolean isOwnerOrHasCheckerRole = hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId);
+        boolean isOwnerOrHasCheckerRole = hasCheckerOrOwnerPermission(tenantId, appId, entityName, callerUserId)
+                || hasCheckerL2OrOwnerPermission(tenantId, appId, entityName, callerUserId);
 
         if (!isMaker && !isOwnerOrHasCheckerRole) {
             throw new IllegalStateException("Forbidden: User '" + callerUserId + "' does not have permission to view approval audit history for " + entityName);

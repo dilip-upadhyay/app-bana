@@ -73,6 +73,19 @@ public class AdvancedQueryTest {
                 field("age", "int", false, false)));
         SchemaManager.saveSchema(numeric);
 
+        // These are fixture tables on the shared dev Postgres, and Liquibase only
+        // manages schema, not data, so rows accumulate across `mvn test` runs. The
+        // range tests assert exact counts, so they must start empty.
+        try (java.sql.Connection conn = JdbcManager.getConnection();
+                java.sql.Statement st = conn.createStatement()) {
+            st.execute("DELETE FROM \"" + SchemaManager.getPhysicalTableName(customer).toUpperCase(Locale.ROOT)
+                    + "\"");
+            st.execute("DELETE FROM \"" + SchemaManager.getPhysicalTableName(logs).toUpperCase(Locale.ROOT)
+                    + "\"");
+            st.execute("DELETE FROM \"" + SchemaManager.getPhysicalTableName(numeric).toUpperCase(Locale.ROOT)
+                    + "\"");
+        }
+
         // Insert sample customer rows
         for (int i = 0; i < 5; i++) {
             Map<String, Object> r = new LinkedHashMap<>();
@@ -643,5 +656,101 @@ public class AdvancedQueryTest {
         assertEquals(Set.of("id", "title"), new HashSet<>(keys),
                 "bare GET on an approval-required entity must return exactly the declared fields, "
                         + "no approval columns: " + row);
+    }
+
+    // Range operator (filter=field:min..max). customer.age is seeded 20..24 across
+    // 5 rows (see setup()); line_item.unit_price is seeded 9.99 / 4.50 / 100.00.
+
+    @Test
+    @Order(19)
+    void rangeFilterOnIntColumnScopesToBoundedSubset() throws Exception {
+        JsonNode node = get("/api/default_default_customer?filter=age:22..24&count=true");
+        assertEquals(3, node.get("total").asLong(), "age in [22,24] should match ages 22, 23, 24");
+    }
+
+    @Test
+    @Order(20)
+    void openEndedLowerBoundRangeMatchesEverythingAtOrAbove() throws Exception {
+        JsonNode node = get("/api/default_default_customer?filter=age:23..&count=true");
+        assertEquals(2, node.get("total").asLong(), "age >= 23 should match ages 23, 24 only");
+    }
+
+    @Test
+    @Order(21)
+    void openEndedUpperBoundRangeMatchesEverythingAtOrBelow() throws Exception {
+        JsonNode node = get("/api/default_default_customer?filter=age:..21&count=true");
+        assertEquals(2, node.get("total").asLong(), "age <= 21 should match ages 20, 21 only");
+    }
+
+    @Test
+    @Order(22)
+    void rangeFilterOnDecimalColumnScopesToBoundedSubset() throws Exception {
+        JsonNode node = get("/api/default_default_line_item?filter=unit_price:5..50&count=true");
+        assertEquals(1, node.get("total").asLong(), "only unit_price 9.99 falls within [5, 50]");
+    }
+
+    @Test
+    @Order(23)
+    void rangeFilterOnTimestampColumnWithOpenUpperBound() throws Exception {
+        // Every seeded logs row was inserted "now" — a lower bound far in the
+        // past with no upper bound must match all 3 without needing exact times.
+        JsonNode node = get("/api/default_default_logs?filter=createdAt:1900-01-01T00:00:00Z..&count=true");
+        assertEquals(3, node.get("total").asLong());
+    }
+
+    @Test
+    @Order(24)
+    void rangeFilterOnNonOrderableFieldRejectedWith400() throws Exception {
+        // firstName is a plain string column — "min..max" only makes sense for
+        // orderable (numeric/date/reference) kinds; must fail closed, not
+        // silently ignore the range and return an unscoped list.
+        JsonNode node = getExpectStatus("/api/default_default_customer?filter=firstName:A..Z&count=true", 400);
+        assertTrue(node.has("errors") && node.get("errors").has("firstName"),
+                "the offending field should be named in the error: " + node);
+    }
+
+    @Test
+    @Order(25)
+    void rangeFilterWithUnparseableBoundRejectedWith400() throws Exception {
+        JsonNode node = getExpectStatus("/api/default_default_customer?filter=age:abc..30&count=true", 400);
+        assertTrue(node.has("errors") && node.get("errors").has("age"), "malformed bound should 400: " + node);
+    }
+
+    @Test
+    @Order(26)
+    void rangeFilterWithNeitherBoundRejectedWith400() throws Exception {
+        // "age:.." — both sides empty — is meaningless, not "no filter".
+        JsonNode node = getExpectStatus("/api/default_default_customer?filter=age:..&count=true", 400);
+        assertTrue(node.has("errors") && node.get("errors").has("age"), "empty range should 400: " + node);
+    }
+
+    @Test
+    @Order(27)
+    void syncIndexesCreatesBtreeAndTrigramIndexesOnPostgres() throws Exception {
+        // Every ensureTable() call should leave the table with more than its PK
+        // index: a B-tree per column, plus a pg_trgm GIN index on the STRING
+        // columns so the default substring ILIKE filter isn't a full scan.
+        EntitySchema customer = new EntitySchema();
+        customer.setName("customer");
+        customer.setTenantId("default");
+        customer.setAppId("default");
+        String table = SchemaManager.getPhysicalTableName(customer);
+
+        List<String> indexDefs = new ArrayList<>();
+        try (java.sql.Connection conn = JdbcManager.getConnection();
+                java.sql.PreparedStatement ps = conn.prepareStatement(
+                        "SELECT indexdef FROM pg_indexes WHERE tablename = ?")) {
+            // getPhysicalTableName() already returns the upper-cased identifier
+            // this table was actually quoted+created with (see SchemaManager.quote()) —
+            // Postgres preserves case for quoted identifiers, so pg_indexes.tablename
+            // is this same uppercase string, not the SQL-standard-default lowercase.
+            ps.setString(1, table);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) indexDefs.add(rs.getString(1));
+            }
+        }
+        assertTrue(indexDefs.size() > 1, "expected more than just the PK index on " + table + ": " + indexDefs);
+        assertTrue(indexDefs.stream().anyMatch(d -> d.toLowerCase(Locale.ROOT).contains("gin")),
+                "expected at least one GIN trigram index on a string column: " + indexDefs);
     }
 }

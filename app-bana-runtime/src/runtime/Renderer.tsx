@@ -228,6 +228,61 @@ function maybeConditional(props: Record<string, unknown>, jsx: React.ReactElemen
   return <ConditionalField conditions={conditions}>{jsx}</ConditionalField>;
 }
 
+interface PlainInputControlArgs {
+  nestedType: string;
+  inputId: string;
+  className: string;
+  styleObj: React.CSSProperties;
+  props: Record<string, unknown>;
+  fieldName: string;
+  required: boolean;
+  entityAttr: Record<string, string | undefined>;
+  fieldAttr: Record<string, string | undefined>;
+}
+
+/**
+ * A checkbox's `value` attribute (not `defaultValue`) is what gets submitted
+ * via FormData when checked — it defaults to "on" if left unset. Passing
+ * `defaultValue={String(props.value ?? '')}` (as every other input type does)
+ * sets that value attribute to "" when there's no initial value, so a
+ * checked checkbox submits an empty string instead of "on", which the save
+ * handler then nulls out. Use `defaultChecked` instead and never set `value`
+ * for checkboxes; every other input type keeps the original defaultValue
+ * behaviour.
+ */
+function renderPlainInputControl(args: PlainInputControlArgs): React.ReactElement {
+  const { nestedType, inputId, className, styleObj, props, fieldName, required, entityAttr, fieldAttr } = args;
+  if (nestedType === 'checkbox') {
+    return (
+      <ValidatedInput
+        id={inputId}
+        className={`appbana-input ${className}`}
+        style={styleObj}
+        type="checkbox"
+        defaultChecked={props.value === true || props.value === 'true'}
+        name={fieldName}
+        required={required}
+        {...entityAttr}
+        {...fieldAttr}
+      />
+    );
+  }
+  return (
+    <ValidatedInput
+      id={inputId}
+      className={`appbana-input ${className}`}
+      style={styleObj}
+      type={nestedType}
+      placeholder={String(props.placeholder ?? '')}
+      defaultValue={String(props.value ?? '')}
+      name={fieldName}
+      required={required}
+      {...entityAttr}
+      {...fieldAttr}
+    />
+  );
+}
+
 function renderNode(
   node: ComponentNode,
   nodeMap: Map<string, ComponentNode>,
@@ -406,20 +461,9 @@ function renderNode(
               entityAttr={entityAttr}
               fieldAttr={fieldAttr}
             />
-          ) : (
-            <ValidatedInput
-              id={inputId}
-              className={`appbana-input ${className}`}
-              style={styleObj}
-              type={nestedType}
-              placeholder={String(props.placeholder ?? '')}
-              defaultValue={String(props.value ?? '')}
-              name={fieldName}
-              required={required}
-              {...entityAttr}
-              {...fieldAttr}
-            />
-          )}
+          ) : renderPlainInputControl({
+              nestedType, inputId, className, styleObj, props, fieldName, required, entityAttr, fieldAttr,
+            })}
         </FormField>
       );
     }

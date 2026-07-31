@@ -119,6 +119,8 @@ public class ListEntitiesTool implements Tool {
                     result.put("message", formattedMessage.toString());
 
                     return ToolResult.success(getName(), result, executionTime);
+                } else if (response.statusCode() == 401) {
+                    throw new BackendAuthException(getName() + ": list_entities (app context) returned 401");
                 } else {
                     log.error("[ListEntitiesTool] Failed to fetch app: {} - {}", response.statusCode(),
                             response.body());
@@ -171,12 +173,17 @@ public class ListEntitiesTool implements Tool {
                     result.put("message", formattedMessage.toString());
 
                     return ToolResult.success(getName(), result, executionTime);
+                } else if (response.statusCode() == 401) {
+                    throw new BackendAuthException(getName() + ": list_entities (global) returned 401");
                 } else {
                     log.error("[ListEntitiesTool] API error: {} - {}", response.statusCode(), response.body());
                     return ToolResult.error(getName(), "API error: " + response.statusCode());
                 }
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[ListEntitiesTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[ListEntitiesTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());

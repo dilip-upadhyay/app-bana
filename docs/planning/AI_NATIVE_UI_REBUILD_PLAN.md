@@ -11,6 +11,12 @@
 - [Maker-Checker Plan](./MAKER_CHECKER_PLAN.md) — **Phase C**: approval workflows.
 - Live status: [`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md).
 
+> [!NOTE]
+> `app-bana-ui/` was deleted in Stage 4 (`6edd19a`). Paths under it below are written as plain code
+> spans, not links, because there is nothing left to link to — they record what the source *was* at
+> the time each stage was executed. Its replacements are `app-bana-shared/`, `app-bana-studio/` and
+> `app-bana-runtime/`.
+
 ---
 
 ## Table of Contents
@@ -35,7 +41,7 @@
 
 ## TL;DR
 
-Rebuild the AppBana Studio as an **AI-native** frontend: chat drives everything — no canvas, no palette, no property inspector. Segregate the current monolithic [`app-bana-ui/`](../../app-bana-ui) into three pnpm workspace packages:
+Rebuild the AppBana Studio as an **AI-native** frontend: chat drives everything — no canvas, no palette, no property inspector. Segregate the current monolithic `app-bana-ui/` into three pnpm workspace packages:
 
 | Package | Purpose | Port |
 |---|---|---|
@@ -51,11 +57,11 @@ Backend gains three additions in Stage 0: SSE streaming for the agent, tenant br
 
 ## Why we are rebuilding
 
-The current [`app-bana-ui/`](../../app-bana-ui) mixes three concerns in one project:
+The current `app-bana-ui/` mixes three concerns in one project:
 
 1. **A drag-and-drop Studio builder** (canvas, component library, inspector, tree store, token/theme editor, page manager, workflow designer)
-2. **An AI chat side panel** ([`src/components/ai-builder/ai-chat-builder.ts`](../../app-bana-ui/src/components/ai-builder/ai-chat-builder.ts)) bolted into the Studio's left tab
-3. **A runtime renderer** ([`src/runtime/`](../../app-bana-ui/src/runtime)) that walks a `PageMeta` tree and renders live pages against the backend's dynamic entity CRUD APIs
+2. **An AI chat side panel** (`src/components/ai-builder/ai-chat-builder.ts`) bolted into the Studio's left tab
+3. **A runtime renderer** (`src/runtime/`) that walks a `PageMeta` tree and renders live pages against the backend's dynamic entity CRUD APIs
 
 The canvas era left a lot of code that no longer serves an AI-native flow where the human never touches a canvas — they just chat, and the app appears and evolves. The rebuild throws away the canvas/palette/inspector, keeps the metadata contract, and reshapes the whole experience around conversation with the agent.
 
@@ -76,7 +82,7 @@ Additional benefits of the split:
 
 Explicitly out of scope for this rebuild:
 
-- Feature parity with old [`app-bana-ui/`](../../app-bana-ui) canvas / palette / inspector / workflow-designer / schema-builder
+- Feature parity with old `app-bana-ui/` canvas / palette / inspector / workflow-designer / schema-builder
 - Migrating LitElement components as-is (all UI is React from Stage 1 onwards)
 - Real-time collaborative editing
 - Mobile-native shell (unblocked by runtime segregation, but not delivered here)
@@ -155,7 +161,7 @@ The bar for "done" is **"AI-native flow is fully functional"**, not feature pari
 | Data drawer, session picker, image paste | Stage 3 (v1.1) |
 | Select-and-instruct feature | Stage 6 (v2) — foundations (`data-appbana-*` attrs + postMessage) baked into Stages 1–2 |
 | ComponentNode ID stability | Verify + fix in Stage 0 |
-| Old [`app-bana-ui/`](../../app-bana-ui) | Kept running during Stages 1–2, retired in Stage 4 |
+| Old `app-bana-ui/` | Kept running during Stages 1–2, retired in Stage 4 |
 | Feature parity check | NOT required — bar is "AI-native flow fully functional" |
 | Ports | studio 5174, runtime 5175, old ui 5173, backend 8080, ai 8081 |
 | UX stance | Preview = first-class INPUT surface (hover highlight from day one), not just output |
@@ -176,7 +182,7 @@ The bar for "done" is **"AI-native flow is fully functional"**, not feature pari
 
 ### 0.1 — Verify `ComponentNode.id` stability
 
-- Read [`app-bana-ui/src/models/metadata.ts`](../../app-bana-ui/src/models/metadata.ts)
+- Read `app-bana-ui/src/models/metadata.ts`
 - Read [`ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java`](../../ai-builder/src/main/java/com/appbana/ai/agent/tool/GeneratePageTool.java)
 - Confirm every node written by the agent gets a stable `id` that survives regeneration
 - **Fix** if unstable — the `data-appbana-node` attribute story and future select-and-instruct UX depend on this
@@ -229,20 +235,20 @@ Event schema (SSE `event:` + JSON `data:`):
 
 ## Stage 1 — Workspace skeleton + Studio MVP
 
-Frontend workspace work. Ships the AI-native studio, embedding the **existing** [`app-bana-ui`](../../app-bana-ui) runtime on 5173 via iframe. Nothing in the old UI is retired yet.
+Frontend workspace work. Ships the AI-native studio, embedding the **existing** `app-bana-ui` runtime on 5173 via iframe. Nothing in the old UI is retired yet.
 
 ### 1.1 — Root workspace setup
 
 - Create `pnpm-workspace.yaml` at repo root
 - Update root `package.json` — declare workspaces + scripts (`dev:studio`, `dev:runtime`, `build:all`)
-- Migrate [`app-bana-ui/`](../../app-bana-ui) to a workspace member (its `node_modules` moves under pnpm-managed structure)
+- Migrate `app-bana-ui/` to a workspace member (its `node_modules` moves under pnpm-managed structure)
 - Verify `pnpm --filter app-bana-ui dev` still works — the old UI must remain unbroken
 
 ### 1.2 — `app-bana-shared/`
 
 New package. Pure TypeScript, no React, no framework code.
 
-- `src/metadata.ts` — port `PageMeta`, `ComponentNode`, `Layout`, `Node` types from [`app-bana-ui/src/models/metadata.ts`](../../app-bana-ui/src/models/metadata.ts)
+- `src/metadata.ts` — port `PageMeta`, `ComponentNode`, `Layout`, `Node` types from `app-bana-ui/src/models/metadata.ts`
 - `src/entities.ts` — `EntitySchema`, `FieldType` enum
 - `src/api-client.ts` — typed fetch wrappers for backend endpoints (auth, apps, pages, entity CRUD, branding, context)
 - `src/postmessage.ts` — `AppBanaPostMessage` union type shared between studio and runtime
@@ -267,7 +273,7 @@ The AI-native builder MVP. Runs on port **5174**.
   - Suggestion chips (context-aware, static list for now)
   - Session picker (minimal: dropdown of past chats for current app via `GET /api/ai/chat/sessions`)
 - **Preview pane (right):**
-  - `<iframe src="http://localhost:5173/run/{tenant}/{app}">` pointing at existing [`app-bana-ui`](../../app-bana-ui) runtime
+  - `<iframe src="http://localhost:5173/run/{tenant}/{app}">` pointing at existing `app-bana-ui` runtime
   - Toolbar: page tabs (from app metadata), refresh, device size toggle, open-in-new-tab
   - **postMessage handshake:** iframe posts `{type: 'ready'}` on load, studio replies with `{type: 'token', jwt}` and `{type: 'setMode', mode: 'browse'}`
   - Preview auto-refreshes after any tool card reports success
@@ -280,7 +286,7 @@ The AI-native builder MVP. Runs on port **5174**.
 
 ### 1.4 — `data-appbana-*` attributes on old runtime
 
-Small edit to existing [`app-bana-ui/src/runtime/renderer/Renderer.ts`](../../app-bana-ui/src/runtime/renderer/Renderer.ts) and [`StudioTableLive.ts`](../../app-bana-ui/src/runtime/renderer/StudioTableLive.ts) to emit `data-appbana-node|entity|field|page` on every rendered element.
+Small edit to existing `app-bana-ui/src/runtime/renderer/Renderer.ts` and `StudioTableLive.ts` to emit `data-appbana-node|entity|field|page` on every rendered element.
 
 - Old UI still works
 - Studio iframe now has selection foundations for later stages
@@ -295,7 +301,7 @@ Studio ⇄ old runtime message types (defined in `app-bana-shared/src/postmessag
 - `highlight` — runtime → studio, hover metadata
 - `selection` — runtime → studio, click selection (stub in Stage 1)
 
-Small edit to [`app-bana-ui/src/runtime/shell/AppRuntimeShell.ts`](../../app-bana-ui/src/runtime/shell/AppRuntimeShell.ts) to accept postMessage token instead of only relying on localStorage.
+Small edit to `app-bana-ui/src/runtime/shell/AppRuntimeShell.ts` to accept postMessage token instead of only relying on localStorage.
 
 ### 1.6 — Launch scripts
 
@@ -342,9 +348,9 @@ New `app-bana-runtime/` package on port **5175**. React port of the runtime, dep
 
 ### 2.3 — React port of the runtime
 
-- `Renderer.tsx` — port of [`app-bana-ui/src/runtime/renderer/Renderer.ts`](../../app-bana-ui/src/runtime/renderer/Renderer.ts)
-- `StudioTableLive.tsx` — port of [`app-bana-ui/src/runtime/renderer/StudioTableLive.ts`](../../app-bana-ui/src/runtime/renderer/StudioTableLive.ts)
-- `AppRuntimeShell.tsx` — port of [`app-bana-ui/src/runtime/shell/AppRuntimeShell.ts`](../../app-bana-ui/src/runtime/shell/AppRuntimeShell.ts)
+- `Renderer.tsx` — port of `app-bana-ui/src/runtime/renderer/Renderer.ts`
+- `StudioTableLive.tsx` — port of `app-bana-ui/src/runtime/renderer/StudioTableLive.ts`
+- `AppRuntimeShell.tsx` — port of `app-bana-ui/src/runtime/shell/AppRuntimeShell.ts`
 - Emits `data-appbana-node|entity|field|page` on every element
 - Uses `@appbana/shared` types + api client — no other framework deps beyond React
 
@@ -561,7 +567,7 @@ User can circle a table column, type "make this sortable and hide on mobile", an
 ### Backwards compatibility
 
 - Old sync `/api/ai/chat/agent` endpoint is preserved through all stages
-- Old [`app-bana-ui/`](../../app-bana-ui) keeps running through Stages 1–3
+- Old `app-bana-ui/` keeps running through Stages 1–3
 - All backend contracts are **additive** — no removed or changed signatures
 
 ### Observability

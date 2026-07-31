@@ -27,6 +27,7 @@ import { PendingCountsProvider, usePendingCountsValue } from './PendingCountsPro
 
 const TOKEN_KEY   = 'appbana_token';
 const STUDIO_ORIGIN = 'http://localhost:5174';
+const SIDEBAR_COLLAPSED_KEY = 'appbana_sidebar_collapsed';
 
 /** True when this runtime is embedded in the studio iframe (has a real cross-frame parent). */
 function isEmbedded(): boolean {
@@ -47,6 +48,10 @@ function storedToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+function storedSidebarCollapsed(): boolean {
+  return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+}
+
 export function AppRuntimeShell() {
   const [token, setTokenState] = useState<string | null>(storedToken);
   const [app, setApp] = useState<AppMeta | null>(null);
@@ -54,6 +59,8 @@ export function AppRuntimeShell() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Desktop-only rail toggle, persisted across visits. Defaults to expanded.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(storedSidebarCollapsed);
   const [branding, setBranding] = useState<TenantBranding | null>(null);
   // Sprint 3 task 3.3 — selected record id for detail-view overlay.
   const [selectedRecord, setSelectedRecord] = useState<
@@ -70,6 +77,16 @@ export function AppRuntimeShell() {
   const modeRef = useRef<RuntimeMode>('browse');
   const highlightedNodeRef = useRef<string | null>(null);
   const isMounted = useRef(true);
+  // Guards against a stale in-flight loadApp() request clobbering state after
+  // a newer one already resolved. Reproduced live: on re-login inside the
+  // studio iframe, the runtime mounts with the OLD token from localStorage
+  // (401s immediately), then the postMessage handshake delivers the fresh
+  // token and a second loadApp() fires and succeeds — but if the first
+  // (stale-token, 401) request's promise settles after the second one, its
+  // `catch` block still ran and overwrote the just-set `app`/`error` state,
+  // leaving the iframe stuck on "Failed to get app: 401" forever even though
+  // the fresh token was valid the whole time.
+  const latestTokenRef = useRef<string | null>(null);
 
   // --- Resolve context from URL path ---
   const ctx = resolveAppContext(window.location);
@@ -137,11 +154,12 @@ export function AppRuntimeShell() {
       setLoading(false);
       return;
     }
+    latestTokenRef.current = tk;
     setLoading(true);
     setError(null);
     try {
       const appData = await getApp(ctx.tenantId, ctx.appId, tk);
-      if (!isMounted.current) return;
+      if (!isMounted.current || latestTokenRef.current !== tk) return;
       // Backend returns two shapes for pages:
       //   pages:     string[] of page IDs (legacy)
       //   pagesData: full PageMeta objects
@@ -154,11 +172,11 @@ export function AppRuntimeShell() {
       const firstPage = ((normalized.pages ?? []) as PageMeta[])[0] ?? null;
       setCurrentPage(firstPage);
     } catch (e) {
-      if (!isMounted.current) return;
+      if (!isMounted.current || latestTokenRef.current !== tk) return;
       setError(e instanceof Error ? e.message : 'Failed to load app');
       postToStudio({ type: 'error', message: String(e) });
     } finally {
-      if (isMounted.current) setLoading(false);
+      if (isMounted.current && latestTokenRef.current === tk) setLoading(false);
     }
   }, [ctx?.tenantId, ctx?.appId]);
 
@@ -258,8 +276,39 @@ export function AppRuntimeShell() {
       <div className="flex flex-1 min-h-0">
         {/* Sidebar: full at md+, icon-rail at sm-to-md, hidden below sm.
             The visual collapse is CSS-driven — see .appbana-sidebar-container
-            @media (max-width: 767.98px) in globals.css. */}
-        <aside className="hidden sm:block appbana-sidebar-container">
+            in globals.css. The width-triggered rail (max-width: 767.98px) and
+            the user-toggled is-collapsed rail (min-width: 768px) live in
+            separate media blocks so they can never both apply. */}
+        <aside className={`hidden sm:block appbana-sidebar-container${sidebarCollapsed ? ' is-collapsed' : ''}`}>
+          <button
+            type="button"
+            className="hidden md:inline-flex appbana-sidebar-toggle"
+            data-appbana-sidebar-toggle
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-pressed={sidebarCollapsed}
+            onClick={() => {
+              setSidebarCollapsed((prev) => {
+                const next = !prev;
+                localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+                return next;
+              });
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              style={{ transform: sidebarCollapsed ? 'rotate(180deg)' : undefined }}
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
           <ApprovalAwareSidebar
             pages={(app.pages ?? []) as PageMeta[]}
             currentPageId={queueEntity ? null : (currentPage?.id ?? null)}

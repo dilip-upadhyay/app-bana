@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { streamAgentChat } from '@appbana/shared';
+import { streamAgentChat, listApps, type AppMeta } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useChatStore } from '../../stores/chat';
 import { MessageBubble } from './MessageBubble';
+
+/** Tool names whose successful completion means a new app now exists (or a new appId was
+ *  assigned to the current conversation) that the Studio chrome doesn't know about yet.
+ *  Without re-fetching here, the "Select app" dropdown stays empty/stale and any follow-up
+ *  action (seed data, add page) fails with "Please select an application first" even though
+ *  the app was just built in this very conversation. See docs/planning session notes. */
+const APP_CREATING_TOOLS = new Set(['scaffold_app', 'create_app']);
 
 const SUGGESTIONS_IDLE = [
   'Describe your app idea…',
@@ -21,7 +28,7 @@ const SUGGESTIONS_ACTIVE = [
 
 export function ChatPane() {
   const { token, tenantId, userId } = useSessionStore();
-  const { currentApp, refreshPreview } = useWorkspaceStore();
+  const { currentApp, refreshPreview, setApps, setCurrentApp } = useWorkspaceStore();
   const {
     messages, sessionId, streaming, attachments,
     addUserMessage, startAssistantMessage, applyEvent, finalizeMessage,
@@ -32,6 +39,28 @@ export function ChatPane() {
   const [draft, setDraft] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // See APP_CREATING_TOOLS above for why this exists. Re-fetches the tenant's app list and
+  // selects the app the tool just created/deployed so the header dropdown + follow-up chat
+  // actions ("Seed sample data", "Add another page") work without a manual page reload.
+  async function syncNewlyCreatedApp(result: unknown) {
+    if (!tenantId || !token) return;
+    const appId = (result as { appId?: string } | null)?.appId;
+    const appName = (result as { appName?: string } | null)?.appName;
+    try {
+      const list = await listApps(tenantId, token);
+      setApps(list);
+      const match = appId ? list.find((a) => a.id === appId) : undefined;
+      if (match) {
+        setCurrentApp(match);
+      } else if (appId) {
+        setCurrentApp({ id: appId, name: appName ?? 'Untitled app', tenantId } as AppMeta);
+      }
+    } catch {
+      // Best-effort only — the app was already created/deployed successfully server-side;
+      // failing to refresh the dropdown just means the user may need to reload manually.
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -79,12 +108,27 @@ export function ChatPane() {
       );
 
       let sawToken = false;
+      const toolNamesById = new Map<string, string>();
       for await (const ev of stream) {
         applyEvent(assistantId, ev);
         if (ev.event === 'token') sawToken = true;
+        if (ev.event === 'tool_call_start') {
+          toolNamesById.set(ev.data.id, ev.data.name);
+        }
         // After a successful scaffold or page creation, refresh the preview
         if (ev.event === 'tool_call_end' && ev.data.status === 'ok') {
           refreshPreview();
+          const toolName = toolNamesById.get(ev.data.id);
+          if (toolName && APP_CREATING_TOOLS.has(toolName)) {
+            void syncNewlyCreatedApp(ev.data.result);
+          }
+        }
+        if (ev.event === 'auth_expired') {
+          // C4.4e Review #12 — a tool inside this already-open (200) stream hit a backend 401.
+          // The transport-level `appbana:auth:expired` recovery (dispatched by authedFetch on an
+          // *outer* 401) can never fire for this case, so dispatch the same event manually and
+          // let AuthGate.tsx's existing listener handle the rest with zero changes there.
+          window.dispatchEvent(new CustomEvent('appbana:auth:expired'));
         }
         if (ev.event === 'done') {
           if (ev.data.conversationId) setSessionId(ev.data.conversationId);

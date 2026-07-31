@@ -1,5 +1,6 @@
 package com.appbana.ai.agent;
 
+import com.appbana.ai.agent.tool.BackendAuthException;
 import com.appbana.ai.agent.tool.Tool;
 import com.appbana.ai.agent.tool.ToolCall;
 import com.appbana.ai.agent.tool.ToolRegistry;
@@ -68,6 +69,12 @@ public class AiAgent {
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
+
+    // C4.4e Review #12/#13 -- shared by every auth-abort site (tool-result driven AND the
+    // think()-level fetch below) so the two parallel loops say exactly the same thing and a
+    // future edit can't update one copy and miss the other.
+    private static final String SESSION_ENDED_MESSAGE =
+            "Your session has ended, so I can't continue with that request. Please sign in again to keep working.";
 
     public AiAgent(LlmRegistry llmRegistry, ToolRegistry toolRegistry, AgentConfig config) {
         this.llmRegistry = llmRegistry;
@@ -187,7 +194,20 @@ public class AiAgent {
                     return AgentResponse.error("Agent timeout after " + elapsed + "ms", steps, elapsed);
                 }
 
-                AgentThought thought = think(userMessage, steps, context, llmService, images, blueprintSection);
+                AgentThought thought;
+                try {
+                    thought = think(userMessage, steps, context, llmService, images, blueprintSection);
+                } catch (BackendAuthException authEx) {
+                    // Review #13 -- loadEntitySummary() (called from buildExecutionContext(), inside
+                    // think(), BEFORE any tool runs this iteration) can 401 on its own, outside the
+                    // tool-result path the authFailureDetected block below already covers. Same abort,
+                    // same message, same iteration-1 cutoff -- just triggered from a different call site.
+                    log.warn("[AGENT-STREAM] Aborting on auth failure from think() (iteration {}): {}",
+                            iteration, authEx.getMessage());
+                    emitter.authExpired(SESSION_ENDED_MESSAGE);
+                    emitter.done(context.sessionId(), SESSION_ENDED_MESSAGE);
+                    return AgentResponse.error(SESSION_ENDED_MESSAGE, steps, System.currentTimeMillis() - startTime);
+                }
                 if (thought == null) {
                     String msg = "Sorry — I couldn't get a response from the AI model. Please try again in a moment.";
                     emitter.token(msg);
@@ -220,10 +240,21 @@ public class AiAgent {
                     List<ToolResult> results = executeToolsWithStream(thought.getToolCalls(), context, emitter);
                     boolean allToolsFailed = true;
                     boolean loopDetected = false;
+                    boolean authFailureDetected = false;
 
                     for (ToolResult result : results) {
                         String signature = result.getToolName() + ":" + result.getArguments();
                         if (!result.isSuccess()) {
+                            if (result.isAuthFailure()) {
+                                // C4.4e Review #12 -- a present-but-invalid (expired/revoked) token
+                                // looks identical to any other tool failure from here on unless we
+                                // check for it explicitly. Left unchecked this is indistinguishable
+                                // from "the backend is having a bad day" and would silently burn
+                                // consecutiveFailures toward the generic "please rephrase" message
+                                // below -- three paid LLM round-trips to tell the user the wrong
+                                // thing about why nothing is working.
+                                authFailureDetected = true;
+                            }
                             if (failedSignatures.contains(signature)) {
                                 result.setError("CRITICAL: Repeated failure. " + result.getError());
                             }
@@ -242,6 +273,19 @@ public class AiAgent {
                             }
                         }
                         step.addToolResult(result);
+                    }
+
+                    if (authFailureDetected) {
+                        // Abort on iteration 1 -- do not wait for consecutiveFailures>=3. A backend
+                        // session isn't going to become valid again by retrying, and every retry is
+                        // a paid LLM call spent producing a wrong diagnosis.
+                        steps.add(step);
+                        log.warn("[AGENT-STREAM] Aborting on auth failure (iteration {}): {}",
+                                iteration, results.stream().filter(ToolResult::isAuthFailure)
+                                        .findFirst().map(ToolResult::getError).orElse(""));
+                        emitter.authExpired(SESSION_ENDED_MESSAGE);
+                        emitter.done(context.sessionId(), SESSION_ENDED_MESSAGE);
+                        return AgentResponse.error(SESSION_ENDED_MESSAGE, steps, System.currentTimeMillis() - startTime);
                     }
 
                     if (loopDetected) {
@@ -341,10 +385,17 @@ public class AiAgent {
                                                      StreamEmitter emitter) {
         if (toolCalls.isEmpty()) return Collections.emptyList();
 
+        // generate_mock_data is included here too: entities frequently reference each other
+        // via FK 'reference' fields (e.g. Employee.department, OnboardingTask.employee). When the
+        // LLM emits multiple generate_mock_data calls in one iteration to seed a parent and its
+        // dependents together, running them in parallel races the parent insert against the
+        // dependent insert and the dependent's FK constraint fails (or references a row that
+        // doesn't exist yet). Sequential execution guarantees parent rows are committed first.
         boolean requiresSequential = toolCalls.stream()
                 .anyMatch(call -> call.getName().equals("create_entity") ||
                         call.getName().equals("generate_page") ||
-                        call.getName().equals("create_app"));
+                        call.getName().equals("create_app") ||
+                        call.getName().equals("generate_mock_data"));
 
         List<ToolResult> results = new ArrayList<>();
 
@@ -559,7 +610,17 @@ public class AiAgent {
                 }
 
                 // 1. THINK - Ask LLM what to do
-                AgentThought thought = think(userMessage, steps, context, llmService, images, blueprintSection);
+                AgentThought thought;
+                try {
+                    thought = think(userMessage, steps, context, llmService, images, blueprintSection);
+                } catch (BackendAuthException authEx) {
+                    // Review #13 -- same think()-level auth failure as processWithStream's matching
+                    // catch above; see that comment for why this is a distinct site from the
+                    // tool-result authFailureDetected check below.
+                    log.warn("[AGENT] Aborting on auth failure from think() (iteration {}): {}",
+                            iteration, authEx.getMessage());
+                    return AgentResponse.error(SESSION_ENDED_MESSAGE, steps, System.currentTimeMillis() - startTime);
+                }
 
                 if (thought == null) {
                     log.error("[AGENT] Failed to get thought from LLM");
@@ -580,10 +641,17 @@ public class AiAgent {
                 if (thought.hasToolCalls()) {
                     List<ToolResult> results = executeTools(thought.getToolCalls(), context);
                     boolean allToolsFailed = true;
+                    boolean authFailureDetected = false;
 
                     for (ToolResult result : results) {
                         String signature = result.getToolName() + ":" + result.getArguments();
                         if (!result.isSuccess()) {
+                            if (result.isAuthFailure()) {
+                                // C4.4e Review #12 -- see the matching check in processWithStream.
+                                // Same reasoning: a 401 here means the session ended, not that the
+                                // backend is flaky. Abort now instead of burning consecutiveFailures.
+                                authFailureDetected = true;
+                            }
                             if (failedSignatures.contains(signature)) {
                                 result.setError("CRITICAL: Repeated failure. " + result.getError());
                             }
@@ -593,6 +661,12 @@ public class AiAgent {
                             allToolsFailed = false;
                         }
                         step.addToolResult(result);
+                    }
+
+                    if (authFailureDetected) {
+                        steps.add(step);
+                        log.warn("[AGENT] Aborting on auth failure (iteration {})", iteration);
+                        return AgentResponse.error(SESSION_ENDED_MESSAGE, steps, System.currentTimeMillis() - startTime);
                     }
 
                     if (allToolsFailed) {
@@ -794,6 +868,13 @@ public class AiAgent {
             }
 
             return parseAgentThought(llmResponse);
+        } catch (BackendAuthException authEx) {
+            // Review #13 -- must NOT be swallowed by the catch below. loadEntitySummary() throws
+            // this from inside buildExecutionContext(), i.e. before any LLM call or tool runs this
+            // iteration; both callers (process/processWithStream) catch it around this think() call
+            // and abort exactly like a tool-reported auth failure, instead of getting back `null`
+            // here and reporting the generic "couldn't get a response from the AI model" message.
+            throw authEx;
         } catch (Exception e) {
             log.error("[AGENT] Error in think step", e);
             return null;
@@ -810,11 +891,14 @@ public class AiAgent {
 
         // Check if sequential execution is required for safety
         // CreateEntityTool and GeneratePageTool modify shared app metadata and are not
-        // thread-safe
+        // thread-safe. generate_mock_data is included too: parallel batches racing across
+        // FK-dependent entities (e.g. Employee vs OnboardingTask.employee) can insert a
+        // dependent row before its parent row is committed, failing the FK constraint.
         boolean requiresSequential = toolCalls.stream()
                 .anyMatch(call -> call.getName().equals("create_entity") ||
                         call.getName().equals("generate_page") ||
-                        call.getName().equals("create_app")); // create_app usually singleton but safe to serialize
+                        call.getName().equals("create_app") || // create_app usually singleton but safe to serialize
+                        call.getName().equals("generate_mock_data"));
 
         if (requiresSequential) {
             log.info("[AGENT] Forcing sequential execution for {} tool(s) to prevent race conditions",
@@ -1121,6 +1205,15 @@ public class AiAgent {
                 rb.header("Authorization", "Bearer " + context.token());
             }
             HttpResponse<String> resp = httpClient.send(rb.GET().build(), HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 401) {
+                // Review #13 -- this call sits outside the tool boundary (it runs during prompt
+                // building, before any tool executes), so a swallowed 401 here used to mean: the
+                // entity block is silently omitted, the LLM answers from nothing, no tool is ever
+                // called, and the user is confidently told their app has no entities. Propagate
+                // instead so think() -> the caller loop can abort exactly like a tool-reported
+                // auth failure, rather than producing a wrong answer with high confidence.
+                throw new BackendAuthException("AiAgent.loadEntitySummary: entity summary fetch returned 401");
+            }
             if (resp.statusCode() != 200) {
                 log.debug("[AGENT] Entity summary fetch returned {}: skipping", resp.statusCode());
                 context.variables().put("entity_summary", "");
@@ -1130,6 +1223,8 @@ public class AiAgent {
             String summary = buildEntitySummaryText(app);
             context.variables().put("entity_summary", summary);
             return summary;
+        } catch (BackendAuthException authEx) {
+            throw authEx;
         } catch (Exception e) {
             log.debug("[AGENT] Entity summary fetch failed (best-effort): {}", e.getMessage());
             context.variables().put("entity_summary", "");

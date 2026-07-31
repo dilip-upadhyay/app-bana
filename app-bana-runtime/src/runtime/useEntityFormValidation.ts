@@ -79,9 +79,17 @@ export function isEffectivelyVisible(
   el: HTMLElement,
   form: HTMLFormElement | null,
 ): boolean {
-  // 1. `type="hidden"` — always invisible for validation purposes.
+  // 1. `type="hidden"` — always invisible for validation purposes, EXCEPT
+  //    DatePicker.tsx's hidden carrier input (`data-appbana-datepicker-value`)
+  //    which is the *only* place that field's real value lives — the visible
+  //    control is a readOnly display-only text input with no `name` at all.
+  //    Excluding it here meant `collectControls` never saw it, so every
+  //    date/datetime field was silently dropped from every form submission
+  //    regardless of what the user picked (found live-testing the Employee
+  //    Onboarding app's Document form: `upload_date` always saved as NULL).
   const type = ((el as HTMLInputElement).type ?? '').toLowerCase();
-  if (type === 'hidden') return false;
+  const isDatepickerCarrier = (el as HTMLElement).dataset?.appbanaDatepickerValue === 'true';
+  if (type === 'hidden' && !isDatepickerCarrier) return false;
 
   // 2. Walk ancestors up to the form. Any hidden container hides its
   //    descendants for validation too.
@@ -201,7 +209,20 @@ export function useEntityFormValidation(): UseEntityFormValidation {
     const result = schema.safeParse(raw);
     if (result.success) {
       setErrors({});
-      return { ok: true, data: result.data as Record<string, unknown> };
+      // Checkboxes validate as the literal string "on" (or absent when
+      // unchecked) so the Zod rule above can express "must be checked" —
+      // but the backend's boolean columns reject that string outright
+      // ("invalid boolean"). Convert to a real boolean here, once, rather
+      // than making every caller of `validate()` know which fields are
+      // checkboxes.
+      const data: Record<string, unknown> = { ...result.data };
+      for (const c of controls) {
+        if ((c as HTMLInputElement).type === 'checkbox') {
+          const name = (c as HTMLInputElement).name;
+          data[name] = data[name] === 'on';
+        }
+      }
+      return { ok: true, data };
     }
     const next: FieldErrors = {};
     for (const issue of result.error.issues) {

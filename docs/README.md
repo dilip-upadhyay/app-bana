@@ -41,7 +41,7 @@ A single schema definition drives the entire stack. See [`.github/copilot-instru
 
 ---
 
-## Current state (2026-07-29)
+## Current state (2026-07-31)
 
 **Shipped**
 - Stages 0–4 of the AI-Native UI Rebuild — legacy `app-bana-ui/` retired; Studio (5174) + Runtime (5175) + shared package are the frontend.
@@ -53,6 +53,7 @@ A single schema definition drives the entire stack. See [`.github/copilot-instru
 - **Phase B.H — Hardening Sprint** (H1–H8) — file tenant isolation, auto-inject parentId + ChildTable, FilterBar + SavedViewsBar in StudioTableLive, real FK constraints, hidden-field validation strip, SQL GROUP BY, Playwright hardening suite, docs refresh.
 - **Phase C1 — Approval DB migration + role model** and **Phase C2 — Approval state machine, permission guard, revisions, audit trail**. All C2 exit criteria met.
 - **Phase C3 — Runtime approval UI** — status pills, submit/approve/reject actions, checker queue, audit timeline. All exit criteria met except the Playwright maker→checker round-trip, which still needs the full stack running.
+- **Runtime list-table column filters + sorting + collapsible sidebar** (`0ceb9e6`) — per-column server-side filtering (text/number-range/date-range/boolean/reference), click-to-sort headers, auto-created B-tree + trigram indexes, and a persisted sidebar rail. Platform-wide defaults for every generated app. See [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md).
 
 **Build health** lives in [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md#-build-health-single-source--do-not-duplicate-these-counts-elsewhere) — it is the single source for test counts and CI status.
 

@@ -79,6 +79,11 @@ public class ScaffoldAppTool implements Tool {
                     "type": "boolean",
                     "description": "Phase C4 — set true to put this entity behind a two-person (maker-checker) approval workflow. Rows are then created as DRAFT, must be submitted for approval, and are invisible to normal reads until a DIFFERENT user approves them. Use for regulated records: customer onboarding, KYC, loan/credit applications, expense claims, purchase orders, policy issuance, contracts, employee onboarding, payments. Do NOT set it for reference/lookup tables or low-risk data (blog posts, todos, product catalogues). Only set it after the user has agreed to the approval flow in the Phase 1 specification."
                   },
+                  "approvalLevels": {
+                    "type": "integer",
+                    "enum": [1, 2],
+                    "description": "Only meaningful when approvalRequired is true. 1 (default) is the standard single-checker workflow. Set to 2 for a two-level checker chain (checker-1 approves first, then a DIFFERENT checker-2 gives final signoff) — use for higher-stakes records such as large payments, policy issuance, or contract signoff."
+                  },
                   "fields": {
                     "type": "array",
                     "items": {
@@ -188,8 +193,21 @@ public class ScaffoldAppTool implements Tool {
       log.info("[ScaffoldAppTool] ───────────────────────────────────────────────────────");
 
       // Story 3: Phase 1 - Create App (or use existing)
+      // C4.4e Review #12 -- the orphan-app lead. This branch used to reuse context.appId()
+      // outright and skip CreateAppTool entirely, so entities landed in appbana_schemas with
+      // no matching row in appbana_apps whenever the caller's appId did not already have one
+      // (e.g. a stale persisted currentApp in the Studio's Zustand store). list_apps and any
+      // app-listing UI then had no way to see the app the agent just built, even though its
+      // entities and physical tables exist. Verify the row exists before trusting the id;
+      // create it under that SAME id if it does not, instead of silently trusting the caller.
       if (context.appId() != null && !context.appId().isBlank() && !"default".equals(context.appId())) {
-        log.info("[ScaffoldAppTool] Phase 1: Re-using existing app ID '{}' from context", context.appId());
+        log.info("[ScaffoldAppTool] Phase 1: Re-using app ID '{}' from context -- verifying it exists",
+            context.appId());
+        if (!appRowExists(context.appId(), context.tenantId(), context)) {
+          log.warn("[ScaffoldAppTool] App '{}' has no appbana_apps row -- creating one instead of "
+              + "silently building orphaned entities under it", context.appId());
+          createAppRowWithId(context.appId(), context.tenantId(), appName, description, context);
+        }
         createdAppId = context.appId();
       } else {
         log.info("[ScaffoldAppTool] Phase 1: Creating new app '{}'", appName);
@@ -202,6 +220,9 @@ public class ScaffoldAppTool implements Tool {
         ToolResult appResult = appTool.execute(appArgs, context);
         if (!appResult.isSuccess()) {
           log.error("[ScaffoldAppTool] App creation failed: {}", appResult.getError());
+          if (appResult.isAuthFailure()) {
+            throw new BackendAuthException(appResult.getError());
+          }
           return ToolResult.error(getName(), "App creation failed: " + appResult.getError());
         }
 
@@ -243,6 +264,9 @@ public class ScaffoldAppTool implements Tool {
         ToolResult entityResult = entityTool.execute(entityDef, context);
         if (!entityResult.isSuccess()) {
           log.error("[ScaffoldAppTool] Entity creation failed for '{}': {}", entityName, entityResult.getError());
+          if (entityResult.isAuthFailure()) {
+            throw new BackendAuthException(entityResult.getError());
+          }
           throw new RuntimeException("Entity creation failed for '" + entityName + "': " + entityResult.getError());
         }
 
@@ -285,6 +309,9 @@ public class ScaffoldAppTool implements Tool {
           ToolResult pageResult = pageTool.execute(pageDef, context);
           if (!pageResult.isSuccess()) {
             log.error("[ScaffoldAppTool] Page generation failed for '{}': {}", pageName, pageResult.getError());
+            if (pageResult.isAuthFailure()) {
+              throw new BackendAuthException(pageResult.getError());
+            }
             throw new RuntimeException("Page generation failed for '" + pageName + "': " + pageResult.getError());
           }
 
@@ -307,6 +334,9 @@ public class ScaffoldAppTool implements Tool {
       ToolResult deployResult = deployTool.execute(deployArgs, context);
       if (!deployResult.isSuccess()) {
         log.error("[ScaffoldAppTool] Deployment failed: {}", deployResult.getError());
+        if (deployResult.isAuthFailure()) {
+          throw new BackendAuthException(deployResult.getError());
+        }
         throw new RuntimeException("Deployment failed: " + deployResult.getError());
       }
 
@@ -342,6 +372,13 @@ public class ScaffoldAppTool implements Tool {
 
       return ToolResult.success(getName(), resultData, executionTime);
 
+    } catch (BackendAuthException authEx) {
+      log.warn("[ScaffoldAppTool] {}", authEx.getMessage());
+      // No rollback: an app-level 401 mid-scaffold means the token stopped being valid, not that
+      // the app itself is bad. Deleting a half-built app the user can't currently re-authenticate
+      // to fix would make recovery harder, not safer. Same reasoning as the existing "modifying an
+      // EXISTING app" skip below -- App Versioning handles partial state.
+      return ToolResult.authError(getName(), authEx.getMessage());
     } catch (Exception e) {
       log.error("[ScaffoldAppTool] Execution failed", e);
 
@@ -374,9 +411,17 @@ public class ScaffoldAppTool implements Tool {
     String deleteUrl = String.format("%s/appbana-studio/%s/apps/%s",
         baseUrl, context.tenantId(), appId);
 
-    HttpRequest deleteRequest = HttpRequest.newBuilder()
-        .uri(URI.create(deleteUrl))
-        .header("Authorization", "Bearer " + context.token())
+    HttpRequest.Builder deleteBuilder = HttpRequest.newBuilder()
+        .uri(URI.create(deleteUrl));
+
+    // C4.4e -- was unconditional, so a blank token produced a literal "Bearer null" header and the
+    // rollback 401'd, stranding the half-built app it was meant to remove. AgentContext now refuses
+    // to hold a blank token, so this matches the other thirteen sites as defence in depth.
+    if (context.token() != null && !context.token().isEmpty()) {
+      deleteBuilder.header("Authorization", "Bearer " + context.token());
+    }
+
+    HttpRequest deleteRequest = deleteBuilder
         .DELETE()
         .build();
 
@@ -391,5 +436,63 @@ public class ScaffoldAppTool implements Tool {
           response.statusCode(), response.body());
       throw new Exception("Rollback delete failed: " + response.statusCode());
     }
+  }
+
+  /**
+   * C4.4e Review #12 -- returns true only if the backend already has an {@code appbana_apps} row
+   * for {@code appId}. {@code GET .../apps/{appId}} 404s when it does not (see
+   * {@code AppRoutes.java}); any other non-200 is treated the same as "can't confirm it exists",
+   * which routes the caller to (re)create the row rather than silently building entities under an
+   * id nothing backs.
+   */
+  private boolean appRowExists(String appId, String tenantId, AgentContext context) throws Exception {
+    String url = String.format("%s/appbana-studio/%s/apps/%s", baseUrl, tenantId, appId);
+    HttpRequest.Builder rb = HttpRequest.newBuilder().uri(URI.create(url)).header("Accept", "application/json");
+    if (context.token() != null && !context.token().isEmpty()) {
+      rb.header("Authorization", "Bearer " + context.token());
+    }
+    java.net.http.HttpResponse<String> response = httpClient.send(rb.GET().build(),
+        java.net.http.HttpResponse.BodyHandlers.ofString());
+    if (response.statusCode() == 401) {
+      throw new BackendAuthException(getName() + ": app-existence check for '" + appId + "' returned 401");
+    }
+    return response.statusCode() == 200;
+  }
+
+  /**
+   * C4.4e Review #12 -- creates the missing {@code appbana_apps} row under the caller's SUPPLIED
+   * id, instead of {@link CreateAppTool}'s normal behaviour of minting a fresh
+   * {@code UUID.randomUUID()}. The entities this scaffold is about to create are keyed by this
+   * exact id ({@code {tenantId}_{appId}_{entityName}}), so a fresh id here would just move the
+   * orphan rather than remove it.
+   */
+  private void createAppRowWithId(String appId, String tenantId, String appName, String description,
+      AgentContext context) throws Exception {
+    Map<String, Object> appMeta = new HashMap<>();
+    appMeta.put("id", appId);
+    appMeta.put("name", appName);
+    appMeta.put("description", description);
+    appMeta.put("tenantId", tenantId);
+
+    String url = String.format("%s/appbana-studio/%s/apps", baseUrl, tenantId);
+    HttpRequest.Builder rb = HttpRequest.newBuilder()
+        .uri(URI.create(url))
+        .header("Content-Type", "application/json");
+    if (context.token() != null && !context.token().isEmpty()) {
+      rb.header("Authorization", "Bearer " + context.token());
+    }
+
+    java.net.http.HttpResponse<String> response = httpClient.send(
+        rb.POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(appMeta))).build(),
+        java.net.http.HttpResponse.BodyHandlers.ofString());
+
+    if (response.statusCode() == 401) {
+      throw new BackendAuthException(getName() + ": creating the missing app row for '" + appId + "' returned 401");
+    }
+    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+      throw new Exception("Creating missing app row for '" + appId + "' failed: " + response.statusCode()
+          + " - " + response.body());
+    }
+    log.info("[ScaffoldAppTool] Created missing appbana_apps row for existing id '{}'", appId);
   }
 }

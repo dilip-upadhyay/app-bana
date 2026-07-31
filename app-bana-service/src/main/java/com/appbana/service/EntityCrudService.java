@@ -706,6 +706,16 @@ public class EntityCrudService {
                 // cases are correctly a 400, not a silent pass-through.
                 throw new FieldValidationException(name, "unknown filter field");
             }
+            // Checked before parseFilterValue() below, because a bare
+            // Integer.parseInt/BigDecimal/Instant.parse on "10..100" would fail
+            // to parse and produce a correct-but-unhelpful "invalid value" 400
+            // instead of being recognised as a range. A single '.' cannot
+            // collide (fractional-second timestamps use one dot, never two).
+            int dotdot = val.indexOf("..");
+            if (dotdot >= 0) {
+                map.put(f.getName(), parseRange(f, val, dotdot));
+                continue;
+            }
             Object parsed = parseFilterValue(f, val);
             if (parsed == null) {
                 // Review #4 (High A) — a filter value that fails to coerce for the
@@ -741,6 +751,45 @@ public class EntityCrudService {
      * {@code filter=submitted_by:=bob}.
      */
     public record ExactMatch(Object value) {}
+
+    /**
+     * A "min..max" double-dot range filter, e.g. {@code filter=amount:10..100}.
+     *
+     * <p>Either bound may be null for an open-ended range; {@link #parseRange}
+     * rejects a range with neither. Only orderable kinds (integer/bigint/decimal/
+     * timestamp/reference) are accepted — a range on a string/boolean column is a
+     * 400, not a silently-ignored predicate.
+     */
+    public record Range(Object min, Object max) {}
+
+    /**
+     * Parses the "min..max" syntax found in {@link #parseFilters}. {@code dotdot}
+     * is the index of the delimiting "..".
+     */
+    private static Range parseRange(EntitySchema.Field f, String val, int dotdot) {
+        SchemaManager.FieldSqlKind kind = SchemaManager.classifyFieldType(f.getType());
+        boolean orderable = switch (kind) {
+            case INTEGER, BIGINT, DECIMAL, TIMESTAMP, REFERENCE -> true;
+            default -> false;
+        };
+        if (!orderable) {
+            throw new FieldValidationException(f.getName(),
+                    "range filters ('min..max') are only supported for numeric/date fields, not '" + f.getType()
+                            + "'");
+        }
+        String lo = val.substring(0, dotdot).trim();
+        String hi = val.substring(dotdot + 2).trim();
+        Object loVal = lo.isEmpty() ? null : parseFilterValue(f, lo);
+        Object hiVal = hi.isEmpty() ? null : parseFilterValue(f, hi);
+        if ((!lo.isEmpty() && loVal == null) || (!hi.isEmpty() && hiVal == null)) {
+            throw new FieldValidationException(f.getName(),
+                    "invalid range value '" + val + "' for type '" + f.getType() + "'");
+        }
+        if (loVal == null && hiVal == null) {
+            throw new FieldValidationException(f.getName(), "range filter '" + val + "' needs at least one bound");
+        }
+        return new Range(loVal, hiVal);
+    }
 
     public long countOnly(EntitySchema schema, String q, Map<String, Object> filters) throws SQLException {
         StringBuilder where = new StringBuilder();
@@ -984,7 +1033,18 @@ public class EntityCrudService {
             for (Map<String, Object> row : batch) {
                 int idx = 1;
                 for (EntitySchema.Field f : insertable) {
-                    Object raw = row.get(f.getName());
+                    String fieldName = f.getName();
+                    Object raw = row.get(fieldName);
+                    // Audit field auto-injection — mirrors insertRecordLegacy. Without this,
+                    // rows written through the batch insert path (e.g. AI-generated mock data)
+                    // silently persisted NULL created_at/updated_at while the single-record
+                    // insert path always populated them, a discrepancy invisible until a caller
+                    // actually displayed those columns.
+                    if (raw == null || (raw instanceof String s && s.isBlank())) {
+                        if ("created_at".equalsIgnoreCase(fieldName) || "updated_at".equalsIgnoreCase(fieldName)) {
+                            raw = new Timestamp(System.currentTimeMillis());
+                        }
+                    }
                     Object val = coerceAndValidate(f, raw);
                     ps.setObject(idx++, val);
                 }
@@ -1157,15 +1217,20 @@ public class EntityCrudService {
                         long lv = ((Number) raw).longValue();
                         if (f.getMin() != null && lv < f.getMin())
                             throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                        if (f.getMax() != null && lv > f.getMax())
-                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        // Strict validation only if max > min (handles AI-generated 0/0 defaults)
+                        if (f.getMax() != null && (f.getMin() == null || f.getMax() > f.getMin())) {
+                            if (lv > f.getMax())
+                                throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                        }
                         yield lv;
                     }
                     long lv = Long.parseLong(raw.toString());
                     if (f.getMin() != null && lv < f.getMin())
                         throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                    if (f.getMax() != null && lv > f.getMax())
-                        throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    if (f.getMax() != null && (f.getMin() == null || f.getMax() > f.getMin())) {
+                        if (lv > f.getMax())
+                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    }
                     yield lv;
                 }
                 case DECIMAL -> {
@@ -1188,9 +1253,11 @@ public class EntityCrudService {
                     if (f.getMin() != null
                             && bd.compareTo(java.math.BigDecimal.valueOf(f.getMin())) < 0)
                         throw new IllegalArgumentException("field '" + f.getName() + "' below min");
-                    if (f.getMax() != null
-                            && bd.compareTo(java.math.BigDecimal.valueOf(f.getMax())) > 0)
-                        throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    // Strict validation only if max > min (handles AI-generated 0/0 defaults)
+                    if (f.getMax() != null && (f.getMin() == null || f.getMax() > f.getMin())) {
+                        if (bd.compareTo(java.math.BigDecimal.valueOf(f.getMax())) > 0)
+                            throw new IllegalArgumentException("field '" + f.getName() + "' above max");
+                    }
                     yield bd;
                 }
                 case BOOLEAN -> {
@@ -1217,7 +1284,14 @@ public class EntityCrudService {
                     String rs = raw.toString();
                     if (rs.isBlank()) yield null;
                     try {
-                        yield Instant.parse(rs);
+                        // Must be Timestamp.from(...), not the bare Instant — the JDBC
+                        // driver's setObject() can't infer a SQL type for java.time.Instant
+                        // and 500s with "Can't infer the SQL type to use for an instance of
+                        // java.time.Instant" on every save of an untouched ISO-8601 TIMESTAMP
+                        // field (e.g. re-saving a record whose upload_date/created_at came
+                        // back from a prior GET in offset form). See parseFilterValue()'s
+                        // TIMESTAMP case just below in this file for the same conversion.
+                        yield Timestamp.from(Instant.parse(rs));
                     } catch (Exception ex) {
                         try {
                             // Try yyyy/MM/dd or yyyy-MM-dd
@@ -1225,7 +1299,15 @@ public class EntityCrudService {
                             if (clean.length() == 10) {
                                 yield java.sql.Date.valueOf(clean);
                             }
-                            yield Timestamp.valueOf(clean.replace("T", " "));
+                            String withSpace = clean.replace("T", " ");
+                            // Native HTML5 <input type="datetime-local"> always submits
+                            // "yyyy-MM-ddTHH:mm" — no seconds, no offset. Timestamp.valueOf
+                            // requires seconds, so pad them in rather than 500ing every edit
+                            // of a datetime field made through the runtime's edit forms.
+                            if (withSpace.matches("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$")) {
+                                withSpace = withSpace + ":00";
+                            }
+                            yield Timestamp.valueOf(withSpace);
                         } catch (Exception ex2) {
                             try {
                                 long millis = Long.parseLong(rs);
@@ -1359,6 +1441,19 @@ public class EntityCrudService {
                 if (filterValue instanceof ExactMatch em) {
                     exactRequested = true;
                     filterValue = em.value();
+                } else if (filterValue instanceof Range range) {
+                    // A range is always a comparison, never a LIKE/exact match —
+                    // handled entirely separately from the rest of this loop body.
+                    String quotedRangeKey = quote(f.getName());
+                    if (range.min() != null) {
+                        parts.add(quotedRangeKey + " >= ?");
+                        params.add(range.min());
+                    }
+                    if (range.max() != null) {
+                        parts.add(quotedRangeKey + " <= ?");
+                        params.add(range.max());
+                    }
+                    continue;
                 }
 
                 String t = f.getType().toLowerCase(Locale.ROOT);

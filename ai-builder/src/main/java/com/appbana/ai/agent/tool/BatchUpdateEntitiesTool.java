@@ -45,7 +45,8 @@ public class BatchUpdateEntitiesTool implements Tool {
     @Override
     public String getDescription() {
         return "Updates multiple entities in a single batch operation. " +
-                "Use this when you need to modify 2+ entities at once (e.g., adding fields to multiple tables). " +
+                "Use this when you need to modify 2+ entities at once (e.g., adding fields to multiple tables, " +
+                "or turning on/off maker-checker approval workflow via set_approval). " +
                 "MUCH more efficient than calling update_entity multiple times.";
     }
 
@@ -71,8 +72,17 @@ public class BatchUpdateEntitiesTool implements Tool {
                           },
                           "operation": {
                             "type": "string",
-                            "enum": ["add_fields", "remove_fields", "update_fields", "rename_entity"],
-                            "description": "Type of update operation"
+                            "enum": ["add_fields", "remove_fields", "update_fields", "rename_entity", "set_approval"],
+                            "description": "Type of update operation. Use 'set_approval' to turn the maker-checker approval workflow on or off for an EXISTING entity (pass 'approvalRequired': true/false); this is the only supported way to change approval status after an entity has already been created — add_fields/update_fields do not touch it."
+                          },
+                          "approvalRequired": {
+                            "type": "boolean",
+                            "description": "Required for operation='set_approval'. true enables maker-checker approval (SchemaManager injects the 8 approval columns), false disables it."
+                          },
+                          "approvalLevels": {
+                            "type": "integer",
+                            "enum": [1, 2],
+                            "description": "Optional for operation='set_approval' when approvalRequired=true. 1 (default) is the standard single-checker workflow; 2 requires a DIFFERENT checker-2 to give final signoff after checker-1 approves."
                           },
                           "fields": {
                             "type": "array",
@@ -166,6 +176,16 @@ public class BatchUpdateEntitiesTool implements Tool {
                         failedUpdates.add(entityName + ":" + operation);
                         log.warn("[BatchUpdateEntities] ❌ {} - {} failed", entityName, operation);
                     }
+                } catch (BackendAuthException authEx) {
+                    // C4.4e Review #12 -- a 401 here means the token died mid-batch, not that this
+                    // one update was invalid. Every remaining update in the batch would fail
+                    // identically, so folding this into failedUpdates and continuing (as a normal
+                    // per-item failure) would burn through the rest of the list producing N
+                    // confusing "backend returned 401" strings instead of one clear signal the
+                    // agent loop can act on. Abort the whole batch instead.
+                    log.warn("[BatchUpdateEntities] Aborting batch -- session expired on update {}/{} ({}:{}): {}",
+                            i + 1, updates.size(), entityName, operation, authEx.getMessage());
+                    return ToolResult.authError(getName(), authEx.getMessage());
                 } catch (Exception e) {
                     failedUpdates.add(entityName + ":" + operation + " - " + e.getMessage());
                     log.error("[BatchUpdateEntities] ❌ {} - {} error: {}", entityName, operation, e.getMessage());
@@ -198,6 +218,9 @@ public class BatchUpdateEntitiesTool implements Tool {
                 return ToolResult.success(getName(), resultData, duration);
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[BatchUpdateEntities] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[BatchUpdateEntities] Fatal error", e);
             return ToolResult.error(getName(), "Batch update failed: " + e.getMessage());
@@ -219,10 +242,52 @@ public class BatchUpdateEntitiesTool implements Tool {
                 return updateFields(tenantId, appId, entityName, update, token);
             case "rename_entity":
                 return renameEntity(tenantId, appId, entityName, update, token);
+            case "set_approval":
+                return setApproval(tenantId, appId, entityName, update, token);
             default:
                 log.warn("[BatchUpdateEntities] Unknown operation: {}", operation);
                 return false;
         }
+    }
+
+    /**
+     * Enable or disable maker-checker approval on an existing entity.
+     *
+     * <p>This is the only supported way to flip {@code approvalRequired} after an entity has
+     * already been created via create_entity/scaffold_app — update_fields intentionally only
+     * touches the {@code fields} array, never entity-level flags. Per Section 7 of the repo's
+     * copilot instructions, setting the flag on the saved schema is the whole contract:
+     * SchemaManager materialises (or leaves in place) the eight physical approval columns on
+     * the next save, so we don't touch fields here at all.
+     */
+    private boolean setApproval(String tenantId, String appId, String entityName, Map<String, Object> update,
+            String token) throws Exception {
+        Object approvalRequiredArg = update.get("approvalRequired");
+        if (!(approvalRequiredArg instanceof Boolean)) {
+            log.warn("[BatchUpdateEntities] set_approval requires a boolean 'approvalRequired' argument");
+            return false;
+        }
+
+        Map<String, Object> entity = fetchEntity(tenantId, appId, entityName, token);
+        if (entity == null) {
+            return false;
+        }
+
+        entity.put("approvalRequired", approvalRequiredArg);
+
+        // approvalLevels only means anything alongside approvalRequired=true.
+        if (Boolean.TRUE.equals(approvalRequiredArg)) {
+            Object levelsArg = update.get("approvalLevels");
+            int levels = (levelsArg instanceof Number n) ? n.intValue() : 1;
+            if (levels == 2) {
+                entity.put("approvalLevels", 2);
+            } else {
+                entity.remove("approvalLevels");
+            }
+        } else {
+            entity.remove("approvalLevels");
+        }
+        return saveEntity(entity, token);
     }
 
     /**
@@ -472,6 +537,8 @@ public class BatchUpdateEntitiesTool implements Tool {
         } else if (response.statusCode() == 404) {
             log.warn("[BatchUpdateEntities] Entity schema not found at {}", url);
             return null;
+        } else if (response.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": fetching entity '" + entityName + "' returned 401");
         } else {
             log.error("[BatchUpdateEntities] Failed to fetch entity {}: {} - {}", url, response.statusCode(),
                     response.body());
@@ -501,6 +568,9 @@ public class BatchUpdateEntitiesTool implements Tool {
         if (response.statusCode() >= 200 && response.statusCode() < 300) {
             return true;
         }
+        if (response.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": saving entity '" + entity.get("name") + "' returned 401");
+        }
         log.error("[BatchUpdateEntities] Failed to save entity {}: {} - {}", entity.get("name"),
                 response.statusCode(), response.body());
         return false;
@@ -520,6 +590,9 @@ public class BatchUpdateEntitiesTool implements Tool {
             rb.header("Authorization", "Bearer " + token);
         }
         HttpResponse<String> response = httpClient.send(rb.DELETE().build(), HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": deleting entity '" + entityName + "' returned 401");
+        }
         return response.statusCode() >= 200 && response.statusCode() < 300;
     }
 
@@ -814,6 +887,9 @@ public class BatchUpdateEntitiesTool implements Tool {
             Map<String, Object> body = objectMapper.readValue(resp.body(), Map.class);
             return body;
         }
+        if (resp.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": fetching app metadata for '" + appId + "' returned 401");
+        }
         log.warn("[BatchUpdateEntities] Failed to fetch app metadata for {}: {} - {}", appId,
                 resp.statusCode(), resp.body());
         return null;
@@ -834,6 +910,9 @@ public class BatchUpdateEntitiesTool implements Tool {
                 rb.PUT(HttpRequest.BodyPublishers.ofString(json)).build(),
                 HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() >= 200 && resp.statusCode() < 300) return true;
+        if (resp.statusCode() == 401) {
+            throw new BackendAuthException(getName() + ": saving page '" + pageId + "' returned 401");
+        }
         log.warn("[BatchUpdateEntities] savePage {} failed: {} - {}", pageId, resp.statusCode(), resp.body());
         return false;
     }

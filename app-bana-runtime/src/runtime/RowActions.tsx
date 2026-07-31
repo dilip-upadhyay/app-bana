@@ -7,14 +7,32 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
+/**
+ * A menu item contributed by the host table beyond the built-in Edit / Copy /
+ * Delete trio — used for maker-checker actions (Submit for approval, Approve,
+ * Reject, History) so an approval-required entity's row menu offers them by
+ * default instead of forcing the user to open the record or find a separate
+ * checker queue page.
+ */
+export interface RowActionItem {
+  readonly label: string;
+  readonly onClick: () => void;
+  readonly disabled?: boolean;
+  /** Tooltip — used to explain a disabled item, e.g. separation-of-duties. */
+  readonly title?: string;
+  readonly tone?: 'default' | 'danger';
+}
+
 export interface RowActionsProps {
   readonly rowId: string;
   readonly onCopy?: () => void;
   readonly onDelete?: () => void;
   readonly onEdit?: () => void;
+  /** Extra menu items rendered between Edit and Copy ID, in array order. */
+  readonly extraActions?: readonly RowActionItem[];
 }
 
-export function RowActions({ rowId, onCopy, onDelete, onEdit }: RowActionsProps) {
+export function RowActions({ rowId, onCopy, onDelete, onEdit, extraActions }: RowActionsProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLTableCellElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -66,6 +84,19 @@ export function RowActions({ rowId, onCopy, onDelete, onEdit }: RowActionsProps)
               Edit
             </button>
           )}
+          {extraActions?.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              role="menuitem"
+              className={action.tone === 'danger' ? 'danger' : undefined}
+              disabled={action.disabled}
+              title={action.title}
+              onClick={() => { setOpen(false); action.onClick(); }}
+            >
+              {action.label}
+            </button>
+          ))}
           <button
             type="button"
             role="menuitem"

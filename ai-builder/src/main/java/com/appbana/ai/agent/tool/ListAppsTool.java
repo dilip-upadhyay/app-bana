@@ -132,11 +132,18 @@ public class ListAppsTool implements Tool {
                 result.put("message", formattedMessage.toString());
 
                 return ToolResult.success(getName(), result, executionTime);
+            } else if (response.statusCode() == 401) {
+                // C4.4e Review #12 -- a present-but-invalid (expired/revoked) token looks identical
+                // to a missing one from here; AiAgent needs to tell them apart from a generic failure.
+                throw new BackendAuthException(getName() + ": list_apps returned 401");
             } else {
                 log.error("[ListAppsTool] Failed to list apps: {} - {}", response.statusCode(), response.body());
                 return ToolResult.error(getName(), "Failed to list apps: " + response.statusCode());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[ListAppsTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[ListAppsTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());

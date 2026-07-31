@@ -156,6 +156,33 @@ public class GeneratePageTool implements Tool {
 
             String pageType = (String) arguments.get("type");
 
+            // GeneratePageTool referenceEntity/empty-fields bug (2nd half of the fix) --
+            // ScaffoldAppTool injects `entityFields` when it calls this tool during initial
+            // app creation, but the LLM can (and does) call generate_page directly with just
+            // {name, path, type, entityName, appId} -- e.g. any "regenerate this page" request
+            // after the app already exists. buildListPage/buildFormPage silently produced an
+            // empty fields array whenever entityFields was missing (fetchEntityFields() was a
+            // stub that always returned an empty list), so every ad-hoc regeneration reset the
+            // page to zero columns regardless of the schema. Fetch the entity's fields from the
+            // backend ourselves whenever the caller didn't supply them, instead of trusting the
+            // LLM to always pass entityFields through.
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> suppliedFields = (List<Map<String, Object>>) arguments.get("entityFields");
+            if ((suppliedFields == null || suppliedFields.isEmpty()) && arguments.get("entityName") != null) {
+                String entityNameForFetch = (String) arguments.get("entityName");
+                String appIdForFetch = (String) arguments.get("appId");
+                if (appIdForFetch == null || appIdForFetch.isEmpty()) {
+                    appIdForFetch = context.appId();
+                }
+                List<Map<String, Object>> fetched = fetchEntityFields(entityNameForFetch, appIdForFetch, context);
+                if (!fetched.isEmpty()) {
+                    arguments = new HashMap<>(arguments);
+                    arguments.put("entityFields", fetched);
+                    log.info("[GeneratePageTool] Fetched {} fields for entity '{}' from backend (caller did not supply entityFields)",
+                            fetched.size(), entityNameForFetch);
+                }
+            }
+
             // 1. Build page metadata based on type
             Map<String, Object> pageMetadata = switch (pageType) {
                 case "list" -> buildListPage(arguments);
@@ -269,6 +296,8 @@ public class GeneratePageTool implements Tool {
                 result.put("status", "created");
 
                 return ToolResult.success(getName(), result, executionTime);
+            } else if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": generate_page returned 401");
             } else {
                 log.error("[GeneratePageTool] API error: {} - {}",
                         response.statusCode(), response.body());
@@ -276,6 +305,9 @@ public class GeneratePageTool implements Tool {
                         "API error: " + response.statusCode() + " - " + response.body());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[GeneratePageTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[GeneratePageTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());
@@ -316,6 +348,15 @@ public class GeneratePageTool implements Tool {
                 f.put("name", field.get("name"));
                 f.put("label", field.getOrDefault("label", field.get("name")));
                 f.put("type", field.get("type"));
+                // StudioTableLive's FK-label lookup reads props.fields[].referenceEntity
+                // to know which entity to fetch for resolving a reference column's human
+                // label (e.g. Employee.department -> "Human Resources" instead of raw id
+                // "1"). Without this, every reference-type column in a generated list page
+                // silently falls back to rendering the raw FK id, with no error anywhere.
+                Object referenceEntity = field.get("referenceEntity");
+                if (referenceEntity != null && !"null".equals(referenceEntity)) {
+                    f.put("referenceEntity", referenceEntity);
+                }
                 tableFields.add(f);
             }
             tableProps.put("fields", tableFields);
@@ -565,16 +606,71 @@ public class GeneratePageTool implements Tool {
     }
 
     /**
-     * Fetch entity fields from backend (simplified version - returns empty list for
-     * now)
-     * In production, this would make an HTTP call to fetch the entity schema
+     * Fetch entity fields from the backend app-context endpoint when the caller
+     * (the LLM) did not supply `entityFields` directly. Mirrors the lookup
+     * GetEntityDetailsTool uses: GET /appbana-studio/{tenantId}/apps/{appId}
+     * and match the entity by name within its `entities[]` list. Returns an
+     * empty list (never throws) if the app/entity can't be resolved so the
+     * page is still created -- just without columns, same as the prior
+     * behavior -- rather than failing the whole generate_page call.
      */
-    private List<Map<String, Object>> fetchEntityFields(String entityName) {
-        // TODO: Fetch from backend API
-        // For now, return empty list - the page will be created but empty
-        // The UI should handle this gracefully
-        log.warn("[GeneratePageTool] Entity field fetching not implemented - form will be empty");
-        return new ArrayList<>();
+    private List<Map<String, Object>> fetchEntityFields(String entityName, String appId, AgentContext context) {
+        if (entityName == null || entityName.isBlank() || appId == null || appId.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            String tenantId = context.tenantId();
+            if (tenantId == null || tenantId.isEmpty()) {
+                tenantId = "default";
+            }
+            String url = baseUrl + "/appbana-studio/" + tenantId + "/apps/" + appId;
+
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Accept", "application/json");
+            String token = context.token();
+            if (token != null && !token.isEmpty()) {
+                requestBuilder.header("Authorization", "Bearer " + token);
+            }
+
+            HttpResponse<String> response = httpClient.send(requestBuilder.GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": entity-fields lookup for '"
+                        + entityName + "' returned 401");
+            }
+
+            if (response.statusCode() != 200) {
+                log.warn("[GeneratePageTool] Could not fetch entity fields for '{}' in app '{}': backend returned {}",
+                        entityName, appId, response.statusCode());
+                return new ArrayList<>();
+            }
+
+            Map<String, Object> appData = objectMapper.readValue(response.body(),
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                    });
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> entities = (List<Map<String, Object>>) appData.get("entities");
+            if (entities == null) {
+                return new ArrayList<>();
+            }
+
+            for (Map<String, Object> entity : entities) {
+                if (entityName.equalsIgnoreCase((String) entity.get("name"))) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> fields = (List<Map<String, Object>>) entity.get("fields");
+                    return fields != null ? fields : new ArrayList<>();
+                }
+            }
+            return new ArrayList<>();
+        } catch (BackendAuthException authEx) {
+            throw authEx;
+        } catch (Exception e) {
+            log.warn("[GeneratePageTool] Failed to fetch entity fields for '{}': {}", entityName, e.getMessage());
+            return new ArrayList<>();
+        }
     }
 
     /**

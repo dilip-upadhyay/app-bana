@@ -36,7 +36,7 @@ import { entityNameFromKey } from './page-classifier';
 import { renderChildTablesFromPage } from './Renderer';
 import { RecordContextProvider } from './RecordContext';
 import { RecordApprovalPanel } from './RecordApprovalPanel';
-import { readRowValue, APPROVAL_STATUS_COLUMN } from './approval-columns';
+import { readRowValue, APPROVAL_COLUMNS, APPROVAL_STATUS_COLUMN } from './approval-columns';
 
 interface Props {
   readonly page: PageMeta;
@@ -51,6 +51,29 @@ function humanizeFieldName(name: string): string {
   return name
     .replace(/_+/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * The backend returns different column casing depending on the read path —
+ * a plain `SELECT *` over quoted UPPER-case identifiers (single-row GET)
+ * yields UPPER-case keys, while `listAdvanced` yields lower-case keys (see
+ * `readRowValue`'s doc comment in approval-columns.ts). `EntityField.name`
+ * is always lower-case snake_case. Without this normalization, every
+ * `record[f.name]` / `draft[f.name]` lookup below silently misses and
+ * renders/edits as if the record were empty. Building a fresh object keyed
+ * by the canonical field name (plus the approval columns) fixes both view
+ * and edit mode at the source, once, instead of special-casing every read.
+ */
+function normalizeRowKeys(
+  row: Record<string, unknown> | null,
+  fieldNames: ReadonlyArray<string>
+): Record<string, unknown> {
+  if (!row) return {};
+  const normalized: Record<string, unknown> = { ...row };
+  for (const name of [...fieldNames, ...APPROVAL_COLUMNS]) {
+    normalized[name] = readRowValue(row, name);
+  }
+  return normalized;
 }
 
 function renderReadOnlyValue(value: unknown, field: EntityField): JSX.Element {
@@ -189,9 +212,10 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
     ])
       .then(([sch, rec]) => {
         if (cancelled) return;
+        const normalized = rec ? normalizeRowKeys(rec, sch.fields.map((f) => f.name)) : null;
         setSchema(sch);
-        setRecord(rec);
-        setDraft(rec ?? {});
+        setRecord(normalized);
+        setDraft(normalized ?? {});
       })
       .catch((err) => {
         if (cancelled) return;
@@ -205,10 +229,23 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
     return () => { cancelled = true; };
   }, [entityKey, recordId]);
 
-  const editableFields = useMemo<EntityField[]>(() => {
+  const displayFields = useMemo<EntityField[]>(() => {
     if (!schema) return [];
     return schema.fields.filter((f) => !f.autoIncrement);
   }, [schema]);
+
+  // created_at/updated_at are system-managed audit columns (see
+  // EntityCrudService's auto-fill-on-insert and ApprovalService's
+  // CREATED_AT-is-immutable rule) — they must never be hand-edited. Still
+  // shown read-only via `displayFields` in view mode, but excluded here so
+  // edit mode never renders them as inputs. Rendering them as editable
+  // native datetime-local inputs previously sent a seconds-less value the
+  // backend's TIMESTAMP coercion rejected with "invalid format" on every
+  // save attempt, even when the user never touched those fields.
+  const editableFields = useMemo<EntityField[]>(
+    () => displayFields.filter((f) => f.name !== 'created_at' && f.name !== 'updated_at'),
+    [displayFields]
+  );
 
   const entityLabel = entityNameFromKey(entityKey) || 'Record';
 
@@ -232,8 +269,9 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
     try {
       const fresh = await getEntityRow(entityKey, recordId, token);
       if (!mountedRef.current) return;
-      setRecord(fresh);
-      setDraft(fresh ?? {});
+      const normalized = fresh && schema ? normalizeRowKeys(fresh, schema.fields.map((f) => f.name)) : fresh;
+      setRecord(normalized);
+      setDraft(normalized ?? {});
       window.dispatchEvent(new CustomEvent('appbana:row-updated', {
         detail: { entity: entityKey, id: recordId },
       }));
@@ -241,7 +279,7 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
       // A failed refresh must not look like a failed action — the caller has
       // already reported the outcome of the action itself.
     }
-  }, [entityKey, recordId]);
+  }, [entityKey, recordId, schema]);
 
   // A PENDING record is owned by the checker; the backend refuses PUTs on it
   // (applyApprovalPutGuard → BLOCKED_PENDING). Offering Edit would be an
@@ -263,12 +301,22 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
     setSaving(true);
     try {
       const token = localStorage.getItem(TOKEN_KEY) ?? '';
-      const result = await updateEntityRow(entityKey, recordId, draft, token);
+      // Send only the user-editable fields — never the full `draft` blob,
+      // which still carries read-only/system columns (created_at, updated_at,
+      // approval metadata) copied straight from the fetched record. Forwarding
+      // those back on every save is what caused "invalid format" 400s on
+      // saves that never touched those fields.
+      const payload: Record<string, unknown> = {};
+      for (const f of editableFields) {
+        payload[f.name] = draft[f.name];
+      }
+      const result = await updateEntityRow(entityKey, recordId, payload, token);
       // Refresh the canonical record after save.
       const fresh = await getEntityRow(entityKey, recordId, token);
       if (!mountedRef.current) return;
-      setRecord(fresh);
-      setDraft(fresh ?? draft);
+      const normalized = fresh ? normalizeRowKeys(fresh, schema.fields.map((f) => f.name)) : fresh;
+      setRecord(normalized);
+      setDraft(normalized ?? draft);
       setMode('view');
       setFieldErrors({});
 
@@ -305,7 +353,7 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
     } finally {
       if (mountedRef.current) setSaving(false);
     }
-  }, [schema, record, entityKey, recordId, draft, nav, page]);
+  }, [schema, record, entityKey, recordId, draft, editableFields, nav, page]);
 
   const handleDelete = useCallback(async () => {
     if (!record) return;
@@ -444,7 +492,7 @@ export function DetailPage({ page, recordId, onDismiss }: Readonly<Props>) {
 
       <div className="appbana-page-card">
         {mode === 'view'
-          ? editableFields.map((f) => (
+          ? displayFields.map((f) => (
               <div key={f.name} className="appbana-detail-field">
                 <span className="appbana-detail-label">
                   {f.label ?? humanizeFieldName(f.name)}

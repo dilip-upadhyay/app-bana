@@ -23,6 +23,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchPendingApprovalCount } from '@appbana/shared';
 import { getRuntimeToken } from './qualifyEntityKey';
+import { parseCheckerEntityKey } from './approval-columns';
 
 export const PENDING_POLL_MS = 30_000;
 
@@ -66,10 +67,11 @@ export function usePendingCounts(
     if (!token) return;
 
     const settled = await Promise.allSettled(
-      names.map((entityName) =>
-        fetchPendingApprovalCount({ tenantId, appId, entityName }, token)
-          .then((count) => [entityName, count] as const)
-      )
+      names.map((key) => {
+        const { entityName, level } = parseCheckerEntityKey(key);
+        return fetchPendingApprovalCount({ tenantId, appId, entityName }, token, level)
+          .then((count) => [key, count] as const);
+      })
     );
     if (cancelled.current) return;
 

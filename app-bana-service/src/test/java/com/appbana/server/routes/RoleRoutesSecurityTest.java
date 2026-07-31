@@ -49,13 +49,24 @@ public class RoleRoutesSecurityTest {
         ApiServer.startJdk(PORT);
     }
 
+    // Scoped to this test class's OWN fixture tenants only. A blanket
+    // "DELETE FROM appbana_apps"/"appbana_schemas" (no WHERE) here wipes every
+    // real app in the shared dev Postgres instance on every `mvn test` run --
+    // confirmed to have destroyed the live "Employee Onboarding" AI Builder app's
+    // appbana_apps/appbana_schemas rows this way (its appbana_pages rows and
+    // physical data tables survived untouched, only the app/schema catalog rows
+    // were lost). Keep this IN (...) list in sync with every tenantId literal
+    // used by a @Test in this file.
+    private static final String TEST_TENANT_IDS_SQL =
+            "'t_spoof', 'tenantA', 'tenantB', 't_sec', 't_immutable', 't_schema_sec', 't_getroles', 't_enum'";
+
     @BeforeEach
     public void cleanTables() throws Exception {
         try (Connection c = JdbcManager.getConnection("default");
              Statement s = c.createStatement()) {
-            s.execute("DELETE FROM appbana_user_roles");
-            s.execute("DELETE FROM appbana_apps");
-            s.execute("DELETE FROM appbana_schemas");
+            s.execute("DELETE FROM appbana_user_roles WHERE tenant_id IN (" + TEST_TENANT_IDS_SQL + ")");
+            s.execute("DELETE FROM appbana_apps WHERE tenant_id IN (" + TEST_TENANT_IDS_SQL + ")");
+            s.execute("DELETE FROM appbana_schemas WHERE tenant_id IN (" + TEST_TENANT_IDS_SQL + ")");
         }
     }
 

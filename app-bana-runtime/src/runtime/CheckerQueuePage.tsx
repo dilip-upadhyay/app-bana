@@ -34,7 +34,7 @@ import {
 import { getRuntimeToken } from './qualifyEntityKey';
 import { humanizeHeader, formatDate } from './cell-formatters';
 import { ApprovalStatusPill } from './ApprovalStatusPill';
-import { isApprovalColumn, readRowValue } from './approval-columns';
+import { isApprovalColumn, readRowValue, parseCheckerEntityKey } from './approval-columns';
 import { Button } from './Button';
 import { RejectDialog } from './RejectDialog';
 import { AuditDrawer } from './AuditDrawer';
@@ -47,6 +47,11 @@ import { useCurrentUser } from './useCurrentUser';
 interface Props {
   readonly tenantId: string;
   readonly appId: string;
+  /**
+   * Bare entity name, or `"{entityName}::L2"` to open the level-2 (final
+   * signoff) queue for a two-level checker chain entity. See
+   * `parseCheckerEntityKey` in approval-columns.ts.
+   */
   readonly entityName: string;
 }
 
@@ -67,8 +72,9 @@ function rowId(row: Row): string {
   return raw == null ? '' : String(raw);
 }
 
-export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props>) {
+export function CheckerQueuePage({ tenantId, appId, entityName: rawEntityKey }: Readonly<Props>) {
   const { user } = useCurrentUser();
+  const { entityName, level } = parseCheckerEntityKey(rawEntityKey);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -82,7 +88,7 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
     setLoading(true);
     setError(null);
     try {
-      const page = await fetchPendingApprovalsPage({ tenantId, appId, entityName }, getRuntimeToken(), 0);
+      const page = await fetchPendingApprovalsPage({ tenantId, appId, entityName }, getRuntimeToken(), 0, level);
       setRows(page.records);
       setHasMore(page.hasMore);
     } catch (e) {
@@ -99,12 +105,12 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
     } finally {
       setLoading(false);
     }
-  }, [tenantId, appId, entityName]);
+  }, [tenantId, appId, entityName, level]);
 
   const loadMore = useCallback(async () => {
     setLoadingMore(true);
     try {
-      const page = await fetchPendingApprovalsPage({ tenantId, appId, entityName }, getRuntimeToken(), rows.length);
+      const page = await fetchPendingApprovalsPage({ tenantId, appId, entityName }, getRuntimeToken(), rows.length, level);
       setRows((prev) => [...prev, ...page.records]);
       setHasMore(page.hasMore);
     } catch (e) {
@@ -114,7 +120,7 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
     } finally {
       setLoadingMore(false);
     }
-  }, [tenantId, appId, entityName, rows.length]);
+  }, [tenantId, appId, entityName, level, rows.length]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -126,6 +132,17 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
   function isOwnSubmission(row: Row): boolean {
     const submitter = readRowValue(row, 'submitted_by');
     return Boolean(user?.userId) && String(submitter ?? '') === user?.userId;
+  }
+
+  /**
+   * True at level 2 only: the caller was the level-1 approver on this row, so
+   * the backend's separation-of-duties rule (a level-2 checker cannot be the
+   * same person who approved at level 1) will refuse them.
+   */
+  function isOwnLevel1Approval(row: Row): boolean {
+    if (level !== 2) return false;
+    const approver = readRowValue(row, 'approved_by');
+    return Boolean(user?.userId) && String(approver ?? '') === user?.userId;
   }
 
   function handleConflict(e: unknown, fallbackTitle: string): boolean {
@@ -181,10 +198,11 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
   const label = humanizeHeader(entityName);
   const loadedCount = hasMore ? `${rows.length}+` : String(rows.length);
   const subtitle = loading ? undefined : `${loadedCount} awaiting your review`;
+  const pageTitle = level === 2 ? `${label} approvals — final review` : `${label} approvals`;
 
   return (
     <PageShell
-      title={`${label} approvals`}
+      title={pageTitle}
       subtitle={subtitle}
     >
       {loading && <TableSkeleton columns={4} />}
@@ -222,6 +240,13 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
               {rows.map((row) => {
                 const id = rowId(row);
                 const own = isOwnSubmission(row);
+                const ownL1 = isOwnLevel1Approval(row);
+                const blocked = own || ownL1;
+                const blockedReason = own
+                  ? 'You submitted this record, so you cannot review it'
+                  : ownL1
+                    ? 'You approved this at level 1, so you cannot give final signoff'
+                    : undefined;
                 const busy = busyId === id;
                 const submittedAt = formatDate(readRowValue(row, 'submitted_at'), 'datetime');
                 return (
@@ -257,8 +282,8 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
                         <Button
                           size="sm"
                           variant="secondary"
-                          disabled={own || busy}
-                          title={own ? 'You submitted this record, so you cannot review it' : undefined}
+                          disabled={blocked || busy}
+                          title={blockedReason}
                           onClick={() => setRejecting(row)}
                         >
                           Reject
@@ -266,17 +291,17 @@ export function CheckerQueuePage({ tenantId, appId, entityName }: Readonly<Props
                         <Button
                           size="sm"
                           variant="primary"
-                          disabled={own || busy}
+                          disabled={blocked || busy}
                           loading={busy}
-                          title={own ? 'You submitted this record, so you cannot review it' : undefined}
+                          title={blockedReason}
                           onClick={() => void handleApprove(row)}
                         >
                           Approve
                         </Button>
                       </div>
-                      {own && (
+                      {blocked && (
                         <p className="text-xs text-slate-500 text-right mt-1">
-                          You submitted this
+                          {own ? 'You submitted this' : 'You approved this at level 1'}
                         </p>
                       )}
                     </td>

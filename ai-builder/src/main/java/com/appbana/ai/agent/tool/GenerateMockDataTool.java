@@ -33,7 +33,8 @@ public class GenerateMockDataTool implements Tool {
 
     @Override
     public String getDescription() {
-        return "Inserts mock data records into an existing entity. Use this when the user asks to seed or create test data. Provide an array of realistic mock JSON objects (up to 10-20 max). Do NOT use fake field names; use exact field names defined in the entity. IMPORTANT: When seeding data for an app you just scaffolded, always pass the 'appId' returned from scaffold_app — otherwise the request will 404.";
+        return "Inserts mock data records into an existing entity. Use this when the user asks to seed or create test data. Provide an array of realistic mock JSON objects (up to 10-20 max). Do NOT use fake field names; use exact field names defined in the entity. IMPORTANT: When seeding data for an app you just scaffolded, always pass the 'appId' returned from scaffold_app — otherwise the request will 404. "
+                + "CRITICAL ordering rule for reference fields: a field of type 'reference' (e.g. Employee.department, Employee.manager, EquipmentRequest.employee) stores the referenced row's real integer primary key — never a name or free-text label. You MUST call this tool once per entity in dependency order: seed entities with no reference fields (or only self-references) first, read the inserted records' real 'id' values back from this tool's own JSON result, and only then seed dependent entities using those real ids for their reference fields. For a self-referencing field (e.g. Employee.manager referencing Employee itself), seed a first batch without that field (or null it), then use the returned ids for later records or a follow-up update. Never invent an id or pass a department/employee name into a reference field — that fails validation.";
     }
 
     @Override
@@ -135,12 +136,17 @@ public class GenerateMockDataTool implements Tool {
                 result.put("details", response.body()); // Optionally include the backend response
                 
                 return ToolResult.success(getName(), result, executionTime);
+            } else if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": generate_mock_data returned 401");
             } else {
                 log.error("[GenerateMockDataTool] API error: {} - {}", response.statusCode(), response.body());
                 return ToolResult.error(getName(),
                         "API error: " + response.statusCode() + " - " + response.body());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[GenerateMockDataTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[GenerateMockDataTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());

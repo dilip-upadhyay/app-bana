@@ -12,12 +12,22 @@
  *   - maker-checker approval state (C3.1)
  */
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import type { ComponentNode, FilterDef, SavedViewRecord } from '@appbana/shared';
-import { fetchEntityRows, deleteEntityRow, insertEntityRow, resolveAppContext } from '@appbana/shared';
+import type { ComponentNode, FilterDef, ApprovalTarget } from '@appbana/shared';
+import {
+  fetchEntityRows,
+  deleteEntityRow,
+  insertEntityRow,
+  resolveAppContext,
+  getEntitySchema,
+  submitForApproval,
+  approveRecord,
+  rejectRecord,
+  ApprovalConflictError,
+} from '@appbana/shared';
 import { qualifyEntityKey, getRuntimeToken } from './qualifyEntityKey';
 import { formatDate, humanizeHeader, pickReferenceLabel } from './cell-formatters';
 import { StatusPill } from './StatusPill';
-import { ApprovalStatusPill } from './ApprovalStatusPill';
+import { ApprovalStatusPill, toApprovalState } from './ApprovalStatusPill';
 import {
   isApprovalColumn,
   isApprovalStatusColumn,
@@ -25,19 +35,22 @@ import {
   readRowValue,
   APPROVAL_STATUS_COLUMN,
 } from './approval-columns';
-import { RowActions } from './RowActions';
+import { RowActions, type RowActionItem } from './RowActions';
+import { RejectDialog } from './RejectDialog';
+import { AuditDrawer } from './AuditDrawer';
 import { toast } from './Toaster';
 import { EmptyState } from './EmptyState';
 import { TableSkeleton } from './Skeleton';
 import { useRuntimeNavigation } from './runtime-navigation';
 import { useConfirm } from './ConfirmDialog';
 import { useEntityRows } from './useEntityRows';
-import { TableHeader } from './TableHeader';
+import { TableHeader, type ColumnSort, type ReferenceOption } from './TableHeader';
 import { PaginationBar } from './PaginationBar';
 import { FilterBar } from './FilterBar';
 import { SavedViewsBar } from './SavedViewsBar';
 import { buildApprovalSystemViews, isSystemView } from './approval-views';
 import { toEntityQueryParams } from './entity-query';
+import { useDebouncedValue } from './useDebouncedValue';
 import { useCurrentUser } from './useCurrentUser';
 import {
   entityNameFromKey,
@@ -89,16 +102,76 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
   });
   // C3.6 — which system view is applied, purely for the chip's active state.
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
-  const { user } = useCurrentUser();
+  const { user, isMaker, isChecker } = useCurrentUser();
+
+  // Filtering and sorting are resolved server-side. Sorting the already-fetched
+  // page client-side would be meaningless once a table has millions of rows
+  // behind server-side pagination.
+  const [columnFilterValues, setColumnFilterValues] = useState<Record<string, unknown>>({});
+  const debouncedColumnFilterValues = useDebouncedValue(columnFilterValues, 400);
+  const handleColumnFilterChange = useCallback((field: string, value: unknown) => {
+    setColumnFilterValues((prev) => {
+      const next = { ...prev };
+      if (value === undefined || value === null) delete next[field];
+      else next[field] = value;
+      return next;
+    });
+  }, []);
+
+  const [sort, setSort] = useState<ColumnSort | null>(null);
+  const handleSortToggle = useCallback((field: string) => {
+    setSort((prev) => {
+      if (prev?.field !== field) return { field, direction: 'asc' };
+      if (prev.direction === 'asc') return { field, direction: 'desc' };
+      return null;
+    });
+  }, []);
 
   // C3.9 — filters go out as `filter=name:value`, not as bare `?name=value`.
   // The backend reads a fixed param allowlist and drops everything outside it,
   // so bare params were being discarded in transit and the list came back
   // unfiltered with a 200. See entity-query.ts for the full account.
+  const combinedFilterValues = useMemo(() => {
+    const merged: Record<string, unknown> = { ...filterValues, ...debouncedColumnFilterValues };
+    if (sort) merged.sort = sort.direction === 'desc' ? `-${sort.field}` : sort.field;
+    return merged;
+  }, [filterValues, debouncedColumnFilterValues, sort]);
   const { params: fetchParams, rejected: rejectedFilters } = useMemo(
-    () => toEntityQueryParams(filterValues),
-    [filterValues],
+    () => toEntityQueryParams(combinedFilterValues),
+    [combinedFilterValues],
   );
+
+  // Default-behavior fix — the plain List page never showed a Status column
+  // for maker-checker entities. Root cause: the backend keeps the 8 approval
+  // columns opt-in (excluded from the default projection so they never leak
+  // into callers that didn't ask), so the un-parameterized fetch below always
+  // came back without `approval_status`, `rowsHaveApprovalColumns()` was
+  // always false, and the status affordance the rendering code already knows
+  // how to draw never had data to draw from. Fetch the schema once per entity
+  // and, when it's approval-required, explicitly ask for `approval_status`
+  // (plus every already-visible column, since specifying `fields=` replaces
+  // the default projection rather than adding to it) so the List view shows
+  // maker/checker status by default, same as the Detail page and checker queue.
+  const [schemaApprovalRequired, setSchemaApprovalRequired] = useState(false);
+  useEffect(() => {
+    if (!entityKey) return;
+    let cancelled = false;
+    getEntitySchema(qualifyEntityKey(entityKey), getToken())
+      .then((schema) => { if (!cancelled) setSchemaApprovalRequired(Boolean(schema?.approvalRequired)); })
+      .catch(() => { if (!cancelled) setSchemaApprovalRequired(false); });
+    return () => { cancelled = true; };
+  }, [entityKey]);
+
+  const listParams = useMemo(() => {
+    if (!schemaApprovalRequired || fields.length === 0) return fetchParams;
+    // `submitted_by` is requested too (though not displayed as a column) so
+    // the row menu can enforce "you cannot approve your own submission" from
+    // the List view without a per-row follow-up fetch.
+    const names = new Set<string>(['id', ...fields.map((f) => f.name)]);
+    names.add(APPROVAL_STATUS_COLUMN);
+    names.add('submitted_by');
+    return { ...fetchParams, fields: Array.from(names).join(',') };
+  }, [fetchParams, schemaApprovalRequired, fields]);
 
   // Sprint 3 task 3.12 — pagination + lifecycle refresh live in a hook now.
   const {
@@ -109,7 +182,7 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     loading,
     error,
     setPage,
-  } = useEntityRows(entityKey, PAGE_SIZE, fetchParams);
+  } = useEntityRows(entityKey, PAGE_SIZE, listParams);
 
   const [fkMaps, setFkMaps] = useState<Record<string, Map<string, string>>>({});
   // Sprint 3 task 3.6 — RowActions navigation + destructive confirm.
@@ -167,6 +240,139 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     }
   }, [entityKey, confirm]);
 
+  // Default-behavior fix — the "⋯" row menu only ever offered Edit / Copy ID /
+  // Delete, even for approval-required entities. A maker had to open the
+  // record's Detail page to find "Submit for approval", and a checker had to
+  // leave the List entirely and find the separate approval-queue page just to
+  // Approve/Reject a row they could already see. Surface the same actions
+  // RecordApprovalPanel (Detail page) and CheckerQueuePage already offer,
+  // directly in the row menu, gated by the caller's maker/checker role for
+  // this entity — same backend, same 409-conflict handling, same
+  // separation-of-duties rule, just reachable from one more place.
+  const [rejectingRow, setRejectingRow] = useState<Record<string, unknown> | null>(null);
+  const [auditingRow, setAuditingRow] = useState<Record<string, unknown> | null>(null);
+  const [busyRowId, setBusyRowId] = useState<string | null>(null);
+
+  const targetFor = useCallback((rowId: string): ApprovalTarget | null => {
+    const ctx = resolveAppContext(window.location);
+    const name = entityNameFromKey(entityKey);
+    if (!ctx?.tenantId || !ctx?.appId || !name) return null;
+    return { tenantId: ctx.tenantId, appId: ctx.appId, entityName: name, rowId };
+  }, [entityKey]);
+
+  // Rows refresh through the same event bus handleDelete/insertEntityRow
+  // already use, rather than a direct refetch — useEntityRows is already
+  // listening for it, so every table that mounts this entity stays in sync.
+  const notifyRowUpdated = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('appbana:row-updated', {
+      detail: { entity: qualifyEntityKey(entityKey) },
+    }));
+  }, [entityKey]);
+
+  const handleApprovalConflict = useCallback((e: unknown, fallbackTitle: string) => {
+    if (e instanceof ApprovalConflictError) {
+      toast.info('This record already moved on', {
+        description: e.message || 'Its approval state changed while this page was open. Refreshed.',
+      });
+      notifyRowUpdated();
+      return;
+    }
+    toast.error(fallbackTitle, { description: e instanceof Error ? e.message : undefined });
+  }, [notifyRowUpdated]);
+
+  const handleSubmitRow = useCallback(async (rowId: string, resubmit: boolean) => {
+    const target = targetFor(rowId);
+    if (!target) return;
+    setBusyRowId(rowId);
+    try {
+      await submitForApproval(target, getToken());
+      toast.success(resubmit ? 'Resubmitted for approval' : 'Submitted for approval', {
+        description: 'A checker will review it. You cannot edit it while it is pending.',
+      });
+      notifyRowUpdated();
+    } catch (e) {
+      handleApprovalConflict(e, 'Submit failed');
+    } finally {
+      setBusyRowId(null);
+    }
+  }, [targetFor, notifyRowUpdated, handleApprovalConflict]);
+
+  const handleApproveRow = useCallback(async (rowId: string) => {
+    const target = targetFor(rowId);
+    if (!target) return;
+    setBusyRowId(rowId);
+    try {
+      await approveRecord(target, getToken());
+      toast.success('Approved', { description: `Record #${rowId} is now live.` });
+      notifyRowUpdated();
+    } catch (e) {
+      handleApprovalConflict(e, 'Approve failed');
+    } finally {
+      setBusyRowId(null);
+    }
+  }, [targetFor, notifyRowUpdated, handleApprovalConflict]);
+
+  const handleRejectConfirm = useCallback(async (reason: string) => {
+    if (!rejectingRow) return;
+    const rowId = String(rejectingRow.id ?? '');
+    const target = targetFor(rowId);
+    if (!target) return;
+    setBusyRowId(rowId);
+    try {
+      await rejectRecord(target, getToken(), reason);
+      setRejectingRow(null);
+      toast.success('Sent back to the maker', {
+        description: `Record #${rowId} was rejected with your reason.`,
+      });
+      notifyRowUpdated();
+    } catch (e) {
+      // Keep the dialog open on a plain failure so the typed reason survives;
+      // close it on a conflict, where retrying the same action is pointless.
+      if (e instanceof ApprovalConflictError) setRejectingRow(null);
+      handleApprovalConflict(e, 'Reject failed');
+    } finally {
+      setBusyRowId(null);
+    }
+  }, [rejectingRow, targetFor, notifyRowUpdated, handleApprovalConflict]);
+
+  /** Builds the maker/checker menu items for one row, or an empty array when
+   *  the entity isn't approval-required or the caller holds neither role. */
+  const buildApprovalActions = useCallback((row: Record<string, unknown>, rowId: string, entityName: string): RowActionItem[] => {
+    const state = toApprovalState(readRowValue(row, APPROVAL_STATUS_COLUMN));
+    if (!state) return [];
+    const actions: RowActionItem[] = [
+      { label: 'History', onClick: () => setAuditingRow(row) },
+    ];
+    const busy = busyRowId === rowId;
+    if (isMaker(entityName) && (state === 'DRAFT' || state === 'REJECTED')) {
+      actions.push({
+        label: state === 'REJECTED' ? 'Resubmit for approval' : 'Submit for approval',
+        onClick: () => { void handleSubmitRow(rowId, state === 'REJECTED'); },
+        disabled: busy,
+      });
+    }
+    if (isChecker(entityName) && state === 'PENDING') {
+      const submittedBy = readRowValue(row, 'submitted_by');
+      const ownSubmission = Boolean(user?.userId) && String(submittedBy ?? '') === user?.userId;
+      actions.push(
+        {
+          label: 'Approve',
+          onClick: () => { void handleApproveRow(rowId); },
+          disabled: busy || ownSubmission,
+          title: ownSubmission ? 'You cannot approve your own submission.' : undefined,
+        },
+        {
+          label: 'Reject',
+          onClick: () => setRejectingRow(row),
+          disabled: busy || ownSubmission,
+          title: ownSubmission ? 'You cannot reject your own submission.' : undefined,
+          tone: 'danger',
+        },
+      );
+    }
+    return actions;
+  }, [busyRowId, isMaker, isChecker, user, handleSubmitRow, handleApproveRow]);
+
 
   // ─── FK label prefetch ────────────────────────────────────────────────
   // For every reference column, load the target entity once so we can render
@@ -206,6 +412,20 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
     return () => { cancelled = true; };
   }, [fields, entityKey]);
 
+  // Derived straight from data already in hand (`fields`, `fkMaps`), so the
+  // filter row never issues a network request of its own.
+  const typeForColumn = useCallback((name: string): string | undefined => {
+    const meta = fields.find((f) => f.name === name);
+    return meta?.type ?? inferTypeFromName(name);
+  }, [fields]);
+  const referenceOptionsForColumn = useCallback((name: string): readonly ReferenceOption[] | undefined => {
+    const map = fkMaps[name];
+    if (!map) return undefined;
+    return Array.from(map.entries())
+      .map(([value, optLabel]) => ({ value, label: optLabel }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [fkMaps]);
+
   const label = String(
     node.label ?? props.label ?? (entityKey ? `${humanizeHeader(entityKey.split('_').pop())} List` : 'Data Table'),
   );
@@ -241,7 +461,10 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
   useEffect(() => {
     if (rowsHaveApprovalColumns(rows)) setApprovalSeen(true);
   }, [rows]);
-  const approvalEnabled = approvalSeen || rowsHaveApprovalColumns(rows);
+  // schemaApprovalRequired is the authoritative, data-independent signal (see
+  // the fetch above); rowsHaveApprovalColumns/approvalSeen stay as a fallback
+  // for the moment a page first mounts, before the schema fetch resolves.
+  const approvalEnabled = schemaApprovalRequired || approvalSeen || rowsHaveApprovalColumns(rows);
 
   const declaredFieldNames: string[] = fields.length > 0
     ? fields.map((f) => f.name)
@@ -416,6 +639,13 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
             <TableHeader
               columns={displayFieldNames}
               labelFor={(name) => fieldByName.get(name)?.label}
+              filterableColumns={displayFieldNames.filter((n) => !isApprovalStatusColumn(n))}
+              typeFor={typeForColumn}
+              referenceOptionsFor={referenceOptionsForColumn}
+              sort={sort}
+              onSortToggle={handleSortToggle}
+              filterValues={columnFilterValues}
+              onFilterChange={handleColumnFilterChange}
             />
             {(() => {
               const groupByField = typeof props.groupBy === 'string' ? props.groupBy : '';
@@ -500,6 +730,7 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
                         : undefined
                       }
                       onDelete={() => { handleDelete(row, rowId).catch(() => {}); }}
+                      extraActions={buildApprovalActions(row, rowId, entityName)}
                     />
                   </tr>
                 );
@@ -520,6 +751,20 @@ export function StudioTableLive({ node, pageId }: Readonly<Props>) {
         totalPages={totalPages}
         onPrev={() => setPage(Math.max(1, page - 1))}
         onNext={() => setPage(Math.min(totalPages, page + 1))}
+      />
+
+      <RejectDialog
+        open={rejectingRow !== null}
+        recordLabel={rejectingRow ? `Record #${rejectingRow.id}` : undefined}
+        submitting={busyRowId !== null && rejectingRow !== null}
+        onCancel={() => setRejectingRow(null)}
+        onConfirm={(reason) => { void handleRejectConfirm(reason); }}
+      />
+      <AuditDrawer
+        open={auditingRow !== null}
+        target={auditingRow ? targetFor(String(auditingRow.id ?? '')) : null}
+        recordLabel={auditingRow ? `Record #${auditingRow.id}` : undefined}
+        onClose={() => setAuditingRow(null)}
       />
     </div>
   );

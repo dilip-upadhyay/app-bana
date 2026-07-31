@@ -19,9 +19,16 @@ import { fetchCurrentUser } from '@appbana/shared';
 export interface CurrentUserState {
   readonly user: CurrentUser | null;
   readonly loading: boolean;
-  /** Bare entity names the caller may check, sorted for stable nav ordering. */
+  /**
+   * Bare entity names the caller may check, sorted for stable nav ordering.
+   * Two-level checker chain: an entity where the caller only holds CHECKER_L2
+   * (not CHECKER) appears here as `"{entityName}::L2"` so existing consumers
+   * that expect a flat `string[]` don't need a type change — they parse/strip
+   * the suffix as needed (see `parseCheckerEntityKey` in approval-columns.ts).
+   */
   readonly checkerEntities: string[];
   readonly isChecker: (entityName: string) => boolean;
+  readonly isCheckerL2: (entityName: string) => boolean;
   readonly isMaker: (entityName: string) => boolean;
 }
 
@@ -30,6 +37,7 @@ const EMPTY: CurrentUserState = {
   loading: false,
   checkerEntities: [],
   isChecker: () => false,
+  isCheckerL2: () => false,
   isMaker: () => false,
 };
 
@@ -53,15 +61,18 @@ function findGrant(
 
 export function buildCurrentUserState(user: CurrentUser | null, loading: boolean): CurrentUserState {
   const roles = user?.entityRoles ?? {};
-  const checkerEntities = Object.keys(roles)
-    .filter((name) => roles[name]?.isChecker)
-    .sort((a, b) => a.localeCompare(b));
+  const l1Entities = Object.keys(roles).filter((name) => roles[name]?.isChecker);
+  const l2Entities = Object.keys(roles)
+    .filter((name) => roles[name]?.isCheckerL2)
+    .map((name) => `${name}::L2`);
+  const checkerEntities = [...l1Entities, ...l2Entities].sort((a, b) => a.localeCompare(b));
 
   return {
     user,
     loading,
     checkerEntities,
     isChecker: (entityName: string) => Boolean(findGrant(roles, entityName)?.isChecker),
+    isCheckerL2: (entityName: string) => Boolean(findGrant(roles, entityName)?.isCheckerL2),
     isMaker: (entityName: string) => Boolean(findGrant(roles, entityName)?.isMaker),
   };
 }

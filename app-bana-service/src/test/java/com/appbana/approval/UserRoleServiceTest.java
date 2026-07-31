@@ -34,7 +34,10 @@ public class UserRoleServiceTest {
     public void cleanTable() throws Exception {
         try (Connection c = JdbcManager.getConnection("default");
              Statement s = c.createStatement()) {
-            s.execute("DELETE FROM appbana_user_roles");
+            // Scoped to this test's OWN fixture tenants -- a blanket "DELETE FROM
+            // appbana_user_roles" (no WHERE) wipes every real app's role grants in the
+            // shared dev Postgres instance on every `mvn test` run.
+            s.execute("DELETE FROM appbana_user_roles WHERE tenant_id IN ('tenant1', 't1')");
         }
     }
 

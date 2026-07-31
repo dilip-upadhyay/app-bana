@@ -69,10 +69,78 @@ function isExact(value: unknown): value is ExactFilterValue {
   return typeof value === 'object' && value !== null && typeof (value as ExactFilterValue).__exact === 'string';
 }
 
+/**
+ * Written on the wire as "min..max" (double-dot separator), parsed by
+ * `EntityCrudService.parseRange` and only accepted for orderable column
+ * kinds (integer/bigint/decimal/timestamp/reference). Either bound may be
+ * omitted for an open-ended range; both empty means "no filter" and is
+ * dropped like any other empty value.
+ */
+export interface RangeFilterValue {
+  readonly __range: { readonly min?: unknown; readonly max?: unknown };
+}
+
+export function range(min: unknown, max: unknown): RangeFilterValue {
+  return { __range: { min, max } };
+}
+
+function isRange(value: unknown): value is RangeFilterValue {
+  return typeof value === 'object' && value !== null && '__range' in (value as Record<string, unknown>);
+}
+
 function stringify(value: unknown): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return JSON.stringify(value);
+}
+
+/** Outcome of turning one `[key, value]` filter entry into a `filter=` clause. */
+type ClauseResult =
+  | { readonly kind: 'skip' }
+  | { readonly kind: 'clause'; readonly text: string }
+  | { readonly kind: 'rejected' };
+
+function rangeClauseResult(key: string, raw: RangeFilterValue): ClauseResult {
+  const { min, max } = raw.__range;
+  if (min == null && max == null) return { kind: 'skip' };
+  const lo = min == null ? '' : stringify(min);
+  const hi = max == null ? '' : stringify(max);
+  // A comma in either bound would be read as a clause separator, same hazard
+  // as the plain-value case below — refuse rather than truncate silently.
+  if (lo.includes(',') || hi.includes(',')) return { kind: 'rejected' };
+  return { kind: 'clause', text: `${key}:${lo}..${hi}` };
+}
+
+function plainClauseResult(key: string, raw: unknown): ClauseResult {
+  const value = isExact(raw) ? raw.__exact : stringify(raw);
+  if (value === '') return { kind: 'skip' };
+  // A comma would be read as a clause separator and silently truncate the
+  // value, so the filter is dropped loudly instead of applied wrongly.
+  if (value.includes(',')) return { kind: 'rejected' };
+  return { kind: 'clause', text: `${key}:${isExact(raw) ? '=' : ''}${value}` };
+}
+
+/**
+ * Handles the two "pass through untouched" cases: an explicit `filter` entry
+ * (appended to rather than replacing whatever else builds the clause list)
+ * and the backend's reserved bare params (`sort`, `limit`, `q`, ...). Returns
+ * whether it consumed the entry, so the caller knows to move on.
+ */
+function applyReservedParam(
+  key: string,
+  raw: unknown,
+  params: Record<string, string | number>,
+  clauses: string[],
+): boolean {
+  if (key === 'filter') {
+    clauses.push(stringify(raw));
+    return true;
+  }
+  if (RESERVED_QUERY_PARAMS.includes(key)) {
+    params[key] = typeof raw === 'number' ? raw : stringify(raw);
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -88,25 +156,14 @@ export function toEntityQueryParams(filterValues: Record<string, unknown>): Enti
 
   for (const [key, raw] of Object.entries(filterValues)) {
     if (raw == null || raw === '') continue;
+    if (applyReservedParam(key, raw, params, clauses)) continue;
 
-    if (key === 'filter') {
-      clauses.push(stringify(raw));
-      continue;
-    }
-    if (RESERVED_QUERY_PARAMS.includes(key)) {
-      params[key] = typeof raw === 'number' ? raw : stringify(raw);
-      continue;
-    }
-
-    const value = isExact(raw) ? raw.__exact : stringify(raw);
-    if (value === '') continue;
-    // A comma would be read as a clause separator and silently truncate the
-    // value, so the filter is dropped loudly instead of applied wrongly.
-    if (value.includes(',')) {
+    const result = isRange(raw) ? rangeClauseResult(key, raw) : plainClauseResult(key, raw);
+    if (result.kind === 'rejected') {
       rejected.push(key);
-      continue;
+    } else if (result.kind === 'clause') {
+      clauses.push(result.text);
     }
-    clauses.push(`${key}:${isExact(raw) ? '=' : ''}${value}`);
   }
 
   if (clauses.length > 0) params.filter = clauses.join(',');

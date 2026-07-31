@@ -346,14 +346,123 @@ public class SchemaManager {
         // exist. Non-fatal on failure: a missing parent table just means the
         // FK will be added on the next ensureTable for the child.
         syncForeignKeys(schema, c, d);
+
+        // Non-fatal: an indexing failure is a performance issue, never a
+        // correctness one, so it must not block the schema save.
+        syncIndexes(schema, c, d, table);
     }
 
     /**
-     * C4.6 — make {@code approvalRequired == true} actually imply the eight physical
-     * approval columns exist.
+     * Creates a supporting index for every indexable field so the runtime's
+     * per-column filter/sort UI and the approval queues stay index-backed as
+     * tables grow. Both families are {@code IF NOT EXISTS}, so this is cheap to
+     * re-run on every {@code ensureTable} call, including the self-heal path.
      *
-     * <p>{@link com.appbana.approval.ApprovalColumns}'s javadoc has always claimed
-     * "the eight system columns <em>SchemaManager injects</em>", but SchemaManager did
+     * <p>The B-tree serves {@code =}, {@link EntityCrudService.Range} bounds and
+     * {@code ORDER BY}. The Postgres-only trigram GIN index is the part that
+     * matters at scale: the default filter is a case-insensitive substring
+     * {@code ILIKE '%value%'}, and no B-tree can serve a leading-wildcard LIKE.
+     *
+     * <p>Deliberately not {@code CREATE INDEX CONCURRENTLY} — that must run
+     * outside any transaction, which does not fit the {@code Statement}-per-DDL
+     * pattern the rest of {@code ensureTable} uses. Revisit if a tenant table is
+     * ever altered while already holding a very large amount of data.
+     *
+     * @see #indexName for why index names carry a hash suffix
+     */
+    private static void syncIndexes(EntitySchema schema, Connection c, String dialect, String table) {
+        boolean isPg = "postgres".equals(dialect) || "postgresql".equals(dialect);
+
+        List<EntitySchema.Field> fields = new ArrayList<>(schema.getFields());
+        if (schema.isApprovalRequired()) {
+            fields.addAll(ApprovalColumns.asFields());
+        }
+
+        boolean trgmReady = false;
+        if (isPg) {
+            try (Statement s = c.createStatement()) {
+                s.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+                trgmReady = true;
+            } catch (SQLException e) {
+                LOG.warn("[INDEX] Could not enable pg_trgm extension ({}); skipping trigram indexes for {}",
+                        e.getMessage(), table);
+            }
+        }
+
+        for (EntitySchema.Field f : fields) {
+            if (f.isPrimaryKey()) {
+                continue; // already uniquely indexed
+            }
+            FieldSqlKind kind = classifyFieldType(f.getType());
+            if (kind == FieldSqlKind.FILE) {
+                continue; // opaque fileId, never filtered/sorted on
+            }
+            String col = f.getName();
+
+            String btreeSql = "CREATE INDEX IF NOT EXISTS " + quote(indexName(table, col, "btree"))
+                    + " ON " + quote(table) + " (" + quote(col) + ")";
+            execIndexDdl(c, schema, table, btreeSql);
+
+            if (trgmReady && (kind == FieldSqlKind.STRING || kind == FieldSqlKind.TEXT)) {
+                String trgmSql = "CREATE INDEX IF NOT EXISTS " + quote(indexName(table, col, "trgm"))
+                        + " ON " + quote(table) + " USING gin (" + quote(col) + " gin_trgm_ops)";
+                execIndexDdl(c, schema, table, trgmSql);
+            }
+        }
+    }
+
+    private static void execIndexDdl(Connection c, EntitySchema schema, String table, String sql) {
+        try (Statement s = c.createStatement()) {
+            s.execute(sql);
+            recordMigration(c, schema.getName(), sql);
+        } catch (SQLException e) {
+            // An index is a performance concern, never a correctness one, so a
+            // failure here must not fail the schema save.
+            LOG.warn("[INDEX] Failed to create index on {} ({}): {}", table, sql, e.getMessage());
+        }
+    }
+
+    /**
+     * Builds a collision-safe, <=63-char index identifier.
+     *
+     * <p>Physical table names already run near Postgres's 63-char identifier
+     * limit, so two columns' naively-truncated index names can collide — and
+     * {@code CREATE INDEX IF NOT EXISTS} treats an existing name as success
+     * regardless of what it actually indexes, silently leaving one column
+     * unindexed. Appending a hash of table+column+kind keeps them distinct.
+     */
+    private static String indexName(String table, String col, String kind) {
+        String digest = shortHash(table + "." + col + "." + kind);
+        String label = "IDX_" + col + "_" + kind;
+        int budget = 63 - 1 - digest.length(); // 1 for the joining underscore
+        if (label.length() > budget) {
+            label = label.substring(0, Math.max(0, budget));
+        }
+        return label + "_" + digest;
+    }
+
+    /** First 10 hex chars of a SHA-256 digest — collision-safe here, not security-sensitive. */
+    private static String shortHash(String input) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 5; i++) {
+                sb.append(String.format("%02x", hash[i]));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 is a mandatory JDK algorithm; this is unreachable in practice.
+            return Integer.toHexString(input.hashCode());
+        }
+    }
+
+    /**
+     * Materialises the eight approval-workflow columns (see {@link ApprovalColumns})
+     * onto a table whose schema has {@code approvalRequired() == true}, if they are
+     * not already present. This is the single chokepoint for that injection; before
+     * it existed here, a table created through any writer other than one specific path
+     * ended up with physical columns that did
      * not contain the string "approval" at all — the only code that materialised them
      * was {@code SchemaEnricher} in the separate ai-builder process, reachable from
      * exactly one of the four writers of the flag. Everything else — {@code create_entity},

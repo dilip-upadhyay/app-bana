@@ -90,6 +90,11 @@ public class CreateEntityTool implements Tool {
               "type": "boolean",
               "description": "Phase C4 — set true to put this entity behind a two-person (maker-checker) approval workflow. Rows are then created as DRAFT, must be submitted for approval, and are invisible to normal reads until a DIFFERENT user approves them. Use for regulated records: customer onboarding, KYC, loan/credit applications, expense claims, purchase orders, policy issuance, contracts, employee onboarding, payments. Do NOT set it for reference/lookup tables or low-risk data (blog posts, todos, product catalogues). Only set it after the user has agreed to the approval flow in the Phase 1 specification."
             },
+            "approvalLevels": {
+              "type": "integer",
+              "enum": [1, 2],
+              "description": "Only meaningful when approvalRequired is true. 1 (default) is the standard single-checker workflow. Set to 2 for a two-level checker chain (checker-1 approves first, then a DIFFERENT checker-2 gives final signoff) — use for higher-stakes records such as large payments, policy issuance, or contract signoff where a single reviewer isn't enough. A checker-2 reject sends the record back to checker-1 for re-review rather than rejecting it outright."
+            },
             "appId": {
               "type": "string",
               "description": "Target App ID. If not provided, uses current context."
@@ -181,12 +186,17 @@ public class CreateEntityTool implements Tool {
         result.put("fieldCount", ((List<?>) arguments.get("fields")).size());
 
         return ToolResult.success(getName(), result, executionTime);
+      } else if (response.statusCode() == 401) {
+        throw new BackendAuthException(getName() + ": create_entity returned 401");
       } else {
         log.error("[CreateEntityTool] API error: {} - {}", response.statusCode(), response.body());
         return ToolResult.error(getName(),
             "API error: " + response.statusCode() + " - " + response.body());
       }
 
+    } catch (BackendAuthException authEx) {
+      log.warn("[CreateEntityTool] {}", authEx.getMessage());
+      return ToolResult.authError(getName(), authEx.getMessage());
     } catch (Exception e) {
       log.error("[CreateEntityTool] Execution failed", e);
       return ToolResult.error(getName(), "Execution error: " + e.getMessage());
@@ -194,53 +204,58 @@ public class CreateEntityTool implements Tool {
   }
 
   // Method to link entity to app
-  private void linkEntityToApp(String appId, String tenantId, String token, String entityName) {
-    try {
-      String appUrl = String.format("%s/appbana-studio/%s/apps/%s", baseUrl, tenantId, appId);
+  // Review #13 (C4.4f follow-up): this used to swallow every failure (including 401) into a
+  // log.error + silent return, so create_entity reported success while the entity was never
+  // actually linked to the app. It now throws on ANY non-2xx (BackendAuthException for 401,
+  // a plain RuntimeException otherwise) so the failure propagates to execute()'s try/catch and
+  // the tool reports the failure instead of a false success.
+  private void linkEntityToApp(String appId, String tenantId, String token, String entityName) throws Exception {
+    String appUrl = String.format("%s/appbana-studio/%s/apps/%s", baseUrl, tenantId, appId);
 
-      // 1. Fetch App
-      HttpRequest getReq = HttpRequest.newBuilder()
+    // 1. Fetch App
+    HttpRequest getReq = HttpRequest.newBuilder()
+        .uri(URI.create(appUrl))
+        .header("Authorization", "Bearer " + token)
+        .GET()
+        .build();
+
+    HttpResponse<String> getRes = httpClient.send(getReq, HttpResponse.BodyHandlers.ofString());
+    if (getRes.statusCode() == 401) {
+      throw new BackendAuthException(getName() + ": link-entity-to-app GET returned 401");
+    }
+    if (getRes.statusCode() != 200) {
+      throw new IllegalStateException("Failed to fetch app for linking: " + getRes.body());
+    }
+
+    Map<String, Object> appData = new com.fasterxml.jackson.databind.ObjectMapper().readValue(getRes.body(),
+        Map.class);
+
+    // 2. Add to schemas list
+    List<String> schemas = (List<String>) appData.get("schemas");
+    if (schemas == null) {
+      schemas = new java.util.ArrayList<>();
+    }
+    if (!schemas.contains(entityName)) {
+      schemas.add(entityName);
+      appData.put("schemas", schemas);
+
+      // 3. Save App
+      String updateBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(appData);
+      HttpRequest putReq = HttpRequest.newBuilder()
           .uri(URI.create(appUrl))
+          .header("Content-Type", "application/json")
           .header("Authorization", "Bearer " + token)
-          .GET()
+          .PUT(HttpRequest.BodyPublishers.ofString(updateBody))
           .build();
 
-      HttpResponse<String> getRes = httpClient.send(getReq, HttpResponse.BodyHandlers.ofString());
-      if (getRes.statusCode() != 200) {
-        log.error("Failed to fetch app for linking: {}", getRes.body());
-        return;
+      HttpResponse<String> putRes = httpClient.send(putReq, HttpResponse.BodyHandlers.ofString());
+      if (putRes.statusCode() == 401) {
+        throw new BackendAuthException(getName() + ": link-entity-to-app PUT returned 401");
       }
-
-      Map<String, Object> appData = new com.fasterxml.jackson.databind.ObjectMapper().readValue(getRes.body(),
-          Map.class);
-
-      // 2. Add to schemas list
-      List<String> schemas = (List<String>) appData.get("schemas");
-      if (schemas == null) {
-        schemas = new java.util.ArrayList<>();
+      if (putRes.statusCode() != 200) {
+        throw new IllegalStateException("Failed to link entity to app: " + putRes.body());
       }
-      if (!schemas.contains(entityName)) {
-        schemas.add(entityName);
-        appData.put("schemas", schemas);
-
-        // 3. Save App
-        String updateBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(appData);
-        HttpRequest putReq = HttpRequest.newBuilder()
-            .uri(URI.create(appUrl))
-            .header("Content-Type", "application/json")
-            .header("Authorization", "Bearer " + token)
-            .PUT(HttpRequest.BodyPublishers.ofString(updateBody))
-            .build();
-
-        HttpResponse<String> putRes = httpClient.send(putReq, HttpResponse.BodyHandlers.ofString());
-        if (putRes.statusCode() == 200) {
-          log.info("Linked entity {} to app {}", entityName, appId);
-        } else {
-          log.error("Failed to link entity to app: {}", putRes.body());
-        }
-      }
-    } catch (Exception e) {
-      log.error("Error linking entity to app", e);
+      log.info("Linked entity {} to app {}", entityName, appId);
     }
   }
 
@@ -274,6 +289,15 @@ public class CreateEntityTool implements Tool {
     // non-approval entities keep exactly the payload shape they had before.
     if (Boolean.TRUE.equals(arguments.get("approvalRequired"))) {
       metadata.put("approvalRequired", true);
+
+      // approvalLevels only means anything alongside approvalRequired=true, so it is
+      // nested inside this branch rather than forwarded unconditionally. Only 2 is worth
+      // sending explicitly — 1 is the backend's own default (see EntitySchema.getEffectiveApprovalLevels()).
+      Object levelsArg = arguments.get("approvalLevels");
+      int levels = (levelsArg instanceof Number n) ? n.intValue() : 1;
+      if (levels == 2) {
+        metadata.put("approvalLevels", 2);
+      }
     }
 
     return metadata;

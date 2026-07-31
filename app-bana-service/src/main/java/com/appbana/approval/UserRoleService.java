@@ -19,7 +19,12 @@ import java.util.Set;
  * Manages per-entity user roles for maker-checker approval workflows.
  * Roles stored in appbana_user_roles platform table.
  *
- * Valid roles: 'maker', 'checker', 'both'.
+ * Valid roles: 'maker', 'checker', 'checker_l2', 'both'.
+ *
+ * 'checker_l2' is the two-level checker chain's final-signoff role (added for the
+ * approvalLevels == 2 feature). It is deliberately its own value rather than something
+ * 'both' expands into: the whole point of a second level is that a different person
+ * holds it, so a grant must be explicit.
  */
 @Slf4j
 public class UserRoleService {
@@ -27,6 +32,7 @@ public class UserRoleService {
     public enum Role {
         MAKER("maker"),
         CHECKER("checker"),
+        CHECKER_L2("checker_l2"),
         BOTH("both");
 
         private final String value;
@@ -147,6 +153,16 @@ public class UserRoleService {
     public static boolean isChecker(String tenantId, String appId, String entityName, String userId) {
         Set<Role> roles = getUserRoles(tenantId, appId, entityName, userId);
         return roles.contains(Role.CHECKER) || roles.contains(Role.BOTH);
+    }
+
+    /**
+     * True if the user holds the level-2 (final signoff) checker role. Unlike
+     * {@link #isChecker}, BOTH does NOT imply this — a level-1 maker/checker grant says
+     * nothing about level-2 authority, by design.
+     */
+    public static boolean isCheckerL2(String tenantId, String appId, String entityName, String userId) {
+        Set<Role> roles = getUserRoles(tenantId, appId, entityName, userId);
+        return roles.contains(Role.CHECKER_L2);
     }
 
     public static void grantCreatorRoles(String tenantId, String appId, String creatorUserId, Set<String> entityNames) {

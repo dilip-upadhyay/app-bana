@@ -80,11 +80,6 @@ public class GetEntityDetailsTool implements Tool {
 
                 String url = baseUrl + "/appbana-studio/" + tenantId + "/apps/" + appId;
 
-                // C4.4d -- worst of the five: a 401 here is not surfaced. The status != 200
-                // path falls through to the global /schema fallback (which does authenticate),
-                // and that lookup uses the bare entity name with no tenant/app prefix, so it
-                // misses too. The tool then reports "entity not found" -- a wrong answer rather
-                // than an auth error, for an entity that exists.
                 HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(url))
                         .header("Accept", "application/json");
@@ -98,32 +93,53 @@ public class GetEntityDetailsTool implements Tool {
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 long executionTime = System.currentTimeMillis() - startTime;
 
-                if (response.statusCode() == 200) {
-                    Map<String, Object> appData = objectMapper.readValue(response.body(),
-                            new TypeReference<Map<String, Object>>() {
-                            });
-
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> entities = (List<Map<String, Object>>) appData.get("entities");
-
-                    if (entities != null) {
-                        Optional<Map<String, Object>> match = entities.stream()
-                                .filter(e -> targetEntityName.equalsIgnoreCase((String) e.get("name")))
-                                .findFirst();
-
-                        if (match.isPresent()) {
-                            return ToolResult.success(getName(), match.get(), executionTime);
-                        }
+                // C4.4e -- this used to be `if (statusCode() == 200) { ... }` with every other status
+                // falling silently through to the global fallback below. C4.4d removed one trigger
+                // (the 401) and left the masking, but 403, 500, 502 and a mid-restart backend all
+                // still reached it. The fallback cannot succeed for an app-scoped entity by
+                // construction -- it looks up /schema/{bareName} while schema keys are
+                // {tenantId}_{appId}_{entityName} -- so its only possible effect here was to convert
+                // a transport error into "entity not found": a wrong answer about an entity that
+                // exists, which is how the missing auth header survived unnoticed.
+                if (response.statusCode() != 200) {
+                    if (response.statusCode() == 401) {
+                        throw new BackendAuthException(getName() + ": app-context lookup for '"
+                                + targetEntityName + "' returned 401");
                     }
-
-                    // If not found in app, maybe it's a new entity user just mentioned?
-                    // Or maybe it exists globally? Fall through to global check.
-                    log.info("[GetEntityDetailsTool] Entity '{}' not found in app '{}'. Checking global...",
-                            targetEntityName, appId);
+                    log.error("[GetEntityDetailsTool] App-context lookup for '{}' in app '{}' failed: {} - {}",
+                            targetEntityName, appId, response.statusCode(), response.body());
+                    return ToolResult.error(getName(),
+                            "Could not read app '" + appId + "' while looking up entity '"
+                                    + targetEntityName + "': backend returned " + response.statusCode()
+                                    + ". This is a transport or authorization failure, not a missing entity.");
                 }
+
+                Map<String, Object> appData = objectMapper.readValue(response.body(),
+                        new TypeReference<Map<String, Object>>() {
+                        });
+
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> entities = (List<Map<String, Object>>) appData.get("entities");
+
+                if (entities != null) {
+                    Optional<Map<String, Object>> match = entities.stream()
+                            .filter(e -> targetEntityName.equalsIgnoreCase((String) e.get("name")))
+                            .findFirst();
+
+                    if (match.isPresent()) {
+                        return ToolResult.success(getName(), match.get(), executionTime);
+                    }
+                }
+
+                // C4.4e -- no fall-through to the global fallback: an app is selected, so the entity
+                // would be keyed {tenantId}_{appId}_{name} and /schema/{bareName} cannot match it.
+                // Answer the question that was actually asked instead of asking a different one.
+                return ToolResult.error(getName(),
+                        "Entity '" + targetEntityName + "' does not exist in app '" + appId + "'.");
             }
 
-            // 2. Global/Schema API fallback
+            // 2. Global/Schema lookup -- reached only when no app is selected, which is the only
+            // case where an unprefixed schema key is the right thing to ask for.
             log.info("[GetEntityDetailsTool] Fetching details for entity '{}' from global schema", targetEntityName);
             String url = baseUrl + "/schema/" + targetEntityName;
 
@@ -147,10 +163,15 @@ public class GetEntityDetailsTool implements Tool {
             } else if (response.statusCode() == 404) {
                 return ToolResult.error(getName(),
                         "Entity '" + targetEntityName + "' not found in current app or global schema.");
+            } else if (response.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": global lookup for '" + targetEntityName + "' returned 401");
             } else {
                 return ToolResult.error(getName(), "API error: " + response.statusCode());
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[GetEntityDetailsTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[GetEntityDetailsTool] Execution failed", e);
             return ToolResult.error(getName(), "Execution error: " + e.getMessage());

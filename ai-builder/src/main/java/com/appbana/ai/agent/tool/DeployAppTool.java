@@ -100,6 +100,8 @@ public class DeployAppTool implements Tool {
                         "summary", response.getOrDefault("summary", "Deployment successful"));
 
                 return ToolResult.success(getName(), result, executionTime);
+            } else if (publishRes.statusCode() == 401) {
+                throw new BackendAuthException(getName() + ": deploy_app returned 401");
             } else {
                 // Parse error response
                 String errorBody = publishRes.body();
@@ -118,6 +120,9 @@ public class DeployAppTool implements Tool {
                 }
             }
 
+        } catch (BackendAuthException authEx) {
+            log.warn("[DeployAppTool] {}", authEx.getMessage());
+            return ToolResult.authError(getName(), authEx.getMessage());
         } catch (Exception e) {
             log.error("[DeployAppTool] Exception during deployment", e);
             return ToolResult.error(getName(), "Deployment error: " + e.getMessage());

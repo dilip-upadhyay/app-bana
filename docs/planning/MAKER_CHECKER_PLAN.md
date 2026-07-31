@@ -1,6 +1,6 @@
 # Maker-Checker Epic — Implementation Plan
 
-**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c/d, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete — and then C4.4d, where the auth fix shipped alongside it repaired one instance of a five-member defect class. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
+**Status:** 📝 Spec approved 2026-07-26 · 🟡 In progress — C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ **done, exit criteria verified end-to-end 29-07-2026** (C4.1–C4.2 done, C4.3 superseded by C4.6, C4.6 done, C4.4 done incl. C4.4a/b/c/d/e/f, C4.5 closed as obsolete) · C5 ⬜ (v1.1-optional). The gate that closed C4 also found C4.4c — the blueprint retrieval had been returning the right templates and rendering an empty string, so the feature had never once produced its intended output despite three review rounds calling it complete — then C4.4d, where the auth fix shipped alongside it repaired one instance of a five-member defect class, then C4.4e, where the fix for *that* turned out to have the same failure mode a third time (the header was made conditional on a token nothing upstream guaranteed), and then C4.4f, where round 12 asked the next question — a present token can still be *invalid* mid-conversation, and the agent loop itself now aborts on iteration 1 with a distinct "session ended" message and SSE `auth_expired` event instead of surfacing that as a generic 3-strikes failure. Live status and commit trail: [ACTIVE_TASKS.md](../ACTIVE_TASKS.md).
 **Owner:** AppBana core team
 **Position in master roadmap:** Phase C of the post-Stage-4 forward plan (see [ACTIVE_TASKS.md](../ACTIVE_TASKS.md)). Depends on Phase A (Runtime UX Sprint 2) and Phase B (Complex UI Epic) completing. Runs *before* Phase D — approvals are AppBana's differentiator (the *product*), while D is enterprise packaging.
 **Trigger:** Every regulated customer-facing workflow — KYC, loan origination, account opening, policy issuance, claims processing — has a mandatory two-person integrity control: a **maker** creates or edits a record and a **checker** approves it before it becomes live. AppBana today has no concept of `submitted`, `pending approval`, `approved`, or `rejected`. Without maker-checker, we cannot ship into any regulated vertical, which is the majority of the customer-onboarding market.
@@ -551,6 +551,287 @@ asking "which components disagree?"; the accompanying auth fix was scoped by ask
 was broken?" — and repaired one instance of a class with five members. When a defect is a missing
 call at a boundary, the unit of repair is *every crossing of that boundary*, enumerated
 mechanically, and the guard belongs on the boundary rather than on the instance.
+
+#### C4.4e — the header was conditional on a token nothing guaranteed
+
+Review round 11 rejected C4.4d. The same lesson applied one level up: C4.4d enumerated mechanically,
+but over a hand-picked set. **Mechanical enumeration over a hand-picked scope is still a hand-picked
+scope; it just feels rigorous.**
+
+**The blocker — a guard checked in one direction only.** Thirteen of the fourteen sites attach the
+header inside `if (token != null && !token.isEmpty())`. Every check confirmed that a *present* token
+reaches the socket; nothing confirmed a token is ever present. It was not guaranteed anywhere:
+`AgentContext.create` accepted `null`; both `AiChatController` and `AgentStreamController`
+null-coalesce *every other field* to a default and pass `token` through raw; `ChatPane.tsx` sends
+`token: token ?? undefined`. A tokenless chat request was therefore accepted, opened `200`, and every
+tool inside it 401'd — **the pre-C4.4d behaviour reproduced symptom for symptom, through the fix.**
+Neither guard could see it: test 1 always supplied a good token, and test 2 only required the literal
+text `header("Authorization"` to appear. `ScaffoldAppTool.rollback` was worse still — it attached the
+header *unconditionally*, so a tokenless rollback sent the literal string `Bearer null`.
+
+**Fixed at the door, not at the sites,** in three layers so that no single omission is load-bearing:
+
+| Layer | Change |
+|---|---|
+| Type | `AgentContext`'s **compact canonical constructor** rejects a null/blank token. Invalid state is now unrepresentable, and the check is inherited by `withVariable` and by any construction path added later — unlike a check in `create`, which the next author routes around by calling the constructor. |
+| Boundary | Both controllers return `401 {"error":"Unauthorized"}` before doing any work — in `AiChatController` *ahead of the pattern-executor short-circuit*, which also creates apps. A 200 cannot trigger the Studio's `appbana:auth:expired` recovery; a 401 can. |
+| Site | `ScaffoldAppTool.rollback` now uses the same conditional as the other thirteen. |
+
+**The masking, deleted.** Round 7 removed one *trigger* of `get_entity_details`' silent fall-through
+(the 401) and left the fall-through itself, so 500, 502, 403 and a mid-restart connection reset all
+still produced "entity not found" for an entity that exists. It now returns an explicit transport/
+authorization error on any non-200, and — critically — returns `Entity 'X' does not exist in app 'Y'`
+instead of falling through on a successful-but-empty lookup. The global `/schema/{bareName}` fallback
+is reachable only when no app is selected, which is the only case where it can succeed: app-scoped
+keys are `{tenantId}_{appId}_{entityName}`, so for a selected app that fallback was *by construction*
+incapable of finding anything. It existed solely to convert errors into a plausible wrong answer.
+
+**The guard covered a directory, not a boundary.** `Files.list` over `agent/tool/` is not "every
+ai-builder request to the backend": there are **25** `HttpRequest.newBuilder()` sites across 17 files
+under `com/appbana/ai`, and the old scan saw 22 in 14. `AiAgent.loadEntitySummary` (line ~1116) calls
+the backend and authenticates correctly today, but was invisible to both tests — as a tool added in a
+subpackage would have been. The scan now walks `com/appbana/ai` recursively and excludes `llm/`
+**by name, with the reason in a javadoc**: `OpenAiLlmService` and `GeminiLlmService` call third-party
+APIs with their own provider keys, so a session token there would be meaningless. That is a decision
+on the record, not an artefact of where the walk happened to start.
+
+**Third test, and all three mutations re-run** —
+`aTokenlessContextCannotProduceARequest` feeds `null`, `""` and `"   "`, and when construction
+succeeds it *drives `ListAppsTool` and reports the leaked request* rather than merely noting a missing
+exception (which is why it is a `try`/`fail` and not `assertThrows` — the consequence is the point):
+
+| Mutation | Result |
+|---|---|
+| Remove the `AgentContext` constructor throw | test 3 only — `AgentContext accepted a blank token (null) and list_apps then sent 1 request(s), the first with Authorization=null` |
+| Delete `DeployAppTool`'s header (a tool test 1 cannot drive) | test 2 only — `[DeployAppTool.java @ line 76]` |
+| Run test 1 with `AgentContext.create(..., null)` | errors at the *construction* line, before any tool executes — it cannot reach the socket at all |
+
+No two of the three tests subsume each other.
+
+**Lesson:** a guard that only ever sees valid input verifies nothing about invalid input. Ask of every
+guard: *what makes its precondition true?* — and if the answer is "nothing", the guard is decoration.
+Prefer making the invalid state unrepresentable in the type over validating at one entry point, since
+the type is inherited by paths that do not exist yet. And when removing a defect, **delete the masking
+that hid it, not just the trigger that exposed it** — the thread running through C4.4c, C4.4d and
+C4.4e is that each fix repaired the defect and left the masking in place, which is precisely why the
+next one stayed invisible.
+
+#### C4.4f — presence vs validity: a token can go bad mid-conversation, after the door already let it through
+
+Review round 12 accepted C4.4e's "is a token present" invariant and asked the next question: a *present*
+token can still be *invalid* — expired or revoked — at any point in an already-running conversation. The
+SSE stream opens with a 200 (the token was present and, at that instant, valid), and a tool call several
+iterations later gets a 401 from the backend. `authedFetch()`'s existing `appbana:auth:expired` recovery
+fires on the *opening* request's transport status; it cannot see a 401 discovered inside a stream that
+already returned 200. Before this round, that 401 was indistinguishable from any other tool failure: it
+burned an iteration, incremented `consecutiveFailures`, and — if it kept happening for 3 iterations — the
+agent gave up with "I'm having trouble, could you rephrase?", which is actively misleading for a dead
+session.
+
+**Fix — an unchecked exception carries the signal through helpers that can't change their return type.**
+`ToolResult` gained `authFailure` (Lombok `isAuthFailure()`) and a `ToolResult.authError(name, msg)`
+factory. New `BackendAuthException` (unchecked) is thrown at the exact point any of the 14 tools detects
+a 401, however deeply nested behind a private helper — some of those helpers return `boolean` or a
+nullable `Map` and already use that return shape to mean "not found"/"other failure", so threading a new
+parameter through every signature would have been a much larger change. Each tool's outer `execute()`
+catches `BackendAuthException` **before** its generic `catch (Exception e)` and returns
+`ToolResult.authError(...)`.
+
+Both `AiAgent` loops (`process`, `processWithStream`) check `result.isAuthFailure()` per tool result and,
+if set, abort **immediately after iteration 1** — bypassing the `consecutiveFailures>=3` gate entirely —
+with *"Your session has ended, so I can't continue with that request. Please sign in again to keep
+working."*, never the generic rephrase message. `StreamEmitter` gained a 6th event, `authExpired(message)`
+→ `{event: "auth_expired", data: {message}}`, which `ChatPane.tsx` maps to
+`window.dispatchEvent(new CustomEvent('appbana:auth:expired'))` — the same recovery `AuthGate.tsx` already
+listens for, now reachable from inside an open stream, not just from the opening request.
+
+**Hardest file:** `BatchUpdateEntitiesTool`'s per-update loop deliberately treats an auth failure
+differently from every other exception in that loop — it does not append to `failedUpdates` and continue
+to the next item; it returns immediately. A dead token fails every remaining update identically, so
+finishing the loop would only produce N confusing per-item 401 strings instead of one clear signal.
+
+**An unrelated orphan-app bug, found while touching `ScaffoldAppTool` for this round:** when
+`context.appId()` was already set (a caller re-using an id), the tool reused it without checking an
+`appbana_apps` row actually existed for that id, so entities/pages could be created under an id with no
+backing app record. Fixed with `appRowExists()` (GET the app; 401 also throws `BackendAuthException`) and
+`createAppRowWithId()` (POST with `id` forced to the caller's id — the one place this class of tool must
+*not* mint a fresh UUID).
+
+**Regression tests** (`AiAgentTest`): `testAgentLoop_AuthFailureAbortsOnFirstIterationNotThird` and
+`testAgentLoopStream_AuthFailureAbortsAndEmitsAuthExpiredEvent` register a tool that always returns
+`ToolResult.authError(...)`, then assert the LLM was called exactly **once** (not up to 3 times), the
+returned message contains "session" and never "rephrase", and — for the streaming variant — that an
+`auth_expired` event was actually emitted alongside `done`.
+
+**Meta-lesson (carried forward from C4.4c/d/e):** the invariant that gets enforced first is the one that
+is easy to state in one line with no I/O — "a token must be present" is checkable locally, for free.
+"A token must be *valid*" is the property the system actually depends on, and validity lives in another
+service, discoverable only by making the call and seeing what comes back. Presence-checks are seductive
+because they are cheap and total; validity is the one that actually protects anything, and it is always
+the harder one to reach.
+
+#### Review #13 — the boundary the fix draws is always the noun the last review named, and the defect is one noun down
+
+C4.4f's fix was scoped to "tools": every `Tool.execute()` now catches `BackendAuthException` before its
+generic `catch (Exception e)`. Review #13 found the exact orphan-shaped defect it had just fixed —
+schema/record written, a dependent linkage silently lost, tool reports success anyway — **one tool over**,
+inside a *method* that isn't itself a tool: `CreateEntityTool.linkEntityToApp` makes a GET (fetch the app)
+and a PUT (save it back with the entity linked) and had wrapped both in a try/catch that logged any
+failure, including 401, and returned `void`. `execute()`'s 2xx-on-`/schema` branch reached
+`ToolResult.success(...)` regardless of whether the link step actually happened.
+
+It found a second instance in a place "tools" cannot even describe: `AiAgent.loadEntitySummary` — called
+from `buildExecutionContext()`, called from `think()`, called from *both* agent loops — fetches the
+app to build the "ENTITIES IN THIS APP" prompt block, and silently swallowed every non-200 (401
+included) into `log.debug` plus a cached empty string. This runs during **prompt building, before any
+tool executes**, so the tool-result-based `isAuthFailure()` abort from C4.4f can never see it: on a dead
+session the entity block just vanishes from the prompt, the LLM answers from nothing, no tool is ever
+called, no auth check fires, and the user gets a confidently wrong answer ("your app has no entities").
+
+**Fix, same shape as C4.4f, applied to both:**
+- `linkEntityToApp` now declares `throws Exception` and throws `BackendAuthException` on a 401 from
+  either the GET or the PUT, and a plain `IllegalStateException` on any other non-2xx — no more
+  try/catch to swallow either into a log line. `execute()`'s existing `catch (BackendAuthException) {…}
+  catch (Exception e) {…}` (already correctly ordered by C4.4f) needed zero changes to handle it.
+- `loadEntitySummary` now throws `BackendAuthException` specifically on 401 (every *other* non-200
+  still logs-and-returns-empty as before — this fix is scoped to the auth case the reviewer found, not
+  a blanket "any failure aborts the conversation"). `think()`'s blanket `catch (Exception e) { return
+  null; }` sat directly between that throw and both loop call sites, so it gained a
+  `catch (BackendAuthException authEx) { throw authEx; }` **before** the generic catch (required order:
+  more specific catch first). Both `process()` and `processWithStream()` now wrap their `think(...)` call
+  in a `try { … } catch (BackendAuthException authEx) { … }` that aborts with the exact same
+  `SESSION_ENDED_MESSAGE` (new shared constant — also closes the C4.4f nit about the message being
+  duplicated verbatim in four places) as the tool-result path, and — for the streaming loop —
+  `emitter.authExpired(...)`.
+
+**Regression tests:**
+- `CreateEntityToolLinkFailureTest` (new file) drives the real HTTP path with a stub `HttpServer`
+  (source-scan cannot prove a swallowed exception was actually swallowed) asserting a 401 on the link GET
+  *or* PUT makes `create_entity` report `isAuthFailure()==true`/`isSuccess()==false`, and that a 500
+  (non-auth) still fails the tool rather than merely logging.
+- `AiAgentTest.testAgentLoop_LoadEntitySummaryAuthFailureAbortsBeforeAnyLlmCall` and its streaming
+  counterpart stand up a stub backend returning 401 on the app-fetch GET, and assert the agent aborts
+  with the session-ended message **and `verify(llmService, times(0))`** — the LLM must never be called,
+  not merely receive the right final message after being called anyway.
+
+**Reviewer's own methodology, worth keeping:** the review enumerated all 27 `HttpRequest.newBuilder()`
+call sites across 17 files under `com.appbana.ai` (2 excluded by design — LLM provider services), and
+of the remaining 25, 21 already handled 401 correctly and exactly 3 did not (the two above, plus
+`ScaffoldAppTool.rollback`, judged safe/unreachable on the auth path by design). Enumerating *operations*
+(every HTTP call site) rather than *nouns* (tools, or "the loop", or whatever the last review happened to
+name) is what makes that closure claim — *"fix these three and the class is closed, with nothing left for
+me to find in it"* — actually checkable, instead of one more round of careful reading that will, per this
+epic's track record, find the next noun down.
+
+**Meta-lesson:** across C4.4c → C4.4f, each review scoped its fix to the noun the *previous* review had
+named (first "header attachment", then "tools", now — almost — "AiAgent"), and each time the defect
+that survived lived at the next noun down inside that boundary (a helper inside a tool; a prompt-building
+fetch inside the agent that no fix ever called a "tool" because it isn't one). The mechanical antidote is
+to stop enumerating nouns and start counting operations: every `HttpRequest.newBuilder()` (or equivalent)
+in the codebase is one row in a table, with one column for "detects 401" and one for "acts on it
+correctly" — a defect class closes when every row is checked, not when every *name someone has used so
+far* is checked.
+
+#### Review #14 — Approved; the census that closed Review #13 was still just a command, not a guard
+
+Review #14 re-verified all three Review #13 fixes by mutation testing (reverting each one and confirming
+the specific regression test goes red with the expected message) and found no defect in any of them —
+first "Approved" verdict in this family. It flagged one thing left undone from Review #13's own stated
+scope: Review #13's census (27 `HttpRequest.newBuilder()` sites, 24 correct 401 checks, 3 named
+exceptions) was run by hand, wired into the write-up, and then never turned into anything that runs
+again. Nothing stops a fourteenth call site from omitting the check; the only way to notice would be
+re-running the same by-hand enumeration next round.
+
+**Fix:** `ToolAuthHeaderTest.everyRequestSiteChecksFor401ExceptTheDocumentedAllowList` (new test) walks
+`com/appbana/ai` recursively, and for every `.java` file counts occurrences of `HttpRequest.newBuilder(`
+and `statusCode() == 401`. The two counts must match, per file, except an explicit allow-list with the
+gap and the reason for each written directly into the test's javadoc and its assertion message:
+- `llm/GeminiLlmService.java`, `llm/OpenAiLlmService.java` (gap 1 each) — third-party provider APIs,
+  authenticated with their own provider key; there is no session token to be invalid.
+- `agent/tool/ScaffoldAppTool.java` (gap 1) — `rollback()`'s delete deliberately skips the check; it
+  only runs after a failure the caller already handled, and a 401 during rollback itself is reported by
+  its own call-site catch, not silently retried.
+
+Mutation-verified before landing: temporarily changed `CreateEntityTool`'s GET-side check from
+`getRes.statusCode() == 401` to an unreachable literal, re-ran only the new test, confirmed it failed
+naming `agent/tool/CreateEntityTool.java` with the exact expected/actual gap, then reverted.
+
+**Two non-blocking 🟢 nits noted, deliberately not fixed this round** (per the review: "not worth a
+round on their own — worth doing next time either loop is opened"): tracked as backlog in
+[`ACTIVE_TASKS.md`](../ACTIVE_TASKS.md), not written up further here.
+
+**Meta-lesson:** *"the census existed, it worked, it was in the review — and what got implemented was
+the three fixes it pointed at, not the census itself. Even when the durable artefact is handed over
+ready-made, the instinct is to consume it as a to-do list and let it evaporate."* A census is only a
+guard once it is re-runnable and wired into the test suite; otherwise it is a very good one-time answer
+to a question nobody will remember to ask again the same way.
+
+#### Review #15 — Approved; the C4.4 auth family closes, and a mutation-testing pitfall caught against itself
+
+Review #15 attacked the one design decision that could have made Review #14's guard decorative: it
+injected a *second*, unchecked `HttpRequest.newBuilder()` call into `ScaffoldAppTool.java` — a file
+already on the allow-list, the exact case a naive "is this file exempt?" implementation would wave
+through — and confirmed the guard still failed, naming the file and the exact arithmetic. Two tests
+failed on that mutation, not one: the new census and the pre-existing behavioural header source-scan,
+confirming they check different properties (site attaches a token / site handles a rejected one) and
+neither subsumes the other. Verdict: **Approved**, no production change, tree clean, 178/0/2 confirmed.
+
+**One javadoc sentence added in response to a 🟢 nit:** the guard matches the literal text
+`statusCode() == 401`; a stylistic variant at a genuinely-correct call site (`401 == resp.statusCode()`,
+`HttpURLConnection.HTTP_UNAUTHORIZED`, or hoisting the status into a local before comparing) reads as a
+missing check and fails the build. Documented in
+`ToolAuthHeaderTest.everyRequestSiteChecksFor401ExceptTheDocumentedAllowList`'s javadoc as a deliberate
+fail-safe direction — match the existing spelling rather than loosen the test. The other 🟢 nit
+("counting is a proxy for pairing, not per-site coverage") was left as pure knowledge, per the review's
+own framing, layered against the fact that the per-site source scan already covers that gap.
+
+**Meta-observation, worth keeping — a mutation test has to verify its own mutation landed.** The
+reviewer's first attempt at the `ScaffoldAppTool` mutation used a string-replace anchor that didn't
+exist in the file; the replace silently no-op'd, the guard ran against the unmodified source, and
+passed — producing, for a moment, false evidence that the new test was decorative. This is the exact
+same defect shape the whole epic has been about (`linkEntityToApp` returning `void` on 401 looked like
+success; `loadEntitySummary` caching `""` looked like an app with no entities): a check that never ran
+looks identical, from outside, to a check that ran and passed. The fix is one line at every layer:
+assert the setup actually happened before trusting the result of what depends on it. Applied here: print
+the post-mutation occurrence count and abort if it isn't exactly one more than before, before trusting a
+red or green verdict from the guard itself.
+
+**Outstanding, unchanged across every round of this epic:** the C3 maker-checker Playwright round-trip
+(maker submits → checker rejects → resubmit → approve) remains the one unticked exit criterion, and CI
+still runs `mvn -B verify` only — no vitest, no Playwright. The new guard lives in the Maven reactor, so
+it is enforced on every push; the frontend guards still are not.
+
+#### Review #16 — Approved; the C4.4 auth family is closed
+
+Doc-only change (Review #15's javadoc sentence). Re-verified: 178/0/2 unchanged, tree clean, the
+27-site/24-check/gap-3 census matches HEAD, and `ScaffoldAppTool` is still exactly 3 sites / 2 checks —
+confirming the `allowed=1` allow-list entry hasn't drifted stale since Review #15. One 🟢 curiosity noted
+and explicitly marked as zero action: the new javadoc's `{@code statusCode() == 401}` literal makes this
+test file the one place that would self-pollute the count if `locateAiSources()`'s walk root were ever
+widened past `src/main/java` — inert today, worth remembering if that method is ever generalised.
+
+**Verdict:** the C4.4 authentication family is closed — every defect fixed, each fix mutation-verified,
+and the enumeration that found them converted into a test proven (Review #15) to bite on the hardest
+case, not only the obvious one.
+
+**What outlives the epic, neither introduced by it:** the C3 Playwright maker→checker round-trip
+(open since Review #10), and CI running `mvn -B verify` only — the runtime's 269 vitest tests and the
+Playwright suite (whose `hardening-*.spec.ts` files self-skip on a health-check failure, silently
+turning "could not run" into "passed") are not in CI. The frontend legs of the auth work verified across
+this epic are exactly the parts CI cannot see.
+
+**Meta-observation — the structural shift that closed the family, marked for reuse in C5 and beyond:**
+Rounds 1–13 each found a defect, got exactly that defect fixed, and the next round found the next
+instance of the same family one layer deeper — competent every time, and the pattern never broke,
+because every round's output was a *description*, and a description gets consumed as a to-do list and
+evaporates. Round 14 was the first round whose output was an artefact rather than a finding: a census,
+handed over as data. Round 15 turned that census into a test. Round 16 is documentation of why the test
+is shaped the way it is. Three rounds, one production line changed between them, and a family that had
+produced a defect in five consecutive commits produced none. **The generalizable tell: the moment a
+finding can be expressed as "N sites, M correct," that subtraction is the deliverable — leaving it in
+prose guarantees someone re-derives it by hand later, or doesn't.** Apply this the next time a review
+finds the third instance of anything, in C5 or otherwise: stop shipping the fix alone and ship the
+enumeration as a re-runnable guard in the same change.
 
 
 > **Deviation from plan — C4.1 was larger than "parameter schemas accept the flag".**
