@@ -20,6 +20,16 @@
     </properties>
 
     <build>
+        <!-- Bound here (not just pluginManagement) so enforce-java actually runs, at the
+             validate phase of this parent module, before any child module reactor-builds and
+             hits javac with an unsupported release value. pluginManagement alone never
+             executes a plugin unless a module also declares it under plugins. -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
                 <!-- Centralized compiler config (all modules inherit) -->

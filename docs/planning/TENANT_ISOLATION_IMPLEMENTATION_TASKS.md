@@ -38,7 +38,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 
 | # | Task | Files | Est. | Status |
 |---|---|---|---|---|
-| S0.0 | Fix the Maven toolchain so `mvn test` compiles/runs on this repo's configured Java 25 | `pom.xml`, `app-bana-service/pom.xml` | 30–90 min | ⬜ |
+| S0.0 | Fix the Maven toolchain so `mvn test` compiles/runs on this repo's configured Java 25 | `pom.xml`, `app-bana-service/pom.xml` | 30–90 min | ✅ |
 | S0.1 | `AuthService.resolveIdentity(req, cfg)` — single method for all 3 credential forms (`X-Session-Token`, `Authorization: Bearer`, `session_id` cookie); replace `extractUserId`'s broken Bearer-blind fallback; `SessionMiddleware.create()` delegates to it too. Preserve existing priority order — service/admin-token interpretation of Bearer is checked before the new session-id fallback, never replaced by it. | `AuthService.java`, `SessionMiddleware.java` | 100 min | ⬜ |
 | S0.1b | Regression test: all 3 token forms → same principal on a middleware-excluded route; admin token via Bearer + `X-User-Id` still resolves via priority 1; a session id via Bearer resolves via the new fallback; neither form is ever misread as the other. | new test | 45 min | ⬜ |
 | S0.2 | Machine-generated route census across every `*Routes.java`: path, middleware-excluded?, identity gate present?, tenant/app check present?, tenant/app source (`path`\|`query`\|`body`\|`header`\|`none`), **known callers** (studio/runtime/shared/ai-builder/e2e/"none found"), **data preconditions** (what must exist for the call to succeed). Predicate = any client-controlled tenant/app identifier, not just path params. Attach the generated table to the plan doc. | new `RouteCensus` tool/report, appended to plan doc | 165 min | ⬜ |
@@ -46,7 +46,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 | S0.4 | Fix or fence `Router.handle(HttpServletRequest,...)` — it bypasses the middleware chain entirely (M1). Either route it through the same chain `handle(HttpExchange)` uses, or fail fast at startup if `serverType` is set to anything but `jdk`. | `Router.java`, `Main.java` | 45 min | ⬜ |
 
 **Exit criteria — S0**
-- [ ] `mvn test` compiles and runs on this repo's toolchain.
+- [x] `mvn test` compiles and runs on this repo's toolchain. Confirmed via clean `mvn clean test` on JDK 25: `app-bana` 331/331 passing, `AI Builder Service` 197/197 (2 skipped), `BUILD SUCCESS`. Fix was binding `maven-enforcer-plugin` under the root pom's actual `<build><plugins>` (it was declared only in `pluginManagement`, which never executes on its own, so the Java-25 gate never fired). Live `start-everything` boot proof still folds into S0.1 per this doc's own UI verification script note below.
 - [ ] All three credential forms resolve to the same principal on a middleware-excluded route.
 - [ ] Bearer-carried admin/service token resolves via priority 1, never as a session lookup; a Bearer session id never satisfies `hasAdmin()`.
 - [ ] Route census exists, attached to the plan doc, every row has non-empty tenant/app-source, known-callers, and data-preconditions columns.
