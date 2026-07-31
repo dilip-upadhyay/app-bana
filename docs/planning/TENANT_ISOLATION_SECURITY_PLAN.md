@@ -23,17 +23,18 @@
 6. [Review round 2 — blockers and additional findings](#review-round-2--blockers-and-additional-findings)
 7. [Review round 3 — blockers and additional findings](#review-round-3--blockers-and-additional-findings)
 8. [Review round 4 — blockers and additional findings](#review-round-4--blockers-and-additional-findings)
-9. [Target model](#target-model)
-10. [Data model additions](#data-model-additions)
-11. [Sub-phase S0 — Unify identity resolution + route census](#sub-phase-s0--unify-identity-resolution--route-census)
-12. [Sub-phase S1 — Tenant boundary on app management](#sub-phase-s1--tenant-boundary-on-app-management)
-13. [Sub-phase S2 — Per-app membership model](#sub-phase-s2--per-app-membership-model)
-14. [Sub-phase S3 — Entity data API enforcement](#sub-phase-s3--entity-data-api-enforcement)
-15. [Sub-phase S4 — Credential hygiene](#sub-phase-s4--credential-hygiene)
-16. [Sub-phase S5 — Capstone tests + ai-builder trust chain](#sub-phase-s5--capstone-tests--ai-builder-trust-chain)
-17. [Cross-cutting concerns](#cross-cutting-concerns)
-18. [File-level change map](#file-level-change-map)
-19. [Open decisions still needed from product](#open-decisions-still-needed-from-product)
+9. [Review round 5 — blockers and additional findings](#review-round-5--blockers-and-additional-findings)
+10. [Target model](#target-model)
+11. [Data model additions](#data-model-additions)
+12. [Sub-phase S0 — Unify identity resolution + route census](#sub-phase-s0--unify-identity-resolution--route-census)
+13. [Sub-phase S1 — Tenant boundary on app management](#sub-phase-s1--tenant-boundary-on-app-management)
+14. [Sub-phase S2 — Per-app membership model](#sub-phase-s2--per-app-membership-model)
+15. [Sub-phase S3 — Entity data API enforcement](#sub-phase-s3--entity-data-api-enforcement)
+16. [Sub-phase S4 — Credential hygiene](#sub-phase-s4--credential-hygiene)
+17. [Sub-phase S5 — Capstone tests + ai-builder trust chain](#sub-phase-s5--capstone-tests--ai-builder-trust-chain)
+18. [Cross-cutting concerns](#cross-cutting-concerns)
+19. [File-level change map](#file-level-change-map)
+20. [Open decisions still needed from product](#open-decisions-still-needed-from-product)
 
 ---
 
@@ -76,21 +77,36 @@ before S2.6 is ever reached. See [Review round 4](#review-round-4--blockers-and-
 full detail; S1.2 and S2.6 are revised to close this, and S2's motivating exit criterion is restated
 against a scenario the product can actually construct.
 
+**Review round 5 (2026-08-01) found the same blind spot in two more principals, both of which have no
+meaningful tenant to compare.** The break-glass admin/service token this plan already promises
+(Non-goals, finding #3, cross-cutting concerns) has no admit branch anywhere in `TenantAccessGuard` —
+confirmed `extractUserId` resolves it to a bare `"admin"`/`X-User-Id` string with no `SessionData` at
+all, so there is nothing for a tenant-comparison guard to even read. Separately, S1 completes (before S2
+exists) in a state where its own exit criteria certify every deployed app's real end-user — by
+construction a foreign-tenant session, per round 4 — as correctly 403'd; if S1 ships alone, every
+deployed app breaks for everyone but its creator until S2.6 lands. No blocker: S1.2 gains an explicit
+admin-token branch, and S1+S2 are declared a single deployable unit. See
+[Review round 5](#review-round-5--blockers-and-additional-findings) for the full principal × guard walk
+and two smaller findings about cross-tenant app discovery.
+
 | # | Sub-phase | Deliverable | Est. |
 |---|---|---|---|
 | S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route, now including **known callers** and **what data must exist for it to succeed** columns | ~5 hr |
-| S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1)** | ~7 hr |
-| S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, **and activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1)** | ~8.5 hr |
+| S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~7.75 hr |
+| S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~10 hr |
 | S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)** | ~10.5 hr |
 | S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~4.5 hr |
 | S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~3 hr |
 
-**Total scope:** ~38.5 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5 hr
-after round 3; round 4 adds ~1 hr back — a precedence rule in S1.2, its activation in S2.6, and two new
-tests — to make the round-3 membership design actually reachable for a cross-tenant grant, the only kind
-that exists). S0 → S1 → S2 → S3 is the strict serial path. S4 is independent and parallel-safe. S5 needs
-S1–S3 finished; its ai-builder half can start once S2 exists. S3.7 now depends on S2 (the `end-user`
-role, its grant endpoint, and S1.2's now-activated membership exception), not on `scopedAppId`.
+**Total scope:** ~40.75 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
+hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
+plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
+consecutive round to add scope, though the first with no blocker). S0 → S1 → S2 → S3 is the strict
+serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review round 5, R5-2)**
+— S1 must not ship to any environment with live deployed apps on its own. S4 is independent and
+parallel-safe. S5 needs S1–S3 finished; its ai-builder half can start once S2 exists. S3.7 now depends on
+S2 (the `end-user` role, its grant endpoint, and S1.2's now-activated membership exception), not on
+`scopedAppId`.
 
 ---
 
@@ -138,6 +154,12 @@ It is not true at the layer that actually decides who may call the API that reac
    guard (S1.2) rejected a cross-tenant session before the membership check (S2.6) was ever consulted.
    A design can be correct two layers down and still fail one layer up if nobody walks every principal
    through every guard in request order.
+9. **The principal walk itself had two blind spots: principals with no tenant at all.** Review round 5
+   applied round 4's own checklist exhaustively — every principal this plan admits, through every guard,
+   in request order — and found it had never been run against the admin/service token (predates the
+   tenant model entirely) or checked for what state a partially-deployed S1 leaves a real end-user in.
+   Every guard so far is specified as a predicate over a tenant comparison; the two principals with no
+   comparable tenant are exactly the ones a comparison-shaped guard cannot express an answer for.
 
 ---
 
@@ -148,7 +170,9 @@ It is not true at the layer that actually decides who may call the API that reac
   existing maker/checker entity roles. Role *granularity* within an app (e.g. "can edit schema" vs.
   "can only view data") is a future extension of the `appbana_app_members.role` column, not built here.
 - **Removing the global `adminToken`/`readToken` model.** Repurposed as an optional platform-operator
-  break-glass override (S3), not deleted — some deployments may still want it for support tooling.
+  break-glass override (S1.2 and S3.2, revised review round 5, R5-1 — the override needs an explicit
+  admit branch at the tenant-boundary layer too, not only at the entity-data layer), not deleted — some
+  deployments may still want it for support tooling.
 - **Rate limiting / WAF / network-level protections.** `RateLimitMiddleware` already exists and is out
   of scope for this plan.
 - **Encryption at rest, secrets management overhaul, key rotation.** Separate concern.
@@ -166,7 +190,7 @@ owns the fix.
 |---|---|---|
 | 1 | `AppRoutes` list/get/update/delete trust the path `tenantId` with no check against the caller's own tenant; update/delete have **no ownership check at all** | S1, S2 |
 | 2 | `/api/{tenant}_{app}_{entity}` is excluded from `SessionMiddleware` entirely and gated only by an optional **global** admin/read token, off by default | S3 |
-| 3 | The admin/read token has no tenant concept — one shared secret unlocks every tenant's data | S3 (repurposed as break-glass, decoupled from "is auth even checked") |
+| 3 | The admin/read token has no tenant concept — one shared secret unlocks every tenant's data | S1, S3 (repurposed as break-glass, decoupled from "is auth even checked"; S1.2 needed its own admit branch — review round 5, R5-1) |
 | 4 | Passwords compared in plaintext in `UserManager` and `GenericAppAuthController` | S4 |
 | 5 | Self-registration is fully open with no invite/approval gate | Accepted as a product decision (out of scope — flagged, not fixed, see [Open decisions](#open-decisions-still-needed-from-product)) |
 | 6 | `CsrfMiddleware` is coded but never registered in the real router pipeline; docs claim otherwise | S4 |
@@ -536,6 +560,130 @@ For the `end-user` principal that walk is `resolveIdentity` → `requireOwnTenan
 
 ---
 
+## Review round 5 — blockers and additional findings
+
+**Reviewer:** Tech Lead / Architect review, 2026-08-01, fifth pass. This round built a single exhaustive
+artifact instead of an opportunistic read: every principal this plan will ever see, walked through every
+guard in request order (the checklist review round 4 adopted). No blocker — S0, S2, S3, S4, S5 confirmed
+executable as written; S1 needs two additions before it starts.
+
+I independently re-verified both findings against source, not just the plan's own text: read
+`AuthService.extractUserId` in full (confirms the admin/service-token path returns a bare `"admin"`/
+`X-User-Id` string with no `SessionData` constructed at all — there is genuinely nothing for a
+tenant-comparison guard to read), and read `AppManager.listApps(tenantId)` (confirms the only
+app-listing query in the codebase is single-tenant-scoped with no user-based cross-tenant path). I also
+independently re-checked the claim about the ai-builder agent forwarding a real bearer token — its
+citation link in the pasted review didn't resolve to anything (a paste artifact, not a concern in
+itself), so I grepped every tool in `ai-builder/.../agent/tool/` directly: all twelve forward
+`Authorization: Bearer <context.token()>`, and `AiChatController` 401s a blank token before any tool
+runs. Confirmed exactly as claimed.
+
+### Principal × guard walk (request order)
+
+| Principal | `resolveIdentity` (S0.1) | `requireOwnTenant` (S1.2) | capability check (S2.6) | `EntityAccessGuard` (S3.2) |
+|---|---|---|---|---|
+| App owner, own tenant | ✅ | ✅ own-tenant | ✅ `owner` | ✅ rule (i) |
+| Cross-tenant Studio `member` | ✅ | ✅ via membership exception | ✅ list/get; denies management | ✅ rule (i) |
+| Deployed-app end-user (`end-user` role, foreign tenant by construction) | ✅ | ⚠️ **403 for the entire S1→S2 window** | ✅ list/get only, once reached | ✅ rule (i) |
+| Anonymous | 401 at `resolveIdentity` | — | — | — |
+| Admin break-glass token | ✅ → literal `"admin"` (or `X-User-Id`), no `SessionData`, no `tenantId` | ❌ **no branch exists for this principal** | — | ✅ documented fall-through (evaluated last) |
+| ai-builder agent | ✅ — every tool forwards `Bearer context.token()`; `AiChatController` rejects a blank token before any tool runs | acts as whatever the forwarded token resolves to — same as its own owner | ✅ | ✅ rule (i) |
+
+Two cells fail. Both are principals nobody had walked through before this round.
+
+### 🟠 High
+
+**R5-1 — `TenantAccessGuard` has no admin branch, so the documented break-glass override dies at S1,
+and no S1 exit criterion would ever notice.** The plan promises this override in four places —
+Non-goals, finding #3, cross-cutting concerns' security bullets, and S3.2's fall-through — but S1.2's
+contract is 401 (no identity) → membership exception (if `pathAppId`) → 403 (mismatch), with no admit
+path for a principal that has no session at all. Confirmed against source: `AuthService.extractUserId`'s
+priority-1 branch resolves a valid service token to a bare `"admin"`/`X-User-Id` string without ever
+constructing a `SessionData` — so `TenantAccessGuard.requireOwnTenant(session, ...)` has nothing to read
+a `tenantId` from for this caller, only a 403 (or worse, an NPE, depending how the eventual
+implementation reaches into `session`). The only exit criterion that tests break-glass today lives under
+S3 and exercises `EntityAccessGuard` only — nothing exercises it on `AppRoutes`/`SchemaRoutes`. From S1
+onward, the documented support-tooling escape hatch would be broken on every app-management and schema
+route, and the plan's own test plan is structurally unable to catch it.
+
+**Resolution adopted:** S1.2 gains an explicit first branch, checked *before* any tenant comparison: a
+valid service/admin token (`extractServiceToken` + `hasAdmin`) admits immediately, regardless of path
+tenant — this is the one principal in the walk above with no tenant to compare, so it must be handled
+before the guard tries to compare one. A new test (S1.14) and a new S1 exit criterion make this
+checkable at the layer where it was actually missing.
+
+**R5-2 — S1 completes in a state where every deployed app is broken for its own end-users, and S1's own
+exit criteria certify that as correct.** S1.2 ships its membership branch *"permanently inert… S1's own
+behavior is unchanged,"* and S1's first exit criterion requires a Tenant B session to get 403 on every
+`AppRoutes`/`SchemaRoutes` route the census lists against Tenant A — which, per round 4's tenant-per-user
+finding, includes `GET /appbana-studio/{t}/apps/{id}` for every real deployed-app end-user, since every
+non-creator is by construction a foreign-tenant session. S1's remaining safety criterion ("Tenant A's own
+users are unaffected") certifies the owner and says nothing about the principal that actually breaks. If
+S1 merges and deploys on its own, the Runtime cannot load any deployed app for anyone but its creator for
+the entire S1→S2 interval — and the exit criteria, read literally, call that a pass.
+
+**Resolution adopted:** declare **S1 and S2 a single deployable unit** — S1 must not ship to any
+environment with live deployed apps on its own. (The alternatives considered — deferring the one route's
+wiring to S2.6, or a flag flipped at the end of S2 — both work but add machinery to unwind later for no
+benefit once S2 is this close behind; treating S1+S2 as one atomic release is the simplest statement that
+matches how the phases already depend on each other.) Recorded as a deployment note under S1's goal, a
+new S1 exit criterion, and a clause in the Rollout order section.
+
+### 🟡 Medium
+
+**R5-3 — nothing lets a cross-tenant member find the app they've been granted.** Confirmed: S1.2 states
+the bare app-list route has no membership exception (own-tenant only); S2.7 manages membership on an app
+you already know the ID of; S2.8 is about not over-showing, not discovery; and `AppManager.listApps` —
+the only app-listing query in the codebase — takes a single `tenantId` and nothing else. After R4-2
+restated S2 as a cross-tenant sharing model, a cross-tenant `member` can only ever reach their app if
+someone hands them the URL directly. Fine for the Runtime end-user (URL-driven by construction); broken
+for the Studio collaborator the membership model now exists to serve. Added as S2.10: a
+`listAppsForUser(userId)` query (cross-tenant, unlike every other lookup in this table) and an endpoint
+the Studio app switcher unions with its existing tenant-owned list.
+
+**R5-4 — the members index leads with the wrong column for the axis this table now serves.** The schema
+above defines `CREATE INDEX idx_app_members_user ON appbana_app_members(tenant_id, user_id)` —
+confirmed, this is the exact text already in this plan. The query R5-3 needs, and the natural "what am I
+a member of" lookup, filters on `user_id` alone across tenants, which a `(tenant_id, user_id)` index
+cannot serve without a full scan. Leading column flipped to `user_id` below — a small fix, but a concrete
+sign this table was designed for an intra-tenant axis and not revisited when R4-2 flipped it to
+cross-tenant.
+
+### Verdict
+
+**No blocker.** S0, S2 (with R5-3/R5-4 folded in), S3, S4, S5 remain executable as written. S1 needs
+R5-1's admin branch and R5-2's deployment-unit decision before it starts — both are contract/rollout
+statements, not new engineering, consistent with how round 4's fix landed. This is the first round with
+no finding that changes what any guard does once reached — every finding here is a missing statement
+about a principal or a rollout step.
+
+### Meta-observation — adopted
+
+Both failures this round are principals with no tenant: the admin token has none because it predates the
+tenant model; the end-user has the *wrong* one because tenant-per-user makes every non-creator foreign.
+Every guard in this plan is specified as a predicate over a tenant comparison, so the two principals that
+don't have a meaningful tenant are exactly the ones that fall through the specification — four rounds
+apart, for the same underlying reason. **Adopted:** the durable fix is not another checklist item but a
+naming/framing one. What actually decides these requests is *"does this principal have a relationship to
+this app"* — ownership, membership, or operator override — with same-tenant being the cheapest of several
+ways to satisfy that, not the question itself. `TenantAccessGuard` is named and specified around the
+thing that turns out not to be the discriminator; four rounds have each added one exception to it, which
+is usually the signal that a guard is factored around the wrong noun. **Not renaming it this round** —
+S1.2/S1.3 are already fully specified and about to be built; a rename now is churn with no behavior
+change. Recorded here so that if a sixth round finds a *third* exception to this guard, renaming it to
+something like `AppAccessGuard` (tenant-match as the first and cheapest of several admit rules, not a
+tenant guard with exceptions bolted on) is the fix, not a fourth patch.
+
+Noting for calibration, since this is the fifth round: blockers have converged 4 → 1 → 1 → 1 → 0. My own
+first-pass hit rate hasn't changed — each round still found the thing one layer outside wherever the
+previous round looked — but this round's principal-walk table is the first artefact in this review that
+was exhaustive over a dimension rather than opportunistic, which is why it's also the first round I'd bet
+on being close to complete. A round 6 is unlikely to find something of this shape again; if one happens,
+it's more likely to be the tenant-per-user-vs-membership discovery gap surfacing somewhere else, or a
+genuinely new category, than a third exception to `TenantAccessGuard`.
+
+---
+
 ## Target model
 
 Two distinct callers hit the same entity-data API today, and the fix must keep telling them apart:
@@ -596,7 +744,9 @@ CREATE TABLE appbana_app_members (
   granted_at   TIMESTAMP NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, app_id, user_id)
 );
-CREATE INDEX idx_app_members_user ON appbana_app_members(tenant_id, user_id);
+-- Leads with user_id (review round 5, R5-4): the cross-tenant "what am I a member of" lookup (S2.10)
+-- filters on user_id alone, which a (tenant_id, user_id) index cannot serve without a full scan.
+CREATE INDEX idx_app_members_user ON appbana_app_members(user_id, tenant_id);
 ```
 
 `owner` may manage membership and delete the app; `member` may build/view/edit but not remove other
@@ -671,10 +821,18 @@ tables identify *why* this work is needed; the census is what tells S1–S3 *whe
 Review round 1 (B2, B4) found the originally-named four routes are a strict subset of what needs
 guarding in these two files alone.
 
+**Deployment note (review round 5, R5-2):** S1.2 ships its membership-exception branch permanently
+inert, so at S1 completion every session from a different tenant — including every real deployed-app
+end-user, who is a foreign-tenant session by construction (round 4) — gets 403 on `AppRoutes`/
+`SchemaRoutes`, with no membership check yet available to admit them. **S1 and S2 are therefore a single
+deployable unit: S1 must not ship to any environment serving live deployed apps on its own**, or the
+Runtime stops loading any app but its creator's until S2.6 lands. Writing S1 before S2 is fine; deploying
+S1 before S2 is not, once real end-user traffic exists.
+
 | # | Task | Where | Est. |
 |---|---|---|---|
 | S1.1 | Add `tenantId` (and reserve `scopedAppId`) to `SessionData`; populate `tenantId` at login from `User.tenantId` | `SessionService.java`, `AuthenticationController.java` | 45 min |
-| S1.2 | New `TenantAccessGuard.requireOwnTenant(session, pathTenantId, pathAppId)` — **401 if there is no resolved identity at all** (via S0.1's `resolveIdentity`), **403 on a tenant mismatch**. Two distinct outcomes, not one mismatch-only comparison (fixes M7). **(Revised, review round 4, R4-1.)** A tenant mismatch is not immediately 403: when `pathAppId` is present, first check whether an `appbana_app_members` row exists for `(the app's own tenant, pathAppId, session.userId)` — a membership hit admits the request despite the mismatch; only a miss falls through to 403. The bare tenant-wide app-list route (no `pathAppId`) has no such exception — own-tenant only. S1 ships this branch permanently inert (nothing to consult until S2's table exists, so S1's own behavior is unchanged by this revision); **S2.6 is what activates it**, wiring `AppMembershipService.isMember` into this exact method rather than adding a second, parallel check. | new `com.appbana.security.TenantAccessGuard` | 60 min |
+| S1.2 | New `TenantAccessGuard.requireOwnTenant(session, pathTenantId, pathAppId)`. **(Revised, review round 5, R5-1 — gains an admit-first branch.)** Check order: **(0) a valid service/admin token** (`extractServiceToken` + `hasAdmin`, no `SessionData` required) **admits immediately, regardless of path tenant** — the break-glass override this plan already promises (Non-goals, finding #3) has no tenant to compare, so it is checked before any tenant logic runs, not folded into it. Then: **401 if there is no resolved identity at all** (via S0.1's `resolveIdentity`), **403 on a tenant mismatch**. Two distinct outcomes, not one mismatch-only comparison (fixes M7). **(Revised, review round 4, R4-1.)** A tenant mismatch is not immediately 403: when `pathAppId` is present, first check whether an `appbana_app_members` row exists for `(the app's own tenant, pathAppId, session.userId)` — a membership hit admits the request despite the mismatch; only a miss falls through to 403. The bare tenant-wide app-list route (no `pathAppId`) has no such exception — own-tenant only. S1 ships the membership branch permanently inert (nothing to consult until S2's table exists); **S2.6 is what activates it**, wiring `AppMembershipService.isMember` into this exact method rather than adding a second, parallel check. The admin branch above is fully active from S1, since it needs no membership data. | new `com.appbana.security.TenantAccessGuard` | 75 min |
 | S1.3 | Wire the guard into **every** `AppRoutes` handler per the S0.2 census — not just list/get/update/delete: also `publish`, `deploy/local`, `commits`, `commits/rollback`, `versions`, `deploy/{versionId}`, `pipeline`, `restore-schemas`, `workflow` GET/PUT, `pages/{pageId}` GET/PUT/DELETE (B2). `restore-schemas` in particular currently mutates schema state with zero authentication. | [`AppRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/AppRoutes.java) | 120 min |
 | S1.4 | Add the missing ownership check to `DELETE /schema/{name}` (B4) — today only `POST /schema` calls `isAppOwnerOrSystem`; the delete/drop-table path does not. Moved up from S2 since it's a same-shape fix to the same file already being touched. | [`SchemaRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/SchemaRoutes.java) | 30 min |
 | S1.5 | `GET /api/debug/schemas` (H1): require the same session check its sibling `/names` endpoint already gets. Root-cause fix: don't let a route's exclusion from `SessionMiddleware` depend on incidental path-segment count — name debug/admin routes in `EXCLUDED_PATHS`'s complement explicitly rather than relying on `ENTITY_API_PATTERN` to *not* match them. | `SchemaRoutes.java`, `SessionMiddleware.java` | 30 min |
@@ -686,6 +844,7 @@ guarding in these two files alone.
 | S1.11 | `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest` — tenant B's session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. **Gains a positive case (review round 4, R4-1):** a tenant B session that **is** a member of one specific tenant A app must be allowed through `requireOwnTenant` for that app's routes (list/get, per S2.6's split) — proving the guard is membership-aware, not a pure mismatch check. This positive case cannot go green until S2's membership table exists; it is written here, alongside its sibling deny cases, and finished once S2.6 activates S1.2's exception. | new tests | 105 min |
 | S1.12 | **(New, review round 2, R2-3)** Fix `SessionMiddlewareTest`'s tautological assertions: `testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes missing the `{tenantId}` segment every real route has, so they stay green regardless of what S1.9 does to the actual routes — rewrite against the real shapes and flip the expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into a read-still-excluded case and a write-requires-auth case, since S1.6 makes writes require auth but this test currently asserts the whole path needs no session. | `SessionMiddlewareTest.java` | 30 min |
 | S1.13 | **(New, review round 2, R2-6; widened review round 3, R3-2)** `login()`/`register()` in `api-client.ts` default `tenantId` to `'default'` when the backend response omits it — post-S1 this silently becomes a confusing 403 against the user's real tenant instead of a clear login-time error. Throw instead of defaulting when the response is missing it. The identical pattern exists in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture` (`loginBody.tenantId ?? 'default'`) — same one-line fix, same task, so a hardening-suite failure post-S1 reads as a fixture bug fixed once, not a new guard bug to chase. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min |
+| S1.14 | **(New, review round 5, R5-1)** `BreakGlassAdminBypassesTenantGuardTest` — a request carrying a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard.requireOwnTenant` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant, proving the override this plan already promises actually exists at this layer — until now only S3's `EntityAccessGuard` exit criterion tested it, and this guard had no admin branch to test at all. | new tests | 30 min |
 
 ### Exit criteria — S1
 
@@ -702,6 +861,12 @@ guarding in these two files alone.
       post-S1 behavior, not a shape no route has (review round 2, R2-3).
 - [ ] Tenant A's own users are unaffected on every route above.
 - [ ] Server logs a visible warning on every boot where global auth is disabled.
+- [ ] **(New, review round 5, R5-1)** A request carrying a valid service/admin token is admitted by
+      `TenantAccessGuard` regardless of path tenant — the break-glass override applies at this layer,
+      not only at S3's `EntityAccessGuard`.
+- [ ] **(New, review round 5, R5-2)** S1 is not deployed alone to any environment serving live
+      deployed-app traffic — S1 and S2 ship as a single atomic unit; this is a release-process
+      criterion, not a route-level test.
 
 ---
 
@@ -731,17 +896,26 @@ session from a separate identity store. This changes nothing about S2's architec
 service, same grant endpoint); it only means S2.6's wiring must now explicitly decide, per route,
 whether an `end-user` grant is enough — see S2.6 below.
 
+**Design change (review round 5, R5-3/R5-4):** R4-2 established this table is, in practice, a
+cross-tenant sharing model — but nothing in S2 as originally scoped let a cross-tenant member actually
+*find* the app they'd been granted (confirmed: the app-list route stays own-tenant-only per S1.2, and
+`AppManager.listApps` — the only app-listing query in the codebase — takes a single `tenantId` and
+nothing else). S2.2 and S2.8 gain a cross-tenant lookup and its UI surfacing (S2.10, new), and the
+table's own index is corrected to lead with `user_id` — the column this new lookup actually filters on
+— instead of `tenant_id`.
+
 | # | Task | Where | Est. |
 |---|---|---|---|
 | S2.1 | Liquibase changeset for `appbana_app_members` (schema above, now with `end-user` as a valid `role`, review round 3, R3-1) | `app-bana-service/src/main/resources/db/changelog/` | 30 min |
-| S2.2 | `AppMembershipService` — `grant/revoke/listMembers/isMember(appTenantId, appId, userId)/isOwner(...)`, mirroring `UserRoleService`'s shape. **`appTenantId` (renamed from `tenantId`, review round 4, R4-1)** is always the app's own tenant — from `AppMetadata`/the path, never `session.tenantId` — since the table's PK is `(tenant_id, app_id, user_id)` and a session-tenant lookup on a cross-tenant grant is a guaranteed, silent miss. | new `com.appbana.security.AppMembershipService` | 75 min |
+| S2.2 | `AppMembershipService` — `grant/revoke/listMembers/isMember(appTenantId, appId, userId)/isOwner(...)`, mirroring `UserRoleService`'s shape. **`appTenantId` (renamed from `tenantId`, review round 4, R4-1)** is always the app's own tenant — from `AppMetadata`/the path, never `session.tenantId` — since the table's PK is `(tenant_id, app_id, user_id)` and a session-tenant lookup on a cross-tenant grant is a guaranteed, silent miss. **Gains `listAppsForUser(userId)` (review round 5, R5-3)** — the one method in this service deliberately *not* scoped to a single tenant, since its purpose is finding a member's cross-tenant grants; backed by the corrected `(user_id, tenant_id)` index (R5-4). | new `com.appbana.security.AppMembershipService` | 90 min |
 | S2.3 | Bootstrap: app creator is auto-granted `owner` membership at creation time (same pattern as maker-checker's C1.5) | [`AppRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/AppRoutes.java) create handler | 30 min |
 | S2.4 | **Backfill migration** — for every pre-existing app row, insert an `owner` membership from `AppMetadata.getAuthor()`. Must tolerate the live data shape (review round 1, M8: some apps have numeric-string authors, some have arbitrary strings): resolve against `UserManager` where possible; where the author no longer resolves to a real user, assign a designated tenant-admin fallback and flag the app as `ownerless-backfilled` in a log line rather than failing the migration. | new Liquibase data migration or one-time startup task | 90 min |
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to the existing `AppMetadata.getAuthor()` comparison only when no membership row exists for that app yet (pre-backfill safety net). No call site needs to change — all 4 (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade automatically. `end-user` never satisfies this check — it stays `owner`-or-system exactly as today, so the new role cannot grant management rights by accident (review round 3, R3-1). | `AppAuthorization.java` | 75 min |
 | S2.6 | **(Revised, review round 3, R3-1 — split by capability, not applied uniformly; revised again, review round 4, R4-1 — activates S1.2's exception, doesn't layer beside it.)** This task **completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert — it is not a second, independent check applied after S1.3's tenant gate (that framing is exactly what R4-1 found broken: an AND-composition that rejects the cross-tenant member before this task's checks ever run). Once active: `AppRoutes` **list/get** accept **any** membership row (`owner`/`member`/`end-user` alike) — this is also what S3.7 relies on for `GET /appbana-studio/{t}/apps/{id}`, so no separate runtime-session carve-out is needed there. `AppRoutes` **update/delete and the release-management family** (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require the existing `isAppOwnerOrSystem` (`owner`, or `member` where S1.3 already allows build/edit) and explicitly exclude `end-user` — a data-access-only grant must never satisfy a management or destructive check. | `AppRoutes.java`, `TenantAccessGuard.java` | 60 min |
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management endpoints, `owner`-only. Accepts any of the three role values on grant, including `end-user` (review round 3, R3-1) — an owner invites a deployed-app end-user through this existing endpoint; no new endpoint is needed. Whether a user can ever get `end-user` access *without* an owner's grant (self-service signup) is the pre-existing "self-registration policy" open decision, which now also gates this. | new `AppMembershipRoutes.java` | 60 min |
-| S2.8 | Studio frontend: verify the app switcher/list only ever renders what the (now correctly filtered) server response contains — no client-side "show all tenant apps" assumption left over | `app-bana-studio/src/features/**` (session/workspace store) | 45 min |
+| S2.8 | Studio frontend: verify the app switcher/list only ever renders what the (now correctly filtered) server response contains — no client-side "show all tenant apps" assumption left over. **Extended (review round 5, R5-3):** union the tenant-owned list with S2.10's cross-tenant `listAppsForUser` result, so an app a user is a member of in another tenant actually appears in their switcher instead of being reachable only by direct URL. | `app-bana-studio/src/features/**` (session/workspace store) | 60 min |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree once membership exists), plus `EndUserMembershipCannotManageAppTest` (review round 3: an `end-user` grant gets 403 on update/delete/schema-management but 200 on list/get), plus **`CrossTenantMembershipAllowsAccessTest` (review round 4, R4-1)** — a cross-tenant member (the realistic case per R4-2: a user from a *different* tenant than the app's own) successfully lists/gets the app they're a member of, proving S1.2's membership exception actually admits them past the tenant gate, not only that S2.6 restricts what they can do once admitted; this also finishes S1.11's positive case. The route-census regression test lives in S0.3, not here — this phase only needs to prove membership is actually consulted. | new tests | 120 min |
+| S2.10 | **(New, review round 5, R5-3)** `GET /api/users/me/apps` (or equivalent) — returns the union of the caller's own-tenant apps and every app they hold cross-tenant membership on via `listAppsForUser`, for the Studio app switcher (S2.8) to consume. This is the only app-listing route in the plan that is deliberately not tenant-scoped. | new route in `AppMembershipRoutes.java` (or `AppRoutes.java`) | 60 min |
 
 ### Exit criteria — S2
 
@@ -761,6 +935,8 @@ whether an `end-user` grant is enough — see S2.6 below.
 - [ ] An `end-user`-role member can list/get the app's own metadata but gets 403 on update, delete, and
       every release-management route — the role split is enforced, not just declared (review round 3,
       R3-1).
+- [ ] **(New, review round 5, R5-3)** A user with membership on an app in a tenant other than their own
+      sees that app in their own app switcher/list (via S2.10), not only when handed the URL directly.
 
 ---
 
@@ -936,11 +1112,15 @@ After S3, that stops working by design. This must ship with:
   field check — same order of overhead as `ApprovalGuard`'s existing filtering (<5ms).
 
 ### Rollout order
-**Strict serial:** S0 → S1 → S2 → S3 (S0's identity resolver and route census are prerequisites for
-writing any of S1–S3's guards correctly; S3's membership check depends on S2's table). **Parallel-safe:**
-S4 (independent of the others, though S4.6/S4.7 touch code S1/S3 also touch — coordinate to avoid merge
-conflicts, not for correctness reasons). **Last:** S5 (the capstone test needs S1–S3 to exist to have
-something real to assert; the ai-builder half can start as soon as S2's membership model is in place).
+**Strict serial (authoring):** S0 → S1 → S2 → S3 (S0's identity resolver and route census are
+prerequisites for writing any of S1–S3's guards correctly; S3's membership check depends on S2's table).
+**S1 and S2 are additionally a single deployable unit (review round 5, R5-2):** S1.2 ships its
+membership-exception branch inert, so releasing S1 alone to any environment with live deployed apps
+403s every real end-user until S2.6 activates it — write them in order, but release them together.
+**Parallel-safe:** S4 (independent of the others, though S4.6/S4.7 touch code S1/S3 also touch —
+coordinate to avoid merge conflicts, not for correctness reasons). **Last:** S5 (the capstone test needs
+S1–S3 to exist to have something real to assert; the ai-builder half can start as soon as S2's
+membership model is in place).
 
 ### Documentation
 - `.github/copilot-instructions.md` — new section on the enforced tenant/app isolation model (S5.4).
@@ -955,7 +1135,8 @@ something real to assert; the ai-builder half can start as soon as S2's membersh
   exception ships inert, activated in S2.6 — review round 4, R4-1)
 - `app-bana-service/src/main/java/com/appbana/security/AppMembershipService.java` (S2)
 - `app-bana-service/src/main/java/com/appbana/security/EntityAccessGuard.java` (S3 — two entry points, see S3.2)
-- `app-bana-service/src/main/java/com/appbana/server/routes/AppMembershipRoutes.java` (S2)
+- `app-bana-service/src/main/java/com/appbana/server/routes/AppMembershipRoutes.java` (S2; gains
+  the cross-tenant `listAppsForUser` route in S2.10 — review round 5, R5-3)
 - Liquibase changesets: `appbana_app_members` table + backfill data migration (S2); `appbana_audit`
   `tenant_id`/`app_id` columns (S4.6)
 - Route census artifact/script + regression test (S0.2, S0.3)
@@ -996,7 +1177,7 @@ something real to assert; the ai-builder half can start as soon as S2's membersh
 - `ApiServer.java` — startup warning when auth disabled (S1)
 
 **Frontend:**
-- `app-bana-studio/src/features/**` (session/workspace store) — verify no client-side "all tenant apps" assumption remains (S2)
+- `app-bana-studio/src/features/**` (session/workspace store) — verify no client-side "all tenant apps" assumption remains (S2); union in S2.10's cross-tenant apps for the switcher (review round 5, R5-3)
 - `app-bana-shared/src/api-client.ts` — stop silently defaulting `tenantId` to `'default'` on a
   login/register response that omits it (S1.13, R2-6). No `runtimeLogin()` after all — review round 3
   (R3-1) found the Runtime has no per-app credential to call it with; see `GenericAppAuthController.java`
@@ -1048,4 +1229,4 @@ starts on the affected phase:
 
 ---
 
-*Last updated: 2026-07-31 (review round 4 incorporated) · Author: AppBana core team · Status: DRAFT — awaiting approval before S0 begins.*
+*Last updated: 2026-08-01 (review round 5 incorporated) · Author: AppBana core team · Status: DRAFT — awaiting approval before S0 begins.*
