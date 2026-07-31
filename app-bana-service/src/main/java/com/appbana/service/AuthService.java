@@ -12,10 +12,16 @@ import java.util.Locale;
  * Handles token extraction, validation, and permission checks.
  *
  * Token type separation (H8):
- *   - extractServiceToken: reads X-AppBana-Token, Authorization Bearer. Used for admin/write/read gates.
- *   - extractToken:        backward-compat shim; may also return session IDs from X-Session-Token.
- *                          MUST NOT be passed to hasAdmin/hasWrite/hasRead.
- *   - extractUserId:       resolves a human identity for audit and approval attribution.
+ *   - extractServiceToken:     reads X-AppBana-Token, Authorization Bearer. Used for admin/write/read gates.
+ *   - extractToken:            backward-compat shim; may also return session IDs from X-Session-Token.
+ *                              MUST NOT be passed to hasAdmin/hasWrite/hasRead.
+ *   - extractSessionCredential: locates a raw session token trying all 3 supported credential forms
+ *                              (X-Session-Token, session_id cookie, Authorization Bearer). Does NOT
+ *                              validate it. Shared by resolveIdentity() and SessionMiddleware.
+ *   - resolveIdentity:         canonical identity resolution (S0.1). Single method for all 3 credential
+ *                              forms; use this for new code.
+ *   - extractUserId:           resolves a human identity for audit and approval attribution.
+ *                              Delegates to resolveIdentity() — kept for the existing ~30 call sites.
  */
 public class AuthService {
     private static final Logger LOG = LoggerFactory.getLogger(AuthService.class);
@@ -64,15 +70,63 @@ public class AuthService {
     }
 
     /**
-     * Extract user ID from request.
+     * Locate a raw session credential (opaque token) from the request, trying all three
+     * supported forms in a fixed priority order. Does NOT validate the token — just finds it.
+     * Safe to pass to SessionService.validateSession()/renewSession(); never to hasAdmin(),
+     * hasWrite(), or hasRead() (a session id must never be compared against the admin/read token).
+     *
      * Priority:
+     * 1. X-Session-Token header (preferred)
+     * 2. Cookie: session_id=&lt;token&gt;
+     * 3. Authorization: Bearer &lt;token&gt; (least preferred — shared with service tokens, so
+     *    callers that need a service/admin token must check extractServiceToken() first)
+     *
+     * Shared by resolveIdentity() (S0.1) and SessionMiddleware.create(), so both places agree on
+     * exactly the same 3 forms instead of maintaining separate, potentially-drifting logic.
+     */
+    public static String extractSessionCredential(Router.HttpRequest req) {
+        String token = req.header("X-Session-Token");
+        if (token != null && !token.isBlank()) {
+            return token.trim();
+        }
+
+        String cookie = req.header("Cookie");
+        if (cookie != null) {
+            String[] cookies = cookie.split(";");
+            for (String c : cookies) {
+                String[] parts = c.trim().split("=", 2);
+                if (parts.length == 2 && "session_id".equals(parts[0])) {
+                    return parts[1].trim();
+                }
+            }
+        }
+
+        String auth = req.header("Authorization");
+        if (auth != null && !auth.isBlank() && auth.trim().toLowerCase(Locale.ROOT).startsWith("bearer ")) {
+            return auth.trim().substring(7).trim();
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve the caller's user id from the request (S0.1) — the canonical identity-resolution
+     * entry point covering all 3 session credential forms. Prefer this over extractUserId() in
+     * new code.
+     *
+     * Priority (never reordered — the service/admin-token check always runs first):
      * 1. Service-token admin override: if the request carries a valid service/admin token
      *    AND an X-User-Id header, returns X-User-Id (internal service-to-service impersonation).
      *    H8 FIX: uses extractServiceToken() — session IDs can never match the admin token.
-     * 2. Session attribute set by SessionMiddleware (authoritative for browser sessions).
-     * 3. Session token lookup fallback via SessionService.validateSession(token).
+     * 2. Session attribute set by SessionMiddleware (authoritative for browser sessions —
+     *    avoids re-validating the same session twice per request).
+     * 3. Session credential fallback via extractSessionCredential() + SessionService.validateSession().
+     *    Covers routes excluded from SessionMiddleware. This is the fix for B1: extractUserId()
+     *    used to check only the X-Session-Token header here, silently dropping a session id sent
+     *    via the session_id cookie or Authorization: Bearer — the form every real Studio/Runtime/
+     *    ai-builder caller actually sends — on any middleware-excluded route.
      */
-    public static String extractUserId(Router.HttpRequest req, AppConfig cfg) {
+    public static String resolveIdentity(Router.HttpRequest req, AppConfig cfg) {
         // Priority 1: admin service token — H8: use extractServiceToken, NOT extractToken.
         // This ensures a session ID (e.g., "abc123") can never accidentally equal adminToken.
         String serviceToken = extractServiceToken(req);
@@ -90,8 +144,9 @@ public class AuthService {
             return uid;
         }
 
-        // Priority 3: session token fallback (covers routes excluded from SessionMiddleware)
-        String sessionTok = req.header("X-Session-Token");
+        // Priority 3: session credential fallback — all 3 forms (covers routes excluded from
+        // SessionMiddleware). Never reads a form already claimed as a service token above.
+        String sessionTok = extractSessionCredential(req);
         if (sessionTok != null && !sessionTok.isBlank()) {
             SessionService.SessionData session = SessionService.validateSession(sessionTok);
             if (session != null && session.userId() != null) {
@@ -100,6 +155,16 @@ public class AuthService {
         }
 
         return null;
+    }
+
+    /**
+     * Extract user ID from request.
+     *
+     * Delegates to resolveIdentity() (S0.1) — kept as a separate name for the ~30 existing call
+     * sites across the route handlers; prefer resolveIdentity() directly in new code.
+     */
+    public static String extractUserId(Router.HttpRequest req, AppConfig cfg) {
+        return resolveIdentity(req, cfg);
     }
 
     /**

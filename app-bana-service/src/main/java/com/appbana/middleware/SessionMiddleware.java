@@ -2,6 +2,7 @@ package com.appbana.middleware;
 
 import com.appbana.api.Router.HttpRequest;
 import com.appbana.api.Router.HttpResponse;
+import com.appbana.service.AuthService;
 import com.appbana.service.SessionService;
 import com.appbana.service.SessionService.SessionData;
 import org.slf4j.Logger;
@@ -92,8 +93,9 @@ public class SessionMiddleware {
                 return; // Continue to next middleware/handler
             }
 
-            // Extract session token
-            String sessionToken = extractSessionToken(req);
+            // Extract session token — delegates to AuthService.extractSessionCredential() (S0.1)
+            // so this middleware and AuthService.resolveIdentity() agree on the exact same 3 forms.
+            String sessionToken = AuthService.extractSessionCredential(req);
 
             if (sessionToken == null || sessionToken.trim().isEmpty()) {
                 LOG.warn("Session middleware: missing session token for {}", path);
@@ -167,42 +169,6 @@ public class SessionMiddleware {
         }
 
         return false;
-    }
-
-    /**
-     * Extract session token from request.
-     * 
-     * Priority:
-     * 1. X-Session-Token header
-     * 2. Cookie: session_id=<token>
-     * 3. Authorization: Bearer <token>
-     */
-    private static String extractSessionToken(HttpRequest req) {
-        // Try X-Session-Token header first (recommended)
-        String token = req.header("X-Session-Token");
-        if (token != null && !token.trim().isEmpty()) {
-            return token.trim();
-        }
-
-        // Try Cookie header
-        String cookie = req.header("Cookie");
-        if (cookie != null) {
-            String[] cookies = cookie.split(";");
-            for (String c : cookies) {
-                String[] parts = c.trim().split("=", 2);
-                if (parts.length == 2 && "session_id".equals(parts[0])) {
-                    return parts[1].trim();
-                }
-            }
-        }
-
-        // Try Authorization: Bearer header (least preferred for sessions)
-        String auth = req.header("Authorization");
-        if (auth != null && auth.startsWith("Bearer ")) {
-            return auth.substring(7).trim();
-        }
-
-        return null;
     }
 
     /**
