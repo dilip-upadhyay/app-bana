@@ -37,14 +37,23 @@
 
 ## ✅ Build health (single source — do not duplicate these counts elsewhere)
 
-Last verified 2026-07-31 at Review #14 (`ai-builder` re-verified on JDK 25 after the Java 21→25 upgrade).
+Last verified 2026-07-31 after the column-filter/sort/sidebar pass (`0ceb9e6`). `ai-builder` was not
+touched by that commit and carries its Review #14 numbers (re-verified on JDK 25 after the Java 21→25
+upgrade).
 
 | Module | Command | Result |
 |---|---|---|
-| `app-bana` | `mvn -B verify` | 306 tests · 0 failures · 0 errors |
+| `app-bana` | `mvn -B verify -pl app-bana-service` | 331 tests · 0 failures · 0 errors |
 | `ai-builder` | `mvn -B verify` | **178 keyless** / **195 with `OPENAI_API_KEY`** · 0 failures · 0 errors · 2 skipped |
-| `app-bana-runtime` | `pnpm test` | 269 tests · 0 failures |
+| `app-bana-runtime` | `pnpm test` | 276 tests · 21 files · 0 failures |
 | CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 🟢 green (keyless — so CI sees 178) |
+
+> [!WARNING]
+> **`app-bana-runtime`'s 276 is a weaker signal than the number suggests.** There is no
+> `vitest.config.ts` and no jsdom/Testing Library — tests render through `react-dom/server` and assert
+> on markup, so nothing that depends on clicks, focus or effects is covered. `StudioTableLive.tsx` has
+> no unit test at all. `app-bana-studio` has **no test script whatsoever** (CI type-checks and builds it,
+> nothing more). See [`.github/copilot-instructions.md` §10](../.github/copilot-instructions.md#10-frontend-architecture).
 
 > [!IMPORTANT]
 > **The build now requires JDK 25.** Commit `c07f62f` moved `<java.version>` from 21 to 25 in the parent
@@ -90,12 +99,54 @@ errors, because Lombok suppresses a generated setter when any method of that nam
 
 ---
 
+## ✅ Completed: Runtime list-table column filters, sorting + collapsible sidebar (`0ceb9e6`, 2026-07-31)
+
+Unplanned pass, outside the A→E phase sequence. Makes every runtime list table filterable per column
+and sortable, and makes the sidebar collapsible — all three as **platform-wide defaults for every
+generated app**, not per-app opt-ins. Designed for scale: every filter and sort is resolved in SQL
+against the whole dataset, never client-side over the current page. Filter/sort coverage is every
+displayed column except `approval_status`, which keeps its dedicated `_approvalStatus=` filter.
+
+| # | Item | Where |
+|---|---|---|
+| 1 | `filter=col:min..max` range filters — `EntityCrudService.parseRange` + a `Range` record that lowers to `col >= ? AND col <= ?`. Spec in §9 | [`EntityCrudService.java`](../app-bana-service/src/main/java/com/appbana/service/EntityCrudService.java) |
+| 2 | `SchemaManager.syncIndexes` — every `ensureTable` now also syncs B-tree + trigram indexes so filters and sorts stay index-served. Spec in §11 | [`SchemaManager.java`](../app-bana-service/src/main/java/com/appbana/SchemaManager.java) |
+| 3 | Per-column filter row — text · number range · date range · boolean select · reference select (options reuse the already-fetched FK label cache, no extra request). Debounced 400 ms | [`TableHeader.tsx`](../app-bana-runtime/src/runtime/TableHeader.tsx), [`useDebouncedValue.ts`](../app-bana-runtime/src/runtime/useDebouncedValue.ts) |
+| 4 | Click-to-sort headers cycling asc → desc → none, emitted as `sort=col` / `sort=-col` | [`TableHeader.tsx`](../app-bana-runtime/src/runtime/TableHeader.tsx), [`StudioTableLive.tsx`](../app-bana-runtime/src/runtime/StudioTableLive.tsx) |
+| 5 | `range()` filter-value helper + `col:lo..hi` wire encoding, alongside the existing `exact()` | [`entity-query.ts`](../app-bana-runtime/src/runtime/entity-query.ts) |
+| 6 | Collapsible sidebar at md+ (256px ↔ 56px rail), persisted in `localStorage['appbana_sidebar_collapsed']`. Scoped to its own `min-width: 768px` CSS block so it never collides with Sprint 2 task 2.10's separate width-triggered sm–md auto-rail | [`AppRuntimeShell.tsx`](../app-bana-runtime/src/runtime/AppRuntimeShell.tsx), [`globals.css`](../app-bana-runtime/src/globals.css) |
+| 7 | Request-generation guard in `load()` so a slow response from a superseded request can no longer overwrite newer rows | [`useEntityRows.ts`](../app-bana-runtime/src/runtime/useEntityRows.ts) |
+
+Wire formats for items 1, 4 and 5 are documented once in
+[`.github/copilot-instructions.md` §9](../.github/copilot-instructions.md#9-backend-api-reference);
+the index strategy in §11; the `StudioTableLive` remount hazard in §10. Those sections are the single
+home for all three — this row set is scope and status only.
+
+**One real defect was found, and only by driving the browser.** `ColumnFilterControl`'s range inputs
+held their min/max in local `useState`. `StudioTableLive` swaps the whole `<table>` for
+`<TableSkeleton>` whenever `loading` flips, so every filter change remounted those inputs and reset
+the draft to `''`; the next bound's `onChange` then read the other bound through a stale closure over
+that reset value and dropped it. Symptom: a range filter that would not clear. Fixed by deriving the
+displayed bounds from the `value` prop on every render. **It passed 276 green runtime tests and the
+full backend suite** — the no-DOM-shim vitest setup cannot express it. Recorded in §10 as a standing
+rule for anything rendered under that loading boundary.
+
+**Verified** end-to-end in the browser (Playwright against runtime :5175), not by backend probes:
+text / number-range / date-range / boolean / reference filters each set *and* cleared; sort cycling
+with real row reordering; sidebar collapse → reload → still collapsed → expand. Backend 331/331,
+runtime 276/276.
+
+**Not covered:** pagination interacting with an active filter — the test app holds 22 rows against a
+page size of 25, so there is only ever one page. Needs a seeded large-table fixture.
+
+---
+
 ## 🧹 Sprint 3 post-review follow-ups (deferred, not blocking Phase B)
 
 The 2026-07-27 architect review of Sprint 3 caught five real issues; all five were fixed the same day (see §A2 row above). A sixth issue — pre-existing decimal-type coercion — was found while writing the CRUD round-trip e2e spec and fixed 2026-07-27 in a follow-up commit (`0a49de7` + e2e regression coverage in `8083945`). The following items remain consciously deferred:
 
 - **Real soft-delete backend.** The current Delete-then-"Recreate" flow re-inserts the row with a new PK, losing inbound FK relationships. A proper implementation adds a `deleted_at` column + `POST /api/{entity}/{id}/restore` endpoint + a `?includeDeleted=true` query flag. Estimated 4–6 hours. Candidate for Sprint 3.2 or fold into Phase B4 (Master-Detail) which needs cascade semantics anyway.
-- **Direct unit tests for `useEntityRows` + `ReferenceCombobox` keyboard nav.** Runtime tests avoid jsdom by convention (see `app-bana-runtime/vitest.config.ts`); testing a React hook or a focus-managing combobox without jsdom requires extracting the pure logic first. Currently covered indirectly by the e2e CRUD spec. Estimated 2 hours to extract + test.
+- **Direct unit tests for `useEntityRows` + `ReferenceCombobox` keyboard nav.** Runtime tests avoid jsdom by convention (there is no `vitest.config.ts` and no jsdom dependency at all — see the build-health note above); testing a React hook or a focus-managing combobox without jsdom requires extracting the pure logic first. Currently covered indirectly by the e2e CRUD spec. Estimated 2 hours to extract + test.
 - **`StudioTableLive.tsx` under 200 lines.** Missed at 328 lines. The FK-prefetch effect and cell-render helpers are irreducibly table-specific; extracting them into passthrough modules would worsen cohesion. Recommend updating the exit criterion instead when a second table consumer appears and can share `useFkLabels`.
 - **Runtime-state screenshot archive** under `docs/design/runtime-states/`. Pure documentation task, needs a running backend + Playwright driver. Deferred pending Phase B4 (Master-Detail) which changes the shape of half these screenshots anyway.
 - ~~**23 pre-existing `AdvancedQueryTest` + `SecurityIntegrationTest` failures.**~~ ✅ **Cleared 2026-07-28** (commit `94714d6`). Three clusters fixed across 5 test classes: (1) 8 URLs updated to qualified `/api/default_default_<entity>` form; (2) `SchemaManagerTenantTest` assertions lowercased since `getPhysicalTableName()` returns UPPERCASE; (3) 15 tests in `SessionMiddlewareTest` + `SecurityIntegrationTest` swapped `/api/users` → `/dashboard` (the former is now auto-excluded by `SessionMiddleware.ENTITY_API_PATTERN`). Full backend suite: 207/207 pass.

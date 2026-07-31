@@ -1,10 +1,26 @@
-# Session Summary — 2026-07-27
+# Session Summary — 2026-07-31
 
 **Working branch:** `feature/ui-rebuild`
 
 ---
 
 ## What shipped this session
+
+- `0ceb9e6` — feat: per-column filtering, sorting and a collapsible sidebar on every runtime list table.
+  Server-side `filter=col:min..max` ranges + auto-created B-tree/trigram indexes on the backend;
+  per-column filter controls, click-to-sort headers and a persisted sidebar rail on the frontend.
+  Full breakdown in [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md).
+
+  The pass also caught a defect that no unit test could have: `ColumnFilterControl`'s range inputs kept
+  their bounds in local `useState`, and `StudioTableLive` remounts that whole subtree every time
+  `loading` flips, so each filter change silently reset the draft and the next bound's `onChange` read
+  a stale closure and dropped it. Found by driving the real browser; fixed by deriving the bounds from
+  props. Recorded as a standing rule in
+  [`.github/copilot-instructions.md` §10](../.github/copilot-instructions.md#10-frontend-architecture).
+
+---
+
+## Earlier this cycle
 
 Recent commits (freshest last):
 - `723a193` — fix(studio): show login screen when session expires
@@ -36,7 +52,7 @@ The technical-architect review of Phase B flagged 8 hardening gaps. All 8 are no
 | H7 | No Playwright tests for complex UI features | 5 spec files, 8 tests covering wizard, upload, master-detail, filter, saved views |
 | H8 | Documentation out of date | copilot-instructions.md, docs/README.md, session_summary.md refreshed |
 
-Backend: 220/220 tests pass · Runtime Vitest: 147/147 · E2E Playwright: 8/8 discoverable.
+Test counts live in [`ACTIVE_TASKS.md` § Build health](./ACTIVE_TASKS.md#-build-health-single-source--do-not-duplicate-these-counts-elsewhere) — the single source. E2E Playwright: 8/8 discoverable.
 
 ---
 
@@ -47,7 +63,7 @@ Backend: 220/220 tests pass · Runtime Vitest: 147/147 · E2E Playwright: 8/8 di
 [✅ Done]     Phase A2 — Runtime Foundations (Sprint 3)
 [✅ Done]     Phase B  — Complex UI Epic (B1–B5)
 [✅ Done]     Phase B.H — Hardening Sprint (H1–H8)
-[🟡 In Prog] Phase C  — Maker-Checker Epic (C1 + C2 complete; C3 next)
+[🟡 In Prog] Phase C  — Maker-Checker Epic (C1–C3 complete; C4 in progress)
      ↓
 🎯 Demo-able differentiated product
      ↓
@@ -65,23 +81,15 @@ Backend: 220/220 tests pass · Runtime Vitest: 147/147 · E2E Playwright: 8/8 di
 
 ## Next session goal
 
-**Start Phase C sub-phase C3 — Runtime approval UI.** See [`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) §C3.
+**Finish Phase C sub-phase C4 — AI Builder `approvalRequired` integration.** Status and the remaining
+C4 items are tracked in [`ACTIVE_TASKS.md`](./ACTIVE_TASKS.md); design detail in
+[`planning/MAKER_CHECKER_PLAN.md`](./planning/MAKER_CHECKER_PLAN.md) §C4.
 
-Nothing in `app-bana-runtime/` is approval-aware yet — no `Approval*.tsx`, `Checker*.tsx` or `Audit*.tsx` exists.
+Also open, both carried rather than forgotten:
 
-Tasks:
-- C3.1 — `ApprovalStatusPill.tsx`, auto-wired into the `StudioTableLive` cell renderer
-- C3.2 — `FormActions.tsx`: `Save as draft` + `Submit for approval`
-- C3.3 — `CheckerQueuePage.tsx` + `checker_queue` PageMeta layout
-- C3.4 — `ApprovalDetail.tsx` + `RejectDialog.tsx` (side-by-side diff for revisions)
-- C3.5 — `AuditDrawer.tsx`
-- C3.6 — "My Drafts" / "Needs Rework" saved views
-- C3.7 — global "Pending my approval" badge
-- C3.8 — toasts on submit/approve/reject
-
-The backend contract C3 builds on is now complete: revision rows expose `approval_parent_id`,
-`?_approvalStatus=` narrows list pages, and `.../records/{id}/approvals/audit` returns the timeline
-including the pre-merge snapshot for revision approvals.
+- The C3 Playwright maker→checker round-trip spec, which needs the full stack running.
+- Pagination-under-filter coverage for the new column filters — the test app has 22 rows against a
+  page size of 25, so a second page never appears. Needs a seeded large-table fixture.
 
 ---
 

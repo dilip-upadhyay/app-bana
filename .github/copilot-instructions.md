@@ -28,7 +28,7 @@ AppBana is a **metadata-driven, AI-powered application builder**. Non-technical 
 1. Defines the data model
 2. Creates PostgreSQL tables (via `SchemaManager`)
 3. Generates REST CRUD APIs (automatically)
-4. Renders UI pages (via LitElement web components)
+4. Renders UI pages (metadata → React runtime, see §10)
 
 **Core Principle:** A single schema definition drives the entire stack â€” database, API, and UI are all metadata-driven.
 
@@ -544,34 +544,70 @@ GET    /api/ai/chat/sessions    â†’ Past sessions
 ## 10. Frontend Architecture
 
 ### Technology Stack
-- **Framework**: LitElement (Web Components) + TypeScript
-- **Build**: Vite 5
-- **Testing**: Vitest + jsdom
+- **Framework**: React 18 + TypeScript (LitElement was retired with `app-bana-ui/` — see §2)
+- **Build**: Vite 5 · **Styling**: Tailwind · **Studio state**: Zustand
+- **Testing**: Vitest, **with no DOM shim**. There is no `vitest.config.ts` and no `jsdom` /
+  `happy-dom` / Testing Library dependency; component tests render with `react-dom/server`'s
+  `renderToStaticMarkup` and assert on the emitted markup. A test that needs to click, focus, or
+  observe an effect cannot be written this way — that behaviour is covered by Playwright in `e2e/`,
+  or not at all. See the limitation note below.
 
 ### Key Source Files
 
 | File | Purpose |
 |------|---------|
-| `src/runtime/renderer/StudioTableLive.ts` | Renders dynamic entity tables from schema metadata |
-| `src/builder/store/AppStore.ts` | Centralized state for apps and pages (REST-backed) |
-| `src/builder/components/AppManager.ts` | App lifecycle UI component |
-| `src/builder/components/PageManager.ts` | Page creation with 8 templates |
-| `src/main/AiChatBuilder.ts` | AI chat interface component |
-| `src/services/` | API client services |
+| [`app-bana-runtime/src/runtime/StudioTableLive.tsx`](../app-bana-runtime/src/runtime/StudioTableLive.tsx) | Live entity table — fetch, per-column filters, sort, pagination, row actions |
+| [`app-bana-runtime/src/runtime/TableHeader.tsx`](../app-bana-runtime/src/runtime/TableHeader.tsx) | Sort-toggle header row + the per-column filter control row |
+| [`app-bana-runtime/src/runtime/useEntityRows.ts`](../app-bana-runtime/src/runtime/useEntityRows.ts) | Paginated row fetching + row-lifecycle auto-refresh |
+| [`app-bana-runtime/src/runtime/entity-query.ts`](../app-bana-runtime/src/runtime/entity-query.ts) | Canonical `{field: value}` → `GET /api/{entity}` query-param translator |
+| [`app-bana-runtime/src/runtime/Renderer.tsx`](../app-bana-runtime/src/runtime/Renderer.tsx) | Walks `PageMeta` → React tree |
+| [`app-bana-runtime/src/runtime/AppRuntimeShell.tsx`](../app-bana-runtime/src/runtime/AppRuntimeShell.tsx) | Shell — sidebar, appbar, login, page slot |
+| [`app-bana-shared/src/api-client.ts`](../app-bana-shared/src/api-client.ts) | All frontend API access (`authedFetch`, `fetchEntityRows`, …) |
 
-### StudioTableLive.ts â€” Critical Knowledge
-This is the live data table rendered in deployed apps. It relies on:
-```typescript
-// node.props.fields - comes from backend entity schema
-// node.props.entityName - the multi-tenant entity key
-// node.props.tableColumns - column definitions from schema
-```
-**Rule:** If you modify how backend schemas are saved, you MUST verify that `StudioTableLive` still receives `fields` metadata correctly in `node.props.tableColumns`. Failing this will silently break data rendering.
+### `StudioTableLive.tsx` — critical knowledge
+
+The live data table rendered in deployed apps. It reads `node.props.entityName` (the multi-tenant
+entity key), `node.props.fields` and `node.props.tableColumns` — all sourced from the backend entity
+schema. **If you change how schemas are saved, verify `tableColumns` still arrives**, or data
+rendering breaks silently.
+
+Every displayed column **except the approval-status column** is filterable, and the same set is
+sortable one column at a time — both **server-side**. The table never filters or sorts the current
+page client-side, because that page is one `limit`/`offset` slice of a dataset that may be
+arbitrarily large. (Approval status is excluded deliberately: it has its own `_approvalStatus=`
+parameter and system views — see §9.) Filter state is debounced 400 ms
+([`useDebouncedValue.ts`](../app-bana-runtime/src/runtime/useDebouncedValue.ts)) and merged with any
+page-level filters before being handed to `toEntityQueryParams`. The wire format for each control is
+in §9.
+
+> [!WARNING]
+> **`StudioTableLive` swaps its entire `<table>` subtree for `<TableSkeleton>` on every load**
+> (`{loading && <TableSkeleton/>}` / `{!loading && rows.length > 0 && <table>…}`). Because a filter or
+> sort change sets `loading` true→false, this **unmounts and remounts `TableHeader` and every filter
+> control on every keystroke-batch** — not just on first load. Any component under that boundary that
+> holds edit state in `useState` will have it silently reset mid-interaction.
+>
+> This is not hypothetical: the column-filter range inputs originally kept their min/max in local
+> `useState`, and each remount reset that draft to `''`, so the *next* bound's `onChange` read the
+> other bound through a stale closure over the reset value and dropped whatever the user had just
+> typed. The visible symptom was a filter that would not clear. **Rule:** anything rendered under
+> `StudioTableLive`'s loading boundary must derive its displayed value from props on every render, not
+> from local state.
+
+> [!IMPORTANT]
+> **`StudioTableLive.tsx` has no unit test, and cannot have a meaningful one** under the no-DOM-shim
+> setup above — it is a fetch-driven, effect-heavy, interaction-heavy component. The remount defect
+> above passed 276 green runtime tests and a full backend suite; it was only ever going to be caught
+> by driving the real browser. Changes to this file must be verified in the running runtime (5175),
+> not by unit tests alone.
 
 ### Adding a New Field Type
-1. Add the SQL type mapping in `SchemaManager.sqlType()` (Java)
-2. Add the field renderer in `StudioTableLive.ts` (TypeScript)  
-3. Add the input component in the form handling code
+1. Add the SQL type mapping in `SchemaManager.sqlType()` (Java) and classify it in
+   `SchemaManager.classifyFieldType()` — the latter decides indexability and whether `filter=`
+   range queries are allowed (§9, §11)
+2. Add the cell renderer in `StudioTableLive.tsx` and the filter control in `TableHeader.tsx`
+   (`ColumnFilterControl`) — a type with no branch there falls through to a plain text filter
+3. Add the input component in `Renderer.tsx`'s field-renderer cases
 
 ---
 
@@ -606,6 +642,33 @@ AppBana uses **safe, non-destructive migrations**:
 - New fields â†’ `ALTER TABLE ADD COLUMN`
 - Renamed fields â†’ `ALTER TABLE RENAME COLUMN` (tracked via `existingName` property)
 - No production drops â€” data is preserved
+
+### Automatic indexing (`SchemaManager.syncIndexes`)
+
+Every `ensureTable` call — create *and* the self-heal path on an existing table — also syncs indexes
+for the entity, so the per-column filter/sort UI (§10) and the approval queues stay index-served as
+tenant tables grow. Two families, both `IF NOT EXISTS`, so re-running is cheap:
+
+| Index | On | Serves |
+|---|---|---|
+| B-tree | every non-PK, non-`FILE` column (plus the 8 approval columns when `approvalRequired`) | `=`, `filter=col:min..max` ranges, `ORDER BY`, FK/status lookups |
+| GIN `gin_trgm_ops` | STRING/TEXT-kind columns, **Postgres only** | the default substring `ILIKE '%value%'` filter, which a B-tree cannot serve at all |
+
+Three things to know before changing this:
+
+1. **It needs the `pg_trgm` extension.** `syncIndexes` issues `CREATE EXTENSION IF NOT EXISTS pg_trgm`
+   first. If the DB user lacks rights, it logs `[INDEX] Could not enable pg_trgm extension` and skips
+   **only** the trigram family — B-trees still get created and everything still works, just with
+   sequential scans for substring filters. Index failures are logged and swallowed by design: an
+   indexing failure is a performance problem, never a correctness one, and must not fail a schema save.
+2. **Index names end in a short SHA-256 hash of `table.column.kind`** (after a truncated
+   `IDX_<col>_<kind>` label), not a naive concatenate-then-truncate. Physical table names already run
+   near Postgres's 63-char identifier limit (§5's UUID-heavy naming), so plain truncation makes two
+   columns collide — and `CREATE INDEX IF NOT EXISTS` treats "that name exists" as success regardless
+   of what it actually indexes, silently leaving one column unindexed.
+3. **Deliberately not `CREATE INDEX CONCURRENTLY`** — that cannot run inside a transaction, which does
+   not fit the `Statement`-per-DDL pattern the rest of `ensureTable` uses. Revisit if a very large
+   tenant table ever needs altering in place.
 
 **Liquibase changesets** (`app-bana-service` only — `ai-builder` uses Flyway, see §4) live in
 `app-bana-service/src/main/resources/db/changelog/` and run from `ApiServer.startJdk()` *before* any
