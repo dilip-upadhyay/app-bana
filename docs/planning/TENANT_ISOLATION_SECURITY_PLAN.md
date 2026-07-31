@@ -24,17 +24,18 @@
 7. [Review round 3 — blockers and additional findings](#review-round-3--blockers-and-additional-findings)
 8. [Review round 4 — blockers and additional findings](#review-round-4--blockers-and-additional-findings)
 9. [Review round 5 — blockers and additional findings](#review-round-5--blockers-and-additional-findings)
-10. [Target model](#target-model)
-11. [Data model additions](#data-model-additions)
-12. [Sub-phase S0 — Unify identity resolution + route census](#sub-phase-s0--unify-identity-resolution--route-census)
-13. [Sub-phase S1 — Tenant boundary on app management](#sub-phase-s1--tenant-boundary-on-app-management)
-14. [Sub-phase S2 — Per-app membership model](#sub-phase-s2--per-app-membership-model)
-15. [Sub-phase S3 — Entity data API enforcement](#sub-phase-s3--entity-data-api-enforcement)
-16. [Sub-phase S4 — Credential hygiene](#sub-phase-s4--credential-hygiene)
-17. [Sub-phase S5 — Capstone tests + ai-builder trust chain](#sub-phase-s5--capstone-tests--ai-builder-trust-chain)
-18. [Cross-cutting concerns](#cross-cutting-concerns)
-19. [File-level change map](#file-level-change-map)
-20. [Open decisions still needed from product](#open-decisions-still-needed-from-product)
+10. [Review round 6 — blockers and additional findings](#review-round-6--blockers-and-additional-findings)
+11. [Target model](#target-model)
+12. [Data model additions](#data-model-additions)
+13. [Sub-phase S0 — Unify identity resolution + route census](#sub-phase-s0--unify-identity-resolution--route-census)
+14. [Sub-phase S1 — Tenant boundary on app management](#sub-phase-s1--tenant-boundary-on-app-management)
+15. [Sub-phase S2 — Per-app membership model](#sub-phase-s2--per-app-membership-model)
+16. [Sub-phase S3 — Entity data API enforcement](#sub-phase-s3--entity-data-api-enforcement)
+17. [Sub-phase S4 — Credential hygiene](#sub-phase-s4--credential-hygiene)
+18. [Sub-phase S5 — Capstone tests + ai-builder trust chain](#sub-phase-s5--capstone-tests--ai-builder-trust-chain)
+19. [Cross-cutting concerns](#cross-cutting-concerns)
+20. [File-level change map](#file-level-change-map)
+21. [Open decisions still needed from product](#open-decisions-still-needed-from-product)
 
 ---
 
@@ -89,6 +90,15 @@ admin-token branch, and S1+S2 are declared a single deployable unit. See
 [Review round 5](#review-round-5--blockers-and-additional-findings) for the full principal × guard walk
 and two smaller findings about cross-tenant app discovery.
 
+**Review round 6 (2026-08-01) found no blocker and no new principal — two consistency gaps in sections
+the plan already had, and a performance deferral worth writing down.** `readToken`, the separate
+read-only credential, gets no admit branch in either new guard, so it would work in `SchemaRoutes` and
+403 everywhere else; retired instead, uniformly. S3's completion is a one-time access reset for every
+deployed app's end-users (no backfill is possible, by design); now stated explicitly in Rollout order so
+it isn't mistaken for a regression. See
+[Review round 6](#review-round-6--blockers-and-additional-findings) for detail. **The reviewer's own
+verdict: the plan is done — execute it.**
+
 | # | Sub-phase | Deliverable | Est. |
 |---|---|---|---|
 | S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route, now including **known callers** and **what data must exist for it to succeed** columns | ~5 hr |
@@ -101,12 +111,14 @@ and two smaller findings about cross-tenant app discovery.
 **Total scope:** ~40.75 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
 hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
 plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
-consecutive round to add scope, though the first with no blocker). S0 → S1 → S2 → S3 is the strict
-serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review round 5, R5-2)**
-— S1 must not ship to any environment with live deployed apps on its own. S4 is independent and
-parallel-safe. S5 needs S1–S3 finished; its ai-builder half can start once S2 exists. S3.7 now depends on
-S2 (the `end-user` role, its grant endpoint, and S1.2's now-activated membership exception), not on
-`scopedAppId`.
+consecutive round to add scope, though the first with no blocker; **round 6 adds none** — both findings
+are same-estimate wording/consistency fixes, the first round to add zero net scope). S0 → S1 → S2 → S3
+is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
+round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
+completion is additionally a one-time access reset with no backfill (review round 6, R6-2)** — see
+Rollout order. S4 is independent and parallel-safe. S5 needs S1–S3 finished; its ai-builder half can
+start once S2 exists. S3.7 now depends on S2 (the `end-user` role, its grant endpoint, and S1.2's
+now-activated membership exception), not on `scopedAppId`.
 
 ---
 
@@ -169,10 +181,16 @@ It is not true at the layer that actually decides who may call the API that reac
 - **A general RBAC/permission-scopes system** beyond "is this user a member of this app" plus the
   existing maker/checker entity roles. Role *granularity* within an app (e.g. "can edit schema" vs.
   "can only view data") is a future extension of the `appbana_app_members.role` column, not built here.
-- **Removing the global `adminToken`/`readToken` model.** Repurposed as an optional platform-operator
-  break-glass override (S1.2 and S3.2, revised review round 5, R5-1 — the override needs an explicit
-  admit branch at the tenant-boundary layer too, not only at the entity-data layer), not deleted — some
-  deployments may still want it for support tooling.
+- **Removing the global `adminToken`/`readToken` model.** `adminToken` is repurposed as an optional
+  platform-operator break-glass override (S1.2 and S3.2, revised review round 5, R5-1 — the override
+  needs an explicit admit branch at the tenant-boundary layer too, not only at the entity-data layer),
+  not deleted. **`readToken`, the separate read-only tier, is retired instead (review round 6, R6-1):**
+  neither new guard gives it an admit branch, so it would otherwise keep working in `SchemaRoutes` (S1.9
+  only fixed its token-extraction bug there) while 403ing everywhere else — a half-migration this plan
+  is otherwise careful to avoid. S1.9 now converts its six `SchemaRoutes.java` call sites to `hasAdmin`
+  uniformly, leaving `AuthService.hasRead`/`cfg.getReadToken()` with no remaining callers. If a scoped,
+  read-only operator credential is wanted later, add it as an explicit new admit rule in both guards,
+  not by reviving `readToken` in just one file.
 - **Rate limiting / WAF / network-level protections.** `RateLimitMiddleware` already exists and is out
   of scope for this plan.
 - **Encryption at rest, secrets management overhaul, key rotation.** Separate concern.
@@ -684,6 +702,108 @@ genuinely new category, than a third exception to `TenantAccessGuard`.
 
 ---
 
+## Review round 6 — blockers and additional findings
+
+**Reviewer:** Tech Lead / Architect review, 2026-08-01, sixth pass. No blockers. Two Medium findings and
+a Nit — the reviewer's own framing: "consequences of decisions already made, not defects in them."
+Verdict: the plan is done, execute it; no round 7 expected.
+
+I independently verified both Mediums against source, not just the plan's own text. Read `AuthService.java`
+in full to confirm `hasRead`/`hasWrite`/`hasAdmin`'s exact semantics: `hasRead` is a genuinely separate,
+weaker credential (true on `hasAdmin` **or** an exact `readToken` match), `hasWrite` is defined as exactly
+`hasAdmin`. Grepped every `hasRead`/`getReadToken` call site across `app-bana-service`: four of
+`SchemaRoutes.java`'s six M2 call sites check `hasRead` (the other two check `hasWrite`, i.e. already
+admin-only); `GenericEntityRoutes.java` has four more, all inside the `authEnabled` blocks S3.4 already
+replaces wholesale with `EntityAccessGuard` — so those disappear regardless of R6-1, and `SchemaRoutes.java`
+is the only file where a `readToken` holder would still be admitted after S3, if nothing here changes. For
+R6-2, re-read S2.4: confirmed it backfills `owner` rows only, from `AppMetadata.getAuthor()` — no
+`end-user` backfill task exists anywhere in S2, exactly as claimed.
+
+### 🟡 Medium
+
+**R6-1 — `readToken` survives in `SchemaRoutes` and nowhere else once S1/S3 land, and Non-goals still
+describes one break-glass model, not two.** Confirmed: S1.2's admit-first branch and S3.2's fall-through
+both check `hasAdmin` only; S1.9 (as originally scoped) only swaps `extractToken`→`extractServiceToken`
+for the six `SchemaRoutes.java` call sites, it doesn't touch which tier they check — so a `readToken`
+holder keeps `GET /schema` after S1.9 but gets 403 on every `AppRoutes` route (S1.2) and every entity
+route (S3.2/S3.4) once those land. Two working definitions of "break-glass" would exist at once, in
+different files, with nothing explaining the difference to whoever holds a `readToken`.
+
+**Resolution adopted — retire `readToken`:** the alternative (a `GET`-only admit branch for `readToken`
+in both new guards) would add a real branch and a test to each of S1.2 and S3.2 for a capability nothing
+in this plan otherwise uses — S3.5's `publicRead` flag already exists for "this data should be readable
+without full admin," so a second, parallel read-only credential is redundant with a mechanism this plan
+already built. Non-goals now states the retirement plainly, and S1.9 is revised to convert all six
+`SchemaRoutes.java` call sites to `hasAdmin` via `extractServiceToken()` (not just fix their extraction
+bug), leaving `AuthService.hasRead`/`cfg.getReadToken()` with no remaining callers. Estimate unchanged —
+same file, same-shaped fix, one tier instead of two.
+
+**R6-2 — S3 completion is a one-time access reset, and Rollout order doesn't say so.** Confirmed: S2.4
+backfills `owner` rows only, from `AppMetadata.getAuthor()`; no `end-user` backfill task exists, and none
+is possible — today, any registered user can open any deployed app, so there is no record of *legitimate*
+end-user access anywhere to migrate (that unrestricted access is precisely the vulnerability S3 closes).
+So the moment `EntityAccessGuard` goes live, every deployed app 403s every end-user until its owner grants
+each one explicitly via S2.7 — the correct end state, but a visible, one-time event that S3's exit criteria
+(which only exercise the happy path with a grant row already present) never describe, and that whoever
+enables S3 could easily mistake for a new regression.
+
+**Resolution adopted:** one paragraph added to Rollout order stating this plainly — S3 is a deliberate
+one-time access reset, no end-user backfill is possible or intended, and this should be communicated to
+whoever operates deployed apps before S3 is enabled.
+
+### 🟢 Nit
+
+**R6-3 — `EntityAccessGuard` rule (i) is a per-request DB round-trip on the path the plan already flagged
+as worth avoiding one on.** The Data model section caches `tenantId` on `SessionData` explicitly to
+"avoid a DB round-trip on every tenant-boundary check" (S1.2's comparison). Confirmed: S3.2 rule (i) does
+exactly such a round-trip — an `appbana_app_members` lookup — on every entity list/get, a hotter path than
+app management by construction (every page load of deployed-app data hits it, not just Studio management
+actions). Not a correctness issue, and the existing Performance section already notes this is a single
+indexed PK lookup at `<5ms`, same order as `ApprovalGuard`'s existing filtering — so this is a deferral,
+not a gap.
+
+**Resolution adopted:** one sentence added to the Performance section naming the asymmetry and the
+future fix (a session-scoped membership cache, invalidated on grant/revoke) as a deliberate deferral
+rather than an oversight, so a future reader doesn't rediscover this from scratch.
+
+### Verdict
+
+**Adopted in full, no blocker.** All three findings are documentation/consistency fixes to sections this
+plan already has — Non-goals, Rollout order, Performance — none change a task's scope in a way that
+affects estimate or design (S1.9's revision is a same-shaped, same-estimate fix to a task that already
+existed). Total scope is unchanged at ~40.75 hr — the first round to add zero net scope, after five
+consecutive rounds that each added some.
+
+### Meta-observation — adopted
+
+Worth recording what the shape of this six-round review turned out to be, since it wasn't what it looked
+like at the start. Round 1 read as a security review — seven findings, four blockers, anonymous
+cross-tenant writes proven live. Rounds 2–5 found nothing further about attackers; every finding from
+round 2 onward was a **legitimate principal wrongly denied** — the Studio/ai-builder caller (round 1's
+own B1), the Runtime (R2-1), a login with no data behind it (R3-1), the end-user's own tenant (R4-1), the
+operator's break-glass token (R5-1). This round's two Mediums continue that pattern one level further:
+not a principal denied outright, but a principal (`readToken`) denied *inconsistently*, and a denial
+(S3's access reset) that is correct but undocumented. The plan was consistently good at deciding who to
+keep out, and had to be walked, layer by layer, into being equally complete about who it must let in and
+how that admission actually arrives operationally.
+
+**Adopted, not acted on further:** the cause is structural, not a lapse — deny cases are enumerable from
+the code under review; admit cases live in clients, data, and operations the code never mentions, and
+only surface by leaving the server and checking `git grep` for callers, `psql` for what data actually
+exists, or a login flow end-to-end. The one artefact that reliably found these — the principal × guard
+walk table (round 5) — is adopted as standing practice: any future guard or migration touching this
+plan's guards should list every principal that must succeed, walk each through every gate in request
+order, and record the verdict per hop, before calling the change done.
+
+**Closing this review at six rounds**, per the reviewer's own recommendation: blockers converged
+4 → 1 → 1 → 1 → 0 → 0, and this round found no new principal and no new guard behavior — only two
+consistency gaps in sections the plan already had. Further value from re-reading this document is
+judged to be exhausted; the next checks that matter are the S0.2 census (the first artefact in this plan
+to contain facts nobody has written down yet) and S3 end-to-end verification against the running Runtime
+— both contact with reality, not further reading.
+
+---
+
 ## Target model
 
 Two distinct callers hit the same entity-data API today, and the fix must keep telling them apart:
@@ -839,7 +959,7 @@ S1 before S2 is not, once real end-user traffic exists.
 | S1.6 | Gate `POST/PUT/DELETE /api/templates` (H4) behind an authenticated (admin, for now) identity — reads stay public pending the open decision on whether templates get a tenant dimension. | `AppRoutes.java` | 30 min |
 | S1.7 | `POST /api/files/upload` (H2): require a resolved identity and derive `tenantId`/`appId` from it (or from the authenticated user's own app membership once S2 lands) instead of trusting the request body. Add an upload-path test to `FileRoutesTenantIsolationTest`, which today only covers downloads. | `FileRoutes.java` | 45 min |
 | S1.8 | `SavedViewRoutes` (H3): require a resolved identity on all three routes; add `tenant_id`/`app_id`/`owner_user_id` to `DELETE_SQL`'s `WHERE` clause (today: `view_id` alone). | `SavedViewRoutes.java` | 45 min |
-| S1.9 | Dedupe the two byte-identical `GET /api/{tenantId}/apps/{id}/env/{env}/full` registrations into one, **and guard both it and its `.../full` sibling with the same S1.3 tenant+membership check — not a public carve-out** (review round 2, R2-2: confirmed zero callers anywhere in `app-bana-studio`, `app-bana-runtime`, `app-bana-shared`, `e2e`, or `ai-builder`; a stale "PUBLIC RUNTIME API" comment is not a reason to keep an unauthenticated route). If a deliberately public app-metadata endpoint is wanted later, add it explicitly under S3.5's `publicRead` flag rather than reviving this one. Also fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite` (M2) to use `extractServiceToken()` instead, per `AuthService`'s own documented contract. | `AppRoutes.java`, `SchemaRoutes.java` | 60 min |
+| S1.9 | Dedupe the two byte-identical `GET /api/{tenantId}/apps/{id}/env/{env}/full` registrations into one, **and guard both it and its `.../full` sibling with the same S1.3 tenant+membership check — not a public carve-out** (review round 2, R2-2: confirmed zero callers anywhere in `app-bana-studio`, `app-bana-runtime`, `app-bana-shared`, `e2e`, or `ai-builder`; a stale "PUBLIC RUNTIME API" comment is not a reason to keep an unauthenticated route). If a deliberately public app-metadata endpoint is wanted later, add it explicitly under S3.5's `publicRead` flag rather than reviving this one. Also fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite` (M2) — **and, since `readToken` is retired (review round 6, R6-1), replace all six with `hasAdmin` via `extractServiceToken()` rather than preserving the separate `hasRead` tier** — leaving `AuthService.hasRead`/`cfg.getReadToken()` with no remaining callers anywhere in the codebase. | `AppRoutes.java`, `SchemaRoutes.java` | 60 min |
 | S1.10 | Startup warning: log a loud, repeated `WARN` while `AuthService.authEnabled(cfg)==false` so this is never silently shipped to production | `ApiServer.java` startup path | 30 min |
 | S1.11 | `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest` — tenant B's session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. **Gains a positive case (review round 4, R4-1):** a tenant B session that **is** a member of one specific tenant A app must be allowed through `requireOwnTenant` for that app's routes (list/get, per S2.6's split) — proving the guard is membership-aware, not a pure mismatch check. This positive case cannot go green until S2's membership table exists; it is written here, alongside its sibling deny cases, and finished once S2.6 activates S1.2's exception. | new tests | 105 min |
 | S1.12 | **(New, review round 2, R2-3)** Fix `SessionMiddlewareTest`'s tautological assertions: `testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes missing the `{tenantId}` segment every real route has, so they stay green regardless of what S1.9 does to the actual routes — rewrite against the real shapes and flip the expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into a read-still-excluded case and a write-requires-auth case, since S1.6 makes writes require auth but this test currently asserts the whole path needs no session. | `SessionMiddlewareTest.java` | 30 min |
@@ -1110,6 +1230,11 @@ After S3, that stops working by design. This must ship with:
 ### Performance
 - Both new guards are a single indexed PK lookup (`appbana_app_members`) or an in-memory `SessionData`
   field check — same order of overhead as `ApprovalGuard`'s existing filtering (<5ms).
+- **Deferred, not overlooked (review round 6, R6-3):** `EntityAccessGuard` rule (i) is a DB round-trip
+  on every entity list/get — a hotter path than the app-management checks this plan cached `tenantId`
+  on `SessionData` specifically to avoid one for. Acceptable at today's scale (<5ms, indexed); if it
+  stops being acceptable, cache the membership result on `SessionData` too, invalidated on grant/revoke
+  (S2.6/S2.7), rather than re-deriving it every request.
 
 ### Rollout order
 **Strict serial (authoring):** S0 → S1 → S2 → S3 (S0's identity resolver and route census are
@@ -1117,6 +1242,12 @@ prerequisites for writing any of S1–S3's guards correctly; S3's membership che
 **S1 and S2 are additionally a single deployable unit (review round 5, R5-2):** S1.2 ships its
 membership-exception branch inert, so releasing S1 alone to any environment with live deployed apps
 403s every real end-user until S2.6 activates it — write them in order, but release them together.
+**S3 completion is a deliberate one-time access reset (review round 6, R6-2):** no `end-user` backfill
+is possible or intended — S2.4 seeds `owner` rows only, and today's unrestricted "any registered user
+can open any deployed app" is the vulnerability S3 closes, so no record of legitimate end-user access
+exists anywhere to migrate. Every deployed app's end-user access must be re-granted explicitly by its
+owner via S2.7 the moment `EntityAccessGuard` goes live. Communicate this before enabling S3 — it will
+otherwise read as a bug, not the intended result.
 **Parallel-safe:** S4 (independent of the others, though S4.6/S4.7 touch code S1/S3 also touch —
 coordinate to avoid merge conflicts, not for correctness reasons). **Last:** S5 (the capstone test needs
 S1–S3 to exist to have something real to assert; the ai-builder half can start as soon as S2's
@@ -1145,8 +1276,8 @@ membership model is in place).
 - `SessionService.java` — `tenantId` + `scopedAppId` on `SessionData` (S1, S3)
 - `AuthenticationController.java` — populate `tenantId` at login (S1)
 - `AuthService.java` — new `resolveIdentity()` (S0.1, preserving priority order per R2-4); fix six
-  `extractToken`→`hasRead/hasWrite` call sites in `SchemaRoutes.java` to use `extractServiceToken()`
-  instead (S1.9, M2)
+  `extractToken`→`hasRead/hasWrite` call sites in `SchemaRoutes.java`, converting all six to
+  `extractServiceToken()` + `hasAdmin` now that `readToken` is retired (S1.9, M2, review round 6, R6-1)
 - `SessionMiddleware.java` — delegate to `resolveIdentity()` (S0.1); fix the dead `/api/csrf/token`
   exclusion entry (S4.3)
 - `SessionMiddlewareTest.java` — rewrite the tautological public-runtime/templates assertions to match
@@ -1229,4 +1360,5 @@ starts on the affected phase:
 
 ---
 
-*Last updated: 2026-08-01 (review round 5 incorporated) · Author: AppBana core team · Status: DRAFT — awaiting approval before S0 begins.*
+*Last updated: 2026-08-01 (review round 6 incorporated — reviewer recommends closing the review; plan
+ready for execution) · Author: AppBana core team · Status: DRAFT — awaiting approval before S0 begins.*
