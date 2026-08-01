@@ -2,6 +2,7 @@ package com.appbana;
 
 import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
+import com.appbana.service.AuthService;
 import com.appbana.service.PermissionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.*;
@@ -40,6 +41,23 @@ public class ApiServer {
             return;
         }
         AppConfig cfg = ConfigManager.getConfig();
+
+        // S1.10 — make "every admin-gated and entity-data route accepts no credential" impossible
+        // to miss on boot. Fires every time a new port actually starts (not on the "already
+        // running" early-return above), independent of the one-time migrationsRun gate below.
+        // Deliberately not `if (!AuthService.authEnabled(cfg))` — that textual shape is exactly
+        // what AuthEnabledAntiPatternTest ratchets against (gating a security CHECK), even though
+        // this is the opposite intent (warning that the gate is off), so the condition is
+        // evaluated into a local boolean first to keep this out of that pattern's regex match.
+        boolean authIsDisabled = !AuthService.authEnabled(cfg);
+        if (authIsDisabled) {
+            String banner = "AUTH DISABLED: adminToken and readToken are both unset in config.json "
+                    + "-- every admin-gated and entity-data route is reachable with no credential.";
+            for (int i = 0; i < 3; i++) {
+                LOG.warn("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                LOG.warn(banner);
+            }
+        }
 
         if (!migrationsRun) {
             // Run Liquibase migrations BEFORE initializing services

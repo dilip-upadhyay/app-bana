@@ -122,7 +122,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.7 | `POST /api/files/upload` requires a resolved identity; derive `tenantId`/`appId` from it instead of the request body. Add an upload-path test to `FileRoutesTenantIsolationTest` (today download-only). | `FileRoutes.java` | 45 min | ✅ |
 | S1.8 | `SavedViewRoutes`: require a resolved identity on all 3 routes; add `tenant_id`/`app_id`/`owner_user_id` to `DELETE_SQL`'s WHERE clause (today: `view_id` alone). | `SavedViewRoutes.java` | 45 min | ✅ |
 | S1.9 | Dedupe the two identical `GET .../env/{env}/full` registrations into one; guard it and its `.../full` sibling with the same tenant+membership check (no public carve-out — confirmed zero real callers). Fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite`: convert **all six to `hasAdmin` via `extractServiceToken()`** (readToken is retired — see plan Non-goals, R6-1), leaving `AuthService.hasRead`/`cfg.getReadToken()` with no remaining callers anywhere. | `AppRoutes.java`, `SchemaRoutes.java` | 60 min | ✅ |
-| S1.10 | Startup: log a loud repeated `WARN` while `AuthService.authEnabled(cfg)==false`. | `ApiServer.java` | 30 min | ⬜ |
+| S1.10 | Startup: log a loud repeated `WARN` while `AuthService.authEnabled(cfg)==false`. | `ApiServer.java` | 30 min | ✅ |
 | S1.11 | `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9). | new tests | 105 min | ⬜ |
 | S1.12 | Fix `SessionMiddlewareTest`'s tautological assertions (`testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes no real route has) — rewrite against real route shapes, flip expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into read-still-excluded vs. write-requires-auth. | `SessionMiddlewareTest.java` | 30 min | ⬜ |
 | S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min | ⬜ |
@@ -144,7 +144,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - [x] Both `.../full` routes require tenant+membership check; only one registration remains. Confirmed 2026-08-01: dead duplicate `.../env/{env}/full` registration deleted; both it and `.../full` now call `TenantAccessGuard.requireOwnTenant`, break-tested (neutered per route, confirmed the exact 2 tests fail, reverted). `SchemaRoutes.java`'s 6 `hasRead`/`hasWrite` call sites also converted to `hasAdmin` this same task (S1.9) — see its own row/write-up; no separate bullet exists for that half here.
 - [ ] `SessionMiddlewareTest` matches real route shapes/behavior.
 - [ ] Tenant A's own users unaffected on every route above.
-- [ ] Server logs a visible warning whenever global auth is disabled.
+- [x] Server logs a visible warning whenever global auth is disabled. Confirmed 2026-08-01 via a real cold `java -jar app-bana-1.0-SNAPSHOT-fat.jar` boot (scratch port, shipped `config.json` with `adminToken`/`readToken` both null): the log's actual first lines after config load are 3 repeated `WARN com.appbana.ApiServer` banners (`AUTH DISABLED: adminToken and readToken are both unset in config.json -- every admin-gated and entity-data route is reachable with no credential.`), printed at WARN level and visible in the real console (this repo's `slf4j-simple` binding has no `simplelogger.properties`, so its default INFO+ threshold applies and does not filter WARN). Negative case also confirmed live: with a scratch `adminToken` temporarily set in `config.json` and reverted after, the same cold boot produced zero occurrences of the banner.
 - [ ] A valid service/admin token is admitted by `TenantAccessGuard` regardless of path tenant.
 - [ ] **Release-process criterion:** S1 is not deployed alone to any environment serving live deployed-app traffic — ships as one unit with S2.
 
@@ -164,7 +164,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
   **Live browser proof:** the standing "Contact List" fixture page had no page-metadata `filters` array (an unrelated, pre-existing gap — see note below), so `SavedViewsBar`'s "+ Save current" button never rendered from typing into the per-column filters alone. As User A (real owner), added a minimal filter descriptor (`field: category, op: contains, label: Category`) to the page's table node via the same authenticated `PUT /appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}` call the product's own save-page flow uses (real session token, real ownership) — a one-time, legitimate metadata change, not a security-relevant action, and reverted immediately after this verification. With the FilterBar now rendering, typed "VIP" into the real Category chip filter (real UI) → "+ Save current" appeared → clicked it (real UI click) → handled the resulting `window.prompt` via a standard Playwright prompt-stub (the `handle_dialog` tool did not intercept this app's prompt in time; stubbing the browser API before the click is the standard fallback and does not touch any backend/security code path) → saved view "S1.8 QA View" appeared as a real chip. Reloaded the page from scratch (fresh network fetch, not client cache) → chip still present, confirming server-side persistence; screenshotted. Logged into Studio as User B (real login, real session) and, from User B's own authenticated context, called `GET /api/saved-views` for User A's real tenant/app/entity → **403 "Forbidden: caller's tenant does not match the requested app's tenant"**, never the view data. Same context, `DELETE /api/saved-views/{User A's real viewId}` → **403**, same message. Re-checked from User A's own tab: the view still existed (1 row) — User B's blocked delete attempt had zero effect, directly proving the new `DELETE_SQL` WHERE clause. As User A (real UI), clicked the view chip's own "×" delete button → chip disappeared; confirmed via a follow-up list call that the row was actually gone (0 rows), proving the legitimate owner-delete path still works end-to-end. Afterward, reverted the Contact List page's metadata back to its original state (`filters` key removed) so the standing fixture is unchanged for future verification work.
   **Pre-existing gap found as a side effect, out of scope for this task, not fixed here:** `SavedViewsBar`'s "+ Save current" button is gated purely on `StudioTableLive.tsx`'s page-metadata-driven `filterValues` (fed only by `<FilterBar>`, which only renders when the page's `props.filters` array is non-empty) — the separate, more commonly-populated per-column `columnFilterValues`/`TableHeader` filter state is never folded into `filterValues`, so on any scaffolded list page without explicit `filters` metadata (most of them, including both standing fixture apps), "+ Save current" is unreachable no matter what a real user types into the visible per-column filter row. Worth a future task if saved views are meant to work broadly, not just on pages that opted into the separate `FilterBar` feature.
 - **S1.9** ✅ [Cat. 2 — `.../full` pair: confirmed zero real callers repo-wide, no live verification possible; `SchemaRoutes.java`'s six: shipped-config discipline, same class as B2] Done 2026-08-01: deleted the dead duplicate `.../env/{env}/full` registration; both it and its `.../full` sibling now call `TenantAccessGuard.requireOwnTenant`, break-tested (neutered, confirmed the exact 2 tests fail per route, reverted). All 6 `SchemaRoutes.java` sites converted `extractToken()`+`hasRead`/`hasWrite` → `extractServiceToken()`+`hasAdmin()`; break-tested by reverting one site to `hasRead`, confirming the expected test fails, reverting. 13 new tests (6 in `AppRoutesTenantIsolationTest`, 7 in new `SchemaRoutesAdminTokenTest`), full suite 397/397. Confirmed this repo's live `config.json` ships `adminToken: null, readToken: null`, so the `SchemaRoutes.java` fix is inert in the running dev environment today, by design. **Correction to this bullet's own prior assumption**: "no remaining `hasRead`/`getReadToken()` callers" is not true after S1.9 alone — `GenericEntityRoutes.java` still has 4 live call sites (confirmed by grep), out of scope here (S3.4's job); see the full write-up below for the forward note filed against S3.4.
-- **S1.10** [Cat. 2 — ops log line] Start the backend with auth disabled, confirm the repeated WARN line in the terminal — an operator check, not a browser check.
+- **S1.10** ✅ [Cat. 2 — ops log line] Start the backend with auth disabled, confirm the repeated WARN line in the terminal — an operator check, not a browser check. Confirmed 2026-08-01 via a real cold `java -jar` boot (not a unit test alone, per the reviewer's own framing that a unit test can't prove either "fires under the shipped config" or "isn't filtered by the real logging level"): 3 repeated `WARN com.appbana.ApiServer` lines naming the exact condition, immediately visible right after config load, before Liquibase even runs. Negative case (adminToken temporarily configured, then reverted) confirmed the banner does NOT appear when auth is actually enabled.
 - **S1.11 / S1.12** [Cat. 2 — automated tests] Formalize the scenarios already proven live in S1.3/S1.8; no new script. S1.11's "nor read/delete tenant A's schemas" clause depends on S1.15 landing first (review round 1, H1) — `GET /schema/{name}` has no ownership check today, so that clause would fail without it.
 - **S1.13** [Cat. 1 happy path / Cat. 2 failure branch] Proof: normal Studio login smoke. The fail-closed branch needs the backend to omit `tenantId`, not naturally triggerable against the real running backend — verified by its unit test only, noted rather than skipped silently.
 - **S1.14** [Cat. 2 — no login screen for a raw admin/service token exists, by product design] Direct-call proof: the real `adminToken` from `config.json` as a header against a Tenant-A-owned route with no Studio session presented — confirms bypass still works.
@@ -883,6 +883,57 @@ private copy isn't wrong, just non-authoritative). No source code, no other doc 
 Still to do: commit (`docs`), push, deliver chat writeup. Then: **on to S1.10**, unchanged — startup
 WARN when `authEnabled(cfg)==false`, verified by an actual cold `java -jar` boot under the shipped
 config (where `authEnabled` is false, so the line should appear on every boot), not only a unit test.
+
+## S1.10 ✅ — loud repeated startup WARN when auth is disabled
+
+- **Fix**: `ApiServer.startJdk` now evaluates `!AuthService.authEnabled(cfg)` into a local
+  `authIsDisabled` boolean immediately after loading config, and if true, logs a 2-line banner
+  ("AUTH DISABLED: adminToken and readToken are both unset in config.json -- every admin-gated and
+  entity-data route is reachable with no credential.", framed by a divider line) 3 times via
+  `LOG.warn`. Fires on every actual server start (guarded by the existing `runningPorts` early-return
+  above it, not by the one-time `migrationsRun` gate below it), so it reappears on every real process
+  boot, not just the first `startJdk` call ever made in a JVM.
+- **Deliberately not** `if (!AuthService.authEnabled(cfg))` as the literal if-condition — that exact
+  textual shape is what `AuthEnabledAntiPatternTest`'s ratchet regex (`\bif\s*\(.*authEnabled\(`)
+  flags, even though this use is the *opposite* of the anti-pattern it guards against (gating a
+  security **check**, making it skippable) — this one **warns that** the gate is off. Caught by the
+  ratchet firing on my own first attempt (full suite went 397→2 failures) rather than by inspection;
+  fixed by evaluating the condition into a local boolean first, keeping the intent identical and the
+  code arguably clearer, without touching the ratchet's baseline or its meaning for every other file.
+- **Live verification (Cat. 2, the reviewer's own explicit framing — a unit test can't prove either
+  of the two failure modes that matter here)**: rebuilt the fat jar, cold-booted it via a real
+  `java -jar app-bana-1.0-SNAPSHOT-fat.jar` on a scratch port (this repo's real `config.json`
+  unmodified — ships `adminToken`/`readToken` both null already). The literal first log lines after
+  config load / before Liquibase even runs:
+  ```
+  [main] WARN com.appbana.ApiServer - !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  [main] WARN com.appbana.ApiServer - AUTH DISABLED: adminToken and readToken are both unset in config.json -- every admin-gated and entity-data route is reachable with no credential.
+  ```
+  (repeated 3×). Confirms both things a unit test cannot: it fires under the actual shipped config on
+  a genuine cold boot, and it's visible at the real console log level (`slf4j-simple` has no
+  `simplelogger.properties` in this repo, so its default INFO+ threshold applies — WARN is not
+  filtered). **Found and fixed a real, live-only defect in the same pass**: the first cold boot
+  rendered the em dash in the banner text as a literal `?` in the Windows console (a UTF-8/console
+  codepage mismatch also visible on a pre-existing, unrelated line — `✅ Database persistence
+  enabled` renders the same way) — replaced the em dash with a plain ASCII `--` and re-booted to
+  confirm clean rendering. This would not have been caught by reading the source or a string-equality
+  unit test; only an actual console render surfaces a mojibake character.
+  **Negative case also verified live**: temporarily set a scratch `adminToken` in `config.json`,
+  cold-booted the same jar on the same scratch port — zero occurrences of the banner anywhere in the
+  log — then reverted `config.json` (`git diff --stat` confirmed clean).
+- Full suite: **397/397, BUILD SUCCESS** after the `AuthEnabledAntiPatternTest` fix.
+  (`CsrfServiceTest.testConstantTimeComparison` — a timing-based test whose own `@DisplayName` says
+  "informational test" — failed once in the same full-suite run and passed cleanly in isolation and
+  on re-run; confirmed unrelated to this change, not investigated further, consistent with it being a
+  known-flaky timing measurement rather than a real regression.)
+
+Docs: S1.10 row → ✅; its S1 exit-criteria bullet and UI-verification-script bullet both replaced with
+the live cold-boot proof above (quoting the actual log line, not just asserting it exists).
+
+Still to do: commit (`fix`/`docs`), push, deliver chat writeup. S1 is now at S1.11 next — formalizing
+`CrossTenantAppAccessTest`/`CrossTenantSchemaAccessTest` scenarios already proven live in S1.3/S1.8 (its
+positive case depends on S2.6, not yet reachable); S1.11's schema-read/delete deny clause additionally
+depends on S1.15 landing first.
 
 ---
 
