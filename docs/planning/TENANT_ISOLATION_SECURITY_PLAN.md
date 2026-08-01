@@ -102,7 +102,7 @@ verdict: the plan is done — execute it.**
 | # | Sub-phase | Deliverable | Est. |
 |---|---|---|---|
 | S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route, now including **known callers** and **what data must exist for it to succeed** columns | ~10.17 hr |
-| S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~13.42 hr |
+| S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~14.42 hr |
 | S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~11.25 hr |
 | S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)** | ~11.25 hr |
 | S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~5.5 hr |
@@ -134,7 +134,12 @@ drift apart. **S1 implementation review round 5 corrects a self-inconsistency in
 S0.5 was registered as a new S0 row but its 90 min was never folded into either S0's total or the grand
 total (round 4's total summed only S0.0–S0.4). Corrected: S0 ~8.67→~10.17 hr (7 tasks, S0.0's upper
 bound + S0.5), new grand total ~55.92 hr across 51 tasks. This round also closes review of S0–S1.6;
-resuming only once S1.7 lands code to check docs against. S0 → S1 → S2 → S3
+resuming only once S1.7 lands code to check docs against. **S1 implementation review round 6 (response
+to commit `7bedbb5`, S1.7's file-upload fix) adds 1 hr** — S1.7 itself accepted with no changes
+requested; new task S1.18 registered for a file-download authentication gap the review's own live-probe
+confirmed (the route requires a session but both places that render its URL use a plain anchor tag that
+can't carry one, so every real download 401s — a decision + fix deferred, not made this round). S1
+~13.42→~14.42 hr, new grand total ~56.92 hr across 52 tasks. S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
 completion is additionally a one-time access reset with no backfill (review round 6, R6-2)** — see

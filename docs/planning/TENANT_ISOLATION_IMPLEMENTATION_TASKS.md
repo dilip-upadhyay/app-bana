@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~55.92 hr across 51 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~56.92 hr across 52 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -130,6 +130,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.15 | Add tenant-filtering to `GET /schema` (only list the caller's own tenant's schema names, not all tenants') and an ownership check to `GET /schema/{name}` (403 if the caller doesn't own the app), mirroring S1.4's `DELETE /schema/{name}` fix. Found unfixed by any existing S1 task — review round 1, finding H1. | `SchemaRoutes.java` | 45 min | ⬜ |
 | S1.16 | **(Revised, review round 3 — severity split + `/openapi.json` correction)** `GET /api/endpoints` and `GET /openapi.json` are each gated only by the optional `authEnabled(cfg)` block (same shape S1.4/S1.15 found on their `SchemaRoutes.java` siblings) with no fallback check beneath it. **`GET /api/endpoints` is the higher-severity of the two**: it returns every schema's full tenant-qualified key (`SchemaManager.listSchemaNames()`, unfiltered) pre-formatted as ready-to-call `POST /api/{key}`, `GET /api/{key}`, `GET /api/{key}/{id}`, `PUT /api/{key}/{id}`, `DELETE /api/{key}/{id}` strings — the enumeration primitive for the anonymous entity data plane (round 1 needed a direct Postgres query to obtain these keys; this route hands out the entire list). **`GET /openapi.json` is narrower than first described**: `OpenApiGenerator` keys `paths`/`components.schemas` by `schema.getName()` — the bare entity name, not the tenant-qualified key — so it discloses the union of field-level shapes across all tenants with no tenant attribution (a name collision across tenants silently last-write-wins, not a per-tenant enumeration); still real scope because it confirms which entity names exist platform-wide, and because every anonymous call loads *all* schemas from the DB and serializes the full result (~340 KB at today's ~455-schema count) — an unauthenticated amplification vector independent of the disclosure itself. Require a resolved identity unconditionally on both (admin, for now — mirrors S1.6's precedent for introspection/ops-facing routes) instead of the optional gate. Not covered by S1.9 (only changes which credential tier the *optional* gate checks) or S1.15 (scoped to `/schema`, `/schema/{name}` only). Found via `AuthEnabledAntiPatternTest` ratchet re-verification — S1 external review round 2; severity/text corrected round 3. **Priority note: despite the task number, `/api/endpoints`'s severity means this task should land before or alongside S1.15, not after it** (review round 3). | `SchemaRoutes.java` | 30 min | ⬜ |
 | S1.17 | **(New, review round 3)** Once S1.15 + S1.16 land, `SchemaRoutes.java`'s remaining two `authEnabled(cfg)` gates (`POST /schema`, `DELETE /schema/{name}`) are pure dead weight — both already have a separate, unconditional `isAppOwnerOrSystem` ownership check beneath them (S1.4's fix, and the pre-existing `POST /schema` check), so the optional gate contributes nothing. Delete both wrappers, taking this file's `authEnabled` count to zero, and **remove its entry from `AuthEnabledAntiPatternTest.BASELINE` entirely** rather than setting it to `0` — **(corrected, review round 4)** both a removed entry and a `0` entry fail the test on any future occurrence (an absent key via the "new file" branch, a `0` entry via the existing `count > max` branch — not a stronger guarantee, as this row originally claimed); removal is simply the more honest representation (the file genuinely has zero occurrences left) and lets it drop out of the map entirely. Makes the test's own docstring ("S3.4 is the task that removes this pattern repo-wide") true for this file specifically, ahead of S3.4. | `SchemaRoutes.java`, `AuthEnabledAntiPatternTest.java` | 30 min | ⬜ |
+| S1.18 | **(New, review round 6)** `GET /api/files/{tenantId}/{appId}/{fileId}` requires a session (confirmed: its path falls outside every `SessionMiddleware` exclusion rule), but both `FileUploadField.tsx`'s preview link and `StudioTableLive.tsx`'s download column use a plain `<a href target="_blank">`, which can never carry the required `Authorization` header — every real download click 401s. Decide and implement one of: (a) whitelist the route in `SessionMiddleware` to restore the anonymous access `FileRoutes.java`'s Javadoc originally documented, or (b) switch both render sites to an authenticated `fetch` + `URL.createObjectURL` download. | `SessionMiddleware.java` or `FileUploadField.tsx` + `StudioTableLive.tsx` (per decision) | 60 min | ⬜ |
 
 **Exit criteria — S1**
 - [ ] Tenant B session gets 403 (not 404/200) on every `AppRoutes`/`SchemaRoutes` route the census lists against Tenant A, including `restore-schemas`, `DELETE /schema/{name}`, and (review round 1, H1) `GET /schema` (tenant-filtered) and `GET /schema/{name}` (ownership check) — S1.15.
@@ -139,6 +140,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - [x] `GET /api/debug/schemas` requires the same session as `/names`.
 - [x] `POST/PUT/DELETE /api/templates` require an authenticated admin identity.
 - [ ] `POST /api/files/upload` and all of `SavedViewRoutes` require identity; saved-view delete scoped by tenant+app+owner.
+- [ ] File downloads (`GET /api/files/{tenantId}/{appId}/{fileId}`) are actually reachable by a real logged-in end user, not just protected from anonymous/cross-tenant access (review round 6, S1.18).
 - [ ] Both `.../full` routes require tenant+membership check; only one registration remains.
 - [ ] `SessionMiddlewareTest` matches real route shapes/behavior.
 - [ ] Tenant A's own users unaffected on every route above.
@@ -157,6 +159,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
   **Two pre-existing issues found as a side effect of live verification, both explicitly out of scope for this task and not introduced by it — flagged for a separate decision, not fixed here:**
   1. The download link itself (`GET /api/files/{tenantId}/{appId}/{fileId}`) 401s for a real end user. Root cause: the path has 4 segments after `/api/`, which is outside `SessionMiddleware.ENTITY_API_PATTERN`'s 2-segment max and doesn't match any other exclusion rule, so a session **is** required — but both places that render this URL (`FileUploadField.tsx`'s own "Preview" link and `StudioTableLive.tsx`'s "Download" column) emit a plain `<a href=... target="_blank">`, and a raw browser navigation can never attach the `Authorization` header this app's header-based (not cookie-based) auth model needs. This directly contradicts this same file's own class Javadoc ("remains anonymous end-to-end … protection rests on the (tenantId, appId, fileId) triple"), which describes the apparent original design intent, not current behavior. Confirmed via a direct unauthenticated request (401 `Missing session token`) and via inspecting the live anchor's attributes in-browser. Two valid fixes exist (whitelist the route in `SessionMiddleware` to restore the documented anonymous intent, vs. switch both render sites to an authenticated `fetch`+blob-URL download) with different security tradeoffs — a real design decision, not made unilaterally here.
   2. Saving the "Document" record via the real form's Save button failed both attempts with "is required" attached to the file field (even though a file was attached) and the Title/Description values not present in the submitted payload — looks like a pre-existing form-state wiring gap for the `file` field type on a create form, unrelated to tenant/identity handling. Not investigated further; the upload call itself (this task's actual scope) is already proven end-to-end above independently of whether the parent record saves.
+- **S1.18** [Cat. 1 — pending the fix-approach decision above] Click the file's Preview/Download link as a real logged-in end user; today it 401s in a new tab (confirmed live during S1.7's review). Re-verify after the fix lands: the same click must actually retrieve the file, and an anonymous or cross-tenant request to the same URL must still be rejected.
 - **S1.8** [Cat. 1] On a Runtime entity list page, save a view via the real `SavedViewsBar` as User A; log in as User B, confirm it's not listed. The delete-someone-else's-view case has no button by definition — direct-call proof as in S1.4.
 - **S1.9** [Cat. 2 — confirmed zero real callers for `.../full`; `readToken` is a service credential with no UI login anywhere] Structural proof: grep confirms no remaining `hasRead`/`getReadToken()` callers; direct-call check that the six converted routes now require `hasAdmin`.
 - **S1.10** [Cat. 2 — ops log line] Start the backend with auth disabled, confirm the repeated WARN line in the terminal — an operator check, not a browser check.
@@ -496,6 +499,69 @@ table is demonstrably unreliable even done carefully, twice, by two different pe
 grand total — round 4 had registered the task but not its estimate). No source code changed this round
 — doc corrections and this section are documentation only. **Review paused here per the reviewer's own
 recommendation; next work is S1.7, not further doc review.**
+
+### Post-acceptance external review of S1.7 (round 6) — accepted; S1.18 registered for a download-auth gap
+
+An external reviewer examined commit `7bedbb5` (S1.7) against source directly, including deliberately
+neutering the new guard (`Result.allow()`) and re-running the tests to confirm they fail on the actual
+security property, not just a superficial assertion. **Verdict: S1.7 accepted, no changes requested.**
+Six items independently re-verified and confirmed correct: the absence-census on `FileRoutes.java`
+(exactly two routes, no gap), guard placement **before** `storage.save()` (a denied upload writes no
+blob and no row — the harder-to-get-right ordering), body-supplied `tenantId`/`appId` compared against
+the resolved identity's own tenant (not the storage triple), the tests genuinely fail when the guard is
+neutered, `uploadToOwnTenantSucceedsAndRecordsResolvedUploader`'s DB-state assertion (pins the
+`uploadedBy` fix — a status-only assertion would have passed with `null` still being written), and the
+frontend `Authorization` header fix caught in the same pass rather than shipped broken.
+
+- 🟡 **Finding — the download-link 401 gap (already flagged in S1.7's own writeup) is promoted from a
+  footnote to its own task.** Independently re-confirmed: `/api/files/` appears nowhere in
+  `SessionMiddleware`'s excluded paths, and the download route's 4 path segments match neither
+  `ENTITY_API_PATTERN` (1–2 segments) nor the `/apps/` rule, so a session is required — while both
+  `FileUploadField.tsx`'s preview link and `StudioTableLive.tsx`'s download column use a plain
+  `<a href target="_blank">`, which cannot carry one. Rationale for its own task rather than a
+  mention: S1.7 makes upload work; download is the other half of the same feature, and S1.7's own live
+  verification (proving the upload path + DB row) could not have caught this, because it never
+  round-tripped through a download. **Registered as new task S1.18** (below) — decision + fix deferred,
+  not made unilaterally. `FileRoutes.java`'s Javadoc corrected in this round (it claimed the download
+  route "remains anonymous end-to-end," which is what made the gap hard to see; now documents the
+  actual current behavior and points at S1.18).
+- 🟢 **Forward note for S2.6, not actionable now.** `TenantAccessGuard.requireOwnTenant`'s membership
+  branch is called with the **body-supplied** `appId` as `pathAppId`. Harmless today (the own-tenant
+  branch decides every real request; the membership branch is inert until S2.6, and S1.2's own comment
+  already flags that app-ownership isn't verified here). Once S2.6 wires `AppMembershipService.isMember`
+  in, this is the one call site where **both** halves of `(app's tenant, appId)` are attacker-controlled
+  — `isMember` must resolve the app's real tenant from the app record itself, never from the tenant the
+  request body asserts alongside the appId. Filed against S2.6's own task row below so it isn't lost
+  between now and then.
+- 🟢 **`app-bana-service/uploads/` was not gitignored.** The happy-path test cleans up its own blob, so a
+  green run leaves nothing but empty (untracked-by-git) directories — but a *failing* upload test can
+  leave real blobs behind. Added `app-bana-service/uploads/` to `.gitignore` this round.
+
+**New task S1.18 registered** (file-download authentication gap): `GET
+/api/files/{tenantId}/{appId}/{fileId}` requires a session today, but no real user can ever reach it,
+because both places that render its URL use a plain anchor tag that cannot carry the required
+`Authorization` header. Needs a decision between (a) whitelisting the route in `SessionMiddleware` to
+restore the anonymous access `FileRoutes.java`'s Javadoc originally documented, or (b) switching both
+render sites to an authenticated `fetch` + `URL.createObjectURL` download — different security
+tradeoffs, not decided in this round. Est. 60 min, added to S1's table above.
+
+**Edits made:** `FileRoutes.java` (Javadoc corrected — no longer claims anonymous end-to-end download).
+`.gitignore` (`app-bana-service/uploads/` added). `TENANT_ISOLATION_SECURITY_PLAN.md` (S1 summary row
+~13.42→~14.42 hr; Total scope headline + new round-6-of-S1-implementation-review clause,
+~55.92→~56.92 hr). `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md` (this doc: headline ~55.92hr/51→
+~56.92hr/52 tasks; new S1.18 row; new S1 exit-criteria bullet; new S1.18 UI-verification-script bullet;
+this section).
+
+No test code changed this round — S1.7's own 370/370 backend + 276/276 runtime baseline is unaffected
+(re-confirmed via the reviewer's neutered-guard re-run, not re-run again independently here).
+
+Still to do: commit (`docs`/`fix`: gitignore + Javadoc), push, deliver chat writeup, per established
+convention. Then: **on to S1.8**, same three-part protocol (absence-census first, negative tests before
+positive, break each new guard on purpose before trusting a pass) — per the reviewer's own explicit
+framing, with two things to watch going in: the `DELETE_SQL` fix must be proven by a test that attempts
+a *foreign* delete and then asserts **the row still exists** (a 403 with the row already gone would pass
+a status-only assertion), and `ownerUserId` must stop being read from the client payload the same way
+`uploadedBy` just stopped being.
 
 ---
 

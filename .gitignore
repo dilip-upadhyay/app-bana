@@ -30,6 +30,7 @@ data/
 qdrant_storage/
 dev-logs/
 logs/
+app-bana-service/uploads/
 
 # --- E2E test artifacts ---
 e2e/node_modules/

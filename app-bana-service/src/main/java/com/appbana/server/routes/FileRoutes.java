@@ -36,13 +36,19 @@ import java.util.regex.Pattern;
  *   400:  malformed payload / oversized file / disallowed mime
  *   401/403: no resolved identity, or the identity's own tenant doesn't match tenantId (S1.7)
  *
- * GET  /api/files/{fileId}
- *   Streams the raw bytes with the original Content-Type. 404 if unknown.
+ * GET  /api/files/{tenantId}/{appId}/{fileId}
+ *   Streams the raw bytes with the original Content-Type. 404 on an unknown or cross-tenant triple.
  *
- * NOTE: the download route still matches ENTITY_API_PATTERN so SessionMiddleware skips it, and
- * remains anonymous end-to-end (protection rests on the (tenantId, appId, fileId) triple plus
- * fileId being an unguessable UUID) — that is a separate, narrower design tradeoff than upload's,
- * not yet revisited. Tighten in production if this changes.
+ * NOTE (corrected 2026-08-01, S1.7 review round 6): this route's path has 4 segments after /api/,
+ * which does NOT match ENTITY_API_PATTERN's 2-segment max and isn't covered by any other
+ * SessionMiddleware exclusion rule — contrary to what this comment previously claimed, a valid
+ * session IS currently required to download a file. That's a real problem: both places that render
+ * this URL (FileUploadField.tsx's "Preview" link, StudioTableLive.tsx's "Download" column) use a
+ * plain <a href target="_blank">, which can never carry the Authorization header this app's
+ * header-based auth model needs — so every real download click 401s today. Tracked as S1.18 in
+ * TENANT_ISOLATION_IMPLEMENTATION_TASKS.md (decision needed: whitelist this route in
+ * SessionMiddleware to restore anonymous access, or switch both render sites to an authenticated
+ * fetch+blob-URL download); not fixed in this commit.
  */
 public class FileRoutes {
 
