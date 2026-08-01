@@ -2,12 +2,21 @@ package com.appbana.server.routes;
 
 import com.appbana.ApiServer;
 import com.appbana.JdbcManager;
+import com.appbana.service.SessionService;
+import com.appbana.storage.LocalFilesystemAdapter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Base64;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,13 +31,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The route handler in {@link FileRoutes#handleDownload} uses this exact SQL
  * (see {@code SELECT_SQL}), so testing at the SQL level catches the isolation
  * contract without needing a live HTTP server + storage adapter round-trip.
+ *
+ * S1.7 additions below also cover {@code POST /api/files/upload} over a real
+ * HTTP round-trip (unlike the SQL-level tests above), since the guard lives
+ * in the route handler itself, not in a reusable SQL string.
  */
 public class FileRoutesTenantIsolationTest {
+
+    private static final int PORT = 18083;
+    private static final String BASE_URL = "http://localhost:" + PORT;
+    private static final HttpClient HTTP = HttpClient.newHttpClient();
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @BeforeAll
     public static void setup() throws Exception {
         // Trigger Liquibase migrations (including V13 for appbana_files).
-        ApiServer.startJdk(18083);
+        ApiServer.startJdk(PORT);
     }
 
     /**
@@ -154,5 +172,85 @@ public class FileRoutesTenantIsolationTest {
                 "production FileRoutes.SELECT_SQL must filter by app_id");
         assertTrue(sql.contains("file_id = ?"),
                 "production FileRoutes.SELECT_SQL must filter by file_id");
+    }
+
+    // ==========================================================================
+    // S1.7 — POST /api/files/upload must require a resolved identity and reject
+    // a body-supplied tenantId that doesn't match the caller's own tenant. This
+    // route (like S1.8's saved views) takes its tenant identifier from the body,
+    // not a path param — flagged by review round 5 for extra scrutiny. Exercised
+    // over a real HTTP round-trip (unlike the SQL-level tests above) since the
+    // guard lives in the route handler itself, not in a reusable SQL string.
+    // ==========================================================================
+
+    private static String createTestSession(String userId, String tenantId) {
+        return SessionService.createSession(userId, tenantId).sessionId();
+    }
+
+    private static Map<String, Object> uploadBody(String tenantId, String appId) {
+        return Map.of(
+                "tenantId", tenantId,
+                "appId", appId,
+                "filename", "s1-7-test.txt",
+                "mimeType", "text/plain",
+                "contentBase64", Base64.getEncoder().encodeToString("hello S1.7".getBytes())
+        );
+    }
+
+    @Test
+    public void uploadWithoutSessionIsRejected() throws Exception {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/files/upload"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(uploadBody("s17-tenantA", "s17-appX"))))
+                .build();
+        HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, res.statusCode(), "Anonymous upload must be rejected, not silently accepted");
+    }
+
+    @Test
+    public void uploadToAnotherTenantIsRejected() throws Exception {
+        String attackerSession = createTestSession("s17-attacker", "s17-tenantA");
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/files/upload"))
+                .header("Content-Type", "application/json")
+                .header("X-Session-Token", attackerSession)
+                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(uploadBody("s17-tenantB", "s17-appY"))))
+                .build();
+        HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, res.statusCode(), "A tenant-A session must not upload a file tagged as tenant B");
+    }
+
+    @Test
+    public void uploadToOwnTenantSucceedsAndRecordsResolvedUploader() throws Exception {
+        String session = createTestSession("s17-owner", "s17-tenantA");
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/files/upload"))
+                .header("Content-Type", "application/json")
+                .header("X-Session-Token", session)
+                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(uploadBody("s17-tenantA", "s17-appX"))))
+                .build();
+        HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(201, res.statusCode(), "Uploading into the caller's own tenant must still succeed");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> respBody = MAPPER.readValue(res.body(), Map.class);
+        String fileId = (String) respBody.get("fileId");
+        assertNotNull(fileId, "a successful upload must return a fileId");
+        try (Connection conn = JdbcManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT tenant_id, app_id, uploaded_by, storage_path FROM appbana_files WHERE file_id = ?")) {
+            ps.setString(1, fileId);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "uploaded row must be persisted");
+                assertEquals("s17-tenantA", rs.getString("tenant_id"));
+                assertEquals("s17-appX", rs.getString("app_id"));
+                assertEquals("s17-owner", rs.getString("uploaded_by"),
+                        "uploaded_by must reflect the resolved session identity, not a never-set request attribute");
+                new LocalFilesystemAdapter().delete(rs.getString("storage_path"));
+            }
+        } finally {
+            deleteFile(fileId);
+        }
     }
 }

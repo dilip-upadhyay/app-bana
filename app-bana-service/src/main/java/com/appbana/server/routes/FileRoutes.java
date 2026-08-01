@@ -2,6 +2,10 @@ package com.appbana.server.routes;
 
 import com.appbana.JdbcManager;
 import com.appbana.api.Router;
+import com.appbana.config.AppConfig;
+import com.appbana.config.ConfigManager;
+import com.appbana.security.TenantAccessGuard;
+import com.appbana.service.AuthService;
 import com.appbana.storage.FileStorageAdapter;
 import com.appbana.storage.LocalFilesystemAdapter;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -30,13 +34,15 @@ import java.util.regex.Pattern;
  *   Body: { tenantId, appId, filename, mimeType, contentBase64, entityKey?, fieldName? }
  *   200:  { fileId, url, filename, mimeType, size }
  *   400:  malformed payload / oversized file / disallowed mime
+ *   401/403: no resolved identity, or the identity's own tenant doesn't match tenantId (S1.7)
  *
  * GET  /api/files/{fileId}
  *   Streams the raw bytes with the original Content-Type. 404 if unknown.
  *
- * NOTE: file endpoints match ENTITY_API_PATTERN so SessionMiddleware skips
- * them — consistent with the rest of the codebase's current dev-mode auth
- * posture (see /api/apps/, /api/ai/, /appbana-studio/). Tighten in production.
+ * NOTE: the download route still matches ENTITY_API_PATTERN so SessionMiddleware skips it, and
+ * remains anonymous end-to-end (protection rests on the (tenantId, appId, fileId) triple plus
+ * fileId being an unguessable UUID) — that is a separate, narrower design tradeoff than upload's,
+ * not yet revisited. Tighten in production if this changes.
  */
 public class FileRoutes {
 
@@ -106,6 +112,19 @@ public class FileRoutes {
             res.json(400, Map.of("error", "Invalid or missing appId"));
             return;
         }
+
+        // S1.7 — require a resolved identity whose own tenant matches the upload's target
+        // tenant/app, instead of trusting tenantId/appId as handed to us in the body. A valid
+        // service/admin token still bypasses (break-glass), same as every other
+        // TenantAccessGuard call site; appId ownership/existence itself is not verified here,
+        // consistent with every other S1 route — that is deferred to S2's membership model.
+        AppConfig cfg = ConfigManager.getConfig();
+        TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req, cfg, tenantId, appId);
+        if (!access.allowed()) {
+            res.json(access.statusCode(), Map.of("error", access.message()));
+            return;
+        }
+
         if (filename == null || filename.isBlank()) {
             res.json(400, Map.of("error", "filename is required"));
             return;
@@ -147,7 +166,10 @@ public class FileRoutes {
 
         String entityKey = asString(body.get("entityKey"));
         String fieldName = asString(body.get("fieldName"));
-        String uploadedBy = asString(req.getAttribute("userId"));
+        // S1.7 — resolved identity (not a request attribute SessionMiddleware never sets for this
+        // route, since it matches ENTITY_API_PATTERN and is skipped) so the audit column reflects
+        // who actually uploaded the file rather than always being null.
+        String uploadedBy = AuthService.resolveIdentity(req, cfg);
 
         try (Connection conn = JdbcManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(INSERT_SQL)) {

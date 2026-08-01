@@ -12,6 +12,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { resolveAppContext } from '@appbana/shared';
+import { getRuntimeToken } from './qualifyEntityKey';
 import { toast } from './Toaster';
 
 export interface FileUploadFieldProps {
@@ -98,9 +99,15 @@ export function FileUploadField(props: Readonly<FileUploadFieldProps>) {
       const effectiveTenant = tenantId ?? ctx?.tenantId ?? 'default';
       const effectiveApp = appId ?? ctx?.appId ?? '';
       const base64 = await fileToBase64(file);
+      // S1.7 — the backend now requires a resolved identity; send the Runtime session token the
+      // same way useEntityRows/entity-query already do, or every upload 401s.
+      const token = getRuntimeToken();
       const res = await fetch('/api/files/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           tenantId: effectiveTenant,
           appId: effectiveApp,
