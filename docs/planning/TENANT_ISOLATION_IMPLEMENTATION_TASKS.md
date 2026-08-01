@@ -845,6 +845,45 @@ repeated WARN while `AuthService.authEnabled(cfg)==false`, with the reviewer's o
 warning must fire under the *shipped* config specifically (where `authEnabled` is false), not only in
 some separately-configured state — confirm on an actual cold boot, not just a unit test.
 
+### Post-acceptance external review of S1.9 follow-ups — accepted; `testing-conventions.md` was never a tracked file
+
+An external reviewer examined commit `b71dc6f` (the census-freeze + repo-memory response) against
+source directly. **Census freeze confirmed better than the reviewer's own original suggestion**: rather
+than deleting the dead-code row (their suggestion), collapsing the two `.../env/{env}/full` rows into
+one annotated "was 2 identical registrations at generation time — deduped by S1.9" preserves the
+original finding while describing what's actually there now; deleting it would have erased the
+evidence for why S1.9 existed. **Verdict: S1.9 closed, nothing outstanding in the code.**
+
+- 🟡 **Finding — the repo-memory lesson never actually reached the repository.** Asked for the
+  test-passed-for-the-wrong-reason lesson to go into "repo memory, not just session memory"; it was
+  recorded in `/memories/repo/testing-conventions.md` — this agent's own private memory store, not a
+  tracked file anywhere in `app-bana`'s git history (`file_search` across the whole workspace confirms
+  zero matches for `testing-conventions.md`). **This is a repeat of an identical mistake from design-
+  review round 1**, where the same filename was cited as if it were a real repo convention and had to
+  be corrected in the plan doc's own text at the time — the lesson about the mistake didn't stop the
+  mistake from recurring, because the correction itself only ever lived in the same private memory
+  store. **Fixed**: added both S1.9 testing lessons (multi-layer-guard status-code ambiguity; new-
+  check's-first-red-run-is-likely-the-checker's-bug) as `[!WARNING]` callouts in
+  `.github/copilot-instructions.md` §13 "Development Conventions" — a new "Backend Testing Traps"
+  subsection, matching the exact shape of this doc's existing traps (`approvalRequired`-dropped-before-
+  the-POST, the `StudioTableLive` remount hazard, the never-edit-an-applied-Liquibase-changeset rule).
+  Also added a permanent `[!IMPORTANT]` banner to the top of the private memory file itself, naming the
+  mistake explicitly and stating the actual test going forward: not "did I write it down," but "will
+  `git grep` find it" — so this doesn't recur a third time.
+- **Meta-observation acknowledged**: the reviewer's framing is exactly right — every mechanism this
+  project has built (census parser, `authEnabled` ratchet, estimate reconciler) exists to stop a fact
+  living in two places where one can silently go stale, and this was that same failure mode applied to
+  the review process itself rather than to the code. Recorded as its own lesson (in the now-corrected
+  private memory file) rather than just fixed silently.
+
+**Edits made:** `.github/copilot-instructions.md` (new "Backend Testing Traps" subsection, §13). Private
+agent memory: `/memories/repo/testing-conventions.md` (banner added; content otherwise unchanged — the
+private copy isn't wrong, just non-authoritative). No source code, no other doc changed this round.
+
+Still to do: commit (`docs`), push, deliver chat writeup. Then: **on to S1.10**, unchanged — startup
+WARN when `authEnabled(cfg)==false`, verified by an actual cold `java -jar` boot under the shipped
+config (where `authEnabled` is false, so the line should appear on every boot), not only a unit test.
+
 ---
 
 ## Sub-phase S2 — Per-app membership model

@@ -796,6 +796,14 @@ Note: `RevisionFlowTest` and the other DB-backed tests need PostgreSQL running (
 - State plainly what remains open/deferred vs. fully closed.
 - Docs/tracker updates are for future sessions; the chat writeup is for the person reading right now — do both, one doesn't substitute for the other.
 
+### Backend Testing Traps (found during the tenant-isolation work, S1.9)
+
+> [!WARNING]
+> **A route can be protected by more than one independent layer — a matching status code alone never proves which one fired.** `SchemaRoutes.java`'s `GET`/`POST /schema` are gated *both* by `SessionMiddleware` (which unconditionally requires a real session — `isExcludedPath` hard-excludes `/schema` from every carve-out: "schema APIs MUST ALWAYS require session authentication") *and* by the route's own internal `hasAdmin()` check. A test that sends only a bogus `X-Session-Token` value and asserts a 401 will pass forever without ever exercising the route's own admin-token logic — `SessionMiddleware` rejects the bad session before `SchemaRoutes.java`'s code runs at all. Before trusting a security test's status-code assertion, confirm *which layer actually produced it* (e.g. by first proving the other layer would pass on its own with a real session, or by isolating the layer you mean to test) — don't assume a matching status code means the intended check ran.
+
+> [!WARNING]
+> **A new consistency/reconciliation check's first red run is more likely to be the checker's own bug than real drift in the data.** Confirmed twice while building `EstimateReconciliationTest` (`app-bana-service/src/test/java/com/appbana/server/`, S0.5): both of its first two failing runs were parser bugs, not real drift — a naive `line.split("|")` silently mis-split a cell containing escaped pipes (`` `path`\|`query`\|... ``), and a raw backtick-token comparison flagged a deliberate "(or `AlternativeFile.java`)" design note as if it were a required file. Before "fixing" whatever a brand-new check flags as wrong, dump what each side of the comparison actually parsed and eyeball it against the real source — only trust a new check once it's been proven to pass *and* to fail correctly (introduce a deliberate, known drift, confirm it's caught with the right message, then revert).
+
 ---
 
 ## 14. Common Pitfalls
