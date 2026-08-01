@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~54.08 hr across 50 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~55.92 hr across 51 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -44,7 +44,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 | S0.2 | Machine-generated route census across every `*Routes.java`: path, middleware-excluded?, identity gate present?, tenant/app check present?, tenant/app source (`path`\|`query`\|`body`\|`header`\|`none`), **known callers** (studio/runtime/shared/ai-builder/e2e/"none found"), **data preconditions** (what must exist for the call to succeed). Predicate = any client-controlled tenant/app identifier, not just path params. Attach the generated table to the plan doc. | new `RouteCensus` tool/report, appended to plan doc | 165 min | ✅ |
 | S0.3 | Test that fails when a route is registered without a census entry — assert on the **set** of route signatures (method+path) via `Router` reflection vs. census, not a count. | new test | 75 min | ✅ |
 | S0.4 | Fix or fence `Router.handle(HttpServletRequest,...)` — it bypasses the middleware chain entirely (M1). Either route it through the same chain `handle(HttpExchange)` uses, or fail fast at startup if `serverType` is set to anything but `jdk`. | `Router.java`, `Main.java` | 45 min | ✅ |
-| S0.5 | **(New, review round 4)** Add an automated check that sums every task row's estimate in this tracker per sub-phase and asserts the total against the plan doc's S0–S5 summary table (and the grand Total scope figure) — the same "derive it, don't hand-maintain it" fix S0.2/S0.3 already applied to the route census. Registered after an independent line-item sum turned up a ~28% aggregate understatement across every phase but S3 (review round 4). | new test/script, `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`, `TENANT_ISOLATION_SECURITY_PLAN.md` | 90 min | ⬜ |
+| S0.5 | **(New, review round 4; scope corrected round 5)** Add an automated check that sums every task row's estimate in this tracker per sub-phase and asserts the total against the plan doc's S0–S5 summary table (and the grand Total scope figure) — the same "derive it, don't hand-maintain it" fix S0.2/S0.3 already applied to the route census. **Range convention (round 5):** where an estimate is a range (only `S0.0`'s "30–90 min"), take the upper bound — the convention already used by hand for every reconciliation so far, now written down so the check and any manual cross-check can't land on different totals depending on which end someone picks. **Non-gating (round 5):** this task's own 90 min counts toward S0's total below, but its ⬜ status does not reopen S0's phase-completion gate for S1 — S0.0–S0.4's exit criteria were independently reviewer-accepted before S1 began (see "Post-acceptance external review of S0"); this task is scope added after that acceptance, like S1.15–S1.17 are for S1, not a retroactive condition on it. Registered after an independent line-item sum turned up a ~28% aggregate understatement across every phase but S3 (review round 4). | new test/script, `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`, `TENANT_ISOLATION_SECURITY_PLAN.md` | 90 min | ⬜ |
 
 **Exit criteria — S0**
 - [x] `mvn test` compiles and runs on this repo's toolchain. Confirmed via clean `mvn clean test` on JDK 25: `app-bana` 331/331 passing, `AI Builder Service` 197/197 (2 skipped), `BUILD SUCCESS`. Fix was binding `maven-enforcer-plugin` under the root pom's actual `<build><plugins>` (it was declared only in `pluginManagement`, which never executes on its own, so the Java-25 gate never fired). Live `start-everything` boot proof completed as part of S0.1's verification below — all four services booted clean from a cold shell with JAVA_HOME set to the JDK 25 install.
@@ -53,7 +53,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 - [x] Route census exists, attached to the plan doc, every row has non-empty tenant/app-source, known-callers, and data-preconditions columns. Confirmed: all 14 `*Routes.java` files enumerated (97 routes total, verified against a fresh `file_search` of the routes directory), census appended to `TENANT_ISOLATION_SECURITY_PLAN.md` under "S0.2 Route census." Live Router-overload uncertainty resolved this session via direct `logs/backend.log` inspection (`handle(HttpExchange)` confirmed live). One census finding (FileRoutes/e2e URL-shape mismatch) independently spot-verified via grep before being written up.
 - [x] Adding/renaming/removing a route without updating the census fails CI (set comparison). `RouteCensusTest.registeredRoutesMatchCensusExactly` reflects `Router`'s private route table via `RouteRegistry.buildRouter()`, builds the live (method,path) signature set, and diffs it against a hardcoded 96-entry expected set (97 registration call-sites collapse to 96 unique signatures — one confirmed duplicate in AppRoutes.java). Verified live: added a throwaway `GET /api/__census_drift_probe` route, test failed and named it precisely ("Registered in Router but MISSING from the S0.2 census"), reverted (clean `git diff`), full suite green again at 345/345.
 - [x] `serverType != jdk` either shares the middleware chain or refuses to start. Chose fail-fast (the plan's own "either/or"): `TomcatServer` has zero callers besides `Main.java`'s switch and zero test coverage, confirming it's genuinely dormant, so fencing it off is lower-risk than retrofitting an unverified middleware integration. `Main.java`'s `case "tomcat":` now logs an explicit M1-referencing error and calls `System.exit(1)` **before** `TomcatServer.start(port)` is ever reached — no port is bound, no request is ever served unprotected. Any other unrecognized value still safely falls through to the pre-existing `default` → `jdk` behavior, unchanged (only the one genuinely-vulnerable value is fenced).
-- [ ] The tracker's summary table (this doc's headline + the plan doc's S0–S5 table) matches an automated sum of every task row's estimate, not a hand-maintained figure (review round 4, S0.5).
+- [ ] *(Non-gating — see S0.5's row and round 5's note below)* The tracker's summary table (this doc's headline + the plan doc's S0–S5 table) matches an automated sum of every task row's estimate, not a hand-maintained figure (review round 4, S0.5). S0's substantive exit criteria above are already met and reviewer-accepted; this bullet tracks only S0.5's own follow-through.
 
 ### UI verification script — S0
 - **S0.0** ✅ [Cat. 2 — build tooling, no UI surface] `mvn -q -DskipTests compile` (then full `mvn test`) succeeds on a clean shell; `start-everything` boots all four services. Confirmed 2026-08-01: cold-started all four services (AI Builder 8081, Backend 8080, Studio 5174, Runtime 5175) via `start-everything.bat` with JAVA_HOME set to the JDK 25 install — all came up clean, Liquibase ran 19/19 changesets with no errors.
@@ -426,6 +426,73 @@ the reviewer's figures or this doc's own prior "~13.4 hr" note at face value.
 **Total scope after this round:** ~54.08 hr across 50 tasks (S0.5 +90 min; every other phase's figure
 corrected to match its own task rows, which already existed — not new scope). No source code changed
 this round — doc corrections, one new task registration, and this section are documentation only.
+
+### Post-acceptance external review of S1 (round 5, closing) — S0.5 scope correction + review pause
+
+A fifth review pass confirmed round 4's fixes, then caught that round 4's own edit was internally
+inconsistent: it added task S0.5 as a new S0 row in the same commit that restated the grand total, but
+the restated total (~54.08 hr / 50 tasks, in the section directly above) summed only S0's original six
+rows — S0.5's own 90 min was registered but never folded into either S0's phase total or the grand
+total. Notably, a parallel hand-count of the same table, made independently by the reviewer, landed on
+a *different* wrong number too (30 min low on S0, from resolving `S0.0`'s "30–90 min" range at its lower
+bound instead of the upper bound this doc has used throughout) — two independent manual passes over the
+same six-then-seven rows, two different errors, neither self-caught by the person who made it. Taken
+together, that's a better argument for S0.5 than either table on its own: hand-reconciliation of this
+table is demonstrably unreliable even done carefully, twice, by two different people.
+
+- 🟢 **S0.5's own estimate folded into S0's total and the grand total**, corrected in place (this is
+  live bookkeeping, not narrative prose — round 4's own already-closed narrative a few paragraphs up is
+  left untouched, same "don't rewrite history" precedent as every prior round). S0 becomes **~10.17 hr
+  across 7 tasks** (610 min: the original 520 min for S0.0–S0.4/S0.1b at S0.0's upper bound, plus
+  S0.5's 90 min). Grand total becomes **~55.92 hr across 51 tasks** (3335 min). Corrected: this doc's
+  line-9 headline and the plan doc's S0 summary-table row + Total scope figure.
+- 🟢 **Range convention now stated explicitly in S0.5's own task text**: take the upper bound of any
+  ranged estimate (`S0.0`'s "30–90 min" is the only one anywhere in the tracker) — the convention
+  already used by hand for every reconciliation so far, now written down so the automated check and any
+  future manual cross-check can't land ±60 min apart depending on which end someone picks.
+- 🟢 **S0.5 marked explicitly non-gating.** S0.5 sitting at ⬜ inside Sub-phase S0 — whose completion
+  was the prior gate for starting S1, and S1 is six tasks in (S1.1–S1.6 ✅) — was ambiguous for a reader
+  with no other context: did S1 start before S0 was done? Added an explicit note on S0.5's row and its
+  exit-criteria bullet: S0's substantive exit criteria (S0.0–S0.4) were independently reviewer-accepted
+  before S1 began (see "Post-acceptance external review of S0" above) and stand as met; S0.5 is scope
+  added after that acceptance, exactly like S1.15–S1.17 are scope added to S1 after *its* acceptance —
+  neither retroactively reopens its own phase's gate. Same frozen-acceptance pattern already established
+  for past narrative sections, applied here to a still-open task instead.
+- **Status: round 4 closed. Reviewer is pausing review here** — nothing outstanding, nothing blocking
+  S1.7. Explicit assessment taken at face value: the last two rounds (prose/arithmetic review of docs
+  with no new code) reached diminishing returns; this round's own findings (a 90-minute row
+  misalignment, a range/units question) are not where the remaining risk is.
+- **Protocol for resuming at S1.7–S1.9**, per the reviewer's own three-part method that found B1/B2 in
+  round 1 — recorded here and in session memory so it carries forward to that work:
+  1. **Absence-census first** — enumerate every route in each touched file, ask which ones *lack* the
+     new guard, before checking whether existing wiring is correct. This found B1 (a completely
+     unguarded creation route); checking only already-believed-guarded routes would not have.
+  2. **Verify against `config.json` as shipped** (`adminToken: null`), never a temporarily-edited
+     config. This found B2 (a guard wrapped in `authEnabled(cfg)`, dead by default under the real
+     shipped config) and is now the exact assumption `AppRoutesTenantIsolationTest`'s fixture-guard
+     test pins.
+  3. **Break each new guard on purpose before trusting it** — a deliberate negative test, not only a
+     positive pass.
+  Extra attention flagged for **S1.7 (file upload) and S1.8 (saved views)**: both take their tenant
+  identifier from the request body/query rather than a path param — exactly the shape S0.2's own census
+  predicate ("any client-controlled tenant/app identifier, not just path params") was written to catch.
+  Worth deliberately re-checking *where* the tenant value is read from before checking whether it's
+  compared correctly.
+- **Meta-observation, saved to memory**: every finding across all rounds — six plan-drafting plus five
+  implementation-review — came from checking one artifact against something outside itself: plan vs.
+  code, guard vs. caller, login vs. data, census vs. router, ratchet vs. a deliberate break, summary
+  table vs. its own rows, and (twice now) one hand-count vs. another. Nothing was found by re-reading a
+  single artifact more carefully in isolation. This is also the stated reason review is pausing here:
+  there's no further external referent for these two docs to be checked against until S1.7's code exists
+  beside them.
+- **Environment**: reviewer's worktree (`agents/tenant-isolation-security-review`) confirmed clean,
+  backend stopped, probe artifacts removed; `appbana-postgres` left running (shared container, correctly
+  left up, not this reviewer's to stop).
+
+**Total scope after this round:** ~55.92 hr across 51 tasks (S0.5's own 90 min folded into S0's and the
+grand total — round 4 had registered the task but not its estimate). No source code changed this round
+— doc corrections and this section are documentation only. **Review paused here per the reviewer's own
+recommendation; next work is S1.7, not further doc review.**
 
 ---
 
