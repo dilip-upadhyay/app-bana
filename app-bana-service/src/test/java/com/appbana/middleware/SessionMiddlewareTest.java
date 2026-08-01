@@ -204,26 +204,11 @@ class SessionMiddlewareTest {
     }
 
     @Test
-    @DisplayName("Should extract token from Cookie")
-    void testExtractFromCookie() {
-        SessionData session = SessionService.createSession("user123");
-        when(req.path()).thenReturn("/dashboard");
-        when(req.header("X-Session-Token")).thenReturn(null);
-        when(req.header("Cookie")).thenReturn("session_id=" + session.sessionId());
-
-        SessionMiddleware.create().accept(req, res);
-
-        verify(res, never()).json(anyInt(), any());
-        assertEquals("user123", attributes.get("userId"));
-    }
-
-    @Test
     @DisplayName("Should extract token from Authorization Bearer")
     void testExtractFromAuthBearer() {
         SessionData session = SessionService.createSession("user123");
         when(req.path()).thenReturn("/dashboard");
         when(req.header("X-Session-Token")).thenReturn(null);
-        when(req.header("Cookie")).thenReturn(null);
         when(req.header("Authorization")).thenReturn("Bearer " + session.sessionId());
 
         SessionMiddleware.create().accept(req, res);

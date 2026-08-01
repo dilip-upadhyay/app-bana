@@ -69,8 +69,7 @@ public class SessionMiddleware {
      * 
      * Extracts session token from:
      * 1. X-Session-Token header (preferred)
-     * 2. Cookie: session_id
-     * 3. Authorization: Bearer <token>
+     * 2. Authorization: Bearer <token>
      * 
      * On valid session:
      * - Attaches userId to request attributes
@@ -94,7 +93,7 @@ public class SessionMiddleware {
             }
 
             // Extract session token — delegates to AuthService.extractSessionCredential() (S0.1)
-            // so this middleware and AuthService.resolveIdentity() agree on the exact same 3 forms.
+            // so this middleware and AuthService.resolveIdentity() agree on the exact same forms.
             String sessionToken = AuthService.extractSessionCredential(req);
 
             if (sessionToken == null || sessionToken.trim().isEmpty()) {

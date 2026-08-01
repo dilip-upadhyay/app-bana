@@ -15,10 +15,12 @@ import java.util.Locale;
  *   - extractServiceToken:     reads X-AppBana-Token, Authorization Bearer. Used for admin/write/read gates.
  *   - extractToken:            backward-compat shim; may also return session IDs from X-Session-Token.
  *                              MUST NOT be passed to hasAdmin/hasWrite/hasRead.
- *   - extractSessionCredential: locates a raw session token trying all 3 supported credential forms
- *                              (X-Session-Token, session_id cookie, Authorization Bearer). Does NOT
- *                              validate it. Shared by resolveIdentity() and SessionMiddleware.
- *   - resolveIdentity:         canonical identity resolution (S0.1). Single method for all 3 credential
+ *   - extractSessionCredential: locates a raw session token trying both supported credential forms
+ *                              (X-Session-Token, Authorization Bearer). Does NOT validate it. Shared
+ *                              by resolveIdentity() and SessionMiddleware. A session_id cookie form
+ *                              was removed here (post-S0.1 review fix) — nothing in the codebase
+ *                              ever set that cookie, so it was dead-but-accepted attack surface.
+ *   - resolveIdentity:         canonical identity resolution (S0.1). Single method for both credential
  *                              forms; use this for new code.
  *   - extractUserId:           resolves a human identity for audit and approval attribution.
  *                              Delegates to resolveIdentity() — kept for the existing ~30 call sites.
@@ -70,35 +72,29 @@ public class AuthService {
     }
 
     /**
-     * Locate a raw session credential (opaque token) from the request, trying all three
-     * supported forms in a fixed priority order. Does NOT validate the token — just finds it.
-     * Safe to pass to SessionService.validateSession()/renewSession(); never to hasAdmin(),
-     * hasWrite(), or hasRead() (a session id must never be compared against the admin/read token).
+     * Locate a raw session credential (opaque token) from the request, trying both supported
+     * forms in a fixed priority order. Does NOT validate the token — just finds it. Safe to pass
+     * to SessionService.validateSession()/renewSession(); never to hasAdmin(), hasWrite(), or
+     * hasRead() (a session id must never be compared against the admin/read token).
      *
      * Priority:
      * 1. X-Session-Token header (preferred)
-     * 2. Cookie: session_id=&lt;token&gt;
-     * 3. Authorization: Bearer &lt;token&gt; (least preferred — shared with service tokens, so
+     * 2. Authorization: Bearer &lt;token&gt; (least preferred — shared with service tokens, so
      *    callers that need a service/admin token must check extractServiceToken() first)
      *
+     * A session_id cookie form was previously supported here but has been removed: nothing in
+     * the codebase (studio, runtime, shared, ai-builder, e2e) ever set that cookie, so it was
+     * dead-but-accepted attack surface that also undermined this plan's CSRF-non-applicability
+     * premise elsewhere (cookie-based auth is what makes CSRF a real concern; this service has
+     * no other cookie-based credential path now that this one is gone).
+     *
      * Shared by resolveIdentity() (S0.1) and SessionMiddleware.create(), so both places agree on
-     * exactly the same 3 forms instead of maintaining separate, potentially-drifting logic.
+     * exactly the same forms instead of maintaining separate, potentially-drifting logic.
      */
     public static String extractSessionCredential(Router.HttpRequest req) {
         String token = req.header("X-Session-Token");
         if (token != null && !token.isBlank()) {
             return token.trim();
-        }
-
-        String cookie = req.header("Cookie");
-        if (cookie != null) {
-            String[] cookies = cookie.split(";");
-            for (String c : cookies) {
-                String[] parts = c.trim().split("=", 2);
-                if (parts.length == 2 && "session_id".equals(parts[0])) {
-                    return parts[1].trim();
-                }
-            }
         }
 
         String auth = req.header("Authorization");
@@ -111,7 +107,7 @@ public class AuthService {
 
     /**
      * Resolve the caller's user id from the request (S0.1) — the canonical identity-resolution
-     * entry point covering all 3 session credential forms. Prefer this over extractUserId() in
+     * entry point covering both session credential forms. Prefer this over extractUserId() in
      * new code.
      *
      * Priority (never reordered — the service/admin-token check always runs first):
@@ -123,8 +119,8 @@ public class AuthService {
      * 3. Session credential fallback via extractSessionCredential() + SessionService.validateSession().
      *    Covers routes excluded from SessionMiddleware. This is the fix for B1: extractUserId()
      *    used to check only the X-Session-Token header here, silently dropping a session id sent
-     *    via the session_id cookie or Authorization: Bearer — the form every real Studio/Runtime/
-     *    ai-builder caller actually sends — on any middleware-excluded route.
+     *    via Authorization: Bearer — the form every real Studio/Runtime/ai-builder caller
+     *    actually sends — on any middleware-excluded route.
      */
     public static String resolveIdentity(Router.HttpRequest req, AppConfig cfg) {
         // Priority 1: admin service token — H8: use extractServiceToken, NOT extractToken.

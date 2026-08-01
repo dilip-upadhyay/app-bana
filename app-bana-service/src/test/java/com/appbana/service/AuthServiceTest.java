@@ -11,11 +11,13 @@ import static org.mockito.Mockito.*;
 /**
  * Regression test for S0.1 — AuthService.resolveIdentity()/extractUserId() unification.
  *
- * Confirms all 3 session credential forms (X-Session-Token, session_id cookie,
- * Authorization: Bearer) resolve to the same principal on a route excluded from
- * SessionMiddleware (i.e. no pre-set "userId" request attribute), that the admin/service
- * token priority is preserved and checked first, and that neither form is ever misread
- * as the other (B1 fix).
+ * Confirms both session credential forms (X-Session-Token, Authorization: Bearer) resolve
+ * to the same principal on a route excluded from SessionMiddleware (i.e. no pre-set
+ * "userId" request attribute), that the admin/service token priority is preserved and
+ * checked first, and that neither form is ever misread as the other (B1 fix).
+ *
+ * A third form, a session_id cookie, was supported here previously but has been removed
+ * (post-S0.1 review fix): nothing in the codebase ever set that cookie.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AuthServiceTest {
@@ -38,7 +40,7 @@ class AuthServiceTest {
     }
 
     // ========================================
-    // All 3 credential forms → same principal
+    // Both credential forms → same principal
     // ========================================
 
     @Test
@@ -49,16 +51,6 @@ class AuthServiceTest {
 
         assertEquals("user-A", AuthService.resolveIdentity(req, cfg));
         assertEquals("user-A", AuthService.extractUserId(req, cfg));
-    }
-
-    @Test
-    @DisplayName("session_id cookie resolves to the session's user on a middleware-excluded route")
-    void testResolvesViaCookie() {
-        SessionData session = SessionService.createSession("user-B");
-        when(req.header("Cookie")).thenReturn("session_id=" + session.sessionId());
-
-        assertEquals("user-B", AuthService.resolveIdentity(req, cfg));
-        assertEquals("user-B", AuthService.extractUserId(req, cfg));
     }
 
     @Test
@@ -152,26 +144,16 @@ class AuthServiceTest {
     // ========================================
 
     @Test
-    @DisplayName("extractSessionCredential prefers X-Session-Token over cookie and Bearer")
+    @DisplayName("extractSessionCredential prefers X-Session-Token over Bearer")
     void testExtractSessionCredentialPriorityOrder() {
         when(req.header("X-Session-Token")).thenReturn("from-header");
-        when(req.header("Cookie")).thenReturn("session_id=from-cookie");
         when(req.header("Authorization")).thenReturn("Bearer from-bearer");
 
         assertEquals("from-header", AuthService.extractSessionCredential(req));
     }
 
     @Test
-    @DisplayName("extractSessionCredential falls back to cookie when header is absent")
-    void testExtractSessionCredentialFallsBackToCookie() {
-        when(req.header("Cookie")).thenReturn("session_id=from-cookie");
-        when(req.header("Authorization")).thenReturn("Bearer from-bearer");
-
-        assertEquals("from-cookie", AuthService.extractSessionCredential(req));
-    }
-
-    @Test
-    @DisplayName("extractSessionCredential falls back to Bearer when header and cookie are absent")
+    @DisplayName("extractSessionCredential falls back to Bearer when header is absent")
     void testExtractSessionCredentialFallsBackToBearer() {
         when(req.header("Authorization")).thenReturn("Bearer from-bearer");
 

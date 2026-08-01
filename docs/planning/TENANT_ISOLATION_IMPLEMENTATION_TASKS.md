@@ -61,6 +61,38 @@ Credentials are recorded in session memory once actually created — not fabrica
 - **S0.3** ✅ [Cat. 2 — CI gate] Temporarily add/remove a dummy route locally, confirm the test fails, then revert. Not UI-observable by nature. Confirmed 2026-08-01: added `router.get("/api/__census_drift_probe", ...)` to `RouteRegistry.buildRouter()`, ran `RouteCensusTest` — failed with `Tests run: 1, Failures: 1` and the message pinpointed `+ GET /api/__census_drift_probe` under "MISSING from the S0.2 census"; reverted the line, confirmed `git diff --stat` showed no changes, re-ran the full `app-bana-service` suite — 345/345 passing, `BUILD SUCCESS`.
 - **S0.4** ✅ [Cat. 2, dormant branch by design] Confirm `config.json`'s `serverType` is `jdk` here (the fail-fast branch is intentionally never exercised in this environment). Live proof is the same Studio login smoke as S0.1. Confirmed 2026-08-01, both directions, as real separate OS processes (not just unit tests) — repackaged the fat jar with the new `Main.java`, then: (1) confirmed `config.json`'s `serverType` here is `null` (defaults to `jdk`, matching the doc's premise); (2) temporarily set it to `"tomcat"`, ran `java -jar app-bana-1.0-SNAPSHOT-fat.jar` on a scratch port — process exited with code 1 and logged `serverType="tomcat" is disabled: ... see TENANT_ISOLATION_SECURITY_PLAN.md finding M1 / task S0.4`, confirmed via `Get-NetTCPConnection` that no port was ever bound; (3) reverted `config.json` (`git diff --stat` clean); (4) re-ran the same jar on the scratch port — booted clean, logged `AppBana (JDK HTTP) running on port 18080`, killed the transient process; (5) confirmed the actual dev backend on 8080 was undisturbed throughout (`GET /health` → `{"status":"UP"}` before and after). Full `app-bana-service` suite re-confirmed green (345/345) after the `Main.java` change, before repackaging.
 
+### Post-acceptance external review of S0 — findings and remediation
+
+An external reviewer examined commits `5b4def5`..`468beb3` (all of S0.0–S0.4) and returned a verdict of
+**"S0 is accepted,"** conditioned on closing one 🟠 High finding before S1 begins, plus one 🟡 Medium
+and two 🟢 Nits that could "ride along." All four are resolved as follows:
+
+- 🟠 **High — S0.3's `EXPECTED_ROUTES` was a hardcoded copy, not a read of the actual census doc.**
+  The guard only ever checked `Router` against a set a developer had typed once; the real
+  `TENANT_ISOLATION_SECURITY_PLAN.md` census table it was meant to enforce could drift under it with
+  nothing to catch that — and in fact already had 4 `ApprovalRoutes` rows abbreviated with a `.../`
+  shorthand plus one genuine `{entity}`/`{entityName}` mismatch on the `submit` row. **Fixed:**
+  expanded/corrected those 5 doc rows to full literal paths, then rewrote `RouteCensusTest` to parse
+  the "S0.2 Route census" section of the plan doc directly at test-run time instead of maintaining a
+  second copy. Re-verified the Cat.2 drift-detection protocol on the new implementation (temporarily
+  renamed a censused route in the doc; test failed with both a missing-from-census and a
+  no-longer-registered line; reverted; full 345/345 suite green again). Commit `0ddb747`.
+- 🟡 **Medium — the `session_id` cookie credential form was accepted end-to-end but never actually set
+  by any client**, dead-but-accepted attack surface that also undermined the CSRF-non-applicability
+  premise elsewhere in this plan (cookie-based auth is what makes CSRF a real concern). Independently
+  re-confirmed via a fresh repo-wide grep (studio, runtime, shared, ai-builder, e2e) before acting —
+  zero cookie-setting call sites anywhere. **Fixed:** removed the cookie-parsing branch from
+  `AuthService.extractSessionCredential`, updated all "3 credential forms" doc comments (`AuthService`,
+  `SessionMiddleware`) to describe the 2 remaining forms, and removed/adjusted the 3 cookie-specific
+  tests (`AuthServiceTest` 13→11, `SessionMiddlewareTest` 19→18; full suite 345→342, exactly accounting
+  for the 3 removed tests). Full suite re-confirmed green post-change.
+- 🟢 **Nit — three stale "Java 21" mentions in `.github/copilot-instructions.md`** (contradicts the
+  now-enforced Java 25 requirement). Not fixed standalone, per the reviewer's own recommendation —
+  folded into S5.3 (already the task that documents this plan's model in that file) as an explicit
+  sub-item so it isn't lost as a driveby edit.
+- 🟢 **Nit — `PermissionServiceTest` reports "Tests run: 0."** Explicitly out of scope: pre-existing,
+  unrelated to S0, reviewer's own words were "worth a glance sometime," not a blocking or scheduled item.
+
 ---
 
 ## Sub-phase S1 — Tenant boundary on app management
@@ -218,7 +250,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 |---|---|---|---|---|
 | S5.1 | `AiChatController`/`AgentContext` verifies caller's `tenantId`/`appId` against app-bana-service (reusing `EntityAccessGuard`/`isAppOwnerOrSystem`) instead of trusting client-supplied JSON body fields. | `ai-builder/.../api/AiChatController.java` | 90 min | ⬜ |
 | S5.2 | `CrossTenantIsolationTest` capstone suite — 2 tenants × 2+ apps each, no session from one tenant/app can read/write/delete another's apps, roles, files, saved views, template writes, or entity rows in any of the 3 entity-route families. | new integration test | 120 min | ⬜ |
-| S5.3 | Document the enforced model in `.github/copilot-instructions.md` (mirrors how Maker-Checker was documented). | `.github/copilot-instructions.md` | 30 min | ⬜ |
+| S5.3 | Document the enforced model in `.github/copilot-instructions.md` (mirrors how Maker-Checker was documented). **Fold in while here:** correct the file's 3 stale "Java 21" mentions (Section 13's "Development Conventions" and others) to "Java 25" — flagged as a 🟢 nit in the post-S0 external review; deliberately not fixed standalone so it doesn't get lost as a driveby edit outside its own commit. | `.github/copilot-instructions.md` | 30 min | ⬜ |
 
 **Exit criteria — S5**
 - [ ] Capstone cross-tenant suite passes, wired into CI (not a one-off manual run).
