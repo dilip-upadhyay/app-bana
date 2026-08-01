@@ -93,6 +93,15 @@ and two 🟢 Nits that could "ride along." All four are resolved as follows:
 - 🟢 **Nit — `PermissionServiceTest` reports "Tests run: 0."** Explicitly out of scope: pre-existing,
   unrelated to S0, reviewer's own words were "worth a glance sometime," not a blocking or scheduled item.
 
+**Reviewer sign-off received:** independently re-verified every item above against the artefact rather
+than the writeup — including perturbing the census doc a second time (`DELETE /schema/{name}` →
+`{nameTYPO}`) and confirming `RouteCensusTest` failed both directions again, and re-reading
+`AuthService.java` to confirm the cookie branch was deleted, not commented out. Verdict: **"S0 is
+closed. S1 is unblocked — start it."** One new 🟢 nit raised (recorded below, not actioned now) and two
+reminders for S1 specifically — both already encoded in this doc's S1 exit criteria and the plan doc's
+R5-1/R5-2 (`TenantAccessGuard`'s admit-first admin branch; S1+S2 as one deployable unit) — no new work
+item needed for either, just flagged here as what to double check when S1.2/S1.14 land.
+
 ---
 
 ## Sub-phase S1 — Tenant boundary on app management
@@ -271,6 +280,7 @@ These block nothing in S0, but the tasks noted should pause for a product answer
 3. **Runtime end-user password write path (S4.2)** — needs a short investigation (folded into S4.2 itself) into every place a runtime end-user's password column is written, not just login.
 4. **`/api/templates` reads — shared catalog or per-tenant?** — S1.6 proceeds with "writes gated, reads stay public" per the plan's own adopted default; revisit only if product says otherwise.
 5. **⏸️ BLOCKS S1.6 and S2.7 specifically — no product UI (or chat tool) exists for either capability today, confirmed by source read.** Templates writes (S1.6) and membership grant/revoke (S2.7) have no button and no AI-tool path anywhere in Studio/Runtime/`ToolRegistry`. Options: (a) verify these two via a direct, real-credentialed HTTP call as a named, documented exception to the UI-first rule (Testing doctrine Cat. 3) — zero added scope; or (b) build minimal UI for one or both (e.g., a small "Members" panel in `Header.tsx`) — real scope beyond the security plan, own estimate needed. Defaulting to nothing until you answer; S1.6/S2.7 stay ⬜ past their code landing if code lands before this is answered.
+6. **🟢 (New, S0 sign-off nit) `RouteCensusTest` is coupled by path to `TENANT_ISOLATION_SECURITY_PLAN.md`** — correct while the plan is active, but the census will outlive the plan; when this initiative closes and the plan is archived/renamed, the test breaks (arguably correct behavior — loud beats silent — but a deliberate S5 decision, not a surprise during a later docs tidy-up). Candidate: move the census to a permanent home (e.g. its own doc, or a generated file) and have the plan link to it instead. Related and low-risk: the parser accepts any `| METHOD | \`path\` |` row inside the census section, so a second method/path table added under that same heading in S1–S3 would be misread as census entries — just don't add one there. Not actioned now; revisit at S5.
 
 ---
 
