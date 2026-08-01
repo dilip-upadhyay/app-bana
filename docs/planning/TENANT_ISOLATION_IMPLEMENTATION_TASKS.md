@@ -124,9 +124,10 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.12 | Fix `SessionMiddlewareTest`'s tautological assertions (`testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes no real route has) — rewrite against real route shapes, flip expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into read-still-excluded vs. write-requires-auth. | `SessionMiddlewareTest.java` | 30 min | ⬜ |
 | S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min | ⬜ |
 | S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. | new tests | 30 min | ⬜ |
+| S1.15 | Add tenant-filtering to `GET /schema` (only list the caller's own tenant's schema names, not all tenants') and an ownership check to `GET /schema/{name}` (403 if the caller doesn't own the app), mirroring S1.4's `DELETE /schema/{name}` fix. Found unfixed by any existing S1 task — review round 1, finding H1. | `SchemaRoutes.java` | 45 min | ⬜ |
 
 **Exit criteria — S1**
-- [ ] Tenant B session gets 403 (not 404/200) on every `AppRoutes`/`SchemaRoutes` route the census lists against Tenant A, including `restore-schemas` and `DELETE /schema/{name}`.
+- [ ] Tenant B session gets 403 (not 404/200) on every `AppRoutes`/`SchemaRoutes` route the census lists against Tenant A, including `restore-schemas`, `DELETE /schema/{name}`, and (review round 1, H1) `GET /schema` (tenant-filtered) and `GET /schema/{name}` (ownership check) — S1.15.
 - [ ] No resolved identity → 401, distinct from a wrong-tenant 403.
 - [x] `GET /api/debug/schemas` requires the same session as `/names`.
 - [x] `POST/PUT/DELETE /api/templates` require an authenticated admin identity.
@@ -149,9 +150,92 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - **S1.8** [Cat. 1] On a Runtime entity list page, save a view via the real `SavedViewsBar` as User A; log in as User B, confirm it's not listed. The delete-someone-else's-view case has no button by definition — direct-call proof as in S1.4.
 - **S1.9** [Cat. 2 — confirmed zero real callers for `.../full`; `readToken` is a service credential with no UI login anywhere] Structural proof: grep confirms no remaining `hasRead`/`getReadToken()` callers; direct-call check that the six converted routes now require `hasAdmin`.
 - **S1.10** [Cat. 2 — ops log line] Start the backend with auth disabled, confirm the repeated WARN line in the terminal — an operator check, not a browser check.
-- **S1.11 / S1.12** [Cat. 2 — automated tests] Formalize the scenarios already proven live in S1.3/S1.8; no new script.
+- **S1.11 / S1.12** [Cat. 2 — automated tests] Formalize the scenarios already proven live in S1.3/S1.8; no new script. S1.11's "nor read/delete tenant A's schemas" clause depends on S1.15 landing first (review round 1, H1) — `GET /schema/{name}` has no ownership check today, so that clause would fail without it.
 - **S1.13** [Cat. 1 happy path / Cat. 2 failure branch] Proof: normal Studio login smoke. The fail-closed branch needs the backend to omit `tenantId`, not naturally triggerable against the real running backend — verified by its unit test only, noted rather than skipped silently.
 - **S1.14** [Cat. 2 — no login screen for a raw admin/service token exists, by product design] Direct-call proof: the real `adminToken` from `config.json` as a header against a Tenant-A-owned route with no Studio session presented — confirms bypass still works.
+- **S1.15** [Cat. 2 — `GET /schema` has no per-tenant UI surface of its own; `DataDrawer` calls it in an already-app-scoped context] Direct-call proof once implemented, same style as S1.4: a tenant B session must not see tenant A's schema names in the `GET /schema` list, and must get 403 (not the real schema) from `GET /schema/{name}` on a tenant A key.
+
+### Post-acceptance external review of S1 (round 1) — findings and remediation
+
+An external reviewer examined commits `564ec59`..`f1c61b2` (S1.1–S1.6). S1.1–S1.5 were confirmed
+correct as implemented. S1.6 was found to have a genuine gap, plus one route outside the S1.1–S1.6
+diff (app creation) was found unguarded, plus one latent guard-logic trap and one coverage hole in the
+still-unscheduled remainder of S1. Two 🔴 Blockers, one 🟠 High, one 🟡 Medium, all resolved as follows
+(all four independently re-verified against source before any fix was written, not taken at face value):
+
+- 🔴 **Blocker B1 — `POST /appbana-studio/{tenantId}/apps` had zero `TenantAccessGuard` call.** Root
+  cause: the S0.2 census marked this row's "T/A check?" column **"N/A (creation)"**, reasoning there's
+  no existing app yet to own — true, but beside the point, since there IS a target tenant (the path
+  segment) and a caller with a tenant of their own, and nothing compared the two. Any authenticated
+  session for tenant A could create an app inside tenant B's path, with `author` correctly set to the
+  real attacker (anti-spoof working as designed) — meaning the planted app would later qualify as a
+  genuine `owner` membership row once S2.4 backfills memberships, a durable foothold rather than mere
+  switcher-list pollution. **Fixed:** added `TenantAccessGuard.requireOwnTenant(req, cfg, tenantId,
+  null)` immediately after the route's existing blank-tenantId check, before any body is read or
+  `AppManager.createApp` runs (`pathAppId=null` — no app exists yet for the S2.6 membership exception
+  to apply to). Census cell corrected in `TENANT_ISOLATION_SECURITY_PLAN.md` with an explanatory
+  footnote so a future "N/A (creation)" cell is read narrowly, not as a blanket exemption.
+- 🔴 **Blocker B2 — S1.6's admin-gate on `/api/templates` writes never runs under the shipped
+  config.** The gate was wrapped in `if (AuthService.authEnabled(cfg))`, which evaluates `false` under
+  the actual shipped `config.json` (`adminToken: null`, `readToken: null`) — meaning the original
+  "live verification" only exercised the gate because a throwaway `adminToken` was temporarily set for
+  that session, then reverted. That proved the gate works under a config the product doesn't ship, not
+  under the config it does. **Fixed:** removed the `authEnabled(cfg)` wrapper from all 3 template-write
+  routes — `hasAdmin` now runs unconditionally. Documented, deliberate consequence: with the shipped
+  `adminToken: null`, `hasAdmin` always returns `false`, so these 3 routes are now closed to *everyone*
+  by default until an operator configures a real admin token — acceptable per S0.2's census (zero
+  known callers repo-wide for these routes).
+- 🟠 **High H1 — `GET /schema` and `GET /schema/{name}` are unguarded, and no S1.7–S1.14 task
+  covered fixing them.** `GET /schema` returns schema names with no tenant filtering; `GET
+  /schema/{name}` has only the same inert `authEnabled`-gated legacy token check as S1.4 found on its
+  `DELETE` sibling, no ownership check. Confirmed via direct read of `SchemaRoutes.java` and a
+  cross-check against the full S1 task list — genuinely no task closes this gap. **Registered as new
+  task S1.15** (added above), not fixed in this round (code fix deferred; only the gap itself and its
+  task registration are resolved now). Also noted: S1.11's planned test spec ("nor read/delete tenant
+  A's schemas") already assumes this fix exists — flagged inline on both S1.11 and S1.15 above so the
+  dependency isn't missed when S1.11 is written.
+- 🟡 **Medium M1 — `TenantAccessGuard`'s tenant-match check fails open on two null tenants.**
+  `Objects.equals(session.tenantId(), pathTenantId)` returns `true` when both are `null`, which would
+  wrongly *allow* rather than deny. Not reachable via any production path today (every real session has
+  a non-null `tenantId` since S1.1), but a null-tenant session is constructible, and S3 reuses this same
+  comparison shape for `scopedAppId` (which is `null` by default) — worth closing before that reuse
+  happens. **Fixed:** added an explicit `session.tenantId() == null → deny(403)` check before the
+  `Objects.equals` comparison.
+- **Meta-observation, addressed as a new ratchet test.** The reviewer noted all four findings trace to
+  one root cause — the `if (authEnabled(cfg))` conditional-gate anti-pattern — and suggested a test
+  that fails on any new occurrence outside the ones S3.4 already plans to delete. A full repo-wide grep
+  before writing that test found the anti-pattern far more widespread than previously scoped: **21 real
+  conditional-gate occurrences in `GenericEntityRoutes.java` alone** (the busiest route file in the
+  system — the generic per-entity CRUD API), on top of the previously-known ~6 in `SchemaRoutes.java`
+  (32 raw `authEnabled(` matches across 4 files; 3 of those are non-gating value-passing calls in
+  `GenericEntityRoutes.java`, correctly excluded). This is new scope information for S3.4, not yet
+  reflected in that task's own estimate — flagged here rather than silently absorbed into a baseline.
+  **New `AuthEnabledAntiPatternTest`** (`com.appbana.server`, mirrors `RouteCensusTest`'s file-scanning
+  style): walks `src/main/java`, regex-matches only actual `if (...authEnabled(...))` conditional gates
+  (not value-passing usages), fails if a new file gains the anti-pattern or a known baseline file's count
+  *increases* (`GenericEntityRoutes.java`: 21, `SchemaRoutes.java`: 6) — a decrease (i.e. progress) is
+  fine and doesn't fail. Permits today's known baseline while blocking regression, pending S3.4's full
+  removal.
+- **Fixes verified:** new `AppRoutesTenantIsolationTest` (8 tests: cross-tenant creation rejected/403,
+  same-tenant creation still works/201, unauthenticated/401, all 3 template writes rejected with no
+  token/401, template reads still public/200, plus an explicit assertion that `authEnabled(cfg)` is
+  `false` under the shipped config — guards the fixture's own assumption), 1 new
+  `TenantAccessGuardTest` case for M1, 1 new `AuthEnabledAntiPatternTest`. Full `app-bana-service` suite:
+  **367/367, `BUILD SUCCESS`** (357 prior baseline + 10 new). Fat jar rebuilt, dev backend relaunched,
+  confirmed healthy.
+- **Live re-verification performed exactly as the reviewer required — "with `config.json` as
+  shipped," no throwaway token this time**, directly correcting B2's own methodological gap: logged in
+  as the real standing fixture users (User A `t-bf0c8f57`, User B `t-fc8d39e7`) via `POST
+  /api/auth/login` against the freshly rebuilt, running backend. (1) User B → `POST
+  /appbana-studio/t-bf0c8f57/apps` (User A's tenant) → **403**; (2) User A → `POST
+  /appbana-studio/t-bf0c8f57/apps` (own tenant) → **201**, then deleted as cleanup by the same owner;
+  (3) no session at all → **401**; (4) `POST /api/templates` with zero token, real unmodified
+  `config.json` — **401**; (5) same for `PUT`/`DELETE /api/templates/{id}` — **401** both; (6) `GET
+  /api/templates` with zero token — **200** (reads still public, non-regression). No `config.json`
+  edit of any kind was needed for this round's verification — the point of the B2 fix.
+- **Process note:** every one of the reviewer's four claims was independently re-confirmed against
+  source (`AppRoutes.java`, `TenantAccessGuard.java`, the full S1 task list) before any fix was written,
+  continuing this project's established norm from the S0 review round.
 
 ---
 

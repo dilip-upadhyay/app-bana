@@ -1018,7 +1018,7 @@ app identifier this route acts on reaches the handler.
 | GET | `/appbana-studio/{tenantId}/apps/{id}` | No (default) | **No** | **No — any valid session, any tenant, passes** | path | shared→runtime (`AppRuntimeShell`), 8 ai-builder tools | app must exist |
 | GET | `/api/{tenantId}/apps/{id}/full` (public runtime API) | Yes (rule 4) | No (intentionally public) | No | path | **none found** — Runtime actually calls the Studio route above instead | app must exist |
 | GET | `/api/{tenantId}/apps/{id}/env/{env}/full` (2nd reg., **dead code**) | Yes (rule 4) | **No** | No | path | none found — unreachable (Router first-match-wins) | moot |
-| POST | `/appbana-studio/{tenantId}/apps` | No (default) | **Yes** — real gate, 401 if blank; sets `author` from caller (anti-spoof) | N/A (creation) | path + body (`id`, `name`) | shared→studio (`Header`), ai-builder (`CreateAppTool`, `ScaffoldAppTool`), e2e | body `id` unique, non-blank |
+| POST | `/appbana-studio/{tenantId}/apps` | No (default) | **Yes** — real gate, 401 if blank; sets `author` from caller (anti-spoof) | **Yes** — `TenantAccessGuard`, `pathAppId=null` (see footnote²) | path + body (`id`, `name`) | shared→studio (`Header`), ai-builder (`CreateAppTool`, `ScaffoldAppTool`), e2e | body `id` unique, non-blank |
 | PUT | `/appbana-studio/{tenantId}/apps/{id}` | No (default) | **No** | No | path | ai-builder (`UpdateAppTool`, `CreateEntityTool`) — no Studio/Runtime UI path | app must exist |
 | DELETE | `/appbana-studio/{tenantId}/apps/{id}` | No (default) | **No** | No | path | ai-builder (`ScaffoldAppTool` rollback-only), e2e cleanup — no Studio/Runtime UI path | app must exist |
 | GET | `/appbana-studio/{tenantId}/apps/{id}/workflow` | No (default) | **No** | No | path | ai-builder (`ListWorkflowsTool`) | returns `{}` if none |
@@ -1035,6 +1035,19 @@ app identifier this route acts on reaches the handler.
 *Footnote: `SessionMiddleware`'s own comment claims `/appbana-studio/*` is "currently public for
 development," but no rule in the actual `isExcludedPath` logic matches that prefix — it falls to the
 rule-6 default (session required). Code behavior, not the stale comment, is reflected above.*
+
+*Footnote²: **CORRECTED — S1 review round 1, finding B1 (2026-08-01).** This cell originally read
+"N/A (creation)", reasoning that there's no *existing* app yet to check ownership of. That was true
+but beside the point — there is no existing app, but there IS a target tenant supplied by the client
+(the path segment) and a caller with a tenant of their own, and nothing compared the two. The route
+shipped with zero `TenantAccessGuard` call at all, so any authenticated session for tenant A could
+create an app inside tenant B's path (`author` forced to the real caller, so the planted row would
+later qualify as an `owner` app-membership row once S2.4 backfills memberships — a durable foothold,
+not just switcher pollution). Fixed by calling `TenantAccessGuard.requireOwnTenant(req, cfg,
+pathTenantId, null)` — `pathAppId=null` because no app exists yet for the S2.6 membership exception
+to apply to. Recorded here so a future "N/A" cell on a creation route is read as "no ownership check
+applies" only if there is also no target tenant to compare — never as a blanket exemption from the
+tenant check itself.*
 
 ### ApprovalRoutes.java
 
