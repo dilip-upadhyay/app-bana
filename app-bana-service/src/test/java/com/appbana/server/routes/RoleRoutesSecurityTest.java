@@ -74,6 +74,13 @@ public class RoleRoutesSecurityTest {
         return SessionService.createSession(userId).sessionId();
     }
 
+    // S1.3: TenantAccessGuard now checks the session's own tenantId against the path tenant on
+    // every AppRoutes route (not just RoleRoutes), so a test that reuses the same session across
+    // both a RoleRoutes call and an AppRoutes call must carry a real tenantId.
+    private String createTestSession(String userId, String tenantId) {
+        return SessionService.createSession(userId, tenantId).sessionId();
+    }
+
     @Test
     public void testHttpHeaderUserSpoofingIsRejected() throws Exception {
         String tenantId = "t_spoof";
@@ -212,7 +219,7 @@ public class RoleRoutesSecurityTest {
         String realAuthor = "real_author";
         String spoofedAuthor = "spoofed_author";
         String hackerAuthor = "hacker_author";
-        String realAuthorSession = createTestSession(realAuthor);
+        String realAuthorSession = createTestSession(realAuthor, tenantId);
 
         // 1. Create app with spoofed author in JSON payload
         String createJson = MAPPER.writeValueAsString(Map.of(

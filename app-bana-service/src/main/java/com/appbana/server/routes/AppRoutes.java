@@ -8,6 +8,7 @@ import com.appbana.model.AppMetadata;
 import com.appbana.model.AppVersion;
 import com.appbana.model.DeploymentResult;
 import com.appbana.model.TenantContext;
+import com.appbana.security.TenantAccessGuard;
 import com.appbana.service.AppPublishService;
 import com.appbana.service.AuthService;
 import com.appbana.service.ReleaseService;
@@ -55,6 +56,13 @@ public class AppRoutes {
 
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
 
@@ -148,6 +156,13 @@ public class AppRoutes {
                 return;
             }
 
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+
             try {
                 LOG.info("[LOCAL-DEPLOY] Starting LOCAL deployment for app {} (tenant: {})", appId, tenantId);
 
@@ -198,6 +213,13 @@ public class AppRoutes {
                 return;
             }
 
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+
             try {
                 Map<String, String> body = req.readJson(new TypeReference<>() {});
                 String message = body.getOrDefault("message", "AI Snapshot");
@@ -221,6 +243,13 @@ public class AppRoutes {
             String appId = req.pathParam("id");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
 
@@ -251,6 +280,12 @@ public class AppRoutes {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
             try {
                 Map<String, String> body = req.readJson(new TypeReference<>() {
                 });
@@ -274,6 +309,12 @@ public class AppRoutes {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
             try {
                 res.json(200, releaseService.listVersions(appId));
             } catch (Exception e) {
@@ -289,6 +330,12 @@ public class AppRoutes {
             String versionId = req.pathParam("versionId");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
             try {
@@ -322,6 +369,12 @@ public class AppRoutes {
             String appId = req.pathParam("id");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
             try {
@@ -360,6 +413,12 @@ public class AppRoutes {
             String appId = req.pathParam("id");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
             String env = req.query("env");
@@ -414,6 +473,15 @@ public class AppRoutes {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            // Bare tenant-wide list: no pathAppId, so the S2.6 membership exception never
+            // applies here (S1.2) -- own-tenant only, deliberately stricter than the
+            // app-scoped routes below.
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, null);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
             try {
                 List<Map<String, Object>> apps = AppManager.listApps(tenantId);
                 res.json(200, Map.of("apps", apps));
@@ -428,6 +496,12 @@ public class AppRoutes {
             String appId = req.pathParam("id");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
             try {
@@ -551,6 +625,12 @@ public class AppRoutes {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
             try {
                 AppMetadata updates = req.readJson(new TypeReference<AppMetadata>() {
                 });
@@ -569,6 +649,12 @@ public class AppRoutes {
             String appId = req.pathParam("id");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
             try {
@@ -593,6 +679,12 @@ public class AppRoutes {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
             try {
                 Map<String, Object> workflow = AppManager.getWorkflow(tenantId, appId);
                 if (workflow == null) {
@@ -611,6 +703,12 @@ public class AppRoutes {
             String appId = req.pathParam("id");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
             try {
@@ -634,6 +732,12 @@ public class AppRoutes {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
             try {
                 Map<String, Object> page = AppManager.getPage(tenantId, appId, pageId);
                 if (page == null) {
@@ -655,6 +759,12 @@ public class AppRoutes {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
             try {
                 Map<String, Object> page = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
@@ -672,6 +782,12 @@ public class AppRoutes {
             String pageId = req.pathParam("pageId");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
             try {
