@@ -123,7 +123,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.8 | `SavedViewRoutes`: require a resolved identity on all 3 routes; add `tenant_id`/`app_id`/`owner_user_id` to `DELETE_SQL`'s WHERE clause (today: `view_id` alone). | `SavedViewRoutes.java` | 45 min | ✅ |
 | S1.9 | Dedupe the two identical `GET .../env/{env}/full` registrations into one; guard it and its `.../full` sibling with the same tenant+membership check (no public carve-out — confirmed zero real callers). Fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite`: convert **all six to `hasAdmin` via `extractServiceToken()`** (readToken is retired — see plan Non-goals, R6-1), leaving `AuthService.hasRead`/`cfg.getReadToken()` with no remaining callers anywhere. | `AppRoutes.java`, `SchemaRoutes.java` | 60 min | ✅ |
 | S1.10 | Startup: log a loud repeated `WARN` while `AuthService.authEnabled(cfg)==false`. | `ApiServer.java` | 30 min | ✅ |
-| S1.11 | `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9). | new tests | 105 min | ⬜ |
+| S1.11 | **(Sequencing note, S1.10 review round 2: do S1.15/S1.16/S1.17 first — the last open routes with live security value; this task becomes the genuine capstone once nothing is left open for it to be wrong about.)** `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9; not a `@Disabled` placeholder here — see S2.6's row). | new tests | 105 min | ⬜ |
 | S1.12 | Fix `SessionMiddlewareTest`'s tautological assertions (`testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes no real route has) — rewrite against real route shapes, flip expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into read-still-excluded vs. write-requires-auth. | `SessionMiddlewareTest.java` | 30 min | ⬜ |
 | S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min | ⬜ |
 | S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. | new tests | 30 min | ⬜ |
@@ -935,14 +935,57 @@ Still to do: commit (`fix`/`docs`), push, deliver chat writeup. S1 is now at S1.
 positive case depends on S2.6, not yet reachable); S1.11's schema-read/delete deny clause additionally
 depends on S1.15 landing first.
 
+### Post-acceptance external review of S1.10 (round 2) — accepted; ratchet-evasion reverted, sequencing reordered
+
+An external reviewer examined commit `b00b208` against source directly, independently confirmed no
+`simplelogger.properties`/`logback`/`log4j` config exists anywhere in the repo (so WARN genuinely isn't
+filtered by the shipped logging config), and called the codepage/mojibake catch out as justifying the
+whole live-verification doctrine on its own. **Verdict: S1.10 accepted.**
+
+- 🟡 **Finding — the ratchet-evasion "fix" taught the wrong lesson.** Extracting
+  `!AuthService.authEnabled(cfg)` into a local `authIsDisabled` boolean avoided
+  `AuthEnabledAntiPatternTest`'s regex match, but this is exactly the blind spot the reviewer flagged
+  when the ratchet first shipped (a local-boolean indirection evades a purely textual pattern-match).
+  `git grep authEnabled` showed 2 hits in `ApiServer.java`; the ratchet reported 0 — its own claim
+  ("no conditional-auth code outside these two files") became quietly false while looking clean, and
+  the codebase now contained a worked, commented example of how to dodge the check. **Fixed**: reverted
+  to the natural `if (!AuthService.authEnabled(cfg))`, and registered `com/appbana/ApiServer.java → 1`
+  in `AuthEnabledAntiPatternTest.BASELINE` with a comment explaining it's the *inverse* of the
+  anti-pattern (warns auth is off; never gates a security check on auth being on) — mirrors the same
+  choice already made for the frozen census note and the estimate range convention: make the exception
+  visible and counted, not silently absent. Break-tested the fix itself: temporarily set the baseline
+  entry to `0`, confirmed the ratchet correctly reported "found 1," reverted to `1`, confirmed green
+  again. Full suite re-confirmed **397/397, BUILD SUCCESS**.
+- **Sequencing reordered, per the reviewer's explicit recommendation**: S1.15/S1.16/S1.17 next (the
+  last actually-open routes with live security value — `GET /schema`, `GET /schema/{name}`,
+  `/api/endpoints`, `/openapi.json`, then the two now-vestigial `authEnabled` wrappers), **then** S1.11
+  (which becomes the genuine capstone once nothing is left open for it to be wrong about), then
+  S1.12/S1.13/S1.14 any time (independent). Recorded directly on S1.11's own row. S1.11's positive
+  membership case will **not** ship as a `@Disabled` placeholder — "a disabled test is a promise
+  nobody is accountable for" — it stays exactly where S2.9 already owns it, with the dependency also
+  now called out explicitly on S2.6's row and folded into the S2 convergence callout (now 4 items, not
+  3) so it isn't lost when S2.6 is eventually picked up.
+- 🟢 **Nit, acknowledged, not actioned**: `CsrfServiceTest.testConstantTimeComparison`'s timing-based
+  flakiness in a suite that gates every task "is worth a moment eventually... don't let it become
+  normal." Correct, and left exactly there — not fixed this round, tracked in session memory so it
+  doesn't get forgotten, but not promoted to a tracker task without a concrete recurrence to act on.
+
+**Edits made:** `ApiServer.java` (reverted to natural `if` syntax). `AuthEnabledAntiPatternTest.java`
+(new `BASELINE` entry + Javadoc explaining it). `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md` (this
+section; S1.11's row gets a sequencing note; S2.6's row and the S2 convergence callout both gain the
+S1.11-positive-case cross-reference).
+
+Still to do: commit (`fix`/`docs`), push, deliver chat writeup. Next up per the new sequencing: S1.15,
+S1.16, S1.17 (not started this round — awaiting explicit go-ahead).
+
 ---
 
 ## Sub-phase S2 — Per-app membership model
 
 > [!IMPORTANT]
-> **S2.6 is no longer "wire `isMember` into one method" — three separately-deferred decisions now
-> converge on it** (flagged across S1.7's and S1.8's own reviews, consolidated here per the reviewer's
-> explicit request to say this plainly before S2 starts):
+> **S2.6 is no longer "wire `isMember` into one method" — four separately-deferred decisions now
+> converge on it** (flagged across S1.7's, S1.8's, and S1.10's own reviews, consolidated here per the
+> reviewer's explicit request to say this plainly before S2 starts):
 > 1. **S1.2's membership-exception branch is called with the body-supplied `appId`** (S1.7 round 6
 >    forward note) — once active, `isMember` must resolve the app's real tenant from the app record
 >    itself, never from the tenant the request body asserts alongside the appId.
@@ -953,6 +996,10 @@ depends on S1.15 landing first.
 >    composes with it (`TenantAccessGuard.requireOwnTenant`, and everything built on top of it across
 >    `AppRoutes.java`, `SchemaRoutes.java`, `SavedViewRoutes.java`) was reasoned against a world where it
 >    can never admit anyone. S2.6 is the one point where that stops being true, for all of them at once.
+> 4. **S1.11's positive membership case (`CrossTenantMembershipAllowsAccessTest`, written in S2.9, not
+>    S2.6) depends on this exact activation** (S1.10 round 2) — S1.11 deliberately writes only the deny
+>    cases and defers the positive case rather than shipping a `@Disabled` placeholder; this is the
+>    other end of that deferral, so it isn't forgotten when tracing what S2.6 unblocks.
 >
 > **When S2.6 is picked up: re-run the principal × guard walk (the round-5 technique recorded in
 > `security-multi-tenant-isolation.md`) from scratch, rather than reviewing it as a single task.** What
@@ -965,7 +1012,7 @@ depends on S1.15 landing first.
 | S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ⬜ |
 | S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ⬜ |
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ⬜ |
-| S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ⬜ |
+| S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). **Reminder (S1.10 review round 2): activating this exception is what unblocks `CrossTenantMembershipAllowsAccessTest` (written in S2.9), which finishes S1.11's deliberately-deferred positive case** — no new work for S2.6 itself, just don't lose the dependency when scoping S2.9. | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ⬜ |
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ⬜ |
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ⬜ |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ⬜ |

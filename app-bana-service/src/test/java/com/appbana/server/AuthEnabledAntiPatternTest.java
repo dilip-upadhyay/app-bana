@@ -34,6 +34,18 @@ import static org.junit.jupiter.api.Assertions.fail;
  * job) never fails this test. Adding a new one — in an existing allow-listed file, or introducing
  * the pattern into any other file for the first time (this is exactly how S1.6 added three new
  * instances in {@code AppRoutes.java}) — does.
+ *
+ * <p><b>{@code ApiServer.java}, 1 occurrence (S1.10, review round 2)</b> is the one deliberate
+ * exception on the list, and is the *inverse* of the anti-pattern rather than a false negative:
+ * {@code if (!AuthService.authEnabled(cfg))} there logs a loud startup warning that auth is off —
+ * it never gates a security check on auth being on. Round 1 of this file's own review flagged that
+ * evading this regex (e.g. via {@code boolean gate = authEnabled(cfg); if (gate)}) is a real,
+ * exploitable blind spot; round 2 confirmed the fix actually took that shape and asked for the
+ * honest alternative instead — keep the natural {@code if (!authEnabled(cfg))} syntax and count it
+ * here, so `git grep authEnabled` and this ratchet's report never disagree. Do not narrow
+ * {@link #ANTI_PATTERN} to exclude negated conditions to "fix" this instead —
+ * {@code if (!authEnabled(cfg)) { return; }} is the anti-pattern in inverted form and must still
+ * be caught.
  */
 class AuthEnabledAntiPatternTest {
 
@@ -53,7 +65,10 @@ class AuthEnabledAntiPatternTest {
      */
     private static final Map<String, Integer> BASELINE = Map.of(
             "com/appbana/server/routes/GenericEntityRoutes.java", 21,
-            "com/appbana/server/routes/SchemaRoutes.java", 6
+            "com/appbana/server/routes/SchemaRoutes.java", 6,
+            // S1.10 — the inverse of the anti-pattern (warns auth is off; never gates a security
+            // check on auth being on). See this class's own Javadoc before adding a second one.
+            "com/appbana/ApiServer.java", 1
     );
 
     @Test

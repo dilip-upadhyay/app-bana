@@ -45,12 +45,12 @@ public class ApiServer {
         // S1.10 — make "every admin-gated and entity-data route accepts no credential" impossible
         // to miss on boot. Fires every time a new port actually starts (not on the "already
         // running" early-return above), independent of the one-time migrationsRun gate below.
-        // Deliberately not `if (!AuthService.authEnabled(cfg))` — that textual shape is exactly
-        // what AuthEnabledAntiPatternTest ratchets against (gating a security CHECK), even though
-        // this is the opposite intent (warning that the gate is off), so the condition is
-        // evaluated into a local boolean first to keep this out of that pattern's regex match.
-        boolean authIsDisabled = !AuthService.authEnabled(cfg);
-        if (authIsDisabled) {
+        // Written as the natural `if (!AuthService.authEnabled(cfg))` — review round 2 rejected
+        // evading AuthEnabledAntiPatternTest's regex via a local boolean, since that would make the
+        // ratchet's report ("no conditional-auth code outside these two files") quietly false while
+        // looking clean. This is the *inverse* of the anti-pattern (warns auth is off, never gates a
+        // security check), and is registered as exactly that in the ratchet's own BASELINE map.
+        if (!AuthService.authEnabled(cfg)) {
             String banner = "AUTH DISABLED: adminToken and readToken are both unset in config.json "
                     + "-- every admin-gated and entity-data route is reachable with no credential.";
             for (int i = 0; i < 3; i++) {
