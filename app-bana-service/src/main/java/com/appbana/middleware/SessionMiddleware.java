@@ -143,6 +143,19 @@ public class SessionMiddleware {
             return false;
         }
 
+        // S1.5 (H1): Debug/admin routes must ALWAYS require session authentication,
+        // regardless of how many path segments they have. Do not rely on
+        // ENTITY_API_PATTERN's segment-count arithmetic to (accidentally) decide
+        // this: /api/debug/schemas (2 segments after /api/) used to match
+        // ENTITY_API_PATTERN and be treated as a public entity API path -- fully
+        // anonymous, cross-tenant schema-summary listing -- while its sibling
+        // /api/debug/schemas/names (3 segments) happened to fall outside the
+        // pattern and correctly required a session. Name debug/admin routes here
+        // explicitly instead of depending on incidental segment counts.
+        if (path.startsWith("/api/debug/")) {
+            return false;
+        }
+
         // Check if it matches the entity API pattern (/api/{tenantId}/{entityName})
         if (path.matches(ENTITY_API_PATTERN)) {
             LOG.info("[SessionMiddleware] Matched entity API pattern for: {}", path);
