@@ -123,7 +123,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.8 | `SavedViewRoutes`: require a resolved identity on all 3 routes; add `tenant_id`/`app_id`/`owner_user_id` to `DELETE_SQL`'s WHERE clause (today: `view_id` alone). | `SavedViewRoutes.java` | 45 min | ✅ |
 | S1.9 | Dedupe the two identical `GET .../env/{env}/full` registrations into one; guard it and its `.../full` sibling with the same tenant+membership check (no public carve-out — confirmed zero real callers). Fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite`: convert **all six to `hasAdmin` via `extractServiceToken()`** (readToken is retired — see plan Non-goals, R6-1), leaving `AuthService.hasRead`/`cfg.getReadToken()` with no remaining callers anywhere. | `AppRoutes.java`, `SchemaRoutes.java` | 60 min | ✅ |
 | S1.10 | Startup: log a loud repeated `WARN` while `AuthService.authEnabled(cfg)==false`. | `ApiServer.java` | 30 min | ✅ |
-| S1.11 | **(Sequencing note, S1.10 review round 2: do S1.15/S1.16/S1.17 first — the last open routes with live security value; this task becomes the genuine capstone once nothing is left open for it to be wrong about.)** `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9; not a `@Disabled` placeholder here — see S2.6's row). | new tests | 105 min | ⬜ |
+| S1.11 | **(Sequencing note, S1.10 review round 2: do S1.15/S1.16/S1.17 first — the last open routes with live security value; this task becomes the genuine capstone once nothing is left open for it to be wrong about.)** `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9; not a `@Disabled` placeholder here — see S2.6's row). | new tests | 105 min | ✅ |
 | S1.12 | Fix `SessionMiddlewareTest`'s tautological assertions (`testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes no real route has) — rewrite against real route shapes, flip expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into read-still-excluded vs. write-requires-auth. | `SessionMiddlewareTest.java` | 30 min | ⬜ |
 | S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min | ⬜ |
 | S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. | new tests | 30 min | ⬜ |
@@ -137,7 +137,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - [x] Tenant B session gets 403 (not 404/200) on every `AppRoutes`/`SchemaRoutes` route the census lists against Tenant A, including `restore-schemas`, `DELETE /schema/{name}`, and (review round 1, H1) `GET /schema` (tenant-filtered) and `GET /schema/{name}` (ownership check) — S1.15.
 - [x] `GET /api/endpoints` and `GET /openapi.json` require a resolved identity unconditionally, not only when `authEnabled(cfg)` is true (review round 2, S1.16).
 - [x] `SchemaRoutes.java`'s two remaining `authEnabled(cfg)` wrappers (`POST /schema`, `DELETE /schema/{name}`) are deleted and the file's `AuthEnabledAntiPatternTest.BASELINE` entry is removed entirely, not set to `0` (review round 3, S1.17).
-- [ ] No resolved identity → 401, distinct from a wrong-tenant 403.
+- [x] No resolved identity → 401, distinct from a wrong-tenant 403 (S1.11 — proven across all 18 `CrossTenantAppAccessTest`-covered `AppRoutes` routes plus `CrossTenantSchemaAccessTest`'s schema read/delete).
 - [x] `GET /api/debug/schemas` requires the same session as `/names`.
 - [x] Neither `GET /api/debug/schemas` nor `GET /api/debug/schemas/names` discloses cross-tenant schema data to any authenticated account, not just to anonymous callers (external review of S1.15/S1.16/S1.17, S1.19).
 - [x] `POST/PUT/DELETE /api/templates` require an authenticated admin identity.
@@ -145,7 +145,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - [ ] File downloads (`GET /api/files/{tenantId}/{appId}/{fileId}`) are actually reachable by a real logged-in end user, not just protected from anonymous/cross-tenant access (review round 6, S1.18).
 - [x] Both `.../full` routes require tenant+membership check; only one registration remains. Confirmed 2026-08-01: dead duplicate `.../env/{env}/full` registration deleted; both it and `.../full` now call `TenantAccessGuard.requireOwnTenant`, break-tested (neutered per route, confirmed the exact 2 tests fail, reverted). `SchemaRoutes.java`'s 6 `hasRead`/`hasWrite` call sites also converted to `hasAdmin` this same task (S1.9) — see its own row/write-up; no separate bullet exists for that half here.
 - [ ] `SessionMiddlewareTest` matches real route shapes/behavior.
-- [ ] Tenant A's own users unaffected on every route above.
+- [x] Tenant A's own users unaffected on every route above (S1.11 — the app's own owner is never 401/403'd on any of the 18 guarded routes, and the delete/schema-delete paths are proven end-to-end: the real owner's delete actually removes the resource).
 - [x] Server logs a visible warning whenever global auth is disabled. Confirmed 2026-08-01 via a real cold `java -jar app-bana-1.0-SNAPSHOT-fat.jar` boot (scratch port, shipped `config.json` with `adminToken`/`readToken` both null): the log's actual first lines after config load are 3 repeated `WARN com.appbana.ApiServer` banners (`AUTH DISABLED: adminToken and readToken are both unset in config.json -- every admin-gated and entity-data route is reachable with no credential.`), printed at WARN level and visible in the real console (this repo's `slf4j-simple` binding has no `simplelogger.properties`, so its default INFO+ threshold applies and does not filter WARN). Negative case also confirmed live: with a scratch `adminToken` temporarily set in `config.json` and reverted after, the same cold boot produced zero occurrences of the banner.
 - [ ] A valid service/admin token is admitted by `TenantAccessGuard` regardless of path tenant.
 - [ ] **Release-process criterion:** S1 is not deployed alone to any environment serving live deployed-app traffic — ships as one unit with S2.
@@ -167,7 +167,8 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
   **Pre-existing gap found as a side effect, out of scope for this task, not fixed here:** `SavedViewsBar`'s "+ Save current" button is gated purely on `StudioTableLive.tsx`'s page-metadata-driven `filterValues` (fed only by `<FilterBar>`, which only renders when the page's `props.filters` array is non-empty) — the separate, more commonly-populated per-column `columnFilterValues`/`TableHeader` filter state is never folded into `filterValues`, so on any scaffolded list page without explicit `filters` metadata (most of them, including both standing fixture apps), "+ Save current" is unreachable no matter what a real user types into the visible per-column filter row. Worth a future task if saved views are meant to work broadly, not just on pages that opted into the separate `FilterBar` feature.
 - **S1.9** ✅ [Cat. 2 — `.../full` pair: confirmed zero real callers repo-wide, no live verification possible; `SchemaRoutes.java`'s six: shipped-config discipline, same class as B2] Done 2026-08-01: deleted the dead duplicate `.../env/{env}/full` registration; both it and its `.../full` sibling now call `TenantAccessGuard.requireOwnTenant`, break-tested (neutered, confirmed the exact 2 tests fail per route, reverted). All 6 `SchemaRoutes.java` sites converted `extractToken()`+`hasRead`/`hasWrite` → `extractServiceToken()`+`hasAdmin()`; break-tested by reverting one site to `hasRead`, confirming the expected test fails, reverting. 13 new tests (6 in `AppRoutesTenantIsolationTest`, 7 in new `SchemaRoutesAdminTokenTest`), full suite 397/397. Confirmed this repo's live `config.json` ships `adminToken: null, readToken: null`, so the `SchemaRoutes.java` fix is inert in the running dev environment today, by design. **Correction to this bullet's own prior assumption**: "no remaining `hasRead`/`getReadToken()` callers" is not true after S1.9 alone — `GenericEntityRoutes.java` still has 4 live call sites (confirmed by grep), out of scope here (S3.4's job); see the full write-up below for the forward note filed against S3.4.
 - **S1.10** ✅ [Cat. 2 — ops log line] Start the backend with auth disabled, confirm the repeated WARN line in the terminal — an operator check, not a browser check. Confirmed 2026-08-01 via a real cold `java -jar` boot (not a unit test alone, per the reviewer's own framing that a unit test can't prove either "fires under the shipped config" or "isn't filtered by the real logging level"): 3 repeated `WARN com.appbana.ApiServer` lines naming the exact condition, immediately visible right after config load, before Liquibase even runs. Negative case (adminToken temporarily configured, then reverted) confirmed the banner does NOT appear when auth is actually enabled.
-- **S1.11 / S1.12** [Cat. 2 — automated tests] Formalize the scenarios already proven live in S1.3/S1.8; no new script. S1.11's "nor read/delete tenant A's schemas" clause depended on S1.15 landing first (review round 1, H1) — **now resolved**, `GET /schema/{name}` has an ownership check as of S1.15.
+- **S1.11** ✅ [Cat. 2 — automated tests, no new script] Done 2026-08-02: `CrossTenantAppAccessTest` (new, port 18095) covers all 18 `AppRoutes.java` handlers gated by `TenantAccessGuard.requireOwnTenant` with a non-null `pathAppId` that weren't already covered by `AppRoutesTenantIsolationTest` (app creation — B1; `.../full`, `.../env/{env}/full` — S1.9): bare tenant list, get/update/delete by id, publish, deploy/local, commits (create + rollback), versions (create + list), deploy/{versionId}, pipeline, restore-schemas, workflow (get + put), pages (get/put/delete). Three loop-driven tests exercise all 18 routes each: cross-tenant session → 403, unauthenticated → 401, and the app's own owner → never 401/403 (deliberately not asserting full business-logic success — publish/deploy/commits/versions can legitimately 400/404/500 downstream of the guard against a minimal single-field fixture app, for reasons unrelated to tenant isolation; only the tenant-guard property is in scope here). Two more tests prove the delete path end-to-end: a blocked cross-tenant delete leaves the app intact, and the real owner's own delete actually removes it. `CrossTenantSchemaAccessTest` (new, port 18096) adds the first automated coverage of `DELETE /schema/{name}`'s ownership check (previously only proven live/manually, S1.4) alongside `GET /schema/{name}`'s (already covered by `SchemaRoutesTenantIsolationTest`, S1.15, formalized here too for the capstone's own completeness): cross-tenant read/delete both 403, unauthenticated delete 401, owner's real delete succeeds and is confirmed gone via a follow-up 404. Both new classes break-tested (temporarily neutered the `PUT /appbana-studio/{tenantId}/apps/{id}` guard and `DELETE /schema/{name}`'s ownership check in turn, confirmed the exact expected test failed with a message naming the specific route, reverted both — `git diff --stat` clean). **Side effect of writing these tests**: found and fixed a genuine, pre-existing connection leak in `ReleaseService.createVersion()` (a bare, never-closed `Connection`, unlike every sibling method in the same file) — invisible until a test exercised `POST .../versions` as the legitimate owner for the first time; without the fix, the full suite reliably (2/2 runs) failed `RevisionFlowTest`'s concurrent-PUT test on connection-pool exhaustion, and a repo-wide grep confirmed this was the only unwrapped `JdbcManager.getConnection()` call site in `src/main` (all other 64 already use try-with-resources). Full suite: **417/417, BUILD SUCCESS** (408 baseline + 9 new), confirmed clean on two consecutive runs post-fix. The positive (membership) case remains deliberately deferred to S2.9's `CrossTenantMembershipAllowsAccessTest`, per the S1.10 review round 2 sequencing note.
+- **S1.12** [Cat. 2 — automated tests] Fix `SessionMiddlewareTest`'s tautological assertions; no new script.
 - **S1.13** [Cat. 1 happy path / Cat. 2 failure branch] Proof: normal Studio login smoke. The fail-closed branch needs the backend to omit `tenantId`, not naturally triggerable against the real running backend — verified by its unit test only, noted rather than skipped silently.
 - **S1.14** [Cat. 2 — no login screen for a raw admin/service token exists, by product design] Direct-call proof: the real `adminToken` from `config.json` as a header against a Tenant-A-owned route with no Studio session presented — confirms bypass still works.
 - **S1.15** ✅ [Cat. 2 — `GET /schema` has no per-tenant UI surface of its own; `DataDrawer` calls it in an already-app-scoped context] Done 2026-08-02: live direct-call proof against a real cold boot — tenant B's `GET /schema` does not contain tenant A's key; tenant B's `GET /schema/{name}` on tenant A's key returns 403 (not the real schema); tenant A's own read still returns 200. 8 new tests in `SchemaRoutesTenantIsolationTest`.
@@ -1119,6 +1120,79 @@ had already flagged as a reusable lesson.
 
 Still to do: commit (`fix`), push, update session memory, deliver chat writeup. S1 remains at S1.11
 next.
+
+---
+
+### S1.11 ✅ — cross-tenant capstone tests (`CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`)
+
+With S1.15/S1.16/S1.17/S1.19 closing every remaining open route, S1.11 became the genuine capstone:
+formalize, as automated tests, the cross-tenant deny behavior individually wired route-by-route
+across S1.1–S1.9 but — apart from app creation (`AppRoutesTenantIsolationTest`, B1) and the
+`.../full` pair (S1.9) — never exercised by a JUnit test; S1.3's own proof of the rest was a live
+browser click-through covering only a subset (get by id, bare tenant list).
+
+- **Absence-census first**: read every `AppRoutes.java` registration to confirm which of the 18
+  remaining tenant-guarded routes had zero automated cross-tenant coverage (list, get, update,
+  delete, publish, deploy/local, commits create + rollback, versions create + list,
+  deploy/{versionId}, pipeline, restore-schemas, workflow get + put, pages get/put/delete) — all 18
+  call `TenantAccessGuard.requireOwnTenant` as their first substantive line, confirmed by direct
+  read, not assumed from the route's name.
+- **New `CrossTenantAppAccessTest`** (port 18095): three loop-driven tests, each iterating the same
+  18-route list once — cross-tenant session → 403, unauthenticated → 401, and the app's own owner →
+  never 401/403. The third assertion is deliberately "not denied" rather than "200": this suite
+  tests the tenant guard specifically, and publish/deploy/commits/versions can legitimately
+  400/404/500 downstream of the guard against a minimal single-field fixture app (no real entities
+  to publish, no prior deployment to roll back) for reasons entirely unrelated to tenant isolation —
+  confirmed exactly this in practice (validation/business-logic errors logged, guard still correctly
+  admitted the owner in every case). Two further tests prove the highest-stakes route end to end:
+  a blocked cross-tenant delete leaves the app intact, and the real owner's own delete actually
+  removes it (mirrors the S1.4/S1.8 live-verification style, now automated).
+- **New `CrossTenantSchemaAccessTest`** (port 18096): adds the first automated coverage of `DELETE
+  /schema/{name}`'s ownership check — S1.4 only ever proved this live, manually, against a running
+  backend, never as a JUnit test. Also covers `GET /schema/{name}` cross-tenant denial (already
+  covered by `SchemaRoutesTenantIsolationTest`, S1.15 — repeated here too for this capstone file's
+  own completeness) and an end-to-end real-owner-delete-then-404 proof.
+- **Both new classes break-tested on purpose**: temporarily neutered the `PUT
+  /appbana-studio/{tenantId}/apps/{id}` guard (`if (false)` in place of `if (!access.allowed())`)
+  and separately `DELETE /schema/{name}`'s `isAppOwnerOrSystem` check, one at a time. Each neuter
+  produced exactly the expected failure, naming the specific route/message (`PUT
+  .../apps/s111-fixture-app must reject a cross-tenant session with 403, got 200`; `A session for a
+  different tenant must not be able to delete another app's schema by name ... but was: <200>`),
+  proving these tests would actually catch a real regression rather than passing for the wrong
+  reason. Both reverted; `git diff --stat` on the two touched route files came back empty.
+- **Real, pre-existing bug found and fixed as a direct side effect of writing these tests, not the
+  tests' own subject matter**: `ReleaseService.createVersion()` acquired a `Connection` via
+  `JdbcManager.getConnection()` as a bare local variable — never wrapped in try-with-resources,
+  never explicitly closed, on every call, success or failure. Invisible until now because no prior
+  automated test ever called `POST .../versions`; a handful of manual/live-verification calls per
+  session was never enough to exhaust a 10-connection pool that gets a fresh JVM between sessions.
+  The first full-suite run after adding these tests failed `RevisionFlowTest`'s own
+  `concurrentPutsOnTheSameParentProduceOnlyOneRevision` on a `SQLTransientConnectionException`
+  (pool exhausted: `active=10, idle=0`) — reproducible twice in a row. Rather than dismissing this
+  as the kind of full-suite-CPU-contention flakiness documented elsewhere in this file, isolated the
+  cause properly: `RevisionFlowTest` alone passed cleanly (21/21), and re-running the full suite
+  with the two new S1.11 test classes excluded also passed cleanly (408/408) — proving the leak was
+  real and specifically triggered by this task's own new coverage of a never-before-exercised route.
+  A repo-wide grep for every `= JdbcManager.getConnection(` call site in `src/main` confirmed all
+  other 64 already use try-with-resources — this was the only unwrapped one anywhere in the module.
+  Fixed by scoping the connection with try-with-resources, matching every sibling method in the same
+  file exactly. Confirmed fixed on two consecutive full-suite runs post-fix (417/417 both times).
+- Full suite: **417/417, BUILD SUCCESS** (408 baseline + 9 new: 5 in `CrossTenantAppAccessTest`, 4 in
+  `CrossTenantSchemaAccessTest`).
+- **Housekeeping, actioned before starting this task**: removed 3 stray test/probe accounts
+  (`s1probe-*`, `s119live_*`, `s119probe-*`) from `app-bana-service/data/users.json`, per the
+  external reviewer's own housekeeping note on the S1.19 round. Stopped the running dev backend
+  first (PID bound to :8080) to avoid a clobbering in-memory `saveUsers()` write, per the
+  established procedure; not restarted afterward since S1.11 needed no live curl/browser
+  verification of its own (Cat. 2 — the automated tests themselves are the complete proof, per this
+  doc's own pre-written classification for S1.11).
+- Docs: S1.11 row → ✅; its two exit-criteria bullets ("no resolved identity → 401, distinct from a
+  wrong-tenant 403"; "Tenant A's own users unaffected on every route above") both checked; the
+  combined S1.11/S1.12 UI-verification-script bullet split so S1.12 (still open) keeps its own
+  unchecked entry.
+  Next: S1.12/S1.13/S1.14/S1.18 remain independent and open — no explicit go-ahead given yet for any
+  of these. S1.11's positive (membership) case remains deliberately deferred to S2.9's
+  `CrossTenantMembershipAllowsAccessTest`, per the S1.10 review round 2 sequencing note.
 
 ---
 

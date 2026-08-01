@@ -48,15 +48,20 @@ public class ReleaseService {
 
         // Delegate to AppPublishService which handles V11 schema (app_versions table)
         // Default to DEV environment for version creation
-        Connection conn = JdbcManager.getConnection();
-        AppPublishService publishService = new AppPublishService(conn, new SchemaManager());
-        DeploymentResult result = publishService.publishApp(
-            appMetaJson, 
-            appId, 
-            tenantId, 
-            AppVersion.Environment.DEV, 
-            userId
-        );
+        // S1.11: was a bare (unclosed) Connection -- leaked one connection per call, exhausting
+        // the pool under sustained load. Every sibling method in this class already scopes its
+        // connection with try-with-resources; this one didn't.
+        DeploymentResult result;
+        try (Connection conn = JdbcManager.getConnection()) {
+            AppPublishService publishService = new AppPublishService(conn, new SchemaManager());
+            result = publishService.publishApp(
+                appMetaJson,
+                appId,
+                tenantId,
+                AppVersion.Environment.DEV,
+                userId
+            );
+        }
 
         if (!result.isSuccess()) {
             throw new Exception("Failed to create version: " + result.getErrorMessage());
