@@ -928,23 +928,55 @@ public class SchemaManager {
         return new ArrayList<>(names);
     }
 
+    // S1.15 (H1): tenant-scoped variant, queried by the tenant_id column (not name-string
+    // parsing) so no tenant id can accidentally prefix-match another tenant's.
+    public static List<String> listSchemaNames(String tenantId) {
+        Set<String> names = new TreeSet<>();
+        for (DatasourceConfig ds : allDatasources()) {
+            String dsName = ds.getName();
+            try {
+                JdbcManager.ensureMetaTableFor(dsName);
+                try (Connection c = JdbcManager.getConnection(dsName);
+                        PreparedStatement ps = c
+                                .prepareStatement("SELECT name FROM appbana_schemas WHERE tenant_id = ?")) {
+                    ps.setString(1, tenantId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next())
+                            names.add(rs.getString(1));
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return new ArrayList<>(names);
+    }
+
     // --- NEW: list schema names with pagination and optional search q (substring
     // match) ---
     public static List<String> listSchemaNames(int page, int size, String q) {
-        List<String> all = listSchemaNames();
+        return paginateSchemaNames(listSchemaNames(), page, size, q);
+    }
+
+    // S1.15 (H1): tenant-scoped counterpart of listSchemaNames(int, int, String).
+    public static List<String> listSchemaNames(String tenantId, int page, int size, String q) {
+        return paginateSchemaNames(listSchemaNames(tenantId), page, size, q);
+    }
+
+    private static List<String> paginateSchemaNames(List<String> all, int page, int size, String q) {
+        List<String> filtered = new ArrayList<>(all);
         if (q != null && !q.isBlank()) {
             String lq = q.toLowerCase();
-            all.removeIf(n -> !n.toLowerCase().contains(lq));
+            filtered.removeIf(n -> !n.toLowerCase().contains(lq));
         }
         if (page < 1)
             page = 1;
         if (size <= 0)
             size = 10;
         int from = (page - 1) * size;
-        if (from >= all.size())
+        if (from >= filtered.size())
             return List.of();
-        int to = Math.min(from + size, all.size());
-        return all.subList(from, to);
+        int to = Math.min(from + size, filtered.size());
+        return filtered.subList(from, to);
     }
 
     // --- NEW: migration preview (generateMigrationPlan) ---

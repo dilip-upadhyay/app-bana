@@ -30,10 +30,16 @@ import static org.junit.jupiter.api.Assertions.fail;
  *
  * <p>This is a one-directional ratchet, not a ban: the {@link #BASELINE} below is today's actual
  * count per file (verified against a real grep at the time this test was added — 21 in
- * {@code GenericEntityRoutes.java}, 6 in {@code SchemaRoutes.java}). Removing occurrences (S3.4's
- * job) never fails this test. Adding a new one — in an existing allow-listed file, or introducing
- * the pattern into any other file for the first time (this is exactly how S1.6 added three new
- * instances in {@code AppRoutes.java}) — does.
+ * {@code GenericEntityRoutes.java}, 6 in {@code SchemaRoutes.java} at the time). Removing
+ * occurrences (S3.4's job) never fails this test. Adding a new one — in an existing allow-listed
+ * file, or introducing the pattern into any other file for the first time (this is exactly how
+ * S1.6 added three new instances in {@code AppRoutes.java}) — does.
+ *
+ * <p><b>{@code SchemaRoutes.java}'s count reached zero via S1.15/S1.16/S1.17</b>, and its entry
+ * was removed from {@link #BASELINE} entirely rather than set to {@code 0} — a missing key and a
+ * {@code 0} entry both fail equally on any future re-introduction (the "NEW FILE" branch vs. the
+ * {@code count > max} branch), so removal is simply the more honest representation of "zero
+ * remaining occurrences" — not a stronger guarantee than {@code 0}, just the more accurate one.
  *
  * <p><b>{@code ApiServer.java}, 1 occurrence (S1.10, review round 2)</b> is the one deliberate
  * exception on the list, and is the *inverse* of the anti-pattern rather than a false negative:
@@ -65,7 +71,6 @@ class AuthEnabledAntiPatternTest {
      */
     private static final Map<String, Integer> BASELINE = Map.of(
             "com/appbana/server/routes/GenericEntityRoutes.java", 21,
-            "com/appbana/server/routes/SchemaRoutes.java", 6,
             // S1.10 — the inverse of the anti-pattern (warns auth is off; never gates a security
             // check on auth being on). See this class's own Javadoc before adding a second one.
             "com/appbana/ApiServer.java", 1

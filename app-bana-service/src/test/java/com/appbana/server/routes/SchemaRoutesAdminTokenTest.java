@@ -48,6 +48,21 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * value 401s at the middleware layer regardless of this fix, which would silently pass a test
  * that never actually exercises the route's own {@code hasAdmin()} check). {@code /api/endpoints}
  * has no such middleware gate (it matches {@code ENTITY_API_PATTERN}), so its tests don't need one.
+ *
+ * <p><b>Superseded by S1.15/S1.16/S1.17 for 4 of the 6 original call sites.</b> This class's
+ * premise (an {@code authEnabled(cfg)}-conditional {@code hasAdmin} gate) now describes only
+ * {@code GET /api/endpoints} and {@code GET /openapi.json}, which stayed admin-gated but became
+ * unconditional (S1.16 — see {@link #testGetEndpointsRejectsAnonymousEvenUnderShippedConfig()}).
+ * {@code GET /schema} and {@code GET /schema/{name}} moved to a session-based, tenant-filtered /
+ * ownership-checked model instead (S1.15 — see {@code SchemaRoutesTenantIsolationTest} for that
+ * route pair's own tests); a real session with no admin token now succeeds on {@code GET /schema}
+ * where it previously 401'd, which is why {@link #testReadTokenAloneNoLongerAdmitsGetSchema()}
+ * below was updated rather than left as-is. {@code POST /schema}/{@code DELETE /schema/{name}}'s
+ * wrapper was deleted outright (S1.17) since their unconditional {@code isAppOwnerOrSystem} check
+ * already fully governed them; this changed
+ * {@link #testOrdinarySessionAloneDoesNotAdmitPostSchema()}'s expected status from 401 to 403 (the
+ * *reason* for rejection changed from "no admin credential" to "not the resource owner" — the
+ * route was never reachable by this caller either way).
  */
 public class SchemaRoutesAdminTokenTest {
 
@@ -107,15 +122,63 @@ public class SchemaRoutesAdminTokenTest {
     }
 
     @Test
+    public void testGetEndpointsRejectsAnonymousEvenUnderShippedConfig() throws Exception {
+        // S1.16: proves the gate no longer depends on authEnabled(cfg) being true — the exact
+        // B2-class bug this task exists to fix. Overrides this class's own @BeforeEach back to
+        // the true shipped state (both tokens null) for just this request.
+        AppConfig cfg = ConfigManager.getConfig();
+        cfg.setAdminToken(null);
+        cfg.setReadToken(null);
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/api/endpoints"))
+                    .GET()
+                    .build();
+            HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+            assertEquals(401, res.statusCode(),
+                    "GET /api/endpoints must reject an anonymous caller even when no admin token is configured at all");
+        } finally {
+            cfg.setAdminToken(ADMIN_TOKEN);
+            cfg.setReadToken(READ_TOKEN);
+        }
+    }
+
+    @Test
+    public void testOpenApiJsonRejectsAnonymousEvenUnderShippedConfig() throws Exception {
+        // S1.16: same fix, same reason as testGetEndpointsRejectsAnonymousEvenUnderShippedConfig.
+        AppConfig cfg = ConfigManager.getConfig();
+        cfg.setAdminToken(null);
+        cfg.setReadToken(null);
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/openapi.json"))
+                    .GET()
+                    .build();
+            HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+            assertEquals(401, res.statusCode(),
+                    "GET /openapi.json must reject an anonymous caller even when no admin token is configured at all");
+        } finally {
+            cfg.setAdminToken(ADMIN_TOKEN);
+            cfg.setReadToken(READ_TOKEN);
+        }
+    }
+
+    @Test
     public void testReadTokenAloneNoLongerAdmitsGetSchema() throws Exception {
+        // S1.15 superseded this test's original premise (see class Javadoc): GET /schema is no
+        // longer admin-gated at all — a real session, with or without any service token
+        // alongside it, is now admitted and tenant-filtered. This assertion flipped from 401 to
+        // 200 accordingly; SchemaRoutesTenantIsolationTest covers the actual tenant-filtering.
         HttpResponse<String> res = getWithSession("/schema", createOrdinarySession(), READ_TOKEN);
-        assertEquals(401, res.statusCode(),
-                "The old read-only token must no longer satisfy the now-hasAdmin-only gate on GET /schema, "
-                        + "even from a caller with an otherwise-valid session");
+        assertEquals(200, res.statusCode(),
+                "A valid session is now sufficient for GET /schema regardless of any accompanying service token (S1.15)");
     }
 
     @Test
     public void testAdminTokenStillAdmitsGetSchema() throws Exception {
+        // S1.15: the admin/service token now means "see every tenant, unfiltered" (break-glass),
+        // rather than "the only credential this route accepts" — but a real admin token must
+        // still be admitted either way.
         HttpResponse<String> res = getWithSession("/schema", createOrdinarySession(), ADMIN_TOKEN);
         assertEquals(200, res.statusCode(), "The real admin token must still be admitted on GET /schema");
     }
@@ -140,11 +203,11 @@ public class SchemaRoutesAdminTokenTest {
 
     @Test
     public void testOrdinarySessionAloneDoesNotAdmitPostSchema() throws Exception {
-        // A real, valid session with no admin token must not be able to write a schema once
-        // authEnabled(cfg) is true — proves the hasWrite -> hasAdmin conversion didn't loosen
-        // anything on the write side (hasWrite() already equaled hasAdmin() before this task, so
-        // the only real change there is the extraction method, which this route's own
-        // SessionMiddleware gate makes untestable in isolation — see class Javadoc).
+        // S1.17 removed this route's authEnabled(cfg) wrapper, so a valid-but-non-owning session
+        // now reaches the unconditional isAppOwnerOrSystem check directly and is rejected there
+        // (403 - "not the resource owner") rather than at the old admin-only wrapper (401 - "no
+        // admin credential"). Either way this caller was never able to write the schema; only the
+        // *reason* for rejection changed.
         String body = MAPPER.writeValueAsString(Map.of(
                 "name", "s19_schema_probe",
                 "tenantId", "t_s19_probe",
@@ -158,8 +221,8 @@ public class SchemaRoutesAdminTokenTest {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
-        assertEquals(401, res.statusCode(),
-                "POST /schema must reject a valid-but-non-admin session once an admin token is configured");
+        assertEquals(403, res.statusCode(),
+                "POST /schema must reject a valid-but-non-owning session (S1.17: ownership check, not the old admin gate)");
     }
 
     private HttpResponse<String> get(String path, String serviceToken) throws Exception {

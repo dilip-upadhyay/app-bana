@@ -25,12 +25,13 @@ public class SchemaRoutes {
         // List API endpoints for all schemas
         router.get("/api/endpoints", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
+            // S1.16: unconditional — mirrors S1.6/B2's /api/templates precedent. This route
+            // enumerates every tenant's schema keys pre-formatted as callable CRUD URLs; it must
+            // not depend on whether an admin token happens to be configured.
+            String tok = AuthService.extractServiceToken(req);
+            if (!AuthService.hasAdmin(tok, cfg)) {
+                res.json(401, Map.of("error", "unauthorized"));
+                return;
             }
             try {
                 List<String> names = SchemaManager.listSchemaNames();
@@ -57,12 +58,11 @@ public class SchemaRoutes {
         // OpenAPI spec generation
         router.get("/openapi.json", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
+            // S1.16: unconditional — see GET /api/endpoints above (same fix, same reason).
+            String tok = AuthService.extractServiceToken(req);
+            if (!AuthService.hasAdmin(tok, cfg)) {
+                res.json(401, Map.of("error", "unauthorized"));
+                return;
             }
             try {
                 List<String> names = SchemaManager.listSchemaNames();
@@ -83,12 +83,21 @@ public class SchemaRoutes {
         // List schemas
         router.get("/schema", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
+
+            // S1.15 (H1): unconditional. Admin/service token sees every tenant (break-glass,
+            // mirrors TenantAccessGuard); anyone else must resolve a real session and is
+            // filtered to that session's own tenant. Previously public and cross-tenant under
+            // the shipped config (the optional authEnabled(cfg) gate skipped entirely).
+            String serviceTok = AuthService.extractServiceToken(req);
+            boolean isAdminCaller = AuthService.hasAdmin(serviceTok, cfg);
+            String callerTenantId = null;
+            if (!isAdminCaller) {
+                com.appbana.service.SessionService.SessionData session = AuthService.resolveSession(req);
+                if (session == null || session.tenantId() == null || session.tenantId().isBlank()) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
+                callerTenantId = session.tenantId();
             }
 
             String pageS = req.query("page");
@@ -108,10 +117,14 @@ public class SchemaRoutes {
                 } catch (Exception ignored) {
                 }
 
-                List<String> names = SchemaManager.listSchemaNames(page, size, q);
+                List<String> names = (callerTenantId != null)
+                        ? SchemaManager.listSchemaNames(callerTenantId, page, size, q)
+                        : SchemaManager.listSchemaNames(page, size, q);
                 res.json(200, names);
             } else {
-                List<String> names = SchemaManager.listSchemaNames();
+                List<String> names = (callerTenantId != null)
+                        ? SchemaManager.listSchemaNames(callerTenantId)
+                        : SchemaManager.listSchemaNames();
                 res.json(200, names);
             }
         });
@@ -119,13 +132,6 @@ public class SchemaRoutes {
         // Get schema by name
         router.get("/schema/{name}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
-            }
 
             String name = req.pathParam("name");
             EntitySchema schema = SchemaManager.loadSchema(name);
@@ -133,19 +139,30 @@ public class SchemaRoutes {
                 res.json(404, Map.of("error", "not found"));
                 return;
             }
+
+            // S1.15 (H1) Fix: ownership check, mirroring S1.4's DELETE /schema/{name} fix — this
+            // route had no ownership check before, so any caller who could name another
+            // tenant's schema key could read it. The now-redundant authEnabled(cfg) wrapper is
+            // removed rather than kept as dead weight (S1.17 depends on this file's GET routes
+            // not carrying one forward).
+            String userId = AuthService.extractUserId(req, cfg);
+            if (userId == null || userId.isBlank()) {
+                res.json(401, Map.of("error", "Unauthorized: valid session required"));
+                return;
+            }
+            if (!com.appbana.security.AppAuthorization.isAppOwnerOrSystem(schema.getTenantId(), schema.getAppId(), userId)) {
+                res.json(403, Map.of("error", "Forbidden: caller is not authorized to read entity schema for app " + schema.getAppId()));
+                return;
+            }
+
             res.json(200, schema);
         });
 
         // Create/Update schema
         router.post("/schema", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
-            }
+            // S1.17: removed the authEnabled(cfg) wrapper — dead weight next to the
+            // unconditional isAppOwnerOrSystem check below (Task C1.10).
 
             try {
                 EntitySchema schema = req.readJson(new TypeReference<EntitySchema>() {
@@ -196,13 +213,8 @@ public class SchemaRoutes {
         // Delete schema
         router.delete("/schema/{name}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
-            }
+            // S1.17: removed the authEnabled(cfg) wrapper — dead weight next to the
+            // unconditional isAppOwnerOrSystem check below (Task S1.4).
 
             String name = req.pathParam("name");
             try {
