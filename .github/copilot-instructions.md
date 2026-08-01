@@ -857,17 +857,18 @@ then hands off to a **reviewer** agent, which verifies it and hands back. Shared
 - **`status: "idle"` with a non-empty `review_comments` means:** read the comments, action them, then
   begin the item tagged `severity: "next"`.
 
-The prompt for either side is just the filename: `#loop_status.json`. Everything needed to act should
-already be in the file — if it isn't, that's a defect in the handoff, not something to ask about.
+Everything needed to act should already be in the file — if it isn't, that's a defect in the handoff,
+not something to ask about.
 
 ### Canonical prompt
 
 ```
-take your turn — #loop_status.json
+loop
 ```
 
-Paste this into either window; it is deliberately role-agnostic and self-selecting. On receiving it,
-read the file and act on whether `active_agent` matches your own role:
+That single word is the whole prompt, and this section is what gives it meaning. On receiving `loop`
+— alone, with no other instruction — read `loop_status.json` at the repo root and act on whether
+`active_agent` matches your own role:
 
 - **It's your turn.** Do your role's next action without waiting for further instruction — developer:
   action any outstanding `review_comments`, then begin the item tagged `severity: "next"`; reviewer:
@@ -875,8 +876,14 @@ read the file and act on whether `active_agent` matches your own role:
 - **It's not your turn.** Say so and stop. Do not act out of turn, and do not edit the file — the other
   agent may be mid-write, and there is no locking.
 
-A bare `#loop_status.json` with no verb tends to produce a *description* of the file rather than an
-action on it; keep the imperative.
+It is deliberately role-agnostic and self-selecting, so the same word works in either window and stays
+correct when the model behind each role is swapped.
+
+> [!NOTE]
+> Do **not** shorten this to a bare `#loop_status.json` file reference. A filename with no verb reads
+> as an attachment rather than a command and tends to produce a *description* of the file instead of
+> an action on it — observed directly. `loop` avoids that only because this section binds it to an
+> imperative; a one-word prompt is not self-explaining, it is explained here.
 
 ### Reviewer protocol
 
