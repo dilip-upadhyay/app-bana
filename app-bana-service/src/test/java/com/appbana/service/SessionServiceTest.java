@@ -146,7 +146,9 @@ class SessionServiceTest {
             session.createdAt(),
             session.lastAccessedAt(),
             System.currentTimeMillis() - 1000, // Expired 1 second ago
-            session.attributes()
+            session.attributes(),
+            session.tenantId(),
+            session.scopedAppId()
         );
         
         // Replace session with expired version (using getSessionData to access internal storage)
@@ -428,7 +430,9 @@ class SessionServiceTest {
             System.currentTimeMillis() - 10000,
             System.currentTimeMillis() - 5000,
             System.currentTimeMillis() - 1000, // Expired 1 second ago
-            new java.util.concurrent.ConcurrentHashMap<>()
+            new java.util.concurrent.ConcurrentHashMap<>(),
+            null,
+            null
         );
         
         assertEquals(0, expiredSession.remainingSeconds());
@@ -524,5 +528,50 @@ class SessionServiceTest {
         for (int i = 0; i < threadCount; i++) {
             assertEquals("value" + i, SessionService.getSessionAttribute(session.sessionId(), "key" + i));
         }
+    }
+
+    // ========================================
+    // Test Group 9: tenantId / scopedAppId (S1.1)
+    // ========================================
+
+    @Test
+    @DisplayName("createSession(userId, tenantId) populates tenantId, leaves scopedAppId reserved")
+    void testCreateSessionWithTenantId() {
+        SessionData session = SessionService.createSession("user123", "t-abc123");
+
+        assertEquals("t-abc123", session.tenantId());
+        assertNull(session.scopedAppId());
+    }
+
+    @Test
+    @DisplayName("createSession(userId) with no tenant leaves tenantId null (back-compat)")
+    void testCreateSessionWithoutTenantIdLeavesItNull() {
+        SessionData session = SessionService.createSession("user123");
+
+        assertNull(session.tenantId());
+        assertNull(session.scopedAppId());
+    }
+
+    @Test
+    @DisplayName("createSession(userId, timeoutMinutes) overload leaves tenantId null (back-compat)")
+    void testCreateSessionWithTimeoutLeavesTenantIdNull() {
+        SessionData session = SessionService.createSession("user123", 60);
+
+        assertNull(session.tenantId());
+        assertNull(session.scopedAppId());
+    }
+
+    @Test
+    @DisplayName("renewSession preserves tenantId and scopedAppId across renewal")
+    void testRenewSessionPreservesTenantId() {
+        SessionData original = SessionService.createSession("user123", "t-abc123");
+
+        SessionData renewed = SessionService.renewSession(original.sessionId());
+        assertEquals("t-abc123", renewed.tenantId());
+        assertNull(renewed.scopedAppId());
+
+        SessionData renewedAgain = SessionService.renewSession(original.sessionId(), 45);
+        assertEquals("t-abc123", renewedAgain.tenantId());
+        assertNull(renewedAgain.scopedAppId());
     }
 }

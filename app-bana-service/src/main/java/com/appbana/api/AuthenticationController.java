@@ -48,8 +48,8 @@ public class AuthenticationController {
                 // Return DTO (safe user) and session
                 UserDTO safeUser = UserDTO.fromUser(user);
 
-                // Create session using SessionService (Story 2.1)
-                SessionData session = SessionService.createSession(String.valueOf(user.getId()));
+                // Create session using SessionService (Story 2.1); tenantId captured at login (S1.1)
+                SessionData session = SessionService.createSession(String.valueOf(user.getId()), user.getTenantId());
                 
                 LOG.info("User registered successfully: {}", email);
 
@@ -87,8 +87,8 @@ public class AuthenticationController {
 
                 UserDTO safeUser = UserDTO.fromUser(user);
 
-                // Create session using SessionService (Story 2.1)
-                SessionData session = SessionService.createSession(String.valueOf(user.getId()));
+                // Create session using SessionService (Story 2.1); tenantId captured at login (S1.1)
+                SessionData session = SessionService.createSession(String.valueOf(user.getId()), user.getTenantId());
                 
                 LOG.info("User logged in successfully: {}", email);
 

@@ -41,7 +41,11 @@ public class SessionService {
         long createdAt,
         long lastAccessedAt,
         long expiresAt,
-        Map<String, Object> attributes
+        Map<String, Object> attributes,
+        // S1.1: captured once at login from User.tenantId, avoids a DB round-trip per request.
+        String tenantId,
+        // S1.1: reserved for a future scoped end-user session (S3); nothing populates it yet.
+        String scopedAppId
     ) {
         /**
          * Check if session is expired.
@@ -73,6 +77,18 @@ public class SessionService {
      * @return SessionData containing session details
      */
     public static SessionData createSession(String userId) {
+        return createSession(userId, (String) null);
+    }
+
+    /**
+     * Create a new session for a user, capturing tenantId once at login (S1.1) so
+     * tenant-boundary checks don't need a DB round-trip per request.
+     *
+     * @param userId User identifier
+     * @param tenantId Tenant identifier from User.tenantId, or null if unknown
+     * @return SessionData containing session details
+     */
+    public static SessionData createSession(String userId, String tenantId) {
         if (userId == null || userId.trim().isEmpty()) {
             throw new IllegalArgumentException("userId cannot be null or empty");
         }
@@ -87,7 +103,9 @@ public class SessionService {
             now,
             now,
             expiresAt,
-            new ConcurrentHashMap<>()
+            new ConcurrentHashMap<>(),
+            tenantId,
+            null
         );
         
         SESSIONS.put(sessionId, session);
@@ -122,7 +140,9 @@ public class SessionService {
             now,
             now,
             expiresAt,
-            new ConcurrentHashMap<>()
+            new ConcurrentHashMap<>(),
+            null,
+            null
         );
         
         SESSIONS.put(sessionId, session);
@@ -181,7 +201,9 @@ public class SessionService {
             oldSession.createdAt(),
             now,
             newExpiresAt,
-            oldSession.attributes()
+            oldSession.attributes(),
+            oldSession.tenantId(),
+            oldSession.scopedAppId()
         );
         
         SESSIONS.put(sessionId, renewedSession);
@@ -217,7 +239,9 @@ public class SessionService {
             oldSession.createdAt(),
             now,
             newExpiresAt,
-            oldSession.attributes()
+            oldSession.attributes(),
+            oldSession.tenantId(),
+            oldSession.scopedAppId()
         );
         
         SESSIONS.put(sessionId, renewedSession);
