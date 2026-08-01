@@ -26,8 +26,8 @@ public class SchemaRoutes {
         router.get("/api/endpoints", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                if (!AuthService.hasRead(tok, cfg)) {
+                String tok = AuthService.extractServiceToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -58,8 +58,8 @@ public class SchemaRoutes {
         router.get("/openapi.json", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                if (!AuthService.hasRead(tok, cfg)) {
+                String tok = AuthService.extractServiceToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -84,8 +84,8 @@ public class SchemaRoutes {
         router.get("/schema", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                if (!AuthService.hasRead(tok, cfg)) {
+                String tok = AuthService.extractServiceToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -120,8 +120,8 @@ public class SchemaRoutes {
         router.get("/schema/{name}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                if (!AuthService.hasRead(tok, cfg)) {
+                String tok = AuthService.extractServiceToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -140,8 +140,8 @@ public class SchemaRoutes {
         router.post("/schema", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                if (!AuthService.hasWrite(tok, cfg)) {
+                String tok = AuthService.extractServiceToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }
@@ -197,8 +197,8 @@ public class SchemaRoutes {
         router.delete("/schema/{name}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
             if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                if (!AuthService.hasWrite(tok, cfg)) {
+                String tok = AuthService.extractServiceToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
                     res.json(401, Map.of("error", "unauthorized"));
                     return;
                 }

@@ -387,28 +387,6 @@ public class AppRoutes {
             }
         });
 
-        // Get app snapshot
-        router.get("/api/{tenantId}/apps/{id}/env/{env}/full", (req, res) -> {
-            String tenantId = req.pathParam("tenantId");
-            String appId = req.pathParam("id");
-            String env = req.pathParam("env").toUpperCase();
-            if (tenantId == null || tenantId.isBlank()) {
-                res.json(400, Map.of("error", "tenantId required"));
-                return;
-            }
-            try {
-                Map<String, Object> snapshot = releaseService.getAppSnapshot(appId, env);
-                if (snapshot == null) {
-                    res.json(404, Map.of("error", "App not deployed to " + env));
-                } else {
-                    res.json(200, snapshot);
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to get app snapshot", e);
-                res.json(500, Map.of("error", e.getMessage()));
-            }
-        });
-
         // Restore schemas from snapshot
         router.post("/api/{tenantId}/apps/{id}/restore-schemas", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
@@ -518,7 +496,9 @@ public class AppRoutes {
             }
         });
 
-        // ==================== PUBLIC RUNTIME APIs (No Auth Required)
+        // ==================== APP SNAPSHOT APIs (S1.9 — tenant-guarded; the "PUBLIC RUNTIME
+        // APIs (No Auth Required)" label these carried until S1.9 was never accurate for a
+        // route returning full page/entity metadata, and had zero real callers to break)
         // ====================
 
         // Get app with all pages (for runtime)
@@ -527,6 +507,12 @@ public class AppRoutes {
             String appId = req.pathParam("id");
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
             try {
@@ -541,13 +527,20 @@ public class AppRoutes {
             }
         });
 
-        // Get deployed app snapshot (PUBLIC - for end users running published apps)
+        // Get deployed app snapshot (S1.9 — tenant-guarded, dedupe of a second identical
+        // registration that used to exist under the release-management section above)
         router.get("/api/{tenantId}/apps/{id}/env/{env}/full", (req, res) -> {
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("id");
             String env = req.pathParam("env").toUpperCase();
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, appId);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
             try {
@@ -562,6 +555,7 @@ public class AppRoutes {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
+
 
         // Create new app
         router.post("/appbana-studio/{tenantId}/apps", (req, res) -> {

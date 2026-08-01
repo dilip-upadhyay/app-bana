@@ -206,4 +206,130 @@ public class AppRoutesTenantIsolationTest {
         HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
         assertEquals(200, res.statusCode(), "GET /api/templates must remain public per the plan's adopted default");
     }
+
+    // ========================================
+    // S1.9 — GET /api/{tenantId}/apps/{id}/full and its .../env/{env}/full sibling must enforce
+    // tenant ownership. Previously unguarded (one of them via a second, dead, identical
+    // registration — see RouteCensusTest's own comment). Confirmed zero real callers repo-wide
+    // (review round 2, R2-2): no client anywhere calls either route, so no live UI/tool
+    // verification is possible for this pair — these HTTP-level tests are the whole verification.
+    // ========================================
+
+    @Test
+    public void testGetAppFullCrossTenantIsRejected() throws Exception {
+        String victimTenant = "t_b1_victim";
+        String attackerTenant = "t_b1_attacker";
+        createAppViaApi(victimTenant, "s19-full-app");
+        String attackerSession = createTestSession("s19_attacker", attackerTenant);
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/" + victimTenant + "/apps/s19-full-app/full"))
+                .header("X-Session-Token", attackerSession)
+                .GET()
+                .build();
+
+        HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, res.statusCode(),
+                "A session for one tenant must not be able to read another tenant's app snapshot via /full");
+    }
+
+    @Test
+    public void testGetAppFullUnauthenticatedIsRejected() throws Exception {
+        String tenantId = "t_b1_victim";
+        createAppViaApi(tenantId, "s19-full-app-anon");
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/" + tenantId + "/apps/s19-full-app-anon/full"))
+                .GET()
+                .build();
+
+        HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, res.statusCode(), "No session at all must 401, not return the app snapshot");
+    }
+
+    @Test
+    public void testGetAppFullSameTenantStillWorks() throws Exception {
+        String tenantId = "t_b1_victim";
+        createAppViaApi(tenantId, "s19-full-app-legit");
+        String session = createTestSession("s19_legit_owner", tenantId);
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/" + tenantId + "/apps/s19-full-app-legit/full"))
+                .header("X-Session-Token", session)
+                .GET()
+                .build();
+
+        HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, res.statusCode(), "The caller's own tenant must still be able to read its own app snapshot");
+    }
+
+    @Test
+    public void testGetAppEnvFullCrossTenantIsRejected() throws Exception {
+        String victimTenant = "t_b1_victim";
+        String attackerTenant = "t_b1_attacker";
+        createAppViaApi(victimTenant, "s19-env-full-app");
+        String attackerSession = createTestSession("s19_attacker2", attackerTenant);
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/" + victimTenant + "/apps/s19-env-full-app/env/DEV/full"))
+                .header("X-Session-Token", attackerSession)
+                .GET()
+                .build();
+
+        HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, res.statusCode(),
+                "A session for one tenant must not be able to read another tenant's deployed snapshot");
+    }
+
+    @Test
+    public void testGetAppEnvFullUnauthenticatedIsRejected() throws Exception {
+        String tenantId = "t_b1_victim";
+        createAppViaApi(tenantId, "s19-env-full-app-anon");
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/" + tenantId + "/apps/s19-env-full-app-anon/env/DEV/full"))
+                .GET()
+                .build();
+
+        HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, res.statusCode(), "No session at all must 401, not return the deployed snapshot");
+    }
+
+    @Test
+    public void testGetAppEnvFullSameTenantReachesBusinessLogic() throws Exception {
+        String tenantId = "t_b1_victim";
+        createAppViaApi(tenantId, "s19-env-full-app-legit");
+        String session = createTestSession("s19_legit_owner2", tenantId);
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/" + tenantId + "/apps/s19-env-full-app-legit/env/DEV/full"))
+                .header("X-Session-Token", session)
+                .GET()
+                .build();
+
+        HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+        // No deployment exists for this fixture app, so the guard must let the request through to
+        // the business logic (a 404 "not deployed"), not stop it at 401/403 — proves the guard
+        // doesn't regress the caller's own tenant even though nothing currently calls this route.
+        assertEquals(404, res.statusCode(),
+                "The caller's own tenant must reach the 'not deployed' business logic, not be blocked by the guard");
+    }
+
+    private void createAppViaApi(String tenantId, String appId) throws Exception {
+        String session = createTestSession("s19_setup_owner", tenantId);
+        String createJson = MAPPER.writeValueAsString(Map.of(
+                "id", appId,
+                "name", "S1.9 fixture app",
+                "version", "1.0.0"
+        ));
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/appbana-studio/" + tenantId + "/apps"))
+                .header("Content-Type", "application/json")
+                .header("X-Session-Token", session)
+                .POST(HttpRequest.BodyPublishers.ofString(createJson))
+                .build();
+        HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(201, res.statusCode(), "Test fixture setup: app creation must succeed");
+    }
 }
+

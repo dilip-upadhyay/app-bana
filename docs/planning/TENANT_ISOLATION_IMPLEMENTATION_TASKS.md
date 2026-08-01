@@ -121,7 +121,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.6 | Gate `POST/PUT/DELETE /api/templates` behind an authenticated (admin, for now) identity; reads stay public pending the open product decision. | `AppRoutes.java` | 30 min | ✅ |
 | S1.7 | `POST /api/files/upload` requires a resolved identity; derive `tenantId`/`appId` from it instead of the request body. Add an upload-path test to `FileRoutesTenantIsolationTest` (today download-only). | `FileRoutes.java` | 45 min | ✅ |
 | S1.8 | `SavedViewRoutes`: require a resolved identity on all 3 routes; add `tenant_id`/`app_id`/`owner_user_id` to `DELETE_SQL`'s WHERE clause (today: `view_id` alone). | `SavedViewRoutes.java` | 45 min | ✅ |
-| S1.9 | Dedupe the two identical `GET .../env/{env}/full` registrations into one; guard it and its `.../full` sibling with the same tenant+membership check (no public carve-out — confirmed zero real callers). Fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite`: convert **all six to `hasAdmin` via `extractServiceToken()`** (readToken is retired — see plan Non-goals, R6-1), leaving `AuthService.hasRead`/`cfg.getReadToken()` with no remaining callers anywhere. | `AppRoutes.java`, `SchemaRoutes.java` | 60 min | ⬜ |
+| S1.9 | Dedupe the two identical `GET .../env/{env}/full` registrations into one; guard it and its `.../full` sibling with the same tenant+membership check (no public carve-out — confirmed zero real callers). Fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite`: convert **all six to `hasAdmin` via `extractServiceToken()`** (readToken is retired — see plan Non-goals, R6-1), leaving `AuthService.hasRead`/`cfg.getReadToken()` with no remaining callers anywhere. | `AppRoutes.java`, `SchemaRoutes.java` | 60 min | ✅ |
 | S1.10 | Startup: log a loud repeated `WARN` while `AuthService.authEnabled(cfg)==false`. | `ApiServer.java` | 30 min | ⬜ |
 | S1.11 | `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9). | new tests | 105 min | ⬜ |
 | S1.12 | Fix `SessionMiddlewareTest`'s tautological assertions (`testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes no real route has) — rewrite against real route shapes, flip expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into read-still-excluded vs. write-requires-auth. | `SessionMiddlewareTest.java` | 30 min | ⬜ |
@@ -141,7 +141,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - [x] `POST/PUT/DELETE /api/templates` require an authenticated admin identity.
 - [x] `POST /api/files/upload` and all of `SavedViewRoutes` require identity; saved-view delete scoped by tenant+app+owner.
 - [ ] File downloads (`GET /api/files/{tenantId}/{appId}/{fileId}`) are actually reachable by a real logged-in end user, not just protected from anonymous/cross-tenant access (review round 6, S1.18).
-- [ ] Both `.../full` routes require tenant+membership check; only one registration remains.
+- [x] Both `.../full` routes require tenant+membership check; only one registration remains. Confirmed 2026-08-01: dead duplicate `.../env/{env}/full` registration deleted; both it and `.../full` now call `TenantAccessGuard.requireOwnTenant`, break-tested (neutered per route, confirmed the exact 2 tests fail, reverted). `SchemaRoutes.java`'s 6 `hasRead`/`hasWrite` call sites also converted to `hasAdmin` this same task (S1.9) — see its own row/write-up; no separate bullet exists for that half here.
 - [ ] `SessionMiddlewareTest` matches real route shapes/behavior.
 - [ ] Tenant A's own users unaffected on every route above.
 - [ ] Server logs a visible warning whenever global auth is disabled.
@@ -163,7 +163,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - **S1.8** [Cat. 1] ✅ Done live 2026-08-01: `SavedViewRoutes.java`'s `handleList`/`handleUpsert` now call `TenantAccessGuard.requireOwnTenant` right after the null-check (same shape as every other S1 guard site); `ownerUserId` on upsert is now always server-derived via `AuthService.resolveIdentity` (client-supplied value ignored). `handleDelete` was rewritten load-then-authorize: a new `LOOKUP_SQL` fetches the row's real tenant_id/app_id/owner_user_id first (404 if missing), then the same tenant guard, then an admin-bypass-aware owner check (403 if the caller isn't the owner and isn't admin/service), then a parameterized `DELETE_SQL` now scoped by `view_id AND tenant_id AND app_id AND owner_user_id IS NOT DISTINCT FROM ?` (previously `view_id` alone — any authenticated caller who guessed/enumerated a viewId could delete anyone's view). All 4 guard call sites individually break-tested (neutered on purpose, confirmed the exact expected test(s) fail, reverted) across both routes and the delete path. 12 new tests in `SavedViewRoutesTenantIsolationTest`, full suite 382/382 `BUILD SUCCESS`.
   **Live browser proof:** the standing "Contact List" fixture page had no page-metadata `filters` array (an unrelated, pre-existing gap — see note below), so `SavedViewsBar`'s "+ Save current" button never rendered from typing into the per-column filters alone. As User A (real owner), added a minimal filter descriptor (`field: category, op: contains, label: Category`) to the page's table node via the same authenticated `PUT /appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}` call the product's own save-page flow uses (real session token, real ownership) — a one-time, legitimate metadata change, not a security-relevant action, and reverted immediately after this verification. With the FilterBar now rendering, typed "VIP" into the real Category chip filter (real UI) → "+ Save current" appeared → clicked it (real UI click) → handled the resulting `window.prompt` via a standard Playwright prompt-stub (the `handle_dialog` tool did not intercept this app's prompt in time; stubbing the browser API before the click is the standard fallback and does not touch any backend/security code path) → saved view "S1.8 QA View" appeared as a real chip. Reloaded the page from scratch (fresh network fetch, not client cache) → chip still present, confirming server-side persistence; screenshotted. Logged into Studio as User B (real login, real session) and, from User B's own authenticated context, called `GET /api/saved-views` for User A's real tenant/app/entity → **403 "Forbidden: caller's tenant does not match the requested app's tenant"**, never the view data. Same context, `DELETE /api/saved-views/{User A's real viewId}` → **403**, same message. Re-checked from User A's own tab: the view still existed (1 row) — User B's blocked delete attempt had zero effect, directly proving the new `DELETE_SQL` WHERE clause. As User A (real UI), clicked the view chip's own "×" delete button → chip disappeared; confirmed via a follow-up list call that the row was actually gone (0 rows), proving the legitimate owner-delete path still works end-to-end. Afterward, reverted the Contact List page's metadata back to its original state (`filters` key removed) so the standing fixture is unchanged for future verification work.
   **Pre-existing gap found as a side effect, out of scope for this task, not fixed here:** `SavedViewsBar`'s "+ Save current" button is gated purely on `StudioTableLive.tsx`'s page-metadata-driven `filterValues` (fed only by `<FilterBar>`, which only renders when the page's `props.filters` array is non-empty) — the separate, more commonly-populated per-column `columnFilterValues`/`TableHeader` filter state is never folded into `filterValues`, so on any scaffolded list page without explicit `filters` metadata (most of them, including both standing fixture apps), "+ Save current" is unreachable no matter what a real user types into the visible per-column filter row. Worth a future task if saved views are meant to work broadly, not just on pages that opted into the separate `FilterBar` feature.
-- **S1.9** [Cat. 2 — confirmed zero real callers for `.../full`; `readToken` is a service credential with no UI login anywhere] Structural proof: grep confirms no remaining `hasRead`/`getReadToken()` callers; direct-call check that the six converted routes now require `hasAdmin`.
+- **S1.9** ✅ [Cat. 2 — `.../full` pair: confirmed zero real callers repo-wide, no live verification possible; `SchemaRoutes.java`'s six: shipped-config discipline, same class as B2] Done 2026-08-01: deleted the dead duplicate `.../env/{env}/full` registration; both it and its `.../full` sibling now call `TenantAccessGuard.requireOwnTenant`, break-tested (neutered, confirmed the exact 2 tests fail per route, reverted). All 6 `SchemaRoutes.java` sites converted `extractToken()`+`hasRead`/`hasWrite` → `extractServiceToken()`+`hasAdmin()`; break-tested by reverting one site to `hasRead`, confirming the expected test fails, reverting. 13 new tests (6 in `AppRoutesTenantIsolationTest`, 7 in new `SchemaRoutesAdminTokenTest`), full suite 397/397. Confirmed this repo's live `config.json` ships `adminToken: null, readToken: null`, so the `SchemaRoutes.java` fix is inert in the running dev environment today, by design. **Correction to this bullet's own prior assumption**: "no remaining `hasRead`/`getReadToken()` callers" is not true after S1.9 alone — `GenericEntityRoutes.java` still has 4 live call sites (confirmed by grep), out of scope here (S3.4's job); see the full write-up below for the forward note filed against S3.4.
 - **S1.10** [Cat. 2 — ops log line] Start the backend with auth disabled, confirm the repeated WARN line in the terminal — an operator check, not a browser check.
 - **S1.11 / S1.12** [Cat. 2 — automated tests] Formalize the scenarios already proven live in S1.3/S1.8; no new script. S1.11's "nor read/delete tenant A's schemas" clause depends on S1.15 landing first (review round 1, H1) — `GET /schema/{name}` has no ownership check today, so that clause would fail without it.
 - **S1.13** [Cat. 1 happy path / Cat. 2 failure branch] Proof: normal Studio login smoke. The fail-closed branch needs the backend to omit `tenantId`, not naturally triggerable against the real running backend — verified by its unit test only, noted rather than skipped silently.
@@ -718,6 +718,76 @@ established convention of never retroactively editing a prior round's own stated
 
 Still to do: commit (`fix`/`docs`), push, deliver chat writeup. Then: **on to S1.9**, unchanged from round
 1's framing.
+
+## S1.9 ✅ — env/{env}/full dedupe + tenant guard; SchemaRoutes hasRead/hasWrite → hasAdmin
+
+- **Protocol compliance**: absence-census confirmed exactly 2 `.../env/{env}/full` registrations
+  (`AppRoutes.java`, byte-identical bodies, the first one live per Router's first-match-wins
+  semantics — matches `RouteCensusTest`'s own long-standing comment) and exactly 6
+  `SchemaRoutes.java` call sites passing `extractToken()` to `hasRead`/`hasWrite` (4 `hasRead`, 2
+  `hasWrite`). Config untouched. Every new guard individually break-tested (neutered, confirmed the
+  exact expected test(s) fail, reverted) before trusting a green run.
+- **`AppRoutes.java` fix**: deleted the dead duplicate registration; the surviving
+  `.../env/{env}/full` and its `.../full` sibling (previously both unguarded under a stale "PUBLIC
+  RUNTIME APIs (No Auth Required)" label) now both call `TenantAccessGuard.requireOwnTenant` — same
+  pattern as every other S1 guard site in this file. Relabeled the section comment since "PUBLIC" was
+  never accurate for a route returning full page/entity metadata (same class of doc-vs-behavior
+  drift S1.7/S1.18 found for `FileRoutes.java`'s download-route Javadoc).
+- **`SchemaRoutes.java` fix**: all 6 call sites converted from `extractToken()`+`hasRead`/`hasWrite`
+  to `extractServiceToken()`+`hasAdmin()` uniformly. `hasWrite(token,cfg)` was *already* `return
+  hasAdmin(token,cfg);` (confirmed by reading `AuthService.java` directly) — so the 2
+  former-`hasWrite` sites have zero behavior change beyond the extraction-method fix; the 4
+  former-`hasRead` sites genuinely retire the separate, weaker `readToken` tier (a caller holding
+  only the read token is no longer admitted — confirmed real, not just a naming cleanup, by reading
+  `hasRead`'s actual body: `hasAdmin(...) || readToken.equals(token)`).
+- **Tests**: 6 new tests in `AppRoutesTenantIsolationTest` (cross-tenant 403, unauthenticated 401, and
+  same-tenant-still-works for both routes — the last one matters precisely *because* nothing calls
+  these routes today: a guard that wrongly denied a legitimate same-tenant caller would be a real
+  regression nobody would notice without this test). 7 new tests in new
+  `SchemaRoutesAdminTokenTest` (shipped-config-null fixture assumption; retired-readToken-tier proof
+  on 2 of the 4 converted GET routes; admin-token-still-works regression check on both; the H8-class
+  extraction fix proven on `/api/endpoints` specifically, since `/schema`'s own independent
+  `SessionMiddleware` gate makes the same proof untestable there in isolation — see below). Full
+  suite: **397/397, BUILD SUCCESS** (384 baseline + 13 new).
+- **Found while writing the tests, not assumed**: `GET /schema`/`POST /schema` are *also*
+  unconditionally gated by `SessionMiddleware` itself (`isExcludedPath` hard-excludes `/schema` from
+  every carve-out — "Role management, schema APIs, and approval routes MUST ALWAYS require session
+  authentication"), a layer entirely independent of the `hasAdmin` check this task touches. A first
+  test draft sent only a bogus `X-Session-Token` value and got the expected 401 — but for the
+  *wrong* reason (rejected by `SessionMiddleware`'s own session validation, never reaching
+  `SchemaRoutes.java`'s code at all). Fixed by attaching a real, valid (non-admin) session to every
+  `/schema` test request, isolating the route's own gate — `/api/endpoints` needed no such session
+  since it matches `ENTITY_API_PATTERN` and has no independent `SessionMiddleware` gate. Same failure
+  shape as S0.5's own parser-bug lesson (a new check's first red/green result can be for the wrong
+  reason) — recorded as its own instance rather than assuming this one didn't need the same scrutiny.
+- 🟡 **Forward note, NOT fixed — this task's own row text overclaims.** S1.9's row says converting
+  `SchemaRoutes.java`'s 6 sites leaves "`AuthService.hasRead`/`cfg.getReadToken()` with no remaining
+  callers anywhere" — false as written: `GenericEntityRoutes.java` still has 4 live
+  `hasRead(tok, cfg)` call sites (confirmed by direct grep, e.g. `GET /audit`), all wrapped in the
+  same `if (authEnabled(cfg))` pattern S1.9 fixed in `SchemaRoutes.java`. Not S1.9's job to touch —
+  S1.9's own Files column names only `AppRoutes.java`/`SchemaRoutes.java`, and
+  `GenericEntityRoutes.java`'s entity-data routes are explicitly S3.4's scope ("Wire
+  `EntityAccessGuard` into every `GenericEntityRoutes` route per the S0.2 census — the 21 existing
+  `authEnabled` blocks"). S3.4's own task text doesn't currently say it should also retire these 4
+  `hasRead` call sites specifically (it only talks about *adding* `EntityAccessGuard` alongside
+  them) — flagging so that decision gets made deliberately when S3.4 is picked up, rather than
+  silently leaving `hasRead`/`readToken` half-retired.
+- Live verification: **`AppRoutes.java`'s pair** — Cat. 2, no live verification is possible; both
+  routes have zero real callers repo-wide (round 2, R2-2), so guarding them cannot be exercised
+  through any UI or chat-tool path, and the automated test above is the whole verification
+  (pre-agreed phrasing, S1.8 round-2 review). **`SchemaRoutes.java`'s six** — Cat. 2, shipped-config
+  discipline (same class as B2): confirmed this repo's real `config.json` ships `adminToken: null,
+  readToken: null`, so `authEnabled(cfg)` is false and all 6 gates are skipped entirely in the actual
+  running dev environment today — this fix is currently inert live, by design, until an admin token
+  is ever configured; the automated test (which explicitly configures one, then restores) is what
+  exercises the changed branch.
+
+Docs: `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md` — S1.9 row → ✅; UI-verification-script bullet
+replaced with the above proof + the corrected "no remaining callers" claim; this section.
+
+Still to do: commit (`fix`/`docs`), push, deliver chat writeup. Then: **on to S1.10** — startup: log a
+loud repeated WARN while `AuthService.authEnabled(cfg)==false` (`ApiServer.java`, Cat. 2 ops check per
+its own UI-verification-script entry, not a browser check).
 
 ---
 
