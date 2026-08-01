@@ -104,15 +104,21 @@ verdict: the plan is done — execute it.**
 | S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route, now including **known callers** and **what data must exist for it to succeed** columns | ~5 hr |
 | S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~7.75 hr |
 | S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~10 hr |
-| S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)** | ~10.5 hr |
+| S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)** | ~11.25 hr |
 | S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~4.5 hr |
 | S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~3 hr |
 
-**Total scope:** ~40.75 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
+**Total scope:** ~41.75 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
 hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
 plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
 consecutive round to add scope, though the first with no blocker; **round 6 adds none** — both findings
-are same-estimate wording/consistency fixes, the first round to add zero net scope). S0 → S1 → S2 → S3
+are same-estimate wording/consistency fixes, the first round to add zero net scope; **S1 implementation
+review round 2 adds ~1 hr** — S3.4's `authEnabled`-block count corrected from an approximate "16+" to
+the ratchet-verified 21, +30 min, plus new task S1.16 for two further unconditionally-open
+`SchemaRoutes.java` routes found while re-verifying that count, +30 min. The S0 and S1 rows above are
+separately known to undercount their own current line items — e.g. S1 alone now sums to ~12.9 hr across
+its 16 tasks — a pre-existing drift, not introduced by this round, left for a dedicated pass rather than
+folded in here). S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
 completion is additionally a one-time access reset with no backfill (review round 6, R6-2)** — see
@@ -1363,7 +1369,7 @@ table's own index is corrected to lead with `user_id` — the column this new lo
 ## Sub-phase S3 — Entity data API enforcement
 
 **Goal:** Every entity-data route in `GenericEntityRoutes` — **all three route families the S0.2 census
-lists**, not only the 16+ places an `authEnabled` block already exists — stops trusting an optional
+lists**, not only the 21 places an `authEnabled` block already exists — stops trusting an optional
 global token and instead requires either real Studio app-membership or a runtime session correctly
 scoped to that one app.
 
@@ -1400,7 +1406,7 @@ on S2 (the `end-user` role + grant endpoint), not on `scopedAppId`/S3.1/S3.3.
 | S3.1 | Use S2's `scopedAppId` field on `SessionData` for runtime sessions (already reserved in S1.1's model) — this remains for the optional, separate-user-table path (see S3.7), not the shipped Runtime's path (review round 3, R3-1) | `SessionService.java` | 30 min |
 | S3.2 | `EntityAccessGuard` with **two entry points**, not one: (a) `check(entityKey, ...)` — parses the packed `{tenantId}_{appId}_{entityName}` key, for the `/api/{entity}` family; (b) `check(tenantId, appId, entityName, ...)` — for the two path-segmented families, which never had a key to parse. Both apply the same allow rule: (i) a Studio session's user is an `appbana_app_members` member of that `(tenantId, appId)` — **any role**, `owner`/`member`/`end-user` alike, since this guard is data-access-only, not a management check (review round 3, R3-1) — **or** (ii) a runtime session whose `scopedAppId` equals that `appId`, **or** (iii) the app is explicitly marked publicly readable (S3.5) and the request is a `GET`. Optional global admin token remains a break-glass override, evaluated only if none of the above match. | new `com.appbana.security.EntityAccessGuard` | 150 min |
 | S3.3 | `GenericAppAuthController.login()`: (a) issues a real session via `SessionService.createSession(...)` with `scopedAppId` set to that app; (b) rewrite the login query to fetch-by-email and verify the password in Java (BCrypt hashes cannot be compared in a `WHERE password = ?` clause — review round 1, M5, means this is not a drop-in swap); (c) normalize the response so a nonexistent entity/app and a wrong password both produce the same generic 401 — today they're distinguishable (404 vs 401), making this endpoint a cross-tenant/cross-app existence oracle (M6). | [`GenericAppAuthController.java`](../../app-bana-service/src/main/java/com/appbana/api/GenericAppAuthController.java) | 105 min |
-| S3.4 | Wire `EntityAccessGuard` into **every route in `GenericEntityRoutes`, per the S0.2 census** — the 16+ existing `authEnabled` blocks *and* the 11 routes in the studio-scoped and env-scoped families that have no block to replace. Auth is now always evaluated for all three families, not conditionally skipped for some. | [`GenericEntityRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/GenericEntityRoutes.java) | 150 min |
+| S3.4 | Wire `EntityAccessGuard` into **every route in `GenericEntityRoutes`, per the S0.2 census** — the 21 existing `authEnabled` blocks (ratchet-verified, `AuthEnabledAntiPatternTest` baseline — S1 external review round 2) *and* the 11 routes in the studio-scoped and env-scoped families that have no block to replace. Auth is now always evaluated for all three families, not conditionally skipped for some. | [`GenericEntityRoutes.java`](../../app-bana-service/src/main/java/com/appbana/server/routes/GenericEntityRoutes.java) | 180 min |
 | S3.5 | Add an explicit `publicRead: boolean` flag on app/entity metadata (default `false`) for the legitimate "this app's data should be publicly browsable" use case — without this, S3 would break intentionally-public apps | `AppMetadata`/`EntitySchema` + `SchemaRoutes.java` | 45 min |
 | S3.6 | Tests: `CrossTenantEntityAccessTest`, `CrossAppEntityAccessTest` (App 1 member cannot touch App 2's entities in the *same* tenant) — run against **all three route families**, not just `/api/{entity}` — plus `RuntimeSessionScopedToSingleAppTest` and `LoginDoesNotLeakEntityExistenceTest` (M6) | new tests | 120 min |
 | S3.7 | **(Rewritten, review round 3, R3-1 — no longer a client/login migration, now a membership grant)** Round 2's fix assumed a per-app `User`/password entity that no real app has (R3-1). The Runtime needs **no frontend change** — it keeps calling the shared platform `login()` exactly as today. What's actually needed: (a) confirm S2.6's revised `AppRoutes` list/get wiring accepts an `end-user`-role membership for `GET /appbana-studio/{t}/apps/{id}` (no new carve-out — this is S2.6, already specified there); (b) land the deferred `e2e/tests/a11y-runtime.spec.ts` authenticated-shell test (review round 3, R3-3) as the regression guard for this flow, since it's the only place an end-user login-and-load is ever exercised; (c) end-to-end verification against the real running Runtime with an `end-user`-role membership row (not `owner`), proving list/get succeed and update/delete/schema-management 403. Depends on S2 (the `end-user` role and S2.6's revised wiring), not on `scopedAppId`/S3.1/S3.3. | `AppRoutes.java` (verify only — no code change expected beyond S2.6), `e2e/tests/a11y-runtime.spec.ts` | 45 min |
@@ -1597,7 +1603,7 @@ membership model is in place).
 - `AppAuthorization.java` — `isAppOwnerOrSystem` becomes membership-aware (S2.5); all 4 existing call
   sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change
 - `GenericEntityRoutes.java` — wire `EntityAccessGuard` across all three route families, not only the
-  16+ `authEnabled` blocks (S3.4); stop writing raw tokens into `actor` (S4.7)
+  21 `authEnabled` blocks (S3.4); stop writing raw tokens into `actor` (S4.7)
 - `GenericAppAuthController.java` — issue scoped session; fetch-by-email + verify in Java; normalize
   404-vs-401 (S3.3, S4.2). No longer the shipped Runtime's path (review round 3, R3-1) — kept as a
   hardened, optional future option for an app that wants its own separate user table.

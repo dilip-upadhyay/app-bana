@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~40.75 hr across 46 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~41.75 hr across 48 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -125,9 +125,11 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min | ⬜ |
 | S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. | new tests | 30 min | ⬜ |
 | S1.15 | Add tenant-filtering to `GET /schema` (only list the caller's own tenant's schema names, not all tenants') and an ownership check to `GET /schema/{name}` (403 if the caller doesn't own the app), mirroring S1.4's `DELETE /schema/{name}` fix. Found unfixed by any existing S1 task — review round 1, finding H1. | `SchemaRoutes.java` | 45 min | ⬜ |
+| S1.16 | `GET /api/endpoints` and `GET /openapi.json` are gated only by the optional `authEnabled(cfg)` block (same shape S1.4/S1.15 found on their `SchemaRoutes.java` siblings) with no fallback check beneath it — under the shipped config (`authEnabled(cfg)==false`) both return every tenant's full route/schema inventory, and `/openapi.json` additionally returns complete field-level schema definitions, to an unauthenticated caller. Require a resolved identity unconditionally (admin, for now — mirrors S1.6's precedent for introspection/ops-facing routes) instead of the optional gate. Not covered by S1.9 (only changes which credential tier the *optional* gate checks) or S1.15 (scoped to `/schema`, `/schema/{name}` only). Found via `AuthEnabledAntiPatternTest` ratchet re-verification — S1 external review, round 2. | `SchemaRoutes.java` | 30 min | ⬜ |
 
 **Exit criteria — S1**
 - [ ] Tenant B session gets 403 (not 404/200) on every `AppRoutes`/`SchemaRoutes` route the census lists against Tenant A, including `restore-schemas`, `DELETE /schema/{name}`, and (review round 1, H1) `GET /schema` (tenant-filtered) and `GET /schema/{name}` (ownership check) — S1.15.
+- [ ] `GET /api/endpoints` and `GET /openapi.json` require a resolved identity unconditionally, not only when `authEnabled(cfg)` is true (review round 2, S1.16).
 - [ ] No resolved identity → 401, distinct from a wrong-tenant 403.
 - [x] `GET /api/debug/schemas` requires the same session as `/names`.
 - [x] `POST/PUT/DELETE /api/templates` require an authenticated admin identity.
@@ -154,6 +156,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - **S1.13** [Cat. 1 happy path / Cat. 2 failure branch] Proof: normal Studio login smoke. The fail-closed branch needs the backend to omit `tenantId`, not naturally triggerable against the real running backend — verified by its unit test only, noted rather than skipped silently.
 - **S1.14** [Cat. 2 — no login screen for a raw admin/service token exists, by product design] Direct-call proof: the real `adminToken` from `config.json` as a header against a Tenant-A-owned route with no Studio session presented — confirms bypass still works.
 - **S1.15** [Cat. 2 — `GET /schema` has no per-tenant UI surface of its own; `DataDrawer` calls it in an already-app-scoped context] Direct-call proof once implemented, same style as S1.4: a tenant B session must not see tenant A's schema names in the `GET /schema` list, and must get 403 (not the real schema) from `GET /schema/{name}` on a tenant A key.
+- **S1.16** [Cat. 2 — `/api/endpoints` and `/openapi.json` are ops/introspection routes, no end-user UI] Direct-call proof: both return 401 with no token under the shipped config (today they return 200 with full cross-tenant data); confirm a valid admin token still gets 200.
 
 ### Post-acceptance external review of S1 (round 1) — findings and remediation
 
@@ -237,6 +240,68 @@ still-unscheduled remainder of S1. Two 🔴 Blockers, one 🟠 High, one 🟡 Me
   source (`AppRoutes.java`, `TenantAccessGuard.java`, the full S1 task list) before any fix was written,
   continuing this project's established norm from the S0 review round.
 
+### Post-acceptance external review of S1 (round 2) — plan-doc accuracy + a new S1.16 finding
+
+A second external review pass re-examined the round-1 remediation (commits `160e7a3`, `ffe9f64`,
+`09a3af2`, `815b202`) plus the plan/tasks docs those commits touched. All of its substantive claims were
+independently re-verified against source before any doc edit was made, continuing this project's
+established norm.
+
+- ✅ **Confirmed as fixed and durable:** B1 (`POST /appbana-studio/{tenantId}/apps` tenant guard), B2
+  (template-write gate now unconditional), M1 (null-tenant fail-open closed), and the
+  `AuthEnabledAntiPatternTest` ratchet (fires on any *increase*, permits decreases). Re-read
+  `AppRoutes.java`, `TenantAccessGuard.java`, and the test itself directly rather than trusting the
+  round-1 writeup's own claims a second time.
+- 🟡 **S3.4's "16+" wording was stale, but not for the reason first assumed.** The review's own math
+  ("~70% understatement", implying 16→27) treats `GenericEntityRoutes.java`'s 21 gates and
+  `SchemaRoutes.java`'s 6 as one combined pool. Re-checked S3.4's own **Where**/file-scope column in
+  both docs: it scopes the task to `GenericEntityRoutes.java` only. The ratchet-verified, correct number
+  for S3.4's own text is **21**, not 27 — corrected in both docs, along with the 3 further "16+"
+  mentions that describe the current state rather than quoting the round-1 finding verbatim (the
+  round-1 B3 quote and its finding-table row are left untouched — a historical record of the *old*,
+  wrong task title being critiqued at the time, not a live claim).
+  Re-derived S3.4's estimate proportionally rather than guessing: the original conception was ~16
+  (fuzzy) + 11 (exact) ≈ 27 reference items for 150 min ≈ 5.5 min/item; the corrected exact scope is
+  21 + 11 = 32 items ⇒ 150 × 32⁄27 ≈ 177.7 min, rounded to this doc's existing 15-minute-increment
+  convention → **180 min**. Propagated through the S3 subtotal (~10.5 hr → ~11.25 hr) and the grand
+  Total scope (see below).
+- 🟢 **Real, separate gap surfaced by chasing the "27" arithmetic — registered as new task S1.16.**
+  The reviewer's instinct that something was undercounted was right, just not about S3.4. Reading all 6
+  `SchemaRoutes.java` `authEnabled(cfg)` gate sites individually (not assuming uniform treatment) found:
+  `GET /schema` and `GET /schema/{name}` are S1.15's exact target; `POST /schema` and `DELETE
+  /schema/{name}` each already have a separate, unconditional `isAppOwnerOrSystem` ownership check
+  beneath the optional gate, so they're vestigial-but-harmless; but **`GET /api/endpoints` and `GET
+  /openapi.json` have no fallback check of any kind.** Neither is covered by S1.9 (only changes which
+  credential tier the still-optional gate checks, doesn't remove its conditionality) or S1.15 (scoped
+  only to `/schema`, `/schema/{name}`). Under the shipped config both remain fully open,
+  unauthenticated, and cross-tenant after every currently-planned S1/S3 task lands — `/openapi.json` in
+  particular discloses complete field-level schema definitions for every tenant's every app. **Not fixed
+  in this round** (code fix deferred, mirroring how H1 became S1.15 in round 1) — **registered as new
+  task S1.16** (added above, `SchemaRoutes.java`, 30 min), with its own exit-criteria bullet and Cat. 2
+  verification-approach note.
+- **Status/ordering note:** the reviewer flagged that S1.11's dependency on S1.15 landing first needs to
+  be explicit so the tasks aren't executed out of order. Checked: this dependency is already recorded,
+  both on the S1.11 task row itself and in its Cat. 2 verification-approach bullet above — no further
+  edit needed.
+- **Environment note (unresolved, non-blocking):** the reviewer mentioned a residual
+  `s1probe-…@example.com` fixture user left in `data/users.json`. Checked both the main workspace's
+  `data/users.json` (no match for `probe`) and the reviewer's own named worktree
+  (`tenant-isolation-security-review`) — which has **no `data/` directory at all**, so the file the
+  reviewer is describing isn't reachable from here to inspect. Noted transparently rather than guessed
+  at; not blocking, since no test or doc depends on that row's absence.
+- **Meta-observation (reusable lesson):** two independent verification disciplines carried this round
+  and are worth keeping permanent: (1) when a reviewer's arithmetic implies combining two
+  separately-scoped items (here, two files' gate counts), check each item's own explicit scope column
+  before accepting the combined figure — the combination can still point at a real, separate gap even
+  when the combined number itself is wrong. (2) A conditional gate is not automatically "still
+  vulnerable" just because the ratchet counts it — some are redundant leftovers sitting behind a separate
+  unconditional check (`POST`/`DELETE /schema/{name}`), so each site needs individual reading, never
+  uniform treatment by raw count alone.
+
+**Total scope after this round:** ~41.75 hr (S3.4 +30 min, S1.16 +30 min — see the plan doc's Total
+scope paragraph for the full running history). No source code changed this round — plan-text and
+task-registration only, so the existing 367/367 suite is unaffected and was not re-run.
+
 ---
 
 ## Sub-phase S2 — Per-app membership model
@@ -285,7 +350,7 @@ still-unscheduled remainder of S1. Two 🔴 Blockers, one 🟠 High, one 🟡 Me
 | S3.1 | Reserve/use `scopedAppId` on `SessionData` for the optional separate-user-table path (not the shipped Runtime's path — that's S3.7). | `SessionService.java` | 30 min | ⬜ |
 | S3.2 | `EntityAccessGuard` with two entry points: (a) `check(entityKey,...)` parsing `{tenantId}_{appId}_{entityName}` for `/api/{entity}`; (b) `check(tenantId, appId, entityName,...)` for the two path-segmented families. Allow rule: (i) Studio session is an `appbana_app_members` member of `(tenantId, appId)` — **any role** — **or** (ii) runtime session `scopedAppId` equals `appId` **or** (iii) app is `publicRead` and request is `GET`. Break-glass admin token is fall-through, evaluated last. | new `com.appbana.security.EntityAccessGuard` | 150 min | ⬜ |
 | S3.3 | `GenericAppAuthController.login()`: (a) issues a real session via `SessionService.createSession(...)` with `scopedAppId` set; (b) fetch-by-email + verify password in Java (not SQL — BCrypt can't compare in `WHERE`); (c) normalize response so nonexistent-entity/app and wrong-password both produce the same generic 401. | `GenericAppAuthController.java` | 105 min | ⬜ |
-| S3.4 | Wire `EntityAccessGuard` into **every** `GenericEntityRoutes` route per the S0.2 census — the 16+ existing `authEnabled` blocks *and* the 11 routes (studio-scoped + env-scoped families) with no such block today. | `GenericEntityRoutes.java` | 150 min | ⬜ |
+| S3.4 | Wire `EntityAccessGuard` into **every** `GenericEntityRoutes` route per the S0.2 census — the 21 existing `authEnabled` blocks (ratchet-verified, `AuthEnabledAntiPatternTest` baseline — S1 external review round 2) *and* the 11 routes (studio-scoped + env-scoped families) with no such block today. | `GenericEntityRoutes.java` | 180 min | ⬜ |
 | S3.5 | Add `publicRead: boolean` flag (default `false`) on app/entity metadata for legitimately public apps. | `AppMetadata`/`EntitySchema`, `SchemaRoutes.java` | 45 min | ⬜ |
 | S3.6 | Tests: `CrossTenantEntityAccessTest`, `CrossAppEntityAccessTest` (same-tenant, different app) across all 3 route families, `RuntimeSessionScopedToSingleAppTest`, `LoginDoesNotLeakEntityExistenceTest`. | new tests | 120 min | ⬜ |
 | S3.7 | (a) Confirm S2.6's `AppRoutes` list/get wiring accepts an `end-user`-role membership for `GET /appbana-studio/{t}/apps/{id}` (no new carve-out — already S2.6). (b) Land the deferred `e2e/tests/a11y-runtime.spec.ts` authenticated-shell test. (c) End-to-end verification against the real running Runtime with an `end-user`-role membership row: list/get succeed, update/delete/schema-management 403. No Runtime frontend change expected. | `AppRoutes.java` (verify only), `e2e/tests/a11y-runtime.spec.ts` | 45 min | ⬜ |
