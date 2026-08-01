@@ -251,22 +251,5 @@ public class SchemaRoutes {
                 res.json(500, Map.of("error", e.getMessage()));
             }
         });
-
-        // Debug endpoints
-        router.get("/api/debug/schemas", (req, res) -> {
-            try {
-                res.json(200, SchemaManager.listSchemaSummaries());
-            } catch (Exception e) {
-                res.json(500, Map.of("error", e.getMessage()));
-            }
-        });
-
-        router.get("/api/debug/schemas/names", (req, res) -> {
-            try {
-                res.json(200, SchemaManager.listSchemaNames());
-            } catch (Exception e) {
-                res.json(500, Map.of("error", e.getMessage()));
-            }
-        });
     }
 }

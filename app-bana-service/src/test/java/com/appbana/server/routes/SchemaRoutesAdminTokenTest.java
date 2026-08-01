@@ -225,6 +225,56 @@ public class SchemaRoutesAdminTokenTest {
                 "POST /schema must reject a valid-but-non-owning session (S1.17: ownership check, not the old admin gate)");
     }
 
+    @Test
+    public void testDebugSchemasRouteIsRemoved() throws Exception {
+        // S1.19: this route used to return every tenant's schema summaries unfiltered, to any
+        // authenticated caller — deleted rather than gated (zero real callers, strictly weaker
+        // duplicate of the now-gated GET /schema and GET /api/endpoints). The exact path now falls
+        // through to GenericEntityRoutes' generic GET /api/{entity}/{id} (entity="debug",
+        // id="schemas"), which 404s as "unknown entity" once authEnabled(cfg) is false — proving
+        // the old unfiltered schema list is truly gone, not just re-gated under a different name.
+        // Requires nulling this class's own forced tokens for the request, since that fallthrough
+        // route's own gate would otherwise mask this proof behind an unrelated 401.
+        AppConfig cfg = ConfigManager.getConfig();
+        cfg.setAdminToken(null);
+        cfg.setReadToken(null);
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/api/debug/schemas"))
+                    .header("X-Session-Token", createOrdinarySession())
+                    .GET()
+                    .build();
+            HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+            assertEquals(404, res.statusCode(),
+                    "GET /api/debug/schemas must no longer return the old cross-tenant schema summary list");
+        } finally {
+            cfg.setAdminToken(ADMIN_TOKEN);
+            cfg.setReadToken(READ_TOKEN);
+        }
+    }
+
+    @Test
+    public void testDebugSchemasNamesRouteIsRemoved() throws Exception {
+        // S1.19: same fix, same reason as testDebugSchemasRouteIsRemoved. Here the fallthrough is
+        // entity="debug", id="names" (three path segments: debug/schemas/names), same 404 proof.
+        AppConfig cfg = ConfigManager.getConfig();
+        cfg.setAdminToken(null);
+        cfg.setReadToken(null);
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/api/debug/schemas/names"))
+                    .header("X-Session-Token", createOrdinarySession())
+                    .GET()
+                    .build();
+            HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+            assertEquals(404, res.statusCode(),
+                    "GET /api/debug/schemas/names must no longer return the old cross-tenant schema key list");
+        } finally {
+            cfg.setAdminToken(ADMIN_TOKEN);
+            cfg.setReadToken(READ_TOKEN);
+        }
+    }
+
     private HttpResponse<String> get(String path, String serviceToken) throws Exception {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + path))

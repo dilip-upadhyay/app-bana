@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~57.08 hr across 52 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~57.42 hr across 53 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -131,6 +131,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.16 | **(Revised, review round 3 — severity split + `/openapi.json` correction)** `GET /api/endpoints` and `GET /openapi.json` are each gated only by the optional `authEnabled(cfg)` block (same shape S1.4/S1.15 found on their `SchemaRoutes.java` siblings) with no fallback check beneath it. **`GET /api/endpoints` is the higher-severity of the two**: it returns every schema's full tenant-qualified key (`SchemaManager.listSchemaNames()`, unfiltered) pre-formatted as ready-to-call `POST /api/{key}`, `GET /api/{key}`, `GET /api/{key}/{id}`, `PUT /api/{key}/{id}`, `DELETE /api/{key}/{id}` strings — the enumeration primitive for the anonymous entity data plane (round 1 needed a direct Postgres query to obtain these keys; this route hands out the entire list). **`GET /openapi.json` is narrower than first described**: `OpenApiGenerator` keys `paths`/`components.schemas` by `schema.getName()` — the bare entity name, not the tenant-qualified key — so it discloses the union of field-level shapes across all tenants with no tenant attribution (a name collision across tenants silently last-write-wins, not a per-tenant enumeration); still real scope because it confirms which entity names exist platform-wide, and because every anonymous call loads *all* schemas from the DB and serializes the full result (~340 KB at today's ~455-schema count) — an unauthenticated amplification vector independent of the disclosure itself. Require a resolved identity unconditionally on both (admin, for now — mirrors S1.6's precedent for introspection/ops-facing routes) instead of the optional gate. Not covered by S1.9 (only changes which credential tier the *optional* gate checks) or S1.15 (scoped to `/schema`, `/schema/{name}` only). Found via `AuthEnabledAntiPatternTest` ratchet re-verification — S1 external review round 2; severity/text corrected round 3. **Priority note: despite the task number, `/api/endpoints`'s severity means this task should land before or alongside S1.15, not after it** (review round 3). | `SchemaRoutes.java` | 30 min | ✅ |
 | S1.17 | **(New, review round 3)** Once S1.15 + S1.16 land, `SchemaRoutes.java`'s remaining two `authEnabled(cfg)` gates (`POST /schema`, `DELETE /schema/{name}`) are pure dead weight — both already have a separate, unconditional `isAppOwnerOrSystem` ownership check beneath them (S1.4's fix, and the pre-existing `POST /schema` check), so the optional gate contributes nothing. Delete both wrappers, taking this file's `authEnabled` count to zero, and **remove its entry from `AuthEnabledAntiPatternTest.BASELINE` entirely** rather than setting it to `0` — **(corrected, review round 4)** both a removed entry and a `0` entry fail the test on any future occurrence (an absent key via the "new file" branch, a `0` entry via the existing `count > max` branch — not a stronger guarantee, as this row originally claimed); removal is simply the more honest representation (the file genuinely has zero occurrences left) and lets it drop out of the map entirely. Makes the test's own docstring ("S3.4 is the task that removes this pattern repo-wide") true for this file specifically, ahead of S3.4. | `SchemaRoutes.java`, `AuthEnabledAntiPatternTest.java` | 30 min | ✅ |
 | S1.18 | **(New, review round 6)** `GET /api/files/{tenantId}/{appId}/{fileId}` requires a session (confirmed: its path falls outside every `SessionMiddleware` exclusion rule), but both `FileUploadField.tsx`'s preview link and `StudioTableLive.tsx`'s download column use a plain `<a href target="_blank">`, which can never carry the required `Authorization` header — every real download click 401s. Decide and implement one of: (a) whitelist the route in `SessionMiddleware` to restore the anonymous access `FileRoutes.java`'s Javadoc originally documented, or (b) switch both render sites to an authenticated `fetch` + `URL.createObjectURL` download. | `SessionMiddleware.java` or `FileUploadField.tsx` + `StudioTableLive.tsx` (per decision) | 60 min | ⬜ |
+| S1.19 | **(New, external review of S1.15/S1.16/S1.17)** `GET /api/debug/schemas` and `GET /api/debug/schemas/names` call the unfiltered `SchemaManager.listSchemaSummaries()`/`listSchemaNames()` with no tenant filter and no admin check — protected only by S1.5's middleware fix requiring *a* session (any session, not filtered), so any self-registered account can enumerate every tenant's schema names (and, for the first route, datasource) platform-wide. S1.5 achieved parity between the two routes but locked in the weaker bar rather than closing it. Zero real callers (census + repo-wide grep both confirm "none found"); both are strictly weaker duplicates of the already-fixed `GET /schema` and `GET /api/endpoints`. **Delete both routes** (not gate — avoids a third copy of the same disclosure decision) and the now-orphaned `listSchemaSummaries()` helper (its only caller). | `SchemaRoutes.java`, `SchemaManager.java` | 20 min | ✅ |
 
 **Exit criteria — S1**
 - [x] Tenant B session gets 403 (not 404/200) on every `AppRoutes`/`SchemaRoutes` route the census lists against Tenant A, including `restore-schemas`, `DELETE /schema/{name}`, and (review round 1, H1) `GET /schema` (tenant-filtered) and `GET /schema/{name}` (ownership check) — S1.15.
@@ -138,6 +139,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - [x] `SchemaRoutes.java`'s two remaining `authEnabled(cfg)` wrappers (`POST /schema`, `DELETE /schema/{name}`) are deleted and the file's `AuthEnabledAntiPatternTest.BASELINE` entry is removed entirely, not set to `0` (review round 3, S1.17).
 - [ ] No resolved identity → 401, distinct from a wrong-tenant 403.
 - [x] `GET /api/debug/schemas` requires the same session as `/names`.
+- [x] Neither `GET /api/debug/schemas` nor `GET /api/debug/schemas/names` discloses cross-tenant schema data to any authenticated account, not just to anonymous callers (external review of S1.15/S1.16/S1.17, S1.19).
 - [x] `POST/PUT/DELETE /api/templates` require an authenticated admin identity.
 - [x] `POST /api/files/upload` and all of `SavedViewRoutes` require identity; saved-view delete scoped by tenant+app+owner.
 - [ ] File downloads (`GET /api/files/{tenantId}/{appId}/{fileId}`) are actually reachable by a real logged-in end user, not just protected from anonymous/cross-tenant access (review round 6, S1.18).
@@ -1046,6 +1048,77 @@ anonymous entity data plane... nothing else in S1 has that leverage").
 Still to do: commit (`feat`), push, update session memory, deliver chat writeup. S1 remains at
 S1.11 next per the S1.10-round-2 sequencing note (now genuinely unblocked — S1.15/16/17 were the
 last open routes with live security value); S1.12/S1.13/S1.14/S1.18 remain independent and open.
+
+### Post-acceptance external review of S1.15/S1.16/S1.17 — accepted; new task S1.19 registered
+
+An external reviewer re-verified live against a fresh self-registered account (its own tenant),
+confirming the tenant-filter, the ownership check in both directions, and `SchemaManager.listSchemaNames(String)`'s `WHERE tenant_id = ?` implementation directly. **Verdict: S1.15, S1.16,
+S1.17 accepted.** Singled out the `ListEntitiesTool` real-caller check (finding the ai-builder
+fallback branch sends a session token, not an admin token, before choosing the gate shape) as "the
+best thing in this commit" — exactly the kind of check-before-gating this task's own session memory
+had already flagged as a reusable lesson.
+
+- 🟠 **Finding — the enumeration primitive S1.16 closed is still open one route over.** `GET
+  /api/debug/schemas` and `GET /api/debug/schemas/names` call the unfiltered
+  `listSchemaSummaries()`/`listSchemaNames()` with no tenant filter and no admin check — protected
+  only by S1.5's fix, which required *a* session but never a tenant match or admin credential. Any
+  self-registered account (registration is open by accepted decision) could enumerate every
+  tenant's schema names platform-wide — the functional duplicate of `GET /api/endpoints` with no
+  gate at all, ~200 lines from the fix in the same file. **Independently re-verified, not just
+  trusted**: read both handlers and `listSchemaSummaries()` directly (unfiltered `SELECT json FROM
+  appbana_schemas`, no `WHERE`), confirmed zero real callers via a repo-wide grep (matches the
+  S0.2 census's own "none found" for both routes), and confirmed no existing test covered either
+  route. S1.5's own exit bullet ("requires the same session its `/names` sibling already has") was
+  parity with the *weaker* of the two routes, not S1's actual exit criterion (403 for cross-tenant).
+  **Fixed — registered and closed as new task S1.19**: deleted both routes outright (reviewer's own
+  preference, independently agreed with: zero callers, strictly weaker duplicates of the
+  already-fixed `GET /schema`/`GET /api/endpoints`, avoids maintaining a third copy of the same
+  disclosure decision) and removed the now-orphaned `listSchemaSummaries()` helper (its only caller).
+  **Discovered while writing the negative test**: the exact path doesn't 404 at the router level
+  after deletion — `/api/debug/schemas` (2 segments) falls through to `GenericEntityRoutes`' generic
+  `GET /api/{entity}/{id}` (entity="debug", id="schemas"), which 404s as "unknown entity" once
+  `authEnabled(cfg)` is false; `/api/debug/schemas/names` (3 segments) has no such fallthrough
+  pattern and hits the router's own generic 404 "not found" instead. Both are equally safe (no
+  schema data disclosed either way) but the *reason* differs by path shape — documented in the
+  tests rather than assumed. Break-tested by temporarily re-registering a stub at the deleted path
+  and confirming the test fails (200 instead of 404), then reverting.
+- **Broke, then fixed, two doc-consistency tests as a direct consequence** — `RouteCensusTest` and
+  `EstimateReconciliationTest` both went red after the S1.19 deletion, exactly the class of trap
+  now written up in `.github/copilot-instructions.md`'s "Backend Testing Traps" section: the S0.2
+  census's `[!NOTE]` "frozen snapshot" disclaimer scopes itself to the classification *columns*
+  only, never the route *set*, which `RouteCensusTest` mechanically enforces regardless. Removed
+  the 2 deleted routes' rows from the census table (not a violation of the freeze — the disclaimer
+  itself says "only guards the route set... never these classification columns," and leaves the
+  rest of each remaining row untouched), and reconciled every headline `EstimateReconciliationTest`
+  names: plan doc's S1 phase total (~14.42→~14.75 hr), plan doc's "Total scope" headline
+  (~57.08→~57.42 hr), tracker's own headline (~57.08 hr/52 tasks → ~57.42 hr/53 tasks). Added a new
+  `[!WARNING]` to `copilot-instructions.md` naming both tests explicitly, since this is exactly the
+  kind of cross-session trap that section exists to prevent re-discovering from scratch.
+- 🟢 **Housekeeping, including the reviewer's own.** Reviewer's "no backend running" sign-off had
+  referred only to processes *they* started, asserted from memory rather than a port check — the
+  exact assert-vs-verify failure this whole review has been flagging elsewhere, self-caught and
+  disclosed. Left 2 probe accounts on the running instance for cleanup; found and removed those
+  plus 3 of this session's own equivalent test accounts from `app-bana-service/data/users.json`
+  (the file the live server actually loads — confirmed there are *two* `users.json` files in this
+  repo, root and `app-bana-service/data/`, and only the latter is live; the process was stopped
+  before editing so the edit wouldn't be silently clobbered by the next in-memory `saveUsers()`).
+  Associated Postgres app/schema test rows from both sessions' live verification were left as
+  harmless residue, consistent with every prior live-verification round this session.
+- **New tests**: `SchemaRoutesAdminTokenTest` gained 2 tests (`testDebugSchemasRouteIsRemoved`,
+  `testDebugSchemasNamesRouteIsRemoved`), each temporarily nulling this class's own forced tokens to
+  exercise the true shipped-config fallthrough behavior described above.
+- **Live re-verification (Cat. 1/2 mixed, real HTTP calls)**: found the earlier live-boot process
+  still running from the prior round, stopped it, rebuilt, cold-booted fresh. Registered a new
+  account, confirmed `GET /api/debug/schemas` → `404 {"error":"unknown entity"}` and `GET
+  /api/debug/schemas/names` → `404 {"error":"not found"}` — neither returns schema data.
+- Full suite: **408/408, BUILD SUCCESS**.
+- Docs: S1.19 row → ✅; new S1 exit-criteria bullet checked; `TENANT_ISOLATION_SECURITY_PLAN.md`'s
+  census table lost its 2 rows for the deleted routes, its S1 phase total and "Total scope"
+  headline both corrected; tracker's own headline corrected; `copilot-instructions.md` gained a new
+  testing-trap warning.
+
+Still to do: commit (`fix`), push, update session memory, deliver chat writeup. S1 remains at S1.11
+next.
 
 ---
 

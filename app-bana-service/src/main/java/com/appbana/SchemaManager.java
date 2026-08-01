@@ -1154,36 +1154,4 @@ public class SchemaManager {
             throw new RuntimeException(e);
         }
     }
-
-    // --- NEW: list schema summaries (name + datasource) ---
-    public static List<Map<String, Object>> listSchemaSummaries() {
-        List<Map<String, Object>> out = new ArrayList<>();
-        for (DatasourceConfig ds : allDatasources()) {
-            String dsName = ds.getName();
-            try {
-                JdbcManager.ensureMetaTableFor(dsName);
-                try (Connection c = JdbcManager.getConnection(dsName);
-                        PreparedStatement ps = c.prepareStatement("SELECT json FROM appbana_schemas")) {
-                    try (ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            String json = rs.getString(1);
-                            try {
-                                EntitySchema schema = M.readValue(json, EntitySchema.class);
-                                if (schema.getDatasourceName() == null || schema.getDatasourceName().isBlank())
-                                    schema.setDatasourceName(dsName); // backfill
-                                Map<String, Object> m = new LinkedHashMap<>();
-                                m.put("name", schema.getName());
-                                m.put("datasource", schema.getDatasourceName());
-                                out.add(m);
-                            } catch (Exception ignore) {
-                            }
-                        }
-                    }
-                }
-            } catch (Exception ignore) {
-            }
-        }
-        out.sort(Comparator.comparing(o -> (String) o.get("name")));
-        return out;
-    }
 }
