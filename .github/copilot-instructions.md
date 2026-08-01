@@ -786,6 +786,16 @@ Exceptions (ask first, don't auto-commit):
 
 Note: `RevisionFlowTest` and the other DB-backed tests need PostgreSQL running (`docker start appbana-postgres`). A "Connection to localhost:5432 refused" failure is environmental, not a code regression — but do not commit until you have actually verified against a live DB.
 
+### Always Write Up After Acting on a Review
+
+**Whenever you take action in response to a review or critique** (a pasted external-reviewer critique, PR feedback, an audit finding, etc.), **always end with a written summary in chat** — never just silently fix things and stop, and never respond with only a terse "done."
+
+- Mirror the review's own structure where one exists (severity tags, finding IDs) so each point maps 1:1 to something the reviewer can check off.
+- For each finding: what you verified against source (don't just trust the claim), what the fix was, how it was tested/verified, and which commit it landed in.
+- Explicitly surface anything you discovered as a side effect that wasn't part of the original ask (e.g. a fix's investigation revealing a larger latent issue elsewhere) — call it out in the chat response, don't bury it only in a docs file.
+- State plainly what remains open/deferred vs. fully closed.
+- Docs/tracker updates are for future sessions; the chat writeup is for the person reading right now — do both, one doesn't substitute for the other.
+
 ---
 
 ## 14. Common Pitfalls
