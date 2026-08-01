@@ -1040,11 +1040,11 @@ rule-6 default (session required). Code behavior, not the stale comment, is refl
 
 | Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
 |---|---|---|---|---|---|---|---|
-| POST | `/api/tenants/{tenantId}/apps/{appId}/entities/{entity}/records/{id}/submit` | No (rule 1) | Yes (`extractUserId`, 401) | No (delegates to `ApprovalService`'s per-tuple MAKER/BOTH role check, not a tenant match) | path | runtime (`RecordApprovalPanel`, `StudioTableLive`) | row exists, DRAFT/REJECTED; caller holds MAKER/BOTH role |
-| POST | `.../records/{id}/approve` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`CheckerQueuePage`, `StudioTableLive`) | row PENDING; caller CHECKER/CHECKER_L2; caller ≠ submitter |
-| POST | `.../records/{id}/reject` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`CheckerQueuePage`, `StudioTableLive`) | row PENDING; caller CHECKER; body `reason` required |
-| GET | `.../approvals/pending` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`CheckerQueuePage`, `usePendingCounts`) | caller holds CHECKER/CHECKER_L2 role |
-| GET | `.../records/{id}/approvals/audit` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`AuditDrawer`) | row exists; caller holds some role on the tuple |
+| POST | `/api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/records/{id}/submit` | No (rule 1) | Yes (`extractUserId`, 401) | No (delegates to `ApprovalService`'s per-tuple MAKER/BOTH role check, not a tenant match) | path | runtime (`RecordApprovalPanel`, `StudioTableLive`) | row exists, DRAFT/REJECTED; caller holds MAKER/BOTH role |
+| POST | `/api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/records/{id}/approve` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`CheckerQueuePage`, `StudioTableLive`) | row PENDING; caller CHECKER/CHECKER_L2; caller ≠ submitter |
+| POST | `/api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/records/{id}/reject` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`CheckerQueuePage`, `StudioTableLive`) | row PENDING; caller CHECKER; body `reason` required |
+| GET | `/api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/approvals/pending` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`CheckerQueuePage`, `usePendingCounts`) | caller holds CHECKER/CHECKER_L2 role |
+| GET | `/api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/records/{id}/approvals/audit` | No (rule 1) | Yes (`extractUserId`, 401) | No (same delegation) | path | runtime (`AuditDrawer`) | row exists; caller holds some role on the tuple |
 
 ### SchemaRoutes.java
 

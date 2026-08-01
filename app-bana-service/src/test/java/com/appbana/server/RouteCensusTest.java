@@ -3,11 +3,17 @@ package com.appbana.server;
 import com.appbana.api.Router;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -17,157 +23,52 @@ import static org.junit.jupiter.api.Assertions.fail;
  * Fails whenever {@link RouteRegistry#buildRouter()} registers a route (method + path
  * pattern) that isn't accounted for in the S0.2 route census
  * ({@code docs/planning/TENANT_ISOLATION_SECURITY_PLAN.md}, "S0.2 Route census" section),
- * or whenever a censused route is renamed/removed without updating this list. This is a
- * SET comparison (symmetric difference), not a count: {@code Router} has one confirmed
- * duplicate registration today (see below), so a raw registration count would be
- * 97 while the number of distinct (method, path) signatures is 96 — a count-based
- * assertion would silently accept a second, different duplicate appearing while missing
- * an actually-new route, which is exactly the failure mode this test exists to catch.
+ * or whenever a censused route is renamed/removed without updating that doc.
  *
- * Route inventory reflected here on 2026-08-01 (96 distinct signatures, 97 registration
- * call-sites — {@code GET /api/{tenantId}/apps/{id}/env/{env}/full} is registered twice,
- * byte-identical, in AppRoutes.java; the second registration is dead code because
- * {@link Router} is first-match-wins). Whenever a route is added, renamed, or removed in
- * any {@code *Routes.java} file, update BOTH this set and the plan doc's census table in
- * the same commit — that pairing is the whole point of this test.
+ * <p>This parses the census table directly out of the plan doc's Markdown rather than
+ * keeping a second, hand-maintained copy in this file. An earlier version hardcoded its own
+ * {@code EXPECTED_ROUTES} set, which meant this test only ever checked {@code Router} against
+ * a copy a developer typed once — the doc itself could still drift out from under it with
+ * nothing to catch that. The doc is what S1–S3 are scoped against, so it — not a shadow copy —
+ * is the artifact this test has to agree with (review feedback on the original S0.3).
+ *
+ * <p>SET comparison (symmetric difference), not a count: {@code Router} has one confirmed
+ * duplicate registration today ({@code GET /api/{tenantId}/apps/{id}/env/{env}/full},
+ * AppRoutes.java), so a raw registration count would be 97 while the number of distinct
+ * (method, path) signatures is 96 — a count-based assertion would silently accept a second,
+ * different duplicate appearing while missing an actually-new route.
  */
 class RouteCensusTest {
 
-    /** Expected (method, path-pattern) signatures, exactly as passed to Router.get/post/put/delete. */
-    private static final Set<String> EXPECTED_ROUTES = new TreeSet<>(List.of(
-        // AiRoutes.java
-        "POST /api/ai/chat",
-        "POST /api/ai/chat/agent",
-        // AppContextRoutes.java
-        "GET /api/app-context",
-        // AppRoutes.java
-        "POST /api/{tenantId}/apps/{id}/publish",
-        "PUT /api/{tenantId}/apps/{id}/deploy/local",
-        "POST /api/{tenantId}/apps/{id}/commits",
-        "POST /api/{tenantId}/apps/{id}/commits/rollback",
-        "POST /api/{tenantId}/apps/{id}/versions",
-        "GET /api/{tenantId}/apps/{id}/versions",
-        "POST /api/{tenantId}/apps/{id}/deploy/{versionId}",
-        "GET /api/{tenantId}/apps/{id}/pipeline",
-        "GET /api/{tenantId}/apps/{id}/env/{env}/full", // registered twice; set collapses to one signature
-        "POST /api/{tenantId}/apps/{id}/restore-schemas",
-        "GET /appbana-studio/{tenantId}/apps",
-        "GET /appbana-studio/{tenantId}/apps/{id}",
-        "GET /api/{tenantId}/apps/{id}/full",
-        "POST /appbana-studio/{tenantId}/apps",
-        "PUT /appbana-studio/{tenantId}/apps/{id}",
-        "DELETE /appbana-studio/{tenantId}/apps/{id}",
-        "GET /appbana-studio/{tenantId}/apps/{id}/workflow",
-        "PUT /appbana-studio/{tenantId}/apps/{id}/workflow",
-        "GET /appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}",
-        "PUT /appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}",
-        "DELETE /appbana-studio/{tenantId}/apps/{appId}/pages/{pageId}",
-        "GET /api/templates",
-        "GET /api/templates/{id}",
-        "POST /api/templates",
-        "PUT /api/templates/{id}",
-        "DELETE /api/templates/{id}",
-        // ApprovalRoutes.java
-        "POST /api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/records/{id}/submit",
-        "POST /api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/records/{id}/approve",
-        "POST /api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/records/{id}/reject",
-        "GET /api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/approvals/pending",
-        "GET /api/tenants/{tenantId}/apps/{appId}/entities/{entityName}/records/{id}/approvals/audit",
-        // AuthRoutes.java
-        "POST /api/auth/register",
-        "POST /api/auth/login",
-        "GET /api/auth/profile",
-        "POST /api/runtime/auth/login",
-        "GET /api/csrf-token",
-        "POST /api/csrf-validate",
-        // FileRoutes.java
-        "POST /api/files/upload",
-        "GET /api/files/{tenantId}/{appId}/{fileId}",
-        // GenericEntityRoutes.java
-        "GET /audit",
-        "GET /api/field-permissions",
-        "GET /api/field-permissions/readable",
-        "GET /api/field-permissions/editable",
-        "GET /api/field-permissions/{id}",
-        "POST /api/field-permissions",
-        "PUT /api/field-permissions/{id}",
-        "DELETE /api/field-permissions/{id}",
-        "POST /api/{entity}",
-        "POST /api/{entity}/batch",
-        "GET /api/{entity}",
-        "GET /api/{entity}/{id}",
-        "PUT /api/{entity}/{id}",
-        "DELETE /api/{entity}/{id}",
-        "POST /api/{entity}/bulk-delete",
-        "POST /api/{entity}/bulk-export",
-        "POST /appbana-studio/{tenantId}/apps/{appId}/{entity}",
-        "GET /appbana-studio/{tenantId}/apps/{appId}/{entity}",
-        "GET /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}",
-        "PUT /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}",
-        "DELETE /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}",
-        "POST /api/{tenantId}/apps/{appId}/{entity}",
-        "POST /api/{tenantId}/apps/{appId}/env/{env}/{entity}",
-        "GET /api/{tenantId}/apps/{appId}/env/{env}/{entity}",
-        "GET /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}",
-        "PUT /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}",
-        "DELETE /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}",
-        // HealthRoutes.java
-        "GET /health",
-        "GET /ready",
-        // RoleRoutes.java
-        "GET /api/tenants/{tenantId}/apps/{appId}/roles",
-        "POST /api/tenants/{tenantId}/apps/{appId}/roles",
-        "DELETE /api/tenants/{tenantId}/apps/{appId}/roles",
-        // SavedViewRoutes.java
-        "GET /api/saved-views",
-        "POST /api/saved-views",
-        "DELETE /api/saved-views/{viewId}",
-        // SchemaRoutes.java
-        "GET /api/endpoints",
-        "GET /openapi.json",
-        "GET /schema",
-        "GET /schema/{name}",
-        "POST /schema",
-        "DELETE /schema/{name}",
-        "GET /api/debug/schemas",
-        "GET /api/debug/schemas/names",
-        // TenantBrandingRoutes.java
-        "GET /api/tenants/{tenantId}/branding",
-        // UserRoutes.java
-        "GET /api/users/me",
-        // WorkflowRoutes.java
-        "POST /api/workflows",
-        "GET /api/workflows",
-        "GET /api/workflows/{id}",
-        "POST /api/workflows/{id}/publish",
-        "POST /api/workflows/{id}/start",
-        "GET /api/my-tasks",
-        "POST /api/my-tasks/{tokenId}/complete",
-        "GET /api/my-requests",
-        "GET /api/workflow-instances"
-    ));
+    private static final String CENSUS_START_MARKER = "## S0.2 Route census";
+    private static final Pattern HTTP_METHOD = Pattern.compile("^(GET|POST|PUT|DELETE)$");
+    private static final Pattern FIRST_BACKTICKED = Pattern.compile("`([^`]+)`");
 
     @Test
     void registeredRoutesMatchCensusExactly() throws Exception {
         Router router = RouteRegistry.buildRouter();
         Set<String> actual = reflectRegisteredRoutes(router);
 
-        Set<String> registeredButNotCensused = new TreeSet<>(actual);
-        registeredButNotCensused.removeAll(EXPECTED_ROUTES);
+        Path planDoc = resolvePlanDoc();
+        Set<String> censused = parseCensusFromPlanDoc(planDoc);
 
-        Set<String> censusedButNotRegistered = new TreeSet<>(EXPECTED_ROUTES);
+        Set<String> registeredButNotCensused = new TreeSet<>(actual);
+        registeredButNotCensused.removeAll(censused);
+
+        Set<String> censusedButNotRegistered = new TreeSet<>(censused);
         censusedButNotRegistered.removeAll(actual);
 
         if (!registeredButNotCensused.isEmpty() || !censusedButNotRegistered.isEmpty()) {
-            StringBuilder sb = new StringBuilder("Route census drift detected.\n");
+            StringBuilder sb = new StringBuilder("Route census drift detected (Router vs. \"S0.2 Route census\"\n")
+                    .append("in ").append(planDoc).append(").\n");
             if (!registeredButNotCensused.isEmpty()) {
-                sb.append("Registered in Router but MISSING from the S0.2 census (add to both this\n")
-                  .append("test's EXPECTED_ROUTES and the plan doc's census table):\n");
+                sb.append("Registered in Router but MISSING from the census — add a row to the\n")
+                  .append("relevant *Routes.java section of the plan doc:\n");
                 registeredButNotCensused.forEach(r -> sb.append("  + ").append(r).append('\n'));
             }
             if (!censusedButNotRegistered.isEmpty()) {
                 sb.append("Listed in the census but NO LONGER registered in Router (route was\n")
-                  .append("renamed/removed — update both this test and the plan doc's census table):\n");
+                  .append("renamed/removed — update the plan doc's census table):\n");
                 censusedButNotRegistered.forEach(r -> sb.append("  - ").append(r).append('\n'));
             }
             fail(sb.toString());
@@ -202,4 +103,89 @@ class RouteCensusTest {
         }
         return result;
     }
+
+    /**
+     * Maven/Surefire's default working directory is the module basedir ({@code app-bana-service/}),
+     * but some IDE test runners use the repo root instead — try both rather than assuming one.
+     */
+    private static Path resolvePlanDoc() {
+        Path fromModuleDir = Paths.get("..", "docs", "planning", "TENANT_ISOLATION_SECURITY_PLAN.md");
+        if (Files.isRegularFile(fromModuleDir)) {
+            return fromModuleDir;
+        }
+        Path fromRepoRoot = Paths.get("docs", "planning", "TENANT_ISOLATION_SECURITY_PLAN.md");
+        if (Files.isRegularFile(fromRepoRoot)) {
+            return fromRepoRoot;
+        }
+        throw new IllegalStateException("Could not locate TENANT_ISOLATION_SECURITY_PLAN.md from working "
+                + "directory " + Paths.get("").toAbsolutePath() + " (tried " + fromModuleDir.toAbsolutePath()
+                + " and " + fromRepoRoot.toAbsolutePath() + ")");
+    }
+
+    /**
+     * Parses {@code | METHOD | `/path` | ... |} rows out of the plan doc's "S0.2 Route census"
+     * section, bounded below by that heading and above by the next level-2 ({@code "## "})
+     * heading. Header/separator rows, prose footnotes, and the "no known caller" bullet list
+     * that follows the per-file tables are all ignored — this only accepts lines starting with
+     * {@code |} whose first cell is a bare HTTP method, which none of those are.
+     *
+     * <p>The Path cell's value is whatever's inside its FIRST pair of backticks. Some rows carry
+     * a trailing parenthetical after the closing backtick — e.g. AppRoutes.java's confirmed
+     * duplicate registration is annotated {@code `/api/.../full` (1st reg., live)} and
+     * {@code `/api/.../full` (2nd reg., **dead code**)} — that's explanatory prose, not part of
+     * the path, and both resolve to the same signature here (correctly collapsing to one entry
+     * in the Set, same as Router's own first-match-wins behavior does at runtime).
+     */
+    private static Set<String> parseCensusFromPlanDoc(Path planDoc) throws IOException {
+        List<String> lines = Files.readAllLines(planDoc);
+
+        int start = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).startsWith(CENSUS_START_MARKER)) {
+                start = i + 1;
+                break;
+            }
+        }
+        if (start < 0) {
+            throw new IllegalStateException("Could not find \"" + CENSUS_START_MARKER + "\" in " + planDoc);
+        }
+
+        int end = lines.size();
+        for (int i = start; i < lines.size(); i++) {
+            if (lines.get(i).startsWith("## ")) {
+                end = i;
+                break;
+            }
+        }
+
+        Set<String> result = new LinkedHashSet<>();
+        for (int i = start; i < end; i++) {
+            String line = lines.get(i).trim();
+            if (!line.startsWith("|")) {
+                continue;
+            }
+
+            String[] cells = line.split("\\|", -1);
+            if (cells.length < 3) {
+                continue;
+            }
+            String method = cells[1].trim();
+            if (!HTTP_METHOD.matcher(method).matches()) {
+                continue; // header row ("Method"), separator row ("---"), or not a route row
+            }
+
+            Matcher m = FIRST_BACKTICKED.matcher(cells[2]);
+            if (!m.find()) {
+                continue;
+            }
+            result.add(method + " " + m.group(1));
+        }
+
+        if (result.isEmpty()) {
+            throw new IllegalStateException("Parsed zero routes from the S0.2 census in " + planDoc
+                    + " — the doc's table structure likely changed and this parser needs updating");
+        }
+        return result;
+    }
 }
+
