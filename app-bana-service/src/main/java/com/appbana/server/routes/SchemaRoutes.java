@@ -206,6 +206,26 @@ public class SchemaRoutes {
 
             String name = req.pathParam("name");
             try {
+                EntitySchema existing = SchemaManager.loadSchema(name);
+                if (existing == null) {
+                    res.json(404, Map.of("error", "Schema not found: " + name));
+                    return;
+                }
+
+                // Task S1.4 Fix: DELETE must enforce the same app ownership authorization as
+                // POST /schema (Task C1.10). Previously only the create/update path checked
+                // isAppOwnerOrSystem, so any caller who could name a schema key could drop another
+                // tenant's table.
+                String userId = AuthService.extractUserId(req, cfg);
+                if (userId == null || userId.isBlank()) {
+                    res.json(401, Map.of("error", "Unauthorized: valid session required"));
+                    return;
+                }
+                if (!com.appbana.security.AppAuthorization.isAppOwnerOrSystem(existing.getTenantId(), existing.getAppId(), userId)) {
+                    res.json(403, Map.of("error", "Forbidden: caller is not authorized to delete entity schema for app " + existing.getAppId()));
+                    return;
+                }
+
                 boolean dropTable = "true".equalsIgnoreCase(req.query("dropTable"))
                         || "1".equals(req.query("dropTable"));
                 boolean deleted = SchemaManager.deleteSchema(name, dropTable);
