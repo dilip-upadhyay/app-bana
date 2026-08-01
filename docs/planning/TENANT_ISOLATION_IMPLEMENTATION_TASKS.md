@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~56.92 hr across 52 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~57.42 hr across 52 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -44,7 +44,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 | S0.2 | Machine-generated route census across every `*Routes.java`: path, middleware-excluded?, identity gate present?, tenant/app check present?, tenant/app source (`path`\|`query`\|`body`\|`header`\|`none`), **known callers** (studio/runtime/shared/ai-builder/e2e/"none found"), **data preconditions** (what must exist for the call to succeed). Predicate = any client-controlled tenant/app identifier, not just path params. Attach the generated table to the plan doc. | new `RouteCensus` tool/report, appended to plan doc | 165 min | ✅ |
 | S0.3 | Test that fails when a route is registered without a census entry — assert on the **set** of route signatures (method+path) via `Router` reflection vs. census, not a count. | new test | 75 min | ✅ |
 | S0.4 | Fix or fence `Router.handle(HttpServletRequest,...)` — it bypasses the middleware chain entirely (M1). Either route it through the same chain `handle(HttpExchange)` uses, or fail fast at startup if `serverType` is set to anything but `jdk`. | `Router.java`, `Main.java` | 45 min | ✅ |
-| S0.5 | **(New, review round 4; scope corrected round 5)** Add an automated check that sums every task row's estimate in this tracker per sub-phase and asserts the total against the plan doc's S0–S5 summary table (and the grand Total scope figure) — the same "derive it, don't hand-maintain it" fix S0.2/S0.3 already applied to the route census. **Range convention (round 5):** where an estimate is a range (only `S0.0`'s "30–90 min"), take the upper bound — the convention already used by hand for every reconciliation so far, now written down so the check and any manual cross-check can't land on different totals depending on which end someone picks. **Non-gating (round 5):** this task's own 90 min counts toward S0's total below, but its ⬜ status does not reopen S0's phase-completion gate for S1 — S0.0–S0.4's exit criteria were independently reviewer-accepted before S1 began (see "Post-acceptance external review of S0"); this task is scope added after that acceptance, like S1.15–S1.17 are for S1, not a retroactive condition on it. Registered after an independent line-item sum turned up a ~28% aggregate understatement across every phase but S3 (review round 4). | new test/script, `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`, `TENANT_ISOLATION_SECURITY_PLAN.md` | 90 min | ⬜ |
+| S0.5 | **(New, review round 4; scope corrected round 5)** Add an automated check that sums every task row's estimate in this tracker per sub-phase and asserts the total against the plan doc's S0–S5 summary table (and the grand Total scope figure) — the same "derive it, don't hand-maintain it" fix S0.2/S0.3 already applied to the route census. **Range convention (round 5):** where an estimate is a range (`S0.0`'s "30–90 min", and now `S2.6`'s "60–90 min"), take the upper bound — the convention already used by hand for every reconciliation so far, now written down so the check and any manual cross-check can't land on different totals depending on which end someone picks. **Scope extended (S1.8 follow-up review, round 2):** also diff each task's Where/scope-descriptive text between the two docs for any task id present in both, not just sum numeric estimates — added after the tracker's and plan doc's S2.6 rows were found to have drifted (tracker gained the `SavedViewRoutes.LIST_SQL` clause and a third file; plan doc did not, until this round's manual fix). **Non-gating (round 5):** this task's own 90 min counts toward S0's total below, but its ⬜ status does not reopen S0's phase-completion gate for S1 — S0.0–S0.4's exit criteria were independently reviewer-accepted before S1 began (see "Post-acceptance external review of S0"); this task is scope added after that acceptance, like S1.15–S1.17 are for S1, not a retroactive condition on it. Registered after an independent line-item sum turned up a ~28% aggregate understatement across every phase but S3 (review round 4). | new test/script, `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`, `TENANT_ISOLATION_SECURITY_PLAN.md` | 90 min | ⬜ |
 
 **Exit criteria — S0**
 - [x] `mvn test` compiles and runs on this repo's toolchain. Confirmed via clean `mvn clean test` on JDK 25: `app-bana` 331/331 passing, `AI Builder Service` 197/197 (2 skipped), `BUILD SUCCESS`. Fix was binding `maven-enforcer-plugin` under the root pom's actual `<build><plugins>` (it was declared only in `pluginManagement`, which never executes on its own, so the Java-25 gate never fired). Live `start-everything` boot proof completed as part of S0.1's verification below — all four services booted clean from a cold shell with JAVA_HOME set to the JDK 25 install.
@@ -616,9 +616,76 @@ verification available for that half; say so rather than inventing one. The `has
 conversion on `GET /schema`/`GET /schema/{name}` only changes behavior when an admin token is actually
 configured, so its live check needs the same shipped-config discipline that caught round-6's B2.
 
+### Post-acceptance external review of S1.8 follow-ups (round 2) — accepted, S1.8 closed; doc drift fixed, S2.6 flagged as a convergence point
+
+An external reviewer examined commit `07d17b2` (the round-1 nit fix) against source directly, confirming
+the `if (identity == null)` check is placed before the equality with the `Objects.equals` trap named in
+its own comment, and independently re-confirming the unreachability claim by reading
+`SessionService.createSession`'s own validation. **Verdict: accepted, nothing outstanding — S1.8 is
+closed.**
+
+- 🟢 **Finding — the tracker's and plan doc's S2.6 rows had drifted apart.** The tracker's S2.6 row
+  (amended in round 1, above) carries the `LIST_SQL` clause and 3 files; `TENANT_ISOLATION_SECURITY_PLAN.md`'s
+  own S2.6 row still had the pre-round-1 text (2 files, no clause). Same two-copies-one-updated shape as
+  S0.3's census-vs-test-list and S0.5's estimate table — now a third instance of the same underlying
+  problem. **Fixed**: the plan doc's S2.6 row synced to match the tracker's exactly.
+- **Structural decision recorded**, choosing between the reviewer's two offered options: extend S0.5's
+  own not-yet-built scope to also diff each shared task's Where/scope text across both docs (not just sum
+  numeric estimates), rather than restructuring the plan doc to link to the tracker instead of restating
+  it. Chosen because S0.5 already targets both files and hasn't been implemented yet, so widening its
+  definition now is a one-line scope change against a task not yet started; collapsing an already-mature,
+  narrative-style plan doc into stub links is a larger, one-time restructuring with its own risk, better
+  made as its own deliberate decision later than folded into closing out a nit-fix review now. S0.5's row
+  updated accordingly (above).
+- **S2.6's estimate corrected to a range, `60–90 min`** — the reviewer's own observation that the task
+  "gained a third file and kept its 60-minute estimate." Mirrors the existing `S0.0` range convention;
+  summed at the established upper-bound rule (S0.5). S2 ~11.25→~11.75 hr, grand total ~56.92→~57.42 hr
+  across the same 52 tasks (no task added — only S2.6's own estimate widened to acknowledge the
+  now-explicit `LIST_SQL` decision folded into its scope).
+- **Meta-observation acted on.** The reviewer noted that S1.7 round 6's body-supplied-`appId` forward
+  note, this task's `LIST_SQL` forward note, and S1.2's own permanently-inert membership branch now all
+  converge on S2.6 — "not 'wire `isMember` into one method' any more." Added an explicit callout at the
+  top of the S2 task table (below) consolidating all three and recording the reviewer's own
+  recommendation: re-run the principal × guard walk from scratch when S2.6 is picked up, rather than
+  reviewing it as a single task, since what changes by then is the premise every S1 guard was reasoned
+  against, not a line of code.
+
+**Edits made:** `TENANT_ISOLATION_SECURITY_PLAN.md` (S2.6 row synced; S2's summary-table estimate and the
+Total-scope paragraph updated to match). `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md` (this section; S0.5's
+row scope extended and its range-convention parenthetical updated; S2.6's estimate widened to a range;
+headline total updated; new S2 convergence callout added below). No source code changed this round.
+
+**Total scope after this round:** ~57.42 hr across 52 tasks (S2.6's estimate widened to a range,
+`60–90 min`, +30 min at the established upper-bound convention — no task added or removed).
+
+Still to do: commit (`docs`), push, deliver chat writeup. Then: **on to S1.9**, unchanged from round 1's
+framing — dedupe the `.../full` registrations, guard with tenant+membership, convert `SchemaRoutes.java`'s
+six `hasRead`/`getReadToken()` call sites to `hasAdmin`/`extractServiceToken()`, and write up the
+`.../full` routes' live-verification section as an explicit negative result (zero real callers repo-wide,
+so the automated test is the whole verification) rather than a manufactured curl call.
+
 ---
 
 ## Sub-phase S2 — Per-app membership model
+
+> [!IMPORTANT]
+> **S2.6 is no longer "wire `isMember` into one method" — three separately-deferred decisions now
+> converge on it** (flagged across S1.7's and S1.8's own reviews, consolidated here per the reviewer's
+> explicit request to say this plainly before S2 starts):
+> 1. **S1.2's membership-exception branch is called with the body-supplied `appId`** (S1.7 round 6
+>    forward note) — once active, `isMember` must resolve the app's real tenant from the app record
+>    itself, never from the tenant the request body asserts alongside the appId.
+> 2. **`SavedViewRoutes.LIST_SQL` has no owner filter** (S1.8 round 1 forward note, above) — a decision
+>    is needed between an owner/`is_shared` filter and explicitly tenant-shared views before a second
+>    member of the same app can list it.
+> 3. **The membership branch itself has shipped permanently inert since S1.2** — every S1 guard that
+>    composes with it (`TenantAccessGuard.requireOwnTenant`, and everything built on top of it across
+>    `AppRoutes.java`, `SchemaRoutes.java`, `SavedViewRoutes.java`) was reasoned against a world where it
+>    can never admit anyone. S2.6 is the one point where that stops being true, for all of them at once.
+>
+> **When S2.6 is picked up: re-run the principal × guard walk (the round-5 technique recorded in
+> `security-multi-tenant-isolation.md`) from scratch, rather than reviewing it as a single task.** What
+> changes isn't a line of code — it's the premise every S1 guard above was reasoned against.
 
 | # | Task | Files | Est. | Status |
 |---|---|---|---|---|
@@ -627,7 +694,7 @@ configured, so its live check needs the same shipped-config discipline that caug
 | S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ⬜ |
 | S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ⬜ |
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ⬜ |
-| S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60 min | ⬜ |
+| S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ⬜ |
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ⬜ |
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ⬜ |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ⬜ |
