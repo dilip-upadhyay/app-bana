@@ -740,6 +740,15 @@ Still to do: commit (`fix`/`docs`), push, deliver chat writeup. Then: **on to S1
   former-`hasRead` sites genuinely retire the separate, weaker `readToken` tier (a caller holding
   only the read token is no longer admitted — confirmed real, not just a naming cleanup, by reading
   `hasRead`'s actual body: `hasAdmin(...) || readToken.equals(token)`).
+- **What this half of S1.9 actually bought, stated plainly**: under the shipped config, the
+  `SchemaRoutes.java` half changes **no observable behavior at all** — all 6 sites stay wrapped in
+  `if (authEnabled(cfg))`, which is false with `adminToken`/`readToken` both null, so those routes
+  remain exactly as open as before this commit. The value delivered here is contract hygiene (the
+  `extractToken()`→`has*()` usage was a direct violation of `AuthService`'s own Javadoc warning—"M2"-
+  class) and retiring the weaker `readToken` tier for good. **The actual closure of these routes—
+  requiring identity unconditionally, not only when an admin token happens to be configured—is
+  S1.15/S1.16/S1.17's job, not this one's.** The `AppRoutes.java` half, by contrast, is a real,
+  unconditional change: two previously-anonymous routes now require a matching tenant, full stop.
 - **Tests**: 6 new tests in `AppRoutesTenantIsolationTest` (cross-tenant 403, unauthenticated 401, and
   same-tenant-still-works for both routes — the last one matters precisely *because* nothing calls
   these routes today: a guard that wrongly denied a legitimate same-tenant caller would be a real
@@ -788,6 +797,53 @@ replaced with the above proof + the corrected "no remaining callers" claim; this
 Still to do: commit (`fix`/`docs`), push, deliver chat writeup. Then: **on to S1.10** — startup: log a
 loud repeated WARN while `AuthService.authEnabled(cfg)==false` (`ApiServer.java`, Cat. 2 ops check per
 its own UI-verification-script entry, not a browser check).
+
+### Post-acceptance external review of S1.9 — accepted; census frozen as a dated snapshot
+
+An external reviewer examined commit `a8a561b` against source directly: recomputed the absence-census
+(26 `AppRoutes.java` registrations after the delete, 21 guard sites, the 5 unguarded all
+`/api/templates*` by adopted design), confirmed zero `extractToken`/`hasRead`/`hasWrite` occurrences
+remain in `SchemaRoutes.java` and that `hasRead(` survives repo-wide only in `GenericEntityRoutes.java`
+(S3.4's job) and `AuthService.java` itself, and independently re-broke the `.../full` guard to confirm
+both its tests fail naming the right property. **Verdict: accepted.**
+
+- 🟡 **Finding — the S0.2 route census's classification columns (`Id. gate?`, `T/A check?`) are now
+  stale, and nothing checks them.** Deleting the dead duplicate `.../env/{env}/full` registration left
+  the census with a row describing a registration that no longer exists; more importantly, both
+  `.../full`/`.../env/{env}/full` rows still read `No`/`No` for identity/tenant checks S1.9 just added.
+  `RouteCensusTest` (S0.3) only guards the route **set**; `EstimateReconciliationTest` (S0.5) only
+  covers estimates and Files/Where lists — no mechanism keeps these specific columns current, and one
+  cell (`POST /appbana-studio/{tenantId}/apps`) had already been hand-corrected during the B1 fix while
+  these hadn't, which is exactly the two-copies-one-updated shape the other three mechanisms exist to
+  prevent. **Fixed** by freezing rather than patching: added an explicit note atop the census stating
+  it's a dated 2026-08-01 pre-S1 snapshot, not a live document, and pointing readers at this tracker's
+  own per-task rows for current guard status; deleted the now-nonexistent dead-code row; simplified the
+  surviving row's orphaned "(1st reg., live)" label. Deliberately did NOT try to update every
+  classification cell S1 has touched so far (S1.3–S1.9) — that would reintroduce hand-maintained
+  duplicated facts, the opposite of what S0.3/S0.5 already moved away from.
+- **Explicit ask, actioned**: "[the test-passed-for-the-wrong-reason catch] belongs in repo memory, not
+  just session memory" — extended the existing S0.5 parser-bug entry in
+  `/memories/repo/testing-conventions.md` with this task's own independent confirmation of the same
+  instinct (suspect your own green/red result) in a completely different kind of test (hand-written
+  HTTP assertions catching a second, independent enforcement layer — `SessionMiddleware` — firing
+  before the route's own check could), generalized as: a route can be protected by more than one
+  independent layer, and a matching status code alone never proves which layer fired.
+- **Clarified, not changed**: added an explicit bullet (above, on S1.9's own write-up) stating plainly
+  what the `SchemaRoutes.java` half of S1.9 actually buys under the shipped config — nothing observable
+  (all 6 sites stay wrapped in `if (authEnabled(cfg))`, false with `adminToken`/`readToken` null) — the
+  value is contract hygiene and retiring the weaker `readToken` tier; the actual closure of these
+  routes is S1.15/S1.16/S1.17.
+
+**Edits made:** `TENANT_ISOLATION_SECURITY_PLAN.md` (S0.2 census: dated-snapshot note added, dead-code
+row deleted, orphaned label simplified). `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md` (this section; new
+"what this half actually bought" bullet on S1.9). `testing-conventions.md` (repo memory: S0.5
+parser-bug entry extended with this task's second, independent confirmation). No source code changed
+this round.
+
+Still to do: commit (`docs`), push, deliver chat writeup. Then: **on to S1.10** — startup: log a loud
+repeated WARN while `AuthService.authEnabled(cfg)==false`, with the reviewer's own check in mind: the
+warning must fire under the *shipped* config specifically (where `authEnabled` is false), not only in
+some separately-configured state — confirm on an actual cold boot, not just a unit test.
 
 ---
 

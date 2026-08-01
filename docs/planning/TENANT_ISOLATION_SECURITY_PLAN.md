@@ -1007,6 +1007,22 @@ an actual comparison of the target tenant/app against the caller's own identity/
 allow-or-deny (not just a read-back or a default fallback) · **T/A source** = how the tenant and/or
 app identifier this route acts on reaches the handler.
 
+> [!NOTE]
+> **This census is a dated snapshot, not a live document.** The `Mw-excl.`/`Id. gate`/`T/A check`
+> columns below describe the system exactly as observed on 2026-08-01, before any S1 task landed —
+> deriving that one-time scope is what S0.2 was for. They are **not** updated as S1's own tasks
+> (S1.3 onward) add guards to routes listed here: `RouteCensusTest` (S0.3) only guards the route
+> **set** (added/renamed/removed), never these classification columns, and S0.5's reconciliation
+> covers only task estimates and Files/Where lists — no mechanism keeps these columns current.
+> **For a route's actual, current guard status, read `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`'s own
+> per-task rows and write-ups**, not this table. Confirmed already drifting two different ways as of
+> S1.9: the `POST /appbana-studio/{tenantId}/apps` row below was hand-corrected during the B1 fix
+> (the one partial update that's already happened, and exactly the inconsistency a frozen snapshot
+> avoids), while `GET /api/{tenantId}/apps/{id}/full` and `.../env/{env}/full` still read
+> `Id. gate? No` / `T/A check? No` below despite both requiring
+> `TenantAccessGuard.requireOwnTenant` since S1.9 (review round, S1.9). Left as originally generated
+> rather than patched further — the point of freezing this table is to stop hand-patching it.
+
 ### GenericEntityRoutes.java
 
 | Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
@@ -1051,12 +1067,11 @@ app identifier this route acts on reaches the handler.
 | GET | `/api/{tenantId}/apps/{id}/versions` | Yes (rule 4) | **No** | No | path | none found | none |
 | POST | `/api/{tenantId}/apps/{id}/deploy/{versionId}` | Yes (rule 4) | Weak (no null-check) | No | path + query/body (`env`) | none found | `versionId` must reference an existing version |
 | GET | `/api/{tenantId}/apps/{id}/pipeline` | Yes (rule 4) | **No** | No | path | none found | none |
-| GET | `/api/{tenantId}/apps/{id}/env/{env}/full` (1st reg., live) | Yes (rule 4) | **No** | No | path | none found | prior deployment snapshot must exist |
+| GET | `/api/{tenantId}/apps/{id}/env/{env}/full` (was 2 identical registrations at generation time — deduped by S1.9, see note above) | Yes (rule 4) | **No** | No | path | none found | prior deployment snapshot must exist |
 | POST | `/api/{tenantId}/apps/{id}/restore-schemas` | Yes (rule 4) | **No** | No | path + query (`env`) | none found | prior deployment snapshot must exist |
 | GET | `/appbana-studio/{tenantId}/apps` | No (default) | **No** (relies solely on session) | No | path (`tenantId` only) | shared→studio (`ChatPane`, `Header`), ai-builder (`ListAppsTool`) | none |
 | GET | `/appbana-studio/{tenantId}/apps/{id}` | No (default) | **No** | **No — any valid session, any tenant, passes** | path | shared→runtime (`AppRuntimeShell`), 8 ai-builder tools | app must exist |
 | GET | `/api/{tenantId}/apps/{id}/full` (public runtime API) | Yes (rule 4) | No (intentionally public) | No | path | **none found** — Runtime actually calls the Studio route above instead | app must exist |
-| GET | `/api/{tenantId}/apps/{id}/env/{env}/full` (2nd reg., **dead code**) | Yes (rule 4) | **No** | No | path | none found — unreachable (Router first-match-wins) | moot |
 | POST | `/appbana-studio/{tenantId}/apps` | No (default) | **Yes** — real gate, 401 if blank; sets `author` from caller (anti-spoof) | **Yes** — `TenantAccessGuard`, `pathAppId=null` (see footnote²) | path + body (`id`, `name`) | shared→studio (`Header`), ai-builder (`CreateAppTool`, `ScaffoldAppTool`), e2e | body `id` unique, non-blank |
 | PUT | `/appbana-studio/{tenantId}/apps/{id}` | No (default) | **No** | No | path | ai-builder (`UpdateAppTool`, `CreateEntityTool`) — no Studio/Runtime UI path | app must exist |
 | DELETE | `/appbana-studio/{tenantId}/apps/{id}` | No (default) | **No** | No | path | ai-builder (`ScaffoldAppTool` rollback-only), e2e cleanup — no Studio/Runtime UI path | app must exist |
