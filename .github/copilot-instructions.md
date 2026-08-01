@@ -860,6 +860,24 @@ then hands off to a **reviewer** agent, which verifies it and hands back. Shared
 The prompt for either side is just the filename: `#loop_status.json`. Everything needed to act should
 already be in the file — if it isn't, that's a defect in the handoff, not something to ask about.
 
+### Canonical prompt
+
+```
+take your turn — #loop_status.json
+```
+
+Paste this into either window; it is deliberately role-agnostic and self-selecting. On receiving it,
+read the file and act on whether `active_agent` matches your own role:
+
+- **It's your turn.** Do your role's next action without waiting for further instruction — developer:
+  action any outstanding `review_comments`, then begin the item tagged `severity: "next"`; reviewer:
+  review the commit named in `task_summary` using the protocol below, write findings, hand back.
+- **It's not your turn.** Say so and stop. Do not act out of turn, and do not edit the file — the other
+  agent may be mid-write, and there is no locking.
+
+A bare `#loop_status.json` with no verb tends to produce a *description* of the file rather than an
+action on it; keep the imperative.
+
 ### Reviewer protocol
 
 The checks below are what actually found defects during the tenant-isolation work; they are not
