@@ -80,7 +80,13 @@ public final class TenantAccessGuard {
             return Result.deny(401, "Unauthorized: valid session required");
         }
 
-        // (2) Own tenant => allow.
+        // (2) Own tenant => allow. A null session tenantId must fail closed rather than rely on
+        // Objects.equals(null, null) == true (M1, review round 1) — not reachable via any
+        // production path today, but a null-tenant session is constructible and S3 reuses this
+        // shape for scopedAppId, which is null by default.
+        if (session.tenantId() == null) {
+            return Result.deny(403, "Forbidden: caller's tenant does not match the requested app's tenant");
+        }
         if (Objects.equals(session.tenantId(), pathTenantId)) {
             return Result.allow();
         }

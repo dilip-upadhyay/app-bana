@@ -147,6 +147,19 @@ class TenantAccessGuardTest {
         assertEquals(403, result.statusCode());
     }
 
+    @Test
+    @DisplayName("M1 (review round 1): a null session tenantId must fail closed even when pathTenantId is ALSO " +
+            "null — Objects.equals(null, null) == true must not be allowed to leak through as an allow")
+    void testNullSessionTenantIdDoesNotMatchNullPathTenant() {
+        SessionData session = SessionService.createSession("user-A"); // no tenantId overload
+        when(req.header("X-Session-Token")).thenReturn(session.sessionId());
+
+        TenantAccessGuard.Result result = TenantAccessGuard.requireOwnTenant(req, cfg, null, null);
+
+        assertFalse(result.allowed());
+        assertEquals(403, result.statusCode());
+    }
+
     // ========================================
     // (3)/(4) Tenant mismatch: 403, and the S2.6 membership exception ships permanently inert
     // ========================================
