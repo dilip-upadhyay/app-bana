@@ -247,6 +247,13 @@ public class SavedViewRoutes {
         String serviceToken = AuthService.extractServiceToken(req);
         boolean isAdmin = serviceToken != null && !serviceToken.isBlank() && AuthService.hasAdmin(serviceToken, cfg);
         String identity = AuthService.resolveIdentity(req, cfg);
+        // requireOwnTenant only guarantees a session with a non-null tenantId, not a non-null userId
+        // (review round 1 nit) — reject explicitly rather than Objects.equals(identity, ownerUserId),
+        // which would let a null identity match a null (legacy) owner and wildcard-authorize the delete.
+        if (identity == null) {
+            res.json(401, Map.of("error", "Unauthorized: valid session required"));
+            return;
+        }
         if (!isAdmin && !identity.equals(ownerUserId)) {
             res.json(403, Map.of("error", "Forbidden: only the view's owner may delete it"));
             return;

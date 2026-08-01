@@ -565,6 +565,57 @@ a *foreign* delete and then asserts **the row still exists** (a 403 with the row
 a status-only assertion), and `ownerUserId` must stop being read from the client payload the same way
 `uploadedBy` just stopped being.
 
+### Post-acceptance external review of S1.8 (round 1) — accepted; one nit fixed, one forward note filed
+
+An external reviewer examined commit `a0aae5b` against source directly, independently break-testing the
+owner check (neutering it and confirming `deleteOfSomeoneElsesViewWithinSameTenantIsRejected` and
+`deleteOfLegacyNullOwnerViewIsRejectedForNonAdmin` fail for the right reason) and specifically checking
+whether `viewId`/`ownerUserId` could be client-supplied on the upsert path (confirmed both are
+server-derived — `UUID.randomUUID()` and `resolveIdentity`, respectively). **Verdict: S1.8 accepted.**
+Both watch-points from the S1.7 round-6 review were re-confirmed independently satisfied at the test
+level (the foreign-delete test asserts the row still exists, not just a 403) and the live-browser level
+(this task's own writeup).
+
+- 🟡 **Finding — `LIST_SQL` has no `owner_user_id` filter, the other half of the same resource.** Not a
+  bug today (tenant-per-user means list only ever returns the caller's own views regardless), and not
+  S1.8's job to decide — but `handleDelete` now treats a saved view as an **owned** object while
+  `handleList` treats the same resource as **tenant-shared**, and that split is currently invisible
+  because S1 never admits a second tenant member to notice it. Once S2.6 activates cross-tenant
+  membership, a second member of the same app would see every other member's saved filters/search terms
+  via plain `GET /api/saved-views`. **Not fixed here** — recorded as a forward note and folded into
+  S2.6's own task row (above) so the decision (owner-filtered list vs. explicitly-shared views) is made
+  once, deliberately, rather than being independently rediscovered mid-S2.6.
+- 🟢 **Nit — latent NPE at the owner check, fixed this round.** `handleDelete`'s
+  `!identity.equals(ownerUserId)` assumed `AuthService.resolveIdentity` is non-null whenever
+  `TenantAccessGuard.requireOwnTenant` has already passed — but the guard only requires a non-null
+  `session.tenantId()` (confirmed by reading `TenantAccessGuard` directly), not a non-null
+  `session.userId()`, and `resolveIdentity` returns null whenever the session-credential fallback's
+  `session.userId()` is null. Not reachable today (`SessionService.createSession` throws
+  `IllegalArgumentException` on a null/blank `userId`, confirmed by reading it — there is no real path
+  to construct such a session), but cheap and correct to guard anyway. Fixed with an explicit
+  `if (identity == null) → 401` before the comparison — deliberately **not**
+  `Objects.equals(identity, ownerUserId)`, which the reviewer correctly flagged as the tempting-looking
+  fix that would instead let a null identity match a null (legacy) owner and reintroduce the exact
+  wildcard-match bug `deleteOfLegacyNullOwnerViewIsRejectedForNonAdmin` exists to prevent. No new test
+  added — the reviewer characterized this as a nit worth one line, not a reachable path worth new
+  test-only session-construction scaffolding, and `SessionService.createSession`'s own validation makes
+  it provably unreachable via any real session today.
+
+**Edits made:** `SavedViewRoutes.java` (`handleDelete` — explicit null-identity 401 check).
+`TENANT_ISOLATION_IMPLEMENTATION_TASKS.md` (this section; S2.6 row now mentions the `LIST_SQL`
+decision). No test code changed — full suite re-run to confirm the fix doesn't regress anything
+(382/382 unaffected; the null-identity path itself is not exercised by any test, consistent with it
+being provably unreachable today).
+
+Still to do: commit (`fix`/`docs`), push, deliver chat writeup. Then: **on to S1.9** — dedupe the
+`.../full` registrations, guard both with tenant+membership, convert `SchemaRoutes.java`'s six
+`hasRead`/`getReadToken()` call sites to `hasAdmin`/`extractServiceToken()`. Per the reviewer's own
+framing: after S1.9, `GET /api/{tenantId}/apps/{id}/full` and `.../env/{env}/full` become guarded for
+the first time with zero real callers (round 2, R2-2) — there's no client to break, but also no live
+verification available for that half; say so rather than inventing one. The `hasRead → hasAdmin`
+conversion on `GET /schema`/`GET /schema/{name}` only changes behavior when an admin token is actually
+configured, so its live check needs the same shipped-config discipline that caught round-6's B2.
+
 ---
 
 ## Sub-phase S2 — Per-app membership model
@@ -576,7 +627,7 @@ a status-only assertion), and `ownerUserId` must stop being read from the client
 | S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ⬜ |
 | S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ⬜ |
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ⬜ |
-| S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. | `AppRoutes.java`, `TenantAccessGuard.java` | 60 min | ⬜ |
+| S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60 min | ⬜ |
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ⬜ |
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ⬜ |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ⬜ |
