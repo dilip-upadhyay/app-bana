@@ -824,6 +824,63 @@ Note: `RevisionFlowTest` and the other DB-backed tests need PostgreSQL running (
 
 ---
 
+## 15. Two-Agent Review Loop (`loop_status.json`)
+
+Some work in this repo runs as a two-agent loop: a **developer** agent implements exactly one task,
+then hands off to a **reviewer** agent, which verifies it and hands back. Shared state lives in
+`loop_status.json` at the repo root.
+
+> [!IMPORTANT]
+> `loop_status.json` is **local, ephemeral, and gitignored — never commit it.** It is per-machine
+> turn-taking state, not project history. Committing a half-finished handoff produces merge conflicts
+> on a file that has no meaningful merge resolution. Durable history belongs in
+> `docs/planning/TENANT_ISOLATION_IMPLEMENTATION_TASKS.md` (or the equivalent tracker), not here.
+
+### Schema
+
+| Field | Meaning |
+|---|---|
+| `active_agent` | Whose turn it is: `"developer"` or `"reviewer"`. **Roles, never model names** — the assignment changes, the roles don't |
+| `status` | `"in_progress"` · `"ready_for_review"` · `"idle"` |
+| `current_task` | Task id + one-line title, e.g. `"S1.11 - cross-tenant capstone tests"` |
+| `task_summary` | What was done, what was independently verified, the commit hash |
+| `review_comments` | Array of `{severity, item, detail}` for the current round. Severities in use: `verdict`, `blocker`, `high`, `medium`, `nit`, `verified-live`, `praise`, `housekeeping`, `next` |
+| `history` | Append-only log of `{round, agent, task, commit, outcome}` |
+
+### Turn-taking
+
+- **Developer finishes a task** → set `active_agent: "reviewer"`, `status: "ready_for_review"`, fill
+  `current_task` + `task_summary`, append a `history` entry. Clear `review_comments` only when
+  *starting* the next task, after its previous entries have been actioned.
+- **Reviewer finishes a review** → write findings to `review_comments`, set
+  `active_agent: "developer"`, `status: "idle"`, append a `history` entry.
+- **`status: "idle"` with a non-empty `review_comments` means:** read the comments, action them, then
+  begin the item tagged `severity: "next"`.
+
+The prompt for either side is just the filename: `#loop_status.json`. Everything needed to act should
+already be in the file — if it isn't, that's a defect in the handoff, not something to ask about.
+
+### Reviewer protocol
+
+The checks below are what actually found defects during the tenant-isolation work; they are not
+generic advice. Blockers found this way include a cross-tenant app-creation hole, an admin gate that
+was inert under the shipped config, and a guard that rejected every real client.
+
+1. **Absence-census first.** Enumerate every route/call-site in each touched file and ask which ones
+   *lack* the new guard. Auditing the sites that have it can never find the one that doesn't.
+2. **Check guard ordering against side effects.** A guard that runs after the write still writes.
+3. **Break the guard on purpose.** Neuter it, confirm the tests fail *with the right message*, revert.
+   A guard never observed failing is not verified. For a *deletion*, re-register a stub at the deleted
+   path — otherwise a test asserting 404 passes trivially forever.
+4. **Verify against `config.json` as shipped** (`adminToken: null`). A check wrapped in
+   `if (authEnabled(cfg))` reads correctly and does nothing in the default configuration.
+5. **Live-probe where a real client exists**; say plainly when one doesn't rather than manufacturing a
+   request. A negative result is a valid result.
+6. **Restore the environment** and report it as *checked*, not remembered — stop servers you started,
+   revert perturbations, confirm `git status` is clean, name any fixture data left behind.
+
+---
+
 *Last updated: April 2026 | Maintained by: AppBana Development Team*
 *For session history and task tracking, see `docs/ACTIVE_TASKS.md` and `docs/session_summary.md`*
 

@@ -56,3 +56,5 @@ app-bana-runtime/vite.config.d.ts
 
 # --- Secrets / env ---
 .env
+# --- Two-agent review loop: local, ephemeral turn-taking state (see .github/copilot-instructions.md S15) ---
+loop_status.json
