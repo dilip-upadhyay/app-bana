@@ -2,6 +2,10 @@ package com.appbana.server.routes;
 
 import com.appbana.JdbcManager;
 import com.appbana.api.Router;
+import com.appbana.config.AppConfig;
+import com.appbana.config.ConfigManager;
+import com.appbana.security.TenantAccessGuard;
+import com.appbana.service.AuthService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -23,13 +27,23 @@ import java.util.UUID;
  * reads verbatim; the backend only enforces the (tenant, app, entity) triple
  * plus an owner_user_id so lists can be filtered per user.
  *
- * Endpoints (all under /api/saved-views — matches ENTITY_API_PATTERN and
- * therefore falls in the same public bucket as /api/files, /api/apps/*, etc.
- * consistent with the codebase's current dev-mode auth posture):
+ * Endpoints (all under /api/saved-views):
  *
  *   GET    /api/saved-views?tenantId=&appId=&entityKey=
  *   POST   /api/saved-views                  body: full view record
  *   DELETE /api/saved-views/{viewId}
+ *
+ * S1.8 (tenant isolation hardening): all 3 routes now require a resolved identity
+ * ({@link AuthService#resolveIdentity}) whose own tenant matches the tenantId/appId supplied in
+ * the query string or body ({@link TenantAccessGuard#requireOwnTenant}) — this route matches
+ * {@code ENTITY_API_PATTERN} and was previously reachable anonymously end-to-end, the same class
+ * of gap S1.7 fixed for file uploads. DELETE additionally requires the caller to be the view's own
+ * {@code owner_user_id} (or a break-glass admin/service token): the route only carries
+ * {@code viewId} in the path, so {@code tenant_id}/{@code app_id}/{@code owner_user_id} are looked
+ * up from the row itself first, then checked against the resolved identity — never trusted from
+ * the client (mirrors S1.4's load-then-authorize pattern for {@code DELETE /schema/{name}}).
+ * {@code ownerUserId} on the POST route is likewise now always the resolved identity, never a
+ * client-supplied value — the same class of fix S1.7 applied to {@code uploadedBy}.
  */
 public class SavedViewRoutes {
 
@@ -48,8 +62,17 @@ public class SavedViewRoutes {
             "WHERE tenant_id = ? AND app_id = ? AND entity_key = ? " +
             "ORDER BY is_default DESC, name ASC";
 
+    private static final String LOOKUP_SQL =
+            "SELECT tenant_id, app_id, owner_user_id FROM appbana_saved_views WHERE view_id = ?";
+
+    // S1.8 — owner_user_id is nullable (legacy rows saved before this fix may have no owner
+    // recorded at all), so a plain "owner_user_id = ?" would never match a NULL column even when
+    // the looked-up value being bound is itself null (SQL NULL = NULL is UNKNOWN, not TRUE) — that
+    // would make an already-authorized delete silently affect 0 rows and misreport 404. Bound with
+    // the value just read by LOOKUP_SQL, never a client-supplied one.
     private static final String DELETE_SQL =
-            "DELETE FROM appbana_saved_views WHERE view_id = ?";
+            "DELETE FROM appbana_saved_views " +
+            "WHERE view_id = ? AND tenant_id = ? AND app_id = ? AND owner_user_id IS NOT DISTINCT FROM ?";
 
     private SavedViewRoutes() {}
 
@@ -66,6 +89,15 @@ public class SavedViewRoutes {
         String entityKey = req.query("entityKey");
         if (tenantId == null || appId == null || entityKey == null) {
             res.json(400, Map.of("error", "tenantId, appId and entityKey are required"));
+            return;
+        }
+
+        // S1.8 — require a resolved identity whose own tenant matches the requested tenantId/appId,
+        // instead of trusting them as handed to us in the query string. Mirrors S1.7's FileRoutes fix.
+        AppConfig cfg = ConfigManager.getConfig();
+        TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req, cfg, tenantId, appId);
+        if (!access.allowed()) {
+            res.json(access.statusCode(), Map.of("error", access.message()));
             return;
         }
 
@@ -121,12 +153,25 @@ public class SavedViewRoutes {
         String name = asString(body.get("name"));
         Object view = body.get("view");
         boolean isDefault = Boolean.TRUE.equals(body.get("isDefault"));
-        String ownerUserId = asString(body.getOrDefault("ownerUserId", req.getAttribute("userId")));
 
         if (tenantId == null || appId == null || entityKey == null || name == null) {
             res.json(400, Map.of("error", "tenantId, appId, entityKey and name are required"));
             return;
         }
+
+        // S1.8 — require a resolved identity whose own tenant matches tenantId/appId, instead of
+        // trusting them as handed to us in the body. Mirrors S1.7's FileRoutes fix.
+        AppConfig cfg = ConfigManager.getConfig();
+        TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req, cfg, tenantId, appId);
+        if (!access.allowed()) {
+            res.json(access.statusCode(), Map.of("error", access.message()));
+            return;
+        }
+        // S1.8 — ownerUserId must reflect the resolved identity, never a client-supplied value (a
+        // caller could otherwise stamp any user's id on a view as its owner). Mirrors S1.7's
+        // uploadedBy fix in FileRoutes.
+        String ownerUserId = AuthService.resolveIdentity(req, cfg);
+
         String viewJson;
         try {
             viewJson = MAPPER.writeValueAsString(view == null ? Map.of() : view);
@@ -162,9 +207,57 @@ public class SavedViewRoutes {
             res.json(400, Map.of("error", "viewId is required"));
             return;
         }
+
+        // S1.8 — this route only carries viewId in the path, so look the row's own tenant/app/owner
+        // up FIRST and authorize against what it actually says — never trust a client-supplied
+        // tenant/app/owner for a delete-by-id route. Mirrors S1.4's DELETE /schema/{name} pattern:
+        // load, authorize, then act.
+        String tenantId;
+        String appId;
+        String ownerUserId;
+        try (Connection conn = JdbcManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(LOOKUP_SQL)) {
+            ps.setString(1, viewId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    res.json(404, Map.of("error", "Unknown viewId"));
+                    return;
+                }
+                tenantId = rs.getString("tenant_id");
+                appId = rs.getString("app_id");
+                ownerUserId = rs.getString("owner_user_id");
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to look up view {} for delete", viewId, e);
+            res.json(500, Map.of("error", "Failed to delete view"));
+            return;
+        }
+
+        AppConfig cfg = ConfigManager.getConfig();
+        TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req, cfg, tenantId, appId);
+        if (!access.allowed()) {
+            res.json(access.statusCode(), Map.of("error", access.message()));
+            return;
+        }
+
+        // S1.8 — tenant match alone is not enough: a saved view also has an individual owner, and
+        // only that owner (or a break-glass admin/service token) may delete it. A null ownerUserId
+        // (a legacy row saved before this fix) fails closed rather than being treated as a wildcard
+        // match — same M1 precedent as TenantAccessGuard's own null-tenant handling.
+        String serviceToken = AuthService.extractServiceToken(req);
+        boolean isAdmin = serviceToken != null && !serviceToken.isBlank() && AuthService.hasAdmin(serviceToken, cfg);
+        String identity = AuthService.resolveIdentity(req, cfg);
+        if (!isAdmin && !identity.equals(ownerUserId)) {
+            res.json(403, Map.of("error", "Forbidden: only the view's owner may delete it"));
+            return;
+        }
+
         try (Connection conn = JdbcManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(DELETE_SQL)) {
             ps.setString(1, viewId);
+            ps.setString(2, tenantId);
+            ps.setString(3, appId);
+            ps.setString(4, ownerUserId);
             int rows = ps.executeUpdate();
             if (rows == 0) {
                 res.json(404, Map.of("error", "Unknown viewId"));
