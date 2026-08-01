@@ -108,17 +108,20 @@ verdict: the plan is done — execute it.**
 | S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~4.5 hr |
 | S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~3 hr |
 
-**Total scope:** ~41.75 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
+**Total scope:** ~42.25 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
 hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
 plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
 consecutive round to add scope, though the first with no blocker; **round 6 adds none** — both findings
 are same-estimate wording/consistency fixes, the first round to add zero net scope; **S1 implementation
 review round 2 adds ~1 hr** — S3.4's `authEnabled`-block count corrected from an approximate "16+" to
 the ratchet-verified 21, +30 min, plus new task S1.16 for two further unconditionally-open
-`SchemaRoutes.java` routes found while re-verifying that count, +30 min. The S0 and S1 rows above are
-separately known to undercount their own current line items — e.g. S1 alone now sums to ~12.9 hr across
-its 16 tasks — a pre-existing drift, not introduced by this round, left for a dedicated pass rather than
-folded in here). S0 → S1 → S2 → S3
+`SchemaRoutes.java` routes found while re-verifying that count, +30 min; **S1 implementation review
+round 3 adds ~0.5 hr** — new task S1.17, deleting `SchemaRoutes.java`'s two now-redundant `authEnabled`
+wrappers once S1.15/S1.16 land (S1.16 itself is a text/severity correction this round, no estimate
+change). The S0 and S1 rows
+above are separately known to undercount their own current line items — e.g. S1 alone now sums to
+~13.4 hr across its 17 tasks — a pre-existing drift, not introduced by these rounds, left for a
+dedicated pass rather than folded in here). S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
 completion is additionally a one-time access reset with no backfill (review round 6, R6-2)** — see
