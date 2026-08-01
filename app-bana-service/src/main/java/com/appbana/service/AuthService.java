@@ -22,6 +22,9 @@ import java.util.Locale;
  *                              ever set that cookie, so it was dead-but-accepted attack surface.
  *   - resolveIdentity:         canonical identity resolution (S0.1). Single method for both credential
  *                              forms; use this for new code.
+ *   - resolveSession:          like resolveIdentity, but returns the full SessionData (S1.2) so
+ *                              fields such as tenantId are available. Returns null for a
+ *                              service/admin token caller (no session exists for them).
  *   - extractUserId:           resolves a human identity for audit and approval attribution.
  *                              Delegates to resolveIdentity() — kept for the existing ~30 call sites.
  */
@@ -161,6 +164,39 @@ public class AuthService {
      */
     public static String extractUserId(Router.HttpRequest req, AppConfig cfg) {
         return resolveIdentity(req, cfg);
+    }
+
+    /**
+     * Resolve the caller's full SessionData (S1.2) — mirrors resolveIdentity()'s session-based
+     * priority order (request attribute set by SessionMiddleware, then the session credential
+     * fallback for routes excluded from SessionMiddleware), but returns the whole SessionData so
+     * fields like tenantId are available, rather than narrowing to just the userId.
+     *
+     * Deliberately does NOT check the service/admin token — a service/admin caller has no
+     * session at all. Callers needing to admit that principal unconditionally (e.g.
+     * TenantAccessGuard's break-glass branch) must check extractServiceToken()+hasAdmin()
+     * themselves FIRST, exactly as resolveIdentity() does internally.
+     *
+     * @return the resolved SessionData, or null if no valid session is found
+     */
+    public static SessionService.SessionData resolveSession(Router.HttpRequest req) {
+        // Priority 1: sessionId attached by SessionMiddleware (authoritative for browser
+        // sessions — avoids re-validating the same session twice per request).
+        Object attrSessionId = req.getAttribute("sessionId");
+        if (attrSessionId instanceof String sid && !sid.isBlank()) {
+            SessionService.SessionData session = SessionService.validateSession(sid);
+            if (session != null) {
+                return session;
+            }
+        }
+
+        // Priority 2: session credential fallback (covers routes excluded from SessionMiddleware).
+        String sessionTok = extractSessionCredential(req);
+        if (sessionTok != null && !sessionTok.isBlank()) {
+            return SessionService.validateSession(sessionTok);
+        }
+
+        return null;
     }
 
     /**
