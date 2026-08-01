@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~57.42 hr across 52 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~57.08 hr across 52 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -44,7 +44,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 | S0.2 | Machine-generated route census across every `*Routes.java`: path, middleware-excluded?, identity gate present?, tenant/app check present?, tenant/app source (`path`\|`query`\|`body`\|`header`\|`none`), **known callers** (studio/runtime/shared/ai-builder/e2e/"none found"), **data preconditions** (what must exist for the call to succeed). Predicate = any client-controlled tenant/app identifier, not just path params. Attach the generated table to the plan doc. | new `RouteCensus` tool/report, appended to plan doc | 165 min | ✅ |
 | S0.3 | Test that fails when a route is registered without a census entry — assert on the **set** of route signatures (method+path) via `Router` reflection vs. census, not a count. | new test | 75 min | ✅ |
 | S0.4 | Fix or fence `Router.handle(HttpServletRequest,...)` — it bypasses the middleware chain entirely (M1). Either route it through the same chain `handle(HttpExchange)` uses, or fail fast at startup if `serverType` is set to anything but `jdk`. | `Router.java`, `Main.java` | 45 min | ✅ |
-| S0.5 | **(New, review round 4; scope corrected round 5)** Add an automated check that sums every task row's estimate in this tracker per sub-phase and asserts the total against the plan doc's S0–S5 summary table (and the grand Total scope figure) — the same "derive it, don't hand-maintain it" fix S0.2/S0.3 already applied to the route census. **Range convention (round 5):** where an estimate is a range (`S0.0`'s "30–90 min", and now `S2.6`'s "60–90 min"), take the upper bound — the convention already used by hand for every reconciliation so far, now written down so the check and any manual cross-check can't land on different totals depending on which end someone picks. **Scope extended (S1.8 follow-up review, round 2):** also diff each task's Where/scope-descriptive text between the two docs for any task id present in both, not just sum numeric estimates — added after the tracker's and plan doc's S2.6 rows were found to have drifted (tracker gained the `SavedViewRoutes.LIST_SQL` clause and a third file; plan doc did not, until this round's manual fix). **Non-gating (round 5):** this task's own 90 min counts toward S0's total below, but its ⬜ status does not reopen S0's phase-completion gate for S1 — S0.0–S0.4's exit criteria were independently reviewer-accepted before S1 began (see "Post-acceptance external review of S0"); this task is scope added after that acceptance, like S1.15–S1.17 are for S1, not a retroactive condition on it. Registered after an independent line-item sum turned up a ~28% aggregate understatement across every phase but S3 (review round 4). | new test/script, `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`, `TENANT_ISOLATION_SECURITY_PLAN.md` | 90 min | ⬜ |
+| S0.5 | **(New, review round 4; scope corrected round 5; implemented S1.8 review round 3)** Add an automated check that sums every task row's estimate in this tracker per sub-phase and asserts the total against the plan doc's S0–S5 summary table (and the grand Total scope figure) — the same "derive it, don't hand-maintain it" fix S0.2/S0.3 already applied to the route census. **Range convention (round 5):** where an estimate is a range (`S0.0`'s "30–90 min", and now `S2.6`'s "60–90 min"), take the upper bound — the convention already used by hand for every reconciliation so far, now written down so the check and any manual cross-check can't land on different totals depending on which end someone picks. **Scope extended (S1.8 follow-up review, round 2):** also diff each task's Where/scope-descriptive text between the two docs for any task id present in both, not just sum numeric estimates — added after the tracker's and plan doc's S2.6 rows were found to have drifted (tracker gained the `SavedViewRoutes.LIST_SQL` clause and a third file; plan doc did not, until this round's manual fix). **Non-gating (round 5):** this task's own 90 min counts toward S0's total below, but its ⬜ status does not reopen S0's phase-completion gate for S1 — S0.0–S0.4's exit criteria were independently reviewer-accepted before S1 began (see "Post-acceptance external review of S0"); this task is scope added after that acceptance, like S1.15–S1.17 are for S1, not a retroactive condition on it. Registered after an independent line-item sum turned up a ~28% aggregate understatement across every phase but S3 (review round 4). | new test/script, `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`, `TENANT_ISOLATION_SECURITY_PLAN.md` | 90 min | ✅ |
 
 **Exit criteria — S0**
 - [x] `mvn test` compiles and runs on this repo's toolchain. Confirmed via clean `mvn clean test` on JDK 25: `app-bana` 331/331 passing, `AI Builder Service` 197/197 (2 skipped), `BUILD SUCCESS`. Fix was binding `maven-enforcer-plugin` under the root pom's actual `<build><plugins>` (it was declared only in `pluginManagement`, which never executes on its own, so the Java-25 gate never fired). Live `start-everything` boot proof completed as part of S0.1's verification below — all four services booted clean from a cold shell with JAVA_HOME set to the JDK 25 install.
@@ -53,7 +53,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 - [x] Route census exists, attached to the plan doc, every row has non-empty tenant/app-source, known-callers, and data-preconditions columns. Confirmed: all 14 `*Routes.java` files enumerated (97 routes total, verified against a fresh `file_search` of the routes directory), census appended to `TENANT_ISOLATION_SECURITY_PLAN.md` under "S0.2 Route census." Live Router-overload uncertainty resolved this session via direct `logs/backend.log` inspection (`handle(HttpExchange)` confirmed live). One census finding (FileRoutes/e2e URL-shape mismatch) independently spot-verified via grep before being written up.
 - [x] Adding/renaming/removing a route without updating the census fails CI (set comparison). `RouteCensusTest.registeredRoutesMatchCensusExactly` reflects `Router`'s private route table via `RouteRegistry.buildRouter()`, builds the live (method,path) signature set, and diffs it against a hardcoded 96-entry expected set (97 registration call-sites collapse to 96 unique signatures — one confirmed duplicate in AppRoutes.java). Verified live: added a throwaway `GET /api/__census_drift_probe` route, test failed and named it precisely ("Registered in Router but MISSING from the S0.2 census"), reverted (clean `git diff`), full suite green again at 345/345.
 - [x] `serverType != jdk` either shares the middleware chain or refuses to start. Chose fail-fast (the plan's own "either/or"): `TomcatServer` has zero callers besides `Main.java`'s switch and zero test coverage, confirming it's genuinely dormant, so fencing it off is lower-risk than retrofitting an unverified middleware integration. `Main.java`'s `case "tomcat":` now logs an explicit M1-referencing error and calls `System.exit(1)` **before** `TomcatServer.start(port)` is ever reached — no port is bound, no request is ever served unprotected. Any other unrecognized value still safely falls through to the pre-existing `default` → `jdk` behavior, unchanged (only the one genuinely-vulnerable value is fenced).
-- [ ] *(Non-gating — see S0.5's row and round 5's note below)* The tracker's summary table (this doc's headline + the plan doc's S0–S5 table) matches an automated sum of every task row's estimate, not a hand-maintained figure (review round 4, S0.5). S0's substantive exit criteria above are already met and reviewer-accepted; this bullet tracks only S0.5's own follow-through.
+- [x] *(Non-gating — see S0.5's row and round 5's note below)* The tracker's summary table (this doc's headline + the plan doc's S0–S5 table) matches an automated sum of every task row's estimate, not a hand-maintained figure (review round 4, S0.5). S0's substantive exit criteria above are already met and reviewer-accepted; this bullet tracks only S0.5's own follow-through. Confirmed 2026-08-01: `EstimateReconciliationTest` implemented and green; a fresh ground-up sum caught a real, pre-existing ~20-minute drift in the hand-maintained total (see "S0.5 implemented" below) before this bullet could be ticked.
 
 ### UI verification script — S0
 - **S0.0** ✅ [Cat. 2 — build tooling, no UI surface] `mvn -q -DskipTests compile` (then full `mvn test`) succeeds on a clean shell; `start-everything` boots all four services. Confirmed 2026-08-01: cold-started all four services (AI Builder 8081, Backend 8080, Studio 5174, Runtime 5175) via `start-everything.bat` with JAVA_HOME set to the JDK 25 install — all came up clean, Liquibase ran 19/19 changesets with no errors.
@@ -62,7 +62,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 - **S0.2** ✅ [Cat. 2 — generated report, not behavior] Read the generated census table for completeness against the actual registered route set — a structural review, not a browser action. Confirmed 2026-08-01: 5 parallel research passes covered all 14 route files (97 routes); cross-checked file count via `file_search` (14/14 match); one flagged discrepancy (FileRoutes upload path vs. the H1 e2e test's URL shape) independently re-verified via direct `grep_search` of both the route registration and the spec file, confirming a genuine test/implementation mismatch rather than a research error. Census appended to the plan doc with a consolidated "no known caller" list and a 9-point critical-findings summary for S1–S3 to scope against.
 - **S0.3** ✅ [Cat. 2 — CI gate] Temporarily add/remove a dummy route locally, confirm the test fails, then revert. Not UI-observable by nature. Confirmed 2026-08-01: added `router.get("/api/__census_drift_probe", ...)` to `RouteRegistry.buildRouter()`, ran `RouteCensusTest` — failed with `Tests run: 1, Failures: 1` and the message pinpointed `+ GET /api/__census_drift_probe` under "MISSING from the S0.2 census"; reverted the line, confirmed `git diff --stat` showed no changes, re-ran the full `app-bana-service` suite — 345/345 passing, `BUILD SUCCESS`.
 - **S0.4** ✅ [Cat. 2, dormant branch by design] Confirm `config.json`'s `serverType` is `jdk` here (the fail-fast branch is intentionally never exercised in this environment). Live proof is the same Studio login smoke as S0.1. Confirmed 2026-08-01, both directions, as real separate OS processes (not just unit tests) — repackaged the fat jar with the new `Main.java`, then: (1) confirmed `config.json`'s `serverType` here is `null` (defaults to `jdk`, matching the doc's premise); (2) temporarily set it to `"tomcat"`, ran `java -jar app-bana-1.0-SNAPSHOT-fat.jar` on a scratch port — process exited with code 1 and logged `serverType="tomcat" is disabled: ... see TENANT_ISOLATION_SECURITY_PLAN.md finding M1 / task S0.4`, confirmed via `Get-NetTCPConnection` that no port was ever bound; (3) reverted `config.json` (`git diff --stat` clean); (4) re-ran the same jar on the scratch port — booted clean, logged `AppBana (JDK HTTP) running on port 18080`, killed the transient process; (5) confirmed the actual dev backend on 8080 was undisturbed throughout (`GET /health` → `{"status":"UP"}` before and after). Full `app-bana-service` suite re-confirmed green (345/345) after the `Main.java` change, before repackaging.
-- **S0.5** [Cat. 2 — doc/build-tooling consistency check, no UI surface] Structural proof: run the check, confirm it currently passes against the round-4-corrected figures; temporarily bump one task row's estimate without updating the summary table, confirm it fails with a clear per-phase mismatch (not just a bare boolean), then revert.
+- **S0.5** ✅ [Cat. 2 — doc/build-tooling consistency check, no UI surface] Structural proof: run the check, confirm it currently passes against the round-4-corrected figures; temporarily bump one task row's estimate without updating the summary table, confirm it fails with a clear per-phase mismatch (not just a bare boolean), then revert. Confirmed 2026-08-01: `EstimateReconciliationTest` (`app-bana-service/src/test/java/com/appbana/server/`) passes 2/2 against the corrected figures; bumped `S1.10` from `30 min` to `130 min` with no other change — failed naming the exact phase (`Phase S1: tracker task rows sum to ~16.08 hr, plan doc's summary table says ~14.42 hr`) and the grand total, not a bare boolean; reverted (`git diff --stat` confirmed no net change); full `app-bana-service` suite re-confirmed green at 384/384 after.
 
 ### Post-acceptance external review of S0 — findings and remediation
 
@@ -663,6 +663,61 @@ framing — dedupe the `.../full` registrations, guard with tenant+membership, c
 six `hasRead`/`getReadToken()` call sites to `hasAdmin`/`extractServiceToken()`, and write up the
 `.../full` routes' live-verification section as an explicit negative result (zero real callers repo-wide,
 so the automated test is the whole verification) rather than a manufactured curl call.
+
+### S0.5 implemented — corrects a compounding total-scope drift (S1.8 review round 3)
+
+A further external review of commit `008c3e5` (the round-2 doc sync) confirmed S1.8 fully closed — the
+source work, the round-1 nit, and the round-2 doc sync were all independently reconfirmed correct — but
+found the round-2 doc sync itself hadn't actually converged: the plan doc's own "Total scope" headline
+(stale since round 5, never updated through round 6 or either S1.8 round) still read ~55.92 hours while
+the tracker's headline read ~57.42 hr — the exact class of drift this whole review thread had just spent
+two rounds fixing, reappearing in the very sentence meant to state the total. The reviewer's conclusion:
+don't trace which number is right by hand, **implement S0.5 now** rather than defer it behind the
+remaining S1 tasks — three rounds of drift had already cost more than S0.5's own 90-minute estimate, and
+it is the only remaining task whose cost grows the longer it stays undone.
+
+- **Implemented**: `EstimateReconciliationTest.java` (`app-bana-service/src/test/java/com/appbana/server/`)
+  — sums every tracker task row's estimate (upper bound for `S0.0`/`S2.6`'s ranges) per phase, asserts
+  against the plan doc's S0–S5 summary table and both docs' own "Total scope" headlines, and (the
+  round-2 scope extension) diffs the set of backtick-quoted Files/Where tokens for any task id with its
+  own row in both docs — normalized to each token's final path segment (a "basename"), since the two
+  docs reference the same file at different levels of path abbreviation (e.g. the tracker's
+  `app-bana-service/.../db/changelog/` vs. the plan doc's full
+  `app-bana-service/src/main/resources/db/changelog/`), and with any `(or ...)` parenthetical stripped
+  first, since that's this doc's own convention for naming an alternative that was considered but not
+  committed to (S0.1's "or a small extracted `IdentityResolver`", S2.10's "or `AppRoutes.java`") rather
+  than a second required file.
+- **Caught a fourth drift before this was even committed.** A ground-up sum of all 52 task rows totals
+  3425 minutes = **~57.08 hr**, not the ~57.42 hr the round-2 entry above states — which itself compounded
+  an error already present in the ~56.92 hr baseline it started from. Not traced to a specific earlier
+  round: consistent with this task's whole point, the fix is to derive the number mechanically going
+  forward, not to forensically audit five rounds of hand arithmetic to find exactly where ~20 minutes
+  went missing.
+- **Also caught two genuine, minor Files-column drifts** while first running the new file-list check
+  (both pre-dating this round): the plan doc's `S0.0` row only listed `pom.xml`, missing the
+  `app-bana-service/pom.xml` the fix actually also touched (added); a first parser draft also
+  mis-split S0.2's own row (its cell contains escaped pipes, `` `path`\|`query`\|... ``, which a naive
+  split on `|` breaks on) — fixed the parser to treat `\|` as a literal pipe within a cell, not a column
+  separator.
+- **Corrected, live figures** (verified by the new test, not hand-summed): S0 ~10.17 hr, S1 ~14.42 hr,
+  S2 ~11.75 hr, S3 ~11.25 hr, S4 ~5.5 hr, S5 ~4.0 hr — **new grand total ~57.08 hr across 52 tasks**, now
+  the headline in both docs.
+- **Verification** (mirrors S0.3's own break-test discipline, per S0.5's UI-verification-script text):
+  ran the new test green against the corrected figures (2/2); temporarily bumped `S1.10`'s estimate from
+  `30 min` to `130 min` with no other change — failed, naming the exact phase and grand-total deltas
+  (`Phase S1: tracker task rows sum to ~16.08 hr, plan doc's summary table says ~14.42 hr`), not a bare
+  boolean; reverted (`git diff --stat` confirmed no net change). Full `app-bana-service` suite re-run
+  after: **384/384, BUILD SUCCESS** (382 baseline + 2 new).
+
+**Edits made:** new `EstimateReconciliationTest.java`. `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`
+(headline corrected to ~57.08 hr; this section; S0.5 row marked ✅; S0's exit-criteria and
+UI-verification-script bullets for S0.5 confirmed done). `TENANT_ISOLATION_SECURITY_PLAN.md` (stale
+"Total scope" headline corrected from ~55.92 to ~57.08 hours; S0.0's Where column gained its second
+file; new narrative clause appended — round-2's own clause left as historical record per this doc's
+established convention of never retroactively editing a prior round's own stated numbers).
+
+Still to do: commit (`fix`/`docs`), push, deliver chat writeup. Then: **on to S1.9**, unchanged from round
+1's framing.
 
 ---
 

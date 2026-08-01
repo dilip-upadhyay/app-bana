@@ -108,7 +108,7 @@ verdict: the plan is done — execute it.**
 | S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~5.5 hr |
 | S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~4.0 hr |
 
-**Total scope:** ~55.92 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
+**Total scope:** ~57.08 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
 hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
 plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
 consecutive round to add scope, though the first with no blocker; **round 6 adds none** — both findings
@@ -143,7 +143,15 @@ can't carry one, so every real download 401s — a decision + fix deferred, not 
 ~0.5 hr** — S2.6's estimate becomes a range, "60–90 min" (mirrors the existing S0.0 range convention),
 to cover the now-explicit `SavedViewRoutes.LIST_SQL` owner-model decision folded into its scope; summed
 at the established upper-bound convention (S0.5). S2 ~11.25→~11.75 hr, new grand total ~57.42 hr across
-the same 52 tasks (no task added, only S2.6's own estimate widened). S0 → S1 → S2 → S3
+the same 52 tasks (no task added, only S2.6's own estimate widened). **S0.5 implemented (S1.8 review
+round 3) corrects a compounding drift that predates this fix**: a fresh ground-up sum of every task
+row (52 tasks, upper bound for `S0.0`/`S2.6`'s ranges) totals 3425 minutes — **~57.08 hr**, not the
+~57.42 hr the entry immediately above states, which itself compounded an error already present in the
+~56.92 hr baseline it started from. Not traced to a specific earlier round — consistent with this
+task's own point: derive the total mechanically going forward rather than re-auditing five rounds of
+hand arithmetic to find exactly where it drifted. New grand total: **~57.08 hr across 52 tasks** (S0
+~10.17 hr, S1 ~14.42 hr, S2 ~11.75 hr, S3 ~11.25 hr, S4 ~5.5 hr, S5 ~4.0 hr), now asserted automatically
+by `EstimateReconciliationTest` rather than hand-summed. S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
 completion is additionally a one-time access reset with no backfill (review round 6, R6-2)** — see
@@ -940,7 +948,7 @@ name. Review round 1 found both were false.
 
 | # | Task | Where | Est. |
 |---|---|---|---|
-| S0.0 | **Prerequisite.** Fix the Maven toolchain so `mvn test` compiles under this repo's configured `release` version — currently fails with "release version 25 not supported." No exit-criteria test in S0–S5 can run until this is fixed. | build config (`pom.xml` / toolchain) | 30–90 min (unscoped until root-caused) |
+| S0.0 | **Prerequisite.** Fix the Maven toolchain so `mvn test` compiles under this repo's configured `release` version — currently fails with "release version 25 not supported." No exit-criteria test in S0–S5 can run until this is fixed. | build config (`pom.xml`, `app-bana-service/pom.xml` / toolchain) | 30–90 min (unscoped until root-caused) |
 | S0.1 | `AuthService.resolveIdentity(req, cfg)` — a single method accepting `X-Session-Token`, `Authorization: Bearer`, and the `session_id` cookie (same three forms `SessionMiddleware.extractSessionToken` already supports), returning a resolved principal. Replace `extractUserId`'s broken X-Session-Token-only Priority 3 fallback with a call to this method; `SessionMiddleware.create()` also delegates to it so there is exactly one implementation of "how do we read the caller's credential" in the codebase. **Must preserve the existing priority order** (review round 2, R2-4): `extractServiceToken` already treats a Bearer value as a possible admin/service token, so a Bearer-carried session id is only attempted *after* ruling out the admin/service-token interpretation, never instead of it. | new method in `AuthService.java` (or a small extracted `IdentityResolver`), `SessionMiddleware.java` | 100 min |
 | S0.1b | Regression test: all three token forms, sent against the same valid session, yield the same principal on a route excluded from `SessionMiddleware` (e.g. `/api/{tenantId}/apps/{appId}/{entity}`). This is the test that would have caught B1. **Add three more cases (review round 2, R2-4):** an admin/service token sent via Bearer with `X-User-Id` still resolves to that `X-User-Id` through priority 1; a session id sent via Bearer (not equal to the admin token) resolves through the new fallback to that session's user; and neither value is ever misread as the other. | new test | 45 min |
 | S0.2 | Machine-generated route census: enumerate every `router.get/post/put/delete(...)` registration across every `*Routes.java` file. Columns: path, middleware-excluded?, identity gate present?, tenant/app check present?, tenant/app source (`path` \| `query` \| `body` \| `header` \| `none`), **known callers** (which of `app-bana-studio` / `app-bana-runtime` / `app-bana-shared` / `ai-builder` / `e2e` actually invoke it, or "none found" — review round 2 meta-observation), **data preconditions** (what must already exist for a call to succeed, e.g. a specific entity/column shape — review round 3 meta-observation: "who calls it" doesn't catch a route whose caller exists but whose required data doesn't, which is exactly how R3-1 slipped past round 2). Predicate is **any client-controlled tenant/app identifier**, not just path params (fixes H5). A route with no known caller is flagged for a guard-or-delete decision, not left to default to whatever its current state happens to be. Attach the generated table to this plan. | new `RouteCensus` (small script or JUnit-generated report), appended to this doc | 165 min |
