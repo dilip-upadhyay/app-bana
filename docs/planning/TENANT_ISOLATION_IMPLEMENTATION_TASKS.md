@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~42.25 hr across 49 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~54.08 hr across 50 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -44,6 +44,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 | S0.2 | Machine-generated route census across every `*Routes.java`: path, middleware-excluded?, identity gate present?, tenant/app check present?, tenant/app source (`path`\|`query`\|`body`\|`header`\|`none`), **known callers** (studio/runtime/shared/ai-builder/e2e/"none found"), **data preconditions** (what must exist for the call to succeed). Predicate = any client-controlled tenant/app identifier, not just path params. Attach the generated table to the plan doc. | new `RouteCensus` tool/report, appended to plan doc | 165 min | ✅ |
 | S0.3 | Test that fails when a route is registered without a census entry — assert on the **set** of route signatures (method+path) via `Router` reflection vs. census, not a count. | new test | 75 min | ✅ |
 | S0.4 | Fix or fence `Router.handle(HttpServletRequest,...)` — it bypasses the middleware chain entirely (M1). Either route it through the same chain `handle(HttpExchange)` uses, or fail fast at startup if `serverType` is set to anything but `jdk`. | `Router.java`, `Main.java` | 45 min | ✅ |
+| S0.5 | **(New, review round 4)** Add an automated check that sums every task row's estimate in this tracker per sub-phase and asserts the total against the plan doc's S0–S5 summary table (and the grand Total scope figure) — the same "derive it, don't hand-maintain it" fix S0.2/S0.3 already applied to the route census. Registered after an independent line-item sum turned up a ~28% aggregate understatement across every phase but S3 (review round 4). | new test/script, `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`, `TENANT_ISOLATION_SECURITY_PLAN.md` | 90 min | ⬜ |
 
 **Exit criteria — S0**
 - [x] `mvn test` compiles and runs on this repo's toolchain. Confirmed via clean `mvn clean test` on JDK 25: `app-bana` 331/331 passing, `AI Builder Service` 197/197 (2 skipped), `BUILD SUCCESS`. Fix was binding `maven-enforcer-plugin` under the root pom's actual `<build><plugins>` (it was declared only in `pluginManagement`, which never executes on its own, so the Java-25 gate never fired). Live `start-everything` boot proof completed as part of S0.1's verification below — all four services booted clean from a cold shell with JAVA_HOME set to the JDK 25 install.
@@ -52,6 +53,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 - [x] Route census exists, attached to the plan doc, every row has non-empty tenant/app-source, known-callers, and data-preconditions columns. Confirmed: all 14 `*Routes.java` files enumerated (97 routes total, verified against a fresh `file_search` of the routes directory), census appended to `TENANT_ISOLATION_SECURITY_PLAN.md` under "S0.2 Route census." Live Router-overload uncertainty resolved this session via direct `logs/backend.log` inspection (`handle(HttpExchange)` confirmed live). One census finding (FileRoutes/e2e URL-shape mismatch) independently spot-verified via grep before being written up.
 - [x] Adding/renaming/removing a route without updating the census fails CI (set comparison). `RouteCensusTest.registeredRoutesMatchCensusExactly` reflects `Router`'s private route table via `RouteRegistry.buildRouter()`, builds the live (method,path) signature set, and diffs it against a hardcoded 96-entry expected set (97 registration call-sites collapse to 96 unique signatures — one confirmed duplicate in AppRoutes.java). Verified live: added a throwaway `GET /api/__census_drift_probe` route, test failed and named it precisely ("Registered in Router but MISSING from the S0.2 census"), reverted (clean `git diff`), full suite green again at 345/345.
 - [x] `serverType != jdk` either shares the middleware chain or refuses to start. Chose fail-fast (the plan's own "either/or"): `TomcatServer` has zero callers besides `Main.java`'s switch and zero test coverage, confirming it's genuinely dormant, so fencing it off is lower-risk than retrofitting an unverified middleware integration. `Main.java`'s `case "tomcat":` now logs an explicit M1-referencing error and calls `System.exit(1)` **before** `TomcatServer.start(port)` is ever reached — no port is bound, no request is ever served unprotected. Any other unrecognized value still safely falls through to the pre-existing `default` → `jdk` behavior, unchanged (only the one genuinely-vulnerable value is fenced).
+- [ ] The tracker's summary table (this doc's headline + the plan doc's S0–S5 table) matches an automated sum of every task row's estimate, not a hand-maintained figure (review round 4, S0.5).
 
 ### UI verification script — S0
 - **S0.0** ✅ [Cat. 2 — build tooling, no UI surface] `mvn -q -DskipTests compile` (then full `mvn test`) succeeds on a clean shell; `start-everything` boots all four services. Confirmed 2026-08-01: cold-started all four services (AI Builder 8081, Backend 8080, Studio 5174, Runtime 5175) via `start-everything.bat` with JAVA_HOME set to the JDK 25 install — all came up clean, Liquibase ran 19/19 changesets with no errors.
@@ -60,6 +62,7 @@ Credentials are recorded in session memory once actually created — not fabrica
 - **S0.2** ✅ [Cat. 2 — generated report, not behavior] Read the generated census table for completeness against the actual registered route set — a structural review, not a browser action. Confirmed 2026-08-01: 5 parallel research passes covered all 14 route files (97 routes); cross-checked file count via `file_search` (14/14 match); one flagged discrepancy (FileRoutes upload path vs. the H1 e2e test's URL shape) independently re-verified via direct `grep_search` of both the route registration and the spec file, confirming a genuine test/implementation mismatch rather than a research error. Census appended to the plan doc with a consolidated "no known caller" list and a 9-point critical-findings summary for S1–S3 to scope against.
 - **S0.3** ✅ [Cat. 2 — CI gate] Temporarily add/remove a dummy route locally, confirm the test fails, then revert. Not UI-observable by nature. Confirmed 2026-08-01: added `router.get("/api/__census_drift_probe", ...)` to `RouteRegistry.buildRouter()`, ran `RouteCensusTest` — failed with `Tests run: 1, Failures: 1` and the message pinpointed `+ GET /api/__census_drift_probe` under "MISSING from the S0.2 census"; reverted the line, confirmed `git diff --stat` showed no changes, re-ran the full `app-bana-service` suite — 345/345 passing, `BUILD SUCCESS`.
 - **S0.4** ✅ [Cat. 2, dormant branch by design] Confirm `config.json`'s `serverType` is `jdk` here (the fail-fast branch is intentionally never exercised in this environment). Live proof is the same Studio login smoke as S0.1. Confirmed 2026-08-01, both directions, as real separate OS processes (not just unit tests) — repackaged the fat jar with the new `Main.java`, then: (1) confirmed `config.json`'s `serverType` here is `null` (defaults to `jdk`, matching the doc's premise); (2) temporarily set it to `"tomcat"`, ran `java -jar app-bana-1.0-SNAPSHOT-fat.jar` on a scratch port — process exited with code 1 and logged `serverType="tomcat" is disabled: ... see TENANT_ISOLATION_SECURITY_PLAN.md finding M1 / task S0.4`, confirmed via `Get-NetTCPConnection` that no port was ever bound; (3) reverted `config.json` (`git diff --stat` clean); (4) re-ran the same jar on the scratch port — booted clean, logged `AppBana (JDK HTTP) running on port 18080`, killed the transient process; (5) confirmed the actual dev backend on 8080 was undisturbed throughout (`GET /health` → `{"status":"UP"}` before and after). Full `app-bana-service` suite re-confirmed green (345/345) after the `Main.java` change, before repackaging.
+- **S0.5** [Cat. 2 — doc/build-tooling consistency check, no UI surface] Structural proof: run the check, confirm it currently passes against the round-4-corrected figures; temporarily bump one task row's estimate without updating the summary table, confirm it fails with a clear per-phase mismatch (not just a bare boolean), then revert.
 
 ### Post-acceptance external review of S0 — findings and remediation
 
@@ -126,7 +129,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. | new tests | 30 min | ⬜ |
 | S1.15 | Add tenant-filtering to `GET /schema` (only list the caller's own tenant's schema names, not all tenants') and an ownership check to `GET /schema/{name}` (403 if the caller doesn't own the app), mirroring S1.4's `DELETE /schema/{name}` fix. Found unfixed by any existing S1 task — review round 1, finding H1. | `SchemaRoutes.java` | 45 min | ⬜ |
 | S1.16 | **(Revised, review round 3 — severity split + `/openapi.json` correction)** `GET /api/endpoints` and `GET /openapi.json` are each gated only by the optional `authEnabled(cfg)` block (same shape S1.4/S1.15 found on their `SchemaRoutes.java` siblings) with no fallback check beneath it. **`GET /api/endpoints` is the higher-severity of the two**: it returns every schema's full tenant-qualified key (`SchemaManager.listSchemaNames()`, unfiltered) pre-formatted as ready-to-call `POST /api/{key}`, `GET /api/{key}`, `GET /api/{key}/{id}`, `PUT /api/{key}/{id}`, `DELETE /api/{key}/{id}` strings — the enumeration primitive for the anonymous entity data plane (round 1 needed a direct Postgres query to obtain these keys; this route hands out the entire list). **`GET /openapi.json` is narrower than first described**: `OpenApiGenerator` keys `paths`/`components.schemas` by `schema.getName()` — the bare entity name, not the tenant-qualified key — so it discloses the union of field-level shapes across all tenants with no tenant attribution (a name collision across tenants silently last-write-wins, not a per-tenant enumeration); still real scope because it confirms which entity names exist platform-wide, and because every anonymous call loads *all* schemas from the DB and serializes the full result (~340 KB at today's ~455-schema count) — an unauthenticated amplification vector independent of the disclosure itself. Require a resolved identity unconditionally on both (admin, for now — mirrors S1.6's precedent for introspection/ops-facing routes) instead of the optional gate. Not covered by S1.9 (only changes which credential tier the *optional* gate checks) or S1.15 (scoped to `/schema`, `/schema/{name}` only). Found via `AuthEnabledAntiPatternTest` ratchet re-verification — S1 external review round 2; severity/text corrected round 3. **Priority note: despite the task number, `/api/endpoints`'s severity means this task should land before or alongside S1.15, not after it** (review round 3). | `SchemaRoutes.java` | 30 min | ⬜ |
-| S1.17 | **(New, review round 3)** Once S1.15 + S1.16 land, `SchemaRoutes.java`'s remaining two `authEnabled(cfg)` gates (`POST /schema`, `DELETE /schema/{name}`) are pure dead weight — both already have a separate, unconditional `isAppOwnerOrSystem` ownership check beneath them (S1.4's fix, and the pre-existing `POST /schema` check), so the optional gate contributes nothing. Delete both wrappers, taking this file's `authEnabled` count to zero, and **remove its entry from `AuthEnabledAntiPatternTest.BASELINE` entirely** rather than setting it to `0` — an absent key fails the test's "new file" branch on any future occurrence, a strictly stronger guarantee than a `0` baseline would give. Makes the test's own docstring ("S3.4 is the task that removes this pattern repo-wide") true for this file specifically, ahead of S3.4. | `SchemaRoutes.java`, `AuthEnabledAntiPatternTest.java` | 30 min | ⬜ |
+| S1.17 | **(New, review round 3)** Once S1.15 + S1.16 land, `SchemaRoutes.java`'s remaining two `authEnabled(cfg)` gates (`POST /schema`, `DELETE /schema/{name}`) are pure dead weight — both already have a separate, unconditional `isAppOwnerOrSystem` ownership check beneath them (S1.4's fix, and the pre-existing `POST /schema` check), so the optional gate contributes nothing. Delete both wrappers, taking this file's `authEnabled` count to zero, and **remove its entry from `AuthEnabledAntiPatternTest.BASELINE` entirely** rather than setting it to `0` — **(corrected, review round 4)** both a removed entry and a `0` entry fail the test on any future occurrence (an absent key via the "new file" branch, a `0` entry via the existing `count > max` branch — not a stronger guarantee, as this row originally claimed); removal is simply the more honest representation (the file genuinely has zero occurrences left) and lets it drop out of the map entirely. Makes the test's own docstring ("S3.4 is the task that removes this pattern repo-wide") true for this file specifically, ahead of S3.4. | `SchemaRoutes.java`, `AuthEnabledAntiPatternTest.java` | 30 min | ⬜ |
 
 **Exit criteria — S1**
 - [ ] Tenant B session gets 403 (not 404/200) on every `AppRoutes`/`SchemaRoutes` route the census lists against Tenant A, including `restore-schemas`, `DELETE /schema/{name}`, and (review round 1, H1) `GET /schema` (tenant-filtered) and `GET /schema/{name}` (ownership check) — S1.15.
@@ -357,6 +360,72 @@ my round-2 arithmetic. All claims independently verified against source before a
 
 **Total scope after this round:** ~42.25 hr across 49 tasks (S1.17 +30 min). No source code changed
 this round — S1.16's text correction, S1.17's registration, and this section are documentation only.
+
+### Post-acceptance external review of S1 (round 4) — estimate reconciliation across all phases
+
+A fourth external review pass confirmed round 3's findings, caught one remaining imprecision in this
+doc's own S1.17 text, and then did something no prior round had: mechanically summed every task row's
+own estimate against the plan doc's phase-level summary table. All of it independently re-verified
+against source before any doc edit, including re-deriving the sums by hand rather than trusting either
+the reviewer's figures or this doc's own prior "~13.4 hr" note at face value.
+
+- ✅ **Confirmed, no changes needed:** the S1.16 severity split, the `/openapi.json` correction, S1.17's
+  registration, the priority/ordering note, and the environment resolution (the reviewer's own worktree
+  fixture-probe leftover, removed on their side).
+- 🟡 **S1.17's "strictly stronger" claim was itself an overclaim — corrected.** Re-read
+  `AuthEnabledAntiPatternTest` line by line: a `0`-valued `BASELINE` entry also fails the test on any
+  future occurrence, via the existing `count > max` branch — not just an absent key's "new file" branch.
+  Both stop the regression equally; removing the entry is the clearer, more specific failure message and
+  the more honest representation (the file genuinely has zero occurrences left), not a *stronger*
+  guarantee. S1.17's row text corrected above; round 3's own text a few paragraphs up is left as-is —
+  an accurate record of what was believed at the time, not rewritten.
+- 🟠 **Estimate drift confirmed real, and larger than previously scoped — independently re-derived, not
+  copied from the reviewer's figures.** Summed all 50 task rows (49 sequentially-numbered plus `S0.1b`,
+  a letter-suffixed id this verification's own first extraction attempt also missed, before re-checking
+  for lettered ids — see below) against the plan doc's S0–S5 summary table:
+
+  | Phase | Task-row sum (this doc) | Plan doc, pre-round-4 | Delta |
+  |---|---|---|---|
+  | S0 | ~8.67 hr (6 tasks) | ~5 hr | +3.67 hr |
+  | S1 | ~13.42 hr (17 tasks) | ~7.75 hr | +5.67 hr |
+  | S2 | ~11.25 hr (10 tasks) | ~10 hr | +1.25 hr |
+  | S3 | ~11.25 hr (7 tasks) | ~11.25 hr | 0 — the only phase a review had already forced a manual re-derivation of (round 2, S3.4) |
+  | S4 | ~5.5 hr (7 tasks) | ~4.5 hr | +1.00 hr |
+  | S5 | ~4.0 hr (3 tasks) | ~3 hr | +1.00 hr |
+  | **Total** | **~54.08 hr (50 tasks)** | **~42.25 hr (49 tasks)** | **+11.83 hr (+28%)** |
+
+  S1+S2 combined — the plan's one hard operational commitment ("ship as one deployable unit," review
+  round 5 R5-2) — was stated at ~17.75 hr and actually totals ~24.67 hr, a 39% understatement on the
+  exact figure someone would use to size a deployment window.
+- 🟢 **Bonus finding, self-caught, not part of the reviewer's ask:** the task count was 50, not 49, even
+  before this round. `S0.1b` is a letter-suffixed task id sitting between S0.1 and S0.2 (45 min,
+  already ✅, done as part of S0's original acceptance) that a plain `S\d+\.\d+` extraction silently
+  skips — this verification's own first pass made exactly that mistake, and only caught it on a
+  follow-up grep for lettered suffixes. It is the only letter-suffixed id anywhere in the tracker. Left
+  as a live illustration of the reviewer's own meta-point below, not just a footnote.
+- 🟢 **Plan doc corrected:** the S0–S5 summary table and the Total scope paragraph now match the sums
+  above (S0 ~5→~8.67 hr, S1 ~7.75→~13.42 hr, S2 ~10→~11.25 hr, S4 ~4.5→~5.5 hr, S5 ~3→~4.0 hr; S3
+  unchanged). This is a correction of a pre-existing measurement gap that accumulated silently across
+  six plan-drafting rounds plus three implementation-review rounds, not new work discovered this round.
+- 🟢 **New task S0.5 registered** — an automated check that sums this tracker's own task rows per phase
+  and asserts the total against the plan doc's summary table (and the grand Total scope figure), the
+  same "derive it, don't hand-maintain it" move S0.2/S0.3 already made for the route census. 90 min.
+  Placed in S0 (not S1) because it's a tracker-wide tooling concern, not S1-specific.
+- **Status:** round 3 is fully closed per the reviewer; this reconciliation is planning-hygiene, not a
+  gate on S1.7 — proceeding to S1.7 next, per the reviewer's own framing, with S0.5 queued as ⬜.
+- **Meta-observation, saved to memory:** the reviewer's own point — that four review rounds (six,
+  counting the plan-drafting rounds) each correctly updated the one number they were asked about while
+  the aggregate silently drifted 28% because no round owned it — is the same shape as S0.2's "no known
+  caller" census cells and earlier rounds' "locally verified, globally unchecked" findings. Registering
+  S0.5 rather than hand-patching the numbers is a direct response to that pattern, not just this one
+  instance of it. The `S0.1b` miss above is a second, smaller instance of the identical shape one level
+  down (in the verification tooling itself, not the tracker). Also noted for the next review pass, per
+  the reviewer's own suggestion: after S1.7–S1.9 land, favor an absence-census (enumerate every route,
+  ask which still lack the new guard) over further prose review.
+
+**Total scope after this round:** ~54.08 hr across 50 tasks (S0.5 +90 min; every other phase's figure
+corrected to match its own task rows, which already existed — not new scope). No source code changed
+this round — doc corrections, one new task registration, and this section are documentation only.
 
 ---
 

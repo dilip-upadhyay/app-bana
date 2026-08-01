@@ -101,14 +101,14 @@ verdict: the plan is done — execute it.**
 
 | # | Sub-phase | Deliverable | Est. |
 |---|---|---|---|
-| S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route, now including **known callers** and **what data must exist for it to succeed** columns | ~5 hr |
-| S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~7.75 hr |
-| S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~10 hr |
+| S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route, now including **known callers** and **what data must exist for it to succeed** columns | ~8.67 hr |
+| S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~13.42 hr |
+| S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~11.25 hr |
 | S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)** | ~11.25 hr |
-| S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~4.5 hr |
-| S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~3 hr |
+| S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~5.5 hr |
+| S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~4.0 hr |
 
-**Total scope:** ~42.25 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
+**Total scope:** ~54.08 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
 hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
 plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
 consecutive round to add scope, though the first with no blocker; **round 6 adds none** — both findings
@@ -118,10 +118,19 @@ the ratchet-verified 21, +30 min, plus new task S1.16 for two further unconditio
 `SchemaRoutes.java` routes found while re-verifying that count, +30 min; **S1 implementation review
 round 3 adds ~0.5 hr** — new task S1.17, deleting `SchemaRoutes.java`'s two now-redundant `authEnabled`
 wrappers once S1.15/S1.16 land (S1.16 itself is a text/severity correction this round, no estimate
-change). The S0 and S1 rows
-above are separately known to undercount their own current line items — e.g. S1 alone now sums to
-~13.4 hr across its 17 tasks — a pre-existing drift, not introduced by these rounds, left for a
-dedicated pass rather than folded in here). S0 → S1 → S2 → S3
+change). **S1 implementation review round 4 reconciles this entire table against the tracker's own
+task-row estimates** — an independent line-item sum of every task row (literally adding up the
+tracker's own numbers, not a re-estimate) found every phase but S3 understated relative to its own line
+items; S3 is the only one a review had already forced a manual re-derivation of (round 2, S3.4). The
+count is 50 tasks, not 49: this pass also caught `S0.1b`, a letter-suffixed task id that a
+straightforward `S\d+\.\d+` extraction silently skips — a mistake this verification made on its own
+first attempt too, before re-checking for lettered ids. Corrected: S0 ~5→~8.67 hr, S1 ~7.75→~13.42 hr,
+S2 ~10→~11.25 hr, S4 ~4.5→~5.5 hr, S5 ~3→~4.0 hr (S3 unchanged at ~11.25 hr, already correct). New
+total: ~54.08 hr across 50 tasks (+~11.83 hr / +28% over the pre-round-4 figure) — a correction of a
+pre-existing measurement gap, not new work discovered this round. The fix for recurrence is registered
+as new task **S0.5**: derive this table from the task rows via an automated check, the same move
+S0.2/S0.3 already made for the route census, instead of two hand-maintained numbers that can silently
+drift apart. S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
 completion is additionally a one-time access reset with no backfill (review round 6, R6-2)** — see
