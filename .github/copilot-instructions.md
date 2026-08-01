@@ -863,12 +863,13 @@ not something to ask about.
 ### Canonical prompt
 
 ```
-loop
+C-R-D-loop
 ```
 
-That single word is the whole prompt, and this section is what gives it meaning. On receiving `loop`
-— alone, with no other instruction — read `loop_status.json` at the repo root and act on whether
-`active_agent` matches your own role:
+**C-R-D** = **C**ode → **R**eview → **D**evelop: the cycle this file drives. That single token is the
+whole prompt, and this section is what gives it meaning. On receiving `C-R-D-loop` — alone, with no
+other instruction — read `loop_status.json` at the repo root and act on whether `active_agent` matches
+your own role:
 
 - **It's your turn.** Do your role's next action without waiting for further instruction — developer:
   action any outstanding `review_comments`, then begin the item tagged `severity: "next"`; reviewer:
@@ -876,14 +877,16 @@ That single word is the whole prompt, and this section is what gives it meaning.
 - **It's not your turn.** Say so and stop. Do not act out of turn, and do not edit the file — the other
   agent may be mid-write, and there is no locking.
 
-It is deliberately role-agnostic and self-selecting, so the same word works in either window and stays
+It is deliberately role-agnostic and self-selecting, so the same token works in either window and stays
 correct when the model behind each role is swapped.
 
 > [!NOTE]
-> Do **not** shorten this to a bare `#loop_status.json` file reference. A filename with no verb reads
-> as an attachment rather than a command and tends to produce a *description* of the file instead of
-> an action on it — observed directly. `loop` avoids that only because this section binds it to an
-> imperative; a one-word prompt is not self-explaining, it is explained here.
+> Do **not** shorten this to a bare `#loop_status.json` file reference, and do not shorten it to a
+> bare `loop`. A filename with no verb reads as an attachment rather than a command and tends to
+> produce a *description* of the file instead of an action on it — observed directly. `C-R-D-loop`
+> avoids that only because this section binds it to an imperative; a short prompt is not
+> self-explaining, it is explained here. A distinctive hyphenated token is also far less likely than a
+> common English word to be mistaken for part of an ordinary request.
 
 ### Reviewer protocol
 
