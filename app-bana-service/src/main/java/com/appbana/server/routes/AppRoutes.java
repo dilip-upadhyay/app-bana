@@ -4,6 +4,8 @@ import com.appbana.AppManager;
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
 import com.appbana.api.Router;
+import com.appbana.config.AppConfig;
+import com.appbana.config.ConfigManager;
 import com.appbana.model.AppMetadata;
 import com.appbana.model.AppVersion;
 import com.appbana.model.DeploymentResult;
@@ -830,6 +832,15 @@ public class AppRoutes {
         });
 
         router.post("/api/templates", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                // S1.6: writes require an admin identity; reads stay public (plan's adopted default).
+                String tok = AuthService.extractServiceToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
             try {
                 Map<String, Object> templateData = req.readJson(new TypeReference<>() {
                 });
@@ -842,6 +853,15 @@ public class AppRoutes {
         });
 
         router.put("/api/templates/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                // S1.6: writes require an admin identity; reads stay public (plan's adopted default).
+                String tok = AuthService.extractServiceToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
             try {
                 String templateId = req.pathParam("id");
                 Map<String, Object> templateData = req.readJson(new TypeReference<>() {
@@ -855,6 +875,15 @@ public class AppRoutes {
         });
 
         router.delete("/api/templates/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
+            if (AuthService.authEnabled(cfg)) {
+                // S1.6: writes require an admin identity; reads stay public (plan's adopted default).
+                String tok = AuthService.extractServiceToken(req);
+                if (!AuthService.hasAdmin(tok, cfg)) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+            }
             try {
                 String templateId = req.pathParam("id");
                 templateService.deleteUserTemplate(templateId);
