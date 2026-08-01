@@ -570,6 +570,16 @@ public class AppRoutes {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            // B1 fix (review round 1): no app exists yet to own, but there IS a target tenant
+            // (path) and a caller with a tenant of their own — pathAppId=null since S2.6's
+            // membership exception can't apply to an app that doesn't exist yet. The S0.2 census
+            // marked this cell "N/A (creation)", which was the root cause of this gap.
+            TenantAccessGuard.Result access = TenantAccessGuard.requireOwnTenant(req,
+                    com.appbana.config.ConfigManager.getConfig(), tenantId, null);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
             try {
                 AppMetadata app = req.readJson(new TypeReference<AppMetadata>() {
                 });
@@ -833,13 +843,15 @@ public class AppRoutes {
 
         router.post("/api/templates", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                // S1.6: writes require an admin identity; reads stay public (plan's adopted default).
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
+            // S1.6: writes require an admin identity; reads stay public (plan's adopted default).
+            // B2 fix (review round 1): unconditional, mirrors S1.4 — do NOT gate behind
+            // authEnabled(cfg). Shipped config has adminToken=null, so hasAdmin always returns
+            // false and these three routes are closed to everyone until an admin token is
+            // configured. That's a deliberate consequence (zero callers repo-wide), not a bug.
+            String tok = AuthService.extractServiceToken(req);
+            if (!AuthService.hasAdmin(tok, cfg)) {
+                res.json(401, Map.of("error", "unauthorized"));
+                return;
             }
             try {
                 Map<String, Object> templateData = req.readJson(new TypeReference<>() {
@@ -854,13 +866,11 @@ public class AppRoutes {
 
         router.put("/api/templates/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                // S1.6: writes require an admin identity; reads stay public (plan's adopted default).
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
+            // B2 fix (review round 1): unconditional — see POST /api/templates above for why.
+            String tok = AuthService.extractServiceToken(req);
+            if (!AuthService.hasAdmin(tok, cfg)) {
+                res.json(401, Map.of("error", "unauthorized"));
+                return;
             }
             try {
                 String templateId = req.pathParam("id");
@@ -876,13 +886,11 @@ public class AppRoutes {
 
         router.delete("/api/templates/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                // S1.6: writes require an admin identity; reads stay public (plan's adopted default).
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
+            // B2 fix (review round 1): unconditional — see POST /api/templates above for why.
+            String tok = AuthService.extractServiceToken(req);
+            if (!AuthService.hasAdmin(tok, cfg)) {
+                res.json(401, Map.of("error", "unauthorized"));
+                return;
             }
             try {
                 String templateId = req.pathParam("id");
