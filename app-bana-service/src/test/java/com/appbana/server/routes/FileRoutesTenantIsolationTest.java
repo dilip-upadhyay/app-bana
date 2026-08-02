@@ -2,12 +2,16 @@ package com.appbana.server.routes;
 
 import com.appbana.ApiServer;
 import com.appbana.JdbcManager;
+import com.appbana.api.Router;
+import com.appbana.middleware.SessionMiddleware;
+import com.appbana.server.RouteRegistry;
 import com.appbana.service.SessionService;
 import com.appbana.storage.LocalFilesystemAdapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -15,8 +19,11 @@ import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -348,18 +355,64 @@ public class FileRoutesTenantIsolationTest {
 
     @Test
     public void uploadRouteStillRequiresASessionAfterTheDownloadRouteExclusion() throws Exception {
-        // Direct proof that S1.18's new SessionMiddleware exclusion is scoped to exactly the
-        // 3-segment download shape and does not also swallow the 2-segment upload route —
-        // uploadWithoutSessionIsRejected above already proves this too; this test re-asserts it
-        // by name right next to the new exclusion's own tests, so the two are never read in
-        // isolation from each other.
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/api/files/upload"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(uploadBody("s118-tenantC", "s118-appC"))))
-                .build();
-        HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
-        assertEquals(401, res.statusCode(),
-                "POST /api/files/upload (2 segments after /api/files/) must still require a session — only the 3-segment download shape is excluded");
+        // Round-16 review: the previous version of this test asserted only a bare HTTP 401, which
+        // the reviewer proved stays green even when SessionMiddleware.FILE_DOWNLOAD_EXCLUSION_PATTERN
+        // is deliberately widened to ALSO swallow POST /api/files/upload -- because that route's 401
+        // actually comes from TenantAccessGuard, not from this pattern (the upload route was already
+        // excluded from SessionMiddleware entirely, via ENTITY_API_PATTERN, long before S1.18
+        // existed). Testing the regex directly is the only way to prove the claim this test's name
+        // makes. The upload route's own required-session behavior over a real HTTP round-trip is
+        // separately (and correctly) covered by uploadWithoutSessionIsRejected above.
+        Field f = SessionMiddleware.class.getDeclaredField("FILE_DOWNLOAD_EXCLUSION_PATTERN");
+        f.setAccessible(true);
+        Pattern pattern = (Pattern) f.get(null);
+
+        assertTrue(pattern.matcher("/api/files/s118-tenantD/s118-appD/s118-fileD").matches(),
+                "the real 3-segment download shape must match");
+        assertFalse(pattern.matcher("/api/files/upload").matches(),
+                "the 2-segment upload route must NOT match the download-exclusion pattern -- this is " +
+                "the actual claim this test makes");
+        assertFalse(pattern.matcher("/api/files/s118-tenantD/s118-appD/s118-fileD/extra").matches(),
+                "a 4-segment path must not match either, confirming the boundary is exactly 3 segments");
+    }
+
+    @Test
+    public void onlyGetIsRegisteredOnTheFileDownloadPathShape() throws Exception {
+        // Round-16 review (finding 3): FILE_DOWNLOAD_EXCLUSION_PATTERN is verb-agnostic -- it
+        // matches on path only, so it would silently exclude ANY method registered on this exact
+        // 3-segment shape from session validation, not just GET (verified live by the reviewer:
+        // anonymous DELETE/PUT on this shape both reach the router today, stopped only by the
+        // absence of a registered handler -- not by SessionMiddleware). This is a ratchet test, not a
+        // behavior test: it fails the moment a second route is registered on this same shape, forcing
+        // whoever adds it to consciously re-scope the exclusion rather than silently inheriting
+        // anonymous access.
+        Router router = RouteRegistry.buildRouter();
+        Field routesField = Router.class.getDeclaredField("routes");
+        routesField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<Object> routes = (List<Object>) routesField.get(router);
+
+        Class<?> routeClass = Class.forName("com.appbana.api.Router$Route");
+        Field methodField = routeClass.getDeclaredField("method");
+        Field partsField = routeClass.getDeclaredField("parts");
+        methodField.setAccessible(true);
+        partsField.setAccessible(true);
+
+        List<String> matchingMethods = new ArrayList<>();
+        for (Object route : routes) {
+            @SuppressWarnings("unchecked")
+            List<String> parts = (List<String>) partsField.get(route);
+            // "api" / "files" / {tenantId} / {appId} / {fileId} -- exactly 5 path segments
+            if (parts.size() == 5 && "api".equals(parts.get(0)) && "files".equals(parts.get(1))) {
+                matchingMethods.add((String) methodField.get(route));
+            }
+        }
+
+        assertEquals(List.of("GET"), matchingMethods,
+                "Exactly one GET route must be registered on the 3-segment /api/files/{t}/{a}/{f} " +
+                "shape. If this now fails, a new route was added on this exact path shape -- " +
+                "SessionMiddleware's FILE_DOWNLOAD_EXCLUSION_PATTERN excludes ALL methods on this " +
+                "shape from session validation, so the new route needs its own deliberate auth " +
+                "decision, not to silently inherit anonymous access.");
     }
 }

@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~57.42 hr across 53 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~58.92 hr across 54 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -1610,6 +1610,48 @@ correction above:
   "Document Library" app/entity/pages fixture itself was left in place unchanged, as established
   practice.
 
+#### S1.18 review round 16 — ACCEPTED; two findings actioned, one absence-census item spun out as S3.8
+
+- **Verdict: ACCEPTED.** All three load-bearing security premises (SELECT_SQL's tenant+app scoping,
+  the identical-404 no-info-leak behavior, `fileId`'s unguessability, and the fact that
+  `TenantAccessGuard` was never on the download route's call path) independently re-derived from
+  source and live-verified against a running server; the S1 closeout statement's every claim checked
+  and confirmed accurate, including the admin-token-harmless-only-because-`config.json`-ships-null
+  premise. No blockers.
+- **Actioned — tautological test (high):** `uploadRouteStillRequiresASessionAfterTheDownloadRouteExclusion`
+  asserted only a bare HTTP 401, which the reviewer proved (by temporarily widening the exclusion
+  regex to also swallow `POST /api/files/upload` and re-running — 12/12 still green) does not actually
+  prove the regex's own scoping: that route's 401 comes from `TenantAccessGuard`, not `SessionMiddleware`,
+  because `/api/files/upload` was already excluded from this class via `ENTITY_API_PATTERN` long before
+  S1.18 existed. Fixed by extracting the inline regex into a new named, package-testable
+  `FILE_DOWNLOAD_EXCLUSION_PATTERN` constant and rewriting the test to assert on the pattern directly via
+  reflection (matches the real 3-segment shape; does NOT match `/api/files/upload`; does NOT match a
+  4-segment path) — the only way to prove the claim the test's own name makes. The upload route's
+  real required-session behavior remains covered end-to-end by the pre-existing `uploadWithoutSessionIsRejected`.
+- **Actioned — two comment corrections (medium):** (1) the prior comment read "...which must keep
+  requiring a session per S1.7," wrongly implying `SessionMiddleware` itself enforces the upload route's
+  session requirement; corrected to state plainly that `TenantAccessGuard` enforces it and that
+  `SessionMiddleware` never gated that route at all, before or after S1.18. (2) the exclusion is
+  path-only and therefore verb-agnostic (excludes every HTTP method on the 3-segment shape, not just
+  GET, live-verified by the reviewer via anonymous DELETE/PUT both reaching the router's own 404 rather
+  than `SessionMiddleware`'s 401) while the old comment read as GET-scoped; corrected, and — going beyond
+  the "cheapest fix" the review itself offered — added a new ratchet test,
+  `onlyGetIsRegisteredOnTheFileDownloadPathShape`, that reflects on `Router`'s actual registrations
+  (mirroring `RouteCensusTest`'s established reflection idiom) and fails the moment a second route lands
+  on this exact path shape, so a future non-GET addition can't silently inherit anonymous access.
+- **Actioned — bit-count precision (nit):** "128 bits, unguessable" corrected to "122 random bits" in
+  both `SessionMiddleware.java` and `FileRoutes.java`'s Javadoc — a v4 UUID fixes 6 of its 128 bits for
+  version/variant. Changes nothing about the security conclusion (122 bits is unguessable by any margin
+  that matters); raised only because this number is the sole thing the anonymous-download model rests on.
+- **Spun out as new task S3.8, not actioned here (high, explicitly out of S1.18's scope):** absence-census
+  finding that `PermissionServiceTest`'s 8 field-level-security tests silently report `Tests run: 0` —
+  gutted by the H2→PostgreSQL migration and never restored, no h2 dependency in either pom. See S3.8's
+  own row above for detail; left as an open port-or-delete decision rather than resolved this round, per
+  the review's own request to open a tracked task rather than fold it into S1.18.
+- **Re-verified:** `FileRoutesTenantIsolationTest` 14/14 (12 pre-existing + the rewritten test + the new
+  ratchet test), full `app-bana-service` suite unaffected by any route change (no new/removed/renamed
+  routes — `RouteCensusTest` not implicated).
+
 ---
 
 ## Sub-phase S2 — Per-app membership model
@@ -1685,6 +1727,7 @@ correction above:
 | S3.5 | Add `publicRead: boolean` flag (default `false`) on app/entity metadata for legitimately public apps. | `AppMetadata`/`EntitySchema`, `SchemaRoutes.java` | 45 min | ⬜ |
 | S3.6 | Tests: `CrossTenantEntityAccessTest`, `CrossAppEntityAccessTest` (same-tenant, different app) across all 3 route families, `RuntimeSessionScopedToSingleAppTest`, `LoginDoesNotLeakEntityExistenceTest`. | new tests | 120 min | ⬜ |
 | S3.7 | (a) Confirm S2.6's `AppRoutes` list/get wiring accepts an `end-user`-role membership for `GET /appbana-studio/{t}/apps/{id}` (no new carve-out — already S2.6). (b) Land the deferred `e2e/tests/a11y-runtime.spec.ts` authenticated-shell test. (c) End-to-end verification against the real running Runtime with an `end-user`-role membership row: list/get succeed, update/delete/schema-management 403. No Runtime frontend change expected. | `AppRoutes.java` (verify only), `e2e/tests/a11y-runtime.spec.ts` | 45 min | ⬜ |
+| S3.8 | **(New, S1.18 review round 16 — absence census, not part of S1.18 itself)** `PermissionServiceTest` declares 8 field-level-security tests (admin bypass, wildcard permissions, explicit field permissions, multi-role OR logic, deny-by-default) that silently report `Tests run: 0` on every invocation, including targeted (`-Dtest=PermissionServiceTest`) — not `@Disabled`, not excluded by any surefire/compiler config, but structurally unable to run: it targets `TEST_DB_URL = jdbc:h2:mem:test_fls` and a commented-out Flyway import marked `TODO: Update to Liquibase + PostgreSQL`, and neither pom declares an h2 dependency. Gutted by the H2→PostgreSQL migration (`5ab9408`) and never restored — the tracker's coverage picture has been counting a class that contributes nothing. Decide and execute one of: port it to the Testcontainers/Liquibase+PostgreSQL harness the rest of the suite now uses, or delete the class and record the resulting field-level-security coverage gap honestly. Must not remain "present, green, and empty." | `PermissionServiceTest.java` | 20–90 min | ⬜ |
 
 **Exit criteria — S3**
 - [ ] With global auth disabled (today's default), entity data is not reachable without a valid, correctly-scoped session, across all 3 route families.
@@ -1701,6 +1744,7 @@ correction above:
 - **S3.5** [Cat. 1 for the read side] Mark one entity `publicRead: true` (via chat, or a direct schema PATCH if Studio has no toggle yet — flag if so), then load that Runtime page in a fresh, fully logged-out browser tab and confirm it renders with no session, while a non-`publicRead` entity on the same app still requires login.
 - **S3.6** [Cat. 2 for route-family shapes with no dedicated screen, Cat. 1 for the ones that do] Formalizes S3.4's scenarios; any route family without a Runtime/Studio consumer is noted as such, not faked.
 - **S3.7** [Cat. 1 — the primary proof for all of S3, explicitly called for by the plan's own exit criteria] Grant a fresh User C `end-user` role on App-A, log into Runtime as User C, list/view App-A's data (must succeed), attempt an edit/delete or navigate to a second app with no grant (must 403 both) — in the running apps, not guard unit tests alone.
+- **S3.8** [Cat. 2 — a dormant, silently-not-running unit test class; no route or UI-visible behavior change] Not UI-testable by nature. Proof is the class actually reporting a non-zero `Tests run:` count against a real PostgreSQL/Testcontainers harness (if ported), or its deletion plus a documented coverage-gap note (if not) — either way, it must never again silently report `Tests run: 0` while appearing green.
 
 ---
 

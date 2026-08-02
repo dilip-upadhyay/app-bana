@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
 
 /**
  * Session Middleware for Entity Form Binding Security.
@@ -60,6 +61,26 @@ public class SessionMiddleware {
     // Special pattern: App runtime APIs for loading apps/pages in published runtime
     // Example: /api/{tenantId}/apps/{appId}/env/{env}/full
     private static final String APP_RUNTIME_API_PATTERN = "^/api/[^/]+/apps/.*";
+
+    // S1.18: matches exactly 3 path segments after /api/files/ (tenantId/appId/fileId) — the
+    // anonymous file-download shape. See the isExcludedPath() usage below for the full security
+    // rationale. Named/testable (rather than an inline literal) specifically so a unit test can
+    // assert its exact-3-segment boundary directly instead of only through an HTTP round-trip
+    // that can't distinguish this class's own behavior from a downstream layer's (round-16
+    // review: FileRoutesTenantIsolationTest.uploadRouteStillRequiresASessionAfterTheDownload-
+    // RouteExclusion previously asserted only a bare 401 over HTTP, which stayed green even when
+    // this pattern was deliberately widened to also swallow POST /api/files/upload, because that
+    // route's 401 actually comes from TenantAccessGuard, not from this class — see below).
+    //
+    // Path-only, therefore verb-agnostic: it excludes EVERY HTTP method registered on this exact
+    // shape from session validation, not just GET. Today only GET is registered here
+    // (FileRoutes.register()), so this is inert for other verbs — but a future non-GET route
+    // added on this same 3-segment shape would silently inherit anonymous access too, and would
+    // need its own deliberate re-scoping of this pattern (round-16 review finding; guarded by
+    // FileRoutesTenantIsolationTest.onlyGetIsRegisteredOnTheFileDownloadPathShape, which fails the
+    // moment a second route is registered on this shape).
+    private static final Pattern FILE_DOWNLOAD_EXCLUSION_PATTERN =
+            Pattern.compile("^/api/files/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/?$");
 
     // Note: /appbana-studio/* is NOT excluded above, so it requires a valid
     // session like any other route (verified live, S1.11 review round 4).
@@ -156,20 +177,26 @@ public class SessionMiddleware {
             return false;
         }
 
-        // S1.18: GET /api/files/{tenantId}/{appId}/{fileId} restores the anonymous-download
-        // design FileRoutes.java's own class Javadoc always documented. Protection there rests
-        // entirely on the (tenantId, appId, fileId) triple: fileId is a server-issued random
-        // UUID (128 bits, unguessable), and FileRoutes' SELECT_SQL returns an identical 404 for
-        // "unknown fileId" and "wrong tenant" so a probe attack learns nothing either way -- the
-        // download route never called TenantAccessGuard and a session was never part of its
-        // actual protection model. A plain <a href target="_blank"> is the only way to let a real
-        // browser preview/stream/right-click-save a file natively, and it can never carry the
-        // Authorization header this app's header-based auth needs -- so requiring a session here
-        // only ever 401s real users (FileUploadField.tsx's Preview link, StudioTableLive.tsx's
-        // Download column), never an attacker who lacks the unguessable fileId anyway. Matches
-        // exactly 3 segments after /api/files/ so it does NOT also exclude POST /api/files/upload
-        // (2 segments: "files"/"upload"), which must keep requiring a session per S1.7.
-        if (path.matches("^/api/files/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/?$")) {
+        // S1.18: restores the anonymous-download design FileRoutes.java's own class Javadoc
+        // always documented, for the download route's exact 3-segment shape (see
+        // FILE_DOWNLOAD_EXCLUSION_PATTERN above for scoping detail and the verb-agnostic
+        // caveat). Protection rests entirely on the (tenantId, appId, fileId) triple: fileId is
+        // a server-issued random UUID (122 random bits once the fixed version/variant bits of a
+        // v4 UUID are excluded — still unguessable by any margin that matters), and FileRoutes'
+        // SELECT_SQL returns an identical 404 for "unknown fileId" and "wrong tenant" so a probe
+        // attack learns nothing either way -- the download route never called TenantAccessGuard
+        // and a session was never part of its actual protection model. A plain
+        // <a href target="_blank"> is the only way to let a real browser preview/stream/
+        // right-click-save a file natively, and it can never carry the Authorization header this
+        // app's header-based auth needs -- so requiring a session here only ever 401s real users
+        // (FileUploadField.tsx's Preview link, StudioTableLive.tsx's Download column), never an
+        // attacker who lacks the unguessable fileId anyway. POST /api/files/upload is unaffected
+        // by this pattern (round-16 review correction: it was ALREADY excluded from this class
+        // entirely, via ENTITY_API_PATTERN below, long before S1.18 existed -- its own
+        // required-session behavior is enforced by TenantAccessGuard, not by this class; the
+        // prior version of this comment wrongly implied SessionMiddleware itself was the layer
+        // preserving that requirement).
+        if (FILE_DOWNLOAD_EXCLUSION_PATTERN.matcher(path).matches()) {
             return true;
         }
 

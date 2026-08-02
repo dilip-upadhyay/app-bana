@@ -104,11 +104,11 @@ verdict: the plan is done — execute it.**
 | S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route, now including **known callers** and **what data must exist for it to succeed** columns | ~10.17 hr |
 | S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~14.75 hr |
 | S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~11.75 hr |
-| S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)** | ~11.25 hr |
+| S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)** | ~12.75 hr |
 | S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~5.5 hr |
 | S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~4.0 hr |
 
-**Total scope:** ~57.42 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
+**Total scope:** ~58.92 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
 hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
 plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
 consecutive round to add scope, though the first with no blocker; **round 6 adds none** — both findings
@@ -151,7 +151,11 @@ row (52 tasks, upper bound for `S0.0`/`S2.6`'s ranges) totals 3425 minutes — *
 task's own point: derive the total mechanically going forward rather than re-auditing five rounds of
 hand arithmetic to find exactly where it drifted. New grand total: **~57.08 hr across 52 tasks** (S0
 ~10.17 hr, S1 ~14.42 hr, S2 ~11.75 hr, S3 ~11.25 hr, S4 ~5.5 hr, S5 ~4.0 hr), now asserted automatically
-by `EstimateReconciliationTest` rather than hand-summed. S0 → S1 → S2 → S3
+by `EstimateReconciliationTest` rather than hand-summed. **S1.18 review round 16 adds ~1.5 hr** — new
+task S3.8 registered for an absence-census finding surfaced while reviewing S1.18
+(`PermissionServiceTest` silently reports `Tests run: 0`, gutted by the H2→PostgreSQL migration and
+never restored): a port-to-Testcontainers-or-delete decision, summed at the established upper-bound
+convention (S0.5). S3 ~11.25→~12.75 hr, new grand total **~58.58 hr across 53 tasks**. S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
 completion is additionally a one-time access reset with no backfill (review round 6, R6-2)** — see

@@ -40,7 +40,8 @@ import java.util.regex.Pattern;
  *   Streams the raw bytes with the original Content-Type. 404 on an unknown or cross-tenant triple.
  *   Remains anonymous end-to-end (S1.18: SessionMiddleware explicitly excludes this exact 3-segment
  *   shape) — protection rests entirely on the (tenantId, appId, fileId) triple. fileId is a
- *   server-issued random UUID (128 bits, unguessable); SELECT_SQL below returns an identical 404 for
+ *   server-issued random UUID (122 random bits once a v4 UUID's fixed version/variant bits are
+ *   excluded; still unguessable by any margin that matters); SELECT_SQL below returns an identical 404 for
  *   an unknown fileId and for a wrong tenant/app, so a probe attack learns nothing either way. This
  *   is deliberate, not an oversight: both places that render this URL (FileUploadField.tsx's
  *   "Preview" link, StudioTableLive.tsx's "Download" column) use a plain <a href target="_blank">,
