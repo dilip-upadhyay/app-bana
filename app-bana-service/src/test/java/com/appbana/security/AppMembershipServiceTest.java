@@ -1,7 +1,7 @@
 package com.appbana.security;
 
 import com.appbana.JdbcManager;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * S2.2 — {@link AppMembershipService}. {@code isMember} is hardcoded {@code false} in
  * {@link TenantAccessGuard} until S2.6 wires this service in, so nothing else in the suite
  * constrains its behavior — these tests are written alongside the service, not deferred to S2.6.
+ *
+ * <p>Deliberately does NOT declare its own {@code appbana_app_members} DDL (round 33 review, MEDIUM):
+ * relying on V19 (S2.11-proven to apply to a genuinely empty database) is the entire point of that
+ * migration existing, and a fixture re-declaring the schema is a second, driftable source of truth
+ * for it -- exactly the pattern that kept an approval-column defect invisible across 281 green tests.
  */
 public class AppMembershipServiceTest {
 
@@ -25,23 +30,19 @@ public class AppMembershipServiceTest {
     private static final String APP_1 = "s22-app-1";
     private static final String APP_2 = "s22-app-2";
 
-    @BeforeAll
-    public static void setUpDb() throws Exception {
-        try (Connection c = JdbcManager.getConnection("default");
-             Statement s = c.createStatement()) {
-            s.execute("CREATE TABLE IF NOT EXISTS appbana_app_members (" +
-                    "tenant_id VARCHAR(255) NOT NULL, " +
-                    "app_id VARCHAR(255) NOT NULL, " +
-                    "user_id VARCHAR(255) NOT NULL, " +
-                    "role VARCHAR(20) NOT NULL CHECK (role IN ('owner', 'member', 'end-user')), " +
-                    "granted_by VARCHAR(255) NOT NULL, " +
-                    "granted_at TIMESTAMP NOT NULL DEFAULT NOW(), " +
-                    "PRIMARY KEY (tenant_id, app_id, user_id))");
-        }
-    }
-
     @BeforeEach
     public void cleanFixtureRows() throws Exception {
+        deleteFixtureRows();
+    }
+
+    @AfterAll
+    public static void sweepFixtureRows() throws Exception {
+        // @BeforeEach cleans BEFORE each test, so whichever test runs last always leaves its rows
+        // behind for the shared dev Postgres instance -- this closes that gap (round 33 housekeeping).
+        deleteFixtureRows();
+    }
+
+    private static void deleteFixtureRows() throws Exception {
         try (Connection c = JdbcManager.getConnection("default");
              Statement s = c.createStatement()) {
             // Scoped to this test's own fixture tenants -- never a blanket DELETE, which would
@@ -65,6 +66,26 @@ public class AppMembershipServiceTest {
     public void isMemberIsFalseForBlankOrNullUserId() {
         assertFalse(AppMembershipService.isMember(TENANT_A, APP_1, null));
         assertFalse(AppMembershipService.isMember(TENANT_A, APP_1, ""));
+    }
+
+    /**
+     * Round 33 review, HIGH: tenant_id/app_id are the actual isolation this table exists to enforce,
+     * and were previously untested -- proven by a mutation making both predicates vacuous, which left
+     * every prior test (and the full 442-test suite) green. A grant in (TENANT_A, APP_1) must not be
+     * visible under the right app in the wrong tenant, nor the wrong app in the right tenant.
+     */
+    @Test
+    public void isMemberIsFalseForTheRightAppInTheWrongTenant() {
+        AppMembershipService.grant(TENANT_A, APP_1, "user1", AppMembershipService.Role.OWNER, "admin");
+        assertFalse(AppMembershipService.isMember(TENANT_B, APP_1, "user1"),
+                "a grant scoped to TENANT_A must not be visible under TENANT_B, same app id");
+    }
+
+    @Test
+    public void isMemberIsFalseForTheWrongAppInTheRightTenant() {
+        AppMembershipService.grant(TENANT_A, APP_1, "user1", AppMembershipService.Role.OWNER, "admin");
+        assertFalse(AppMembershipService.isMember(TENANT_A, APP_2, "user1"),
+                "a grant scoped to APP_1 must not be visible under APP_2, same tenant");
     }
 
     /** The end-user trap, half 1: isMember must be permissive -- true for every role including end-user. */
@@ -95,6 +116,21 @@ public class AppMembershipServiceTest {
                         + "imply management rights");
     }
 
+    /** Round 33 review, HIGH: same scope-vacuity mutation also hit isOwner -- same two negatives. */
+    @Test
+    public void isOwnerIsFalseForTheRightAppInTheWrongTenant() {
+        AppMembershipService.grant(TENANT_A, APP_1, "owner-user", AppMembershipService.Role.OWNER, "admin");
+        assertFalse(AppMembershipService.isOwner(TENANT_B, APP_1, "owner-user"),
+                "an owner grant scoped to TENANT_A must not be visible under TENANT_B, same app id");
+    }
+
+    @Test
+    public void isOwnerIsFalseForTheWrongAppInTheRightTenant() {
+        AppMembershipService.grant(TENANT_A, APP_1, "owner-user", AppMembershipService.Role.OWNER, "admin");
+        assertFalse(AppMembershipService.isOwner(TENANT_A, APP_2, "owner-user"),
+                "an owner grant scoped to APP_1 must not be visible under APP_2, same tenant");
+    }
+
     @Test
     public void revokeRemovesMembership() {
         AppMembershipService.grant(TENANT_A, APP_1, "user1", AppMembershipService.Role.MEMBER, "admin");
@@ -102,6 +138,30 @@ public class AppMembershipServiceTest {
 
         AppMembershipService.revoke(TENANT_A, APP_1, "user1");
         assertFalse(AppMembershipService.isMember(TENANT_A, APP_1, "user1"));
+    }
+
+    /**
+     * Round 33 review, HIGH: the same mutation also made revoke's WHERE clause scope-vacuous, which
+     * would delete every grant the user holds anywhere. Revoking one exact (tenant, app, user) triple
+     * must leave that same user's grant on another app, that user's grant in another tenant, and
+     * another user's grant on the same app all intact.
+     */
+    @Test
+    public void revokeOnlyRemovesTheExactTenantAppUserTripleAndLeavesEverythingElseIntact() {
+        AppMembershipService.grant(TENANT_A, APP_1, "user1", AppMembershipService.Role.MEMBER, "admin");
+        AppMembershipService.grant(TENANT_A, APP_2, "user1", AppMembershipService.Role.MEMBER, "admin");
+        AppMembershipService.grant(TENANT_B, APP_1, "user1", AppMembershipService.Role.MEMBER, "admin");
+        AppMembershipService.grant(TENANT_A, APP_1, "user2", AppMembershipService.Role.MEMBER, "admin");
+
+        AppMembershipService.revoke(TENANT_A, APP_1, "user1");
+
+        assertFalse(AppMembershipService.isMember(TENANT_A, APP_1, "user1"), "the revoked triple itself");
+        assertTrue(AppMembershipService.isMember(TENANT_A, APP_2, "user1"),
+                "the same user's grant on a DIFFERENT app must survive");
+        assertTrue(AppMembershipService.isMember(TENANT_B, APP_1, "user1"),
+                "the same user's grant in a DIFFERENT tenant must survive");
+        assertTrue(AppMembershipService.isMember(TENANT_A, APP_1, "user2"),
+                "a DIFFERENT user's grant on the same (tenant, app) must survive");
     }
 
     @Test

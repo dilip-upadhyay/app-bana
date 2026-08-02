@@ -1975,12 +1975,54 @@ correction above:
 - **One transient full-suite flake observed and NOT chased**: a single `mvn clean test` run reported
   `442, Failures: 1` with every individual surefire report showing 0 failures (implying a rerun/
   aggregation artifact, not a reproducible test failure); two immediate consecutive re-runs both came
-  back clean `442/442, BUILD SUCCESS` — consistent with this repo's already-documented
-  `CsrfServiceTest.testConstantTimeComparison`-style CPU-contention flakiness under a full-suite run,
-  not a regression from this task. Not investigated further per the same established precedent.
+  back clean `442/442, BUILD SUCCESS`. Round 33 review: labeling this as "known `CsrfServiceTest`
+  flakiness" does not fit the symptom — a real timing failure in that test would appear in its OWN
+  surefire XML, the opposite of what was observed, and there is no `rerunFailingTestsCount` configured
+  in `app-bana-service/pom.xml` for surefire's own rerun aggregation to explain it either. Corrected
+  label: **observed once, unexplained, not reproducible in 3 subsequent clean full-suite runs** (the 2
+  from round 32 plus this round's own `mvn -pl app-bana-service clean test` re-verification, 447/447).
+  Not investigated further given the non-reproducibility.
 - Full suite: **442/442, BUILD SUCCESS** (432 + 10 new). Fixture rows scoped to
   `s22-tenant-a`/`s22-tenant-b`, cleaned via `@BeforeEach` per-test and manually swept after the run.
   Next: S2.3 — bootstrap: app creator auto-granted `owner` membership at creation time.
+
+### S2.2 review round 33 response
+
+- **HIGH fixed — the untested tenant_id/app_id scope predicates**: added 5 new tests to
+  `AppMembershipServiceTest` — `isMemberIsFalseForTheRightAppInTheWrongTenant`,
+  `isMemberIsFalseForTheWrongAppInTheRightTenant`, the same two for `isOwner`, and
+  `revokeOnlyRemovesTheExactTenantAppUserTripleAndLeavesEverythingElseIntact` (asserts the same
+  user's grant on another app, that user's grant in another tenant, and another user's grant on the
+  same app all survive one `revoke` call). Re-applied the reviewer's exact mutation
+  (`(tenant_id = ? OR TRUE) AND (app_id = ? OR TRUE) AND user_id = ?` in `isMember`, `isOwner`, AND
+  `revoke` simultaneously) and confirmed all 5 new tests now fail on precisely the assertion the
+  mutation should break; reverted, re-confirmed 15/15 green. Class is now 15 tests (10 + 5).
+- **MEDIUM fixed — dropped the test's hand-declared `appbana_app_members` DDL**: deleted
+  `AppMembershipServiceTest`'s `@BeforeAll setUpDb()` entirely. The class now relies solely on V19
+  (Liquibase), which S2.11 already proves applies to a genuinely empty database — re-declaring the
+  schema in a fixture was a second, driftable source of truth for exactly the property S2.11 exists to
+  guarantee. Verified the class still passes unchanged against the real V19-created table (15/15).
+- **Two LOW Role-handling one-liners fixed**: `isOwner` now compares via `Role.fromValue(rs.getString(1))
+  == Role.OWNER` instead of a raw case-sensitive string `.equals(...)`, so it agrees with `listMembers`
+  on what counts as the owner role. `Role.fromValue` now throws `IllegalArgumentException` on a `null`
+  role instead of returning `null` — the existing `catch (IllegalArgumentException)` guards in
+  `listMembers`/`listAppsForUser` (added so an unrecognized role "must not sink the whole listing")
+  now correctly cover the `null` case too, instead of silently adding a `Member`/`MembershipGrant` with
+  `role == null`. Both remain unreachable today given V19's `NOT NULL` + `CHECK` constraint — fixed
+  proactively since S2.4's backfill migration will write rows into this table from outside this
+  service, where CHECK is the only thing currently preventing either case.
+- **Housekeeping fixed — fixture rows leaking into shared dev Postgres**: added `@AfterAll
+  sweepFixtureRows()` (identical scoped `DELETE` to `@BeforeEach`'s), since `@BeforeEach`-only cleanup
+  structurally always leaves the last-run test's rows behind. Removed the one stray leftover row
+  (`s22-tenant-a`/`s22-app-1`/`user1`/`owner`) from the shared dev Postgres — confirmed via `psql`
+  before and after: 1 row → 0 rows, and 0 rows again after this round's own full test run.
+- Full suite: **447/447, BUILD SUCCESS** (442 + 5 new). Pushed to `feature/tenant-security`.
+  Next: **S2.3** — bootstrap: app creator auto-granted `owner` membership at creation time. Carrying
+  forward unchanged: inventory one-tenant-per-user assumptions before S2.6; the end-user trap must not
+  be inverted when S2.5/S2.6 wire the service in; `granted_by`'s `NOT NULL`-no-default (handled today
+  by `grant()`'s `"system"` default, S2.4's backfill must supply a real value for every row it writes).
+  Standing flag, unchanged: S3.4 remains a live, demonstrated, real PII exposure (round 7, zero
+  credentials) — "S2.2 done" is not "tenant isolation done."
 
 ---
 

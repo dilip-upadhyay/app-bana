@@ -52,7 +52,7 @@ public class AppMembershipService {
 
         public static Role fromValue(String text) {
             if (text == null) {
-                return null;
+                throw new IllegalArgumentException("Role value must not be null");
             }
             for (Role r : Role.values()) {
                 if (r.value.equalsIgnoreCase(text.trim())) {
@@ -161,7 +161,10 @@ public class AppMembershipService {
                 if (!rs.next()) {
                     return false;
                 }
-                return Role.OWNER.getValue().equals(rs.getString(1));
+                // Route through fromValue (not a raw string compare) so this agrees with listMembers
+                // on what counts as the owner role -- fromValue's equalsIgnoreCase/trim is the one
+                // parser for this column, everywhere it is read.
+                return Role.fromValue(rs.getString(1)) == Role.OWNER;
             }
         } catch (SQLException e) {
             log.error("[AppMembershipService] Failed to check ownership for user '{}': {}", userId, e.getMessage(), e);
