@@ -1274,13 +1274,21 @@ correction above:
   (`/roles`, `/approvals`, `/submit`, `/approve`, `/reject`) already run first and force a session
   requirement regardless of the `/apps/` carve-out, so `ApprovalRoutes.java`'s and `RoleRoutes.java`'s
   matches were never actually affected by it. `GenericEntityRoutes.java`'s 6 env-scoped entity-CRUD
-  matches (`/api/{tenantId}/apps/{appId}/env/{env}/{entity}...`) load via `SchemaManager.loadSchema`,
-  matching this repo's documented "public runtime API, defense-in-depth via optional tokens" design —
-  by design, not a gap. `AppRoutes.java`'s remaining 11 matches are all already covered by
-  `TenantAccessGuard` (S1.3/S1.9). **Conclusion: narrowing `SessionMiddleware.java`'s carve-out itself
-  is a separate, higher-blast-radius architectural change with no live security payoff (every route it
-  affects is already independently guarded) — out of scope for this 30-minute test-cleanup task.**
-  Left `SessionMiddleware.java`'s behavior unchanged; fixed the test file only.
+  matches (`/api/{tenantId}/apps/{appId}/env/{env}/{entity}...`) load via `SchemaManager.loadSchema`.
+  **Correction (post-acceptance review round 1 — see section below): this family is NOT uniformly
+  guarded, and this paragraph originally claimed otherwise.** The 3 mutating routes (POST/PUT/DELETE)
+  each carry their own route-level session gate (`B7 FIX`/`B9 FIX` comments — `extractUserId`, 401 if
+  blank); the 2 GET routes (list and by-id) have no such gate at all, and — combined with
+  `SessionMiddleware`'s own carve-out — are reachable with zero authentication of any kind, live,
+  today. This is a known, already-tracked gap, not new: `TENANT_ISOLATION_SECURITY_PLAN.md` already
+  classifies exactly these two routes as "zero auth of any kind" (lines 291, 1053-1054, 1250, 1426)
+  and assigns the fix to **S3.4**. `AppRoutes.java`'s remaining 11 matches are all already covered by
+  `TenantAccessGuard` (S1.3/S1.9). **Conclusion (corrected): the DECISION to leave
+  `SessionMiddleware.java`'s carve-out unchanged in this 30-minute test-cleanup task is still right —
+  but not because "every route it affects is already independently guarded." Two of them are not;
+  closing that gap is S3.4's job at the route layer (the same layer the 3 guarded siblings were
+  already fixed at), not a change to this carve-out.** Fixed the test file only; left
+  `SessionMiddleware.java`'s behavior unchanged, same as originally decided, for the corrected reason.
 - **Fix applied** (`SessionMiddlewareTest.java`): rewrote `testPublicRuntimeAppsPathExcluded` and
   `testPublicDeployedAppsPathExcluded` to use the REAL registered route shapes
   (`/api/default/apps/hr-management-app/full`, `/api/default/apps/hr-management-app/env/DEV/full`
@@ -1303,6 +1311,46 @@ correction above:
   verification above) holding the fat jar open, which had left `target/classes` stale. Stopped
   that local process and re-ran with `clean test` to get a reliable, from-scratch result — not a
   real regression from this change. Recorded as a new pitfall for future sessions.
+
+### Post-acceptance external review of S1.12 (round 1) — changes requested (doc-only); one required fix actioned
+
+- **Verdict: changes requested — documentation only. Code and test changes accepted as-is, no line
+  of `SessionMiddlewareTest.java` questioned.** Reviewer independently re-verified `isExcludedPath()`
+  is genuinely method-blind (takes only `path`, never reads `req.method()`), confirmed the real
+  route shapes now used are the actually-registered ones, and confirmed S1.9 never touched
+  `SessionMiddleware.java` — matching the reviewer's own round-4 live probe that independently found
+  the same `TenantAccessGuard`-vs-`SessionMiddleware` layer split from the other direction. Full
+  suite reproduced independently: 418/418, BUILD SUCCESS. Round 5 (`8c6ea7b`)'s three fixes
+  re-verified as correctly landed.
+- 🟠 **High, fixed — the tracker recorded a false all-clear over a known, live, anonymous
+  cross-tenant PII leak.** See the in-place correction to the round-1 paragraph above. Reviewer
+  proved it live, no credentials of any kind, against real (not fixture) tenant data on a
+  cold-booted backend: `GET /api/{tenantId}/apps/{appId}/env/DEV/Employee` → HTTP 200 with real
+  `full_name`/`work_email`/`phone_number`/`date_of_joining`/`employment_type`; `.../env/DEV/Document`
+  → HTTP 200 with real document records. The 3 sibling mutating routes in the same family correctly
+  401 and carry `B7 FIX`/`B9 FIX` "Middleware exclusion ≠ public access" comments — proof the project
+  already decided this family should not be public, making the 2 unguarded GETs an oversight, not a
+  design choice. Independently confirmed already-tracked (S3.4, `TENANT_ISOLATION_SECURITY_PLAN.md`
+  lines 291, 1053-1054, 1250, 1426) before treating it as new — not introduced by S1.12, not
+  something S1.12 was ever asked to fix, and the underlying DECISION (leave `SessionMiddleware.java`
+  unchanged) stands; only the stated REASON was wrong. Fixed by correcting the round-1 paragraph in
+  place; no code touched.
+- 🟢 **Secondary, no action requested** — the same 2 unauthenticated GETs also leak the physical
+  table naming scheme in 500 bodies (an errored env probe returned the raw uppercase physical table
+  name in a Postgres `relation "..." does not exist` message) — a useful enumeration primitive on
+  top of the read itself. Same two routes, same owner (S3.4/S4); flagged for whoever picks up S3.4,
+  not actioned here.
+- 🟢 **Praise, no action requested** — correcting a task's own written premise before implementing it
+  (the second time this exact habit has paid off in this loop, after S1.9) is exactly right, and the
+  new class-level Javadoc note ("excluded here means only this class doesn't gate it — NOT that the
+  path is unauthenticated end-to-end") is a genuinely durable invariant — doubly so because the
+  `GenericEntityRoutes` conclusion in the very same round briefly violated the mirror image of that
+  same principle (assuming some layer must be guarding a route, without checking which layer
+  actually does).
+- 🟢 **Housekeeping, no action needed** — reviewer cold-booted the backend to run the live probes
+  above, then deliberately stopped it again (confirmed port 8080 clear) before running the suite, to
+  avoid re-triggering this round's own jar-locking pitfall. No probe accounts or fixture rows
+  created — every probe was an unauthenticated GET against pre-existing data.
 
 ---
 
