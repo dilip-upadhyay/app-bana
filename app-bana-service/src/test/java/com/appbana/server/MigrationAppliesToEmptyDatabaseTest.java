@@ -50,7 +50,10 @@ public class MigrationAppliesToEmptyDatabaseTest {
 
         try (Connection admin = DriverManager.getConnection(adminUrl, cfg.getUsername(), cfg.getPassword());
              Statement st = admin.createStatement()) {
-            st.execute("CREATE DATABASE " + probeDb);
+            // TEMPLATE template0, not the default template1: template1 is explicitly customisable and
+            // a table left in it would make this database "empty" in name only, silently defeating the
+            // whole point of this test (round-25 review finding).
+            st.execute("CREATE DATABASE " + probeDb + " TEMPLATE template0");
         }
 
         try {
@@ -132,7 +135,12 @@ public class MigrationAppliesToEmptyDatabaseTest {
     }
 
     private static String withDatabase(String jdbcUrl, String database) {
-        int lastSlash = jdbcUrl.lastIndexOf('/');
-        return jdbcUrl.substring(0, lastSlash + 1) + database;
+        // Preserve any query string (e.g. ?currentSchema=X) rather than silently dropping it, which
+        // would otherwise migrate against a different schema/mode than the real config intends.
+        int queryIndex = jdbcUrl.indexOf('?');
+        String base = queryIndex >= 0 ? jdbcUrl.substring(0, queryIndex) : jdbcUrl;
+        String query = queryIndex >= 0 ? jdbcUrl.substring(queryIndex) : "";
+        int lastSlash = base.lastIndexOf('/');
+        return base.substring(0, lastSlash + 1) + database + query;
     }
 }

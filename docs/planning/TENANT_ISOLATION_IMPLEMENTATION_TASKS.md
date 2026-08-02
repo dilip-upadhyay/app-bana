@@ -1830,8 +1830,68 @@ correction above:
   Java creates lazily") — the test failed with the exact expected Postgres error naming that table;
   reverted (`git diff --stat` confirmed clean), re-ran — green again. Confirmed zero leftover throwaway
   databases after both the failing and passing runs.
+  **Correction, round 28 (see below): this break-test's canary — a table name that doesn't exist
+  anywhere, not even in dev — was weaker than the exit criterion actually asked for, and has been
+  redone with a genuinely asymmetric canary; see the round-28 write-up.**
 - Full suite: **432/432, BUILD SUCCESS** (431 + 1 new).
   Next: S2.2 — `AppMembershipService`.
+
+#### S2.1 review round 28 — ACCEPTED; template0 silent-pass hole fixed, break-test redone with a genuine canary
+
+- **Verdict: ACCEPTED**, both round-25 hazards confirmed fixed by construction. Reviewer break-tested
+  S2.11 with a REAL canary (`APP_T_A5FD3ACF_...EMPLOYEE`, one of 694 tables that exist in the dev
+  database but that no changeset creates — `SchemaManager` builds them lazily at runtime): the test
+  failed naming that exact table, and the identical SQL was independently confirmed to SUCCEED against
+  the dev database — proving the genuine asymmetry (a changeset that passes on dev, fails fresh) that
+  is the actual V0-incident shape, and that only this test in the whole suite would catch it.
+- **Medium, fixed — my own break-test used a weaker canary than the exit criterion specified.** The
+  original write-up's canary (`table_only_java_creates_lazily`) doesn't exist anywhere — not in dev,
+  not in a fresh database — so it only proved "the test fails when a changeset references something
+  that exists nowhere," strictly weaker than the asymmetric V0-shape the exit criterion actually asks
+  for. The test's own CODE was never wrong (the reviewer verified the asymmetric case directly and it
+  catches it); only the verification was too weak. **Redone**: temporarily added a changeset selecting
+  from a real, lazily-created `APP_*` table that exists in dev — confirmed the identical SQL succeeds
+  against dev (`SELECT COUNT(*) ...` → 0 rows, no error) and fails against the fresh probe database
+  with `relation "APP_T_...EMPLOYEE" does not exist`, naming the exact changeset (`V20`) and table.
+  Reverted, confirmed `git diff --stat` clean, full suite **432/432 BUILD SUCCESS** via a genuinely
+  clean `mvn clean test` (not just `mvn test` — per the reviewer's own housekeeping disclosure below).
+  **Lesson for S2.4's own verification**: the canary there must be something that genuinely exists in
+  the dev database (a real `AppMetadata` row, a real runtime-created table) — a nonexistent-anywhere
+  name will not exercise the failure mode S2.11 exists to catch.
+- **Medium, fixed — `CREATE DATABASE` without `TEMPLATE template0` was a silent-pass hole in the test's
+  own core claim.** A bare `CREATE DATABASE` copies `template1`, which is explicitly designed to be
+  customizable (unlike the pristine `template0`) — so "genuinely empty" was only as empty as whatever
+  happened to be in `template1` on that Postgres server. Reviewer demonstrated this in 3 steps: (1)
+  clean `template1` + a V0-shaped bad changeset → correctly `BUILD FAILURE`; (2) added one table to
+  `template1`, confirmed a newly created database inherits it, re-ran the identical changeset → `BUILD
+  SUCCESS` (the test silently asserted nothing); (3) added `TEMPLATE template0` to the `CREATE DATABASE`
+  call, `template1` still polluted → `BUILD FAILURE` again, naming the relation. **Fixed**:
+  `MigrationAppliesToEmptyDatabaseTest`'s `CREATE DATABASE` now explicitly specifies
+  `TEMPLATE template0`. **Independently re-verified this exact fix**: polluted `template1` with a real
+  table, confirmed a database created with `TEMPLATE template0` does NOT inherit it (direct `\dt`
+  check — "Did not find any relation"), confirmed the test still passes correctly with `template1`
+  polluted, then cleaned `template1` back to empty.
+- **Low, fixed while in the file anyway** — `withDatabase()` previously discarded any URL query string
+  (e.g. `?currentSchema=X`) when substituting the database name; latent today (this repo's `jdbcUrl` has
+  no query string) but would have silently migrated into the wrong schema/mode if one were ever added.
+  Now splits on `?` and re-appends the query string after substitution.
+- **Housekeeping, no action needed (reviewer self-disclosure)**: reviewer nearly reported a phantom
+  regression caused by their own revert method (`Copy-Item` preserving an old file timestamp left a
+  stale compiled changeset on the classpath after `git status` already showed clean) — root-caused and
+  corrected before reporting anything false. Two reusable lessons recorded: git cleanliness doesn't
+  imply build cleanliness, and touch a reverted resource file (or `mvn clean`) rather than trusting
+  incremental compilation's timestamp comparison.
+- **Calibration, no action** — 3 things checked and correctly not flagged: the raw-JDBC-over-
+  Testcontainers decision stands (already reasoned, S3.8 stays unblocked either way); pinning
+  `appbana_app_members` as the existence canary (rather than tracking the newest changeset) is adequate
+  because the separate changeset-COUNT assertion already carries the general "did everything run"
+  property; requiring `CREATEDB` privilege is an accepted, understood cost of the raw-JDBC decision,
+  not an oversight.
+- Re-verified: full suite **432/432, BUILD SUCCESS** via `mvn clean test`; zero leftover throwaway
+  databases; dev's `databasechangelog` confirmed unaffected (still exactly 20 rows, no stray `V20`).
+  Next: S2.2 — `AppMembershipService`, carrying forward the same 4 items from round 23 unchanged (write
+  `isMember`'s tests alongside the service; inventory one-tenant-per-user assumptions before S2.6; the
+  end-user permissive-vs-owner-only trap; `granted_by`'s `NOT NULL`-no-default constraint for S2.4).
 
 
 ---
