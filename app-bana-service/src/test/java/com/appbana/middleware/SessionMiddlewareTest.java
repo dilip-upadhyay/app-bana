@@ -14,6 +14,15 @@ import static org.mockito.Mockito.*;
 
 /**
  * Tests for SessionMiddleware (Story 2.1: Session Management).
+ *
+ * <p>This class unit-tests {@link SessionMiddleware#create()} in isolation — it never touches
+ * {@code Router}, {@code AppRoutes}, or {@code TenantAccessGuard}. Its {@code isExcludedPath}
+ * check is path-only and method-blind (it never reads {@code req.method()}), so "excluded here"
+ * means only "this class itself never requires a session for this path" — it does NOT mean the
+ * path is unauthenticated end-to-end. Several excluded-path tests below cover routes that a
+ * SEPARATE, later layer (route-level {@code TenantAccessGuard} or an admin-token gate) protects
+ * instead (S1.12, correcting S1.9-era assumptions that this class's own carve-outs had changed —
+ * they hadn't; only the route layer gained a second, independent check on top).
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SessionMiddlewareTest {
@@ -102,8 +111,8 @@ class SessionMiddlewareTest {
     }
 
     @Test
-    @DisplayName("Should allow /api/templates without session")
-    void testTemplatesPathExcluded() {
+    @DisplayName("Should allow /api/templates (read shape) without session")
+    void testTemplatesReadPathExcluded() {
         when(req.path()).thenReturn("/api/templates");
 
         SessionMiddleware.create().accept(req, res);
@@ -112,9 +121,36 @@ class SessionMiddlewareTest {
     }
 
     @Test
-    @DisplayName("Should allow /api/apps/* paths without session (public runtime)")
+    @DisplayName("/api/templates/{id} (write shape) is ALSO excluded here — this class is method-blind")
+    void testTemplatesWritePathAlsoExcludedAtThisLayer() {
+        // isExcludedPath() never reads req.method(), so it cannot and does not distinguish
+        // GET /api/templates/{id} from POST/PUT/DELETE on the same path — both are excluded from
+        // THIS class's own session check. Real write protection for POST/PUT/DELETE
+        // /api/templates(/{id}) is a separate, unconditional admin-token gate
+        // (AuthService.hasAdmin) inside AppRoutes.java itself (S1.6, hardened by the B2 fix),
+        // exercised end-to-end by AppRoutesTenantIsolationTest — not by this class or this test.
+        when(req.path()).thenReturn("/api/templates/some-template-id");
+
+        SessionMiddleware.create().accept(req, res);
+
+        verify(res, never()).json(anyInt(), any());
+    }
+
+    @Test
+    @DisplayName("/api/{tenantId}/apps/{id}/full is excluded HERE, but TenantAccessGuard requires a session at the route")
     void testPublicRuntimeAppsPathExcluded() {
-        when(req.path()).thenReturn("/api/apps/hr-management-app/full");
+        // Real registered route (AppRoutes.java): GET /api/{tenantId}/apps/{id}/full — the fake
+        // 3-segment /api/apps/{id}/full shape this test used before S1.12 matches no real route.
+        // SessionMiddleware's own "/apps/" carve-out (below) is unchanged since before S1.9 and
+        // still excludes this shape unconditionally; S1.9 added a SEPARATE, route-level
+        // TenantAccessGuard.requireOwnTenant call inside AppRoutes.java's handler that now 401s an
+        // unauthenticated caller anyway. Verified live (S1.12): an unauthenticated GET against the
+        // real running route returns 401 with TenantAccessGuard's message shape
+        // ({"error":"Unauthorized: valid session required"}), not SessionMiddleware's — proving
+        // the 401 comes from the route layer, not this class. That end-to-end behavior is covered
+        // by CrossTenantAppAccessTest (S1.11), not here — this test only proves THIS class's own
+        // carve-out still exists.
+        when(req.path()).thenReturn("/api/default/apps/hr-management-app/full");
 
         SessionMiddleware.create().accept(req, res);
 
@@ -123,9 +159,11 @@ class SessionMiddlewareTest {
     }
 
     @Test
-    @DisplayName("Should allow /api/apps/{id}/env/{env}/full without session (deployed apps)")
+    @DisplayName("/api/{tenantId}/apps/{id}/env/{env}/full is excluded HERE, but TenantAccessGuard requires a session at the route")
     void testPublicDeployedAppsPathExcluded() {
-        when(req.path()).thenReturn("/api/apps/hr-management-app/env/DEV/full");
+        // Same story as testPublicRuntimeAppsPathExcluded above, for AppRoutes.java's sibling
+        // GET /api/{tenantId}/apps/{id}/env/{env}/full route.
+        when(req.path()).thenReturn("/api/default/apps/hr-management-app/env/DEV/full");
 
         SessionMiddleware.create().accept(req, res);
 

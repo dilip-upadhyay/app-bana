@@ -124,7 +124,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.9 | Dedupe the two identical `GET .../env/{env}/full` registrations into one; guard it and its `.../full` sibling with the same tenant+membership check (no public carve-out — confirmed zero real callers). Fix the six `SchemaRoutes.java` call sites passing `extractToken()`'s output to `hasRead`/`hasWrite`: convert **all six to `hasAdmin` via `extractServiceToken()`** (readToken is retired — see plan Non-goals, R6-1), leaving `AuthService.hasRead`/`cfg.getReadToken()` with no remaining callers anywhere. | `AppRoutes.java`, `SchemaRoutes.java` | 60 min | ✅ |
 | S1.10 | Startup: log a loud repeated `WARN` while `AuthService.authEnabled(cfg)==false`. | `ApiServer.java` | 30 min | ✅ |
 | S1.11 | **(Sequencing note, S1.10 review round 2: do S1.15/S1.16/S1.17 first — the last open routes with live security value; this task becomes the genuine capstone once nothing is left open for it to be wrong about.)** `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9; not a `@Disabled` placeholder here — see S2.6's row). | new tests | 105 min | ✅ |
-| S1.12 | Fix `SessionMiddlewareTest`'s tautological assertions (`testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes no real route has) — rewrite against real route shapes, flip expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into read-still-excluded vs. write-requires-auth. | `SessionMiddlewareTest.java` | 30 min | ⬜ |
+| S1.12 | ~~Fix `SessionMiddlewareTest`'s tautological assertions... flip expectation to "requires session" now that S1.9 removes the public carve-out...~~ **Premise corrected during implementation — see round-1 write-up below.** | `SessionMiddlewareTest.java` | 30 min | ✅ |
 | S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min | ⬜ |
 | S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. | new tests | 30 min | ⬜ |
 | S1.15 | Add tenant-filtering to `GET /schema` (only list the caller's own tenant's schema names, not all tenants') and an ownership check to `GET /schema/{name}` (403 if the caller doesn't own the app), mirroring S1.4's `DELETE /schema/{name}` fix. Found unfixed by any existing S1 task — review round 1, finding H1. | `SchemaRoutes.java` | 45 min | ✅ |
@@ -1239,6 +1239,70 @@ browser click-through covering only a subset (get by id, bare tenant list).
   not actionable by an agent alone): S2.6 is where four deferred decisions converge AND where the
   tenant-per-user premise every S1 guard rests on stops holding — flagged as needing a fresh
   principal-by-guard walk when picked up, not a routine single-task review.
+
+### S1.12 implementation (round 1) — task's own premise found factually wrong; fixed test file to
+### state verified ground truth instead
+
+User directed the order S1.12 → S1.13 → S1.14 → S1.18. Starting S1.12 surfaced that **the task's
+own premise is incorrect**, in the same "verify before implementing" spirit as S1.9's own
+correction above:
+
+- **The claim "S1.9 removes the public carve-out" conflates two independent layers.** S1.9 added
+  `TenantAccessGuard.requireOwnTenant` inside `AppRoutes.java`'s `.../full` and
+  `.../env/{env}/full` handlers — that part is true and already tested
+  (`CrossTenantAppAccessTest`). But S1.9 never touched `SessionMiddleware.java`. Its own,
+  separate, unconditional `if (path.startsWith("/api/") && path.contains("/apps/")) return
+  true;` carve-out (predates S1.9, still present) still excludes these paths from ITS OWN session
+  check today. **Live-verified**: an unauthenticated `GET /api/default/apps/{id}/full` against the
+  real running backend returns 401 with `TenantAccessGuard`'s message shape
+  (`{"error":"Unauthorized: valid session required"}`), not `SessionMiddleware`'s
+  (`{"error":"Unauthorized","message":...,"status":401}`) — proving the 401 comes from the route
+  layer, and `SessionMiddleware` still lets the request through unauthenticated, exactly as
+  before S1.9. So "flip the assertion to requires-session" would have made the test **assert
+  something false** about this class's own behavior.
+- **The "split testTemplatesPathExcluded into read-excluded vs. write-requires-auth" instruction
+  is not expressible at this layer.** `isExcludedPath()` never reads `req.method()` — it is
+  entirely path-based. The literal prefix `/api/templates` excludes every method on that prefix
+  from `SessionMiddleware`'s own check, always. Real write-side enforcement
+  (`AuthService.hasAdmin(extractServiceToken(req), cfg)`, unconditional since the S1.6/B2 fix) is
+  a completely separate mechanism living in `AppRoutes.java`, already exercised end-to-end by
+  `AppRoutesTenantIsolationTest`. A `SessionMiddlewareTest`-level "split" would have had to fake a
+  method-based distinction this class structurally cannot make.
+- Enumerated all 25 routes across `AppRoutes.java`, `ApprovalRoutes.java`,
+  `GenericEntityRoutes.java`, `RoleRoutes.java` matching the `/apps/` substring the inline carve-out
+  affects, to check whether narrowing it would be safe. Confirmed the earlier hard-block checks
+  (`/roles`, `/approvals`, `/submit`, `/approve`, `/reject`) already run first and force a session
+  requirement regardless of the `/apps/` carve-out, so `ApprovalRoutes.java`'s and `RoleRoutes.java`'s
+  matches were never actually affected by it. `GenericEntityRoutes.java`'s 6 env-scoped entity-CRUD
+  matches (`/api/{tenantId}/apps/{appId}/env/{env}/{entity}...`) load via `SchemaManager.loadSchema`,
+  matching this repo's documented "public runtime API, defense-in-depth via optional tokens" design —
+  by design, not a gap. `AppRoutes.java`'s remaining 11 matches are all already covered by
+  `TenantAccessGuard` (S1.3/S1.9). **Conclusion: narrowing `SessionMiddleware.java`'s carve-out itself
+  is a separate, higher-blast-radius architectural change with no live security payoff (every route it
+  affects is already independently guarded) — out of scope for this 30-minute test-cleanup task.**
+  Left `SessionMiddleware.java`'s behavior unchanged; fixed the test file only.
+- **Fix applied** (`SessionMiddlewareTest.java`): rewrote `testPublicRuntimeAppsPathExcluded` and
+  `testPublicDeployedAppsPathExcluded` to use the REAL registered route shapes
+  (`/api/default/apps/hr-management-app/full`, `/api/default/apps/hr-management-app/env/DEV/full`
+  — the old fake 3-segment shapes matched no real route, the original "tautological" complaint),
+  kept the "excluded here" assertion (still true), and rewrote the Javadoc/`@DisplayName` to state
+  plainly that `TenantAccessGuard` — not this class — is what protects these routes end-to-end,
+  cross-referencing `CrossTenantAppAccessTest`. Split `testTemplatesPathExcluded` into
+  `testTemplatesReadPathExcluded` (bare `/api/templates`) and
+  `testTemplatesWritePathAlsoExcludedAtThisLayer` (`/api/templates/{id}`), with a comment
+  explaining the method-blindness point above and pointing to `AppRoutesTenantIsolationTest` for
+  the real write-side coverage. Added a class-level Javadoc note stating this class is method-blind
+  and "excluded" only ever means "this class doesn't gate it," not "unauthenticated end-to-end."
+- **Verification**: `mvn -pl app-bana-service -am clean test` → **418/418 tests pass** (417
+  pre-existing + 1 net-new from the templates split), `BUILD SUCCESS`. First attempt (non-clean
+  `test`) showed 31 errors across unrelated classes (`CrossTenantAppAccessTest`,
+  `SchemaRoutesTenantIsolationTest`, etc.), all sharing one identical
+  `java.lang.Error: Unresolved compilation problems: ConfigManager cannot be resolved...` at
+  `ApiServer.startJdk` — traced to a locally-running dev backend process
+  (`java -jar target\app-bana-1.0-SNAPSHOT-fat.jar`, started earlier in this session for live
+  verification above) holding the fat jar open, which had left `target/classes` stale. Stopped
+  that local process and re-ran with `clean test` to get a reliable, from-scratch result — not a
+  real regression from this change. Recorded as a new pitfall for future sessions.
 
 ---
 
