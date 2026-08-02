@@ -260,4 +260,51 @@ public class AppMembershipServiceTest {
         assertTrue(AppMembershipService.listAppsForUser(null).isEmpty());
         assertTrue(AppMembershipService.listAppsForUser("").isEmpty());
     }
+
+    /**
+     * Round 38 review, MEDIUM (closes the recurrence that spanned rounds 33/35/36/37/38): the
+     * helper's adoption at each of the three role-reading call sites was not itself under test
+     * (Mutation B — reverting one call site to inline {@code Role.fromValue} — was 19/19 green).
+     *
+     * <p>This test seeds a single corrupt-role row (bypassing V19's CHECK constraint) and asserts
+     * all four readers return the tolerant/skip result in one test method, so per-call-site
+     * divergence from the helper becomes visible rather than silently re-introducing the
+     * round-35 defect. Closes round 38's second MEDIUM simultaneously: {@link
+     * AppMembershipService#isMember} now reads the role column and routes through
+     * {@code parseRoleOrTolerate}, so a corrupt-role row does NOT satisfy isMember.
+     */
+    @Test
+    public void allFourReadersTolerateACorruptRoleRowGracefully() throws Exception {
+        final String corruptUser = "s22-corrupt-role-user";
+        // Drop CHECK, seed the corrupt row — both committed so the service's own connections see them.
+        try (Connection c = JdbcManager.getConnection("default");
+             Statement s = c.createStatement()) {
+            s.execute("ALTER TABLE appbana_app_members DROP CONSTRAINT IF EXISTS appbana_app_members_role_check");
+            s.execute("INSERT INTO appbana_app_members (tenant_id, app_id, user_id, role, granted_by, granted_at) "
+                    + "VALUES ('" + TENANT_A + "', '" + APP_1 + "', '" + corruptUser + "', 'administrator', 'test', NOW())");
+        }
+        try {
+            assertFalse(AppMembershipService.isMember(TENANT_A, APP_1, corruptUser),
+                    "isMember must not return true for a corrupt-role row — existence alone must not grant access");
+            assertFalse(AppMembershipService.isOwner(TENANT_A, APP_1, corruptUser),
+                    "isOwner must return false for a corrupt-role row");
+            List<AppMembershipService.Member> members = AppMembershipService.listMembers(TENANT_A, APP_1);
+            assertTrue(members.stream().noneMatch(m -> m.userId().equals(corruptUser)),
+                    "listMembers must skip a corrupt-role row — it must not appear in the admin member list");
+            List<AppMembershipService.MembershipGrant> grants = AppMembershipService.listAppsForUser(corruptUser);
+            assertTrue(grants.isEmpty(),
+                    "listAppsForUser must skip a corrupt-role row — the user must not gain app access via it");
+        } finally {
+            // Restore unconditionally so a mid-test failure never leaves the schema without the constraint.
+            try (Connection c = JdbcManager.getConnection("default");
+                 Statement s = c.createStatement()) {
+                s.execute("DELETE FROM appbana_app_members WHERE user_id = '" + corruptUser + "'");
+                s.execute("DO $$ BEGIN "
+                        + "ALTER TABLE appbana_app_members ADD CONSTRAINT appbana_app_members_role_check "
+                        + "CHECK (role IN ('owner', 'member', 'end-user')); "
+                        + "EXCEPTION WHEN duplicate_object THEN NULL; "
+                        + "END $$");
+            }
+        }
+    }
 }

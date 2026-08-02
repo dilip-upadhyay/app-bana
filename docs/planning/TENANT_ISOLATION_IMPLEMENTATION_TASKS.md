@@ -1683,7 +1683,7 @@ correction above:
 |---|---|---|---|---|
 | S2.1 | Liquibase changeset for `appbana_app_members` (`tenant_id, app_id, user_id, role['owner'\|'member'\|'end-user'], granted_by, granted_at`, PK `(tenant_id, app_id, user_id)`, index **leading with `user_id`**: `(user_id, tenant_id)`). | `app-bana-service/.../db/changelog/` | 30 min | ✅ |
 | S2.2 | `AppMembershipService` — `grant/revoke/listMembers/isMember(appTenantId, appId, userId)/isOwner(...)`. `appTenantId` is always the app's own tenant (from `AppMetadata`/path), never `session.tenantId`. Gains `listAppsForUser(userId)` — the one cross-tenant lookup in this service, backed by the `(user_id, tenant_id)` index. | new `com.appbana.security.AppMembershipService` | 90 min | ✅ |
-| S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ⬜ |
+| S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ✅ |
 | S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ⬜ |
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ⬜ |
 | S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). **Reminder (S1.10 review round 2): activating this exception is what unblocks `CrossTenantMembershipAllowsAccessTest` (written in S2.9), which finishes S1.11's deliberately-deferred positive case** — no new work for S2.6 itself, just don't lose the dependency when scoping S2.9. | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ⬜ |
@@ -2071,6 +2071,48 @@ correction above:
   flag, unchanged: `PermissionServiceTest` still reports `tests=0` with a green build (S3.8, not a
   regression, still open). S3.4 remains a live, demonstrated, real PII exposure (round 7, zero
   credentials) — "S2.2 done" is not "tenant isolation done."
+
+### S2.2 review round 38 response + S2.3 implementation
+
+- **Round 38 (MEDIUM, fixed — closes recurrence across rounds 33/35/36/37/38)** — helper-adoption at
+  each call site was not under test; Mutation B (reverting one call site to inline `Role.fromValue`
+  while leaving the helper intact) was 19/19 green, reproducing the exact round-35 defect verbatim.
+  **Fixed**: added `allFourReadersTolerateACorruptRoleRowGracefully` — a constraint-surgery test that
+  drops V19's CHECK, seeds `role='administrator'`, asserts all four readers return the tolerant result
+  (`isMember=false`, `isOwner=false`, `listMembers` skips, `listAppsForUser` skips), then restores the
+  constraint unconditionally in a `finally` block (using a `DO $$ EXCEPTION WHEN duplicate_object`
+  block so a mid-test failure never leaves the schema unguarded). Four WARN log lines confirmed all
+  four readers actually hit `parseRoleOrTolerate` on the corrupt row.
+- **Round 38 (MEDIUM, fixed)** — `isMember` treated row-existence as membership regardless of role
+  validity, inconsistent with the other three readers; a corrupt-role row satisfied `isMember=true`
+  while being invisible to `listMembers`/`listAppsForUser`/`isOwner`. **Fixed** (path a): changed
+  `isMember`'s SQL from `SELECT 1` to `SELECT role`, routes through `parseRoleOrTolerate`, returns
+  `role != null`. The constraint-surgery test above asserts `isMember=false` for the corrupt row,
+  closing both MEDIUMs in one test method. Pre-existing tests (`isMemberIsTrueForEveryRoleIncludingEndUser`,
+  all other isMember tests) are unaffected — all use valid Role values.
+- **S2.3 (implementation)** — Added `AppMembershipService.grant(tenantId, created.getId(),
+  creatorUserId, Role.OWNER, creatorUserId)` immediately after `AppManager.createApp(...)` in
+  `AppRoutes.java`'s create handler. Mirrors C1.5's approval bootstrap. The creator's userId is
+  already extracted for the C1.5 call so no new auth extraction needed.
+- Full suite: **452/452, BUILD SUCCESS** (451 + 1 new: `allFourReadersTolerateACorruptRoleRowGracefully`)
+  via `mvn -pl app-bana-service test`, aggregated from `target/surefire-reports/TEST-*.xml` (44
+  classes, 0 failures/errors/skipped). Targeted class: 20/20.
+  Next: **S2.4** — backfill migration: every pre-existing app row gets an `owner` membership from
+  `AppMetadata.getAuthor()`. Standing flags: `PermissionServiceTest` still `tests=0` (S3.8, unchanged);
+  S3.4 remains a live PII exposure.
+
+---
+
+### S2.3 implementation notes
+
+- `AppRoutes.java` create handler now calls `AppMembershipService.grant(tenantId, created.getId(),
+  creatorUserId, Role.OWNER, creatorUserId)` immediately after `AppManager.createApp(...)`. The
+  grant is placed before the C1.5 approval-role block so an exception there doesn't prevent the
+  ownership grant from landing.
+- **UI verification** (Cat. 1 / S2.3 entry in the verification script): create a brand-new app via
+  Studio's real chat-driven create flow. Until S2.7 adds the membership read route, indirect proof
+  is that the creator can still manage the app they just created; DB confirmation via
+  `SELECT * FROM appbana_app_members WHERE app_id = '<new-id>'` is the secondary corroboration.
 
 ---
 

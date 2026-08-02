@@ -10,6 +10,7 @@ import com.appbana.model.AppMetadata;
 import com.appbana.model.AppVersion;
 import com.appbana.model.DeploymentResult;
 import com.appbana.model.TenantContext;
+import com.appbana.security.AppMembershipService;
 import com.appbana.security.TenantAccessGuard;
 import com.appbana.service.AppPublishService;
 import com.appbana.service.AuthService;
@@ -600,6 +601,9 @@ public class AppRoutes {
                 app.setAuthor(creatorUserId);
 
                 AppMetadata created = AppManager.createApp(tenantId, app);
+
+                // S2.3: Bootstrap — creator automatically holds owner membership on their new app.
+                AppMembershipService.grant(tenantId, created.getId(), creatorUserId, AppMembershipService.Role.OWNER, creatorUserId);
 
                 // Task C1.5 — Bootstrap: app creator automatically gets 'both' (maker + checker) role on all entities in app
                 if (created.getEntities() != null) {

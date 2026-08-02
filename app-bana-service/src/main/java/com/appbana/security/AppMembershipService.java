@@ -24,9 +24,10 @@ import java.util.Objects;
  * user_id)} and a session-tenant lookup on a cross-tenant grant is a guaranteed, silent miss.
  *
  * <p><b>{@link #isMember} vs {@link #isOwner}</b> — deliberately opposite in how they treat
- * {@code end-user}: {@code isMember} is permissive (true for ANY role, including
+ * {@code end-user}: {@code isMember} is permissive (true for ANY valid role, including
  * {@code end-user} — S2.6 wires this into {@code TenantAccessGuard} for list/get access, and
- * S3.7's deployed-app end-user relies on exactly this permissiveness). {@code isOwner} is
+ * S3.7's deployed-app end-user relies on exactly this permissiveness; a corrupt-role row is
+ * tolerated and yields false, consistent with the other three readers). {@code isOwner} is
  * strict (true only for {@code owner} — S2.5 wires this into {@code AppAuthorization
  * .isAppOwnerOrSystem}, which must never be satisfiable by a data-access-only grant). Getting
  * either backwards either silently blocks a legitimate end-user or silently grants management
@@ -135,7 +136,11 @@ public class AppMembershipService {
         }
     }
 
-    /** True for ANY role, including {@code end-user}. See the class Javadoc's isMember-vs-isOwner note. */
+    /**
+     * True for ANY valid role, including {@code end-user}. A corrupt-role row (tolerated per
+     * {@link #parseRoleOrTolerate}) yields false — consistent with the other three readers.
+     * See the class Javadoc's isMember-vs-isOwner note.
+     */
     public static boolean isMember(String appTenantId, String appId, String userId) {
         Objects.requireNonNull(appTenantId, "appTenantId required");
         Objects.requireNonNull(appId, "appId required");
@@ -143,14 +148,17 @@ public class AppMembershipService {
             return false;
         }
 
-        String sql = "SELECT 1 FROM appbana_app_members WHERE tenant_id = ? AND app_id = ? AND user_id = ?";
+        String sql = "SELECT role FROM appbana_app_members WHERE tenant_id = ? AND app_id = ? AND user_id = ?";
         try (Connection c = JdbcManager.getConnection("default");
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, appTenantId);
             ps.setString(2, appId);
             ps.setString(3, userId);
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
+                if (!rs.next()) {
+                    return false;
+                }
+                return parseRoleOrTolerate(rs.getString(1), userId) != null;
             }
         } catch (SQLException e) {
             log.error("[AppMembershipService] Failed to check membership for user '{}': {}", userId, e.getMessage(), e);
