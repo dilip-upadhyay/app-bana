@@ -1691,7 +1691,7 @@ correction above:
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ⬜ |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ⬜ |
 | S2.10 | `GET /api/users/me/apps` (or equivalent) — union of own-tenant apps + `listAppsForUser` cross-tenant memberships, for the Studio switcher (S2.8) to consume. The only deliberately non-tenant-scoped app-listing route in the plan. | new route in `AppMembershipRoutes.java` | 60 min | ⬜ |
-| S2.11 | **(New, S2.1 review round 23 — absence census; hazards fixed + reprioritized, round 25)** No automated guard exists for the "changelog migrates a genuinely empty database" rule — every test runs against the shared, already-migrated dev Postgres, so this property is enforced only by a human remembering the manual ritual that already failed once (the V0 bootstrap incident). Tolerable while S2.1 was a self-contained `CREATE TABLE`; stops being tolerable at S2.4, a **data-backfill** migration of exactly the shape that broke fresh provisioning last time. **Take this before S2.2** (round 25's explicit recommendation — it's the only S2 task whose value is purely preventive, and the cheapest it will ever be to write). New test: open its **own dedicated JDBC `Connection`** to a **uniquely-named, throwaway** database on the same Postgres server (raw JDBC `CREATE DATABASE`, not Testcontainers — decision below) and assert the connection is actually pointed there, never silently falling back to `JdbcManager`'s shared, already-migrated dev datasource (a fallback would make the test a no-op that proves nothing). Run **only** `liquibase.update(...)` against that connection — never copy across `ApiServer.startJdk`'s neighboring `dropAll()` branch (gated on `flywayCleanOnStart`), which has no place in a test that must never be able to wipe the real dev database. Assert every changeset executes cleanly, then drop the throwaway database — force-terminate any lingering backends first (`pg_terminate_backend`) so a run killed mid-migration doesn't leave a changelog lock or an undroppable leftover database for the next run. **Testcontainers decision (round 25 calibration)**: `app-bana-service` has no Testcontainers dependency (unlike `ai-builder`) — deliberately NOT adopted here; raw JDBC `CREATE DATABASE` against the existing dev Postgres server is simpler and keeps this task's own small scope, at the cost of needing careful unique-naming/cleanup (above). S3.8's own Testcontainers-or-delete decision for `PermissionServiceTest` is independent and unblocked by this choice either way. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 60 min | ⬜ |
+| S2.11 | **(New, S2.1 review round 23 — absence census; hazards fixed + reprioritized, round 25)** No automated guard exists for the "changelog migrates a genuinely empty database" rule — every test runs against the shared, already-migrated dev Postgres, so this property is enforced only by a human remembering the manual ritual that already failed once (the V0 bootstrap incident). Tolerable while S2.1 was a self-contained `CREATE TABLE`; stops being tolerable at S2.4, a **data-backfill** migration of exactly the shape that broke fresh provisioning last time. **Take this before S2.2** (round 25's explicit recommendation — it's the only S2 task whose value is purely preventive, and the cheapest it will ever be to write). New test: open its **own dedicated JDBC `Connection`** to a **uniquely-named, throwaway** database on the same Postgres server (raw JDBC `CREATE DATABASE`, not Testcontainers — decision below) and assert the connection is actually pointed there, never silently falling back to `JdbcManager`'s shared, already-migrated dev datasource (a fallback would make the test a no-op that proves nothing). Run **only** `liquibase.update(...)` against that connection — never copy across `ApiServer.startJdk`'s neighboring `dropAll()` branch (gated on `flywayCleanOnStart`), which has no place in a test that must never be able to wipe the real dev database. Assert every changeset executes cleanly, then drop the throwaway database — force-terminate any lingering backends first (`pg_terminate_backend`) so a run killed mid-migration doesn't leave a changelog lock or an undroppable leftover database for the next run. **Testcontainers decision (round 25 calibration)**: `app-bana-service` has no Testcontainers dependency (unlike `ai-builder`) — deliberately NOT adopted here; raw JDBC `CREATE DATABASE` against the existing dev Postgres server is simpler and keeps this task's own small scope, at the cost of needing careful unique-naming/cleanup (above). S3.8's own Testcontainers-or-delete decision for `PermissionServiceTest` is independent and unblocked by this choice either way. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 60 min | ✅ |
 | S2.12 | **(New, S2.1 review round 25 — absence census)** The S2.1 round-23 schema-block reconciliation (plan doc's "Data model additions" → `appbana_app_members`) was performed by hand and, even under maximum attention on the very round meant to fix this exact class of drift, still left cosmetic-but-real differences from `V19` (`CREATE TABLE` vs `CREATE TABLE IF NOT EXISTS`, `now()` vs `NOW()`, missing `IF NOT EXISTS` on the index) — proving by example that nothing guards this claim from recurring, unlike route census (S0.3) or estimate reconciliation (S0.5). A fail-open `DEFAULT` sat in the authoritative security plan for multiple rounds before being caught this way; that is not a cosmetic-drift risk class. New test: extract the fenced SQL block under "Data model additions", normalize (lowercase, collapse whitespace, strip `IF NOT EXISTS`), compare against `V19__appbana_app_members.sql` normalized the same way, fail on any difference. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 45–60 min | ⬜ |
 
 **Exit criteria — S2**
@@ -1713,7 +1713,11 @@ correction above:
 - **S2.8** [Cat. 1] The Header app switcher itself. Log in as User B, open it, confirm only User B's own apps plus any cross-tenant memberships (S2.6) appear.
 - **S2.9** [Cat. 2 — automated tests] Formalizes S2.6/S2.7's already-proven scenarios.
 - **S2.10** [Cat. 1 — same surface as S2.8] Proof is the same switcher click-through after S2.6's grant.
-- **S2.11** [Cat. 2 — CI/test-suite gate, no UI surface by nature] Proof is the test itself passing against a real throwaway database, plus a deliberate break-test (a changeset that reads a table only Java creates lazily must fail this test) before trusting it.
+- **S2.11** [Cat. 2 — CI/test-suite gate, no UI surface by nature] ✅ Proved by a real break-test: a
+  temporary changeset referencing a table only Java creates lazily was added to the changelog, the new
+  `MigrationAppliesToEmptyDatabaseTest` failed naming exactly that table (`relation
+  "table_only_java_creates_lazily" does not exist`), then the changeset was reverted and the test
+  re-ran green. Confirmed no leftover throwaway database either time (`pg_database` query, 0 rows).
 - **S2.12** [Cat. 2 — CI/test-suite gate, no UI surface by nature] Proof is the test failing when the plan doc's schema block is deliberately perturbed to disagree with `V19` (e.g. reverting the `CHECK` back to a `DEFAULT`), then passing again once reverted.
 
 ### S2.1 implementation
@@ -1808,6 +1812,26 @@ correction above:
   its cost only rises once S2.2–S2.5 add code depending on this schema.
   Re-verified: `EstimateReconciliationTest`/`RouteCensusTest` green (~60.92 hr across 56 tasks) after
   the S2.12 registration and S2.11 spec fix. Next: implement S2.11 for real (see below), then S2.2.
+
+### S2.11 implementation
+
+- New `MigrationAppliesToEmptyDatabaseTest.java` (`app-bana-service/src/test/java/com/appbana/server/`)
+  fixes the two round-25 hazards by construction: it opens its **own** dedicated JDBC connections
+  (never reuses `JdbcManager`'s shared datasource), asserts `SELECT current_database()` on the fresh
+  connection equals the uniquely-named throwaway database it just created, and calls **only**
+  `liquibase.update(...)` — the `dropAll()` branch from `ApiServer.startJdk` is never referenced.
+  Cleanup force-terminates lingering backends (`pg_terminate_backend`) before `DROP DATABASE`, per the
+  reviewer's own round-23 experience with a killed mid-migration boot.
+- The expected changeset count is derived by counting `<changeSet ` occurrences in the real
+  `db.changelog-master.xml` classpath resource, not hardcoded — so this test doesn't need updating
+  every time a new `V`-numbered changeset is registered.
+- **Live break-test performed** (per S2.11's own pre-registered exit criterion): temporarily added a
+  changeset inserting into a nonexistent table (simulating "a changeset that depends on something only
+  Java creates lazily") — the test failed with the exact expected Postgres error naming that table;
+  reverted (`git diff --stat` confirmed clean), re-ran — green again. Confirmed zero leftover throwaway
+  databases after both the failing and passing runs.
+- Full suite: **432/432, BUILD SUCCESS** (431 + 1 new).
+  Next: S2.2 — `AppMembershipService`.
 
 
 ---
