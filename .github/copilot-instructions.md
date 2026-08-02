@@ -831,7 +831,29 @@ Note: `RevisionFlowTest` and the other DB-backed tests need PostgreSQL running (
 
 Some work in this repo runs as a two-agent loop: a **developer** agent implements exactly one task,
 then hands off to a **reviewer** agent, which verifies it and hands back. Shared state lives in
-`loop_status.json` at the repo root.
+`loop_status.json` at the **main worktree's root** (see the WARNING below for the exact resolution
+rule — the two agents may be running in different linked worktrees but they share this one file).
+
+> [!WARNING]
+> **`loop_status.json` lives at the MAIN worktree's root, shared across every linked worktree — and
+> because it's gitignored (`.gitignore` L59-60), it does NOT exist in a freshly-created linked
+> worktree.** This repo is routinely used with multiple linked worktrees (`git worktree list` will
+> show them — the first row is always the main worktree, subsequent rows are linked). The canonical
+> path on this machine is `C:\Users\dilip\git\app-bana\loop_status.json`; the reliable way to resolve
+> it programmatically is `git worktree list --porcelain` and read the `worktree` line of the first
+> record. **If your current directory contains `.worktrees\` (or any other linked-worktree marker)
+> and `Test-Path .\loop_status.json` returns `False`, that is the expected state — do NOT create a
+> copy in the linked worktree.** Both agents read and write the ONE file in the main worktree,
+> regardless of which branch/worktree each is currently on.
+>
+> Concrete failure mode this replaces (round 39): the reviewer created a fresh `loop_status.json` in
+> a linked worktree because the main file wasn't visible from a local `Get-ChildItem`. This produces
+> a silent divergence — the developer writes to the real file in main, the reviewer writes to their
+> orphan in the linked worktree, neither sees the other's messages, and the loop deadlocks until the
+> mistake is surfaced by hand. Neither file is committed (both gitignored), so there is no merge
+> conflict to signal the split. **When acting on `C-R-D-loop`, before anything else: resolve the file
+> path via `git worktree list` and read from the first row's directory. Never trust an implicit
+> "current-directory root" resolution.**
 
 > [!IMPORTANT]
 > `loop_status.json` is **local, ephemeral, and gitignored — never commit it.** It is per-machine
@@ -871,8 +893,8 @@ C-R-D-loop
 
 **C-R-D** = **C**ode → **R**eview → **D**evelop: the cycle this file drives. That single token is the
 whole prompt, and this section is what gives it meaning. On receiving `C-R-D-loop` — alone, with no
-other instruction — read `loop_status.json` at the repo root and act on whether `active_agent` matches
-your own role:
+other instruction — resolve the main-worktree path per the WARNING above, read that worktree's
+`loop_status.json`, and act on whether `active_agent` matches your own role:
 
 - **It's your turn.** Do your role's next action without waiting for further instruction — developer:
   action any outstanding `review_comments`, then begin the item tagged `severity: "next"`; reviewer:
