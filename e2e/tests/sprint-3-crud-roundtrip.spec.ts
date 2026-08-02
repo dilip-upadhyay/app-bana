@@ -81,7 +81,13 @@ async function setup(): Promise<Fixture | null> {
   }
   const loginBody = await login.json();
   const token = loginBody.token as string;
-  const tenantId = (loginBody.tenantId as string | undefined) ?? 'default';
+  // S1.13 follow-up: tenantId is nested under `user`, not top-level - same
+  // bug (and same fix) as e2e/tests/hardening/fixtures.ts's newHardeningFixture.
+  const tenantId = loginBody.user?.tenantId as string | undefined;
+  if (!tenantId) {
+    await api.dispose();
+    throw new Error(`login response missing user.tenantId: ${JSON.stringify(loginBody)}`);
+  }
 
   // Create the app (backend requires client-supplied id + name)
   const appId = `rt-${stamp}-${Math.random().toString(36).slice(2, 8)}`;

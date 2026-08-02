@@ -1315,7 +1315,7 @@ S1 before S2 is not, once real end-user traffic exists.
 | S1.10 | Startup warning: log a loud, repeated `WARN` while `AuthService.authEnabled(cfg)==false` so this is never silently shipped to production | `ApiServer.java` startup path | 30 min |
 | S1.11 | `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest` — tenant B's session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. **Gains a positive case (review round 4, R4-1):** a tenant B session that **is** a member of one specific tenant A app must be allowed through `requireOwnTenant` for that app's routes (list/get, per S2.6's split) — proving the guard is membership-aware, not a pure mismatch check. This positive case cannot go green until S2's membership table exists; it is written here, alongside its sibling deny cases, and finished once S2.6 activates S1.2's exception. | new tests | 105 min |
 | S1.12 | **(New, review round 2, R2-3)** Fix `SessionMiddlewareTest`'s tautological assertions: `testPublicRuntimeAppsPathExcluded`/`testPublicDeployedAppsPathExcluded` assert path shapes missing the `{tenantId}` segment every real route has, so they stay green regardless of what S1.9 does to the actual routes — rewrite against the real shapes and flip the expectation to "requires session" now that S1.9 removes the public carve-out. Split `testTemplatesPathExcluded` into a read-still-excluded case and a write-requires-auth case, since S1.6 makes writes require auth but this test currently asserts the whole path needs no session. | `SessionMiddlewareTest.java` | 30 min |
-| S1.13 | **(New, review round 2, R2-6; widened review round 3, R3-2)** `login()`/`register()` in `api-client.ts` default `tenantId` to `'default'` when the backend response omits it — post-S1 this silently becomes a confusing 403 against the user's real tenant instead of a clear login-time error. Throw instead of defaulting when the response is missing it. The identical pattern exists in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture` (`loginBody.tenantId ?? 'default'`) — same one-line fix, same task, so a hardening-suite failure post-S1 reads as a fixture bug fixed once, not a new guard bug to chase. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min |
+| S1.13 | **(New, review round 2, R2-6; widened review round 3, R3-2; widened again review round 10, R10-1)** `login()`/`register()` in `api-client.ts` default `tenantId` to `'default'` when the backend response omits it — post-S1 this silently becomes a confusing 403 against the user's real tenant instead of a clear login-time error. Throw instead of defaulting when the response is missing it. The identical pattern exists in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture` (`loginBody.tenantId ?? 'default'`) — same fix, same task, so a hardening-suite failure post-S1 reads as a fixture bug fixed once, not a new guard bug to chase. Review round 10 found the byte-identical line in a second, non-hardening spec (`e2e/tests/sprint-3-crud-roundtrip.spec.ts`), understating the original blast-radius claim, plus now-dead `?? 'default'` fallbacks one call downstream of `login()`/`register()` in `AuthGate.tsx` worth deleting while in the area. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts`, `e2e/tests/sprint-3-crud-roundtrip.spec.ts`, `app-bana-studio/src/features/auth/AuthGate.tsx` | 25 min |
 | S1.14 | **(New, review round 5, R5-1)** `BreakGlassAdminBypassesTenantGuardTest` — a request carrying a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard.requireOwnTenant` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant, proving the override this plan already promises actually exists at this layer — until now only S3's `EntityAccessGuard` exit criterion tested it, and this guard had no admin branch to test at all. | new tests | 30 min |
 
 ### Exit criteria — S1
@@ -1665,11 +1665,16 @@ membership model is in place).
   login/register response that omits it (S1.13, R2-6). No `runtimeLogin()` after all — review round 3
   (R3-1) found the Runtime has no per-app credential to call it with; see `GenericAppAuthController.java`
   above.
+- `app-bana-studio/src/features/auth/AuthGate.tsx` — delete the two now-dead `result.tenantId ?? 'default'`
+  fallbacks immediately downstream of `login()`/`register()`, unreachable once those throw instead of
+  returning with a missing `tenantId` (S1.13, R10-1)
 - `app-bana-runtime/src/runtime/AppRuntimeShell.tsx` — **no change** (review round 3, R3-1 supersedes
   round 2's planned `handleLogin` switch; the Runtime keeps calling the shared platform `login()`)
 
 **Tests:**
 - `e2e/tests/hardening/fixtures.ts` — same `tenantId ?? 'default'` fix as `api-client.ts` (S1.13, R3-2)
+- `e2e/tests/sprint-3-crud-roundtrip.spec.ts` — same fix again; byte-identical line found by review
+  round 10 in a spec outside `hardening/` (S1.13, R10-1)
 - `e2e/tests/a11y-runtime.spec.ts` — land the deferred authenticated-shell test as S3.7's regression
   guard (S3.7, R3-3)
 

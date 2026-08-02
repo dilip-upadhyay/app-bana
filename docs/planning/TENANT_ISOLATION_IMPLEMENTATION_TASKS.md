@@ -125,7 +125,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.10 | Startup: log a loud repeated `WARN` while `AuthService.authEnabled(cfg)==false`. | `ApiServer.java` | 30 min | ✅ |
 | S1.11 | **(Sequencing note, S1.10 review round 2: do S1.15/S1.16/S1.17 first — the last open routes with live security value; this task becomes the genuine capstone once nothing is left open for it to be wrong about.)** `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9; not a `@Disabled` placeholder here — see S2.6's row). | new tests | 105 min | ✅ |
 | S1.12 | ~~Fix `SessionMiddlewareTest`'s tautological assertions... flip expectation to "requires session" now that S1.9 removes the public carve-out...~~ **Premise corrected during implementation — see round-1 write-up below.** | `SessionMiddlewareTest.java` | 30 min | ✅ |
-| S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. **`fixtures.ts` needed a second, larger fix than its own row text implies — see write-up below.** | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min | ✅ |
+| S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. **`fixtures.ts` needed a second, larger fix than its own row text implies, and review round 10 found the byte-identical bug in a second spec file outside `hardening/` — see write-up below.** | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts`, `e2e/tests/sprint-3-crud-roundtrip.spec.ts`, `app-bana-studio/src/features/auth/AuthGate.tsx` | 25 min | ✅ |
 | S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. | new tests | 30 min | ⬜ |
 | S1.15 | Add tenant-filtering to `GET /schema` (only list the caller's own tenant's schema names, not all tenants') and an ownership check to `GET /schema/{name}` (403 if the caller doesn't own the app), mirroring S1.4's `DELETE /schema/{name}` fix. Found unfixed by any existing S1 task — review round 1, finding H1. | `SchemaRoutes.java` | 45 min | ✅ |
 | S1.16 | **(Revised, review round 3 — severity split + `/openapi.json` correction)** `GET /api/endpoints` and `GET /openapi.json` are each gated only by the optional `authEnabled(cfg)` block (same shape S1.4/S1.15 found on their `SchemaRoutes.java` siblings) with no fallback check beneath it. **`GET /api/endpoints` is the higher-severity of the two**: it returns every schema's full tenant-qualified key (`SchemaManager.listSchemaNames()`, unfiltered) pre-formatted as ready-to-call `POST /api/{key}`, `GET /api/{key}`, `GET /api/{key}/{id}`, `PUT /api/{key}/{id}`, `DELETE /api/{key}/{id}` strings — the enumeration primitive for the anonymous entity data plane (round 1 needed a direct Postgres query to obtain these keys; this route hands out the entire list). **`GET /openapi.json` is narrower than first described**: `OpenApiGenerator` keys `paths`/`components.schemas` by `schema.getName()` — the bare entity name, not the tenant-qualified key — so it discloses the union of field-level shapes across all tenants with no tenant attribution (a name collision across tenants silently last-write-wins, not a per-tenant enumeration); still real scope because it confirms which entity names exist platform-wide, and because every anonymous call loads *all* schemas from the DB and serializes the full result (~340 KB at today's ~455-schema count) — an unauthenticated amplification vector independent of the disclosure itself. Require a resolved identity unconditionally on both (admin, for now — mirrors S1.6's precedent for introspection/ops-facing routes) instead of the optional gate. Not covered by S1.9 (only changes which credential tier the *optional* gate checks) or S1.15 (scoped to `/schema`, `/schema/{name}` only). Found via `AuthEnabledAntiPatternTest` ratchet re-verification — S1 external review round 2; severity/text corrected round 3. **Priority note: despite the task number, `/api/endpoints`'s severity means this task should land before or alongside S1.15, not after it** (review round 3). | `SchemaRoutes.java` | 30 min | ✅ |
@@ -1423,6 +1423,45 @@ correction above:
     consumer of `login()`/`register()`.
   - **Environment restored:** backend process stopped and port 8080 re-confirmed clear after the
     live probes and e2e runs above.
+
+### S1.13 review round 10 follow-up — byte-identical bug in a second spec file, corrected blast radius
+
+- **Reviewer's required finding, verified independently before fixing:** `e2e/tests/sprint-3-crud-roundtrip.spec.ts:84`
+  carried the exact line just deleted from `fixtures.ts` —
+  `const tenantId = (loginBody.tenantId as string | undefined) ?? 'default';` — feeding the same
+  guarded `POST /appbana-studio/{tenantId}/apps` at line 89. Confirmed by running the spec **before**
+  applying any fix: both of its 2 test cases failed identically with `createApp failed HTTP 403:
+  {"error":"Forbidden: caller's tenant does not match the requested app's tenant"}` at line 95 — the
+  same failure signature chased throughout the original S1.13 write-up above.
+- **Corrected blast-radius figure:** the original write-up's "8 of 8 test cases across all 6
+  hardening specs" was accurate for `e2e/tests/hardening/` specifically, but the true total was
+  understated — this second spec file adds **2 more** affected test cases outside that folder, for a
+  combined **10 of 10** across **7** spec files, all sharing the identical root cause.
+- **Fix applied**, identical shape to `fixtures.ts`: read `loginBody.user?.tenantId`, dispose the API
+  context and throw a descriptive error if falsy.
+- **Re-verified after the fix:** re-ran `sprint-3-crud-roundtrip.spec.ts` alone — both tests now pass
+  (0/2 → 2/2). Re-ran the full `hardening/` suite again as a combined regression check — unchanged at
+  5 passed / 3 failed (same B2/H1/H3 pre-existing failures as before, still out of scope, still not
+  fixed here).
+- **Also actioned (medium, non-blocking):** the reviewer flagged two now-dead `?? 'default'`
+  fallbacks in `app-bana-studio/src/features/auth/AuthGate.tsx` (lines 43, 50), immediately
+  downstream of `login()`/`register()`. Since both functions now throw rather than return with a
+  missing `tenantId`, `result.tenantId` (typed `string`, not `string | undefined`, in `AuthResult`)
+  can never be falsy at that point — the fallback was unreachable dead code reproducing the exact
+  pattern this task retired. Removed in both places.
+- **Repo-wide grep performed** for the same pattern to check for further misses: 9 other matches
+  remain, all in `app-bana-runtime`/`app-bana-studio` runtime/UI files (`AppRuntimeShell.tsx`,
+  `FileUploadField.tsx`, `Renderer.tsx`, `StudioTableLive.tsx`, `ChatPane.tsx`, `PreviewPane.tsx`).
+  Checked each: none of them parse a raw `login`/`register` HTTP response — they all read an
+  already-resolved `tenantId` from app context (`resolveAppContext()`), a postMessage payload, or a
+  session store, which is a different data source and a different (and not necessarily wrong) design
+  decision for path-based tenant resolution. Left unchanged as out of scope for this task.
+- **Environment restored again:** backend (started fresh for this round's verification) stopped,
+  port 8080 confirmed clear. 13 probe accounts created by this round's verification runs (4 from the
+  sprint-3 spec's before/after runs, 9 from the hardening-suite re-run, since its H1 test alone
+  registers 2 users) removed from `app-bana-service/data/users.json` — backend stopped first so
+  `saveUsers()` couldn't clobber the edit; file re-parsed afterward to confirm valid JSON, 65 users,
+  zero remaining matches (matching the reviewer's own round-10 cleanup baseline of 65).
 
 ---
 

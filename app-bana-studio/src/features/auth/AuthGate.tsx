@@ -40,14 +40,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       const result = tab === 'login'
         ? await login(email, password)
         : await register(name, email, password);
-      const branding = await fetchBranding(result.tenantId ?? 'default');
+      const branding = await fetchBranding(result.tenantId);
       setBranding(branding);
       setSession({
         token: result.token,
         userId: result.userId,
         email: result.email,
         name: result.name,
-        tenantId: result.tenantId ?? 'default',
+        tenantId: result.tenantId,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
