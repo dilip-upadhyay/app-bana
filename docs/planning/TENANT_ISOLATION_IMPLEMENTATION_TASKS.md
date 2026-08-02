@@ -125,7 +125,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.10 | Startup: log a loud repeated `WARN` while `AuthService.authEnabled(cfg)==false`. | `ApiServer.java` | 30 min | ✅ |
 | S1.11 | **(Sequencing note, S1.10 review round 2: do S1.15/S1.16/S1.17 first — the last open routes with live security value; this task becomes the genuine capstone once nothing is left open for it to be wrong about.)** `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9; not a `@Disabled` placeholder here — see S2.6's row). | new tests | 105 min | ✅ |
 | S1.12 | ~~Fix `SessionMiddlewareTest`'s tautological assertions... flip expectation to "requires session" now that S1.9 removes the public carve-out...~~ **Premise corrected during implementation — see round-1 write-up below.** | `SessionMiddlewareTest.java` | 30 min | ✅ |
-| S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min | ⬜ |
+| S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. **`fixtures.ts` needed a second, larger fix than its own row text implies — see write-up below.** | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts` | 25 min | ✅ |
 | S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. | new tests | 30 min | ⬜ |
 | S1.15 | Add tenant-filtering to `GET /schema` (only list the caller's own tenant's schema names, not all tenants') and an ownership check to `GET /schema/{name}` (403 if the caller doesn't own the app), mirroring S1.4's `DELETE /schema/{name}` fix. Found unfixed by any existing S1 task — review round 1, finding H1. | `SchemaRoutes.java` | 45 min | ✅ |
 | S1.16 | **(Revised, review round 3 — severity split + `/openapi.json` correction)** `GET /api/endpoints` and `GET /openapi.json` are each gated only by the optional `authEnabled(cfg)` block (same shape S1.4/S1.15 found on their `SchemaRoutes.java` siblings) with no fallback check beneath it. **`GET /api/endpoints` is the higher-severity of the two**: it returns every schema's full tenant-qualified key (`SchemaManager.listSchemaNames()`, unfiltered) pre-formatted as ready-to-call `POST /api/{key}`, `GET /api/{key}`, `GET /api/{key}/{id}`, `PUT /api/{key}/{id}`, `DELETE /api/{key}/{id}` strings — the enumeration primitive for the anonymous entity data plane (round 1 needed a direct Postgres query to obtain these keys; this route hands out the entire list). **`GET /openapi.json` is narrower than first described**: `OpenApiGenerator` keys `paths`/`components.schemas` by `schema.getName()` — the bare entity name, not the tenant-qualified key — so it discloses the union of field-level shapes across all tenants with no tenant attribution (a name collision across tenants silently last-write-wins, not a per-tenant enumeration); still real scope because it confirms which entity names exist platform-wide, and because every anonymous call loads *all* schemas from the DB and serializes the full result (~340 KB at today's ~455-schema count) — an unauthenticated amplification vector independent of the disclosure itself. Require a resolved identity unconditionally on both (admin, for now — mirrors S1.6's precedent for introspection/ops-facing routes) instead of the optional gate. Not covered by S1.9 (only changes which credential tier the *optional* gate checks) or S1.15 (scoped to `/schema`, `/schema/{name}` only). Found via `AuthEnabledAntiPatternTest` ratchet re-verification — S1 external review round 2; severity/text corrected round 3. **Priority note: despite the task number, `/api/endpoints`'s severity means this task should land before or alongside S1.15, not after it** (review round 3). | `SchemaRoutes.java` | 30 min | ✅ |
@@ -1351,6 +1351,78 @@ correction above:
   above, then deliberately stopped it again (confirmed port 8080 clear) before running the suite, to
   avoid re-triggering this round's own jar-locking pitfall. No probe accounts or fixture rows
   created — every probe was an unauthenticated GET against pre-existing data.
+
+### S1.13 implementation — literal fix plus a discovered 100%-reproducing e2e regression
+
+- **`api-client.ts` (straightforward):** `login()`/`register()` already read the correct field
+  (`body.user?.tenantId`) — they only needed the fallback changed from `?? 'default'` to a thrown
+  `Error` when the value is falsy. Done for both functions.
+- **`fixtures.ts` (not straightforward — verified before implementing, per this engagement's
+  standing practice):** the task text describes this as "the same fix," but `newHardeningFixture`
+  read `loginBody.tenantId` — the **top level** of the login response. The real response (confirmed
+  against `AuthenticationController.login()`) nests `tenantId` under `user`, so this read was *always*
+  `undefined`, and the fixture *always* silently fell back to the literal string `'default'`,
+  regardless of the caller's actual tenant. `UserManager.register()` (confirmed by direct read)
+  assigns every self-registered user a fresh random `"t-" + UUID` tenant, never `'default'` — so
+  every fixture-created test user's real tenant and the fixture's `tenantId` field have been two
+  different values from day one.
+  - **Why this couldn't be fixed as literally asked:** adding a throw-when-missing check on top of
+    the *existing* (wrong) top-level read would make the fixture throw on every single invocation —
+    `loginBody.tenantId` is never present, throw-on-missing or default-on-missing are the only two
+    possible outcomes on that field, and neither is "read the real value." Implementing this task's
+    literal words alone, without also correcting the field path, would have converted the fixture
+    from "silently wrong" to "permanently broken," not fixed it. Both the field path (→
+    `loginBody.user?.tenantId`) and the fail-closed throw were required together.
+  - **Live proof this is a real, not hypothetical, bug — before touching any code:** rebuilt the
+    fat jar, started the backend, registered a fresh user via `POST /api/auth/register`, and called
+    `POST /appbana-studio/{tenantId}/apps` with that user's real session token twice: once with
+    `tenantId='default'` (mirroring the fixture's bug) and once with the user's real nested
+    `user.tenantId` (e.g. `t-e81803f8`). The `'default'` call returned a live
+    `403 {"error":"Forbidden: caller's tenant does not match the requested app's tenant"}` from
+    `TenantAccessGuard.requireOwnTenant` (`pathTenantId` `'default'` ≠ `session.tenantId()`
+    `t-e81803f8`); the real-tenant call returned `201`. `requireOwnTenant` was wired into this exact
+    route by an earlier S1 task in this same engagement (`AppRoutes.java`'s "B1 fix (review round
+    1)" comment) — meaning this project's own hardening work is what turned a previously-inert
+    fixture bug into a live break.
+  - **Confirmed against the real e2e suite, not just a manual probe:** ran
+    `npx playwright test tests/hardening/` before making any fix. **8 of 8** test cases across all 6
+    spec files that call `newHardeningFixture` (`hardening-b2-conditional-fields`,
+    `hardening-h1-file-tenant-isolation`, `hardening-h2-master-detail`, `hardening-h3-list-views`,
+    `hardening-h4-fk-constraints` ×2, `hardening-h6-groupby-counts` ×2) failed with the identical
+    `createApp failed HTTP 403: {"error":"Forbidden: caller's tenant does not match the requested
+    app's tenant"}` at `fixtures.ts:80` — the entire hardening sprint suite has been unable to run
+    past its own setup step.
+  - **Fix applied:** `tenantId` now read from `loginBody.user?.tenantId`, and the fixture disposes
+    its API context and throws if that value is falsy, mirroring `api-client.ts`'s fail-closed
+    pattern and citing both root causes (wrong field, `TenantAccessGuard`) inline for the next reader.
+  - **Re-ran the same suite after the fix:** 8 failed → **5 passed, 3 failed**. The 3 remaining
+    failures are unrelated to tenantId/login/fixture setup entirely (distinct assertions, e2e's
+    `createApp` step now succeeds for all of them) and were **never reachable before this fix** —
+    every one of these specs previously died inside `newHardeningFixture` before its own test body
+    ever ran, so fixing the fixture didn't regress them, it exposed them for the first time:
+    - `hardening-b2-conditional-fields.spec.ts`: conditional-field `conditions{}` metadata
+      (`showWhen`/`requiredWhen`/`disabledWhen`) does not survive a schema save → fetch round-trip
+      (`conditions` is `undefined` on fetch).
+    - `hardening-h1-file-tenant-isolation.spec.ts`: file upload itself returns 404
+      (`expect(upload.status()).toBeLessThan(300)` receives 404), before the test even reaches its
+      actual cross-tenant-download assertion.
+    - `hardening-h3-list-views.spec.ts`: an AND of two field filters on `/api/{entity}` returns 5
+      rows where the test expects exactly 3.
+    - None of these three are tenant-isolation regressions and none were introduced by this fix —
+      flagging them here as newly-visible, pre-existing defects for their own follow-up task(s)
+      rather than fixing them under S1.13, which is scoped to the tenantId fail-closed behavior only.
+  - **Unit test added** (`app-bana-runtime/src/runtime/auth-tenant-fail-closed.test.ts`, 4 cases):
+    the tracker's own S1.13 verification note ("the fail-closed branch ... not naturally triggerable
+    against the real running backend — verified by its unit test only") anticipated this — `UserDTO`'s
+    compact constructor rejects a null/blank `tenantId` server-side, so a genuine 200 response can
+    never omit it, and the throw branch can only be exercised by mocking the response shape.
+    Followed `AuditDrawer.test.tsx`'s existing `globalThis.fetch` stubbing pattern (no other
+    `@appbana/shared` package has a test runner configured; `app-bana-runtime`'s Vitest setup does
+    and already consumes `@appbana/shared` as source). All 4 pass; full `app-bana-runtime` suite
+    re-run clean at 280/280 (276 pre-existing + 4 new), confirming no regression in any other
+    consumer of `login()`/`register()`.
+  - **Environment restored:** backend process stopped and port 8080 re-confirmed clear after the
+    live probes and e2e runs above.
 
 ---
 

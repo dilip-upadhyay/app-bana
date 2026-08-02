@@ -67,7 +67,19 @@ export async function newHardeningFixture(prefix: string): Promise<HardeningFixt
   }
   const loginBody = await login.json();
   const token = loginBody.token as string;
-  const tenantId = (loginBody.tenantId as string | undefined) ?? 'default';
+  // S1.13: tenantId is nested under `user` in the real login response, not top-level -
+  // reading loginBody.tenantId here always read undefined and silently fell back to the
+  // literal string 'default', regardless of the caller's actual tenant (UserManager
+  // assigns a fresh random "t-xxxxxxxx" id to every self-registered user). That masked
+  // itself until TenantAccessGuard.requireOwnTenant started enforcing an exact
+  // path-tenant/session-tenant match on createApp below, at which point every hardening
+  // spec using this fixture started failing with createApp 403. Fail closed instead of
+  // defaulting, matching the same fix in app-bana-shared/api-client.ts.
+  const tenantId = loginBody.user?.tenantId as string | undefined;
+  if (!tenantId) {
+    await api.dispose();
+    throw new Error(`login response missing user.tenantId: ${JSON.stringify(loginBody)}`);
+  }
 
   const appId = `${prefix}-${stamp}-${suffix}`.toLowerCase();
   const createApp = await api.post(`${BACKEND_URL}/appbana-studio/${tenantId}/apps`, {

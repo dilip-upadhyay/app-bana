@@ -40,12 +40,19 @@ export async function login(email: string, password: string): Promise<AuthResult
   if (!res.ok) throw new Error(`Login failed: ${res.status}`);
   // Backend returns { token, sessionId, user: { id, email, name, tenantId, ... }, message }
   const body = await res.json();
+  // S1.13: a real response always has a non-blank user.tenantId (UserDTO's compact
+  // constructor rejects null/blank tenantId server-side) - a missing value here means
+  // an unexpected response shape, not a legitimate anonymous/default tenant. Defaulting
+  // to 'default' would silently place the caller in someone else's real tenant
+  // namespace instead of surfacing the shape mismatch.
+  const tenantId = body.user?.tenantId;
+  if (!tenantId) throw new Error('Login response missing user.tenantId');
   return {
     token: body.token ?? body.sessionId,
     userId: String(body.user?.id ?? ''),
     email: body.user?.email ?? email,
     name: body.user?.name ?? '',
-    tenantId: body.user?.tenantId ?? 'default',
+    tenantId,
   };
 }
 
@@ -58,12 +65,15 @@ export async function register(name: string, email: string, password: string): P
   if (!res.ok) throw new Error(`Registration failed: ${res.status}`);
   // Backend returns { token, sessionId, user: { id, email, name, tenantId, ... }, message }
   const body = await res.json();
+  // S1.13: see login() above - fail closed rather than default into a real tenant.
+  const tenantId = body.user?.tenantId;
+  if (!tenantId) throw new Error('Registration response missing user.tenantId');
   return {
     token: body.token ?? body.sessionId,
     userId: String(body.user?.id ?? ''),
     email: body.user?.email ?? email,
     name: body.user?.name ?? name,
-    tenantId: body.user?.tenantId ?? 'default',
+    tenantId,
   };
 }
 
