@@ -126,7 +126,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 | S1.11 | **(Sequencing note, S1.10 review round 2: do S1.15/S1.16/S1.17 first — the last open routes with live security value; this task becomes the genuine capstone once nothing is left open for it to be wrong about.)** `CrossTenantAppAccessTest` + `CrossTenantSchemaAccessTest`: tenant B session must not list/get/update/delete/publish/deploy/rollback/restore tenant A's apps, nor read/delete tenant A's schemas. Positive case: a tenant B session that **is** a member of one specific tenant A app is admitted for that app's list/get (finishes once S2.6 activates the exception — write the deny cases now, finish the positive case in S2.9; not a `@Disabled` placeholder here — see S2.6's row). | new tests | 105 min | ✅ |
 | S1.12 | ~~Fix `SessionMiddlewareTest`'s tautological assertions... flip expectation to "requires session" now that S1.9 removes the public carve-out...~~ **Premise corrected during implementation — see round-1 write-up below.** | `SessionMiddlewareTest.java` | 30 min | ✅ |
 | S1.13 | `login()`/`register()` in `api-client.ts` must throw (not default `tenantId` to `'default'`) when the backend response omits `tenantId`. Same fix in `e2e/tests/hardening/fixtures.ts`'s `newHardeningFixture`. **`fixtures.ts` needed a second, larger fix than its own row text implies, and review round 10 found the byte-identical bug in a second spec file outside `hardening/` — see write-up below.** | `app-bana-shared/src/api-client.ts`, `e2e/tests/hardening/fixtures.ts`, `e2e/tests/sprint-3-crud-roundtrip.spec.ts`, `app-bana-studio/src/features/auth/AuthGate.tsx` | 25 min | ✅ |
-| S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. | new tests | 30 min | ⬜ |
+| S1.14 | `BreakGlassAdminBypassesTenantGuardTest` — a valid service/admin token (with or without `X-User-Id`) is admitted by `TenantAccessGuard` on an `AppRoutes`/`SchemaRoutes` route regardless of path tenant. **Task-text corrected during implementation — see write-up below.** | new tests | 30 min | ✅ |
 | S1.15 | Add tenant-filtering to `GET /schema` (only list the caller's own tenant's schema names, not all tenants') and an ownership check to `GET /schema/{name}` (403 if the caller doesn't own the app), mirroring S1.4's `DELETE /schema/{name}` fix. Found unfixed by any existing S1 task — review round 1, finding H1. | `SchemaRoutes.java` | 45 min | ✅ |
 | S1.16 | **(Revised, review round 3 — severity split + `/openapi.json` correction)** `GET /api/endpoints` and `GET /openapi.json` are each gated only by the optional `authEnabled(cfg)` block (same shape S1.4/S1.15 found on their `SchemaRoutes.java` siblings) with no fallback check beneath it. **`GET /api/endpoints` is the higher-severity of the two**: it returns every schema's full tenant-qualified key (`SchemaManager.listSchemaNames()`, unfiltered) pre-formatted as ready-to-call `POST /api/{key}`, `GET /api/{key}`, `GET /api/{key}/{id}`, `PUT /api/{key}/{id}`, `DELETE /api/{key}/{id}` strings — the enumeration primitive for the anonymous entity data plane (round 1 needed a direct Postgres query to obtain these keys; this route hands out the entire list). **`GET /openapi.json` is narrower than first described**: `OpenApiGenerator` keys `paths`/`components.schemas` by `schema.getName()` — the bare entity name, not the tenant-qualified key — so it discloses the union of field-level shapes across all tenants with no tenant attribution (a name collision across tenants silently last-write-wins, not a per-tenant enumeration); still real scope because it confirms which entity names exist platform-wide, and because every anonymous call loads *all* schemas from the DB and serializes the full result (~340 KB at today's ~455-schema count) — an unauthenticated amplification vector independent of the disclosure itself. Require a resolved identity unconditionally on both (admin, for now — mirrors S1.6's precedent for introspection/ops-facing routes) instead of the optional gate. Not covered by S1.9 (only changes which credential tier the *optional* gate checks) or S1.15 (scoped to `/schema`, `/schema/{name}` only). Found via `AuthEnabledAntiPatternTest` ratchet re-verification — S1 external review round 2; severity/text corrected round 3. **Priority note: despite the task number, `/api/endpoints`'s severity means this task should land before or alongside S1.15, not after it** (review round 3). | `SchemaRoutes.java` | 30 min | ✅ |
 | S1.17 | **(New, review round 3)** Once S1.15 + S1.16 land, `SchemaRoutes.java`'s remaining two `authEnabled(cfg)` gates (`POST /schema`, `DELETE /schema/{name}`) are pure dead weight — both already have a separate, unconditional `isAppOwnerOrSystem` ownership check beneath them (S1.4's fix, and the pre-existing `POST /schema` check), so the optional gate contributes nothing. Delete both wrappers, taking this file's `authEnabled` count to zero, and **remove its entry from `AuthEnabledAntiPatternTest.BASELINE` entirely** rather than setting it to `0` — **(corrected, review round 4)** both a removed entry and a `0` entry fail the test on any future occurrence (an absent key via the "new file" branch, a `0` entry via the existing `count > max` branch — not a stronger guarantee, as this row originally claimed); removal is simply the more honest representation (the file genuinely has zero occurrences left) and lets it drop out of the map entirely. Makes the test's own docstring ("S3.4 is the task that removes this pattern repo-wide") true for this file specifically, ahead of S3.4. | `SchemaRoutes.java`, `AuthEnabledAntiPatternTest.java` | 30 min | ✅ |
@@ -1449,19 +1449,85 @@ correction above:
   missing `tenantId`, `result.tenantId` (typed `string`, not `string | undefined`, in `AuthResult`)
   can never be falsy at that point — the fallback was unreachable dead code reproducing the exact
   pattern this task retired. Removed in both places.
-- **Repo-wide grep performed** for the same pattern to check for further misses: 9 other matches
-  remain, all in `app-bana-runtime`/`app-bana-studio` runtime/UI files (`AppRuntimeShell.tsx`,
-  `FileUploadField.tsx`, `Renderer.tsx`, `StudioTableLive.tsx`, `ChatPane.tsx`, `PreviewPane.tsx`).
-  Checked each: none of them parse a raw `login`/`register` HTTP response — they all read an
-  already-resolved `tenantId` from app context (`resolveAppContext()`), a postMessage payload, or a
-  session store, which is a different data source and a different (and not necessarily wrong) design
-  decision for path-based tenant resolution. Left unchanged as out of scope for this task.
+- **Repo-wide grep performed** for the same pattern to check for further misses: **10** other
+  matches remain (not 9 — the original count counted files, not matches), all in
+  `app-bana-runtime`/`app-bana-studio` runtime/UI files: `AppRuntimeShell.tsx` (4: lines 115, 218,
+  270, 349), `PreviewPane.tsx` (2: lines 18, 40), `FileUploadField.tsx` (1: line 99), `Renderer.tsx`
+  (1: line 876), `StudioTableLive.tsx` (1: line 528), `ChatPane.tsx` (1: line 101). None of them
+  parse a raw `login`/`register` HTTP response, but checking each individually (round 12 review)
+  found the blanket "different design decision" characterization was only accurate for **7 of the
+  10**: `AppRuntimeShell.tsx:218/270/349`, `Renderer.tsx:876`, `StudioTableLive.tsx:528`, and
+  `FileUploadField.tsx:99` do read an already-resolved, genuinely-optional `ctx?.tenantId` from app
+  context (`resolveAppContext()`), and `AppRuntimeShell.tsx:115` reads `tenantId` from an untrusted
+  postMessage payload — all legitimately different data sources. The other **3** —
+  `ChatPane.tsx:101`, `PreviewPane.tsx:18`, `PreviewPane.tsx:40` — are dead code of the exact same
+  species just deleted from `AuthGate.tsx`: all three destructure `tenantId` from
+  `useSessionStore()`, which `app-bana-studio/src/stores/session.ts:9` declares as a non-optional
+  `string`, so the `?? 'default'` fallback can never fire. (The store's own seeding/reset logic at
+  `stores/session.ts:21`/`:23` is what actually assigns the literal `'default'` when appropriate —
+  recorded here as an observation, not a new task; changing seeding behavior is out of scope.) All
+  10 left unchanged as out of scope for this task — the 3 dead ones are inert, not harmful, and
+  removing them is a separate, later cleanup, not a security fix. Also note: `app-bana-studio` has
+  no test runner at all (`package.json` has only `dev`/`build`/`preview` scripts, no `vitest`
+  dependency), so none of this is unit-testable there regardless.
 - **Environment restored again:** backend (started fresh for this round's verification) stopped,
   port 8080 confirmed clear. 13 probe accounts created by this round's verification runs (4 from the
   sprint-3 spec's before/after runs, 9 from the hardening-suite re-run, since its H1 test alone
   registers 2 users) removed from `app-bana-service/data/users.json` — backend stopped first so
   `saveUsers()` couldn't clobber the edit; file re-parsed afterward to confirm valid JSON, 65 users,
   zero remaining matches (matching the reviewer's own round-10 cleanup baseline of 65).
+
+### S1.14 — `BreakGlassAdminBypassesTenantGuardTest`
+
+- **Route-family correction (task said "AppRoutes/SchemaRoutes"):** confirmed by direct grep that
+  `SchemaRoutes.java` never calls `TenantAccessGuard.requireOwnTenant` anywhere — its one textual
+  match on "TenantAccessGuard" is a comment noting its own, separate `hasAdmin`-based gate "mirrors
+  TenantAccessGuard" in shape, not a shared call site. `SchemaRoutesAdminTokenTest` and
+  `SchemaRoutesTenantIsolationTest#testGetSchemaAdminTokenSeesBothTenants` already cover SchemaRoutes'
+  own, independent admin bypass at the route level; there was no `TenantAccessGuard` call there left
+  to additionally prove. New test class instead covers two real `AppRoutes` call sites — one read
+  (`GET /appbana-studio/{tenantId}/apps/{id}`), one write (`PUT /appbana-studio/{tenantId}/apps/{id}`)
+  — to span both verb shapes without inventing a SchemaRoutes call site that does not exist.
+- **Second, more consequential correction, found live on this test's first run:** the first draft
+  sent the admin token with no session at all, mirroring `TenantAccessGuardTest`'s pure-unit-test
+  scenario (a mocked request, calling the guard method directly, no HTTP middleware chain involved).
+  All 5 of the draft's admin-bypass cases failed with 401 `"Missing session token"` — not from
+  `TenantAccessGuard` at all, but from `SessionMiddleware`, a separate, **earlier** layer that
+  unconditionally requires a session for `/appbana-studio/*` (a standing comment in
+  `SessionMiddleware.isExcludedPath` already documents this: "`/appbana-studio/*` is NOT excluded
+  above, so it requires a valid session like any other route (verified live, S1.11 review round 4)").
+  This is the exact "a route can be protected by more than one independent layer" trap this doc's own
+  Backend Testing Traps section already records for `/schema` — now confirmed to separately apply
+  here too. The fix is not a bypass of `SessionMiddleware` (there isn't one, by design): it is pairing
+  the admin token with a session that belongs to a tenant **unrelated** to both the path tenant and
+  the fixture app's real tenant. That satisfies `SessionMiddleware` (any valid session at all) while
+  proving `TenantAccessGuard`'s admit-first branch ignores the session's tenant entirely once a valid
+  service token is present — the accurate reading of "regardless of path tenant." A true
+  zero-credential case is kept as the baseline negative control
+  (`testWithoutAdminTokenOrSessionTheRouteStill401s`).
+- **Positive-evidence discipline (the reviewer's explicit ask for this task):** every admitted case
+  asserts on the real fixture app's own data appearing in the response body (its `name` field, for
+  both the GET and the PUT-then-echoed-update cases) — not merely "the status wasn't 403." The
+  mismatched-path-tenant case asserts the route's own `"App not found"` message specifically (proving
+  the DB-layer lookup ran), contrasted directly against a same-shape ordinary-session case
+  (`testOrdinarySessionMismatchedTenantGets403WithGuardsOwnMessage`) that asserts the guard's own
+  distinct `"caller's tenant does not match"` denial message — two different messages for two
+  genuinely different code paths, not one status code that could have been reached either way.
+- **Break-tested on purpose:** temporarily forced the guard's admit-first branch off
+  (`if (false && serviceToken != null && ...)` in `TenantAccessGuard.requireOwnTenant`) and re-ran —
+  all 5 admin-bypass cases failed with 403 `"Forbidden: caller's tenant does not match the requested
+  app's tenant"` (the correct failure mode: falling through to the ordinary tenant-mismatch branch),
+  while the 2 negative-control cases still passed unchanged. Reverted; `git diff --stat` on
+  `TenantAccessGuard.java` confirmed byte-identical to HEAD afterward.
+- **Verified:** new class alone — 7/7 passing. Full `app-bana-service` suite re-run clean at
+  425/425 (418 pre-existing + 7 new), `BUILD SUCCESS`.
+- **Files/Where column left as "new tests"** in both docs (matching the existing convention already
+  set by S1.11's completed row) rather than backticking the new file's name — doing so would have
+  desynced `EstimateReconciliationTest#sharedTaskFileListsMatchAcrossDocs()` against the plan doc's
+  matching S1.14 row, which was not touched (confirmed no other text there needed correcting).
+- **No environment perturbation this round:** this task's live verification only ever talked to the
+  new test class's own dedicated port (18097) and its own fixture tenant/rows; no probe accounts, no
+  shared-Postgres fixture cleanup, and no dev backend start/stop were needed.
 
 ---
 
