@@ -1528,6 +1528,29 @@ correction above:
 - **No environment perturbation this round:** this task's live verification only ever talked to the
   new test class's own dedicated port (18097) and its own fixture tenant/rows; no probe accounts, no
   shared-Postgres fixture cleanup, and no dev backend start/stop were needed.
+- **Review round 14 (commit `19cf8d0`) — ACCEPTED with 2 non-blocking findings, both actioned:**
+  1. The contrast pair didn't isolate the one variable it claimed to: the ordinary-session test used
+     a freshly-created `outsiderSession` (different user, different tenant) while the admin-bypass
+     test it was contrasted against used `serviceCallerSession` — three things differed, not one,
+     even though the code comment said "the SAME unrelated-tenant session." Fixed by making the
+     ordinary-session test reuse `serviceCallerSession` directly and deleting the now-orphaned
+     `OUTSIDER_TENANT` constant (its only other reference was its own declaration).
+  2. The four strongest bypass cases had no negative control: every `FIXTURE_TENANT`-path request
+     carried `ADMIN_TOKEN`, so nothing proved that removing *only* the token (same session, same
+     path) flips the result — a future regression widening the admit branch would only be caught by
+     the (different-session) ordinary-tenant-mismatch test, not by the bypass cases themselves. Added
+     `sameSessionOnFixturePathWithoutAdminTokenIs403()`: identical session and path to
+     `testAdminTokenAdmitsGetWithUnrelatedTenantSessionAndNoXUserId`, admin token omitted, asserting
+     403 with the guard's own tenant-mismatch message.
+  - Re-verified full class 8/8, full suite 426/426 `BUILD SUCCESS`. Re-ran the break-test
+    (admit-first branch neutered) after both fixes: exactly the same 5 bypass cases failed with the
+    guard's 403, the 3 negative controls (zero-credential 401, ordinary-session 403, and the new
+    same-session-no-token 403) were unaffected — reverted, `git diff --stat` on
+    `TenantAccessGuard.java` empty afterward.
+  - The reviewer's third finding (a cosmetic "nit": 2 of 4 fixture tenant constants are
+    underscore-shaped while real tenant IDs are hyphenated) was explicitly flagged as "not worth its
+    own commit" and outside the "next" instruction's scope — deliberately left unactioned rather than
+    expanding this round's diff beyond what was asked.
 
 ---
 

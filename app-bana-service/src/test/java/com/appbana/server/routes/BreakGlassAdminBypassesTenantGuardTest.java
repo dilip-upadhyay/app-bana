@@ -79,7 +79,6 @@ public class BreakGlassAdminBypassesTenantGuardTest {
 
     private static final String ADMIN_TOKEN = "s114-admin-xyz";
     private static final String FIXTURE_TENANT = "t_s114_fixture";
-    private static final String OUTSIDER_TENANT = "t_s114_outsider_own_tenant";
     private static final String SERVICE_CALLER_TENANT = "t_s114_service_caller_tenant";
     private static final String MISMATCHED_TENANT = "t-s114-totally-unrelated-tenant";
     private static final String FIXTURE_APP_ID = "s114-fixture-app";
@@ -155,14 +154,27 @@ public class BreakGlassAdminBypassesTenantGuardTest {
     @Test
     public void testOrdinarySessionMismatchedTenantGets403WithGuardsOwnMessage() throws Exception {
         // Direct contrast for testAdminTokenBypassesEvenWithACompletelyMismatchedPathTenant below:
-        // an ordinary session (no admin token), whose own tenant does not match the path tenant,
-        // must hit TenantAccessGuard's own denial branch with its own distinct message. The two
-        // tests together prove the admin-token case takes a genuinely different code path, not
-        // just a different status code by coincidence.
-        String outsiderSession = SessionService.createSession("s114_outsider", OUTSIDER_TENANT).sessionId();
+        // the SAME session (serviceCallerSession), same path tenant, with no admin token, must hit
+        // TenantAccessGuard's own denial branch with its own distinct message — a genuine
+        // single-variable (admin token present/absent) comparison, not just a different status code.
         HttpResponse<String> res = send("GET",
-                "/appbana-studio/" + MISMATCHED_TENANT + "/apps/" + FIXTURE_APP_ID, null, outsiderSession, null, null);
+                "/appbana-studio/" + MISMATCHED_TENANT + "/apps/" + FIXTURE_APP_ID, null, serviceCallerSession, null, null);
         assertEquals(403, res.statusCode(), "A real session whose tenant differs from the path tenant must be denied by the guard: " + res.body());
+        JsonNode body = MAPPER.readTree(res.body());
+        assertTrue(body.get("error").asText().toLowerCase().contains("tenant"),
+                "Must be the guard's own tenant-mismatch denial message: " + res.body());
+    }
+
+    @Test
+    public void sameSessionOnFixturePathWithoutAdminTokenIs403() throws Exception {
+        // Pairs with testAdminTokenAdmitsGetWithUnrelatedTenantSessionAndNoXUserId below: identical
+        // session, path, and method, with only the admin token removed — isolates the admin token
+        // itself as the one variable that flips 403 to 200, rather than relying solely on the
+        // one-time break-test to establish that causation.
+        HttpResponse<String> res = send("GET",
+                "/appbana-studio/" + FIXTURE_TENANT + "/apps/" + FIXTURE_APP_ID, null, serviceCallerSession, null, null);
+        assertEquals(403, res.statusCode(),
+                "Same session on the same fixture path, minus the admin token, must be denied by the guard: " + res.body());
         JsonNode body = MAPPER.readTree(res.body());
         assertTrue(body.get("error").asText().toLowerCase().contains("tenant"),
                 "Must be the guard's own tenant-mismatch denial message: " + res.body());
