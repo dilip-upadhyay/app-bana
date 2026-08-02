@@ -1681,7 +1681,7 @@ correction above:
 
 | # | Task | Files | Est. | Status |
 |---|---|---|---|---|
-| S2.1 | Liquibase changeset for `appbana_app_members` (`tenant_id, app_id, user_id, role['owner'\|'member'\|'end-user'], granted_by, granted_at`, PK `(tenant_id, app_id, user_id)`, index **leading with `user_id`**: `(user_id, tenant_id)`). | `app-bana-service/.../db/changelog/` | 30 min | ⬜ |
+| S2.1 | Liquibase changeset for `appbana_app_members` (`tenant_id, app_id, user_id, role['owner'\|'member'\|'end-user'], granted_by, granted_at`, PK `(tenant_id, app_id, user_id)`, index **leading with `user_id`**: `(user_id, tenant_id)`). | `app-bana-service/.../db/changelog/` | 30 min | ✅ |
 | S2.2 | `AppMembershipService` — `grant/revoke/listMembers/isMember(appTenantId, appId, userId)/isOwner(...)`. `appTenantId` is always the app's own tenant (from `AppMetadata`/path), never `session.tenantId`. Gains `listAppsForUser(userId)` — the one cross-tenant lookup in this service, backed by the `(user_id, tenant_id)` index. | new `com.appbana.security.AppMembershipService` | 90 min | ⬜ |
 | S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ⬜ |
 | S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ⬜ |
@@ -1711,6 +1711,25 @@ correction above:
 - **S2.8** [Cat. 1] The Header app switcher itself. Log in as User B, open it, confirm only User B's own apps plus any cross-tenant memberships (S2.6) appear.
 - **S2.9** [Cat. 2 — automated tests] Formalizes S2.6/S2.7's already-proven scenarios.
 - **S2.10** [Cat. 1 — same surface as S2.8] Proof is the same switcher click-through after S2.6's grant.
+
+### S2.1 implementation
+
+- New Liquibase changeset `V19` (`app-bana-service/src/main/resources/db/migration/V19__appbana_app_members.sql`,
+  registered in `db.changelog-master.xml`) creates `appbana_app_members` exactly per the task's own
+  spec: `(tenant_id, app_id, user_id, role, granted_by, granted_at)`, PK `(tenant_id, app_id,
+  user_id)`, a `CHECK (role IN ('owner','member','end-user'))` constraint (mirrors
+  `appbana_user_roles`' existing `maker`/`checker`/`both` pattern from `V16`), and the index
+  deliberately **leading with `user_id`** (`(user_id, tenant_id)`, not the more common
+  tenant-first order) — this table has exactly one cross-tenant query (S2.2's
+  `listAppsForUser(userId)`) and no `tenant_id` to filter by first for that one.
+- Verified by booting the real server (any test that calls `ApiServer.startJdk`, e.g.
+  `FileRoutesTenantIsolationTest`) and inspecting the live table via `psql \d appbana_app_members`:
+  columns, PK, index, and CHECK constraint all match exactly. Full suite unaffected:
+  **431/431, BUILD SUCCESS**.
+- Per the doc's own UI-verification-script classification (**Cat. 2** — schema only, not wired to a
+  route yet), live/UI proof is correctly deferred to S2.3/S2.6, not attempted here.
+  Next: S2.2 — `AppMembershipService` (`grant`/`revoke`/`listMembers`/`isMember`/`isOwner`/
+  `listAppsForUser`).
 
 ---
 

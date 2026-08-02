@@ -85,4 +85,8 @@
         <sqlFile path="db/migration/V18__appbana_approvals_pending_l2.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
+    <changeSet id="V19" author="appbana">
+        <sqlFile path="db/migration/V19__appbana_app_members.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
 </databaseChangeLog>
