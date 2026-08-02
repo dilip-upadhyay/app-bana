@@ -1558,7 +1558,7 @@ correction above:
   render sites to an authenticated `fetch` + blob-URL download). Rationale: `FileRoutes.java`'s own
   class Javadoc always documented anonymous end-to-end access as the intended design — protection
   was meant to rest entirely on the `(tenantId, appId, fileId)` triple, where `fileId` is a
-  server-issued random UUID (128 bits, unguessable) and the route's `SELECT_SQL` already returns an
+  server-issued random UUID (122 random bits, unguessable) and the route's `SELECT_SQL` already returns an
   identical 404 for both "unknown fileId" and "wrong tenant/app", so a probe attack learns nothing
   either way. A session requirement here could only ever 401 real users (both render sites use a
   plain `<a href target="_blank">`, which can never carry the `Authorization` header this app's
@@ -1648,8 +1648,8 @@ correction above:
   gutted by the H2→PostgreSQL migration and never restored, no h2 dependency in either pom. See S3.8's
   own row above for detail; left as an open port-or-delete decision rather than resolved this round, per
   the review's own request to open a tracked task rather than fold it into S1.18.
-- **Re-verified:** `FileRoutesTenantIsolationTest` 14/14 (12 pre-existing + the rewritten test + the new
-  ratchet test), full `app-bana-service` suite unaffected by any route change (no new/removed/renamed
+- **Re-verified:** `FileRoutesTenantIsolationTest` 13/13 (12 pre-existing, one of them rewritten in
+  place, plus the new ratchet test), full `app-bana-service` suite unaffected by any route change (no new/removed/renamed
   routes — `RouteCensusTest` not implicated).
 
 ---

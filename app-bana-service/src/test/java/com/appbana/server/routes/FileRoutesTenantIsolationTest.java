@@ -42,6 +42,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * S1.7 additions below also cover {@code POST /api/files/upload} over a real
  * HTTP round-trip (unlike the SQL-level tests above), since the guard lives
  * in the route handler itself, not in a reusable SQL string.
+ *
+ * S1.18's download-exclusion coverage is deliberately split across two layers, and neither alone is
+ * sufficient: {@code onlyGetIsRegisteredOnTheFileDownloadPathShape} and
+ * {@code uploadRouteStillRequiresASessionAfterTheDownloadRouteExclusion} prove
+ * {@code FILE_DOWNLOAD_EXCLUSION_PATTERN}'s own boundary (exactly 3 segments, GET-only today) but
+ * would still pass even if {@code isExcludedPath()} stopped consulting that pattern at all; the real
+ * HTTP tests ({@code anonymousDownloadOfRealUploadedFileSucceeds} and its wrong-tenant/unknown-fileId
+ * siblings) are what prove the pattern is actually wired into the middleware. Do not treat the HTTP
+ * tests as superseded by the sharper pattern tests and remove them.
  */
 public class FileRoutesTenantIsolationTest {
 

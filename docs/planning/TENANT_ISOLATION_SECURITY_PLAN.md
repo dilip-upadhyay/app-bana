@@ -155,7 +155,7 @@ by `EstimateReconciliationTest` rather than hand-summed. **S1.18 review round 16
 task S3.8 registered for an absence-census finding surfaced while reviewing S1.18
 (`PermissionServiceTest` silently reports `Tests run: 0`, gutted by the H2→PostgreSQL migration and
 never restored): a port-to-Testcontainers-or-delete decision, summed at the established upper-bound
-convention (S0.5). S3 ~11.25→~12.75 hr, new grand total **~58.58 hr across 53 tasks**. S0 → S1 → S2 → S3
+convention (S0.5). S3 ~11.25→~12.75 hr, new grand total **~58.92 hr across 54 tasks**. S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
 completion is additionally a one-time access reset with no backfill (review round 6, R6-2)** — see
