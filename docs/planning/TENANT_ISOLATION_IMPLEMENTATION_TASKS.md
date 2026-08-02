@@ -1893,6 +1893,54 @@ correction above:
   `isMember`'s tests alongside the service; inventory one-tenant-per-user assumptions before S2.6; the
   end-user permissive-vs-owner-only trap; `granted_by`'s `NOT NULL`-no-default constraint for S2.4).
 
+#### S2.11 review round 30 — ACCEPTED; template0 fix proven load-bearing by direct A/B; scope wording corrected
+
+- **Verdict: ACCEPTED.** Reviewer independently reproduced the full suite (432/432, aggregated from
+  the surefire XML, not console output) and re-derived the doc arithmetic with their own parser
+  (56 rows, 60.9167 hr, all six phase subtotals matching) — confirmed exact, no drift.
+- **Verified-live — the `TEMPLATE template0` fix proven load-bearing by the cleanest possible A/B**:
+  reviewer polluted `template1` with a real table, injected a `V20` changeset referencing it, then ran
+  three variants under otherwise-identical conditions: (1) a direct, no-Maven inheritance check — bare
+  `CREATE DATABASE` inherits the pollution, `TEMPLATE template0` doesn't; (2) shipped code + polluted
+  `template1` + `V20` → correctly `BUILD FAILURE`, naming the exact changeset/relation; (3) the
+  counterfactual — reverted ONLY the `TEMPLATE template0` clause, byte-identical otherwise, same
+  polluted `template1`, same `V20` → silently green. One clause flips a silently-passing test into a
+  correctly-failing one. Also confirmed the test genuinely executes (not a `PermissionServiceTest`-style
+  `Tests run: 0` trap — no `Assumptions.assumeTrue` anywhere, so a missing Postgres/`CREATEDB` right
+  fails hard rather than passing vacuously), and that failure-path cleanup holds under a genuinely
+  failing run (zero leftover databases, `template1` restored, dev changelog unaffected).
+- **Nit, fixed** — the new code comment credited the `TEMPLATE template0` fix to "round-25 review
+  finding"; it was round 28. Corrected in `MigrationAppliesToEmptyDatabaseTest.java`.
+- **Low, fixed — S2.11's own scope description was imprecise about which deployment it actually
+  covers.** Reviewer censused every non-tenant table in dev (40, excluding 687 `APP_*` runtime tables):
+  32 from `app-bana-service`'s Liquibase, 5 from `ai-builder`'s Flyway (`ai_*` tables), 3 tool
+  bookkeeping — zero orphans, so the "reverse V0" shape (app code depending on a table no migration
+  creates) is currently unexposed, verified rather than assumed. The boundary that matters: the probe
+  database in `MigrationAppliesToEmptyDatabaseTest` is migrated by **`app-bana-service`'s Liquibase
+  changelog only** — `ai-builder`'s 5 `ai_*` tables (its own separate Flyway migration) never exist in
+  it, and nothing enforces cross-module boot ordering today (`start-everything` happens to boot
+  `ai-builder` first in dev, by sequencing convention, not by any tested contract). **Corrected
+  framing, going forward**: describe S2.11 as proving "`app-bana-service`'s changelog applies cleanly
+  to an empty database" — never as "a fresh AppBana deployment provisions correctly," since the two
+  are genuinely different claims and only the first one is tested.
+- **Calibration, no action** — 3 things checked and correctly not flagged: `TEMPLATE template0` makes
+  the probe stricter (no pre-installed extensions inherited), verified safe because `V1__auth_schema.sql`
+  installs its own `pgcrypto` extension and encoding/collation match across all 4 databases;
+  `withDatabase()`'s new query-string handling has no dedicated test, judged acceptable since the
+  dangerous failure mode is already caught by the `current_database()` assertion; `AppManager
+  .ensureTables()`'s apparent DDL duplication of `V9` turned out to be dead, commented-out code, not a
+  live drift hazard.
+- **Housekeeping, no action needed (reviewer self-disclosure)**: two of the reviewer's own errors this
+  round, both caught before becoming false findings against this commit — an independent recount
+  parser initially missed the letter-suffixed `S0.1b` row (localized instantly once a phase subtotal,
+  not just the grand total, disagreed), and a `Get-Content -Raw` over a glob returning an array rather
+  than a string caused a false-positive "orphan table" claim, caught because it contradicted a file
+  already directly read.
+- Full suite: **432/432, BUILD SUCCESS** (unaffected by this round's comment/doc-only changes).
+  Next: S2.2 — `AppMembershipService`, carrying forward the same 4 items from round 23 unchanged, plus
+  the standing flag restated again this round: S3.4 remains a live, demonstrated, real PII exposure
+  (round 7, zero credentials) — "S2.11 done" must never be read as "tenant isolation done."
+
 
 ---
 

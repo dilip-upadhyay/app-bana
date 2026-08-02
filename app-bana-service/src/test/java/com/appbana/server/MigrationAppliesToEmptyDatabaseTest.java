@@ -52,7 +52,7 @@ public class MigrationAppliesToEmptyDatabaseTest {
              Statement st = admin.createStatement()) {
             // TEMPLATE template0, not the default template1: template1 is explicitly customisable and
             // a table left in it would make this database "empty" in name only, silently defeating the
-            // whole point of this test (round-25 review finding).
+            // whole point of this test (round-28 review finding).
             st.execute("CREATE DATABASE " + probeDb + " TEMPLATE template0");
         }
 
