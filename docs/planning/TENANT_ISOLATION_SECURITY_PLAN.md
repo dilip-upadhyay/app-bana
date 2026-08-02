@@ -103,12 +103,12 @@ verdict: the plan is done — execute it.**
 |---|---|---|---|
 | S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route, now including **known callers** and **what data must exist for it to succeed** columns | ~10.17 hr |
 | S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~14.75 hr |
-| S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~11.75 hr |
+| S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~12.75 hr |
 | S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)** | ~12.75 hr |
 | S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~5.5 hr |
 | S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~4.0 hr |
 
-**Total scope:** ~58.92 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
+**Total scope:** ~59.92 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
 hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
 plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
 consecutive round to add scope, though the first with no blocker; **round 6 adds none** — both findings
@@ -155,7 +155,11 @@ by `EstimateReconciliationTest` rather than hand-summed. **S1.18 review round 16
 task S3.8 registered for an absence-census finding surfaced while reviewing S1.18
 (`PermissionServiceTest` silently reports `Tests run: 0`, gutted by the H2→PostgreSQL migration and
 never restored): a port-to-Testcontainers-or-delete decision, summed at the established upper-bound
-convention (S0.5). S3 ~11.25→~12.75 hr, new grand total **~58.92 hr across 54 tasks**. S0 → S1 → S2 → S3
+convention (S0.5). S3 ~11.25→~12.75 hr, new grand total **~58.92 hr across 54 tasks**. **S2.1 review
+round 23 adds ~1.0 hr** — new task S2.11 registered for an absence-census finding: no automated guard
+exists for the "changelog migrates a genuinely empty database" rule (the same rule the V0 bootstrap
+incident violated), which stops being tolerable once S2.4 lands a data-backfill migration of that exact
+shape. S2 ~11.75→~12.75 hr, new grand total **~59.92 hr across 55 tasks**. S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
 completion is additionally a one-time access reset with no backfill (review round 6, R6-2)** — see
@@ -897,12 +901,21 @@ independent of each other" for end-users, not just for the Studio builder.
 
 ### `appbana_app_members` (new platform table — mirrors `appbana_user_roles`'s shape)
 
+> [!NOTE]
+> **Reconciled against the shipped `V19__appbana_app_members.sql` (S2.1 review round 23)** — the block
+> below now matches the real DDL exactly. It previously showed `DEFAULT 'member'` with no `CHECK`; V19
+> shipped with NO default and a real `CHECK (role IN (...))` instead, following `V16`'s established
+> precedent rather than this block's original sketch. Both changes are strictly safer: a `NOT NULL`
+> column with no default forces every caller to state a role explicitly, so nothing can silently mint
+> an unintended `member` row (which, per the paragraph below, already carries build/view/edit rights)
+> just by omitting the column. `V19` is the source of truth; if they ever disagree again, trust `V19`.
+
 ```sql
 CREATE TABLE appbana_app_members (
   tenant_id    VARCHAR(255) NOT NULL,
   app_id       VARCHAR(255) NOT NULL,
   user_id      VARCHAR(255) NOT NULL,
-  role         VARCHAR(20) NOT NULL DEFAULT 'member',  -- 'owner' | 'member' | 'end-user'
+  role         VARCHAR(20) NOT NULL CHECK (role IN ('owner', 'member', 'end-user')),
   granted_by   VARCHAR(255) NOT NULL,
   granted_at   TIMESTAMP NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, app_id, user_id)
@@ -1392,6 +1405,7 @@ table's own index is corrected to lead with `user_id` — the column this new lo
 | S2.8 | Studio frontend: verify the app switcher/list only ever renders what the (now correctly filtered) server response contains — no client-side "show all tenant apps" assumption left over. **Extended (review round 5, R5-3):** union the tenant-owned list with S2.10's cross-tenant `listAppsForUser` result, so an app a user is a member of in another tenant actually appears in their switcher instead of being reachable only by direct URL. | `app-bana-studio/src/features/**` (session/workspace store) | 60 min |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree once membership exists), plus `EndUserMembershipCannotManageAppTest` (review round 3: an `end-user` grant gets 403 on update/delete/schema-management but 200 on list/get), plus **`CrossTenantMembershipAllowsAccessTest` (review round 4, R4-1)** — a cross-tenant member (the realistic case per R4-2: a user from a *different* tenant than the app's own) successfully lists/gets the app they're a member of, proving S1.2's membership exception actually admits them past the tenant gate, not only that S2.6 restricts what they can do once admitted; this also finishes S1.11's positive case. The route-census regression test lives in S0.3, not here — this phase only needs to prove membership is actually consulted. | new tests | 120 min |
 | S2.10 | **(New, review round 5, R5-3)** `GET /api/users/me/apps` (or equivalent) — returns the union of the caller's own-tenant apps and every app they hold cross-tenant membership on via `listAppsForUser`, for the Studio app switcher (S2.8) to consume. This is the only app-listing route in the plan that is deliberately not tenant-scoped. | new route in `AppMembershipRoutes.java` (or `AppRoutes.java`) | 60 min |
+| S2.11 | **(New, S2.1 review round 23)** No automated guard exists for the "changelog migrates a genuinely empty database" rule that caused the V0 bootstrap incident — every test runs against the shared, already-migrated dev Postgres. Tolerable while S2.1 was a self-contained `CREATE TABLE`; not tolerable once S2.4 lands a data-backfill migration of exactly the shape that broke fresh provisioning before. New test creating a genuinely empty, throwaway database, running the full changelog against it via the same `Liquibase(...).update(...)` call `ApiServer.startJdk` uses, asserting a clean run, then dropping the throwaway database. Must land before S2.4 despite its higher number — task IDs are stable identifiers, not an execution-order promise. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 60 min |
 
 ### Exit criteria — S2
 

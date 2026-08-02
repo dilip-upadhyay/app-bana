@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~58.92 hr across 54 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~59.92 hr across 55 tasks. Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -1691,6 +1691,7 @@ correction above:
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ⬜ |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ⬜ |
 | S2.10 | `GET /api/users/me/apps` (or equivalent) — union of own-tenant apps + `listAppsForUser` cross-tenant memberships, for the Studio switcher (S2.8) to consume. The only deliberately non-tenant-scoped app-listing route in the plan. | new route in `AppMembershipRoutes.java` | 60 min | ⬜ |
+| S2.11 | **(New, S2.1 review round 23 — absence census)** No automated guard exists for the "changelog migrates a genuinely empty database" rule — every test runs against the shared, already-migrated dev Postgres, so this property is enforced only by a human remembering the manual ritual that already failed once (the V0 bootstrap incident). Tolerable while S2.1 was a self-contained `CREATE TABLE`; stops being tolerable at S2.4, a **data-backfill** migration of exactly the shape that broke fresh provisioning last time. New test: create a genuinely empty, throwaway database, run the full Liquibase changelog against it via the same `Liquibase(...).update(...)` invocation `ApiServer.startJdk` uses, assert every changeset executes cleanly, then drop the throwaway database. **Must land before S2.4 despite its higher number** — task IDs are stable identifiers, not an execution-order promise (same convention as S1.16/S1.17/S3.7). | new test in `app-bana-service/src/test/java/com/appbana/server/` | 60 min | ⬜ |
 
 **Exit criteria — S2**
 - [ ] A Tenant B user not a member of Tenant A's App 2 gets 403 managing App 2; granted `member` on Tenant A's App 1, manages App 1 normally despite the tenant mismatch.
@@ -1711,6 +1712,7 @@ correction above:
 - **S2.8** [Cat. 1] The Header app switcher itself. Log in as User B, open it, confirm only User B's own apps plus any cross-tenant memberships (S2.6) appear.
 - **S2.9** [Cat. 2 — automated tests] Formalizes S2.6/S2.7's already-proven scenarios.
 - **S2.10** [Cat. 1 — same surface as S2.8] Proof is the same switcher click-through after S2.6's grant.
+- **S2.11** [Cat. 2 — CI/test-suite gate, no UI surface by nature] Proof is the test itself passing against a real throwaway database, plus a deliberate break-test (a changeset that reads a table only Java creates lazily must fail this test) before trusting it.
 
 ### S2.1 implementation
 
@@ -1730,6 +1732,41 @@ correction above:
   route yet), live/UI proof is correctly deferred to S2.3/S2.6, not attempted here.
   Next: S2.2 — `AppMembershipService` (`grant`/`revoke`/`listMembers`/`isMember`/`isOwner`/
   `listAppsForUser`).
+
+#### S2.1 review round 23 — ACCEPTED; 2 medium findings actioned
+
+- **Verdict: ACCEPTED.** V19 independently re-derived field-by-field against the S2.1 spec row and
+  confirmed to match exactly. Reviewer additionally proved two properties this task's own write-up
+  could not: (1) the changelog migrates a genuinely **empty** database (created a fresh throwaway DB,
+  rebuilt, cold-booted against it — all 20 changesets V0→V19 executed cleanly), and (2) the `CHECK`
+  constraint really rejects an invalid role (attempted `role='admin'` live — rejected by name; `role=
+  'end-user'` — accepted).
+- **Medium, fixed — the plan doc's own illustrative schema block had drifted from the shipped DDL, in
+  the fail-open direction.** `TENANT_ISOLATION_SECURITY_PLAN.md`'s "Data model additions" section still
+  showed `role VARCHAR(20) NOT NULL DEFAULT 'member'` with no `CHECK` — V19 shipped with no default and
+  a real `CHECK` instead (correctly, following `V16`'s precedent), but the divergence was unrecorded
+  while this task's own write-up said it matched "exactly." Fixed by updating the plan doc's block to
+  the shipped DDL verbatim, with a note pointing at `V19` as the source of truth going forward.
+- **Medium, registered as new task S2.11, not fixed this round** — absence-census finding: no automated
+  guard exists for the "changelog migrates a genuinely empty database" rule (the same rule the V0
+  bootstrap incident violated); tolerable while S2.1 was self-contained, not tolerable once S2.4 (a
+  data-backfill migration) lands. See S2.11's own row above; must land before S2.4 despite its number.
+- **Low, no fix needed** — "431/431 unaffected" is a no-regression signal only; zero tests reference
+  `appbana_app_members` (confirmed via grep), which is expected for a Cat. 2 schema-only task and will
+  change naturally once S2.2 lands.
+- **Calibration, no action** — no FK constraints on tenant_id/app_id/user_id matches `V16`'s established
+  norm, not a lapse; `isMember`'s permissive treatment of `end-user` is correct by design (S2.6 splits
+  by capability, S2.5 keeps `isAppOwnerOrSystem` owner-or-system-only).
+- Re-verified: `EstimateReconciliationTest` + `RouteCensusTest` green after the S2.11 registration and
+  headline updates (~59.92 hr across 55 tasks). Full suite unaffected.
+  Next: S2.2 — `AppMembershipService`, carrying forward 4 items from the review: (1) write `isMember`'s
+  tests alongside the service, not after S2.6 wires it in; (2) before S2.6, inventory which S1 guards
+  silently assume one-tenant-per-user (`TenantAccessGuard.requireOwnTenant`'s path-tenant comparison and
+  S1.15's session-scoped schema listing flagged as the two to examine hardest); (3) the end-user trap —
+  `isMember` must stay permissive (any role) while `isAppOwnerOrSystem` stays owner-or-system, easy to
+  get backwards in either direction; (4) `granted_by` is `NOT NULL` with no default, so S2.4's backfill
+  must supply a value for every row, including the "ownerless-backfilled" fallback case.
+
 
 ---
 
