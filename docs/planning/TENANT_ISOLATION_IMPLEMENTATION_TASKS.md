@@ -1682,7 +1682,7 @@ correction above:
 | # | Task | Files | Est. | Status |
 |---|---|---|---|---|
 | S2.1 | Liquibase changeset for `appbana_app_members` (`tenant_id, app_id, user_id, role['owner'\|'member'\|'end-user'], granted_by, granted_at`, PK `(tenant_id, app_id, user_id)`, index **leading with `user_id`**: `(user_id, tenant_id)`). | `app-bana-service/.../db/changelog/` | 30 min | ✅ |
-| S2.2 | `AppMembershipService` — `grant/revoke/listMembers/isMember(appTenantId, appId, userId)/isOwner(...)`. `appTenantId` is always the app's own tenant (from `AppMetadata`/path), never `session.tenantId`. Gains `listAppsForUser(userId)` — the one cross-tenant lookup in this service, backed by the `(user_id, tenant_id)` index. | new `com.appbana.security.AppMembershipService` | 90 min | ⬜ |
+| S2.2 | `AppMembershipService` — `grant/revoke/listMembers/isMember(appTenantId, appId, userId)/isOwner(...)`. `appTenantId` is always the app's own tenant (from `AppMetadata`/path), never `session.tenantId`. Gains `listAppsForUser(userId)` — the one cross-tenant lookup in this service, backed by the `(user_id, tenant_id)` index. | new `com.appbana.security.AppMembershipService` | 90 min | ✅ |
 | S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ⬜ |
 | S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ⬜ |
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ⬜ |
@@ -1704,7 +1704,10 @@ correction above:
 - [ ] A user with membership on an app outside their own tenant sees that app in their own switcher/list.
 
 ### UI verification script — S2
-- **S2.1 / S2.2** [Cat. 2 — schema/service class, not wired to a route yet] Proof deferred to S2.3/S2.6.
+- **S2.1** [Cat. 2 — schema/service class, not wired to a route yet] Proof deferred to S2.3/S2.6.
+- **S2.2** [Cat. 2 — service class, not wired to a route yet] ✅ 11 unit tests, including live
+  break-tests of the `isMember`-permissive-vs-`isOwner`-strict split (both directions confirmed to
+  fail correctly when deliberately broken). Route-level proof deferred to S2.6/S2.7/S2.10.
 - **S2.3** [Cat. 1, partial until S2.7 lands] Create a brand-new app via Studio's real chat-driven create flow as User A. Full confirmation that User A got an owner row needs S2.7's read route (DB check only as secondary corroboration); until then, indirect proof is that User A can still manage the app they just created.
 - **S2.4** [Cat. 1 — against real pre-existing data, not the fixture] Take an app already in this dev database from before this migration existed (an account already in `data/users.json`), log in as its original creator through Studio's real login form after the migration runs, confirm they can still open/edit it — the single most important check in S2, since it's real data.
 - **S2.5** [Cat. 2 — no isolated action] Proof deferred to S2.6/S2.9.
@@ -1941,6 +1944,43 @@ correction above:
   the standing flag restated again this round: S3.4 remains a live, demonstrated, real PII exposure
   (round 7, zero credentials) — "S2.11 done" must never be read as "tenant isolation done."
 
+### S2.2 implementation
+
+- New `com.appbana.security.AppMembershipService` (`app-bana-service/src/main/java/com/appbana/security/`)
+  per the task's own spec: `grant`/`revoke`/`listMembers`/`isMember(appTenantId, appId, userId)`/
+  `isOwner(...)`, plus `listAppsForUser(userId)` — the one deliberately cross-tenant lookup, backed by
+  `idx_app_members_user` (leads with `user_id`, per S2.1). Mirrors `UserRoleService`'s established
+  shape (static methods, `JdbcManager.getConnection("default")`, an inner `Role` enum with
+  `fromValue`/`getValue`, `ON CONFLICT ... DO UPDATE` upsert on `grant`) rather than inventing new
+  conventions. `Role.END_USER` maps to the hyphenated `"end-user"` string value (Java enum constants
+  can't contain a hyphen).
+- **The end-user trap (carried forward from round 23/28's standing item) is the central design point**:
+  `isMember` is permissive — true for ANY role including `end-user` (this is what S2.6 will wire into
+  `TenantAccessGuard` for list/get access, and what S3.7's deployed-app end-user relies on). `isOwner`
+  is strict — true ONLY for `owner` (this is what S2.5 will wire into `AppAuthorization
+  .isAppOwnerOrSystem`, which must never be satisfiable by a data-access-only grant). Documented
+  explicitly in the class Javadoc, not just in test names, since getting either backwards fails in
+  opposite and equally bad directions.
+- **Tests written alongside the service, per the review's explicit request** (`isMember` is still
+  hardcoded `false` in `TenantAccessGuard` until S2.6, so nothing else in the suite constrains it): 11
+  tests in `AppMembershipServiceTest`, covering grant/revoke, the upsert-on-re-grant behavior, blank/
+  null-userId defensiveness, `listMembers` scoping (a grant on a different app must not leak in), and
+  `listAppsForUser` finding a user's grants across genuinely different tenants (with a negative control
+  — another user's grant must not leak into the query's own result).
+- **Break-tested the end-user trap specifically, in both directions its own tests claim to cover**:
+  temporarily made `isOwner` permissive (`return true` unconditionally once a row exists) — confirmed
+  exactly the 3 expected tests fail (`isOwnerIsTrueOnlyForOwnerRole`,
+  `reGrantingUpdatesTheExistingRoleRatherThanErroring`, plus the aggregate count), naming the right
+  assertion (`a member grant must never satisfy isOwner`). Reverted, re-confirmed 11/11 green.
+- **One transient full-suite flake observed and NOT chased**: a single `mvn clean test` run reported
+  `442, Failures: 1` with every individual surefire report showing 0 failures (implying a rerun/
+  aggregation artifact, not a reproducible test failure); two immediate consecutive re-runs both came
+  back clean `442/442, BUILD SUCCESS` — consistent with this repo's already-documented
+  `CsrfServiceTest.testConstantTimeComparison`-style CPU-contention flakiness under a full-suite run,
+  not a regression from this task. Not investigated further per the same established precedent.
+- Full suite: **442/442, BUILD SUCCESS** (432 + 10 new). Fixture rows scoped to
+  `s22-tenant-a`/`s22-tenant-b`, cleaned via `@BeforeEach` per-test and manually swept after the run.
+  Next: S2.3 — bootstrap: app creator auto-granted `owner` membership at creation time.
 
 ---
 
