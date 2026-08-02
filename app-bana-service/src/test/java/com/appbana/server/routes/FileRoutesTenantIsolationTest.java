@@ -253,4 +253,113 @@ public class FileRoutesTenantIsolationTest {
             deleteFile(fileId);
         }
     }
+
+    // ==========================================================================
+    // S1.18 — GET /api/files/{tenantId}/{appId}/{fileId} must remain reachable with
+    // ZERO credentials (SessionMiddleware now excludes this exact 3-segment shape),
+    // restoring FileRoutes.java's own always-documented anonymous design intent —
+    // while the (tenantId, appId, fileId) triple enforced by SELECT_SQL (proven at
+    // the SQL layer by the tests near the top of this file) continues to gate
+    // cross-tenant/unknown reads exactly as before. Exercised end-to-end over real
+    // HTTP (real authenticated upload, then a real zero-header download) since
+    // SessionMiddleware sits in front of the route handler entirely and the
+    // SQL-level tests above cannot exercise it.
+    // ==========================================================================
+
+    private static Map<String, Object> uploadRealFile(String session, String tenantId, String appId, String content) throws Exception {
+        Map<String, Object> body = Map.of(
+                "tenantId", tenantId,
+                "appId", appId,
+                "filename", "s1-18-real.txt",
+                "mimeType", "text/plain",
+                "contentBase64", Base64.getEncoder().encodeToString(content.getBytes())
+        );
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/files/upload"))
+                .header("Content-Type", "application/json")
+                .header("X-Session-Token", session)
+                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(body)))
+                .build();
+        HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(201, res.statusCode(), "Test fixture setup: real upload must succeed: " + res.body());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> respBody = MAPPER.readValue(res.body(), Map.class);
+        return respBody;
+    }
+
+    @Test
+    public void anonymousDownloadOfRealUploadedFileSucceeds() throws Exception {
+        String tenantId = "s118-tenantA";
+        String appId = "s118-appX";
+        String session = createTestSession("s118-owner", tenantId);
+        String content = "S1.18 anonymous download content";
+        Map<String, Object> uploaded = uploadRealFile(session, tenantId, appId, content);
+        String fileId = (String) uploaded.get("fileId");
+        try {
+            // No X-Session-Token, no Authorization, no headers at all beyond what
+            // HttpClient sends by default — exactly what a plain
+            // <a href target="_blank"> browser navigation sends.
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/api/files/" + tenantId + "/" + appId + "/" + fileId))
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> res = HTTP.send(req, HttpResponse.BodyHandlers.ofByteArray());
+            assertEquals(200, res.statusCode(),
+                    "A real file's download URL must be reachable with zero credentials — proves the " +
+                    "SessionMiddleware exclusion actually took effect, not merely that the SQL-level check allows it");
+            assertEquals(content, new String(res.body()), "The real uploaded bytes must be returned");
+            assertTrue(res.headers().firstValue("Content-Type").orElse("").contains("text/plain"),
+                    "The original mimeType must be preserved: " + res.headers().firstValue("Content-Type"));
+        } finally {
+            deleteFile(fileId);
+        }
+    }
+
+    @Test
+    public void anonymousDownloadWithWrongTenantStill404sDespiteNoSessionRequirement() throws Exception {
+        String tenantId = "s118-tenantB1";
+        String appId = "s118-appY";
+        String session = createTestSession("s118-owner2", tenantId);
+        Map<String, Object> uploaded = uploadRealFile(session, tenantId, appId, "irrelevant");
+        String fileId = (String) uploaded.get("fileId");
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/api/files/s118-attacker-tenant/" + appId + "/" + fileId))
+                    .GET()
+                    .build();
+            HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+            assertEquals(404, res.statusCode(),
+                    "Removing the session requirement must not weaken the (tenantId, appId, fileId) triple " +
+                    "check — a wrong tenant in the URL, with zero credentials, must still 404: " + res.body());
+        } finally {
+            deleteFile(fileId);
+        }
+    }
+
+    @Test
+    public void anonymousDownloadOfUnknownFileIdStill404s() throws Exception {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/files/s118-tenantZ/s118-appZ/s118-does-not-exist"))
+                .GET()
+                .build();
+        HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(404, res.statusCode(), "An unknown fileId must still 404 with zero credentials presented: " + res.body());
+    }
+
+    @Test
+    public void uploadRouteStillRequiresASessionAfterTheDownloadRouteExclusion() throws Exception {
+        // Direct proof that S1.18's new SessionMiddleware exclusion is scoped to exactly the
+        // 3-segment download shape and does not also swallow the 2-segment upload route —
+        // uploadWithoutSessionIsRejected above already proves this too; this test re-asserts it
+        // by name right next to the new exclusion's own tests, so the two are never read in
+        // isolation from each other.
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/files/upload"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(uploadBody("s118-tenantC", "s118-appC"))))
+                .build();
+        HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, res.statusCode(),
+                "POST /api/files/upload (2 segments after /api/files/) must still require a session — only the 3-segment download shape is excluded");
+    }
 }

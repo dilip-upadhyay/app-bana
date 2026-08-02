@@ -156,6 +156,23 @@ public class SessionMiddleware {
             return false;
         }
 
+        // S1.18: GET /api/files/{tenantId}/{appId}/{fileId} restores the anonymous-download
+        // design FileRoutes.java's own class Javadoc always documented. Protection there rests
+        // entirely on the (tenantId, appId, fileId) triple: fileId is a server-issued random
+        // UUID (128 bits, unguessable), and FileRoutes' SELECT_SQL returns an identical 404 for
+        // "unknown fileId" and "wrong tenant" so a probe attack learns nothing either way -- the
+        // download route never called TenantAccessGuard and a session was never part of its
+        // actual protection model. A plain <a href target="_blank"> is the only way to let a real
+        // browser preview/stream/right-click-save a file natively, and it can never carry the
+        // Authorization header this app's header-based auth needs -- so requiring a session here
+        // only ever 401s real users (FileUploadField.tsx's Preview link, StudioTableLive.tsx's
+        // Download column), never an attacker who lacks the unguessable fileId anyway. Matches
+        // exactly 3 segments after /api/files/ so it does NOT also exclude POST /api/files/upload
+        // (2 segments: "files"/"upload"), which must keep requiring a session per S1.7.
+        if (path.matches("^/api/files/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/?$")) {
+            return true;
+        }
+
         // Check if it matches the entity API pattern (/api/{tenantId}/{entityName})
         if (path.matches(ENTITY_API_PATTERN)) {
             LOG.info("[SessionMiddleware] Matched entity API pattern for: {}", path);

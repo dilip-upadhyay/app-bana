@@ -38,17 +38,18 @@ import java.util.regex.Pattern;
  *
  * GET  /api/files/{tenantId}/{appId}/{fileId}
  *   Streams the raw bytes with the original Content-Type. 404 on an unknown or cross-tenant triple.
- *
- * NOTE (corrected 2026-08-01, S1.7 review round 6): this route's path has 4 segments after /api/,
- * which does NOT match ENTITY_API_PATTERN's 2-segment max and isn't covered by any other
- * SessionMiddleware exclusion rule — contrary to what this comment previously claimed, a valid
- * session IS currently required to download a file. That's a real problem: both places that render
- * this URL (FileUploadField.tsx's "Preview" link, StudioTableLive.tsx's "Download" column) use a
- * plain <a href target="_blank">, which can never carry the Authorization header this app's
- * header-based auth model needs — so every real download click 401s today. Tracked as S1.18 in
- * TENANT_ISOLATION_IMPLEMENTATION_TASKS.md (decision needed: whitelist this route in
- * SessionMiddleware to restore anonymous access, or switch both render sites to an authenticated
- * fetch+blob-URL download); not fixed in this commit.
+ *   Remains anonymous end-to-end (S1.18: SessionMiddleware explicitly excludes this exact 3-segment
+ *   shape) — protection rests entirely on the (tenantId, appId, fileId) triple. fileId is a
+ *   server-issued random UUID (128 bits, unguessable); SELECT_SQL below returns an identical 404 for
+ *   an unknown fileId and for a wrong tenant/app, so a probe attack learns nothing either way. This
+ *   is deliberate, not an oversight: both places that render this URL (FileUploadField.tsx's
+ *   "Preview" link, StudioTableLive.tsx's "Download" column) use a plain <a href target="_blank">,
+ *   which can never carry the Authorization header this app's header-based auth model needs — so a
+ *   session requirement here could only ever 401 real users, never an attacker who lacks the
+ *   unguessable fileId anyway. (Previously broken 2026-08-01 → 2026-08-0X: SessionMiddleware had no
+ *   exclusion matching this route's 4-segment path, so it 401'd every real download click despite
+ *   this Javadoc always documenting anonymous intent — tracked and fixed as S1.18 in
+ *   TENANT_ISOLATION_IMPLEMENTATION_TASKS.md.)
  */
 public class FileRoutes {
 
