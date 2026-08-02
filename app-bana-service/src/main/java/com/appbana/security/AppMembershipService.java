@@ -164,7 +164,17 @@ public class AppMembershipService {
                 // Route through fromValue (not a raw string compare) so this agrees with listMembers
                 // on what counts as the owner role -- fromValue's equalsIgnoreCase/trim is the one
                 // parser for this column, everywhere it is read.
-                return Role.fromValue(rs.getString(1)) == Role.OWNER;
+                try {
+                    return Role.fromValue(rs.getString(1)) == Role.OWNER;
+                } catch (IllegalArgumentException e) {
+                    // Tolerate-and-log, same policy as listMembers -- an unrecognized/null role must
+                    // never THROW out of a security decision point (round 35 review, MEDIUM): a
+                    // corrupt row must degrade to "not owner", not a 500 that skips isAppOwnerOrSystem's
+                    // author-fallback check at S2.5.
+                    log.warn("[AppMembershipService] Ignoring unknown role '{}' for user '{}' in isOwner check",
+                            rs.getString(1), userId);
+                    return false;
+                }
             }
         } catch (SQLException e) {
             log.error("[AppMembershipService] Failed to check ownership for user '{}': {}", userId, e.getMessage(), e);

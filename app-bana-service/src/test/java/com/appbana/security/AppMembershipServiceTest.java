@@ -173,18 +173,41 @@ public class AppMembershipServiceTest {
         assertTrue(AppMembershipService.isOwner(TENANT_A, APP_1, "user1"));
     }
 
+    /**
+     * Round 35 review, MEDIUM (residual of round 33's under-specified HIGH): the tenant_id half of
+     * listMembers' scope predicate was untested -- proven by a mutation making it vacuous while this
+     * test stayed green. A grant under the same app id but a DIFFERENT tenant must not be visible.
+     */
     @Test
     public void listMembersReturnsEveryGrantForOneApp() {
         AppMembershipService.grant(TENANT_A, APP_1, "user1", AppMembershipService.Role.OWNER, "admin");
         AppMembershipService.grant(TENANT_A, APP_1, "user2", AppMembershipService.Role.MEMBER, "admin");
         // A grant on a DIFFERENT app must not appear in APP_1's listing.
         AppMembershipService.grant(TENANT_A, APP_2, "user3", AppMembershipService.Role.OWNER, "admin");
+        // A grant under the same app id but a DIFFERENT tenant must not appear either.
+        AppMembershipService.grant(TENANT_B, APP_1, "other-tenant-user", AppMembershipService.Role.OWNER, "admin");
 
         List<AppMembershipService.Member> members = AppMembershipService.listMembers(TENANT_A, APP_1);
 
         assertEquals(2, members.size());
-        assertTrue(members.stream().anyMatch(m -> m.userId().equals("user1") && m.role() == AppMembershipService.Role.OWNER));
+        assertTrue(members.stream().anyMatch(m -> m.userId().equals("user1") && m.role() == AppMembershipService.Role.OWNER
+                && m.grantedBy().equals("admin")));
         assertTrue(members.stream().anyMatch(m -> m.userId().equals("user2") && m.role() == AppMembershipService.Role.MEMBER));
+        assertFalse(members.stream().anyMatch(m -> m.userId().equals("other-tenant-user")),
+                "a grant scoped to TENANT_B must not appear under TENANT_A, same app id");
+    }
+
+    /**
+     * Round 35 review, LOW (absence census): granted_by had zero coverage anywhere, including the
+     * blank/null -> "system" fallback that S2.4's backfill migration depends on.
+     */
+    @Test
+    public void grantWithNullGrantedByFallsBackToSystem() {
+        AppMembershipService.grant(TENANT_A, APP_1, "user1", AppMembershipService.Role.MEMBER, null);
+
+        List<AppMembershipService.Member> members = AppMembershipService.listMembers(TENANT_A, APP_1);
+
+        assertTrue(members.stream().anyMatch(m -> m.userId().equals("user1") && m.grantedBy().equals("system")));
     }
 
     /** The one deliberately cross-tenant lookup: a user's grants across DIFFERENT tenants' apps. */
