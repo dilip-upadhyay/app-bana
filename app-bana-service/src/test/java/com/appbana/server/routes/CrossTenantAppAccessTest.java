@@ -41,6 +41,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * that stays owned by S2.9's {@code CrossTenantMembershipAllowsAccessTest}, since
  * {@code TenantAccessGuard}'s membership branch ships permanently inert until S2.6 wires
  * {@code AppMembershipService.isMember} in.
+ *
+ * <p>Unauthenticated (401): 9 of these 18 routes are {@code /appbana-studio/*}-shaped, so that 401
+ * actually comes from {@code SessionMiddleware} (not excluded from session enforcement), not
+ * {@code TenantAccessGuard}; the guard's own 401 branch is exercised by the other 9,
+ * {@code /api/{tenantId}/apps/*}-shaped routes. Confirmed by live-probing the real backend's
+ * response bodies, which differ per layer (S1.11 review round 4) — both denials are correct,
+ * this is a defense-in-depth note, not a gap.
  */
 public class CrossTenantAppAccessTest {
 

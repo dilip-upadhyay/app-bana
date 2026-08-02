@@ -137,7 +137,7 @@ item needed for either, just flagged here as what to double check when S1.2/S1.1
 - [x] Tenant B session gets 403 (not 404/200) on every `AppRoutes`/`SchemaRoutes` route the census lists against Tenant A, including `restore-schemas`, `DELETE /schema/{name}`, and (review round 1, H1) `GET /schema` (tenant-filtered) and `GET /schema/{name}` (ownership check) — S1.15.
 - [x] `GET /api/endpoints` and `GET /openapi.json` require a resolved identity unconditionally, not only when `authEnabled(cfg)` is true (review round 2, S1.16).
 - [x] `SchemaRoutes.java`'s two remaining `authEnabled(cfg)` wrappers (`POST /schema`, `DELETE /schema/{name}`) are deleted and the file's `AuthEnabledAntiPatternTest.BASELINE` entry is removed entirely, not set to `0` (review round 3, S1.17).
-- [x] No resolved identity → 401, distinct from a wrong-tenant 403 (S1.11 — proven across all 18 `CrossTenantAppAccessTest`-covered `AppRoutes` routes plus `CrossTenantSchemaAccessTest`'s schema read/delete).
+- [x] No resolved identity → 401, distinct from a wrong-tenant 403 (S1.11 — proven across all 18 `CrossTenantAppAccessTest`-covered `AppRoutes` routes plus `CrossTenantSchemaAccessTest`'s schema read/delete). **Layer split (S1.11 review round 4, live-probed against the running backend, not inferred from code):** of these 20 unauthenticated-401 assertions, 11 are actually answered by `SessionMiddleware`, not `TenantAccessGuard` — the 9 `/appbana-studio/*`-shaped `AppRoutes` routes (`isExcludedPath` does not exclude this prefix) plus both `/schema/{name}` routes, GET and DELETE (`/schema` is unconditionally excluded from every carve-out). Only the remaining 9 `/api/{tenantId}/apps/*`-shaped `AppRoutes` routes are genuinely answered by `TenantAccessGuard`'s own 401 branch — this criterion still holds for those 9. Not a correctness gap: two independent denying layers is real defense-in-depth, and the guard's 401 branch remains covered.
 - [x] `GET /api/debug/schemas` requires the same session as `/names`.
 - [x] Neither `GET /api/debug/schemas` nor `GET /api/debug/schemas/names` discloses cross-tenant schema data to any authenticated account, not just to anonymous callers (external review of S1.15/S1.16/S1.17, S1.19).
 - [x] `POST/PUT/DELETE /api/templates` require an authenticated admin identity.
@@ -1193,6 +1193,52 @@ browser click-through covering only a subset (get by id, bare tenant list).
   Next: S1.12/S1.13/S1.14/S1.18 remain independent and open — no explicit go-ahead given yet for any
   of these. S1.11's positive (membership) case remains deliberately deferred to S2.9's
   `CrossTenantMembershipAllowsAccessTest`, per the S1.10 review round 2 sequencing note.
+
+### Post-acceptance external review of S1.11 (round 1) — accepted, two documentation fixes actioned
+
+- **Verdict: accepted, no code changes requested.** Reviewer independently re-verified the route
+  census (21 guarded `AppRoutes.java` registrations = 18 tested here + 3 covered elsewhere, read
+  `AppRoutesTenantIsolationTest` directly rather than trusting the exclusion list), confirmed the 4
+  tenant-guarded handlers outside `AppRoutes` (`FileRoutes` x1, `SavedViewRoutes` x3) already have
+  their own dedicated tests, reproduced the full suite at 417/417, and confirmed the branch was in
+  sync with `origin/feature/tenant-security`. Praised the owner-admits loop's `assertNotEquals`
+  design and the isolate-before-blaming-the-new-test judgment call on the `ReleaseService` leak.
+- 🟡 **Finding, fixed — the S1 exit-criteria bullet overstated what S1.11 proved about the 401 case.**
+  Reviewer live-probed the running backend (not just reasoned about it) and found the unauthenticated
+  401 on 11 of the 20 assertions this task makes actually comes from `SessionMiddleware`, not
+  `TenantAccessGuard`: the 9 `/appbana-studio/*`-shaped `AppRoutes` routes (`isExcludedPath` doesn't
+  exclude that prefix) and both `/schema/{name}` routes (`/schema` is unconditionally excluded from
+  every carve-out). Only the 9 `/api/{tenantId}/apps/*`-shaped routes are genuinely answered by the
+  guard's own 401 branch. Not a correctness bug — two independent denying layers is real
+  defense-in-depth, and the guard's branch is still covered by those 9 — purely a doc-accuracy gap,
+  the same L802/S1.9 lesson ("a matching status code alone never proves which layer fired")
+  recurring at the exit-criteria-bullet level instead of a test-assertion level. **Fixed**: amended
+  the exit-criteria bullet above with the layer split, and added a one-line Javadoc note to both
+  `CrossTenantAppAccessTest` and `CrossTenantSchemaAccessTest` recording which layer answers the
+  unauthenticated case for which path shape, so the next reader doesn't have to re-derive it.
+- 🟡 **Finding, fixed — `SessionMiddleware.java`'s own comment was provably false.** A stale note
+  above `APP_RUNTIME_API_PATTERN` claimed `/appbana-studio/*` is "currently public for development" —
+  false today (confirmed by the same live probe: it 401s without a session). Pre-existing, not
+  introduced by S1.11, but S1.11 is what made the truth greppable. Corrected the comment to state the
+  real current behavior rather than deleting it outright, since it still answers "why isn't this
+  prefix in `EXCLUDED_PATHS`" for a future reader.
+- 🟢 **Praise, no action requested** — the owner-admits loop's `assertNotEquals(401)`/
+  `assertNotEquals(403)` design (rather than `assertEquals(200)`) makes the two loops mutually
+  validating (a bad/mistyped path 404s, failing the 403 loop too — proving all 18 are real, live,
+  tenant-discriminating routes), and correctly refusing to ship a `@Disabled` placeholder for the
+  positive membership case.
+- 🟢 **Nit, no action requested** — leftover fixture tables (`APP_T_S111_SCHEMA_VICTIM_*`) match this
+  repo's established practice (661 pre-existing `APP_*` tables, 21 from other tests' fixtures).
+  Separately, a possible `dropTable=true` no-op on `SchemaRoutes`' delete path was flagged as worth a
+  glance sometime — out of S1.11's scope, not investigated, not registered as a task.
+- No test/behavioral code changed this round (2 Javadoc additions + 1 stale code comment + tracker-doc
+  text) — confirmed via `mvn -pl app-bana-service -am -DskipTests compile` → `BUILD SUCCESS` rather
+  than a full test re-run, since nothing but comments/docs changed.
+  Next: reviewer flagged S1.12/S1.13/S1.14/S1.18 as open with no ordering preference and asked to
+  confirm with the user before picking one — do not assume an order. Separately (for the **user**,
+  not actionable by an agent alone): S2.6 is where four deferred decisions converge AND where the
+  tenant-per-user premise every S1 guard rests on stops holding — flagged as needing a fresh
+  principal-by-guard walk when picked up, not a routine single-task review.
 
 ---
 

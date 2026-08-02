@@ -61,8 +61,8 @@ public class SessionMiddleware {
     // Example: /api/{tenantId}/apps/{appId}/env/{env}/full
     private static final String APP_RUNTIME_API_PATTERN = "^/api/[^/]+/apps/.*";
 
-    // Note: /appbana-studio/* is currently public for development. Enable
-    // authentication in production.
+    // Note: /appbana-studio/* is NOT excluded above, so it requires a valid
+    // session like any other route (verified live, S1.11 review round 4).
 
     /**
      * Create session validation middleware.

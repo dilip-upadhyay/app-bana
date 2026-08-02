@@ -28,6 +28,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * own completeness, and — the real gap this task closes — adds the first automated coverage of
  * {@code DELETE /schema/{name}}'s ownership check, which S1.4 only ever proved via a live, manual
  * HTTP call against a running backend, never as a JUnit test.
+ *
+ * <p>Unauthenticated (401) on both routes here actually comes from {@code SessionMiddleware}, not
+ * {@code TenantAccessGuard} — {@code /schema} is unconditionally excluded from every carve-out in
+ * {@code SessionMiddleware.isExcludedPath}, so a sessionless request never reaches
+ * {@code SchemaRoutes.java}'s own code at all. Confirmed by live-probing the real backend
+ * (S1.11 review round 4).
  */
 public class CrossTenantSchemaAccessTest {
 
