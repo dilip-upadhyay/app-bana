@@ -71,6 +71,21 @@ public class AppMembershipService {
     public record Member(String userId, Role role, String grantedBy) {
     }
 
+    /**
+     * Tolerate-and-log parse (round 37 review, MEDIUM): {@code null} on an unrecognized or {@code
+     * NULL} role instead of throwing, structurally shared by every reader so the policy can't drift
+     * or silently revert to strict at one call site. {@link Role#fromValue} keeps throwing -- that
+     * strict contract is still correct for callers that want it.
+     */
+    static Role parseRoleOrTolerate(String rawRole, String userId) {
+        try {
+            return Role.fromValue(rawRole);
+        } catch (IllegalArgumentException e) {
+            log.warn("[AppMembershipService] Ignoring unknown role '{}' for user '{}'", rawRole, userId);
+            return null;
+        }
+    }
+
     public static void grant(String appTenantId, String appId, String userId, Role role, String grantedBy) {
         Objects.requireNonNull(appTenantId, "appTenantId required");
         Objects.requireNonNull(appId, "appId required");
@@ -161,20 +176,7 @@ public class AppMembershipService {
                 if (!rs.next()) {
                     return false;
                 }
-                // Route through fromValue (not a raw string compare) so this agrees with listMembers
-                // on what counts as the owner role -- fromValue's equalsIgnoreCase/trim is the one
-                // parser for this column, everywhere it is read.
-                try {
-                    return Role.fromValue(rs.getString(1)) == Role.OWNER;
-                } catch (IllegalArgumentException e) {
-                    // Tolerate-and-log, same policy as listMembers -- an unrecognized/null role must
-                    // never THROW out of a security decision point (round 35 review, MEDIUM): a
-                    // corrupt row must degrade to "not owner", not a 500 that skips isAppOwnerOrSystem's
-                    // author-fallback check at S2.5.
-                    log.warn("[AppMembershipService] Ignoring unknown role '{}' for user '{}' in isOwner check",
-                            rs.getString(1), userId);
-                    return false;
-                }
+                return parseRoleOrTolerate(rs.getString(1), userId) == Role.OWNER;
             }
         } catch (SQLException e) {
             log.error("[AppMembershipService] Failed to check ownership for user '{}': {}", userId, e.getMessage(), e);
@@ -196,13 +198,8 @@ public class AppMembershipService {
             ps.setString(2, appId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    Role role;
-                    try {
-                        role = Role.fromValue(rs.getString(2));
-                    } catch (IllegalArgumentException e) {
-                        // An unrecognized role value must not sink the whole listing.
-                        log.warn("[AppMembershipService] Ignoring unknown role '{}' for user '{}'",
-                                rs.getString(2), rs.getString(1));
+                    Role role = parseRoleOrTolerate(rs.getString(2), rs.getString(1));
+                    if (role == null) {
                         continue;
                     }
                     members.add(new Member(rs.getString(1), role, rs.getString(3)));
@@ -234,11 +231,8 @@ public class AppMembershipService {
             ps.setString(1, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    Role role;
-                    try {
-                        role = Role.fromValue(rs.getString(3));
-                    } catch (IllegalArgumentException e) {
-                        log.warn("[AppMembershipService] Ignoring unknown role '{}' for user '{}'", rs.getString(3), userId);
+                    Role role = parseRoleOrTolerate(rs.getString(3), userId);
+                    if (role == null) {
                         continue;
                     }
                     grants.add(new MembershipGrant(rs.getString(1), rs.getString(2), role));

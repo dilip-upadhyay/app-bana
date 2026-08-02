@@ -1962,7 +1962,7 @@ correction above:
   explicitly in the class Javadoc, not just in test names, since getting either backwards fails in
   opposite and equally bad directions.
 - **Tests written alongside the service, per the review's explicit request** (`isMember` is still
-  hardcoded `false` in `TenantAccessGuard` until S2.6, so nothing else in the suite constrains it): 11
+  hardcoded `false` in `TenantAccessGuard` until S2.6, so nothing else in the suite constrains it): 10
   tests in `AppMembershipServiceTest`, covering grant/revoke, the upsert-on-re-grant behavior, blank/
   null-userId defensiveness, `listMembers` scoping (a grant on a different app must not leak in), and
   `listAppsForUser` finding a user's grants across genuinely different tenants (with a negative control
@@ -1971,7 +1971,11 @@ correction above:
   temporarily made `isOwner` permissive (`return true` unconditionally once a row exists) — confirmed
   exactly the 3 expected tests fail (`isOwnerIsTrueOnlyForOwnerRole`,
   `reGrantingUpdatesTheExistingRoleRatherThanErroring`, plus the aggregate count), naming the right
-  assertion (`a member grant must never satisfy isOwner`). Reverted, re-confirmed 11/11 green.
+  assertion (`a member grant must never satisfy isOwner`). Reverted, re-confirmed 10/10 green.
+
+  *(Round 37 review: this count was previously misstated as 11 despite the full-suite arithmetic below
+  already implying 10 — corrected against source, `git show 9d1f3fd:...AppMembershipServiceTest.java`
+  has exactly 10 `@Test` methods.)*
 - **One transient full-suite flake observed and NOT chased**: a single `mvn clean test` run reported
   `442, Failures: 1` with every individual surefire report showing 0 failures (implying a rerun/
   aggregation artifact, not a reproducible test failure); two immediate consecutive re-runs both came
@@ -1997,6 +2001,8 @@ correction above:
   (`(tenant_id = ? OR TRUE) AND (app_id = ? OR TRUE) AND user_id = ?` in `isMember`, `isOwner`, AND
   `revoke` simultaneously) and confirmed all 5 new tests now fail on precisely the assertion the
   mutation should break; reverted, re-confirmed 15/15 green. Class is now 15 tests (10 + 5).
+  *(Round 37 correction: this was later 16 tests after round-35's `listMembers` tenant-scope fix and
+  448/448 after round-36 — see the round-35/36 response section below.)*
 - **MEDIUM fixed — dropped the test's hand-declared `appbana_app_members` DDL**: deleted
   `AppMembershipServiceTest`'s `@BeforeAll setUpDb()` entirely. The class now relies solely on V19
   (Liquibase), which S2.11 already proves applies to a genuinely empty database — re-declaring the
@@ -2022,6 +2028,48 @@ correction above:
   be inverted when S2.5/S2.6 wire the service in; `granted_by`'s `NOT NULL`-no-default (handled today
   by `grant()`'s `"system"` default, S2.4's backfill must supply a real value for every row it writes).
   Standing flag, unchanged: S3.4 remains a live, demonstrated, real PII exposure (round 7, zero
+  credentials) — "S2.2 done" is not "tenant isolation done."
+
+### S2.2 review round 35/36/37 responses
+
+- **Round 35 (MEDIUM, fixed in round 36)** — routing `isOwner` through `Role.fromValue` (round 33's
+  own fix) also changed it from never-throws to throws on an unrecognized/`NULL` role, since the
+  `catch` only caught `SQLException`. Proven live: seeded `role='administrator'` and `role=NULL` rows
+  after temporarily dropping the CHECK/`NOT NULL`, `isOwner` threw on both while `listMembers`/
+  `listAppsForUser` tolerated — three different unknown-value policies on one column, and the strict
+  one gated a security decision S2.5 depends on (a throw would skip S2.5's planned `getAuthor()`
+  fallback: 500 instead of graceful degrade). **Fixed**: `isOwner` caught `IllegalArgumentException`
+  and returned `false`, matching the other two readers.
+- **Round 35 (residual MEDIUM, fixed in round 36)** — `listMembers`' `tenant_id` predicate was already
+  correct SQL but untested (round 33's HIGH named only `isMember`/`isOwner`/`revoke`, not "every scope
+  predicate"). **Fixed**: added a cross-tenant grant + negative assertion to
+  `listMembersReturnsEveryGrantForOneApp`.
+- **Round 35 (LOW, fixed in round 36)** — `granted_by` had zero test coverage, including the `system`
+  fallback S2.4's backfill depends on. **Fixed**: asserted `Member.grantedBy` plus a new
+  `grantWithNullGrantedByFallsBackToSystem` test. Round 36 full suite: **448/448** (447 + 1 new test
+  method — the other two round-36 fixes extended existing tests).
+- **Round 37 (MEDIUM, fixed)** — round 36's `isOwner` fix had zero standing coverage of its own, and
+  neither did `listMembers`/`listAppsForUser`'s pre-existing tolerate-and-log branches: reverting any
+  one of the three catches back to rethrow left the suite green, so the whole tolerate-and-log policy
+  on this column was unconstrained by tests and re-verified only by hand, live, three rounds running.
+  **Fixed**: extracted a single package-private `parseRoleOrTolerate(rawRole, userId)` helper used by
+  all three readers, pinned by two plain no-DB unit tests
+  (`parseRoleOrTolerateReturnsNullForUnrecognizedOrNullRoleInsteadOfThrowing`,
+  `...ReturnsTheParsedRoleForARecognizedValue`) — no constraint surgery needed anymore. This also
+  removed the double `rs.getString(1)` re-read inside `isOwner`'s catch block that round 37 flagged as
+  a (currently latent) `nit`.
+- **Round 37 (LOW, fixed)** — only the `null` half of `grant()`'s `granted_by` fallback was tested; a
+  blank string satisfies V19's `NOT NULL` and would silently store `''`. **Fixed**: added
+  `grantWithBlankGrantedByFallsBackToSystem`.
+- **Round 37 (LOW, fixed — this section)** — round 36's work had no durable record in this tracker
+  (this section) and the round-33 section above still read 15/16 and 442+5, both now corrected.
+- Full suite: **451/451, BUILD SUCCESS** (448 + 3 new: 1 blank-`granted_by` test, 2 `parseRoleOrTolerate`
+  unit tests) via `mvn -pl app-bana-service clean test`, aggregated from `target/surefire-reports/
+  TEST-*.xml` (44 classes, 0 failures/errors/skipped). All new/changed assertions re-verified via the
+  reviewer's own mutations before trusting them; all mutations reverted.
+  Next: **S2.3** — bootstrap: app creator auto-granted `owner` membership at creation time. Standing
+  flag, unchanged: `PermissionServiceTest` still reports `tests=0` with a green build (S3.8, not a
+  regression, still open). S3.4 remains a live, demonstrated, real PII exposure (round 7, zero
   credentials) — "S2.2 done" is not "tenant isolation done."
 
 ---

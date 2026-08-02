@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -208,6 +209,33 @@ public class AppMembershipServiceTest {
         List<AppMembershipService.Member> members = AppMembershipService.listMembers(TENANT_A, APP_1);
 
         assertTrue(members.stream().anyMatch(m -> m.userId().equals("user1") && m.grantedBy().equals("system")));
+    }
+
+    /** Round 37 review, LOW: only the null half of the fallback was tested; a blank string satisfies
+     * V19's NOT NULL and would silently store "" without this test. */
+    @Test
+    public void grantWithBlankGrantedByFallsBackToSystem() {
+        AppMembershipService.grant(TENANT_A, APP_1, "user1", AppMembershipService.Role.MEMBER, "");
+
+        List<AppMembershipService.Member> members = AppMembershipService.listMembers(TENANT_A, APP_1);
+
+        assertTrue(members.stream().anyMatch(m -> m.userId().equals("user1") && m.grantedBy().equals("system")));
+    }
+
+    /**
+     * Round 37 review, MEDIUM: the tolerate-and-log policy shared by isOwner/listMembers/
+     * listAppsForUser is now one structural helper, pinned here with a plain no-DB unit test rather
+     * than relying on live constraint-surgery probes every round.
+     */
+    @Test
+    public void parseRoleOrTolerateReturnsNullForUnrecognizedOrNullRoleInsteadOfThrowing() {
+        assertNull(AppMembershipService.parseRoleOrTolerate("administrator", "some-user"));
+        assertNull(AppMembershipService.parseRoleOrTolerate(null, "some-user"));
+    }
+
+    @Test
+    public void parseRoleOrTolerateReturnsTheParsedRoleForARecognizedValue() {
+        assertEquals(AppMembershipService.Role.OWNER, AppMembershipService.parseRoleOrTolerate("owner", "some-user"));
     }
 
     /** The one deliberately cross-tenant lookup: a user's grants across DIFFERENT tenants' apps. */
