@@ -6,6 +6,7 @@
 target/
 build/
 dist/
+bin/
 *.jar
 *.class
 
