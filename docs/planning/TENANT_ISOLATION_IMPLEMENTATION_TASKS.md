@@ -1685,7 +1685,7 @@ correction above:
 | S2.2 | `AppMembershipService` — `grant/revoke/listMembers/isMember(appTenantId, appId, userId)/isOwner(...)`. `appTenantId` is always the app's own tenant (from `AppMetadata`/path), never `session.tenantId`. Gains `listAppsForUser(userId)` — the one cross-tenant lookup in this service, backed by the `(user_id, tenant_id)` index. | new `com.appbana.security.AppMembershipService` | 90 min | ✅ |
 | S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ✅ |
 | S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ✅ |
-| S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ⬜ |
+| S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ✅ |
 | S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). **Reminder (S1.10 review round 2): activating this exception is what unblocks `CrossTenantMembershipAllowsAccessTest` (written in S2.9), which finishes S1.11's deliberately-deferred positive case** — no new work for S2.6 itself, just don't lose the dependency when scoping S2.9. | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ⬜ |
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ⬜ |
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ⬜ |
@@ -2138,6 +2138,28 @@ correction above:
 - Full suite: **452/452 BUILD SUCCESS** (count unchanged — no new `@Test` methods, only assertions
   added to existing setup). `MigrationAppliesToEmptyDatabaseTest` 1/1 with V20.
   Next: **S2.5** — make `AppAuthorization.isAppOwnerOrSystem` membership-aware.
+  Standing flags: `PermissionServiceTest` still `tests=0` (S3.8); S3.4 live PII exposure.
+
+### S2.5 implementation
+
+- `AppAuthorization.isAppOwnerOrSystem` (S2.5): `AppMembershipService.listMembers(tenantId, appId)` is
+  called first; if the list is non-empty, it is authoritative and the caller is allowed only if they
+  hold `Role.OWNER`. If the list is empty (pre-S2.4 safety net), falls back to reading the `author`
+  column directly from `appbana_apps` via JDBC (not `AppManager.getApp()`, which requires
+  `json_metadata` to be populated — not guaranteed for apps inserted via bare SQL in some tests).
+  `"system"` / null / blank are fast-path checks unchanged from the original.
+- **Core contract verified by test** `membershipExistsDoesNotFallBackToAuthorField`: an app's author
+  user who holds only `MEMBER` (not `OWNER`) in the membership table is denied management rights —
+  the author field is not consulted once the membership table has any row for the app.
+- New test class `AppAuthorizationTest` (9 tests): owner grants ownership; MEMBER/END_USER do not;
+  non-owner caller denied even when another user is owner; membership-exists prevents author-fallback;
+  no-membership falls back to author; no-membership mismatch returns false; system/null/blank fast
+  paths.
+- Full suite: **461/461 BUILD SUCCESS** (452 + 9 new `AppAuthorizationTest` tests), 45 classes,
+  0 failures/errors/skipped. `RoleRoutesSecurityTest` (uses `AppManager.createApp()` directly, no
+  membership row → fallback path) and `SchemaRoutesTenantIsolationTest` (creates apps via HTTP
+  route → S2.3 grant fires → membership path) both pass unchanged.
+  Next: **S2.6** — complete `TenantAccessGuard.requireOwnTenant` by wiring `isMember`.
   Standing flags: `PermissionServiceTest` still `tests=0` (S3.8); S3.4 live PII exposure.
 
 ---
