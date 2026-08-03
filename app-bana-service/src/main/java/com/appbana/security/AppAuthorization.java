@@ -64,4 +64,39 @@ public final class AppAuthorization {
         }
         return false;
     }
+
+    /**
+     * S2.6: gate for {@code AppRoutes} management/destructive routes (update/delete and the
+     * release-management family) once {@link TenantAccessGuard#requireOwnTenant}'s membership
+     * exception admits a cross-tenant caller past the tenant gate. Deliberately NOT the same check
+     * as {@link #isAppOwnerOrSystem} — that stays owner-or-system-only (S2.5) so a data-access-only
+     * grant can never satisfy the maker-checker/role-management call sites it guards. This method
+     * instead preserves the pre-S2 same-tenant trust model (a same-tenant caller with no membership
+     * row at all is still admitted, exactly as before S2 existed) while adding exactly one new
+     * restriction: a caller who holds an explicit {@code end-user} row for this specific app is
+     * denied management rights regardless of tenant, because that role is a data-access-only grant
+     * by design (S2.6 spec, {@code TENANT_ISOLATION_IMPLEMENTATION_TASKS.md}).
+     *
+     * <p>Returns true when: caller is {@code "system"}; OR caller has no membership row for this
+     * app (no row => nothing to restrict, same as before S2); OR caller's row is {@code owner} or
+     * {@code member}. Returns false only when caller's row is explicitly {@code end-user} (or the
+     * check itself fails open-to-false on error, matching {@link #isAppOwnerOrSystem}'s posture).
+     */
+    public static boolean isManagerOrSystem(String tenantId, String appId, String callerUserId) {
+        if ("system".equalsIgnoreCase(callerUserId)) {
+            return true;
+        }
+        if (callerUserId == null || callerUserId.isBlank()) {
+            return false;
+        }
+        try {
+            List<AppMembershipService.Member> members = AppMembershipService.listMembers(tenantId, appId);
+            return members.stream()
+                    .filter(m -> m.userId().equals(callerUserId))
+                    .noneMatch(m -> m.role() == AppMembershipService.Role.END_USER);
+        } catch (Exception e) {
+            LOG.warn("[AppAuthorization] Failed to check manager rights for ({}, {}): {}", tenantId, appId, e.getMessage());
+        }
+        return false;
+    }
 }

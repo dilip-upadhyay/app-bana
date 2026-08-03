@@ -24,10 +24,11 @@ import java.util.Objects;
  *   <li>(1) 401 if no session resolves at all — distinct from a wrong-tenant 403 (fixes M7).</li>
  *   <li>(2) Allow if the resolved session's {@code tenantId} matches {@code pathTenantId}.</li>
  *   <li>(3) If {@code pathAppId} is present, allow anyway when the caller is a member of that
- *       specific app despite the tenant mismatch (review round 4, R4-1). This branch ships
- *       permanently inert in S1 — {@link #isMember} always returns false until S2.6 wires
- *       {@code AppMembershipService.isMember(...)} into this exact method, rather than adding a
- *       second, parallel check.</li>
+ *       specific app despite the tenant mismatch (review round 4, R4-1). Active since S2.6:
+ *       {@link #isMember} wires {@code AppMembershipService.isMember(...)} in directly, admitting
+ *       ANY membership role (owner/member/end-user alike) — this branch only gets a principal past
+ *       the tenant gate for app-scoped read routes; management/destructive routes additionally
+ *       require {@code AppAuthorization.isManagerOrSystem} on top, which excludes {@code end-user}.</li>
  *   <li>(4) Otherwise 403.</li>
  * </ol>
  */
@@ -101,12 +102,13 @@ public final class TenantAccessGuard {
     }
 
     /**
-     * S1 membership-exception hook (review round 4, R4-1) — permanently inert until S2.6, which
-     * replaces this body by wiring {@code AppMembershipService.isMember(appTenantId, appId, userId)}
-     * in directly, rather than layering a second, parallel check elsewhere. Do not implement this
-     * ahead of S2's membership table (S2.1/S2.2) — there is nothing real to consult yet.
+     * S2.6: wires {@link AppMembershipService#isMember} in directly — this is what activates check
+     * (3) above for every guard built on top of it (was permanently inert, review round 4, R4-1,
+     * until this task). {@code appTenantId} here is {@code pathTenantId} from the caller above,
+     * which is always the app's own tenant (from the path), never {@code session.tenantId} — the
+     * membership table's PK requires the app's real tenant, not the caller's.
      */
     private static boolean isMember(String appTenantId, String appId, String userId) {
-        return false;
+        return AppMembershipService.isMember(appTenantId, appId, userId);
     }
 }

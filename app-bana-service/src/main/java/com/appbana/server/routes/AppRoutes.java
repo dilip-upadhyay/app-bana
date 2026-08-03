@@ -10,6 +10,7 @@ import com.appbana.model.AppMetadata;
 import com.appbana.model.AppVersion;
 import com.appbana.model.DeploymentResult;
 import com.appbana.model.TenantContext;
+import com.appbana.security.AppAuthorization;
 import com.appbana.security.AppMembershipService;
 import com.appbana.security.TenantAccessGuard;
 import com.appbana.service.AppPublishService;
@@ -44,6 +45,23 @@ public class AppRoutes {
         return ctx != null ? ctx.getTenantId() : DEFAULT_TENANT;
     }
 
+    /**
+     * S2.6: gate for management/destructive routes, applied on top of (never instead of)
+     * {@link TenantAccessGuard#requireOwnTenant}. Writes a 403 and returns true when the caller
+     * holds an explicit {@code end-user} row on this app — the only case
+     * {@link AppAuthorization#isManagerOrSystem} rejects. Callers: check
+     * {@code TenantAccessGuard.requireOwnTenant} first as always; only call this after that
+     * passes, so a 401/403 from the tenant gate itself is never masked by this one.
+     */
+    private static boolean denyIfNotManager(Router.HttpRequest req, Router.HttpResponse res, String tenantId, String appId) {
+        String callerUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
+        if (!AppAuthorization.isManagerOrSystem(tenantId, appId, callerUserId)) {
+            res.json(403, Map.of("error", "Forbidden: end-user membership does not permit app management"));
+            return true;
+        }
+        return false;
+    }
+
     public static void register(Router router) {
         ReleaseService releaseService = new ReleaseService();
         String dataDir = Optional.ofNullable(System.getProperty("appbana.dataDir")).orElse("./data");
@@ -68,6 +86,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
 
             if (envParam == null || envParam.isBlank()) {
                 res.json(400, Map.of("error", "env query parameter required (DEV, SIT, or PROD)"));
@@ -165,6 +184,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
 
             try {
                 LOG.info("[LOCAL-DEPLOY] Starting LOCAL deployment for app {} (tenant: {})", appId, tenantId);
@@ -222,6 +242,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
 
             try {
                 Map<String, String> body = req.readJson(new TypeReference<>() {});
@@ -255,6 +276,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
 
             try {
                 Map<String, Object> body = req.readJson(new TypeReference<>() {});
@@ -289,6 +311,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
             try {
                 Map<String, String> body = req.readJson(new TypeReference<>() {
                 });
@@ -341,6 +364,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
             try {
                 String env = "PROD";
 
@@ -402,6 +426,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
             String env = req.query("env");
             if (env == null)
                 env = "DEV";
@@ -641,6 +666,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
             try {
                 AppMetadata updates = req.readJson(new TypeReference<AppMetadata>() {
                 });
@@ -667,6 +693,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
             try {
                 boolean deleted = AppManager.deleteApp(tenantId, appId);
                 if (!deleted) {
@@ -721,6 +748,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
             try {
                 Map<String, Object> workflow = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
@@ -775,6 +803,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
             try {
                 Map<String, Object> page = req.readJson(new TypeReference<Map<String, Object>>() {
                 });
@@ -800,6 +829,7 @@ public class AppRoutes {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
+            if (denyIfNotManager(req, res, tenantId, appId)) return;
             try {
                 boolean deleted = AppManager.deletePage(tenantId, appId, pageId);
                 if (!deleted) {

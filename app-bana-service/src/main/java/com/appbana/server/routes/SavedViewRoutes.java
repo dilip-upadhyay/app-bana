@@ -62,6 +62,15 @@ public class SavedViewRoutes {
             "WHERE tenant_id = ? AND app_id = ? AND entity_key = ? " +
             "ORDER BY is_default DESC, name ASC";
 
+    // S2.6 decision (S1.8 round-1 forward note, `TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`): saved
+    // views are deliberately tenant/app-shared, NOT filtered by owner_user_id. Now that S2.6 wires
+    // the membership exception in, a second app member really can list this app's views — that is
+    // the intended behavior, not a leak: `is_default` only makes sense as a concept if a view can be
+    // the shared default for everyone viewing that entity, and there is no product surface (no
+    // "private view" toggle in the runtime UI) that ever asked for per-user visibility. DELETE stays
+    // owner-only (see DELETE_SQL below) — sharing a view for everyone to see is not the same as
+    // letting anyone but its owner remove it.
+
     private static final String LOOKUP_SQL =
             "SELECT tenant_id, app_id, owner_user_id FROM appbana_saved_views WHERE view_id = ?";
 

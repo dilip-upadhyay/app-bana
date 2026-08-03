@@ -122,4 +122,54 @@ public class AppAuthorizationTest {
         assertFalse(AppAuthorization.isAppOwnerOrSystem(TENANT, APP_ID, ""));
         assertFalse(AppAuthorization.isAppOwnerOrSystem(TENANT, APP_ID, "   "));
     }
+
+    // ── S2.6: isManagerOrSystem — the deliberately different split used to gate management/
+    // destructive AppRoutes handlers once the tenant guard's membership exception admits a
+    // cross-tenant caller. Unlike isAppOwnerOrSystem, MEMBER is allowed; unlike the pre-S2 trust
+    // model, an explicit END_USER row is the one case that must now be denied. ──────────────────
+
+    @Test
+    public void managerCheckSystemCallerAlwaysReturnsTrue() {
+        assertTrue(AppAuthorization.isManagerOrSystem(TENANT, APP_ID, "system"));
+    }
+
+    @Test
+    public void managerCheckNullOrBlankCallerReturnsFalse() {
+        assertFalse(AppAuthorization.isManagerOrSystem(TENANT, APP_ID, null));
+        assertFalse(AppAuthorization.isManagerOrSystem(TENANT, APP_ID, ""));
+    }
+
+    @Test
+    public void managerCheckNoMembershipRowPreservesPreS2TrustAndAllows() {
+        // No membership row at all for AUTHOR on this app — same-tenant callers with no explicit
+        // grant must not be newly locked out by S2.6; only an explicit end-user row denies.
+        assertTrue(AppAuthorization.isManagerOrSystem(TENANT, APP_ID, AUTHOR));
+    }
+
+    @Test
+    public void managerCheckOwnerRowAllows() {
+        AppMembershipService.grant(TENANT, APP_ID, AUTHOR, AppMembershipService.Role.OWNER, "test");
+        assertTrue(AppAuthorization.isManagerOrSystem(TENANT, APP_ID, AUTHOR));
+    }
+
+    @Test
+    public void managerCheckMemberRowAllows() {
+        AppMembershipService.grant(TENANT, APP_ID, AUTHOR, AppMembershipService.Role.MEMBER, "test");
+        assertTrue(AppAuthorization.isManagerOrSystem(TENANT, APP_ID, AUTHOR),
+                "member role must be allowed to manage — only end-user is excluded");
+    }
+
+    @Test
+    public void managerCheckEndUserRowDenies() {
+        AppMembershipService.grant(TENANT, APP_ID, AUTHOR, AppMembershipService.Role.END_USER, "test");
+        assertFalse(AppAuthorization.isManagerOrSystem(TENANT, APP_ID, AUTHOR),
+                "an explicit end-user row must never satisfy a management check, per S2.6 spec");
+    }
+
+    @Test
+    public void managerCheckEndUserRowForOneUserDoesNotDenyAnotherUserOnTheSameApp() {
+        AppMembershipService.grant(TENANT, APP_ID, OTHER, AppMembershipService.Role.END_USER, "test");
+        assertTrue(AppAuthorization.isManagerOrSystem(TENANT, APP_ID, AUTHOR),
+                "AUTHOR has no row of their own — OTHER's end-user row must not leak into AUTHOR's check");
+    }
 }

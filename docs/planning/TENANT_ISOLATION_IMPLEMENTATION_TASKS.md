@@ -1684,9 +1684,9 @@ correction above:
 | S2.1 | Liquibase changeset for `appbana_app_members` (`tenant_id, app_id, user_id, role['owner'\|'member'\|'end-user'], granted_by, granted_at`, PK `(tenant_id, app_id, user_id)`, index **leading with `user_id`**: `(user_id, tenant_id)`). | `app-bana-service/.../db/changelog/` | 30 min | ✅ |
 | S2.2 | `AppMembershipService` — `grant/revoke/listMembers/isMember(appTenantId, appId, userId)/isOwner(...)`. `appTenantId` is always the app's own tenant (from `AppMetadata`/path), never `session.tenantId`. Gains `listAppsForUser(userId)` — the one cross-tenant lookup in this service, backed by the `(user_id, tenant_id)` index. | new `com.appbana.security.AppMembershipService` | 90 min | ✅ |
 | S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ✅ |
-| S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ✅ |
+| S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author is null/blank, assign the global `"system"` sentinel as user_id (round-40 reconciliation, below — no per-tenant-admin concept exists anywhere in this codebase to assign instead) and record `granted_by = 'system-backfill'` as the audit marker identifying these rows, rather than failing the migration. | new Liquibase data migration / one-time startup task | 90 min | ✅ |
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ✅ |
-| S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). **Reminder (S1.10 review round 2): activating this exception is what unblocks `CrossTenantMembershipAllowsAccessTest` (written in S2.9), which finishes S1.11's deliberately-deferred positive case** — no new work for S2.6 itself, just don't lose the dependency when scoping S2.9. | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ⬜ |
+| S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). **Reminder (S1.10 review round 2): activating this exception is what unblocks `CrossTenantMembershipAllowsAccessTest` (written in S2.9), which finishes S1.11's deliberately-deferred positive case** — no new work for S2.6 itself, just don't lose the dependency when scoping S2.9. | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ✅ |
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ⬜ |
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ⬜ |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ⬜ |
@@ -1711,7 +1711,7 @@ correction above:
 - **S2.3** [Cat. 1, partial until S2.7 lands] Create a brand-new app via Studio's real chat-driven create flow as User A. Full confirmation that User A got an owner row needs S2.7's read route (DB check only as secondary corroboration); until then, indirect proof is that User A can still manage the app they just created.
 - **S2.4** [Cat. 1 — against real pre-existing data, not the fixture] Take an app already in this dev database from before this migration existed (an account already in `data/users.json`), log in as its original creator through Studio's real login form after the migration runs, confirm they can still open/edit it — the single most important check in S2, since it's real data.
 - **S2.5** [Cat. 2 — no isolated action] Proof deferred to S2.6/S2.9.
-- **S2.6** [Cat. 1 — the central S2 checkpoint] Grant User B `member` on App-A (mechanism per the S2.7 decision). Log in as User B: App-A appears in the switcher and opens; clicking update/delete/publish/deploy from the real Studio UI must be blocked (403) despite the grant. Repeat with an `end-user`-role grant on a second app and confirm the same read-admit/write-deny split.
+- **S2.6** [Cat. 1 — the central S2 checkpoint; code done, backend-tested; live UI click-through still pending] `isMember` is now wired live and `AppAuthorization.isManagerOrSystem` gates every management route (12 handlers) — verified via `TenantAccessGuardTest`/`AppAuthorizationTest`/`CrossTenantAppAccessTest`'s new activation smoke test (471/471 suite). Still owed, per the testing doctrine above (backend-green is not UI-verified): grant User B `member` on App-A through the real Studio, confirm App-A appears in the switcher/opens, and that update/delete/publish/deploy click through the real UI are blocked (403) for an `end-user`-role grant on a second app but allowed for `member`. No members/invite panel exists yet (S2.7), so this grant must be seeded via `AppMembershipService.grant(...)` directly until then.
 - **S2.7** [Cat. 3 — flagged; pending your decision] No members/invite panel exists anywhere in Studio today. See Testing doctrine above.
 - **S2.8** [Cat. 1] The Header app switcher itself. Log in as User B, open it, confirm only User B's own apps plus any cross-tenant memberships (S2.6) appear.
 - **S2.9** [Cat. 2 — automated tests] Formalizes S2.6/S2.7's already-proven scenarios.
@@ -2140,7 +2140,46 @@ correction above:
   Next: **S2.5** — make `AppAuthorization.isAppOwnerOrSystem` membership-aware.
   Standing flags: `PermissionServiceTest` still `tests=0` (S3.8); S3.4 live PII exposure.
 
-### S2.5 implementation
+### S2.4 review round 40 response — system-sentinel spec deviation, reconciled not fixed
+
+- **Round 40 finding (MEDIUM, re-raised in round 41 after being silently dropped for one round):**
+  V20's implementation — a single global `"system"` sentinel `user_id` plus `granted_by =
+  'system-backfill'` — deviates from this task's own row text at the time, which said "assign a
+  designated tenant-admin fallback and flag the app as `ownerless-backfilled` in a log line." Not a
+  live vulnerability (a real user id organically colliding with the literal string `"system"` was
+  checked and is not reachable through registration), but the spec and the shipped migration
+  disagreed and nobody had said why.
+- **Why this is being reconciled (spec text corrected to match the implementation) rather than
+  fixed (implementation changed to match the original spec):** V20 is an already-applied Liquibase
+  changeset — it ran against the shared dev database in the round-40 verification pass (11 apps
+  backfilled). Per this repo's own migration convention (`.github/copilot-instructions.md` §11):
+  "Never edit a changeset that has already been applied — Liquibase checksums each one; editing it
+  breaks every existing database." Editing `V20__backfill_app_memberships.sql` now is the unsafe
+  option, not the safe one, regardless of which text is "more correct."
+- **Why a global `"system"` sentinel over a "designated tenant-admin fallback"**: grepped the whole
+  codebase for a tenant-admin concept (`tenant.?[Aa]dmin`) — the only real hits are unrelated future
+  plans (`ENTERPRISE_CAPABILITIES_PLAN.md`'s SSO section) and one forward-looking note in this same
+  security plan about local dev setup; there is no `User` field, role, or table anywhere in this
+  codebase today that designates one user as "the admin of a tenant." Inventing that concept purely
+  to serve as a migration fallback value would be new product surface with no owner, no UI, and no
+  other consumer — a heavier and riskier change than a sentinel string for a one-time backfill of
+  apps whose author field was already null/blank (0 of the 11 real apps backfilled needed the
+  fallback at all — confirmed live in round 40's own verification). `"system"` is also not a novel
+  pattern introduced here: `AppMembershipService.grant()`'s own `grantedBy` parameter already falls
+  back to the literal `"system"` when null/blank (pre-dates S2.4), and `AppAuthorization
+  .isAppOwnerOrSystem`/`TenantAccessGuard`'s admit-first branch already treat `"system"` as a
+  recognized non-human caller identity throughout this codebase. Reusing an existing sentinel is
+  lower-risk than adding a new, unused-anywhere-else concept.
+- **The "log a line" half of the original spec is genuinely not met** — V20 is a plain SQL migration
+  with no logging capability of its own (Liquibase SQL changesets don't have a log sink to write to
+  short of `RAISE NOTICE`, and adding one now means either a new changeset — unnecessary schema/data
+  churn for a pure observability gap — or editing V20, which is the one thing ruled out above). The
+  practical equivalent exists: `granted_by = 'system-backfill'` is queryable
+  (`SELECT * FROM appbana_app_members WHERE granted_by = 'system-backfill' AND user_id = 'system'`)
+  and identifies exactly the "author didn't resolve" rows after the fact, which is what the log line
+  was for. Recorded here as the durable, git-tracked explanation the round-40/41 reviewer asked for,
+  rather than another silent drop.
+  Next: **S2.6** — wire `AppMembershipService.isMember` into `TenantAccessGuard`.
 
 - `AppAuthorization.isAppOwnerOrSystem` (S2.5): `AppMembershipService.listMembers(tenantId, appId)` is
   called first; if the list is non-empty, it is authoritative and the caller is allowed only if they
@@ -2160,6 +2199,55 @@ correction above:
   membership row → fallback path) and `SchemaRoutesTenantIsolationTest` (creates apps via HTTP
   route → S2.3 grant fires → membership path) both pass unchanged.
   Next: **S2.6** — complete `TenantAccessGuard.requireOwnTenant` by wiring `isMember`.
+  Standing flags: `PermissionServiceTest` still `tests=0` (S3.8); S3.4 live PII exposure.
+
+### S2.6 implementation
+
+- **`TenantAccessGuard.isMember`** now delegates directly to `AppMembershipService.isMember(pathTenantId,
+  pathAppId, session.userId())` — `pathTenantId` here is always the app's own tenant (the path value,
+  never `session.tenantId`), exactly per the S2.2-era contract. This activates check (3) in
+  `requireOwnTenant`'s check order for every route already wired to the guard by S1.3 — no route file
+  needed a new guard call, only what a passing membership row now means changed.
+- **New `AppAuthorization.isManagerOrSystem(tenantId, appId, callerUserId)`** — deliberately a
+  *different* split from `isAppOwnerOrSystem` (S2.5). Per this task's own spec, `AppRoutes`
+  update/delete and the release-management family must admit `owner` or `member` and exclude only
+  `end-user`; `isAppOwnerOrSystem` stays owner-or-system-only (S2.5, used by the maker-checker/role
+  call sites, unaffected by this task). `isManagerOrSystem` also preserves the pre-S2 same-tenant
+  trust model: a caller with **no** membership row at all for the app is still admitted (nothing to
+  restrict — this is what let every same-tenant Studio user manage every app of that tenant before S2
+  existed); only an explicit `end-user` row denies.
+- **12 `AppRoutes.java` management/destructive handlers** gained a `denyIfNotManager(req, res,
+  tenantId, appId)` call immediately after `TenantAccessGuard.requireOwnTenant` (never replacing it):
+  `POST publish`, `PUT deploy/local`, `POST commits`, `POST commits/rollback`, `POST versions`,
+  `POST deploy/{versionId}`, `POST restore-schemas`, `PUT`/`DELETE` app, `PUT` workflow, `PUT`/`DELETE`
+  page. The 8 read-only routes (`GET` list/get/`.../full`/`.../env/{env}/full`/versions/pipeline/
+  workflow/page) were deliberately left untouched — `requireOwnTenant`'s now-live membership
+  exception alone is the intended full gate for them, admitting any role including `end-user`.
+- **`SavedViewRoutes.LIST_SQL` (S1.8 round-1 forward note, S2.6's own deferred item)** — resolved by
+  documentation, not a filter: added a code comment declaring saved views intentionally tenant/app-
+  shared, not per-owner. Rationale: `is_default` only means anything if a view can be a shared
+  default for every viewer of that entity, and no product surface (Studio, Runtime, ai-builder tools)
+  ever exposed a "private view" concept. `DELETE` stays owner-only (`DELETE_SQL`'s existing
+  `owner_user_id` check, S1.8) — shared-to-view is not shared-to-delete.
+- **Tests**: `TenantAccessGuardTest` gained 2 (renamed the stale "ships permanently inert" test to
+  reflect the no-row-still-denies case, added a live grant-then-assert-admitted case, plus an
+  end-user-also-admitted-past-the-tenant-gate case) — 14 total. `AppAuthorizationTest` gained 7 for
+  `isManagerOrSystem` (system; null/blank; no-row-allows; owner-allows; member-allows; end-user-
+  denies; one user's end-user row doesn't leak into another user's check on the same app) — 16 total.
+  `CrossTenantAppAccessTest` gained 1 activation smoke test proving both halves live end-to-end
+  (cross-tenant end-user admitted to `GET`, denied on `PUT`; cross-tenant member admitted to both) —
+  6 total. The full S2.9 role × route matrix is still that task's own job, not duplicated here.
+- Full suite: **471/471 BUILD SUCCESS** (461 + 10 new tests across the three classes above), 45
+  classes, 0 failures/errors/skipped. `RoleRoutesSecurityTest`/`SchemaRoutesTenantIsolationTest`/
+  `UserRoutesTest`/`ApprovalServiceTest` all pass unchanged (none of these touch `AppRoutes`'s
+  management gate).
+- **Not done this round, carried to S2.9 as a nit (round 41 reviewer, not blocking)**: no direct test
+  for a corrupt-role membership row interacting with `isManagerOrSystem` specifically — traced by
+  hand, same safe outcome as the existing corrupt-role tolerance elsewhere (`parseRoleOrTolerate`
+  skips the row, so `isManagerOrSystem` sees no row for that user and falls to the no-row-allows
+  branch, same as today's pre-existing trust model). Not exploitable through the public API (`V19`'s
+  `CHECK` blocks a corrupt role from ever being written).
+  Next: **S2.7** — `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members`.
   Standing flags: `PermissionServiceTest` still `tests=0` (S3.8); S3.4 live PII exposure.
 
 ---

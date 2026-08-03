@@ -38,10 +38,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * NOT in scope — it is admin-gated, not tenant-scoped (S1.6).
  *
  * <p>The positive (membership) case — a tenant B session that legitimately belongs to one specific
- * tenant A app — is deliberately NOT covered here. Per the S1.10 review round 2 sequencing note,
- * that stays owned by S2.9's {@code CrossTenantMembershipAllowsAccessTest}, since
- * {@code TenantAccessGuard}'s membership branch ships permanently inert until S2.6 wires
- * {@code AppMembershipService.isMember} in.
+ * tenant A app — was deliberately NOT covered here originally, per the S1.10 review round 2
+ * sequencing note, since {@code TenantAccessGuard}'s membership branch shipped permanently inert
+ * until S2.6 wired {@code AppMembershipService.isMember} in. Now that S2.6 has landed, {@link
+ * #testCrossTenantMemberIsAdmittedToReadRoutesButManagementStaysGatedByRole} is a smoke test
+ * proving the activation end-to-end; the FULL formalized suite (every route × every role) is still
+ * {@code CrossTenantMembershipAllowsAccessTest}, owned by S2.9.
  *
  * <p>Unauthenticated (401): 9 of these 18 routes are {@code /appbana-studio/*}-shaped, so that 401
  * actually comes from {@code SessionMiddleware} (not excluded from session enforcement), not
@@ -196,5 +198,40 @@ public class CrossTenantAppAccessTest {
 
         HttpResponse<String> getRes = send("GET", "/appbana-studio/" + VICTIM_TENANT + "/apps/" + APP_ID, victimOwnerSession, null);
         assertEquals(404, getRes.statusCode(), "After the owner's own real delete, the app must actually be gone");
+    }
+
+    /**
+     * S2.6 activation smoke test — the full role × route matrix is S2.9's job
+     * ({@code CrossTenantMembershipAllowsAccessTest}); this proves the two things S2.6 itself
+     * changes: (1) a cross-tenant member is now admitted past the tenant gate at all (was
+     * permanently inert pre-S2.6 — see {@link #testEveryGuardedAppRouteRejectsCrossTenantSession}
+     * above, which used an attacker with NO membership row), and (2) an end-user-role grant is
+     * still refused management rights by {@code AppAuthorization.isManagerOrSystem} despite being
+     * admitted past the tenant gate by {@code AppMembershipService.isMember}.
+     */
+    @Test
+    public void testCrossTenantMemberIsAdmittedToReadRoutesButManagementStaysGatedByRole() throws Exception {
+        String crossTenantEndUserSession = createTestSession("s111_cross_tenant_enduser", ATTACKER_TENANT);
+        AppMembershipService.grant(VICTIM_TENANT, APP_ID, "s111_cross_tenant_enduser",
+                AppMembershipService.Role.END_USER, "test-setup");
+
+        HttpResponse<String> getRes = send("GET", "/appbana-studio/" + VICTIM_TENANT + "/apps/" + APP_ID,
+                crossTenantEndUserSession, null);
+        assertEquals(200, getRes.statusCode(),
+                "end-user membership must admit a cross-tenant caller to a read route despite the tenant mismatch: " + getRes.body());
+
+        HttpResponse<String> updateRes = send("PUT", "/appbana-studio/" + VICTIM_TENANT + "/apps/" + APP_ID,
+                crossTenantEndUserSession, MAPPER.writeValueAsString(Map.of("name", "hijacked")));
+        assertEquals(403, updateRes.statusCode(),
+                "end-user membership must never satisfy the management gate, even though it passes the tenant gate");
+
+        String crossTenantMemberSession = createTestSession("s111_cross_tenant_member", ATTACKER_TENANT);
+        AppMembershipService.grant(VICTIM_TENANT, APP_ID, "s111_cross_tenant_member",
+                AppMembershipService.Role.MEMBER, "test-setup");
+
+        HttpResponse<String> memberUpdateRes = send("PUT", "/appbana-studio/" + VICTIM_TENANT + "/apps/" + APP_ID,
+                crossTenantMemberSession, MAPPER.writeValueAsString(Map.of("name", "S1.11 fixture app")));
+        assertEquals(200, memberUpdateRes.statusCode(),
+                "member role must be admitted to management routes too — only end-user is excluded: " + memberUpdateRes.body());
     }
 }
