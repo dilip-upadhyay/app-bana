@@ -1153,6 +1153,14 @@ tenant check itself.*
 | POST | `/api/tenants/{tenantId}/apps/{appId}/roles` | No (rule 1) | Yes (`extractUserId`, 401) | No (ownership-only, pre-lookup ordering; body `tenantId` explicitly discarded) | path | **none found** | app exists with caller as author/system; target entity schema exists |
 | DELETE | `/api/tenants/{tenantId}/apps/{appId}/roles` | No (rule 1) | Yes (`extractUserId`, 401) | No (ownership-only) | path | **none found** | app exists with caller as author/system; role row must exist |
 
+### AppMembershipRoutes.java (S2.7)
+
+| Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
+|---|---|---|---|---|---|---|---|
+| GET | `/api/tenants/{tenantId}/apps/{appId}/members` | No (rule 1) | Yes (`TenantAccessGuard.requireOwnTenant`, 401/403) | Yes — tenant guard, then owner-only (`isAppOwnerOrSystem`, 403; deliberately stricter than `AppRoutes`'s owner-or-member gate, S2.6) | path | **none found** — no members/invite panel exists yet (S2.7 Cat. 3) | app's own tenant matches, or caller holds a membership row on this app; caller must additionally be `owner` or `system` |
+| POST | `/api/tenants/{tenantId}/apps/{appId}/members` | No (rule 1) | Yes (`TenantAccessGuard.requireOwnTenant`, 401/403) | Yes — same as GET; body `userId`/`role` explicitly required, path `tenantId`/`appId` authoritative | path | **none found** | same as GET; accepts all 3 roles (`owner`/`member`/`end-user`) on grant |
+| DELETE | `/api/tenants/{tenantId}/apps/{appId}/members` | No (rule 1) | Yes (`TenantAccessGuard.requireOwnTenant`, 401/403) | Yes — same as GET; `userId` query param required | path + query | **none found** | same as GET |
+
 ### UserRoutes.java
 
 | Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |

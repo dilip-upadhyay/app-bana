@@ -46,6 +46,7 @@ public class RouteRegistry {
         FileRoutes.register(router);            // Phase B3: POST /api/files/upload + GET /api/files/{id}
         SavedViewRoutes.register(router);       // Phase B5: GET/POST/DELETE /api/saved-views
         RoleRoutes.register(router);            // Task C1.6: GET/POST/DELETE /api/tenants/{tenantId}/apps/{appId}/roles
+        AppMembershipRoutes.register(router);   // Task S2.7: GET/POST/DELETE /api/tenants/{tenantId}/apps/{appId}/members
         ApprovalRoutes.register(router);        // Phase C2.2: Approval state machine endpoints
         // Task C3.3: GET /api/users/me — must precede GenericEntityRoutes, whose
         // /api/{entity}/{id} wildcard would otherwise match it as entity=users, id=me.

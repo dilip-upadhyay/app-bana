@@ -52,6 +52,17 @@ public class AppRoutes {
      * {@link AppAuthorization#isManagerOrSystem} rejects. Callers: check
      * {@code TenantAccessGuard.requireOwnTenant} first as always; only call this after that
      * passes, so a 401/403 from the tenant gate itself is never masked by this one.
+     *
+     * <p><b>Deliberate asymmetry with {@code requireOwnTenant} (round-41 review nit, on record,
+     * not fixed):</b> {@code requireOwnTenant}'s check (0) admits a valid service/admin token
+     * unconditionally, before any tenant/membership logic runs. This method has no equivalent
+     * short-circuit — it resolves identity via {@link AuthService#extractUserId} the same as any
+     * other caller, so an admin-token caller impersonating a user via {@code X-User-Id} who holds
+     * an {@code end-user} row on this specific app is DENIED management, same as that impersonated
+     * user would be. This is fail-closed (can only add a denial, never open a hole) and inert
+     * under the shipped config ({@code adminToken: null}); a plain admin-token caller with no
+     * {@code X-User-Id} header still passes, since {@code isManagerOrSystem} has no membership row
+     * to deny on. Left as-is intentionally rather than adding a parallel short-circuit.
      */
     private static boolean denyIfNotManager(Router.HttpRequest req, Router.HttpResponse res, String tenantId, String appId) {
         String callerUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());

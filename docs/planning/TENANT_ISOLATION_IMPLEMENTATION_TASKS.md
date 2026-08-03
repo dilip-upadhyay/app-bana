@@ -1687,7 +1687,7 @@ correction above:
 | S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author is null/blank, assign the global `"system"` sentinel as user_id (round-40 reconciliation, below — no per-tenant-admin concept exists anywhere in this codebase to assign instead) and record `granted_by = 'system-backfill'` as the audit marker identifying these rows, rather than failing the migration. | new Liquibase data migration / one-time startup task | 90 min | ✅ |
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ✅ |
 | S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). **Reminder (S1.10 review round 2): activating this exception is what unblocks `CrossTenantMembershipAllowsAccessTest` (written in S2.9), which finishes S1.11's deliberately-deferred positive case** — no new work for S2.6 itself, just don't lose the dependency when scoping S2.9. | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ✅ |
-| S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ⬜ |
+| S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ✅ |
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ⬜ |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ⬜ |
 | S2.10 | `GET /api/users/me/apps` (or equivalent) — union of own-tenant apps + `listAppsForUser` cross-tenant memberships, for the Studio switcher (S2.8) to consume. The only deliberately non-tenant-scoped app-listing route in the plan. | new route in `AppMembershipRoutes.java` | 60 min | ⬜ |
@@ -1712,7 +1712,7 @@ correction above:
 - **S2.4** [Cat. 1 — against real pre-existing data, not the fixture] Take an app already in this dev database from before this migration existed (an account already in `data/users.json`), log in as its original creator through Studio's real login form after the migration runs, confirm they can still open/edit it — the single most important check in S2, since it's real data.
 - **S2.5** [Cat. 2 — no isolated action] Proof deferred to S2.6/S2.9.
 - **S2.6** [Cat. 1 — the central S2 checkpoint; code done, backend-tested; live UI click-through still pending] `isMember` is now wired live and `AppAuthorization.isManagerOrSystem` gates every management route (12 handlers) — verified via `TenantAccessGuardTest`/`AppAuthorizationTest`/`CrossTenantAppAccessTest`'s new activation smoke test (471/471 suite). Still owed, per the testing doctrine above (backend-green is not UI-verified): grant User B `member` on App-A through the real Studio, confirm App-A appears in the switcher/opens, and that update/delete/publish/deploy click through the real UI are blocked (403) for an `end-user`-role grant on a second app but allowed for `member`. No members/invite panel exists yet (S2.7), so this grant must be seeded via `AppMembershipService.grant(...)` directly until then.
-- **S2.7** [Cat. 3 — flagged; pending your decision] No members/invite panel exists anywhere in Studio today. See Testing doctrine above.
+- **S2.7** [Cat. 3 — resolved per the S1.6 precedent (Option (a), direct HTTP call verification only), which explicitly said "the same decision also applies to S2.7"] ✅ Done 2026-08-04: no members/invite panel exists in Studio, so verified via `AppMembershipRoutesTest`'s real HTTP-integration coverage against the running backend (owner-only gate on all 3 verbs; grant of all 3 roles including `end-user`; cross-tenant owner admitted past both the tenant gate and this route's own gate; cross-tenant non-member still 403s at the tenant gate; unauthenticated 401). See the S2.7 implementation section below for the full account.
 - **S2.8** [Cat. 1] The Header app switcher itself. Log in as User B, open it, confirm only User B's own apps plus any cross-tenant memberships (S2.6) appear.
 - **S2.9** [Cat. 2 — automated tests] Formalizes S2.6/S2.7's already-proven scenarios.
 - **S2.10** [Cat. 1 — same surface as S2.8] Proof is the same switcher click-through after S2.6's grant.
@@ -2249,6 +2249,64 @@ correction above:
   `CHECK` blocks a corrupt role from ever being written).
   Next: **S2.7** — `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members`.
   Standing flags: `PermissionServiceTest` still `tests=0` (S3.8); S3.4 live PII exposure.
+
+### S2.6 review round 41 items closed this round
+
+- **MEDIUM (blast-radius census in the S2.6 commit message was wrong)** — corrected here, not by editing the
+  already-written commit message. The true blast radius of S2.6's `TenantAccessGuard.isMember` wiring is:
+  `AppRoutes.java` (20 app-scoped handlers), `FileRoutes.handleUpload` (the sole other `requireOwnTenant`
+  caller), and `SavedViewRoutes.java` (3 handlers) — **not** `SchemaRoutes.java`. Re-verified against source
+  directly: `SchemaRoutes.java` never calls `TenantAccessGuard`/`AppMembershipService.isMember` at all — its
+  own session-tenant check plus `isAppOwnerOrSystem` (owner-only) gate every write, and `GET /schema`/`GET
+  /schema/{name}` are scoped to the caller's own tenant / owner-only respectively. **Decision, on record**: a
+  cross-tenant `member`/`end-user` can open an app's metadata via `AppRoutes` (S2.6) but cannot read its
+  entity schemas via `SchemaRoutes` — this is a real, currently-live functional gap for the cross-tenant
+  membership feature (a member can't fully use an app they were granted access to), not a security hole (it
+  fails closed). Deliberately deferred, not silently dropped: making `SchemaRoutes` membership-aware is out
+  of scope for S2 (which is about `AppRoutes`'s own tenant/ownership gate) and is not currently a named task
+  in this tracker — flagging it here as a candidate for a future S2.x/S3.x task rather than inventing one
+  unprompted. `FileRoutes.handleUpload`'s exposure (any cross-tenant member/end-user can now reach it) was
+  already read in full during round 41 and confirmed safe (pure data-plane: stores file bytes + a
+  tenant-scoped file-registry row, no control-plane side effect) — a cross-tenant-member smoke test for it
+  is added to S2.9's matrix below rather than here, since S2.9 owns the full role × route test matrix.
+- **nit (denyIfNotManager admin-token asymmetry)** — resolved documentatively rather than with a code change,
+  per the reviewer's own suggested option: `AppRoutes.denyIfNotManager`'s Javadoc now states the asymmetry
+  explicitly (no service-token short-circuit, unlike `requireOwnTenant`'s check (0); fail-closed, inert under
+  the shipped `adminToken: null` config) so it is intentional-on-record rather than an unexplained gap.
+
+### S2.7 implementation
+
+- **New `AppMembershipRoutes.java`** — `GET`/`POST`/`DELETE /api/tenants/{tenantId}/apps/{appId}/members`,
+  registered in `RouteRegistry.java` immediately after `RoleRoutes` (before `GenericEntityRoutes`'s
+  `/api/{entity}` wildcard, same reasoning as every other `/api/tenants/...` route family). Every handler
+  runs `TenantAccessGuard.requireOwnTenant` first (never skipped), then a new `denyIfNotOwner` gate calling
+  `AppAuthorization.isAppOwnerOrSystem` — deliberately the **strict**, owner-or-system-only check (S2.5),
+  not S2.6's owner-or-member `isManagerOrSystem`. Rationale, per this task's own spec and `AppMembershipRoutes`'s
+  class Javadoc: a `member` can manage an app's data/configuration (S2.6) but must never be able to add or
+  remove members — that would let a non-owner grant themselves (or an accomplice) `owner` and escalate.
+  `POST` accepts all 3 `AppMembershipService.Role` values on grant, including `end-user`; body-supplied
+  `tenantId`/`appId` are impossible to send (route path is authoritative, same shape as `RoleRoutes.handlePostRole`,
+  C1.9). `DELETE` takes `userId` as a query parameter, mirroring `SavedViewRoutes`'s query-param shape for a
+  single-resource action.
+- **Tests**: new `AppMembershipRoutesTest` (port 18098, HTTP-integration style, same pattern as
+  `CrossTenantAppAccessTest`) — 8 tests: owner can list; a `member` role gets 403 on list/grant/revoke (all
+  three verbs, not just one); owner can grant all 3 roles including `end-user`; owner can revoke a member;
+  a cross-tenant caller with no membership row at all still 403s at the tenant gate (proving this route
+  doesn't accidentally admit an unrelated foreign-tenant caller); a cross-tenant `owner`-role grant is
+  admitted past both the tenant gate (S2.6's membership exception) and this route's own owner-only gate;
+  unauthenticated request 401s; an invalid role string on grant 400s (`Role.fromValue`'s existing strict
+  throw, caught and surfaced as 400 rather than 500).
+- **Doc-consistency tests**: `RouteCensusTest`/`EstimateReconciliationTest` both require the S0.2 route
+  census in `TENANT_ISOLATION_SECURITY_PLAN.md` to list every registered route — added a new
+  `### AppMembershipRoutes.java (S2.7)` section there with the same table shape as the other route
+  families, re-ran both tests green after the addition (they failed first, exactly as designed, before the
+  census was updated — confirming they actually check what they claim to).
+- Full suite: **479/479 BUILD SUCCESS** (471 + 8 new tests in `AppMembershipRoutesTest`), 46 classes,
+  0 failures/errors/skipped — independently re-aggregated from all 46 surefire report files.
+  Standing flags carried forward: `PermissionServiceTest` still `tests=0` (S3.8, unchanged); S3.4 remains a
+  demonstrated, currently-live PII exposure reachable with zero credentials.
+  Next: **S2.8** — Studio frontend app switcher (or, if a members/invite panel is ever prioritized as
+  product scope beyond this security plan, that would consume these S2.7 routes directly).
 
 ---
 
