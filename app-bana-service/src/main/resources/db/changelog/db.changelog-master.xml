@@ -89,4 +89,8 @@
         <sqlFile path="db/migration/V19__appbana_app_members.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
+    <changeSet id="V20" author="appbana">
+        <sqlFile path="db/migration/V20__backfill_app_memberships.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
 </databaseChangeLog>

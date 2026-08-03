@@ -1684,7 +1684,7 @@ correction above:
 | S2.1 | Liquibase changeset for `appbana_app_members` (`tenant_id, app_id, user_id, role['owner'\|'member'\|'end-user'], granted_by, granted_at`, PK `(tenant_id, app_id, user_id)`, index **leading with `user_id`**: `(user_id, tenant_id)`). | `app-bana-service/.../db/changelog/` | 30 min | ✅ |
 | S2.2 | `AppMembershipService` — `grant/revoke/listMembers/isMember(appTenantId, appId, userId)/isOwner(...)`. `appTenantId` is always the app's own tenant (from `AppMetadata`/path), never `session.tenantId`. Gains `listAppsForUser(userId)` — the one cross-tenant lookup in this service, backed by the `(user_id, tenant_id)` index. | new `com.appbana.security.AppMembershipService` | 90 min | ✅ |
 | S2.3 | Bootstrap: app creator auto-granted `owner` membership at creation time (mirrors maker-checker's C1.5). | `AppRoutes.java` create handler | 30 min | ✅ |
-| S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ⬜ |
+| S2.4 | **Backfill migration** — every pre-existing app row gets an `owner` membership from `AppMetadata.getAuthor()`. Tolerate mixed numeric/string authors; where the author doesn't resolve to a real user, assign a designated tenant-admin fallback and log `ownerless-backfilled` rather than failing. | new Liquibase data migration / one-time startup task | 90 min | ✅ |
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ⬜ |
 | S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). **Reminder (S1.10 review round 2): activating this exception is what unblocks `CrossTenantMembershipAllowsAccessTest` (written in S2.9), which finishes S1.11's deliberately-deferred positive case** — no new work for S2.6 itself, just don't lose the dependency when scoping S2.9. | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ⬜ |
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ⬜ |
@@ -2113,6 +2113,32 @@ correction above:
   Studio's real chat-driven create flow. Until S2.7 adds the membership read route, indirect proof
   is that the creator can still manage the app they just created; DB confirmation via
   `SELECT * FROM appbana_app_members WHERE app_id = '<new-id>'` is the secondary corroboration.
+
+### S2.3/S2.4 review round 39 response + S2.4 implementation
+
+- **Round 39 (nit, fixed)** — DELETE in `allFourReadersTolerateACorruptRoleRowGracefully`'s `finally` block used
+  `WHERE user_id = '...'` only. **Fixed**: changed to full-PK `WHERE tenant_id = ... AND app_id = ...
+  AND user_id = ...`. No practical risk existed (unique test-specific user_id), but a precise WHERE
+  is the right standard.
+- **Round 39 (housekeeping, closed)** — No dedicated backend assertion for S2.3. **Fixed**: added
+  `DELETE FROM appbana_app_members WHERE tenant_id IN (...)` to `CrossTenantAppAccessTest.@BeforeEach`
+  so each run starts with a clean membership state for the fixture tenants, then added
+  `assertTrue(AppMembershipService.isMember(VICTIM_TENANT, APP_ID, "s111_owner"), ...)` immediately
+  after the app-creation 201 assertion. This is now a non-trivial assertion (members table is clean
+  beforehand) that fails if S2.3's grant does not fire.
+- **S2.4 (implementation)** — New Liquibase changeset **V20** (`V20__backfill_app_memberships.sql`):
+  INSERT-SELECT from `appbana_apps` WHERE no owner row exists in `appbana_app_members`, using
+  `COALESCE(NULLIF(TRIM(author), ''), 'system')` as user_id and `'system-backfill'` as granted_by
+  (the audit marker identifying rows written by this migration vs. real grants). ON CONFLICT
+  (tenant_id, app_id, user_id) DO UPDATE promotes an existing non-owner row to owner if the creator
+  had a prior membership. Scope covers all apps without an owner row, including any S2.3-orphaned
+  rows where grant() failed after createApp succeeded.
+  `MigrationAppliesToEmptyDatabaseTest` automatically expected 21 changesets (derives count from XML);
+  V20 ran cleanly on the empty-database probe (0 rows inserted, no apps yet, no error).
+- Full suite: **452/452 BUILD SUCCESS** (count unchanged — no new `@Test` methods, only assertions
+  added to existing setup). `MigrationAppliesToEmptyDatabaseTest` 1/1 with V20.
+  Next: **S2.5** — make `AppAuthorization.isAppOwnerOrSystem` membership-aware.
+  Standing flags: `PermissionServiceTest` still `tests=0` (S3.8); S3.4 live PII exposure.
 
 ---
 

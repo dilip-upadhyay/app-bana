@@ -298,7 +298,7 @@ public class AppMembershipServiceTest {
             // Restore unconditionally so a mid-test failure never leaves the schema without the constraint.
             try (Connection c = JdbcManager.getConnection("default");
                  Statement s = c.createStatement()) {
-                s.execute("DELETE FROM appbana_app_members WHERE user_id = '" + corruptUser + "'");
+                s.execute("DELETE FROM appbana_app_members WHERE tenant_id = '" + TENANT_A + "' AND app_id = '" + APP_1 + "' AND user_id = '" + corruptUser + "'");
                 s.execute("DO $$ BEGIN "
                         + "ALTER TABLE appbana_app_members ADD CONSTRAINT appbana_app_members_role_check "
                         + "CHECK (role IN ('owner', 'member', 'end-user')); "

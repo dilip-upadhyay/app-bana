@@ -2,6 +2,7 @@ package com.appbana.server.routes;
 
 import com.appbana.ApiServer;
 import com.appbana.JdbcManager;
+import com.appbana.security.AppMembershipService;
 import com.appbana.service.SessionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -76,6 +77,7 @@ public class CrossTenantAppAccessTest {
         try (Connection c = JdbcManager.getConnection("default");
              Statement s = c.createStatement()) {
             s.execute("DELETE FROM appbana_apps WHERE tenant_id IN ('" + VICTIM_TENANT + "', '" + ATTACKER_TENANT + "')");
+            s.execute("DELETE FROM appbana_app_members WHERE tenant_id IN ('" + VICTIM_TENANT + "', '" + ATTACKER_TENANT + "')");
         }
 
         victimOwnerSession = createTestSession("s111_owner", VICTIM_TENANT);
@@ -84,6 +86,9 @@ public class CrossTenantAppAccessTest {
         HttpResponse<String> appRes = send("POST", "/appbana-studio/" + VICTIM_TENANT + "/apps", victimOwnerSession,
                 MAPPER.writeValueAsString(Map.of("id", APP_ID, "name", "S1.11 fixture app", "version", "1.0.0")));
         assertEquals(201, appRes.statusCode(), "Test fixture setup: app creation must succeed: " + appRes.body());
+        // S2.3 backend coverage: creator must receive an owner membership row when their app is created.
+        assertTrue(AppMembershipService.isMember(VICTIM_TENANT, APP_ID, "s111_owner"),
+                "S2.3: creator must hold an owner membership row immediately after app creation");
 
         HttpResponse<String> pageRes = send("PUT",
                 "/appbana-studio/" + VICTIM_TENANT + "/apps/" + APP_ID + "/pages/" + PAGE_ID, victimOwnerSession,
