@@ -65,7 +65,7 @@ public class AppMembershipRoutes {
      * {@code isManagerOrSystem} — see the class Javadoc for why membership management itself must
      * stay owner-only rather than owner-or-member.
      *
-     * <p>Shares {@code denyIfNotManager}'s admin-token asymmetry (round-43 review nit, on record,
+     * <p>Shares {@code denyIfNotManager}'s admin-token asymmetry (round-44 review nit, on record,
      * not fixed): no service-token short-circuit here either, so an admin-token caller with no
      * {@code X-User-Id} is denied (fail-closed, inert under the shipped {@code adminToken: null}
      * config) — see that method's own Javadoc in {@code AppRoutes.java} for the full rationale.
@@ -141,7 +141,7 @@ public class AppMembershipRoutes {
 
             AppMembershipService.Role role = AppMembershipService.Role.fromValue(roleStr);
 
-            // S2.7 review round 43 (LOW): refuse a grant that would demote the app's only owner —
+            // S2.7 review round 44 (LOW): refuse a grant that would demote the app's only owner —
             // it would freeze membership management (this route requires an existing owner) and,
             // via isManagerOrSystem, also strip the actor's own AppRoutes management rights.
             if (role != AppMembershipService.Role.OWNER
@@ -187,7 +187,7 @@ public class AppMembershipRoutes {
             return;
         }
 
-        // S2.7 review round 43 (LOW): refuse to revoke the app's only owner — same rationale as
+        // S2.7 review round 44 (LOW): refuse to revoke the app's only owner — same rationale as
         // the demote-guard in handleGrant above.
         if (AppMembershipService.isSoleOwner(tenantId, appId, targetUserId)) {
             res.json(409, Map.of("error", "Conflict: cannot revoke the app's only owner - grant another owner first"));

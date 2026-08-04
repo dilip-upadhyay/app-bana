@@ -2308,6 +2308,40 @@ correction above:
   Next: **S2.8** — Studio frontend app switcher (or, if a members/invite panel is ever prioritized as
   product scope beyond this security plan, that would consume these S2.7 routes directly).
 
+### S2.7 review round 44 items closed (last-owner lockout guard)
+
+- **LOW (no last-owner / self-lockout protection)** — closed by adding a guard rather than documenting the
+  gap as intentionally-allowed, since a silent self-lockout (an owner revoking/demoting themselves as the
+  app's last owner) is a real footgun recoverable only by an operator. New
+  `AppMembershipService.isSoleOwner(tenantId, appId, userId)` — count-based (exactly one `owner` row) AND
+  identity-based (that row belongs to `userId`), so a second real owner can always revoke/demote the first
+  freely. `AppMembershipRoutes.handleRevoke` now 409s if the target is the sole owner; `handleGrant` now
+  409s if the grant would move the sole owner away from `owner`. 3 new tests:
+  `revokingTheSoleOwnerIsRejectedWith409` / `demotingTheSoleOwnerViaGrantIsRejectedWith409` (both assert the
+  row is actually untouched, not just the status code) and `revokingOneOfTwoOwnersSucceeds` (confirms the
+  guard doesn't over-block a legitimate second-owner action). Mutation-tested by the round-45 reviewer:
+  neutering `isSoleOwner` to always return `false` failed exactly the 2 new 409 tests with the expected-vs-
+  actual mismatch, while `revokingOneOfTwoOwnersSucceeds` correctly stayed green.
+- **nit (`denyIfNotOwner` admin-token asymmetry)** — documented only, per the reviewer's own suggested
+  option: one-line Javadoc cross-reference to `denyIfNotManager`'s existing round-41 note in
+  `AppRoutes.java`, same fail-closed/inert-under-shipped-config rationale.
+- **nit (malformed POST body → 500, not 400)** — `req.readJson(...)` is now wrapped in its own try/catch
+  translating a Jackson parse failure to 400, placed after the auth gates and before the existing
+  `userId`/`role` validation. New test `malformedJsonBodyIsRejectedWith400NotServerError`.
+- **LOW residual, deliberately deferred (round-45 reviewer, TOCTOU on the last-owner guard)** — `isSoleOwner`
+  and the caller's subsequent revoke/grant are not one transaction: two concurrent requests against a
+  2-owner app (e.g. one revoking owner A, one revoking owner B) can each observe `ownerCount == 2` and both
+  proceed, leaving zero owners — the same lockout the guard exists to prevent, via a race instead of a
+  single request. **Decision, on record**: documented as a known limitation (Javadoc on `isSoleOwner`)
+  rather than fixed now — not a security issue (no cross-tenant/privilege-escalation angle; a self-inflicted,
+  operator-recoverable availability footgun triggered only by an app's own legitimate owners racing each
+  other), and a complete fix (`SELECT ... FOR UPDATE` around check-and-mutate, or a DB-level
+  at-least-one-owner constraint) is out of S2.7's scope. Flagged for S2.9 if this initiative revisits
+  hardening, per the reviewer's own suggestion.
+- Full suite: **483/483 BUILD SUCCESS** (479 + 4 new), 46 classes, independently re-aggregated from all
+  surefire report files. Pushed to `feature/tenant-security` at commit `3e2af72`.
+  Next: **S2.8** — Studio frontend app switcher (S2.9's test matrix is the adjacent backend option).
+
 ---
 
 ## Sub-phase S3 — Entity data API enforcement

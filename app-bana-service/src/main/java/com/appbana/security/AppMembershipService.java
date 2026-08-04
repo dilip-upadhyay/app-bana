@@ -88,11 +88,23 @@ public class AppMembershipService {
     }
 
     /**
-     * S2.7 review round 43 (LOW): true when {@code userId} is the app's ONLY {@code owner} row —
+     * S2.7 review round 44 (LOW): true when {@code userId} is the app's ONLY {@code owner} row —
      * used by {@code AppMembershipRoutes} to refuse a revoke or a demoting grant that would leave
      * the app with zero owners (an operator-only-recoverable self-lockout, since every management
      * route including this one requires an existing owner). Deliberately membership-count-based,
      * not identity-based, so a second real owner can always revoke/demote the first freely.
+     *
+     * <p><b>Known limitation (round-45 review, LOW, deliberately not fixed here):</b> this check
+     * and the caller's subsequent revoke/grant are not one transaction, so two concurrent requests
+     * against a 2-owner app (e.g. one revoking owner A, one revoking owner B) can each observe
+     * {@code ownerCount == 2} and both proceed, leaving zero owners — the exact lockout this guard
+     * exists to prevent, just via a race instead of a single request. Not a security issue (no
+     * cross-tenant/privilege-escalation angle; self-inflicted, operator-recoverable availability
+     * footgun by legitimate owners), and strictly narrower than the original single-request
+     * footgun this method fully closes. A complete fix needs a transactional
+     * {@code SELECT ... FOR UPDATE} around check-and-mutate (or a DB-level constraint enforcing
+     * at least one owner per app) — deferred as out of S2.7's scope; flag for S2.9 if this
+     * initiative revisits hardening.
      */
     public static boolean isSoleOwner(String appTenantId, String appId, String userId) {
         List<Member> members = listMembers(appTenantId, appId);
