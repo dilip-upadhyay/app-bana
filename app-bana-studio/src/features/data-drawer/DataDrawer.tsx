@@ -78,8 +78,13 @@ export function DataDrawer() {
         setEntityCounts({});
       })
       .finally(() => setLoading(false));
-    // Only refetch when the drawer opens or the app changes
-  }, [dataOpen, currentApp?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Only refetch when the drawer opens or the app changes. Keyed on both id AND
+    // tenantId (not just id): app identity is (tenantId, id) — V9__app_metadata.sql's PK is
+    // (id, tenant_id) — so an id is unique only per-tenant. Without tenantId here, switching
+    // between two different-tenant apps that happen to share an id would not re-fire this
+    // effect, leaving the drawer showing the prior tenant's entity list against the new
+    // tenant's `appTenantId`-keyed lookups (review finding, S2.10 follow-up).
+  }, [dataOpen, currentApp?.id, currentApp?.tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load schema + rows for the selected entity (resets sort + page)
   useEffect(() => {

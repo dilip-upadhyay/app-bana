@@ -1692,7 +1692,7 @@ correction above:
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ✅ |
 | S2.10 | `GET /api/users/me/apps` (or equivalent) — union of own-tenant apps + `listAppsForUser` cross-tenant memberships, for the Studio switcher (S2.8) to consume. The only deliberately non-tenant-scoped app-listing route in the plan. | new route in `AppMembershipRoutes.java` | 60 min | ✅ |
 | S2.11 | **(New, S2.1 review round 23 — absence census; hazards fixed + reprioritized, round 25)** No automated guard exists for the "changelog migrates a genuinely empty database" rule — every test runs against the shared, already-migrated dev Postgres, so this property is enforced only by a human remembering the manual ritual that already failed once (the V0 bootstrap incident). Tolerable while S2.1 was a self-contained `CREATE TABLE`; stops being tolerable at S2.4, a **data-backfill** migration of exactly the shape that broke fresh provisioning last time. **Take this before S2.2** (round 25's explicit recommendation — it's the only S2 task whose value is purely preventive, and the cheapest it will ever be to write). New test: open its **own dedicated JDBC `Connection`** to a **uniquely-named, throwaway** database on the same Postgres server (raw JDBC `CREATE DATABASE`, not Testcontainers — decision below) and assert the connection is actually pointed there, never silently falling back to `JdbcManager`'s shared, already-migrated dev datasource (a fallback would make the test a no-op that proves nothing). Run **only** `liquibase.update(...)` against that connection — never copy across `ApiServer.startJdk`'s neighboring `dropAll()` branch (gated on `flywayCleanOnStart`), which has no place in a test that must never be able to wipe the real dev database. Assert every changeset executes cleanly, then drop the throwaway database — force-terminate any lingering backends first (`pg_terminate_backend`) so a run killed mid-migration doesn't leave a changelog lock or an undroppable leftover database for the next run. **Testcontainers decision (round 25 calibration)**: `app-bana-service` has no Testcontainers dependency (unlike `ai-builder`) — deliberately NOT adopted here; raw JDBC `CREATE DATABASE` against the existing dev Postgres server is simpler and keeps this task's own small scope, at the cost of needing careful unique-naming/cleanup (above). S3.8's own Testcontainers-or-delete decision for `PermissionServiceTest` is independent and unblocked by this choice either way. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 60 min | ✅ |
-| S2.12 | **(New, S2.1 review round 25 — absence census)** The S2.1 round-23 schema-block reconciliation (plan doc's "Data model additions" → `appbana_app_members`) was performed by hand and, even under maximum attention on the very round meant to fix this exact class of drift, still left cosmetic-but-real differences from `V19` (`CREATE TABLE` vs `CREATE TABLE IF NOT EXISTS`, `now()` vs `NOW()`, missing `IF NOT EXISTS` on the index) — proving by example that nothing guards this claim from recurring, unlike route census (S0.3) or estimate reconciliation (S0.5). A fail-open `DEFAULT` sat in the authoritative security plan for multiple rounds before being caught this way; that is not a cosmetic-drift risk class. New test: extract the fenced SQL block under "Data model additions", normalize (lowercase, collapse whitespace, strip `IF NOT EXISTS`), compare against `V19__appbana_app_members.sql` normalized the same way, fail on any difference. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 45–60 min | ⬜ |
+| S2.12 | **(New, S2.1 review round 25 — absence census)** The S2.1 round-23 schema-block reconciliation (plan doc's "Data model additions" → `appbana_app_members`) was performed by hand and, even under maximum attention on the very round meant to fix this exact class of drift, still left cosmetic-but-real differences from `V19` (`CREATE TABLE` vs `CREATE TABLE IF NOT EXISTS`, `now()` vs `NOW()`, missing `IF NOT EXISTS` on the index) — proving by example that nothing guards this claim from recurring, unlike route census (S0.3) or estimate reconciliation (S0.5). A fail-open `DEFAULT` sat in the authoritative security plan for multiple rounds before being caught this way; that is not a cosmetic-drift risk class. New test: extract the fenced SQL block under "Data model additions", normalize (lowercase, collapse whitespace, strip `IF NOT EXISTS`), compare against `V19__appbana_app_members.sql` normalized the same way, fail on any difference. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 45–60 min | ✅ |
 
 **Exit criteria — S2**
 - [ ] A Tenant B user not a member of Tenant A's App 2 gets 403 managing App 2; granted `member` on Tenant A's App 1, manages App 1 normally despite the tenant mismatch.
@@ -1745,7 +1745,10 @@ correction above:
   `MigrationAppliesToEmptyDatabaseTest` failed naming exactly that table (`relation
   "table_only_java_creates_lazily" does not exist`), then the changeset was reverted and the test
   re-ran green. Confirmed no leftover throwaway database either time (`pg_database` query, 0 rows).
-- **S2.12** [Cat. 2 — CI/test-suite gate, no UI surface by nature] Proof is the test failing when the plan doc's schema block is deliberately perturbed to disagree with `V19` (e.g. reverting the `CHECK` back to a `DEFAULT`), then passing again once reverted.
+- **S2.12** [Cat. 2 — CI/test-suite gate, no UI surface by nature] ✅ Done 2026-08-05: proof is the
+  test failing when the plan doc's schema block is deliberately perturbed to disagree with `V19`
+  (reverted the `CHECK` back to a `DEFAULT`), then passing again once reverted. See the S2.12
+  implementation section below for the full account.
 
 ### S2.1 implementation
 
@@ -2626,6 +2629,69 @@ route; the only client function Studio should use for app listing going forward)
 
 Next: **S2.11** — already ✅ (implemented ahead of S2.10 in an earlier round; see its own section
 above). **S2.12** remains the next open task in this sub-phase.
+
+### S2.10 review follow-up — DataDrawer dep-array hardening (LOW, non-blocking)
+
+- **Finding (reviewer, LOW, non-blocking)**: `DataDrawer.tsx`'s entity-list load effect was keyed on
+  `[dataOpen, currentApp?.id]` — `id` only, not `tenantId`. App identity is `(tenantId, id)` —
+  `V9__app_metadata.sql`'s primary key is `(id, tenant_id)` — so an `id` is unique only per-tenant, not
+  globally. `PreviewPane.tsx` already got this right: its reload effect keys on `runtimeUrl`, which
+  embeds both `tenantId` and `id`. `DataDrawer.tsx` was the one site whose reload trigger omitted
+  `tenantId`: switching between two same-`id` apps in different tenants changes `currentApp.tenantId`
+  but not `.id`, so the effect would not re-fire, leaving the drawer showing the prior tenant's entity
+  list/counts while `appTenantId` (the S2.10 fix already in place) recomputes to the new tenant on
+  render — stale/wrong-tenant keys on the next fetch. Reviewer noted reachability is near-zero via the
+  real product UX (both app-creation paths assign random UUID ids, so two switcher apps sharing an id
+  requires a UUID collision or hand-crafted API creation), hence LOW and non-blocking rather than a
+  release-blocking gap.
+- **Fix**: added `currentApp?.tenantId` to the effect's dependency array (`DataDrawer.tsx`), matching
+  `PreviewPane`'s tenant-aware reload trigger, with a comment explaining the `(tenantId, id)` identity
+  rationale so a future edit doesn't drop it again for looking redundant with `appTenantId` itself.
+- **Verification**: `pnpm exec tsc --noEmit` clean in `app-bana-studio`.
+
+Next: **S2.12** — the schema-block reconciliation test, the last open S2 task.
+
+### S2.12 implementation
+
+**Test** (`SchemaBlockReconciliationTest.java`, `app-bana-service/src/test/java/com/appbana/server/`):
+extracts the fenced ```sql``` block under the plan doc's "## Data model additions" heading (bounded by
+the next "## " heading, same start/end convention `RouteCensusTest`/`EstimateReconciliationTest` already
+use), reads `V19__appbana_app_members.sql` in full, and compares both after normalizing: strip `--` line
+comments, lowercase, strip `IF NOT EXISTS`, collapse all whitespace to single spaces.
+
+**Comments deliberately excluded from the comparison**: both documents carry their own,
+differently-worded `--` commentary explaining the same leads-with-`user_id` decision for two different
+audiences (the plan doc's security rationale vs. the migration file's implementation note). Comparing
+raw text would fail this test on every future wording tweak to either doc's prose, for zero actual
+schema drift — the same false-positive-brittleness class `EstimateReconciliationTest`'s own `(or ...)`
+tolerance already exists to avoid. Only the DDL statements themselves are compared.
+
+**Second test for non-vacuousness of the normalization itself**
+(`normalizationDoesNotMaskARealDifference`): asserts two inputs that differ only in a `DEFAULT` value
+(not comments or `IF NOT EXISTS`) still compare unequal after normalization — guards against a future
+over-eager strip in the normalizer silently collapsing every input to the same string, which would make
+the main test pass regardless of real drift.
+
+**Break-tested per the task's own pre-registered UI-verification spec** ("reverting the `CHECK` back to
+a `DEFAULT`"): temporarily changed the plan doc's `role` column from
+`VARCHAR(20) NOT NULL CHECK (role IN ('owner', 'member', 'end-user'))` to
+`VARCHAR(20) NOT NULL DEFAULT 'member'`, re-ran — failed with the exact expected diff, showing both
+normalized strings side by side (`default 'member'` vs. `check (role in (...))`), confirming the
+constraint difference is caught and not silently normalized away. Reverted; `git diff --stat` on the
+plan doc showed an empty diff, and a fresh run was 2/2 green again.
+
+**Verification**:
+- New test class: 2/2 passing on first run (confirms the round-23 hand reconciliation genuinely holds
+  once comments and `IF NOT EXISTS` are normalized away — no further doc edits were needed).
+- Break-test above confirms non-vacuousness.
+- Full `app-bana-service` suite: **529/529 BUILD SUCCESS**, 53 classes (527 baseline + 2 new), 0
+  failures, 0 errors — independently re-aggregated from every surefire report file.
+- `RouteCensusTest` (1/1) and `EstimateReconciliationTest` (2/2) both still pass — this task added no
+  route and no estimate change beyond its own checkbox flip.
+
+Full suite: **529/529 BUILD SUCCESS** (527 baseline + 2 new), 53 classes.
+This closes out sub-phase S2 — every S2.1–S2.12 task is now ✅. Next: **S3** — entity data API
+enforcement.
 
 ---
 
