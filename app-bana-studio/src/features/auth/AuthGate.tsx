@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { login, register, fetchBranding } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
+import { resetSessionScopedState } from '../../stores/sessionBoundary';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { token, setSession, clearSession } = useSessionStore();
-  const { setBranding, resetWorkspace } = useWorkspaceStore();
+  const { setBranding } = useWorkspaceStore();
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,20 +25,20 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       if (useSessionStore.getState().token) {
         setSessionExpired(true);
         clearSession();
-        // S2.8: also clear the app switcher's state (apps/currentApp/branding).
+        // S2.8/S2.8-followup: also clear every session-scoped store (app
+        // switcher's apps/currentApp/branding, chat history/attachments).
         // Without this, whoever re-authenticates next in this tab -- the same
         // user after an idle timeout, or a different user on a shared machine --
-        // would briefly see the previous session's app list/selection rendered
-        // as if it were already confirmed for them, before the fresh
-        // tenant-scoped fetch in Header's effect resolves. The switcher must
-        // only ever render a server-filtered response, never carried-over
-        // client state from a prior session.
-        resetWorkspace();
+        // would briefly see the previous session's data rendered as if it were
+        // already confirmed for them, before the fresh tenant-scoped fetches
+        // resolve. Nothing here may assume carried-over client state from a
+        // prior session is still valid.
+        resetSessionScopedState();
       }
     };
     window.addEventListener('appbana:auth:expired', handler);
     return () => window.removeEventListener('appbana:auth:expired', handler);
-  }, [clearSession, resetWorkspace]);
+  }, [clearSession]);
 
   if (token) return <>{children}</>;
 

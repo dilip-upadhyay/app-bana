@@ -3,6 +3,7 @@ import { listApps, createApp, deployApp, fetchBranding, type DeployResult } from
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useDrawerStore } from '../../stores/drawer';
+import { resetSessionScopedState } from '../../stores/sessionBoundary';
 import { SessionPicker } from '../sessions/SessionPicker';
 import { DeployResultModal } from './DeployResultModal';
 
@@ -16,7 +17,7 @@ const ENV_BADGE: Record<Env, { text: string; className: string }> = {
 
 export function Header() {
   const { token, tenantId, name, clearSession } = useSessionStore();
-  const { apps, currentApp, branding, setApps, setCurrentApp, setBranding, resetWorkspace } = useWorkspaceStore();
+  const { apps, currentApp, branding, setApps, setCurrentApp, setBranding } = useWorkspaceStore();
   const { toggleData, toggleSessions, sessionsOpen, closeAll } = useDrawerStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [appsOpen, setAppsOpen] = useState(false);
@@ -257,10 +258,11 @@ export function Header() {
               onClick={() => {
                 setMenuOpen(false);
                 clearSession();
-                // S2.8: clear the app switcher's state too, so a stale app list/
-                // selection from this session is never shown to whoever uses this
-                // browser next (see AuthGate's auth-expired path for the same fix).
-                resetWorkspace();
+                // S2.8/S2.8-followup: clear every session-scoped store too (app
+                // switcher state + chat history/attachments), so nothing from
+                // this session is ever shown to whoever uses this browser next
+                // (see AuthGate's auth-expired path for the same fix).
+                resetSessionScopedState();
                 // Defensive: nuke persisted session and hard-reload so we always
                 // land on the AuthGate login screen even if a downstream component
                 // still holds a stale reference to the previous session/app.

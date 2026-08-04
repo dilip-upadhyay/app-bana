@@ -1713,7 +1713,7 @@ correction above:
 - **S2.5** [Cat. 2 — no isolated action] Proof deferred to S2.6/S2.9.
 - **S2.6** [Cat. 1 — the central S2 checkpoint; code done, backend-tested; live UI click-through still pending] `isMember` is now wired live and `AppAuthorization.isManagerOrSystem` gates every management route (12 handlers) — verified via `TenantAccessGuardTest`/`AppAuthorizationTest`/`CrossTenantAppAccessTest`'s new activation smoke test (471/471 suite). Still owed, per the testing doctrine above (backend-green is not UI-verified): grant User B `member` on App-A through the real Studio, confirm App-A appears in the switcher/opens, and that update/delete/publish/deploy click through the real UI are blocked (403) for an `end-user`-role grant on a second app but allowed for `member`. No members/invite panel exists yet (S2.7), so this grant must be seeded via `AppMembershipService.grant(...)` directly until then.
 - **S2.7** [Cat. 3 — resolved per the S1.6 precedent (Option (a), direct HTTP call verification only), which explicitly said "the same decision also applies to S2.7"] ✅ Done 2026-08-04: no members/invite panel exists in Studio, so verified via `AppMembershipRoutesTest`'s real HTTP-integration coverage against the running backend (owner-only gate on all 3 verbs; grant of all 3 roles including `end-user`; cross-tenant owner admitted past both the tenant gate and this route's own gate; cross-tenant non-member still 403s at the tenant gate; unauthenticated 401). See the S2.7 implementation section below for the full account.
-- **S2.8** [Cat. 1] ✅ Done 2026-08-05: the switcher itself (`Header.tsx`) already rendered only
+- **S2.8** [Cat. 1] ✅ Done 2026-08-04: the switcher itself (`Header.tsx`) already rendered only
   `useWorkspaceStore().apps`, and that store is populated exclusively from
   `GET /appbana-studio/{tenantId}/apps`'s response (`AppManager.listApps`, SQL-filtered by
   `tenant_id`) — confirmed no client-side merge/union/cache of any other app list exists anywhere in
@@ -2403,6 +2403,54 @@ correction above:
   environmental gap unrelated to this change (no `OPENAI_API_KEY` configured anywhere in this
   environment), not a regression, confirmed by that spec's own health-check code requiring 8081
   independent of anything S2.8 touched.
+  Next: **S2.9** — the backend test matrix (`AppMembershipGuardTest` et al.), still open.
+
+### S2.8 review follow-up — chat-history session-leak closed (same root cause, same code path)
+
+- **Finding (reviewer, HIGH, non-blocking)**: the S2.8 fix cleared `useWorkspaceStore` on the
+  `appbana:auth:expired` no-reload recovery path, but `useChatStore` — the chat pane's `messages[]`
+  and pasted-image `attachments[]` — is exactly the same shape of in-memory Zustand singleton with no
+  `persist` middleware, and nothing cleared it on that path either. `clearMessages()` existed and was
+  already called from `SessionPicker.tsx`'s explicit "new session" action, but never from a session
+  *boundary*. Net effect: after User A's session expired and User B logged in on the same tab (no
+  reload), User B would see User A's full conversation content — not just a stale app name — until User
+  B started a new chat session. Strictly worse than the S2.8 finding itself, since conversation content
+  is frequently more sensitive than an app's display name.
+- **Root cause confirmed identical to S2.8's**: `AuthGate`'s conditional render (`if (token) return
+  <>{children}</>`) unmounts the child tree when `token` clears, which resets component-local
+  `useState` — but Zustand store state is a module-level singleton and survives unmount/remount
+  untouched. Grepped `resetWorkspace` call sites (exactly 2: `AuthGate.tsx`, `Header.tsx`) confirming
+  no third caller existed to also update, so wiring a fix into those same two sites was safe.
+- **Fix — consolidated rather than bolted on**: added `app-bana-studio/src/stores/sessionBoundary.ts`
+  exporting one `resetSessionScopedState()` that calls `useWorkspaceStore.getState().resetWorkspace()`,
+  `useChatStore.getState().stopStreaming()`, and `useChatStore.getState().clearMessages()`. Both
+  `AuthGate.tsx`'s auth-expired handler and `Header.tsx`'s Sign-out handler now call this one function
+  instead of `resetWorkspace()` directly — precisely to avoid a third session-clear site ever being
+  added later and forgetting to also reset the chat store, which is exactly how this gap survived the
+  first round. Two implementation notes worth recording:
+  - `clearMessages()` (pre-existing) already resets `attachments: []` and issues a fresh `sessionId` in
+    the same `set()` call — so the reviewer's literal suggestion to also call a separate
+    `clearAttachments()` would have been redundant; `clearMessages()` alone covers both.
+  - `stopStreaming()` is called immediately before `clearMessages()` to abort any in-flight
+    `AbortController` for a still-streaming response before the array backing it is wiped. Traced
+    `applyEvent`/`finalizeMessage`: both update `messages` via `.map()` filtered by a specific message
+    id, so a stale in-flight stream event arriving after `messages` has already been cleared is a
+    pre-existing safe no-op, not a new race introduced by ordering the clear this way.
+- **Verification**: `npx tsc --noEmit` clean in `app-bana-studio`. Extended
+  `e2e/tests/s2-8-app-switcher-session-isolation.spec.ts` with a third test: log in as User A, send a
+  distinctive chat message (renders synchronously via `addUserMessage`, before any AI Builder network
+  call — this spec still has no AI Builder dependency), dispatch `appbana:auth:expired`, log in as User
+  B, assert User A's message text has zero matches anywhere on the page. All 3 tests in the file pass
+  (`3 passed`). **Break-test performed**: temporarily commented out the two `useChatStore` calls inside
+  `resetSessionScopedState()`, re-ran just the new test — failed exactly as expected (`getByText`
+  resolved to 1 element, expected 0, showing User A's literal message text still rendered for User B);
+  reverted, re-ran all 3 tests green, `git diff` confirmed the file matches the fix as landed with no
+  break-test residue.
+- **Deferred, not forgotten (reviewer's own explicit call)**: the reviewer's accompanying "nit" —
+  proactively clearing session-scoped state on every composer submit as a self-healing invariant, not
+  just at the two known session-boundary call sites — was marked "optional, no action required" by the
+  reviewer and is intentionally not implemented here. Revisit only if a third session-clear call site
+  is ever added and shown to bypass `resetSessionScopedState()`.
   Next: **S2.9** — the backend test matrix (`AppMembershipGuardTest` et al.), still open.
 
 ---

@@ -1,5 +1,5 @@
 /**
- * S2.8 — Studio app switcher session isolation
+ * S2.8 — Studio app switcher + chat history session isolation
  *
  * Verifies:
  *   1. The app switcher renders exactly the current user's own apps — the
@@ -13,9 +13,19 @@
  *      page) so a different user re-authenticating in the same tab never
  *      briefly sees the previous user's app list/selection rendered as if
  *      the server had already confirmed it for them.
+ *   3. A previous session's chat conversation (message content/attachments)
+ *      never survives that same auth-expiry boundary either. Regression
+ *      guard for the S2.8 review follow-up: `useChatStore`'s `messages[]`
+ *      is an in-memory singleton just like `useWorkspaceStore`'s state, and
+ *      was found still leaking full conversation content across the exact
+ *      same no-reload recovery path after the app-switcher leak above was
+ *      fixed. `resetSessionScopedState()` (stores/sessionBoundary.ts) now
+ *      clears both stores from one call site.
  *
  * Prerequisites: backend 8080 and studio 5174 must be running. AI Builder is
- * NOT required — this spec never exercises chat/AI flows.
+ * NOT required — this spec never depends on receiving an AI response; the
+ * user's own message renders synchronously (`addUserMessage`) before any
+ * network call is made, which is all test 3 below needs.
  */
 import { expect, request, test } from '@playwright/test';
 
@@ -146,4 +156,41 @@ test('a previous session\u2019s app selection never survives an auth-expiry re-l
   await page.waitForTimeout(3500);
   await switcherTrigger.click();
   await expect(switcherWrapper.getByText(userA.appName)).toHaveCount(0);
+});
+
+test('a previous session\u2019s chat history never survives an auth-expiry re-login as a different user', async ({ page }) => {
+  const userA = await registerUserWithApp('s28c1');
+  if (!userA) { test.skip(true, 'Registration rate-limited — re-run after 60 min'); return; }
+  const userB = await registerUserWithApp('s28c2');
+  if (!userB) { test.skip(true, 'Registration rate-limited — re-run after 60 min'); return; }
+
+  const secretMessage = `USER-A-CONFIDENTIAL-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  await page.goto(STUDIO_URL);
+  await expect(page.getByPlaceholder('you@example.com')).toBeVisible({ timeout: 10_000 });
+  await page.getByPlaceholder('you@example.com').fill(userA.email);
+  await page.getByPlaceholder('••••••••').fill(userA.password);
+  await page.locator('button[type="submit"]').click();
+  const composer = page.getByPlaceholder('Describe your app or ask anything… (paste an image to attach)');
+  await expect(composer).toBeVisible({ timeout: 15_000 });
+
+  // useChatStore.addUserMessage() renders the bubble synchronously, before any
+  // network call to the AI Builder is made — so this assertion holds even
+  // when the AI Builder isn't running (see file header).
+  await composer.fill(secretMessage);
+  await composer.press('Enter');
+  await expect(page.getByText(secretMessage)).toBeVisible({ timeout: 5_000 });
+
+  // Same transport-level 401 recovery path as the app-switcher test above.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('appbana:auth:expired')));
+  await expect(page.getByText('Your session expired. Please sign in again to continue.')).toBeVisible({ timeout: 5_000 });
+
+  await page.getByPlaceholder('you@example.com').fill(userB.email);
+  await page.getByPlaceholder('••••••••').fill(userB.password);
+  await page.locator('button[type="submit"]').click();
+  await expect(composer).toBeVisible({ timeout: 15_000 });
+
+  // User B must never see User A's message content anywhere on the page —
+  // that would mean the chat store survived the session boundary.
+  await expect(page.getByText(secretMessage)).toHaveCount(0);
 });
