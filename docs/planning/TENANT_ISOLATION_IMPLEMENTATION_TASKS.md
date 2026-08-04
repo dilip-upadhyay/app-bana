@@ -1689,7 +1689,7 @@ correction above:
 | S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). **Reminder (S1.10 review round 2): activating this exception is what unblocks `CrossTenantMembershipAllowsAccessTest` (written in S2.9), which finishes S1.11's deliberately-deferred positive case** — no new work for S2.6 itself, just don't lose the dependency when scoping S2.9. | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ✅ |
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ✅ |
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ✅ |
-| S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ⬜ |
+| S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ✅ |
 | S2.10 | `GET /api/users/me/apps` (or equivalent) — union of own-tenant apps + `listAppsForUser` cross-tenant memberships, for the Studio switcher (S2.8) to consume. The only deliberately non-tenant-scoped app-listing route in the plan. | new route in `AppMembershipRoutes.java` | 60 min | ⬜ |
 | S2.11 | **(New, S2.1 review round 23 — absence census; hazards fixed + reprioritized, round 25)** No automated guard exists for the "changelog migrates a genuinely empty database" rule — every test runs against the shared, already-migrated dev Postgres, so this property is enforced only by a human remembering the manual ritual that already failed once (the V0 bootstrap incident). Tolerable while S2.1 was a self-contained `CREATE TABLE`; stops being tolerable at S2.4, a **data-backfill** migration of exactly the shape that broke fresh provisioning last time. **Take this before S2.2** (round 25's explicit recommendation — it's the only S2 task whose value is purely preventive, and the cheapest it will ever be to write). New test: open its **own dedicated JDBC `Connection`** to a **uniquely-named, throwaway** database on the same Postgres server (raw JDBC `CREATE DATABASE`, not Testcontainers — decision below) and assert the connection is actually pointed there, never silently falling back to `JdbcManager`'s shared, already-migrated dev datasource (a fallback would make the test a no-op that proves nothing). Run **only** `liquibase.update(...)` against that connection — never copy across `ApiServer.startJdk`'s neighboring `dropAll()` branch (gated on `flywayCleanOnStart`), which has no place in a test that must never be able to wipe the real dev database. Assert every changeset executes cleanly, then drop the throwaway database — force-terminate any lingering backends first (`pg_terminate_backend`) so a run killed mid-migration doesn't leave a changelog lock or an undroppable leftover database for the next run. **Testcontainers decision (round 25 calibration)**: `app-bana-service` has no Testcontainers dependency (unlike `ai-builder`) — deliberately NOT adopted here; raw JDBC `CREATE DATABASE` against the existing dev Postgres server is simpler and keeps this task's own small scope, at the cost of needing careful unique-naming/cleanup (above). S3.8's own Testcontainers-or-delete decision for `PermissionServiceTest` is independent and unblocked by this choice either way. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 60 min | ✅ |
 | S2.12 | **(New, S2.1 review round 25 — absence census)** The S2.1 round-23 schema-block reconciliation (plan doc's "Data model additions" → `appbana_app_members`) was performed by hand and, even under maximum attention on the very round meant to fix this exact class of drift, still left cosmetic-but-real differences from `V19` (`CREATE TABLE` vs `CREATE TABLE IF NOT EXISTS`, `now()` vs `NOW()`, missing `IF NOT EXISTS` on the index) — proving by example that nothing guards this claim from recurring, unlike route census (S0.3) or estimate reconciliation (S0.5). A fail-open `DEFAULT` sat in the authoritative security plan for multiple rounds before being caught this way; that is not a cosmetic-drift risk class. New test: extract the fenced SQL block under "Data model additions", normalize (lowercase, collapse whitespace, strip `IF NOT EXISTS`), compare against `V19__appbana_app_members.sql` normalized the same way, fail on any difference. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 45–60 min | ⬜ |
@@ -1731,7 +1731,8 @@ correction above:
   with a new `resetWorkspace()` action (clears `apps`/`currentApp`/`branding`), wired into both
   `AuthGate.tsx`'s auth-expired handler (closes the actual gap) and `Header.tsx`'s Sign-out handler
   (defense-in-depth alongside the existing hard reload). See the S2.8 implementation section below.
-- **S2.9** [Cat. 2 — automated tests] Formalizes S2.6/S2.7's already-proven scenarios.
+- **S2.9** [Cat. 2 — automated tests] ✅ Done 2026-08-05: formalizes S2.5/S2.6/S2.7's already-proven
+  scenarios as JUnit tests. See the S2.9 implementation section below for the full account.
 - **S2.10** [Cat. 1 — same surface as S2.8] Proof is the same switcher click-through after S2.6's grant.
 - **S2.11** [Cat. 2 — CI/test-suite gate, no UI surface by nature] ✅ Proved by a real break-test: a
   temporary changeset referencing a table only Java creates lazily was added to the changelog, the new
@@ -2452,6 +2453,91 @@ correction above:
   reviewer and is intentionally not implemented here. Revisit only if a third session-clear call site
   is ever added and shown to bypass `resetSessionScopedState()`.
   Next: **S2.9** — the backend test matrix (`AppMembershipGuardTest` et al.), still open.
+
+### S2.9 implementation
+
+**Investigation first (avoid duplicating S2.2/S2.5/S2.6/S2.7's existing coverage)**: read every
+existing membership-adjacent test class in full (`AppAuthorizationTest`, `AppMembershipServiceTest`,
+`AppMembershipRoutesTest`, `CrossTenantAppAccessTest`, `TenantAccessGuardTest`) plus the S2.5/S2.6/S2.7
+tracker sections and their own Javadoc cross-references, and grepped every test file for
+`AppMembershipService`/`denyIfNotManager`/`isManagerOrSystem` usage. Confirmed three real, previously
+untested gaps, all reflected in the 5 new classes below: (1) `AppMembershipService.isSoleOwner` had
+zero direct unit tests (only indirect HTTP-level proof); (2) no test proved all 4 canonical
+`isAppOwnerOrSystem` call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) are
+satisfied by a membership-only owner who is deliberately not the app's `author`; (3) no same-tenant or
+full cross-tenant HTTP-level role × route matrix existed across `AppRoutes.java`'s real 20 handlers —
+existing coverage was either unit-level (`AppAuthorizationTest`) or a 2-route cross-tenant smoke test
+(`CrossTenantAppAccessTest`, S2.6 activation check).
+
+**5 new test classes** (`app-bana-service/src/test/`, ports 18099–18102, one class has none since it's
+a pure unit test with no HTTP server):
+
+1. **`security/AppMembershipGuardTest`** (pure unit, no HTTP) — 9 tests directly exercising
+   `AppMembershipService.isSoleOwner`'s boundary conditions (0/1/2-owner apps, member/end-user rows
+   don't count, non-existent app/user), plus a **deterministic, non-flaky reproduction** of the
+   documented TOCTOU race from S2.7 round-45 (two sequential `isSoleOwner` checks against a 2-owner
+   app, both observe `ownerCount == 2` and pass, then both revokes proceed, leaving zero owners) —
+   chosen over real thread concurrency specifically to prove the documented limitation without
+   introducing flakiness.
+2. **`security/IsAppOwnerOrSystemConsultsMembershipTest`** (HTTP, port 18099) — 10 tests proving all 4
+   canonical call sites (`ApprovalService`'s 3 static helpers direct-called; `RoleRoutes` grant/revoke/
+   read-others'-roles; `SchemaRoutes` GET/POST/DELETE; `UserRoutes`'s `isAppOwner` field) are satisfied
+   by a membership-only OWNER who is **not** the app's `author` — proving the check is genuinely
+   membership-driven, not an author-fallback artifact — each paired with a negative-control outsider
+   assertion so no positive case is vacuous.
+3. **`server/routes/AppRoutesMembershipTest`** (HTTP, port 18100) — the SAME-tenant role × route
+   matrix across all 20 `AppRoutes.java` handlers (12 `denyIfNotManager`-gated management + 8
+   read-only): owner and member admitted to all 12 management routes, end-user denied all 12 with
+   exactly 403 (confirmed `denyIfNotManager` runs before any query/body validation, so the 403 can't
+   be masked by a downstream 400), all 3 roles admitted to all 8 read-only routes, and a blocked
+   end-user update attempt is confirmed to leave the app record unchanged.
+4. **`server/routes/EndUserMembershipCannotManageAppTest`** (HTTP, port 18101) — deliberately
+   **persona-centric** (one role, `end-user`, swept across route families) to complement #3's
+   **route-centric** matrix: `AppRoutes` (reads 200, writes 403), `SchemaRoutes` (all 3 verbs 403 —
+   with an explicit paired test proving a plain `member` is *also* denied here, since `SchemaRoutes`
+   uses the stricter owner-only `isAppOwnerOrSystem` unlike `AppRoutes`'s `isManagerOrSystem` — a
+   distinction worth making explicit rather than letting a reader assume schema-mgmt 403s are
+   end-user-specific), `RoleRoutes` (grant/revoke 403, but reading one's **own** workflow roles is
+   admitted regardless of app-membership role — a genuinely separate, per-entity maker/checker role
+   system, included here to show that carve-out is independent of the owner/member/end-user split),
+   and `AppMembershipRoutes` (list/grant/revoke 403).
+5. **`server/routes/CrossTenantMembershipAllowsAccessTest`** (HTTP, port 18102) — the FULL cross-tenant
+   role × route matrix explicitly deferred to this class by both `CrossTenantAppAccessTest`'s own
+   Javadoc and S2.6 round-41's review note. Extends the no-membership-denied baseline to all 20 routes
+   (`CrossTenantAppAccessTest` covered 18), proves a cross-tenant `end-user` is admitted to read-only
+   routes but denied management routes, proves a cross-tenant `member` and a cross-tenant
+   membership-only `owner` (again, not the app's `author`) are admitted to all 19 app-scoped routes,
+   and adds the `FileRoutes.handleUpload` cross-tenant-member smoke test flagged by S2.6 round-41.
+
+**Real finding while writing test #5**: an early draft asserted the bare tenant-wide
+`GET /appbana-studio/{tenantId}/apps` list route (no `{appId}` path segment) would be admitted for a
+cross-tenant member/owner-via-membership, same as the other 19 routes — it failed against the real
+running server with 403 on all three role grants. Reading `AppRoutes.java`'s own handler confirmed
+this is deliberate, not a bug: its own comment reads "Bare tenant-wide list: no pathAppId, so the S2.6
+membership exception never applies here — own-tenant only, deliberately stricter than the app-scoped
+routes below," and it calls `TenantAccessGuard.requireOwnTenant` with a `null` `pathAppId`. Fixed by
+separating this one route out of the "admitted via membership" assertions into its own dedicated test
+(`bareTenantListRouteNeverAdmitsCrossTenantCallerRegardlessOfMembershipRole`, asserting exactly the
+opposite: 403 for every membership role), rather than either silently dropping the route from coverage
+or asserting the wrong behavior against it. This is precisely the kind of gap S2.9 exists to catch —
+a route whose membership-awareness looks uniform from the outside but isn't, formalized as a test
+rather than left as tribal knowledge.
+
+**Verification**: `mvn.cmd` (not the extensionless `mvn` script — see note below) `test-compile` clean,
+then all 5 new classes run together (38 tests, 0 failures) after the fix above, then the full
+`app-bana-service` suite: **521/521, BUILD SUCCESS**, 51 classes, independently re-aggregated from every
+surefire report file (483 baseline + 38 new). `RouteCensusTest`/`EstimateReconciliationTest` both still
+pass (no routes added or removed, no task-row/estimate change beyond this row's own ⬜→✅ flip already
+reflected in the summary table above).
+
+**Environment note**: the extensionless `C:\dev\apache-maven-3.9.2\bin\mvn` script hung indefinitely
+under PowerShell's `&` call operator this round (18+ minutes, zero output, no child JVM spawned) —
+apparently Windows attempting to resolve a file with no extension via a non-interactive file-association
+path rather than executing it as a script. `mvn.cmd` in the same directory works correctly and should be
+used explicitly on this machine going forward.
+
+Full suite: **521/521 BUILD SUCCESS** (483 baseline + 38 new), 51 classes.
+Next: **S2.10** — `GET /api/users/me/apps` union route for the Studio switcher.
 
 ---
 
