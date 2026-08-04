@@ -155,4 +155,35 @@ public class AppMembershipRoutesTest {
                 MAPPER.writeValueAsString(Map.of("userId", "s27_bad_role", "role", "superadmin")));
         assertEquals(400, res.statusCode(), res.body());
     }
+
+    @Test
+    public void malformedJsonBodyIsRejectedWith400NotServerError() throws Exception {
+        HttpResponse<String> res = send("POST", membersPath(), ownerSession, "not json");
+        assertEquals(400, res.statusCode(), res.body());
+    }
+
+    @Test
+    public void revokingTheSoleOwnerIsRejectedWith409() throws Exception {
+        HttpResponse<String> res = send("DELETE", membersPath() + "?userId=s27_owner", ownerSession, null);
+        assertEquals(409, res.statusCode(), res.body());
+        assertTrue(AppMembershipService.isMember(TENANT, APP_ID, "s27_owner"), "the sole owner must not actually be removed");
+    }
+
+    @Test
+    public void demotingTheSoleOwnerViaGrantIsRejectedWith409() throws Exception {
+        HttpResponse<String> res = send("POST", membersPath(), ownerSession,
+                MAPPER.writeValueAsString(Map.of("userId", "s27_owner", "role", "member")));
+        assertEquals(409, res.statusCode(), res.body());
+        assertTrue(AppMembershipService.isOwner(TENANT, APP_ID, "s27_owner"), "the sole owner must still be an owner");
+    }
+
+    @Test
+    public void revokingOneOfTwoOwnersSucceeds() throws Exception {
+        AppMembershipService.grant(TENANT, APP_ID, "s27_second_owner", AppMembershipService.Role.OWNER, "test-setup");
+
+        HttpResponse<String> res = send("DELETE", membersPath() + "?userId=s27_owner", ownerSession, null);
+        assertEquals(200, res.statusCode(), res.body());
+        assertFalse(AppMembershipService.isMember(TENANT, APP_ID, "s27_owner"));
+        assertTrue(AppMembershipService.isOwner(TENANT, APP_ID, "s27_second_owner"), "the remaining owner must be untouched");
+    }
 }

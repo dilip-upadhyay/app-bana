@@ -64,6 +64,11 @@ public class AppMembershipRoutes {
      * shape but calls the strict {@link AppAuthorization#isAppOwnerOrSystem} rather than
      * {@code isManagerOrSystem} — see the class Javadoc for why membership management itself must
      * stay owner-only rather than owner-or-member.
+     *
+     * <p>Shares {@code denyIfNotManager}'s admin-token asymmetry (round-43 review nit, on record,
+     * not fixed): no service-token short-circuit here either, so an admin-token caller with no
+     * {@code X-User-Id} is denied (fail-closed, inert under the shipped {@code adminToken: null}
+     * config) — see that method's own Javadoc in {@code AppRoutes.java} for the full rationale.
      */
     private static boolean denyIfNotOwner(Router.HttpRequest req, Router.HttpResponse res, String tenantId, String appId) {
         String callerUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
@@ -116,8 +121,15 @@ public class AppMembershipRoutes {
         }
         if (denyIfNotOwner(req, res, tenantId, appId)) return;
 
+        Map<String, String> body;
         try {
-            Map<String, String> body = req.readJson(new TypeReference<>() {});
+            body = req.readJson(new TypeReference<>() {});
+        } catch (RuntimeException e) {
+            res.json(400, Map.of("error", "Malformed JSON body"));
+            return;
+        }
+
+        try {
             // Body-supplied tenantId/appId are always ignored — path values are authoritative,
             // same reasoning as RoleRoutes.handlePostRole (C1.9).
             String targetUserId = body.get("userId");
@@ -128,6 +140,16 @@ public class AppMembershipRoutes {
             }
 
             AppMembershipService.Role role = AppMembershipService.Role.fromValue(roleStr);
+
+            // S2.7 review round 43 (LOW): refuse a grant that would demote the app's only owner —
+            // it would freeze membership management (this route requires an existing owner) and,
+            // via isManagerOrSystem, also strip the actor's own AppRoutes management rights.
+            if (role != AppMembershipService.Role.OWNER
+                    && AppMembershipService.isSoleOwner(tenantId, appId, targetUserId)) {
+                res.json(409, Map.of("error", "Conflict: cannot demote the app's only owner - grant another owner first"));
+                return;
+            }
+
             String callerUserId = AuthService.extractUserId(req, com.appbana.config.ConfigManager.getConfig());
             AppMembershipService.grant(tenantId, appId, targetUserId, role, callerUserId);
 
@@ -162,6 +184,13 @@ public class AppMembershipRoutes {
         String targetUserId = req.query("userId");
         if (targetUserId == null || targetUserId.isBlank()) {
             res.json(400, Map.of("error", "userId query parameter required"));
+            return;
+        }
+
+        // S2.7 review round 43 (LOW): refuse to revoke the app's only owner — same rationale as
+        // the demote-guard in handleGrant above.
+        if (AppMembershipService.isSoleOwner(tenantId, appId, targetUserId)) {
+            res.json(409, Map.of("error", "Conflict: cannot revoke the app's only owner - grant another owner first"));
             return;
         }
 

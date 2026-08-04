@@ -87,6 +87,20 @@ public class AppMembershipService {
         }
     }
 
+    /**
+     * S2.7 review round 43 (LOW): true when {@code userId} is the app's ONLY {@code owner} row —
+     * used by {@code AppMembershipRoutes} to refuse a revoke or a demoting grant that would leave
+     * the app with zero owners (an operator-only-recoverable self-lockout, since every management
+     * route including this one requires an existing owner). Deliberately membership-count-based,
+     * not identity-based, so a second real owner can always revoke/demote the first freely.
+     */
+    public static boolean isSoleOwner(String appTenantId, String appId, String userId) {
+        List<Member> members = listMembers(appTenantId, appId);
+        long ownerCount = members.stream().filter(m -> m.role() == Role.OWNER).count();
+        return ownerCount == 1 && members.stream()
+                .anyMatch(m -> m.role() == Role.OWNER && m.userId().equals(userId));
+    }
+
     public static void grant(String appTenantId, String appId, String userId, Role role, String grantedBy) {
         Objects.requireNonNull(appTenantId, "appTenantId required");
         Objects.requireNonNull(appId, "appId required");
