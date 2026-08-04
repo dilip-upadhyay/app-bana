@@ -16,7 +16,7 @@ const ENV_BADGE: Record<Env, { text: string; className: string }> = {
 
 export function Header() {
   const { token, tenantId, name, clearSession } = useSessionStore();
-  const { apps, currentApp, branding, setApps, setCurrentApp, setBranding } = useWorkspaceStore();
+  const { apps, currentApp, branding, setApps, setCurrentApp, setBranding, resetWorkspace } = useWorkspaceStore();
   const { toggleData, toggleSessions, sessionsOpen, closeAll } = useDrawerStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [appsOpen, setAppsOpen] = useState(false);
@@ -257,6 +257,10 @@ export function Header() {
               onClick={() => {
                 setMenuOpen(false);
                 clearSession();
+                // S2.8: clear the app switcher's state too, so a stale app list/
+                // selection from this session is never shown to whoever uses this
+                // browser next (see AuthGate's auth-expired path for the same fix).
+                resetWorkspace();
                 // Defensive: nuke persisted session and hard-reload so we always
                 // land on the AuthGate login screen even if a downstream component
                 // still holds a stale reference to the previous session/app.

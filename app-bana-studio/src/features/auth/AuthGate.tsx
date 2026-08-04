@@ -5,7 +5,7 @@ import { useWorkspaceStore } from '../../stores/workspace';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { token, setSession, clearSession } = useSessionStore();
-  const { setBranding } = useWorkspaceStore();
+  const { setBranding, resetWorkspace } = useWorkspaceStore();
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,11 +24,20 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       if (useSessionStore.getState().token) {
         setSessionExpired(true);
         clearSession();
+        // S2.8: also clear the app switcher's state (apps/currentApp/branding).
+        // Without this, whoever re-authenticates next in this tab -- the same
+        // user after an idle timeout, or a different user on a shared machine --
+        // would briefly see the previous session's app list/selection rendered
+        // as if it were already confirmed for them, before the fresh
+        // tenant-scoped fetch in Header's effect resolves. The switcher must
+        // only ever render a server-filtered response, never carried-over
+        // client state from a prior session.
+        resetWorkspace();
       }
     };
     window.addEventListener('appbana:auth:expired', handler);
     return () => window.removeEventListener('appbana:auth:expired', handler);
-  }, [clearSession]);
+  }, [clearSession, resetWorkspace]);
 
   if (token) return <>{children}</>;
 

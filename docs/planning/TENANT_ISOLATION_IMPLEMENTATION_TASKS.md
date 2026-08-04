@@ -1688,7 +1688,7 @@ correction above:
 | S2.5 | Make `AppAuthorization.isAppOwnerOrSystem` membership-aware: check `appbana_app_members` first, fall back to `AppMetadata.getAuthor()` only when no membership row exists yet. All 4 call sites (`ApprovalService`, `RoleRoutes`, `SchemaRoutes`, `UserRoutes`) upgrade with no code change. `end-user` never satisfies this check. | `AppAuthorization.java` | 75 min | ✅ |
 | S2.6 | **Completes `TenantAccessGuard.requireOwnTenant`** by wiring `AppMembershipService.isMember` into the membership-exception branch S1.2 ships inert (not a second check layered after — that composition is what R4-1 found broken). Once active: `AppRoutes` list/get accept **any** membership role; update/delete/release-management (`publish`/`deploy`/`commits`/`rollback`/`versions`/`pipeline`/`restore-schemas`/`workflow`/`pages`) require `owner`/`member` and explicitly exclude `end-user`. **Also resolve the S1.8-review-flagged `SavedViewRoutes.LIST_SQL` owner-model gap** (no `owner_user_id` filter today — harmless only while tenant-per-user holds; once a second member can list the same app's views, either add an owner/is_shared filter or explicitly document saved views as tenant-shared). **Reminder (S1.10 review round 2): activating this exception is what unblocks `CrossTenantMembershipAllowsAccessTest` (written in S2.9), which finishes S1.11's deliberately-deferred positive case** — no new work for S2.6 itself, just don't lose the dependency when scoping S2.9. | `AppRoutes.java`, `TenantAccessGuard.java`, `SavedViewRoutes.java` | 60–90 min | ✅ |
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ✅ |
-| S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ⬜ |
+| S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ✅ |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ⬜ |
 | S2.10 | `GET /api/users/me/apps` (or equivalent) — union of own-tenant apps + `listAppsForUser` cross-tenant memberships, for the Studio switcher (S2.8) to consume. The only deliberately non-tenant-scoped app-listing route in the plan. | new route in `AppMembershipRoutes.java` | 60 min | ⬜ |
 | S2.11 | **(New, S2.1 review round 23 — absence census; hazards fixed + reprioritized, round 25)** No automated guard exists for the "changelog migrates a genuinely empty database" rule — every test runs against the shared, already-migrated dev Postgres, so this property is enforced only by a human remembering the manual ritual that already failed once (the V0 bootstrap incident). Tolerable while S2.1 was a self-contained `CREATE TABLE`; stops being tolerable at S2.4, a **data-backfill** migration of exactly the shape that broke fresh provisioning last time. **Take this before S2.2** (round 25's explicit recommendation — it's the only S2 task whose value is purely preventive, and the cheapest it will ever be to write). New test: open its **own dedicated JDBC `Connection`** to a **uniquely-named, throwaway** database on the same Postgres server (raw JDBC `CREATE DATABASE`, not Testcontainers — decision below) and assert the connection is actually pointed there, never silently falling back to `JdbcManager`'s shared, already-migrated dev datasource (a fallback would make the test a no-op that proves nothing). Run **only** `liquibase.update(...)` against that connection — never copy across `ApiServer.startJdk`'s neighboring `dropAll()` branch (gated on `flywayCleanOnStart`), which has no place in a test that must never be able to wipe the real dev database. Assert every changeset executes cleanly, then drop the throwaway database — force-terminate any lingering backends first (`pg_terminate_backend`) so a run killed mid-migration doesn't leave a changelog lock or an undroppable leftover database for the next run. **Testcontainers decision (round 25 calibration)**: `app-bana-service` has no Testcontainers dependency (unlike `ai-builder`) — deliberately NOT adopted here; raw JDBC `CREATE DATABASE` against the existing dev Postgres server is simpler and keeps this task's own small scope, at the cost of needing careful unique-naming/cleanup (above). S3.8's own Testcontainers-or-delete decision for `PermissionServiceTest` is independent and unblocked by this choice either way. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 60 min | ✅ |
@@ -1713,7 +1713,24 @@ correction above:
 - **S2.5** [Cat. 2 — no isolated action] Proof deferred to S2.6/S2.9.
 - **S2.6** [Cat. 1 — the central S2 checkpoint; code done, backend-tested; live UI click-through still pending] `isMember` is now wired live and `AppAuthorization.isManagerOrSystem` gates every management route (12 handlers) — verified via `TenantAccessGuardTest`/`AppAuthorizationTest`/`CrossTenantAppAccessTest`'s new activation smoke test (471/471 suite). Still owed, per the testing doctrine above (backend-green is not UI-verified): grant User B `member` on App-A through the real Studio, confirm App-A appears in the switcher/opens, and that update/delete/publish/deploy click through the real UI are blocked (403) for an `end-user`-role grant on a second app but allowed for `member`. No members/invite panel exists yet (S2.7), so this grant must be seeded via `AppMembershipService.grant(...)` directly until then.
 - **S2.7** [Cat. 3 — resolved per the S1.6 precedent (Option (a), direct HTTP call verification only), which explicitly said "the same decision also applies to S2.7"] ✅ Done 2026-08-04: no members/invite panel exists in Studio, so verified via `AppMembershipRoutesTest`'s real HTTP-integration coverage against the running backend (owner-only gate on all 3 verbs; grant of all 3 roles including `end-user`; cross-tenant owner admitted past both the tenant gate and this route's own gate; cross-tenant non-member still 403s at the tenant gate; unauthenticated 401). See the S2.7 implementation section below for the full account.
-- **S2.8** [Cat. 1] The Header app switcher itself. Log in as User B, open it, confirm only User B's own apps plus any cross-tenant memberships (S2.6) appear.
+- **S2.8** [Cat. 1] ✅ Done 2026-08-05: the switcher itself (`Header.tsx`) already rendered only
+  `useWorkspaceStore().apps`, and that store is populated exclusively from
+  `GET /appbana-studio/{tenantId}/apps`'s response (`AppManager.listApps`, SQL-filtered by
+  `tenant_id`) — confirmed no client-side merge/union/cache of any other app list exists anywhere in
+  `app-bana-studio/src/features/**`. The union with S2.10's cross-tenant `listAppsForUser` result
+  remains deferred until S2.10 itself lands (its route doesn't exist yet), as the task's own spec
+  anticipates. Verification did surface one real, unrelated gap while auditing every path that
+  populates or clears `apps`/`currentApp`: the `appbana:auth:expired` session-expiry recovery in
+  `AuthGate.tsx` (no page reload, unlike the explicit Sign-out flow, which hard-reloads specifically
+  to avoid stale references) called `clearSession()` but never cleared the `workspace` Zustand store —
+  a store, once populated, that lives on as an in-memory singleton independent of component
+  mount/unmount. A user re-authenticating through that recovery path (or a different user on a shared
+  browser tab) could see the previous session/tenant's app list and selection rendered before the
+  fresh tenant-scoped fetch resolved, i.e. exactly the "client-side stale-apps assumption" this task
+  exists to rule out, just triggered by a session boundary rather than by request-time logic. Fixed
+  with a new `resetWorkspace()` action (clears `apps`/`currentApp`/`branding`), wired into both
+  `AuthGate.tsx`'s auth-expired handler (closes the actual gap) and `Header.tsx`'s Sign-out handler
+  (defense-in-depth alongside the existing hard reload). See the S2.8 implementation section below.
 - **S2.9** [Cat. 2 — automated tests] Formalizes S2.6/S2.7's already-proven scenarios.
 - **S2.10** [Cat. 1 — same surface as S2.8] Proof is the same switcher click-through after S2.6's grant.
 - **S2.11** [Cat. 2 — CI/test-suite gate, no UI surface by nature] ✅ Proved by a real break-test: a
@@ -2341,6 +2358,52 @@ correction above:
 - Full suite: **483/483 BUILD SUCCESS** (479 + 4 new), 46 classes, independently re-aggregated from all
   surefire report files. Pushed to `feature/tenant-security` at commit `3e2af72`.
   Next: **S2.8** — Studio frontend app switcher (S2.9's test matrix is the adjacent backend option).
+
+### S2.8 implementation
+
+- **Audit, not a rebuild**: `Header.tsx`'s app switcher already renders only
+  `useWorkspaceStore().apps`, which `Header`'s own effect populates from
+  `GET /appbana-studio/{tenantId}/apps` (`AppRoutes.java` ~line 487) and nothing else —
+  `AppManager.listApps(tenantId)` is a plain `SELECT ... WHERE tenant_id = ?`. Grepped the whole of
+  `app-bana-studio/src/**` for any second source of app data (local fixtures, a broader `/apps` call,
+  a merge/union helper) — none exists. The S2.10 union is genuinely still pending on that task, not a
+  gap in S2.8's own scope.
+- **Real bug found while auditing the *lifecycle* of that state, not its population**: every place
+  that writes to the `workspace` store's `apps`/`currentApp`/`branding`, and every place that should
+  clear them, following the store as a plain in-memory Zustand singleton (no `persist` middleware,
+  unlike `session.ts`). Two call sites clear the session today: `Header.tsx`'s explicit Sign-out
+  (which also force-reloads the page — its own comment says this is deliberately defensive against
+  "a downstream component still holds a stale reference to the previous session/app") and
+  `AuthGate.tsx`'s `appbana:auth:expired` listener (the transport-level 401 recovery path fired by
+  `authedFetch` — no reload, since the whole point is to let the user re-authenticate in place). Only
+  the second one is a real gap: with no reload, nothing else in the tree unmounts, so the workspace
+  store's stale `apps`/`currentApp` array from the previous session sat there, fully renderable, until
+  the next tenant-scoped fetch happened to overwrite it — a window in which the switcher does not
+  reflect "only the server-filtered response," which is precisely the property S2.8 exists to
+  guarantee. Confirmed every consumer of `currentApp` (`PreviewPane`, `DataDrawer`, `ChatPane`,
+  `SessionPicker`) already null-checks it, so clearing it proactively introduces no new null-handling
+  requirement.
+- **Fix**: `workspace.ts` gains `resetWorkspace: () => set({ apps: [], currentApp: null, branding:
+  null })`. Wired into `AuthGate.tsx`'s `appbana:auth:expired` handler (the actual fix — added to the
+  effect's dependency array too) and, as defense-in-depth alongside the existing hard reload, into
+  `Header.tsx`'s Sign-out handler.
+- **Verification**: `npx tsc --noEmit` clean. New Playwright spec
+  `e2e/tests/s2-8-app-switcher-session-isolation.spec.ts` (backend 8080 + Studio 5174 live, no AI
+  Builder dependency — this task needed no chat/AI surface) — two tests: (1) a freshly-registered
+  user's switcher shows only their own just-created app; (2) the regression guard — log in as User A,
+  select their app, dispatch `appbana:auth:expired`, confirm the login form reappears, install a
+  `page.route()` delay on the next `GET .../apps` call, log in as a different User B, and assert
+  *before* the delayed fetch resolves that the switcher shows "Select app" (never User A's app name),
+  then confirm the same after the delay clears. **Break-test performed**: temporarily reverted just
+  the `resetWorkspace()` call in `AuthGate.tsx`, re-ran test 2 — failed exactly as expected
+  (`toContainText` found User A's stale app name still rendered), confirming the test is not vacuous;
+  reverted the revert, re-ran both tests green, `git diff` confirmed byte-identical to the fix as
+  landed. Also ran the pre-existing `stage-3-studio-drawers.spec.ts` (touches the same `Header.tsx`);
+  it fails its own `beforeAll` on this machine because AI Builder (8081) isn't running here — an
+  environmental gap unrelated to this change (no `OPENAI_API_KEY` configured anywhere in this
+  environment), not a regression, confirmed by that spec's own health-check code requiring 8081
+  independent of anything S2.8 touched.
+  Next: **S2.9** — the backend test matrix (`AppMembershipGuardTest` et al.), still open.
 
 ---
 
