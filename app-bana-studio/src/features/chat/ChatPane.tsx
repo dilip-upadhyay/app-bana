@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { streamAgentChat, listApps, type AppMeta } from '@appbana/shared';
+import { streamAgentChat, listMyApps, type AppMeta } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useChatStore } from '../../stores/chat';
@@ -48,7 +48,9 @@ export function ChatPane() {
     const appId = (result as { appId?: string } | null)?.appId;
     const appName = (result as { appName?: string } | null)?.appName;
     try {
-      const list = await listApps(tenantId, token);
+      // S2.10 — listMyApps() (not listApps(tenantId, ...)) so a post-creation refresh doesn't
+      // silently drop any cross-tenant apps already present in the switcher.
+      const list = await listMyApps(token);
       setApps(list);
       const match = appId ? list.find((a) => a.id === appId) : undefined;
       if (match) {
@@ -98,7 +100,11 @@ export function ChatPane() {
           message: text,
           sessionId,
           userId: userId ?? 'anonymous',
-          tenantId: tenantId ?? 'default',
+          // S2.10 — must pair with `appId` below: once the switcher can hold a cross-tenant
+          // app, this session's OWN tenantId is no longer necessarily the tenant that owns
+          // `currentApp`. Sending the wrong tenantId here would point the AI builder's tool
+          // calls (create_entity, generate_page, etc.) at the wrong tenant/app pairing.
+          tenantId: currentApp?.tenantId ?? tenantId ?? 'default',
           appId: currentApp?.id ?? 'default',
           appName: currentApp?.name ?? '',
           token: token ?? undefined,

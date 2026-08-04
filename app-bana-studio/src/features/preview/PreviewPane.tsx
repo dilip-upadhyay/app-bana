@@ -13,9 +13,12 @@ export function PreviewPane() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [deviceWidth, setDeviceWidth] = useState<'full' | 'tablet' | 'mobile'>('full');
 
-  // Build the iframe URL
+  // Build the iframe URL. S2.10 — the runtime derives ALL entity/API scoping from this path's
+  // tenantId (resolveAppContext), so once the switcher can select a cross-tenant app,
+  // `currentApp.tenantId` (the tenant that actually owns the selected app) must win over this
+  // session's own tenantId, or the runtime iframe loads under the wrong tenant entirely.
   const runtimeUrl = currentApp
-    ? `${RUNTIME_BASE}/run/${tenantId ?? 'default'}/${currentApp.id}`
+    ? `${RUNTIME_BASE}/run/${currentApp.tenantId ?? tenantId ?? 'default'}/${currentApp.id}`
     : null;
 
   // Reload iframe when previewRefreshToken changes (after tool completes), the

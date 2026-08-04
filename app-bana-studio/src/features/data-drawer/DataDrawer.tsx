@@ -40,18 +40,23 @@ export function DataDrawer() {
   const [showAddForm, setShowAddForm] = useState(false);
 
   const canWork = !!(token && tenantId && currentApp);
+  // S2.10 — the entity keys/API calls below must be scoped to the tenant that owns
+  // `currentApp`, not this session's own tenant: once the switcher can select a cross-tenant
+  // app, those two can differ, and building `${tenantId}_${appId}_${entity}` with the wrong
+  // tenant produces a key no schema will ever match (silent "unknown entity" 404s, §8).
+  const appTenantId = currentApp?.tenantId ?? tenantId;
 
   // Load entity list AND row counts when the drawer opens or the app changes
   useEffect(() => {
     if (!dataOpen || !canWork) return;
     setLoading(true);
-    listEntities(tenantId!, currentApp!.id, token!)
+    listEntities(appTenantId!, currentApp!.id, token!)
       .then((list) => {
         setEntities(list);
         // Fetch counts in parallel; keep name unaffected if any single call fails
         Promise.all(
           list.map(async (e) => {
-            const key = `${tenantId}_${currentApp!.id}_${e.name}`;
+            const key = `${appTenantId}_${currentApp!.id}_${e.name}`;
             const count = await fetchEntityRowCount(key, token!);
             return [e.name, count] as const;
           })
@@ -60,7 +65,7 @@ export function DataDrawer() {
         });
         // Auto-select the first entity if none picked yet or previous is gone
         if (list.length > 0) {
-          const key = `${tenantId}_${currentApp!.id}_${list[0].name}`;
+          const key = `${appTenantId}_${currentApp!.id}_${list[0].name}`;
           setSelectedKey(key);
         } else {
           setSelectedKey(null);
@@ -207,7 +212,7 @@ export function DataDrawer() {
                 <div className="px-3 py-4 text-xs text-gray-500">No entities yet.</div>
               )}
               {entities.map((e) => {
-                const key = `${tenantId}_${currentApp!.id}_${e.name}`;
+                const key = `${appTenantId}_${currentApp!.id}_${e.name}`;
                 const active = key === selectedKey;
                 const count = entityCounts[e.name];
                 return (

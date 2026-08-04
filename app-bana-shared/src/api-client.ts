@@ -103,6 +103,24 @@ export async function listApps(tenantId: string, token: string): Promise<AppMeta
   return Array.isArray(data) ? data : (data.apps ?? []);
 }
 
+/**
+ * S2.10 — the union of the caller's own-tenant apps plus any app in another tenant they hold a
+ * cross-tenant membership grant on (each tagged with `tenantId` and, for the cross-tenant ones,
+ * `role`). This is the ONLY app-listing call the Studio switcher should use: unlike {@link
+ * listApps}, which is scoped to a single named tenant, this reflects everywhere the signed-in
+ * user actually has access. Backed by `GET /api/users/me/apps`, which derives "own tenant" from
+ * the caller's verified session rather than a client-supplied tenant id (see
+ * `AppMembershipRoutes.handleListMyApps` for the security rationale).
+ */
+export async function listMyApps(token: string): Promise<AppMeta[]> {
+  const res = await authedFetch(`${BACKEND}/api/users/me/apps`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Failed to list my apps: ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : (data.apps ?? []);
+}
+
 export async function getApp(tenantId: string, appId: string, token: string): Promise<AppMeta> {
   const res = await authedFetch(`${BACKEND}/appbana-studio/${tenantId}/apps/${appId}`, {
     headers: { Authorization: `Bearer ${token}` },

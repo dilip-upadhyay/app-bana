@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { listApps, createApp, deployApp, fetchBranding, type DeployResult } from '@appbana/shared';
+import { listMyApps, createApp, deployApp, fetchBranding, type DeployResult } from '@appbana/shared';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useDrawerStore } from '../../stores/drawer';
@@ -33,7 +33,10 @@ export function Header() {
   useEffect(() => {
     if (!token || !tenantId) return;
     fetchBranding(tenantId).then(setBranding).catch(() => {});
-    listApps(tenantId, token).then(setApps).catch(() => {});
+    // S2.10 — listMyApps() (not listApps(tenantId, ...)) so the switcher also surfaces apps in
+    // OTHER tenants the signed-in user holds a cross-tenant membership grant on, not just this
+    // tenant's own roster.
+    listMyApps(token).then(setApps).catch(() => {});
   }, [token, tenantId]);
 
   useEffect(() => {
@@ -121,16 +124,30 @@ export function Header() {
         {appsOpen && (
           <div className="absolute top-full mt-1 left-0 w-56 bg-gray-800 border border-gray-700 rounded-lg
                           shadow-xl z-50 py-1 text-sm">
-            {apps.map((app) => (
-              <button
-                key={app.id}
-                onClick={() => { setCurrentApp(app); setAppsOpen(false); }}
-                className={`w-full text-left px-3 py-2 hover:bg-gray-700 transition-colors truncate
-                  ${currentApp?.id === app.id ? 'text-indigo-400' : 'text-gray-200'}`}
-              >
-                {app.name}
-              </button>
-            ))}
+            {apps.map((app) => {
+              // S2.10 — an app whose tenantId differs from this session's own tenant is one the
+              // user only sees via a cross-tenant membership grant (AppMembershipService), not
+              // ownership. Flag it so "Select app" doesn't look like every entry is equally
+              // "yours" — role is only ever set on these cross-tenant entries (see AppMeta.role).
+              const isCrossTenant = !!app.tenantId && app.tenantId !== tenantId;
+              return (
+                <button
+                  key={app.id}
+                  onClick={() => { setCurrentApp(app); setAppsOpen(false); }}
+                  className={`w-full text-left px-3 py-2 hover:bg-gray-700 transition-colors flex items-center gap-1.5
+                    ${currentApp?.id === app.id ? 'text-indigo-400' : 'text-gray-200'}`}
+                  title={isCrossTenant ? `Shared with you (${app.role ?? 'member'}) · tenant: ${app.tenantId}` : undefined}
+                >
+                  <span className="truncate flex-1">{app.name}</span>
+                  {isCrossTenant && (
+                    <span className="shrink-0 text-[9px] uppercase tracking-wide px-1 py-0.5 rounded
+                                      bg-amber-900/50 text-amber-300">
+                      shared
+                    </span>
+                  )}
+                </button>
+              );
+            })}
             <div className="border-t border-gray-700 my-1" />
             <button
               onClick={handleNewApp}

@@ -211,6 +211,13 @@ export interface AppMeta {
   pages?: PageMeta[] | string[];
   /** Full page metadata objects (backend `pagesData` field). */
   pagesData?: PageMeta[];
+  /**
+   * S2.10 — set only on apps returned by `listMyApps()`/`GET /api/users/me/apps` for a
+   * CROSS-TENANT membership grant (i.e. `tenantId` differs from the caller's own session
+   * tenant). Absent for the caller's own-tenant apps. Lets the Studio switcher visually
+   * distinguish "an app you were granted access to elsewhere" from "an app you own".
+   */
+  role?: string;
 }
 
 export interface TenantBranding {

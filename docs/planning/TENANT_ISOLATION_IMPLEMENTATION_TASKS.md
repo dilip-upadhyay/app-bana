@@ -1690,7 +1690,7 @@ correction above:
 | S2.7 | `GET/POST/DELETE /api/tenants/{t}/apps/{a}/members` — membership management, `owner`-only, accepts all 3 roles including `end-user` on grant. | new `AppMembershipRoutes.java` | 60 min | ✅ |
 | S2.8 | Studio frontend: app switcher/list renders only the server-filtered response — no client-side "all tenant apps" assumption. Union in S2.10's cross-tenant `listAppsForUser` result. | `app-bana-studio/src/features/**` | 60 min | ✅ |
 | S2.9 | Tests: `AppMembershipGuardTest`, `AppRoutesMembershipTest`, `IsAppOwnerOrSystemConsultsMembershipTest` (all 4 call sites agree), `EndUserMembershipCannotManageAppTest` (list/get 200, update/delete/schema-mgmt 403), `CrossTenantMembershipAllowsAccessTest` (finishes S1.11's positive case). | new tests | 120 min | ✅ |
-| S2.10 | `GET /api/users/me/apps` (or equivalent) — union of own-tenant apps + `listAppsForUser` cross-tenant memberships, for the Studio switcher (S2.8) to consume. The only deliberately non-tenant-scoped app-listing route in the plan. | new route in `AppMembershipRoutes.java` | 60 min | ⬜ |
+| S2.10 | `GET /api/users/me/apps` (or equivalent) — union of own-tenant apps + `listAppsForUser` cross-tenant memberships, for the Studio switcher (S2.8) to consume. The only deliberately non-tenant-scoped app-listing route in the plan. | new route in `AppMembershipRoutes.java` | 60 min | ✅ |
 | S2.11 | **(New, S2.1 review round 23 — absence census; hazards fixed + reprioritized, round 25)** No automated guard exists for the "changelog migrates a genuinely empty database" rule — every test runs against the shared, already-migrated dev Postgres, so this property is enforced only by a human remembering the manual ritual that already failed once (the V0 bootstrap incident). Tolerable while S2.1 was a self-contained `CREATE TABLE`; stops being tolerable at S2.4, a **data-backfill** migration of exactly the shape that broke fresh provisioning last time. **Take this before S2.2** (round 25's explicit recommendation — it's the only S2 task whose value is purely preventive, and the cheapest it will ever be to write). New test: open its **own dedicated JDBC `Connection`** to a **uniquely-named, throwaway** database on the same Postgres server (raw JDBC `CREATE DATABASE`, not Testcontainers — decision below) and assert the connection is actually pointed there, never silently falling back to `JdbcManager`'s shared, already-migrated dev datasource (a fallback would make the test a no-op that proves nothing). Run **only** `liquibase.update(...)` against that connection — never copy across `ApiServer.startJdk`'s neighboring `dropAll()` branch (gated on `flywayCleanOnStart`), which has no place in a test that must never be able to wipe the real dev database. Assert every changeset executes cleanly, then drop the throwaway database — force-terminate any lingering backends first (`pg_terminate_backend`) so a run killed mid-migration doesn't leave a changelog lock or an undroppable leftover database for the next run. **Testcontainers decision (round 25 calibration)**: `app-bana-service` has no Testcontainers dependency (unlike `ai-builder`) — deliberately NOT adopted here; raw JDBC `CREATE DATABASE` against the existing dev Postgres server is simpler and keeps this task's own small scope, at the cost of needing careful unique-naming/cleanup (above). S3.8's own Testcontainers-or-delete decision for `PermissionServiceTest` is independent and unblocked by this choice either way. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 60 min | ✅ |
 | S2.12 | **(New, S2.1 review round 25 — absence census)** The S2.1 round-23 schema-block reconciliation (plan doc's "Data model additions" → `appbana_app_members`) was performed by hand and, even under maximum attention on the very round meant to fix this exact class of drift, still left cosmetic-but-real differences from `V19` (`CREATE TABLE` vs `CREATE TABLE IF NOT EXISTS`, `now()` vs `NOW()`, missing `IF NOT EXISTS` on the index) — proving by example that nothing guards this claim from recurring, unlike route census (S0.3) or estimate reconciliation (S0.5). A fail-open `DEFAULT` sat in the authoritative security plan for multiple rounds before being caught this way; that is not a cosmetic-drift risk class. New test: extract the fenced SQL block under "Data model additions", normalize (lowercase, collapse whitespace, strip `IF NOT EXISTS`), compare against `V19__appbana_app_members.sql` normalized the same way, fail on any difference. | new test in `app-bana-service/src/test/java/com/appbana/server/` | 45–60 min | ⬜ |
 
@@ -1733,7 +1733,13 @@ correction above:
   (defense-in-depth alongside the existing hard reload). See the S2.8 implementation section below.
 - **S2.9** [Cat. 2 — automated tests] ✅ Done 2026-08-05: formalizes S2.5/S2.6/S2.7's already-proven
   scenarios as JUnit tests. See the S2.9 implementation section below for the full account.
-- **S2.10** [Cat. 1 — same surface as S2.8] Proof is the same switcher click-through after S2.6's grant.
+- **S2.10** [Cat. 1 — same surface as S2.8] ✅ Done 2026-08-05: route implemented and unit/HTTP-tested
+  (`UsersMeAppsRouteTest`, 6/6). Live switcher click-through deferred with the same justification as
+  S2.7/S2.8/S2.9 (no environment with two real cross-tenant users and a live-granted membership was
+  exercised this round) — TypeScript compiles clean for all 4 touched Studio files and the backend
+  route is HTTP-integration-tested end-to-end, but the actual browser click-through remains open. See
+  the S2.10 implementation section below for the full account, including a real cross-tenant frontend
+  bug found and fixed while wiring the switcher to this route.
 - **S2.11** [Cat. 2 — CI/test-suite gate, no UI surface by nature] ✅ Proved by a real break-test: a
   temporary changeset referencing a table only Java creates lazily was added to the changelog, the new
   `MigrationAppliesToEmptyDatabaseTest` failed naming exactly that table (`relation
@@ -2538,6 +2544,88 @@ used explicitly on this machine going forward.
 
 Full suite: **521/521 BUILD SUCCESS** (483 baseline + 38 new), 51 classes.
 Next: **S2.10** — `GET /api/users/me/apps` union route for the Studio switcher.
+
+### S2.10 implementation
+
+**Route design** (`AppMembershipRoutes.java`, new `handleListMyApps`, gated by
+`AuthService.resolveSession` — 401 if no valid session, consistent with the file's other 3 routes):
+
+- `ownTenantId` is **always session-derived** (`session.tenantId()`, falling back to `"default"`),
+  **never a client query parameter**. This matters because the own-tenant half calls
+  `AppManager.listApps(ownTenantId)`, which is an *unfiltered* dump of every app in that tenant (same
+  semantics as the pre-existing `GET /appbana-studio/{tenantId}/apps`) — unlike `GET /api/users/me`,
+  which only ever reports the caller's role on one named app. A client-suppliable tenant id here would
+  let any authenticated caller enumerate an arbitrary tenant's full app roster.
+- Cross-tenant half: `AppMembershipService.listAppsForUser(callerUserId)` returns grants from **all**
+  tenants including the caller's own, so a dedup guard (`if (grant.tenantId().equals(ownTenantId))
+  continue;`) skips grants already covered by the unfiltered own-tenant dump. Without it, every app a
+  user owns/is a member of in their own tenant would appear twice.
+- Each surviving cross-tenant grant is resolved via `AppManager.getApp(grant.tenantId(),
+  grant.appId())` and **skipped silently if null** (an orphaned grant — e.g. app deleted after the
+  grant was issued) rather than 500ing.
+- Response shape: `{"apps": [...]}`, each entry tagged with `tenantId` (a field `AppManager.listApps()`
+  never sets natively) and, for cross-tenant entries only, `role`.
+
+**Tests** (`UsersMeAppsRouteTest`, port 18103, 6 tests, all passing): unauthenticated → 401; own-tenant
+apps appear tagged with own tenantId; a cross-tenant grant appears tagged with the foreign tenantId +
+role; a same-tenant grant does not duplicate the app; an orphaned cross-tenant grant is skipped
+gracefully; the no-cross-tenant-membership case still returns own-tenant apps only. One self-caught
+test bug during writing: an early assertion assumed same-tenant users can't see each other's apps —
+wrong, since the own-tenant half is deliberately unfiltered by membership (matches
+`/appbana-studio/{tenantId}/apps`); fixed the assertion rather than the route.
+
+**Break-tested both critical guards** (non-vacuousness, per reviewer protocol): temporarily disabled
+the dedup guard — `sameTenantOwnerGrantDoesNotDuplicateOwnApp` failed with the exact duplicate entry
+expected. Temporarily disabled the orphan-skip guard — `orphanedCrossTenantGrantIsSkippedGracefully`
+failed with a 500/NPE, exactly as documented. Both reverted; `git diff --stat` confirmed a clean
+97-insertion/0-deletion diff and a fresh 6/6 pass.
+
+**Real cross-tenant frontend bug found and fixed while wiring the Studio switcher to this route**:
+before S2.10, the switcher only ever listed same-tenant apps, so `currentApp.tenantId` and the signed-in
+user's own `session.tenantId` were always identical — nothing in Studio had ever needed to distinguish
+them. The moment `listMyApps()` starts returning cross-tenant entries, selecting one of those apps makes
+the two diverge for the first time, and three components were found still using the session tenantId
+where they needed the *selected app's own* tenantId:
+
+- `PreviewPane.tsx` — `runtimeUrl` (the `/run/{tenantId}/{appId}` iframe path that `resolveAppContext`
+  uses for **all** downstream entity/API scoping in the runtime) was built from session tenantId.
+  Selecting a cross-tenant app would have opened the preview against the *wrong* tenant's schema
+  namespace entirely. Fixed to prefer `currentApp.tenantId`. (The postMessage `type:'token'` payload's
+  separate `tenantId` field was checked and correctly left alone — traced into `AppRuntimeShell.tsx`,
+  it only ever lands in `localStorage['appbana_user']` for display, never in a request path.)
+- `DataDrawer.tsx` — four raw `tenantId` usages (the `listEntities` call and three entity-key-building
+  sites) would have built entity keys against the wrong tenant prefix, silently 404ing all entity data
+  for a selected cross-tenant app (exactly the §8 multi-tenant entity-endpoint hazard the master
+  instructions call out). Fixed by introducing one derived `appTenantId = currentApp?.tenantId ??
+  tenantId` constant and routing all four sites through it.
+- `ChatPane.tsx` — `streamAgentChat`'s request payload sent session tenantId, which would have pointed
+  AI Builder tool calls (`create_entity`, `generate_page`, etc.) at the wrong tenant/app pairing for a
+  cross-tenant-selected app. Fixed to prefer `currentApp?.tenantId`. (`syncNewlyCreatedApp`'s own
+  fallback `setCurrentApp` call was checked and correctly left using session tenantId — new apps are
+  always created in the caller's own tenant, so no divergence is possible there.)
+
+Also added to `Header.tsx`: a visual "shared" badge + tooltip in the switcher dropdown for entries
+where `app.tenantId !== session tenantId`, so a cross-tenant app is visibly distinguishable rather than
+silently indistinguishable from an own-tenant one.
+
+**Shared package additions**: `listMyApps(token)` in `app-bana-shared/src/api-client.ts` (calls the new
+route; the only client function Studio should use for app listing going forward) and an optional
+`role?: string` field on `AppMeta` in `app-bana-shared/src/metadata.ts`.
+
+**Verification**:
+- Backend: `mvn -pl app-bana-service compile` clean; `UsersMeAppsRouteTest` 6/6 with both guards
+  break-tested (above); `RouteCensusTest` and `EstimateReconciliationTest` both pass after adding the
+  new census row to `TENANT_ISOLATION_SECURITY_PLAN.md` — and `RouteCensusTest` was itself break-tested
+  (temporarily removed the new census row, re-ran, got the exact "Registered in Router but MISSING from
+  the census — + GET /api/users/me/apps" failure message, restored, re-confirmed green), proving the
+  census guard is not vacuous for this addition either.
+- Full `app-bana-service` suite: **527/527 BUILD SUCCESS**, 52 classes (521 baseline + 6 new), 0
+  failures, 0 errors — independently re-aggregated from every surefire report file.
+- Frontend: `pnpm exec tsc --noEmit` in `app-bana-studio` clean across all 4 touched files.
+- Live switcher click-through (Cat. 1 UI verification) deferred — see the UI verification bullet above.
+
+Next: **S2.11** — already ✅ (implemented ahead of S2.10 in an earlier round; see its own section
+above). **S2.12** remains the next open task in this sub-phase.
 
 ---
 

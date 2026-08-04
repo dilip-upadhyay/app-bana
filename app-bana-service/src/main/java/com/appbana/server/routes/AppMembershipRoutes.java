@@ -1,14 +1,19 @@
 package com.appbana.server.routes;
 
+import com.appbana.AppManager;
 import com.appbana.api.Router;
+import com.appbana.model.AppMetadata;
 import com.appbana.security.AppAuthorization;
 import com.appbana.security.AppMembershipService;
 import com.appbana.security.TenantAccessGuard;
 import com.appbana.service.AuthService;
+import com.appbana.service.SessionService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -56,6 +61,8 @@ public class AppMembershipRoutes {
             String appId = req.pathParam("appId");
             handleRevoke(req, res, tenantId, appId);
         });
+
+        router.get("/api/users/me/apps", AppMembershipRoutes::handleListMyApps);
     }
 
     /**
@@ -199,6 +206,96 @@ public class AppMembershipRoutes {
             res.json(200, Map.of("status", "revoked", "tenantId", tenantId, "appId", appId, "userId", targetUserId));
         } catch (Exception e) {
             LOG.error("[AppMembershipRoutes] Failed to revoke membership for {}/{}", tenantId, appId, e);
+            res.json(500, Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Task S2.10 — {@code GET /api/users/me/apps}: the one deliberately non-tenant-scoped
+     * app-listing route in this plan. Returns the union of:
+     * <ol>
+     *   <li>every app in the caller's OWN tenant, unfiltered by membership — same semantics as
+     *       {@code GET /appbana-studio/{tenantId}/apps} ({@link AppManager#listApps}); and</li>
+     *   <li>every app the caller holds a membership grant on in a DIFFERENT tenant
+     *       ({@link AppMembershipService#listAppsForUser}), each tagged with that grant's
+     *       {@code role} so the caller can be told apart from an owner/member of their own
+     *       app.</li>
+     * </ol>
+     *
+     * <p>Consumed by the Studio app switcher (S2.8) — an app switcher that shows only the
+     * caller's own tenant can never surface an app they were granted membership on elsewhere,
+     * which is the entire point of {@code AppMembershipService}'s cross-tenant {@code
+     * listAppsForUser} lookup existing at all.
+     *
+     * <p><b>Why {@code ownTenantId} comes from the verified session, never a client-supplied
+     * query param</b>: unlike {@code UserRoutes}'s {@code GET /api/users/me}, which only ever
+     * reports the caller's own role on one named app (safe to let the caller pick which app to
+     * ask about — it can never leak a second app's data), this route's own-tenant half calls
+     * {@code AppManager.listApps(tenantId)} — an <em>unfiltered dump of every app row in that
+     * tenant</em>, regardless of membership. Trusting a client-supplied tenant id here would let
+     * any authenticated caller enumerate an arbitrary tenant's entire app roster just by naming
+     * it, with no membership check at all — exactly the cross-tenant listing hole
+     * {@code TenantAccessGuard} exists to close everywhere else. {@link
+     * AuthService#resolveSession} returns the server-verified {@code SessionData}, whose {@code
+     * tenantId} is the only tenant this route will ever list unfiltered.
+     *
+     * <p>Fails closed (401) for a bare service/admin-token caller with no session — same
+     * fail-closed posture as this file's other three routes (see {@link #denyIfNotOwner}'s
+     * Javadoc for the full rationale). There is no "own tenant" concept for a principal with no
+     * session to derive one from, and this route has no path tenant/app to fall back on either.
+     */
+    private static void handleListMyApps(Router.HttpRequest req, Router.HttpResponse res) {
+        SessionService.SessionData session = AuthService.resolveSession(req);
+        if (session == null || session.userId() == null || session.userId().isBlank()) {
+            res.json(401, Map.of("error", "Unauthorized: valid session required"));
+            return;
+        }
+
+        String callerUserId = session.userId();
+        String ownTenantId = session.tenantId() != null ? session.tenantId() : "default";
+
+        try {
+            List<Map<String, Object>> result = new ArrayList<>();
+
+            List<Map<String, Object>> ownApps = AppManager.listApps(ownTenantId);
+            for (Map<String, Object> app : ownApps) {
+                Map<String, Object> tagged = new LinkedHashMap<>(app);
+                tagged.put("tenantId", ownTenantId);
+                result.add(tagged);
+            }
+
+            List<AppMembershipService.MembershipGrant> grants = AppMembershipService.listAppsForUser(callerUserId);
+            for (AppMembershipService.MembershipGrant grant : grants) {
+                // A same-tenant grant is already covered, unfiltered, by the own-tenant list
+                // above -- AppManager.listApps() doesn't consult membership at all, so including
+                // it again here would just duplicate an entry already present.
+                if (grant.tenantId().equals(ownTenantId)) {
+                    continue;
+                }
+
+                AppMetadata app = AppManager.getApp(grant.tenantId(), grant.appId());
+                if (app == null) {
+                    // Orphaned grant: the app was deleted after the membership row was written.
+                    // Skip it rather than fabricate an entry with no backing metadata.
+                    continue;
+                }
+
+                Map<String, Object> summary = new LinkedHashMap<>();
+                summary.put("id", app.getId());
+                summary.put("name", app.getName());
+                summary.put("tenantId", grant.tenantId());
+                summary.put("description", app.getDescription());
+                summary.put("version", app.getVersion());
+                summary.put("created", app.getCreated());
+                summary.put("updated", app.getUpdated());
+                summary.put("pageCount", app.getPages() != null ? app.getPages().size() : 0);
+                summary.put("role", grant.role().getValue());
+                result.add(summary);
+            }
+
+            res.json(200, Map.of("apps", result));
+        } catch (Exception e) {
+            LOG.error("[AppMembershipRoutes] Failed to list apps for user '{}'", callerUserId, e);
             res.json(500, Map.of("error", e.getMessage()));
         }
     }

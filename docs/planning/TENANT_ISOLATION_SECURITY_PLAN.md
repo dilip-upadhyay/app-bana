@@ -1153,13 +1153,14 @@ tenant check itself.*
 | POST | `/api/tenants/{tenantId}/apps/{appId}/roles` | No (rule 1) | Yes (`extractUserId`, 401) | No (ownership-only, pre-lookup ordering; body `tenantId` explicitly discarded) | path | **none found** | app exists with caller as author/system; target entity schema exists |
 | DELETE | `/api/tenants/{tenantId}/apps/{appId}/roles` | No (rule 1) | Yes (`extractUserId`, 401) | No (ownership-only) | path | **none found** | app exists with caller as author/system; role row must exist |
 
-### AppMembershipRoutes.java (S2.7)
+### AppMembershipRoutes.java (S2.7, S2.10)
 
 | Method | Path | Mw-excl.? | Id. gate? | T/A check? | T/A source | Known callers | Data preconditions |
 |---|---|---|---|---|---|---|---|
 | GET | `/api/tenants/{tenantId}/apps/{appId}/members` | No (rule 1) | Yes (`TenantAccessGuard.requireOwnTenant`, 401/403) | Yes — tenant guard, then owner-only (`isAppOwnerOrSystem`, 403; deliberately stricter than `AppRoutes`'s owner-or-member gate, S2.6) | path | **none found** — no members/invite panel exists yet (S2.7 Cat. 3) | app's own tenant matches, or caller holds a membership row on this app; caller must additionally be `owner` or `system` |
 | POST | `/api/tenants/{tenantId}/apps/{appId}/members` | No (rule 1) | Yes (`TenantAccessGuard.requireOwnTenant`, 401/403) | Yes — same as GET; body `userId`/`role` explicitly required, path `tenantId`/`appId` authoritative | path | **none found** | same as GET; accepts all 3 roles (`owner`/`member`/`end-user`) on grant |
 | DELETE | `/api/tenants/{tenantId}/apps/{appId}/members` | No (rule 1) | Yes (`TenantAccessGuard.requireOwnTenant`, 401/403) | Yes — same as GET; `userId` query param required | path + query | **none found** | same as GET |
+| GET | `/api/users/me/apps` | No (rule 2) | Yes (`AuthService.resolveSession`, 401) | No — by design, the ONE deliberately non-tenant-scoped app-listing route in the plan (S2.10). The own-tenant half is an unfiltered `AppManager.listApps(ownTenantId)` dump, but `ownTenantId` is session-derived and NEVER a client query param — unlike `GET /api/users/me` below, a client-supplied tenant id here would let any caller enumerate an arbitrary tenant's full app roster. The cross-tenant half is inherently self-scoped: `listAppsForUser(callerUserId)` can only ever return the CALLER's OWN membership grants | session (`AuthService.resolveSession`) | studio (`Header.tsx`, `ChatPane.tsx`'s `syncNewlyCreatedApp`) via shared `listMyApps()` | valid session only |
 
 ### UserRoutes.java
 
