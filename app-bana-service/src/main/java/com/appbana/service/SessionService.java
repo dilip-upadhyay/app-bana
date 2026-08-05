@@ -44,7 +44,9 @@ public class SessionService {
         Map<String, Object> attributes,
         // S1.1: captured once at login from User.tenantId, avoids a DB round-trip per request.
         String tenantId,
-        // S1.1: reserved for a future scoped end-user session (S3); nothing populates it yet.
+        // S1.1: reserved for a scoped end-user session; populated by the 3-arg createSession
+        // overload below (S3.1) for the optional separate-user-table login path (S3.3) — not
+        // the shipped Runtime's path, which stays on an ordinary tenant-wide session (S3.7).
         String scopedAppId
     ) {
         /**

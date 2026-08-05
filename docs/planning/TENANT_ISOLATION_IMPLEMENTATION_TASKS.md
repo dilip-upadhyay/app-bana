@@ -2703,7 +2703,7 @@ enforcement.
 |---|---|---|---|---|
 | S3.1 | Reserve/use `scopedAppId` on `SessionData` for the optional separate-user-table path (not the shipped Runtime's path — that's S3.7). | `SessionService.java` | 30 min | ✅ |
 | S3.2 | `EntityAccessGuard` with two entry points: (a) `check(entityKey,...)` parsing `{tenantId}_{appId}_{entityName}` for `/api/{entity}`; (b) `check(tenantId, appId, entityName,...)` for the two path-segmented families. Allow rule: (i) Studio session is an `appbana_app_members` member of `(tenantId, appId)` — **any role** — **or** (ii) runtime session `scopedAppId` equals `appId` **or** (iii) app is `publicRead` and request is `GET`. Break-glass admin token is fall-through, evaluated last. | new `com.appbana.security.EntityAccessGuard` | 150 min | ✅ |
-| S3.3 | `GenericAppAuthController.login()`: (a) issues a real session via `SessionService.createSession(...)` with `scopedAppId` set; (b) fetch-by-email + verify password in Java (not SQL — BCrypt can't compare in `WHERE`); (c) normalize response so nonexistent-entity/app and wrong-password both produce the same generic 401. | `GenericAppAuthController.java` | 105 min | ⬜ |
+| S3.3 | `GenericAppAuthController.login()`: (a) issues a real session via `SessionService.createSession(...)` with `scopedAppId` set; (b) fetch-by-email + verify password in Java (not SQL — BCrypt can't compare in `WHERE`); (c) normalize response so nonexistent-entity/app and wrong-password both produce the same generic 401. | `GenericAppAuthController.java` | 105 min | ✅ |
 | S3.4 | Wire `EntityAccessGuard` into **every** `GenericEntityRoutes` route per the S0.2 census — the 21 existing `authEnabled` blocks (ratchet-verified, `AuthEnabledAntiPatternTest` baseline — S1 external review round 2) *and* the 11 routes (studio-scoped + env-scoped families) with no such block today. | `GenericEntityRoutes.java` | 180 min | ⬜ |
 | S3.5 | Add `publicRead: boolean` flag (default `false`) on app/entity metadata for legitimately public apps. | `AppMetadata`/`EntitySchema`, `SchemaRoutes.java` | 45 min | ⬜ |
 | S3.6 | Tests: `CrossTenantEntityAccessTest`, `CrossAppEntityAccessTest` (same-tenant, different app) across all 3 route families, `RuntimeSessionScopedToSingleAppTest`, `LoginDoesNotLeakEntityExistenceTest`. | new tests | 120 min | ⬜ |
@@ -2741,7 +2741,53 @@ enforcement.
   20 new `EntityAccessGuardTest` — `SessionServiceTest`'s 7 new S3.1 tests are part of its
   existing 44, no new class), `RouteCensusTest`/`EstimateReconciliationTest` re-confirmed green
   (unaffected — no route or estimate changes).
-- **S3.3** [Cat. 1] Runtime's real login form for a deployed app with its own end-user table. Confirm correct credentials succeed; confirm a wrong password on a real account and a request for a nonexistent account show the identical on-screen message/status (cross-check via the browser network tab).
+- **S3.3** [**Corrected from this row's original "Cat. 1"** — the plan doc's own Review round 3
+  (R3-1) already established that `GenericAppAuthController` "has no real entity to authenticate
+  against in any live app" and "remains a future option, not the shipped Runtime's path"
+  (`TENANT_ISOLATION_SECURITY_PLAN.md` lines ~896, ~947). Reconfirmed this round via a repo-wide grep
+  of `app-bana-runtime`/`app-bana-shared`/`app-bana-studio` for `runtime/auth/login`: zero matches.
+  There is no login form to click through today, so this is genuinely Cat. 2 — unit/integration-level
+  verification against a live PostgreSQL fixture is the only verification this task can have until a
+  real caller exists.] ✅ Done 2026-08-06: rewrote `GenericAppAuthController.login()` end-to-end.
+  (a) **Scoped-session issuance** — `SessionService.createSession(sessionUserId, appTenantId, appId)`,
+  where `appTenantId` is `schema.getTenantId()` (the authoritative tenantId of the matched schema row),
+  not the raw request-supplied `tenantId` — directly resolving the S3.1/S3.2 review's MEDIUM
+  coordination note that a wrong tenantId source here would silently 403 every request under
+  `EntityAccessGuard` rule (ii). `sessionUserId` prefers the row's own primary-key value
+  (`resolveSessionUserId`), falling back to email. (b) **M5 Java-side verification** — fetch-by-email
+  only (password removed from the SQL `WHERE`), then a new `verifyCredential()` helper: BCrypt via
+  `PasswordService.verifyPassword` when the stored value has a `$2a$`/`$2b$`/`$2y$` prefix
+  (`looksLikeBcryptHash`), else a constant-time (`MessageDigest.isEqual`) plaintext-equality fallback
+  for legacy pre-S4.2 rows — the fallback is transitional and closed out by S4.2's hash-on-write, not
+  this task. (c) **M6 existence-oracle normalization** — the schema-not-found path and the
+  credential-mismatch path now both return one identical `GENERIC_AUTH_FAILURE` constant
+  (`401 {"error":"Invalid credentials"}`); previously the former returned a distinguishable 404.
+  **Discovered and fixed a serious, previously-unknown pre-existing bug while rewriting the SQL**:
+  `SchemaManager` creates every dynamic-entity column quoted+uppercase (e.g. `"EMAIL"`), and Postgres
+  does not case-fold an unquoted `email` reference to match a quoted-uppercase column — it throws
+  `column "email" does not exist`. This means the *original* `WHERE email = ? AND password = ?` 500'd
+  on **every single login attempt, right or wrong password**, for any schema created through the normal
+  path — verified empirically against the live `appbana-postgres` container (reproduced the error, then
+  confirmed `WHERE "EMAIL" = ?` resolves it). Fixed in the same line change (tightly coupled to the
+  exact SQL being rewritten, in scope per project convention) and documented prominently in the method's
+  own comments so a future edit can't silently reintroduce it. 10 new tests in new file
+  `GenericAppAuthControllerTest` (new `com.appbana.api` test package): successful BCrypt login plus a
+  flagship assertion that the minted session is actually admitted by `EntityAccessGuard.check(...)`
+  rule (ii) (directly proving the S3.1/S3.2 coordination-note concern is resolved, not just assumed);
+  legacy-plaintext-password fallback still verifies; default-`"User"`-entity path when `entity` is
+  omitted; 5 M6 tests asserting byte-identical status+body across wrong-password vs. unknown-email vs.
+  nonexistent-entity vs. nonexistent-app vs. wrong-tenant; 2 unchanged-behavior regressions (400 on
+  missing `appId` / missing `email`+`password`). Break-tested the M6 guard: temporarily reverted the
+  schema-not-found branch to a distinguishable 404, confirmed exactly the 3 tests on that code path
+  (nonexistent-entity, nonexistent-app, wrong-tenant) failed with `expected: <401> but was: <404>` while
+  the unknown-email test (a different code path — schema found, row not found) correctly stayed green;
+  reverted, reconfirmed all 10 green. Full `app-bana-service` suite: **566/566** (556 baseline + 10
+  new), `RouteCensusTest`/`EstimateReconciliationTest` reconfirmed green (unaffected — no route or
+  estimate changes; this task only edited method bodies inside an already-registered route). **Deferred,
+  out of scope for this task**: the controller's catch-all `catch (Exception e)` still returns
+  `e.getMessage()` in a 500 body, which could leak SQL-exception detail on an unrelated failure mode
+  (e.g. schema row present but physical table missing) — adjacent to but distinct from M6's specific
+  404-vs-401 concern, flagged here for whoever picks this up rather than silently left undocumented.
 - **S3.4** [Cat. 1 — both sides] Studio: as User B (no membership on App-A), Studio's `DataDrawer` for App-A's entity must fail/be empty. Runtime: an end-user session scoped to App-A works on App-A's own `StudioTableLive` grid; the same session 403s if pointed at App-B's entity route via a direct URL edit.
 - **S3.5** [Cat. 1 for the read side] Mark one entity `publicRead: true` (via chat, or a direct schema PATCH if Studio has no toggle yet — flag if so), then load that Runtime page in a fresh, fully logged-out browser tab and confirm it renders with no session, while a non-`publicRead` entity on the same app still requires login.
 - **S3.6** [Cat. 2 for route-family shapes with no dedicated screen, Cat. 1 for the ones that do] Formalizes S3.4's scenarios; any route family without a Runtime/Studio consumer is noted as such, not faked.
