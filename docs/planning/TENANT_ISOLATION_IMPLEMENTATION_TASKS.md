@@ -2701,8 +2701,8 @@ enforcement.
 
 | # | Task | Files | Est. | Status |
 |---|---|---|---|---|
-| S3.1 | Reserve/use `scopedAppId` on `SessionData` for the optional separate-user-table path (not the shipped Runtime's path — that's S3.7). | `SessionService.java` | 30 min | ⬜ |
-| S3.2 | `EntityAccessGuard` with two entry points: (a) `check(entityKey,...)` parsing `{tenantId}_{appId}_{entityName}` for `/api/{entity}`; (b) `check(tenantId, appId, entityName,...)` for the two path-segmented families. Allow rule: (i) Studio session is an `appbana_app_members` member of `(tenantId, appId)` — **any role** — **or** (ii) runtime session `scopedAppId` equals `appId` **or** (iii) app is `publicRead` and request is `GET`. Break-glass admin token is fall-through, evaluated last. | new `com.appbana.security.EntityAccessGuard` | 150 min | ⬜ |
+| S3.1 | Reserve/use `scopedAppId` on `SessionData` for the optional separate-user-table path (not the shipped Runtime's path — that's S3.7). | `SessionService.java` | 30 min | ✅ |
+| S3.2 | `EntityAccessGuard` with two entry points: (a) `check(entityKey,...)` parsing `{tenantId}_{appId}_{entityName}` for `/api/{entity}`; (b) `check(tenantId, appId, entityName,...)` for the two path-segmented families. Allow rule: (i) Studio session is an `appbana_app_members` member of `(tenantId, appId)` — **any role** — **or** (ii) runtime session `scopedAppId` equals `appId` **or** (iii) app is `publicRead` and request is `GET`. Break-glass admin token is fall-through, evaluated last. | new `com.appbana.security.EntityAccessGuard` | 150 min | ✅ |
 | S3.3 | `GenericAppAuthController.login()`: (a) issues a real session via `SessionService.createSession(...)` with `scopedAppId` set; (b) fetch-by-email + verify password in Java (not SQL — BCrypt can't compare in `WHERE`); (c) normalize response so nonexistent-entity/app and wrong-password both produce the same generic 401. | `GenericAppAuthController.java` | 105 min | ⬜ |
 | S3.4 | Wire `EntityAccessGuard` into **every** `GenericEntityRoutes` route per the S0.2 census — the 21 existing `authEnabled` blocks (ratchet-verified, `AuthEnabledAntiPatternTest` baseline — S1 external review round 2) *and* the 11 routes (studio-scoped + env-scoped families) with no such block today. | `GenericEntityRoutes.java` | 180 min | ⬜ |
 | S3.5 | Add `publicRead: boolean` flag (default `false`) on app/entity metadata for legitimately public apps. | `AppMetadata`/`EntitySchema`, `SchemaRoutes.java` | 45 min | ⬜ |
@@ -2719,7 +2719,28 @@ enforcement.
 - [ ] The shipped `app-bana-runtime` logs in (existing platform login, unchanged) and loads its own app end-to-end against a running backend using an `end-user`-role membership row; the same end-user 403s updating/deleting the app or loading a second app they aren't a member of. **Verified in the running apps (5175/8080), not guard unit tests alone.**
 
 ### UI verification script — S3
-- **S3.1 / S3.2** [Cat. 2 — reserved field / guard class, not wired yet] Proof deferred to S3.3/S3.4.
+- **S3.1 / S3.2** [Cat. 2 — reserved field / guard class, not wired yet] ✅ Done 2026-08-05, unit-level:
+  live UI proof still deferred to S3.3/S3.4 (guard is not yet called from any route). S3.1 added
+  `SessionService.createSession(userId, tenantId, scopedAppId)` (44/44 `SessionServiceTest` green,
+  7 new). S3.2 added `EntityAccessGuard` with both entry points (packed-key via
+  `SchemaManager.loadSchema`, avoiding fragile `_`-splitting since neither `appId` nor entity
+  names are guaranteed underscore-free; path-segmented core). 20 new tests in
+  `EntityAccessGuardTest` cover every allow-rule branch, the 401-vs-403 default-deny split, and
+  the admin-token-evaluated-last fall-through. **Deliberate hardening beyond this row's literal
+  spec, flagged for reviewer scrutiny**: rule (ii) requires the session's `tenantId` to match the
+  target app's `tenantId` in addition to the `scopedAppId`/`appId` match — the spec's one-liner
+  above only mentions the `appId` comparison. Rationale: `appId` values are not guaranteed
+  globally unique across tenants (same lesson as the S2.10/S2.12 `DataDrawer` bug), so a bare
+  `appId`-only match could in principle let a session scoped under one tenant reach a
+  same-numbered app in a different tenant. Break-tested twice: (1) removed the tenantId guard —
+  `testScopedSessionMatchingAppIdButDifferentTenantIsDenied` and
+  `testNullSessionTenantIdDoesNotMatchNullPathTenantId` failed with the exact expected
+  `assertFalse`/`assertTrue` mismatch; (2) disabled the rule (i) membership branch entirely — all
+  4 membership-dependent tests failed with the right message; both reverted clean, full suite
+  re-confirmed green (556/556) afterward. Full `app-bana-service` suite: 556/556 (536 baseline +
+  20 new `EntityAccessGuardTest` — `SessionServiceTest`'s 7 new S3.1 tests are part of its
+  existing 44, no new class), `RouteCensusTest`/`EstimateReconciliationTest` re-confirmed green
+  (unaffected — no route or estimate changes).
 - **S3.3** [Cat. 1] Runtime's real login form for a deployed app with its own end-user table. Confirm correct credentials succeed; confirm a wrong password on a real account and a request for a nonexistent account show the identical on-screen message/status (cross-check via the browser network tab).
 - **S3.4** [Cat. 1 — both sides] Studio: as User B (no membership on App-A), Studio's `DataDrawer` for App-A's entity must fail/be empty. Runtime: an end-user session scoped to App-A works on App-A's own `StudioTableLive` grid; the same session 403s if pointed at App-B's entity route via a direct URL edit.
 - **S3.5** [Cat. 1 for the read side] Mark one entity `publicRead: true` (via chat, or a direct schema PATCH if Studio has no toggle yet — flag if so), then load that Runtime page in a fresh, fully logged-out browser tab and confirm it renders with no session, while a non-`publicRead` entity on the same app still requires login.

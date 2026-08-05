@@ -114,6 +114,55 @@ public class SessionService {
         
         return session;
     }
+
+    /**
+     * S3.1: create a session scoped to a single app. Populates the {@code scopedAppId} field
+     * reserved since S1.1 — nothing minted this until now. This path is for the optional,
+     * separate-user-table login ({@code GenericAppAuthController}, S3.3) where the caller
+     * authenticates against a generated app's own entity table, not against
+     * {@code appbana_users}. It is NOT what the shipped {@code app-bana-runtime} uses — that
+     * keeps an ordinary tenant-wide session and relies on an {@code end-user}-role
+     * {@code appbana_app_members} grant instead (S2.6/S3.7; see
+     * docs/planning/TENANT_ISOLATION_SECURITY_PLAN.md, review round 3, R3-1).
+     *
+     * <p>A non-null {@code scopedAppId} means this session is valid ONLY for that app's entity
+     * routes ({@code EntityAccessGuard} rule ii, S3.2) — never any {@code AppRoutes}/Studio
+     * management endpoint.
+     *
+     * @param userId User identifier
+     * @param tenantId Tenant identifier the app belongs to, or null if unknown
+     * @param scopedAppId The single app this session is scoped to
+     * @return SessionData containing session details
+     */
+    public static SessionData createSession(String userId, String tenantId, String scopedAppId) {
+        if (userId == null || userId.trim().isEmpty()) {
+            throw new IllegalArgumentException("userId cannot be null or empty");
+        }
+        if (scopedAppId == null || scopedAppId.trim().isEmpty()) {
+            throw new IllegalArgumentException("scopedAppId cannot be null or empty");
+        }
+
+        String sessionId = generateSessionId();
+        long now = System.currentTimeMillis();
+        long expiresAt = now + SESSION_TIMEOUT_MS;
+
+        SessionData session = new SessionData(
+            sessionId,
+            userId,
+            now,
+            now,
+            expiresAt,
+            new ConcurrentHashMap<>(),
+            tenantId,
+            scopedAppId
+        );
+
+        SESSIONS.put(sessionId, session);
+        LOG.info("Scoped session created for user {} with sessionId {} (scopedAppId={}, expires in {} minutes)",
+                userId, sessionId, scopedAppId, SESSION_TIMEOUT_MINUTES);
+
+        return session;
+    }
     
     /**
      * Create session with custom timeout.

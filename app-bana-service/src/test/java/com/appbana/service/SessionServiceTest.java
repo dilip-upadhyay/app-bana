@@ -574,4 +574,74 @@ class SessionServiceTest {
         assertEquals("t-abc123", renewedAgain.tenantId());
         assertNull(renewedAgain.scopedAppId());
     }
+
+    // ========================================
+    // Test Group 10: createSession(userId, tenantId, scopedAppId) (S3.1)
+    // ========================================
+
+    @Test
+    @DisplayName("createSession(userId, tenantId, scopedAppId) populates both tenantId and scopedAppId")
+    void testCreateScopedSessionPopulatesBothFields() {
+        SessionData session = SessionService.createSession("end-user-1", "t-abc123", "app-xyz");
+
+        assertEquals("t-abc123", session.tenantId());
+        assertEquals("app-xyz", session.scopedAppId());
+        assertEquals("end-user-1", session.userId());
+        assertTrue(session.isValid());
+    }
+
+    @Test
+    @DisplayName("createSession(userId, tenantId, scopedAppId) rejects a null userId")
+    void testCreateScopedSessionRejectsNullUserId() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SessionService.createSession(null, "t-abc123", "app-xyz"));
+    }
+
+    @Test
+    @DisplayName("createSession(userId, tenantId, scopedAppId) rejects a blank userId")
+    void testCreateScopedSessionRejectsBlankUserId() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SessionService.createSession("   ", "t-abc123", "app-xyz"));
+    }
+
+    @Test
+    @DisplayName("createSession(userId, tenantId, scopedAppId) rejects a null scopedAppId — this overload exists " +
+            "specifically to mint a SCOPED session; an unscoped one should use the 2-arg overload instead")
+    void testCreateScopedSessionRejectsNullScopedAppId() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SessionService.createSession("user123", "t-abc123", null));
+    }
+
+    @Test
+    @DisplayName("createSession(userId, tenantId, scopedAppId) rejects a blank scopedAppId")
+    void testCreateScopedSessionRejectsBlankScopedAppId() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SessionService.createSession("user123", "t-abc123", "   "));
+    }
+
+    @Test
+    @DisplayName("A scoped session is independently retrievable via validateSession, same as any other session")
+    void testScopedSessionIsValidatable() {
+        SessionData session = SessionService.createSession("end-user-1", "t-abc123", "app-xyz");
+
+        SessionData validated = SessionService.validateSession(session.sessionId());
+
+        assertNotNull(validated);
+        assertEquals("app-xyz", validated.scopedAppId());
+        assertEquals("t-abc123", validated.tenantId());
+    }
+
+    @Test
+    @DisplayName("renewSession preserves scopedAppId set via the 3-arg overload across renewal")
+    void testRenewSessionPreservesScopedAppId() {
+        SessionData original = SessionService.createSession("end-user-1", "t-abc123", "app-xyz");
+
+        SessionData renewed = SessionService.renewSession(original.sessionId());
+        assertEquals("app-xyz", renewed.scopedAppId());
+        assertEquals("t-abc123", renewed.tenantId());
+
+        SessionData renewedAgain = SessionService.renewSession(original.sessionId(), 45);
+        assertEquals("app-xyz", renewedAgain.scopedAppId());
+        assertEquals("t-abc123", renewedAgain.tenantId());
+    }
 }
