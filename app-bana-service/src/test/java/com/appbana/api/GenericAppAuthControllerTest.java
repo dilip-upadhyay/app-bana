@@ -318,6 +318,34 @@ class GenericAppAuthControllerTest {
         assertEquals(wrongPassword.body(), wrongTenant.body());
     }
 
+    @Test
+    @DisplayName("M6 (round-60 MEDIUM): a blank password against a BCrypt-backed account is a 400, never a 500")
+    void testBlankPasswordAgainstBcryptRowReturns400NotServerError() {
+        // Before the fix: password="" slipped past the null-only guard, reached
+        // verifyCredential(""), and PasswordService.verifyPassword("", hash) threw
+        // IllegalArgumentException for Alice's BCrypt-hashed row specifically, propagating to the
+        // catch-all as a 500 - while an unknown email or a plaintext row stayed a normal 401. That
+        // split let an unauthenticated caller fingerprint which emails are backed by a BCrypt hash.
+        LoginOutcome outcome = doLogin(loginBody(APP_1, TENANT_A, ENTITY_NAME, ALICE_EMAIL, ""));
+
+        assertEquals(400, outcome.status());
+        assertEquals(Map.of("error", "Email and password are required"), outcome.body());
+    }
+
+    @Test
+    @DisplayName("M6 (round-60 MEDIUM): blank password produces the identical 400 whether or not the account exists")
+    void testBlankPasswordProducesIdentical400RegardlessOfAccountExistence() {
+        LoginOutcome knownBcryptAccount = doLogin(loginBody(APP_1, TENANT_A, ENTITY_NAME, ALICE_EMAIL, ""));
+        LoginOutcome knownPlaintextAccount = doLogin(loginBody(APP_1, TENANT_A, ENTITY_NAME, BOB_EMAIL, ""));
+        LoginOutcome unknownAccount = doLogin(
+                loginBody(APP_1, TENANT_A, ENTITY_NAME, "nobody-here@example.com", ""));
+
+        assertEquals(knownBcryptAccount.status(), knownPlaintextAccount.status());
+        assertEquals(knownBcryptAccount.body(), knownPlaintextAccount.body());
+        assertEquals(knownBcryptAccount.status(), unknownAccount.status());
+        assertEquals(knownBcryptAccount.body(), unknownAccount.body());
+    }
+
     // ========================================
     // Pre-existing validation behavior (unchanged) — quick regression check
     // ========================================

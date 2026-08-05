@@ -52,7 +52,16 @@ public class GenericAppAuthController {
                     return;
                 }
 
-                if (email == null || password == null) {
+                if (email == null || password == null || password.isBlank()) {
+                    // Round-60 review MEDIUM: an empty (non-null, blank) password used to slip past
+                    // this guard and reach verifyCredential(), which for a BCrypt-hashed row calls
+                    // PasswordService.verifyPassword("", hash) -> IllegalArgumentException -> 500,
+                    // while an unknown email or a plaintext row still correctly returned 401. That
+                    // status-code split let an unauthenticated caller distinguish "this email is
+                    // backed by a BCrypt-hashed account" from every other case - the same existence-
+                    // oracle class M6 closes elsewhere in this method. Rejecting here with the same
+                    // 400 as the missing-password case happens before any schema/DB lookup, so it
+                    // reveals nothing about whether the app/entity/email exists.
                     res.json(400, Map.of("error", "Email and password are required"));
                     return;
                 }
@@ -165,9 +174,14 @@ public class GenericAppAuthController {
      * constant-time plain-text equality check for rows still holding a pre-hash value (Phase 1
      * prototype data - see the old TODO this replaced). S4.2 adds transparent hash-on-write and
      * rehash-on-login so this fallback branch stops being reachable for any row it has touched.
+     *
+     * Rejects a blank (non-null, empty) rawPassword here too - not just at the login() call site
+     * - because PasswordService.verifyPassword throws IllegalArgumentException on an empty
+     * argument (round-60 review MEDIUM); this method must be safe to call with any non-null
+     * String regardless of caller-side guards.
      */
     private static boolean verifyCredential(String rawPassword, String storedValue) {
-        if (rawPassword == null || storedValue == null || storedValue.isEmpty()) {
+        if (rawPassword == null || rawPassword.isEmpty() || storedValue == null || storedValue.isEmpty()) {
             return false;
         }
         if (looksLikeBcryptHash(storedValue)) {
