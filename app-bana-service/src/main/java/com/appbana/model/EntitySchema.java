@@ -16,6 +16,7 @@ public class EntitySchema {
     @com.fasterxml.jackson.annotation.JsonProperty("tenantId")
     private String tenantId; // Owner Tenant ID for global uniqueness
     private boolean approvalRequired; // Task C1.3 — approval workflow enabled for this entity
+    private boolean publicRead; // Task S3.5 — anonymous GETs allowed for this entity (default false)
 
     // Two-level checker chain — platform-wide, per-entity opt-in. Boxed rather than a
     // primitive int so that schemas persisted before this field existed (i.e. every

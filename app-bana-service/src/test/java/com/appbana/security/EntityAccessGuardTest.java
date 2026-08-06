@@ -67,10 +67,18 @@ class EntityAccessGuardTest {
     }
 
     private void saveFixtureSchema() {
+        saveFixtureSchema(false);
+    }
+
+    // S3.5 — publicRead overload. Real schemas are the only way to feed EntityAccessGuard a
+    // publicRead value now: both entry points resolve it themselves (from an already-loaded
+    // schema, or via their own lookup), it is no longer a caller-supplied check(...) parameter.
+    private void saveFixtureSchema(boolean publicRead) {
         EntitySchema schema = new EntitySchema();
         schema.setName(ENTITY_NAME);
         schema.setAppId(APP_1);
         schema.setTenantId(TENANT_A);
+        schema.setPublicRead(publicRead);
 
         EntitySchema.Field idField = new EntitySchema.Field();
         idField.setName("id");
@@ -88,7 +96,7 @@ class EntityAccessGuardTest {
     @Test
     @DisplayName("No credentials at all, no publicRead => 401, not 403")
     void testNoCredentialsReturns401() {
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertFalse(result.allowed());
         assertEquals(401, result.statusCode());
@@ -100,7 +108,7 @@ class EntityAccessGuardTest {
     void testInvalidSessionCredentialReturns401() {
         when(req.header("X-Session-Token")).thenReturn("not-a-real-session-id");
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertFalse(result.allowed());
         assertEquals(401, result.statusCode());
@@ -112,7 +120,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("user-outsider", TENANT_A);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertFalse(result.allowed());
         assertEquals(403, result.statusCode());
@@ -136,7 +144,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("user-owner", TENANT_B); // session's own tenant differs
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertTrue(result.allowed(), "a real membership row must admit regardless of the session's own tenant");
     }
@@ -148,7 +156,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("user-member", TENANT_A);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertTrue(result.allowed());
     }
@@ -160,7 +168,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("user-enduser", TENANT_A);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertTrue(result.allowed());
     }
@@ -172,7 +180,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("user-x", TENANT_A);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertFalse(result.allowed());
         assertEquals(403, result.statusCode());
@@ -188,7 +196,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("scoped-user", TENANT_A, APP_1);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertTrue(result.allowed());
     }
@@ -202,7 +210,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("scoped-user-b", TENANT_B, APP_1);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertFalse(result.allowed(), "a scopedAppId match must not cross a tenant boundary");
         assertEquals(403, result.statusCode());
@@ -214,7 +222,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("scoped-user-2", TENANT_A, "some-other-app");
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertFalse(result.allowed());
         assertEquals(403, result.statusCode());
@@ -227,7 +235,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("scoped-user-3", null, APP_1);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, null, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, null, APP_1, ENTITY_NAME);
 
         assertFalse(result.allowed());
     }
@@ -239,9 +247,12 @@ class EntityAccessGuardTest {
     @Test
     @DisplayName("Rule (iii): publicRead + GET admits even with zero session at all")
     void testPublicReadGetAdmitsAnonymously() {
+        // S3.5 — publicRead is now resolved by the guard itself from a real persisted schema,
+        // not injected as a check(...) parameter, so this must save one with publicRead=true.
+        saveFixtureSchema(true);
         when(req.method()).thenReturn("GET");
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, true);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertTrue(result.allowed());
     }
@@ -249,9 +260,10 @@ class EntityAccessGuardTest {
     @Test
     @DisplayName("Rule (iii): publicRead + POST does NOT admit — the rescue is GET-only")
     void testPublicReadPostDoesNotAdmit() {
+        saveFixtureSchema(true);
         when(req.method()).thenReturn("POST");
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, true);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertFalse(result.allowed());
         assertEquals(401, result.statusCode());
@@ -262,7 +274,50 @@ class EntityAccessGuardTest {
     void testNonPublicGetWithNoOtherRuleIsDenied() {
         when(req.method()).thenReturn("GET");
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
+
+        assertFalse(result.allowed());
+        assertEquals(401, result.statusCode());
+    }
+
+    // ========================================
+    // S3.5: publicRead is resolved by the guard itself, not a caller-supplied parameter
+    // ========================================
+
+    @Test
+    @DisplayName("S3.5: a schema saved without ever touching publicRead (pre-S3.5 shape) defaults to " +
+            "false, same as an explicit false — not admitted even on a GET")
+    void testSchemaPredatingPublicReadFieldDefaultsToFalse() {
+        saveFixtureSchema(); // never calls setPublicRead — simulates a schema saved before S3.5 existed
+        when(req.method()).thenReturn("GET");
+
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
+
+        assertFalse(result.allowed(), "publicRead must default to false, not true, for a pre-existing schema");
+        assertEquals(401, result.statusCode());
+    }
+
+    @Test
+    @DisplayName("S3.5: entry point (b)'s internal publicRead lookup for an entity name that matches no " +
+            "schema at all resolves false safely, without error")
+    void testEntryPointBResolvesPublicReadFalseForNonexistentEntitySafely() {
+        when(req.method()).thenReturn("GET");
+
+        // No saveFixtureSchema() call — SchemaManager.loadSchema(APP_1, "NoSuchEntityAtAll", TENANT_A)
+        // must return null, and resolvePublicRead must treat that as false, not throw.
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, "NoSuchEntityAtAll");
+
+        assertFalse(result.allowed());
+        assertEquals(401, result.statusCode());
+    }
+
+    @Test
+    @DisplayName("S3.5: entry point (b)'s resolvePublicRead guard — a blank appId resolves publicRead=false " +
+            "safely (skips the lookup entirely) rather than risking a bare-entityName fallback match")
+    void testBlankAppIdResolvesPublicReadFalseSafely() {
+        when(req.method()).thenReturn("GET");
+
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, "", ENTITY_NAME);
 
         assertFalse(result.allowed());
         assertEquals(401, result.statusCode());
@@ -277,7 +332,7 @@ class EntityAccessGuardTest {
     void testAdminTokenAdmitsWithNoSessionAtAll() {
         when(req.header("X-AppBana-Token")).thenReturn("admin-token-xyz");
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertTrue(result.allowed());
     }
@@ -289,7 +344,7 @@ class EntityAccessGuardTest {
         when(req.header("X-AppBana-Token")).thenReturn("admin-token-xyz");
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertTrue(result.allowed());
     }
@@ -300,7 +355,7 @@ class EntityAccessGuardTest {
     void testReadTokenAloneDoesNotBypass() {
         when(req.header("X-AppBana-Token")).thenReturn("read-token-abc");
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, APP_1, ENTITY_NAME);
 
         assertFalse(result.allowed());
         assertEquals(401, result.statusCode());
@@ -313,7 +368,7 @@ class EntityAccessGuardTest {
     @Test
     @DisplayName("Entry point (a): unknown entity key, no session => 401, not 404 (S3.4 review LOW fix)")
     void testUnknownEntityKeyNoSessionReturns401() {
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity");
 
         assertFalse(result.allowed());
         assertEquals(401, result.statusCode());
@@ -325,7 +380,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("user-no-such-app", TENANT_A);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity");
 
         assertFalse(result.allowed());
         assertEquals(403, result.statusCode());
@@ -335,15 +390,15 @@ class EntityAccessGuardTest {
     @DisplayName("Entry point (a): unknown vs. real-but-unauthorized entity key are byte-identical (status code AND message) for the same caller shape (round-65 review MEDIUM fix)")
     void testUnknownEntityKeyIndistinguishableFromRealUnauthorizedEntity() {
         saveFixtureSchema();
-        EntityAccessGuard.Result unknownAnon = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
-        EntityAccessGuard.Result realAnon = EntityAccessGuard.check(req, cfg, PACKED_KEY, false);
+        EntityAccessGuard.Result unknownAnon = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity");
+        EntityAccessGuard.Result realAnon = EntityAccessGuard.check(req, cfg, PACKED_KEY);
         assertEquals(realAnon.statusCode(), unknownAnon.statusCode(), "unauthenticated: unknown key vs real-unauthorized key must match");
         assertEquals(realAnon.message(), unknownAnon.message(), "unauthenticated: 401 message must not differ (both null/no session)");
 
         SessionData session = SessionService.createSession("user-packed-outsider-2", TENANT_A);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
-        EntityAccessGuard.Result unknownWithSession = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
-        EntityAccessGuard.Result realWithSession = EntityAccessGuard.check(req, cfg, PACKED_KEY, false);
+        EntityAccessGuard.Result unknownWithSession = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity");
+        EntityAccessGuard.Result realWithSession = EntityAccessGuard.check(req, cfg, PACKED_KEY);
         assertEquals(realWithSession.statusCode(), unknownWithSession.statusCode(), "authenticated non-member: unknown key vs real-unauthorized key must match");
         // This is the exact assertion the round-65 review independently added via a temporary probe
         // to prove the 403 body still leaked (before the fix): a real entity's label (schema.getName(),
@@ -361,7 +416,7 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("user-packed-member", TENANT_A);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, PACKED_KEY, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, PACKED_KEY);
 
         assertTrue(result.allowed());
     }
@@ -373,9 +428,33 @@ class EntityAccessGuardTest {
         SessionData session = SessionService.createSession("user-packed-outsider", TENANT_A);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, PACKED_KEY, false);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, PACKED_KEY);
 
         assertFalse(result.allowed());
         assertEquals(403, result.statusCode());
+    }
+
+    @Test
+    @DisplayName("S3.5: entry point (a) reads publicRead straight off the schema it already loaded — " +
+            "GET admits anonymously, same as entry point (b)")
+    void testPackedKeyPublicReadGetAdmitsAnonymously() {
+        saveFixtureSchema(true);
+        when(req.method()).thenReturn("GET");
+
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, PACKED_KEY);
+
+        assertTrue(result.allowed());
+    }
+
+    @Test
+    @DisplayName("S3.5: entry point (a) publicRead=true does not rescue a non-GET")
+    void testPackedKeyPublicReadPostDoesNotAdmit() {
+        saveFixtureSchema(true);
+        when(req.method()).thenReturn("POST");
+
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, PACKED_KEY);
+
+        assertFalse(result.allowed());
+        assertEquals(401, result.statusCode());
     }
 }

@@ -203,8 +203,7 @@ class GenericAppAuthControllerTest {
         // just look superficially correct. Proves the two features interoperate end-to-end.
         Router.HttpRequest guardReq = mock(Router.HttpRequest.class);
         when(guardReq.header("X-Session-Token")).thenReturn(sessionId);
-        EntityAccessGuard.Result guardResult = EntityAccessGuard.check(guardReq, cfg, TENANT_A, APP_1, ENTITY_NAME,
-                false);
+        EntityAccessGuard.Result guardResult = EntityAccessGuard.check(guardReq, cfg, TENANT_A, APP_1, ENTITY_NAME);
         assertTrue(guardResult.allowed(),
                 "a session minted by GenericAppAuthController.login() must be admitted by EntityAccessGuard rule (ii)");
     }

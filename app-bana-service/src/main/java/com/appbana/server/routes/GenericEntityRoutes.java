@@ -441,7 +441,7 @@ public class GenericEntityRoutes {
             // S3.4 — EntityAccessGuard replaces the conditional `if (authEnabled(cfg))` gate:
             // auth is now always evaluated, never silently skipped when no admin/read token
             // happens to be configured (the anti-pattern AuthEnabledAntiPatternTest guards).
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -495,7 +495,7 @@ public class GenericEntityRoutes {
             AppConfig cfg = ConfigManager.getConfig();
             String entity = req.pathParam("entity");
 
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -559,7 +559,7 @@ public class GenericEntityRoutes {
             AppConfig cfg = ConfigManager.getConfig();
             String entity = req.pathParam("entity");
 
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -788,7 +788,7 @@ public class GenericEntityRoutes {
             AppConfig cfg = ConfigManager.getConfig();
             String entity = req.pathParam("entity");
 
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -824,7 +824,7 @@ public class GenericEntityRoutes {
             AppConfig cfg = ConfigManager.getConfig();
             String entity = req.pathParam("entity");
 
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -910,7 +910,7 @@ public class GenericEntityRoutes {
             AppConfig cfg = ConfigManager.getConfig();
             String entity = req.pathParam("entity");
 
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -963,7 +963,7 @@ public class GenericEntityRoutes {
             AppConfig cfg = ConfigManager.getConfig();
             String entity = req.pathParam("entity");
 
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1038,7 +1038,7 @@ public class GenericEntityRoutes {
             AppConfig cfg = ConfigManager.getConfig();
             String entity = req.pathParam("entity");
 
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1125,7 +1125,7 @@ public class GenericEntityRoutes {
             // S3.4 — EntityAccessGuard replaces the old bare extractUserId-null check: this also
             // verifies the caller actually belongs to (tenantId, appId), not merely that *some*
             // session exists.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1185,7 +1185,7 @@ public class GenericEntityRoutes {
             }
 
             // S3.4 — this route previously had NO auth check at all.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1304,7 +1304,7 @@ public class GenericEntityRoutes {
             }
 
             // S3.4 — this route previously had NO auth check at all.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1356,7 +1356,7 @@ public class GenericEntityRoutes {
             }
 
             // S3.4 — EntityAccessGuard replaces the old bare extractUserId-null check.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1450,7 +1450,7 @@ public class GenericEntityRoutes {
             }
 
             // S3.4 — EntityAccessGuard replaces the old bare extractUserId-null check.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1535,7 +1535,7 @@ public class GenericEntityRoutes {
 
             // S3.4 — EntityAccessGuard replaces the B8-FIX bare extractUserId-null check: this
             // also verifies the caller actually belongs to (tenantId, appId).
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1605,7 +1605,7 @@ public class GenericEntityRoutes {
             }
 
             // S3.4 — EntityAccessGuard replaces the B9-FIX bare extractUserId-null check.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1671,7 +1671,7 @@ public class GenericEntityRoutes {
             }
 
             // S3.4 — this route previously had NO auth check at all.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1784,7 +1784,7 @@ public class GenericEntityRoutes {
             }
 
             // S3.4 — this route previously had NO auth check at all.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1840,7 +1840,7 @@ public class GenericEntityRoutes {
             }
 
             // S3.4 — EntityAccessGuard replaces the bare extractUserId-null check.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
@@ -1936,7 +1936,7 @@ public class GenericEntityRoutes {
             }
 
             // S3.4 — EntityAccessGuard replaces the bare extractUserId-null check.
-            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity);
             if (!access.allowed()) {
                 res.json(access.statusCode(), Map.of("error", access.message()));
                 return;

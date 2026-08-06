@@ -18,7 +18,7 @@ import java.util.Objects;
  * <p><b>Two entry points</b>, since {@code GenericEntityRoutes} has two differently-shaped route
  * families:
  * <ul>
- *   <li>{@link #check(Router.HttpRequest, AppConfig, String, boolean)} — for the {@code /api/{entity}}
+ *   <li>{@link #check(Router.HttpRequest, AppConfig, String)} — for the {@code /api/{entity}}
  *       family, whose only identifier is the packed {@code {tenantId}_{appId}_{entityName}} key.
  *       Resolves {@code tenantId}/{@code appId} via {@link SchemaManager#loadSchema(String)}
  *       rather than splitting the string on {@code "_"} — {@code appId} or {@code entityName}
@@ -29,12 +29,17 @@ import java.util.Objects;
  *       entity the caller isn't authorized for (S3.4 review LOW fix, hardened by the round-65
  *       review MEDIUM fix) — both produce the same 401/403 tail with the same constant message
  *       text, so no caller shape (unauthenticated, or authenticated to any tenant) can enumerate
- *       which packed keys are real by inspecting either the status code or the response body.</li>
- *   <li>{@link #check(Router.HttpRequest, AppConfig, String, String, String, boolean)} — for the
+ *       which packed keys are real by inspecting either the status code or the response body.
+ *       Since this entry point already loads the schema, it reads {@code publicRead} (S3.5)
+ *       straight off it — no separate lookup.</li>
+ *   <li>{@link #check(Router.HttpRequest, AppConfig, String, String, String)} — for the
  *       studio-scoped ({@code /appbana-studio/{tenantId}/apps/{appId}/{entity}}) and env-scoped
  *       ({@code /api/{tenantId}/apps/{appId}/env/{env}/{entity}}) families, which already carry
- *       {@code tenantId}/{@code appId} as separate path params — no schema lookup needed to reach
- *       an allow/deny decision.</li>
+ *       {@code tenantId}/{@code appId} as separate path params, so rules (i)/(ii) below need no
+ *       schema lookup. Rule (iii) does, so this entry point resolves {@code publicRead} (S3.5)
+ *       with its own {@code SchemaManager.loadSchema(appId, entityName, tenantId)} call — but
+ *       only once rules (i)/(ii) have both failed, so a real member or scoped session (the
+ *       common case for these routes) never pays for it.</li>
  * </ul>
  *
  * <p><b>Allow rule</b> — ONE disjunctive condition (review round 5 confirmed this guard must NOT
@@ -53,9 +58,8 @@ import java.util.Objects;
  *       {@code DataDrawer} dependency-array bug — so an appId-only comparison could in principle
  *       let a session scoped to one tenant's app reach a different tenant's app that happens to
  *       reuse the same id); <b>or</b></li>
- *   <li>(iii) the app is marked {@code publicRead} (S3.5 — passed in explicitly by the caller
- *       here, since no such field exists on {@code EntitySchema}/{@code AppMetadata} yet) and the
- *       request is a {@code GET}.</li>
+ *   <li>(iii) the entity's schema has {@code publicRead == true} (S3.5,
+ *       {@link EntitySchema#isPublicRead()}) and the request is a {@code GET}.</li>
  * </ol>
  * A valid service/admin token ({@link AuthService#extractServiceToken}/{@link AuthService#hasAdmin})
  * is a break-glass override, evaluated LAST (fall-through) — deliberately not admit-first the way
@@ -64,10 +68,13 @@ import java.util.Objects;
  * and simply returns false rather than throwing — {@link AppMembershipService#isMember} already
  * short-circuits on a null userId before ever issuing a query.
  *
- * <p><b>publicRead is NOT read from schema/app metadata by this class</b> — S3.5 (which adds that
- * flag) has not landed yet, and its exact shape (per-app vs. per-entity) isn't settled. Callers
- * pass the boolean explicitly; until S3.5 lands and S3.4 wires it through, callers should pass
- * {@code false}.
+ * <p><b>publicRead resolution never changes the shape of the 401/403 tail</b> (S3.5): an entity
+ * with {@code publicRead == false} — or one that doesn't resolve to a schema at all — falls
+ * through to the exact same {@link #denyOrAdmit} tail either way, same status code and same
+ * constant message. Only {@code publicRead == true} on a {@code GET} short-circuits to an allow,
+ * which is the feature working as intended, not a regression of the existence-oracle closure
+ * above: a caller can learn "this entity exists and is public", but never distinguish "exists but
+ * private" from "doesn't exist" — both still 401/403 with identical bodies.
  */
 public final class EntityAccessGuard {
 
@@ -98,15 +105,13 @@ public final class EntityAccessGuard {
     /**
      * Entry point (a) — packed-key family ({@code /api/{entity}}).
      *
-     * @param req        the incoming request
-     * @param cfg        app config, for admin-token comparison
-     * @param entityKey  the packed {@code {tenantId}_{appId}_{entityName}} key (or a legacy,
-     *                   non-tenant-scoped bare entity name — see the schema-not-found branch below)
-     * @param publicRead whether this app/entity has been marked publicly readable (S3.5); pass
-     *                   {@code false} until that flag exists and is threaded through by the caller
+     * @param req       the incoming request
+     * @param cfg       app config, for admin-token comparison
+     * @param entityKey the packed {@code {tenantId}_{appId}_{entityName}} key (or a legacy,
+     *                  non-tenant-scoped bare entity name — see the schema-not-found branch below)
      * @return a {@link Result} describing whether the request may proceed
      */
-    public static Result check(Router.HttpRequest req, AppConfig cfg, String entityKey, boolean publicRead) {
+    public static Result check(Router.HttpRequest req, AppConfig cfg, String entityKey) {
         EntitySchema schema = SchemaManager.loadSchema(entityKey);
         if (schema == null) {
             // S3.4 review LOW fix: this used to return 404 immediately, before any session/admin
@@ -120,47 +125,71 @@ public final class EntityAccessGuard {
             // that tail here makes the response byte-identical — status code AND body, since the
             // round-65 fix below made the 403 message a caller-invariant constant — for every
             // caller shape, to what a REAL entity the caller isn't authorized for would produce.
+            // publicRead is false here too — there is no schema, so nothing to be public about.
             // The entity's genuine existence is only revealed to callers who turn out to be actual
             // members — same as entry point (b), whose own downstream route handler is what
             // finally 404s on a truly absent entity, for a caller already inside that app.
             SessionService.SessionData session = AuthService.resolveSession(req);
-            return denyOrAdmit(req, cfg, session, publicRead);
+            return denyOrAdmit(req, cfg, session, false);
         }
 
         String tenantId = (schema.getTenantId() != null && !schema.getTenantId().isBlank())
                 ? schema.getTenantId()
                 : "default";
         String appId = schema.getAppId();
+        SessionService.SessionData session = AuthService.resolveSession(req);
 
-        return check(req, cfg, tenantId, appId, schema.getName(), publicRead);
+        Result admitted = admitByMembershipOrScope(tenantId, appId, session);
+        if (admitted != null) {
+            return admitted;
+        }
+        // S3.5 — this entry point already has the schema in hand, so publicRead is read directly
+        // off it; no extra lookup (entry point (b) below has to do its own, lazily, since it's
+        // never handed a schema).
+        return denyOrAdmit(req, cfg, session, schema.isPublicRead());
     }
 
     /**
      * Entry point (b) — path-segmented families (studio-scoped {@code /appbana-studio/{tenantId}
      * /apps/{appId}/{entity}} and env-scoped {@code /api/{tenantId}/apps/{appId}/env/{env}/{entity}}):
-     * {@code tenantId}/{@code appId} are already separate path params, so no schema lookup is
-     * needed to reach an allow/deny decision. This is also the shared core the packed-key entry
-     * point above delegates to once it has resolved those two values.
+     * {@code tenantId}/{@code appId} are already separate path params, so rules (i)/(ii) need no
+     * schema lookup to reach an allow decision.
      *
      * @param req        the incoming request (used to extract the service token / session credential)
      * @param cfg        app config, for admin-token comparison
      * @param tenantId   the tenant id the target app belongs to
      * @param appId      the target app id
-     * @param entityName the target entity name; NOT read by this method's own logic (allow-rule
-     *                   never depended on it) and, since round 65, not even used for the 403
-     *                   message body — deliberately unused here to avoid re-introducing a
-     *                   real-vs-fake existence oracle into the message text (see
-     *                   {@link #denyOrAdmit} Javadoc). Kept in the signature for API stability
-     *                   across the ~19 {@code GenericEntityRoutes} call sites and as a hook for
-     *                   any future server-side-only use (e.g. logging) that must not reach the
-     *                   client response.
-     * @param publicRead whether this app/entity has been marked publicly readable (S3.5); pass
-     *                   {@code false} until that flag exists and is threaded through by the caller
+     * @param entityName the target entity name; not read by rules (i)/(ii), and never echoed in
+     *                   any response body (the 403 message stays the round-65 caller-invariant
+     *                   constant — see {@link #denyOrAdmit} Javadoc). Since S3.5, IS used —
+     *                   server-side only, and only once rules (i)/(ii) have both failed — to look
+     *                   up the entity's schema and read {@code publicRead} off it.
      * @return a {@link Result} describing whether the request may proceed
      */
     public static Result check(Router.HttpRequest req, AppConfig cfg, String tenantId, String appId,
-                                String entityName, boolean publicRead) {
+                                String entityName) {
         SessionService.SessionData session = AuthService.resolveSession(req);
+
+        Result admitted = admitByMembershipOrScope(tenantId, appId, session);
+        if (admitted != null) {
+            return admitted;
+        }
+
+        // S3.5 — only reached once rules (i)/(ii) have both failed, so a real member or scoped
+        // session (the common case for these routes) never pays for this lookup.
+        boolean publicRead = resolvePublicRead(tenantId, appId, entityName);
+        return denyOrAdmit(req, cfg, session, publicRead);
+    }
+
+    /**
+     * Rules (i) membership and (ii) scoped-session, shared by both entry points above. Returns
+     * {@code null} (not a {@link Result}) when neither rule admits, so callers can tell "denied"
+     * apart from "not yet decided — fall through to {@link #denyOrAdmit}". Both entry points still
+     * resolve {@code publicRead} differently before that fall-through: entry point (a) already has
+     * a schema in hand; entry point (b) has to look one up.
+     */
+    private static Result admitByMembershipOrScope(String tenantId, String appId,
+                                                     SessionService.SessionData session) {
         String userId = session != null ? session.userId() : null;
 
         // (i) any appbana_app_members role for this (tenantId, appId) — data-access-only, so
@@ -181,7 +210,24 @@ public final class EntityAccessGuard {
             return Result.allow();
         }
 
-        return denyOrAdmit(req, cfg, session, publicRead);
+        return null;
+    }
+
+    /**
+     * S3.5 — resolves {@code publicRead} for entry point (b), which (unlike entry point (a)) is
+     * never handed a schema. Returns {@code false} without querying at all when {@code appId} or
+     * {@code entityName} is missing — mirrors rule (i)'s own blank-guard above, and means a
+     * malformed/absent identifier can never accidentally resolve to some unrelated schema via a
+     * bare-name fallback lookup. A blank {@code tenantId} is left to
+     * {@link SchemaManager#loadSchema(String, String, String)}'s own "default" fallback, same as
+     * every other caller of that overload.
+     */
+    private static boolean resolvePublicRead(String tenantId, String appId, String entityName) {
+        if (appId == null || appId.isBlank() || entityName == null || entityName.isBlank()) {
+            return false;
+        }
+        EntitySchema schema = SchemaManager.loadSchema(appId, entityName, tenantId);
+        return schema != null && schema.isPublicRead();
     }
 
     /**
