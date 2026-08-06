@@ -28,8 +28,9 @@ public class AuditLogTest {
         ApiServer.startJdk(PORT);
         Thread.sleep(300);
 
-        // Use SessionService to create a valid session
-        SessionService.SessionData session = SessionService.createSession("test-user");
+        // Use SessionService to create a valid session, scoped to the "default"/"default"
+        // tenant+app so it satisfies EntityAccessGuard (S3.4) for the fixture schema below.
+        SessionService.SessionData session = SessionService.createSession("test-user", "default", "default");
         TOKEN = session.sessionId();
 
         // Now initialize SchemaManager and create the test schema

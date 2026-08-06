@@ -38,8 +38,9 @@ public class AdvancedQueryTest {
         SchemaManager.init();
         EntityCrudService crud = new EntityCrudService();
 
-        // Create valid session for tests
-        SessionService.SessionData session = SessionService.createSession("test-user");
+        // Create valid session for tests, scoped to the "default"/"default" tenant+app so it
+        // satisfies EntityAccessGuard (S3.4) for every fixture schema defined below.
+        SessionService.SessionData session = SessionService.createSession("test-user", "default", "default");
         TOKEN = session.sessionId();
 
         // Define schemas with default tenant/app context to match API resolution

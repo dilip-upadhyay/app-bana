@@ -2704,7 +2704,7 @@ enforcement.
 | S3.1 | Reserve/use `scopedAppId` on `SessionData` for the optional separate-user-table path (not the shipped Runtime's path — that's S3.7). | `SessionService.java` | 30 min | ✅ |
 | S3.2 | `EntityAccessGuard` with two entry points: (a) `check(entityKey,...)` parsing `{tenantId}_{appId}_{entityName}` for `/api/{entity}`; (b) `check(tenantId, appId, entityName,...)` for the two path-segmented families. Allow rule: (i) Studio session is an `appbana_app_members` member of `(tenantId, appId)` — **any role** — **or** (ii) runtime session `scopedAppId` equals `appId` **or** (iii) app is `publicRead` and request is `GET`. Break-glass admin token is fall-through, evaluated last. | new `com.appbana.security.EntityAccessGuard` | 150 min | ✅ |
 | S3.3 | `GenericAppAuthController.login()`: (a) issues a real session via `SessionService.createSession(...)` with `scopedAppId` set; (b) fetch-by-email + verify password in Java (not SQL — BCrypt can't compare in `WHERE`); (c) normalize response so nonexistent-entity/app and wrong-password both produce the same generic 401. | `GenericAppAuthController.java` | 105 min | ✅ |
-| S3.4 | Wire `EntityAccessGuard` into **every** `GenericEntityRoutes` route per the S0.2 census — the 21 existing `authEnabled` blocks (ratchet-verified, `AuthEnabledAntiPatternTest` baseline — S1 external review round 2) *and* the 11 routes (studio-scoped + env-scoped families) with no such block today. | `GenericEntityRoutes.java` | 180 min | ⬜ |
+| S3.4 | Wire `EntityAccessGuard` into **every** `GenericEntityRoutes` route per the S0.2 census — the 21 existing `authEnabled` blocks (ratchet-verified, `AuthEnabledAntiPatternTest` baseline — S1 external review round 2) *and* the 11 routes (studio-scoped + env-scoped families) with no such block today. | `GenericEntityRoutes.java` | 180 min | ✅ |
 | S3.5 | Add `publicRead: boolean` flag (default `false`) on app/entity metadata for legitimately public apps. | `AppMetadata`/`EntitySchema`, `SchemaRoutes.java` | 45 min | ⬜ |
 | S3.6 | Tests: `CrossTenantEntityAccessTest`, `CrossAppEntityAccessTest` (same-tenant, different app) across all 3 route families, `RuntimeSessionScopedToSingleAppTest`, `LoginDoesNotLeakEntityExistenceTest`. | new tests | 120 min | ⬜ |
 | S3.7 | (a) Confirm S2.6's `AppRoutes` list/get wiring accepts an `end-user`-role membership for `GET /appbana-studio/{t}/apps/{id}` (no new carve-out — already S2.6). (b) Land the deferred `e2e/tests/a11y-runtime.spec.ts` authenticated-shell test. (c) End-to-end verification against the real running Runtime with an `end-user`-role membership row: list/get succeed, update/delete/schema-management 403. No Runtime frontend change expected. | `AppRoutes.java` (verify only), `e2e/tests/a11y-runtime.spec.ts` | 45 min | ⬜ |
@@ -2788,7 +2788,100 @@ enforcement.
   `e.getMessage()` in a 500 body, which could leak SQL-exception detail on an unrelated failure mode
   (e.g. schema row present but physical table missing) — adjacent to but distinct from M6's specific
   404-vs-401 concern, flagged here for whoever picks this up rather than silently left undocumented.
-- **S3.4** [Cat. 1 — both sides] Studio: as User B (no membership on App-A), Studio's `DataDrawer` for App-A's entity must fail/be empty. Runtime: an end-user session scoped to App-A works on App-A's own `StudioTableLive` grid; the same session 403s if pointed at App-B's entity route via a direct URL edit.
+- **S3.4** [Cat. 1 for the cross-app-403 claim — proven with a real HTTP session against the live
+  backend; Cat. 2 for the unauthenticated-401 claim on studio-scoped routes — see attribution caveat
+  below] ✅ Done 2026-08-07: wired `EntityAccessGuard.check(...)` into all **19** in-scope
+  `GenericEntityRoutes` routes — 8 packed-key (`/api/{entity}` family: GET-list, GET/{id}, POST,
+  POST/batch, PUT/{id}, DELETE/{id}, plus 2 more matching the packed-key shape), 3 studio-scoped
+  (`/api/{tenantId}/apps/{appId}/{entity}...`), and 8 env-scoped
+  (`/api/{tenantId}/apps/{appId}/env/{env}/{entity}...`) — reaching the doc's own "19/19" figure.
+  Added a small `actorOrSystem(req, cfg)` private helper (falls back to `"system"` only defensively;
+  every admit path through the guard already requires a resolvable identity) so mutation routes keep
+  their existing audit-log attribution unchanged.
+  **Reconciling this row's original "21 + 11" scope figure against what was actually wired** (flagging
+  proactively, per this project's own pattern of correcting stale scope math rather than silently
+  absorbing it): of the 21 ratchet-tracked `authEnabled(cfg)` blocks in `GenericEntityRoutes.java`,
+  only **8** were genuine entity-data-access gates in this task's scope and were replaced by
+  `EntityAccessGuard` (confirmed by counting removed `authEnabled(` occurrences directly in the diff —
+  exactly 8, with the one textual addition being an explanatory comment, correctly excluded by the
+  ratchet test's own comment-skipping regex). The other **13** are legitimately out of scope and were
+  left untouched: 7 on `/api/field-permissions*` (a separate admin surface, not entity CRUD), 1 on
+  `/audit`, and 5 field-level-security (FLS) `permissionService`-gated readable-fields filters that
+  live *inside* routes this task already gated — they decide which *fields* of an admitted response are
+  visible, an orthogonal, supplementary concern to whether the caller may reach the route at all, and
+  are not separate routes. 8 (replaced) + 11 (previously fully unguarded) = 19, matching the routes
+  actually wired. Updated `AuthEnabledAntiPatternTest`'s `BASELINE` entry for this file from 21 → 13
+  (a ratchet decrease, always safe) and expanded its Javadoc with this same breakdown for future
+  readers.
+  **Layered-guard discovery, directly relevant to this doc's own "Backend Testing Traps" caution**:
+  read `SessionMiddleware.isExcludedPath()` (lines 148–228) before attributing any probe result.
+  Packed-key `/api/{entity}` and both path-segmented families under `/api/.../apps/...` are *excluded*
+  from `SessionMiddleware`'s blanket session requirement, making `EntityAccessGuard` the *sole*
+  protection layer for those two shapes — any 401/403 there is unambiguously the new guard's doing.
+  `/appbana-studio/*`, however, is explicitly **not** excluded (per an existing code comment), so
+  `SessionMiddleware` *independently* also requires a session on studio routes — a bare
+  unauthenticated-401 probe there cannot, by itself, prove `EntityAccessGuard` fired (same status code,
+  different layer; the two layers do return distinguishably different JSON error bodies:
+  `{"error":"Unauthorized","message":"Missing session token","status":401}` from `SessionMiddleware`
+  vs. `EntityAccessGuard`'s own `{"error":"Unauthorized: valid session required"}`, but a probe that
+  never got past `SessionMiddleware` never reaches the code under test). This is why the cross-app
+  **403** case (valid session, wrong app) is the correct, unambiguous verification for studio routes,
+  not the unauthenticated case.
+  **Live-probe methodology and results** (real running backend, freshly rebuilt from the edited code,
+  not guard unit tests alone): stopped the stale pre-edit backend instance, rebuilt the fat jar,
+  relaunched, confirmed healthy via `/health`. (1) Unauthenticated GET against a real pre-existing
+  cross-tenant schema (`company-x_ecommerce_order`, found via read-only `psql` against
+  `appbana_schemas`) → packed-key **401**, env-scoped (fake entity, to prove the guard runs before
+  schema lookup) **401** — both guard-attributable per the layering above; studio-scoped **401** too,
+  but attribution is ambiguous per the caveat above (noted honestly rather than claimed as proof). (2)
+  Minted a real, zero-membership session by registering a genuine throwaway user via the actually
+  HTTP-reachable `POST /api/auth/register` (`AuthenticationController.java`) — obtained user id `108`
+  and a real 2-arg (`userId, tenantId`, no `scopedAppId`) session token. Probed all 3 families against
+  the foreign `company-x`/`ecommerce`/`order` target with this session — **all 3 returned 403 with
+  `EntityAccessGuard`'s exact, distinguishing message** (`"Forbidden: caller is not authorized for
+  entity 'order'"`), which is unique to the guard's deny path and unambiguous across all 3 families,
+  including studio. (3) Inserted a real `appbana_app_members` row (direct `psql`, mirroring
+  `AppMembershipService.grant`'s own `ON CONFLICT ... DO UPDATE` shape) granting user 108 `member` on
+  `company-x`/`ecommerce`, re-probed all 3 families — **all 3 returned 200** (empty result sets),
+  proving the guard's allow-path also works live, not just in unit tests. Deleted the synthetic
+  membership row afterward and re-confirmed the deny-path (403) returned post-cleanup, proving cleanup
+  succeeded; left the harmless throwaway user account in place (consistent with other fixture accounts
+  already in the dev DB) and left the freshly-rebuilt backend running (matches this repo's own
+  "always restart after Java changes" convention).
+  **Break-test discipline**: found two pre-existing tests with real unauthenticated-401 assertions on
+  routes that were previously undocumented as "unauthenticated AND ungated" —
+  `testRuntimeAppScopedInsertBypassPrevented` (runtime no-env POST) and
+  `testEnvScopedInsertBypassPrevented` (env-scoped POST), both in `ApprovalRoutesSecurityTest`.
+  Temporarily commented out the guard call on both routes, ran exactly these 2 tests — both failed
+  with the precise expected signature (`expected: <401> but was: <201>`, i.e. the unauthenticated write
+  now silently succeeds without the guard), reverted, re-ran the full suite to reconfirm green. No
+  pre-existing test asserts a deny (401/403) for packed-key or studio-scoped absent this task's guard —
+  that HTTP-level regression coverage is **S3.6**'s explicit job (`CrossTenantEntityAccessTest`,
+  `CrossAppEntityAccessTest`); the live-probe above substitutes for it this round, and
+  `EntityAccessGuardTest` (pre-existing, 20/20 green, unmodified) already covers the guard's own logic
+  at the unit level regardless of which route calls it.
+  **Fixed 3 pre-existing tests broken by this task's edits** (all were calling a 1-arg/2-arg
+  `SessionService.createSession` that no longer produces a session `EntityAccessGuard` will admit, now
+  that every route actually checks membership): `AuditLogTest` and `AdvancedQueryTest` each needed their
+  single `createSession(...)` call switched to the 3-arg form with explicit `tenantId`/`appId`
+  (`"default"`/`"default"`, matching every fixture schema already in each file).
+  `ApprovalRoutesSecurityTest` needed real `AppMembershipService.grant(...)` rows added in `@BeforeAll`
+  for its `alice_maker`/`bob_checker` fixture users (not for `eve_attacker`, whose session is never used
+  against a now-guarded route — confirmed by grep) — added the import and 2 grant calls, then manually
+  re-verified all 13 of the file's `@Test` methods to confirm every call site still matches this fix's
+  assumptions before trusting the green run.
+  Full `app-bana-service` suite: **568/568**, 0 failures, 0 errors, `BUILD SUCCESS` — both before and
+  after the break-test revert. `RouteCensusTest`/`EstimateReconciliationTest` reconfirmed green
+  (unaffected — no route additions/removals or estimate changes this task; wiring only edited existing
+  handler bodies).
+  **Deferred, explicitly out of this task's scope, tracked as separate rows**: `publicRead` (S3.5,
+  not yet implemented — rule (iii) in S3.2's allow logic has no metadata flag to read yet, so it's
+  currently unreachable dead logic, not a bug); new `CrossTenantEntityAccessTest`/
+  `CrossAppEntityAccessTest` suite (S3.6); Runtime end-user login UI proof (S3.7); the dormant
+  `PermissionServiceTest` (S3.8). Phase-level "Exit criteria — S3" checkboxes are intentionally left
+  unchecked below — criteria 1 (all 3 families require a valid, scoped session) and 2 (cross-app 403,
+  same tenant) are now concretely demonstrated by this task's live-probe, but criteria 3 (`publicRead`)
+  and 6 (Runtime UI end-to-end) depend on S3.5/S3.7, which remain ⬜.
 - **S3.5** [Cat. 1 for the read side] Mark one entity `publicRead: true` (via chat, or a direct schema PATCH if Studio has no toggle yet — flag if so), then load that Runtime page in a fresh, fully logged-out browser tab and confirm it renders with no session, while a non-`publicRead` entity on the same app still requires login.
 - **S3.6** [Cat. 2 for route-family shapes with no dedicated screen, Cat. 1 for the ones that do] Formalizes S3.4's scenarios; any route family without a Runtime/Studio consumer is noted as such, not faked.
 - **S3.7** [Cat. 1 — the primary proof for all of S3, explicitly called for by the plan's own exit criteria] Grant a fresh User C `end-user` role on App-A, log into Runtime as User C, list/view App-A's data (must succeed), attempt an edit/delete or navigate to a second app with no grant (must 403 both) — in the running apps, not guard unit tests alone.

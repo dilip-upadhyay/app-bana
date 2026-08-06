@@ -7,6 +7,7 @@ import com.appbana.approval.ApprovalColumns;
 import com.appbana.approval.UserRoleService;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
+import com.appbana.security.AppMembershipService;
 import com.appbana.service.SessionService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -101,6 +102,15 @@ public class ApprovalRoutesSecurityTest {
         makerSessionToken = SessionService.createSession("alice_maker").sessionId();
         checkerSessionToken = SessionService.createSession("bob_checker").sessionId();
         attackerSessionToken = SessionService.createSession("eve_attacker").sessionId();
+
+        // S3.4 — EntityAccessGuard is now unconditionally wired into every generic-entity route.
+        // UserRoleService (above) only grants the maker/checker *approval-domain* business role;
+        // it says nothing about "is this user in this app" (AppMembershipService), which the guard
+        // actually consults (rule i). eve_attacker is deliberately NOT granted membership here —
+        // her session is never exercised against the routes below anyway (see class docs), and an
+        // attacker having no membership is also the more realistic/conservative fixture.
+        AppMembershipService.grant(TENANT_ID, APP_ID, "alice_maker", AppMembershipService.Role.MEMBER, "system");
+        AppMembershipService.grant(TENANT_ID, APP_ID, "bob_checker", AppMembershipService.Role.MEMBER, "system");
     }
 
     @BeforeEach

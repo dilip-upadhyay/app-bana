@@ -35,6 +35,17 @@ import static org.junit.jupiter.api.Assertions.fail;
  * file, or introducing the pattern into any other file for the first time (this is exactly how
  * S1.6 added three new instances in {@code AppRoutes.java}) — does.
  *
+ * <p><b>{@code GenericEntityRoutes.java} dropped from 21 to 13 in S3.4</b>, which wired
+ * {@code EntityAccessGuard} unconditionally into all 19 in-scope entity-data routes (the 8
+ * packed-key {@code /api/{entity}*}, 5 studio-scoped, and 6 runtime/env-scoped families),
+ * replacing each route's own {@code if (authEnabled(cfg))} block. The remaining 13 are a
+ * genuinely different, out-of-scope concern, not a shortfall: 1 on {@code /audit} and 7 on
+ * {@code /api/field-permissions*} (their own admin surface, never routed through
+ * {@code EntityAccessGuard}), plus 5 field-level-security (FLS) readable-fields filters nested
+ * inside already-guarded routes — those gate only whether {@code permissionService} redacts
+ * individual fields from an already-admitted response, not whether the caller may reach the route
+ * at all, so they are not the access-control anti-pattern this ratchet exists to catch.
+ *
  * <p><b>{@code SchemaRoutes.java}'s count reached zero via S1.15/S1.16/S1.17</b>, and its entry
  * was removed from {@link #BASELINE} entirely rather than set to {@code 0} — a missing key and a
  * {@code 0} entry both fail equally on any future re-introduction (the "NEW FILE" branch vs. the
@@ -70,7 +81,8 @@ class AuthEnabledAntiPatternTest {
      * occurrence is a genuine one-off exception, discuss with the plan doc's owner first.
      */
     private static final Map<String, Integer> BASELINE = Map.of(
-            "com/appbana/server/routes/GenericEntityRoutes.java", 21,
+            // S3.4 — dropped from 21 to 13; see class Javadoc for what the remaining 13 are.
+            "com/appbana/server/routes/GenericEntityRoutes.java", 13,
             // S1.10 — the inverse of the anti-pattern (warns auth is off; never gates a security
             // check on auth being on). See this class's own Javadoc before adding a second one.
             "com/appbana/ApiServer.java", 1

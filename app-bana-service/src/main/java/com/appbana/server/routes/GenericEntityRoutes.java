@@ -10,6 +10,7 @@ import com.appbana.config.AppConfig;
 import com.appbana.config.ConfigManager;
 import com.appbana.model.EntitySchema;
 import com.appbana.model.TenantContext;
+import com.appbana.security.EntityAccessGuard;
 import com.appbana.service.AuthService;
 import com.appbana.service.EntityCrudService;
 import com.appbana.service.ErrorHandler;
@@ -435,17 +436,18 @@ public class GenericEntityRoutes {
         // ==================== ENTITY CRUD ====================
         router.post("/api/{entity}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous";
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
-            }
-
             String entity = req.pathParam("entity");
+
+            // S3.4 — EntityAccessGuard replaces the conditional `if (authEnabled(cfg))` gate:
+            // auth is now always evaluated, never silently skipped when no admin/read token
+            // happens to be configured (the anti-pattern AuthEnabledAntiPatternTest guards).
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String actor = actorOrSystem(req, cfg);
+
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity"));
@@ -456,8 +458,8 @@ public class GenericEntityRoutes {
             });
 
             // C2.15 — Use shared enforceApprovalPreInsert helper (same guard as batch/studio/runtime/env routes).
-            // The actor variable already holds extractUserId; re-use it here as callerUserId.
-            enforceApprovalPreInsert(schema, data, AuthService.extractUserId(req, cfg));
+            // actor is the same resolved identity used for the audit log above.
+            enforceApprovalPreInsert(schema, data, actor);
             try {
                 Object idObj = crud.insertRecord(schema, data);
                 Map<String, Object> after = crud.getById(schema, idObj);
@@ -491,17 +493,15 @@ public class GenericEntityRoutes {
 
         router.post("/api/{entity}/batch", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous";
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
-            }
-
             String entity = req.pathParam("entity");
+
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String actor = actorOrSystem(req, cfg);
+
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity"));
@@ -529,9 +529,8 @@ public class GenericEntityRoutes {
             // C2.15 — Use shared enforceApprovalPreInsert helper for every batch element.
             // Same guard as single POST, studio POST, runtime POST, env POST.
             {
-                String batchUserId = AuthService.extractUserId(req, cfg);
                 for (Map<String, Object> element : payload) {
-                    enforceApprovalPreInsert(schema, element, batchUserId);
+                    enforceApprovalPreInsert(schema, element, actor);
                 }
             }
 
@@ -558,15 +557,14 @@ public class GenericEntityRoutes {
 
         router.get("/api/{entity}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                if (!AuthService.hasRead(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
+            String entity = req.pathParam("entity");
+
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
             }
 
-            String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity"));
@@ -788,15 +786,14 @@ public class GenericEntityRoutes {
 
         router.get("/api/{entity}/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                if (!AuthService.hasRead(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
+            String entity = req.pathParam("entity");
+
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
             }
 
-            String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) {
@@ -825,17 +822,15 @@ public class GenericEntityRoutes {
 
         router.put("/api/{entity}/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous";
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
-            }
-
             String entity = req.pathParam("entity");
+
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String actor = actorOrSystem(req, cfg);
+
             String idStr = req.pathParam("id");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) {
@@ -848,8 +843,7 @@ public class GenericEntityRoutes {
 
             if (schema.isApprovalRequired()) {
                 try {
-                    ApprovalPutResult guard = applyApprovalPutGuard(crud, schema, idStr, data,
-                            AuthService.extractUserId(req, cfg));
+                    ApprovalPutResult guard = applyApprovalPutGuard(crud, schema, idStr, data, actor);
                     switch (guard.action()) {
                         case BLOCKED_PENDING -> {
                             res.json(400, guard.body());
@@ -914,17 +908,15 @@ public class GenericEntityRoutes {
 
         router.delete("/api/{entity}/{id}", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous";
-            if (AuthService.authEnabled(cfg)) {
-                String tok = AuthService.extractToken(req);
-                actor = (tok != null && !tok.isBlank()) ? tok : "anonymous";
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
-            }
-
             String entity = req.pathParam("entity");
+
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String actor = actorOrSystem(req, cfg);
+
             String idStr = req.pathParam("id");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) {
@@ -969,20 +961,15 @@ public class GenericEntityRoutes {
 
         router.post("/api/{entity}/bulk-delete", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            String actor = "anonymous";
-            if (AuthService.authEnabled(cfg)) {
-                // H8: use extractServiceToken for hasAdmin — never pass session IDs to admin gate.
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasAdmin(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
-                // Use authenticated identity for audit, not the raw token literal.
-                String uid = AuthService.extractUserId(req, cfg);
-                actor = (uid != null && !uid.isBlank()) ? uid : "admin";
-            }
-
             String entity = req.pathParam("entity");
+
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String actor = actorOrSystem(req, cfg);
+
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity"));
@@ -1049,16 +1036,14 @@ public class GenericEntityRoutes {
 
         router.post("/api/{entity}/bulk-export", (req, res) -> {
             AppConfig cfg = ConfigManager.getConfig();
-            if (AuthService.authEnabled(cfg)) {
-                // H8 consistency: use extractServiceToken so session IDs never reach hasRead.
-                String tok = AuthService.extractServiceToken(req);
-                if (!AuthService.hasRead(tok, cfg)) {
-                    res.json(401, Map.of("error", "unauthorized"));
-                    return;
-                }
+            String entity = req.pathParam("entity");
+
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
             }
 
-            String entity = req.pathParam("entity");
             EntitySchema schema = SchemaManager.loadSchema(entity);
             if (schema == null) {
                 res.json(404, Map.of("error", "unknown entity"));
@@ -1128,14 +1113,6 @@ public class GenericEntityRoutes {
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
 
-            // Derive caller identity (SessionMiddleware has already validated; this reads the attribute).
-            String studioInsertUserId = AuthService.extractUserId(req, cfg);
-            if (studioInsertUserId == null || studioInsertUserId.isBlank()) {
-                // SessionMiddleware should have caught this; treat as double-check.
-                res.json(401, Map.of("error", "Authentication required for studio mutations"));
-                return;
-            }
-
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1144,6 +1121,16 @@ public class GenericEntityRoutes {
                 res.json(400, Map.of("error", "appId required"));
                 return;
             }
+
+            // S3.4 — EntityAccessGuard replaces the old bare extractUserId-null check: this also
+            // verifies the caller actually belongs to (tenantId, appId), not merely that *some*
+            // session exists.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String studioInsertUserId = actorOrSystem(req, cfg);
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1183,6 +1170,7 @@ public class GenericEntityRoutes {
         // GET /appbana-studio/{tenantId}/apps/{appId}/{entity} - List entities scoped
         // to tenant and app (supports filtering, sorting, pagination)
         router.get("/appbana-studio/{tenantId}/apps/{appId}/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
@@ -1193,6 +1181,13 @@ public class GenericEntityRoutes {
             }
             if (appId == null || appId.isBlank()) {
                 res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+
+            // S3.4 — this route previously had NO auth check at all.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
 
@@ -1293,6 +1288,7 @@ public class GenericEntityRoutes {
         // GET /appbana-studio/{tenantId}/apps/{appId}/{entity}/{id} - Get entity by ID
         // scoped to tenant and app
         router.get("/appbana-studio/{tenantId}/apps/{appId}/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
@@ -1304,6 +1300,13 @@ public class GenericEntityRoutes {
             }
             if (appId == null || appId.isBlank()) {
                 res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+
+            // S3.4 — this route previously had NO auth check at all.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
                 return;
             }
 
@@ -1343,13 +1346,6 @@ public class GenericEntityRoutes {
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
 
-            // Session auth required for studio mutations
-            String studioUserId = AuthService.extractUserId(req, cfg);
-            if (studioUserId == null || studioUserId.isBlank()) {
-                res.json(401, Map.of("error", "Authentication required for studio mutations"));
-                return;
-            }
-
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1358,6 +1354,14 @@ public class GenericEntityRoutes {
                 res.json(400, Map.of("error", "appId required"));
                 return;
             }
+
+            // S3.4 — EntityAccessGuard replaces the old bare extractUserId-null check.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String studioUserId = actorOrSystem(req, cfg);
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1436,13 +1440,6 @@ public class GenericEntityRoutes {
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
 
-            // Session auth required for studio mutations
-            String studioDeleteUserId = AuthService.extractUserId(req, cfg);
-            if (studioDeleteUserId == null || studioDeleteUserId.isBlank()) {
-                res.json(401, Map.of("error", "Authentication required for studio mutations"));
-                return;
-            }
-
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1451,6 +1448,14 @@ public class GenericEntityRoutes {
                 res.json(400, Map.of("error", "appId required"));
                 return;
             }
+
+            // S3.4 — EntityAccessGuard replaces the old bare extractUserId-null check.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String studioDeleteUserId = actorOrSystem(req, cfg);
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1519,13 +1524,6 @@ public class GenericEntityRoutes {
             String appId = req.pathParam("appId");
             String entity = req.pathParam("entity");
 
-            // B8 FIX — Route-level session auth gate. Middleware exclusion ≠ public access.
-            String runtimeUserId = AuthService.extractUserId(req, cfg);
-            if (runtimeUserId == null || runtimeUserId.isBlank()) {
-                res.json(401, Map.of("error", "Authentication required"));
-                return;
-            }
-
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1534,6 +1532,15 @@ public class GenericEntityRoutes {
                 res.json(400, Map.of("error", "appId required"));
                 return;
             }
+
+            // S3.4 — EntityAccessGuard replaces the B8-FIX bare extractUserId-null check: this
+            // also verifies the caller actually belongs to (tenantId, appId).
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String runtimeUserId = actorOrSystem(req, cfg);
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1584,13 +1591,6 @@ public class GenericEntityRoutes {
             String env = req.pathParam("env");
             String entity = req.pathParam("entity");
 
-            // B9 FIX — Route-level session auth gate. Exclusion from SessionMiddleware ≠ public write access.
-            String envInsertUserId = AuthService.extractUserId(req, cfg);
-            if (envInsertUserId == null || envInsertUserId.isBlank()) {
-                res.json(401, Map.of("error", "Authentication required"));
-                return;
-            }
-
             if (tenantId == null || tenantId.isBlank()) {
                 res.json(400, Map.of("error", "tenantId required"));
                 return;
@@ -1603,6 +1603,14 @@ public class GenericEntityRoutes {
                 res.json(400, Map.of("error", "env required"));
                 return;
             }
+
+            // S3.4 — EntityAccessGuard replaces the B9-FIX bare extractUserId-null check.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String envInsertUserId = actorOrSystem(req, cfg);
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1643,10 +1651,31 @@ public class GenericEntityRoutes {
 
         // GET /api/{tenantId}/apps/{appId}/env/{env}/{entity} - List entities in specific environment
         router.get("/api/{tenantId}/apps/{appId}/env/{env}/{entity}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String env = req.pathParam("env");
             String entity = req.pathParam("entity");
+
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+            if (env == null || env.isBlank()) {
+                res.json(400, Map.of("error", "env required"));
+                return;
+            }
+
+            // S3.4 — this route previously had NO auth check at all.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1734,11 +1763,32 @@ public class GenericEntityRoutes {
 
         // GET /api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id} - Get by ID in specific environment
         router.get("/api/{tenantId}/apps/{appId}/env/{env}/{entity}/{id}", (req, res) -> {
+            AppConfig cfg = ConfigManager.getConfig();
             String tenantId = req.pathParam("tenantId");
             String appId = req.pathParam("appId");
             String env = req.pathParam("env");
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
+
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
+                return;
+            }
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+            if (env == null || env.isBlank()) {
+                res.json(400, Map.of("error", "env required"));
+                return;
+            }
+
+            // S3.4 — this route previously had NO auth check at all.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1776,12 +1826,26 @@ public class GenericEntityRoutes {
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
 
-            // Session auth required for env-scoped mutations
-            String envPutUserId = AuthService.extractUserId(req, cfg);
-            if (envPutUserId == null || envPutUserId.isBlank()) {
-                res.json(401, Map.of("error", "Authentication required for data mutations"));
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+            if (env == null || env.isBlank()) {
+                res.json(400, Map.of("error", "env required"));
+                return;
+            }
+
+            // S3.4 — EntityAccessGuard replaces the bare extractUserId-null check.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String envPutUserId = actorOrSystem(req, cfg);
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1858,12 +1922,26 @@ public class GenericEntityRoutes {
             String entity = req.pathParam("entity");
             String idStr = req.pathParam("id");
 
-            // Session auth required for env-scoped mutations
-            String envDeleteUserId = AuthService.extractUserId(req, cfg);
-            if (envDeleteUserId == null || envDeleteUserId.isBlank()) {
-                res.json(401, Map.of("error", "Authentication required for data mutations"));
+            if (tenantId == null || tenantId.isBlank()) {
+                res.json(400, Map.of("error", "tenantId required"));
                 return;
             }
+            if (appId == null || appId.isBlank()) {
+                res.json(400, Map.of("error", "appId required"));
+                return;
+            }
+            if (env == null || env.isBlank()) {
+                res.json(400, Map.of("error", "env required"));
+                return;
+            }
+
+            // S3.4 — EntityAccessGuard replaces the bare extractUserId-null check.
+            EntityAccessGuard.Result access = EntityAccessGuard.check(req, cfg, tenantId, appId, entity, false);
+            if (!access.allowed()) {
+                res.json(access.statusCode(), Map.of("error", access.message()));
+                return;
+            }
+            String envDeleteUserId = actorOrSystem(req, cfg);
 
             EntitySchema schema = SchemaManager.loadSchema(appId, entity, tenantId);
             if (schema == null) {
@@ -1939,6 +2017,19 @@ public class GenericEntityRoutes {
      */
     private static boolean isPendingApprovalStatus(String status) {
         return "PENDING".equalsIgnoreCase(status) || "PENDING_L2".equalsIgnoreCase(status);
+    }
+
+    /**
+     * S3.4 — resolves the caller's identity for audit-log/approval-guard attribution now that
+     * every route below requires {@link EntityAccessGuard} to have already admitted the caller.
+     * A real identity is therefore expected here in every case: guard rule (i)/(ii) require a
+     * session with a resolvable userId, and rule (iv) (break-glass admin token) already resolves
+     * to a non-null "admin"/X-User-Id value via {@code AuthService.resolveIdentity}. "system" is
+     * a defensive fallback only, matching the precedent in {@code AppRoutes}' publish route.
+     */
+    private static String actorOrSystem(Router.HttpRequest req, AppConfig cfg) {
+        String id = AuthService.extractUserId(req, cfg);
+        return (id != null && !id.isBlank()) ? id : "system";
     }
 
     /** What the caller should do after {@link #applyApprovalPutGuard} has inspected a PUT. */
