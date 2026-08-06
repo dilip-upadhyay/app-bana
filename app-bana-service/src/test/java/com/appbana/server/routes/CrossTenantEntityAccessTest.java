@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -220,8 +219,13 @@ public class CrossTenantEntityAccessTest {
 
         for (RouteCase rc : readRoutesAcrossAllFamilies()) {
             HttpResponse<String> res = send(rc.method(), rc.path(), attackerSession, null);
-            assertNotEquals(401, res.statusCode(), () -> rc + " must not 401 a cross-tenant member: " + res.body());
-            assertNotEquals(403, res.statusCode(), () -> rc + " must not 403 a cross-tenant member: " + res.body());
+            // A genuine 2xx, not merely "not 401/403" — a stray 500 downstream of the guard must
+            // not be silently read as proof that authorization succeeded (round-71 review LOW —
+            // this method was the one outlier still using the lenient assertNotEquals pair its
+            // own write-admit sibling below deliberately does not use).
+            assertTrue(res.statusCode() >= 200 && res.statusCode() < 300,
+                    () -> rc + " must actually succeed for a cross-tenant member (guard admitted, read must work): "
+                            + res.statusCode() + ": " + res.body());
         }
     }
 
