@@ -305,12 +305,39 @@ class EntityAccessGuardTest {
     // ========================================
 
     @Test
-    @DisplayName("Entry point (a): unknown entity key => 404, not 401/403")
-    void testUnknownEntityKeyReturns404() {
+    @DisplayName("Entry point (a): unknown entity key, no session => 401, not 404 (S3.4 review LOW fix)")
+    void testUnknownEntityKeyNoSessionReturns401() {
         EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
 
         assertFalse(result.allowed());
-        assertEquals(404, result.statusCode());
+        assertEquals(401, result.statusCode());
+    }
+
+    @Test
+    @DisplayName("Entry point (a): unknown entity key, real session but no membership possible => 403, same as a real unauthorized entity")
+    void testUnknownEntityKeyWithSessionReturns403() {
+        SessionData session = SessionService.createSession("user-no-such-app", TENANT_A);
+        when(req.header("X-Session-Token")).thenReturn(session.sessionId());
+
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
+
+        assertFalse(result.allowed());
+        assertEquals(403, result.statusCode());
+    }
+
+    @Test
+    @DisplayName("Entry point (a): unknown vs. real-but-unauthorized entity key produce identical status codes for the same caller shape")
+    void testUnknownEntityKeyIndistinguishableFromRealUnauthorizedEntity() {
+        saveFixtureSchema();
+        EntityAccessGuard.Result unknownAnon = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
+        EntityAccessGuard.Result realAnon = EntityAccessGuard.check(req, cfg, PACKED_KEY, false);
+        assertEquals(realAnon.statusCode(), unknownAnon.statusCode(), "unauthenticated: unknown key vs real-unauthorized key must match");
+
+        SessionData session = SessionService.createSession("user-packed-outsider-2", TENANT_A);
+        when(req.header("X-Session-Token")).thenReturn(session.sessionId());
+        EntityAccessGuard.Result unknownWithSession = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
+        EntityAccessGuard.Result realWithSession = EntityAccessGuard.check(req, cfg, PACKED_KEY, false);
+        assertEquals(realWithSession.statusCode(), unknownWithSession.statusCode(), "authenticated non-member: unknown key vs real-unauthorized key must match");
     }
 
     @Test

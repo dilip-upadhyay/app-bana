@@ -2792,9 +2792,15 @@ enforcement.
   backend; Cat. 2 for the unauthenticated-401 claim on studio-scoped routes — see attribution caveat
   below] ✅ Done 2026-08-07: wired `EntityAccessGuard.check(...)` into all **19** in-scope
   `GenericEntityRoutes` routes — 8 packed-key (`/api/{entity}` family: GET-list, GET/{id}, POST,
-  POST/batch, PUT/{id}, DELETE/{id}, plus 2 more matching the packed-key shape), 3 studio-scoped
-  (`/api/{tenantId}/apps/{appId}/{entity}...`), and 8 env-scoped
-  (`/api/{tenantId}/apps/{appId}/env/{env}/{entity}...`) — reaching the doc's own "19/19" figure.
+  POST/batch, PUT/{id}, DELETE/{id}, plus 2 more matching the packed-key shape), 5 studio-scoped
+  (`/appbana-studio/{tenantId}/apps/{appId}/{entity}...`), 1 app-scoped-no-env
+  (`/api/{tenantId}/apps/{appId}/{entity}` — the runtime route with no `/env/{env}/` segment), and 5
+  env-scoped (`/api/{tenantId}/apps/{appId}/env/{env}/{entity}...`) — 8 + 5 + 1 + 5 = 19, reaching the
+  doc's own "19/19" figure. **[Round-64 correction, review LOW #2]**: this row originally miscounted
+  the per-family breakdown as "8 packed-key, 3 studio-scoped, 8 env-scoped" — the total (19/19 guarded)
+  was always correct and is what `RouteCensusTest`/`AuthEnabledAntiPatternTest` actually ratchet on;
+  only this descriptive breakdown was wrong. Corrected here rather than in git history, per this doc's
+  own established convention for narrative-only fixes.
   Added a small `actorOrSystem(req, cfg)` private helper (falls back to `"system"` only defensively;
   every admit path through the guard already requires a resolvable identity) so mutation routes keep
   their existing audit-log attribution unchanged.

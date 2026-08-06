@@ -231,10 +231,16 @@ public class SchemaRoutesAdminTokenTest {
         // authenticated caller — deleted rather than gated (zero real callers, strictly weaker
         // duplicate of the now-gated GET /schema and GET /api/endpoints). The exact path now falls
         // through to GenericEntityRoutes' generic GET /api/{entity}/{id} (entity="debug",
-        // id="schemas"), which 404s as "unknown entity" once authEnabled(cfg) is false — proving
-        // the old unfiltered schema list is truly gone, not just re-gated under a different name.
-        // Requires nulling this class's own forced tokens for the request, since that fallthrough
-        // route's own gate would otherwise mask this proof behind an unrelated 401.
+        // id="schemas"), which used to 404 as "unknown entity" immediately, before any session
+        // check, once authEnabled(cfg) is false. Since round 64 (S3.4 review LOW fix), that
+        // immediate-404 was itself a cross-tenant existence oracle in EntityAccessGuard (any
+        // caller could distinguish a real packed key from a fake one by 401/403 vs. 404) and was
+        // closed: an entity key that resolves to no schema now runs through the exact same
+        // publicRead/admin-override/401-vs-403 tail a real-but-unauthorized entity would. With the
+        // ordinary (non-member, non-admin) session this test sends, that tail now denies with 403,
+        // not 404 — proving the same thing the original 404 proved (no cross-tenant schema summary
+        // is returned to this caller), just via the guard's ordinary deny path instead of a
+        // schema-existence leak.
         AppConfig cfg = ConfigManager.getConfig();
         cfg.setAdminToken(null);
         cfg.setReadToken(null);
@@ -245,7 +251,7 @@ public class SchemaRoutesAdminTokenTest {
                     .GET()
                     .build();
             HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
-            assertEquals(404, res.statusCode(),
+            assertEquals(403, res.statusCode(),
                     "GET /api/debug/schemas must no longer return the old cross-tenant schema summary list");
         } finally {
             cfg.setAdminToken(ADMIN_TOKEN);
@@ -255,8 +261,11 @@ public class SchemaRoutesAdminTokenTest {
 
     @Test
     public void testDebugSchemasNamesRouteIsRemoved() throws Exception {
-        // S1.19: same fix, same reason as testDebugSchemasRouteIsRemoved. Here the fallthrough is
-        // entity="debug", id="names" (three path segments: debug/schemas/names), same 404 proof.
+        // S1.19: same removal, same reason as testDebugSchemasRouteIsRemoved, but this path has
+        // three segments after /api/ (debug/schemas/names) which does NOT match
+        // GenericEntityRoutes' two-segment GET /api/{entity}/{id} fallthrough the sibling test
+        // relies on — it never reaches EntityAccessGuard at all, so it is unaffected by the
+        // round-64 existence-oracle fix there and still 404s as a genuinely unmatched route.
         AppConfig cfg = ConfigManager.getConfig();
         cfg.setAdminToken(null);
         cfg.setReadToken(null);
