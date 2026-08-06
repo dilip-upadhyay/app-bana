@@ -116,7 +116,13 @@ class EntityAccessGuardTest {
 
         assertFalse(result.allowed());
         assertEquals(403, result.statusCode());
-        assertTrue(result.message().contains(ENTITY_NAME));
+        // Round-65 review MEDIUM fix: the 403 message is a caller-invariant constant and must NOT
+        // name the entity, or an authenticated caller could distinguish real-vs-fake entities by
+        // inspecting the response body even when status codes match (see EntityAccessGuard's
+        // denyOrAdmit Javadoc). Assert the exact constant rather than merely its absence of
+        // ENTITY_NAME, so any future regression back to an interpolated message fails loudly.
+        assertEquals("Forbidden: caller is not authorized for this entity", result.message());
+        assertFalse(result.message().contains(ENTITY_NAME), "403 message must not leak the entity name");
     }
 
     // ========================================
@@ -326,18 +332,25 @@ class EntityAccessGuardTest {
     }
 
     @Test
-    @DisplayName("Entry point (a): unknown vs. real-but-unauthorized entity key produce identical status codes for the same caller shape")
+    @DisplayName("Entry point (a): unknown vs. real-but-unauthorized entity key are byte-identical (status code AND message) for the same caller shape (round-65 review MEDIUM fix)")
     void testUnknownEntityKeyIndistinguishableFromRealUnauthorizedEntity() {
         saveFixtureSchema();
         EntityAccessGuard.Result unknownAnon = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
         EntityAccessGuard.Result realAnon = EntityAccessGuard.check(req, cfg, PACKED_KEY, false);
         assertEquals(realAnon.statusCode(), unknownAnon.statusCode(), "unauthenticated: unknown key vs real-unauthorized key must match");
+        assertEquals(realAnon.message(), unknownAnon.message(), "unauthenticated: 401 message must not differ (both null/no session)");
 
         SessionData session = SessionService.createSession("user-packed-outsider-2", TENANT_A);
         when(req.header("X-Session-Token")).thenReturn(session.sessionId());
         EntityAccessGuard.Result unknownWithSession = EntityAccessGuard.check(req, cfg, "no-such-tenant_no-such-app_NoSuchEntity", false);
         EntityAccessGuard.Result realWithSession = EntityAccessGuard.check(req, cfg, PACKED_KEY, false);
         assertEquals(realWithSession.statusCode(), unknownWithSession.statusCode(), "authenticated non-member: unknown key vs real-unauthorized key must match");
+        // This is the exact assertion the round-65 review independently added via a temporary probe
+        // to prove the 403 body still leaked (before the fix): a real entity's label (schema.getName(),
+        // short) vs. an unresolvable packed key's label (the full raw key, always longer) meant the two
+        // 403 bodies always differed even once status codes matched. Now permanently enforced here so
+        // this closure cannot silently regress.
+        assertEquals(realWithSession.message(), unknownWithSession.message(), "authenticated non-member: 403 message must not differ (must not leak which key is real)");
     }
 
     @Test

@@ -26,8 +26,10 @@ import java.util.Objects;
  *       {@code tenant_id}/{@code app_id} columns are the authoritative source this whole plan
  *       already relies on for this exact lookup (see {@code SchemaManager.getUniqueSchemaKey}).
  *       A key that resolves to no schema at all is deliberately NOT distinguished from a real
- *       entity the caller isn't authorized for (S3.4 review LOW fix) — both produce the same
- *       401/403 tail, so no caller shape can enumerate which packed keys are real.</li>
+ *       entity the caller isn't authorized for (S3.4 review LOW fix, hardened by the round-65
+ *       review MEDIUM fix) — both produce the same 401/403 tail with the same constant message
+ *       text, so no caller shape (unauthenticated, or authenticated to any tenant) can enumerate
+ *       which packed keys are real by inspecting either the status code or the response body.</li>
  *   <li>{@link #check(Router.HttpRequest, AppConfig, String, String, String, boolean)} — for the
  *       studio-scoped ({@code /appbana-studio/{tenantId}/apps/{appId}/{entity}}) and env-scoped
  *       ({@code /api/{tenantId}/apps/{appId}/env/{env}/{entity}}) families, which already carry
@@ -115,13 +117,14 @@ public final class EntityAccessGuard {
             // check membership/scoped-session against for a key with no schema, so rules (i)/(ii)
             // could never admit here regardless of ordering — only the caller-facts tail
             // (publicRead+GET, admin override, then the 401-vs-403 split) can apply, and running
-            // that tail here makes the response byte-identical, for every caller shape, to what a
-            // REAL entity the caller isn't authorized for would produce. The entity's genuine
-            // existence is only revealed to callers who turn out to be actual members — same as
-            // entry point (b), whose own downstream route handler is what finally 404s on a truly
-            // absent entity, for a caller already inside that app.
+            // that tail here makes the response byte-identical — status code AND body, since the
+            // round-65 fix below made the 403 message a caller-invariant constant — for every
+            // caller shape, to what a REAL entity the caller isn't authorized for would produce.
+            // The entity's genuine existence is only revealed to callers who turn out to be actual
+            // members — same as entry point (b), whose own downstream route handler is what
+            // finally 404s on a truly absent entity, for a caller already inside that app.
             SessionService.SessionData session = AuthService.resolveSession(req);
-            return denyOrAdmit(req, cfg, session, publicRead, entityKey);
+            return denyOrAdmit(req, cfg, session, publicRead);
         }
 
         String tenantId = (schema.getTenantId() != null && !schema.getTenantId().isBlank())
@@ -143,8 +146,14 @@ public final class EntityAccessGuard {
      * @param cfg        app config, for admin-token comparison
      * @param tenantId   the tenant id the target app belongs to
      * @param appId      the target app id
-     * @param entityName the target entity name (used only for messages — the allow-rule itself
-     *                   never depends on it)
+     * @param entityName the target entity name; NOT read by this method's own logic (allow-rule
+     *                   never depended on it) and, since round 65, not even used for the 403
+     *                   message body — deliberately unused here to avoid re-introducing a
+     *                   real-vs-fake existence oracle into the message text (see
+     *                   {@link #denyOrAdmit} Javadoc). Kept in the signature for API stability
+     *                   across the ~19 {@code GenericEntityRoutes} call sites and as a hook for
+     *                   any future server-side-only use (e.g. logging) that must not reach the
+     *                   client response.
      * @param publicRead whether this app/entity has been marked publicly readable (S3.5); pass
      *                   {@code false} until that flag exists and is threaded through by the caller
      * @return a {@link Result} describing whether the request may proceed
@@ -172,7 +181,7 @@ public final class EntityAccessGuard {
             return Result.allow();
         }
 
-        return denyOrAdmit(req, cfg, session, publicRead, entityName);
+        return denyOrAdmit(req, cfg, session, publicRead);
     }
 
     /**
@@ -181,13 +190,19 @@ public final class EntityAccessGuard {
      * publicRead rescues only {@code GET}s, (iv) a valid admin/service token is a break-glass
      * fall-through evaluated last, else deny with 401 (no session) or 403 (session exists, just
      * not authorized). Extracted so an unresolvable packed key and a real-but-unauthorized entity
-     * produce byte-identical responses for every caller shape — see the packed-key entry point's
-     * own Javadoc above for why this matters (S3.4 review LOW fix).
-     *
-     * @param entityLabel text used only in the 403 message body
+     * produce byte-identical responses for every caller shape, status code AND body — see the
+     * packed-key entry point's own Javadoc above for why this matters (S3.4 review LOW fix).
+     * The 403 message is deliberately a constant with no entity-specific text (round-65 review
+     * MEDIUM fix): an earlier version echoed the caller-supplied label into the message, but since
+     * a real entity's label ({@code schema.getName()}, short) and an unresolvable packed key's
+     * label (the full raw key, always longer) are never the same length, that still let an
+     * authenticated caller distinguish real from fake keys by inspecting the response body even
+     * after the status codes were unified — the same class of leak, just moved from the status
+     * code into the body. {@code TenantAccessGuard}'s own 403 ("caller's tenant does not match the
+     * requested app's tenant") is already worded this way for the same reason; this follows suit.
      */
     private static Result denyOrAdmit(Router.HttpRequest req, AppConfig cfg, SessionService.SessionData session,
-                                       boolean publicRead, String entityLabel) {
+                                       boolean publicRead) {
         // (iii) publicRead rescues only GETs.
         if (publicRead && isGetRequest(req)) {
             return Result.allow();
@@ -200,11 +215,12 @@ public final class EntityAccessGuard {
         }
 
         // Deny — 401 (no session at all) is distinct from 403 (session exists, just not
-        // authorized for this app's data), same split TenantAccessGuard uses.
+        // authorized for this app's data), same split TenantAccessGuard uses. Neither message
+        // names the entity/key involved (round-65 review MEDIUM fix) — see this method's Javadoc.
         if (session == null) {
             return Result.deny(401, "Unauthorized: valid session required");
         }
-        return Result.deny(403, "Forbidden: caller is not authorized for entity '" + entityLabel + "'");
+        return Result.deny(403, "Forbidden: caller is not authorized for this entity");
     }
 
     private static boolean isGetRequest(Router.HttpRequest req) {
