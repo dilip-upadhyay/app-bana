@@ -81,6 +81,19 @@ class SessionMiddlewareTest {
     }
 
     @Test
+    @DisplayName("S3.6: Should allow /api/runtime/auth/login without session (pins the S3.6 fix — "
+            + "this route was previously unreachable by any anonymous caller since it fell through "
+            + "every carve-out below despite being a login endpoint)")
+    void testRuntimeAuthLoginPathExcluded() {
+        when(req.path()).thenReturn("/api/runtime/auth/login");
+
+        SessionMiddleware.create().accept(req, res);
+
+        verify(res, never()).json(anyInt(), any());
+        assertNull(attributes.get("userId"));
+    }
+
+    @Test
     @DisplayName("Should allow /health without session")
     void testHealthPathExcluded() {
         when(req.path()).thenReturn("/health");

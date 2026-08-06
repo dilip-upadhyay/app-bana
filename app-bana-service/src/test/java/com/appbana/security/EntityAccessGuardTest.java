@@ -33,6 +33,10 @@ class EntityAccessGuardTest {
     private static final String APP_1 = "s32-guard-app-1";
     private static final String ENTITY_NAME = "S32Entity";
     private static final String PACKED_KEY = TENANT_A + "_" + APP_1 + "_" + ENTITY_NAME;
+    // S3.5 nit fix (round-69 review): a distinct bare (no appId) schema name, never used by any
+    // packed-key fixture, so testBlankAppIdResolvesPublicReadFalseSafely can persist a real
+    // publicRead=true schema under this exact bare key without touching ENTITY_NAME's own rows.
+    private static final String BARE_ENTITY_NAME = "S35BareNamePublicEntity";
 
     private Router.HttpRequest req;
     private AppConfig cfg;
@@ -61,6 +65,10 @@ class EntityAccessGuardTest {
             s.execute("DELETE FROM appbana_app_members WHERE tenant_id IN ('" + TENANT_A + "', '" + TENANT_B
                     + "') AND app_id = '" + APP_1 + "'");
             s.execute("DELETE FROM appbana_schemas WHERE tenant_id = '" + TENANT_A + "' AND app_id = '" + APP_1 + "'");
+            // Bare-name fixture (see saveBareNamePublicSchema): saved with no appId, so
+            // getUniqueSchemaKey() keys it by BARE_ENTITY_NAME alone, not tenant_id/app_id — the
+            // tenant_id/app_id-scoped DELETE above never reaches it.
+            s.execute("DELETE FROM appbana_schemas WHERE name = '" + BARE_ENTITY_NAME + "'");
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -79,6 +87,26 @@ class EntityAccessGuardTest {
         schema.setAppId(APP_1);
         schema.setTenantId(TENANT_A);
         schema.setPublicRead(publicRead);
+
+        EntitySchema.Field idField = new EntitySchema.Field();
+        idField.setName("id");
+        idField.setType("long");
+        idField.setPrimaryKey(true);
+        schema.setFields(List.of(idField));
+
+        SchemaManager.saveSchema(schema);
+    }
+
+    // S3.5 nit fix (round-69 review): a real, persisted schema keyed by its bare name only (no
+    // appId set at all, unlike saveFixtureSchema above) — mirrors a genuine legacy/pre-tenant-
+    // isolation schema row. This is the only way to prove the appId-blank branch of
+    // resolvePublicRead() is load-bearing: if that guard were removed, SchemaManager.loadSchema
+    // would fall through to its bare-name lookup (loadSchema(entityName) — see its Javadoc) and
+    // find this row with publicRead=true, wrongly admitting the request.
+    private void saveBareNamePublicSchema() {
+        EntitySchema schema = new EntitySchema();
+        schema.setName(BARE_ENTITY_NAME);
+        schema.setPublicRead(true);
 
         EntitySchema.Field idField = new EntitySchema.Field();
         idField.setName("id");
@@ -315,11 +343,17 @@ class EntityAccessGuardTest {
     @DisplayName("S3.5: entry point (b)'s resolvePublicRead guard — a blank appId resolves publicRead=false " +
             "safely (skips the lookup entirely) rather than risking a bare-entityName fallback match")
     void testBlankAppIdResolvesPublicReadFalseSafely() {
+        // Round-69 review nit: a real schema keyed by BARE_ENTITY_NAME with publicRead=true must
+        // exist for this test to have any discriminating power. Without it, SchemaManager.loadSchema
+        // finds nothing regardless of whether resolvePublicRead's appId-blank guard exists at all,
+        // so the assertion below would pass even if that guard were deleted.
+        saveBareNamePublicSchema();
         when(req.method()).thenReturn("GET");
 
-        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, "", ENTITY_NAME);
+        EntityAccessGuard.Result result = EntityAccessGuard.check(req, cfg, TENANT_A, "", BARE_ENTITY_NAME);
 
-        assertFalse(result.allowed());
+        assertFalse(result.allowed(), "a blank appId must not admit via a bare-name fallback match, "
+                + "even when a real publicRead=true schema exists under that exact bare name");
         assertEquals(401, result.statusCode());
     }
 

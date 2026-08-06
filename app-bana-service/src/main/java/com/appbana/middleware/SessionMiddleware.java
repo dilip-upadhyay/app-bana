@@ -30,6 +30,15 @@ public class SessionMiddleware {
             "/api/auth/login",
             "/api/auth/register",
             "/api/auth/refresh",
+            // S3.6 (discovered while writing LoginDoesNotLeakEntityExistenceTest): the runtime
+            // (per-app end-user table) login route registered in AuthRoutes.java was never added
+            // here, so it fell through every carve-out above and required a session to reach a
+            // route whose entire purpose is issuing one -- a real caller could never log in.
+            // S3.3's own tests called GenericAppAuthController.login() directly (bypassing
+            // Router/SessionMiddleware entirely), so this was never exercised through real HTTP
+            // until this task's route-level formalization. Mirrors the three sibling builder-auth
+            // entries above.
+            "/api/runtime/auth/login",
             "/health",
             "/ready",
             "/ui/",
