@@ -81,7 +81,7 @@ export async function register(name: string, email: string, password: string): P
 
 export async function fetchBranding(tenantId: string): Promise<TenantBranding> {
   const res = await authedFetch(`${BACKEND}/api/tenants/${encodeURIComponent(tenantId)}/branding`);
-  if (!res.ok) return { tenantId, displayName: 'AppBana', logoUrl: null, primaryColor: '#6366f1' };
+  if (!res.ok) return { tenantId, displayName: 'AppBana', logoUrl: null, primaryColor: '#6163f0' };
   return res.json();
 }
 

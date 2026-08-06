@@ -113,12 +113,19 @@ public class PermissionService {
         }
         
         List<String> fields = new ArrayList<>();
+        // The sort key must be in the SELECT DISTINCT list, not just the ORDER BY:
+        // Postgres (and the SQL standard) reject a DISTINCT query whose ORDER BY
+        // expression doesn't literally match a select-list column. H2 (the test DB
+        // this class originally ran against) tolerated the non-standard form, which
+        // is how this query type-checked in H2 tests yet threw on every real Postgres
+        // call the moment field-level security was actually exercised (S3.8).
         String sql = """
-            SELECT DISTINCT fp.field_name, fp.can_read
+            SELECT DISTINCT fp.field_name, fp.can_read,
+                   CASE WHEN fp.field_name = '*' THEN 0 ELSE 1 END AS sort_order
             FROM field_permission fp
             INNER JOIN user_role ur ON fp.role_id = ur.role_id
             WHERE ur.user_id = ? AND fp.entity_name = ? AND fp.can_read = TRUE
-            ORDER BY CASE WHEN fp.field_name = '*' THEN 0 ELSE 1 END, fp.field_name
+            ORDER BY sort_order, fp.field_name
             """;
         
         try (Connection conn = dataSource.getConnection();
@@ -152,12 +159,14 @@ public class PermissionService {
         }
         
         List<String> fields = new ArrayList<>();
+        // Same DISTINCT+ORDER BY fix as getReadableFields() above — see comment there.
         String sql = """
-            SELECT DISTINCT fp.field_name, fp.can_edit
+            SELECT DISTINCT fp.field_name, fp.can_edit,
+                   CASE WHEN fp.field_name = '*' THEN 0 ELSE 1 END AS sort_order
             FROM field_permission fp
             INNER JOIN user_role ur ON fp.role_id = ur.role_id
             WHERE ur.user_id = ? AND fp.entity_name = ? AND fp.can_edit = TRUE
-            ORDER BY CASE WHEN fp.field_name = '*' THEN 0 ELSE 1 END, fp.field_name
+            ORDER BY sort_order, fp.field_name
             """;
         
         try (Connection conn = dataSource.getConnection();
