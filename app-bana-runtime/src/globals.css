@@ -8,7 +8,10 @@
 /* ------------------------------------------------------------------------- */
 :root {
   /* Brand */
-  --color-brand:        #6366f1;  /* violet-600 */
+  /* #6163f0 (not the Tailwind indigo-500 stop, #6366f1) — nudged one step
+     darker so white-on-brand text/buttons clear WCAG 2 AA 4.5:1 (was 4.47:1,
+     failed axe's color-contrast rule; this shade measures 4.61:1). */
+  --color-brand:        #6163f0;
   --color-brand-hover:  #4f46e5;
   --color-brand-active: #4338ca;
   --color-brand-soft:   #eef2ff;
@@ -348,7 +351,7 @@
   .appbana-sidebar-section {
     @apply px-3 pt-1 pb-1
            text-[0.65rem] font-semibold tracking-wider uppercase
-           text-gray-400 truncate;
+           text-gray-500 truncate;
   }
   .appbana-sidebar-link {
     @apply w-full flex items-center gap-3

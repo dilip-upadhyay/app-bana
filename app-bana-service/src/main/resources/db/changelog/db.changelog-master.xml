@@ -93,4 +93,8 @@
         <sqlFile path="db/migration/V20__backfill_app_memberships.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
+    <changeSet id="V21" author="appbana">
+        <sqlFile path="db/migration/V21__default_tenant_brand_color_contrast_fix.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
 </databaseChangeLog>

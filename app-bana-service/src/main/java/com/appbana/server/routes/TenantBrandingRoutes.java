@@ -25,7 +25,7 @@ import java.util.Map;
  *   "tenantId":     "default",
  *   "displayName":  "AppBana",
  *   "logoUrl":      null,
- *   "primaryColor": "#6366f1"
+ *   "primaryColor": "#6163f0"
  * }
  */
 public class TenantBrandingRoutes {
@@ -57,12 +57,15 @@ public class TenantBrandingRoutes {
                         out.put("primaryColor", rs.getString("primary_color"));
                         res.json(200, out);
                     } else {
-                        // Return sensible defaults for any unknown tenant
+                        // Return sensible defaults for any unknown tenant.
+                        // #6163f0, not Tailwind's indigo-500 (#6366f1) stop — the
+                        // latter measures 4.46:1 white-on-brand contrast, just under
+                        // WCAG 2 AA's 4.5:1 minimum (see e2e/tests/a11y-runtime.spec.ts).
                         Map<String, Object> defaults = new LinkedHashMap<>();
                         defaults.put("tenantId",     tenantId);
                         defaults.put("displayName",  "AppBana");
                         defaults.put("logoUrl",      null);
-                        defaults.put("primaryColor", "#6366f1");
+                        defaults.put("primaryColor", "#6163f0");
                         res.json(200, defaults);
                     }
                 }

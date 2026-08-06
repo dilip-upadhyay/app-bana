@@ -25,7 +25,7 @@ import java.util.Map;
  * {
  *   "tenantId":  "default",
  *   "appId":     "7495460a-...",
- *   "branding":  { "displayName": "AppBana", "logoUrl": null, "primaryColor": "#6366f1" }
+ *   "branding":  { "displayName": "AppBana", "logoUrl": null, "primaryColor": "#6163f0" }
  * }
  */
 public class AppContextRoutes {
@@ -93,7 +93,10 @@ public class AppContextRoutes {
         Map<String, Object> branding = new LinkedHashMap<>();
         branding.put("displayName",  "AppBana");
         branding.put("logoUrl",      null);
-        branding.put("primaryColor", "#6366f1");
+        // #6163f0, not Tailwind's indigo-500 (#6366f1) stop — the latter measures
+        // 4.46:1 white-on-brand contrast, just under WCAG 2 AA's 4.5:1 minimum
+        // (see e2e/tests/a11y-runtime.spec.ts).
+        branding.put("primaryColor", "#6163f0");
 
         try (Connection conn = JdbcManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(BRANDING_SQL)) {
