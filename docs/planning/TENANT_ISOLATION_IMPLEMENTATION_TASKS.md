@@ -2969,7 +2969,7 @@ enforcement.
 | S4.2 | Same transparent-rehash treatment for `GenericAppAuthController`'s runtime end-user table: fetch-by-email-then-verify-in-Java, plus hash-on-write for every path that sets the password column, not just login. | `GenericAppAuthController.java` + password-write paths | 90 min | ✅ |
 | S4.3 | CSRF: remove dead `CsrfMiddleware` registration references from docs and delete the unused middleware (bearer-token auth today, not cookie-based — classic CSRF doesn't apply). Drive-by: fix the dead `/api/csrf/token` vs. real `/api/csrf-token` mismatch in `EXCLUDED_PATHS`. | `docs/features/SECURITY_FEATURES.md`, `CsrfMiddleware.java`, `SessionMiddleware.java` | 30 min | ✅ |
 | S4.4 | Correct `docs/features/SECURITY_FEATURES.md` end-to-end against post-S4 reality (remove false BCrypt-already-done / wired-CSRF claims; replace stale LitElement snippets). | `docs/features/SECURITY_FEATURES.md` | 30 min | ✅ |
-| S4.5 | Tests: `PasswordRehashOnLoginTest`, `NewRegistrationIsHashedTest`. | new tests | 45 min | ⬜ |
+| S4.5 | Tests: `PasswordRehashOnLoginTest`, `NewRegistrationIsHashedTest`. | new tests | 45 min | ✅ |
 | S4.6 | Add `tenant_id`/`app_id` columns to `appbana_audit`; populate on every write. | Liquibase changeset, `AuditLogService.java` | 60 min | ⬜ |
 | S4.7 | Stop writing the raw token/session id into `appbana_audit.actor` on any path — always resolve to the real userId via `resolveIdentity` first. | `GenericEntityRoutes.java` | 30 min | ⬜ |
 | S4.8 | **(New, S4.2 review follow-up)** `EntityCrudService.getById`/`listAll`/`listAdvanced` — and therefore every generic entity GET route, `bulk-export`, and `ApprovalRoutes`' pending-approval queue — return raw password/secret column values completely unredacted to the client, confirmed live in S4.2's own probe. Add a shared name-based redaction helper (mirrors `GenericAppAuthController.login()`'s `contains("password")\|\|contains("secret")` convention) and call it explicitly at every verified client-response call site — deliberately NOT inside `getById`/`listAll`/`toList` themselves, since those are also used internally by the approval revision-merge (`applyApprovalPutGuard`, `findOpenRevision`) and audit logging, which need the real hash value. | `EntityCrudService.java`, `GenericEntityRoutes.java`, `ApprovalRoutes.java` | 90 min | ✅ |
@@ -3056,7 +3056,47 @@ enforcement.
   regression check since the same commit also touches the tracker/plan docs' estimate figures (S4.9).
   Checked every new `(#anchor)` link resolves to a real heading. No live UI probe: this task is
   documentation-only and doesn't change any running behavior to observe.
-- **S4.5** [Cat. 2 — automated tests] Formalizes S4.1/S4.2's already-proven scenarios.
+- **S4.5** [Cat. 2 — automated tests] ✅ Done 2026-08-08: investigated before writing anything new,
+  since the task's own description ("Formalizes S4.1/S4.2's already-proven scenarios") implied these
+  scenarios might already be exercised somewhere. They were: `UserManagerPasswordHashingTest.java`
+  (added alongside S4.1 itself) already has 3 methods covering the S4.1/UserManager surface
+  end-to-end — `newRegistrationStoresABcryptHashNotThePlaintextPassword`,
+  `legacyPlaintextRowIsTransparentlyRehashedOnSuccessfulLogin` (asserts the rehash persists via a
+  re-read AND that a second login doesn't rehash again), and
+  `wrongPasswordAgainstLegacyPlaintextRowDoesNotAuthenticateOrMutateTheStoredValue`.
+  `GenericAppAuthControllerTest.java` (added alongside S4.2) already has
+  `testLegacyPlaintextPasswordIsRehashedToBcryptAfterLogin` and
+  `testAlreadyRehashedPasswordIsNotRehashedAgainOnSubsequentLogin` for the S4.2/GenericAppAuthController
+  surface, and `EntityCrudServicePasswordHashingTest.java` (also S4.2) already covers "a newly-written
+  password is always hashed" for the generic-entity API's actual create path (`insertRecord`,
+  `insertBatch`, both `updateById` overloads — there is no dedicated runtime register endpoint, per
+  `GenericAppAuthControllerTest.java`'s own class javadoc, so entity-creation-via-API *is* "new
+  registration" for that surface).
+  **One genuine, asymmetric gap found**: `GenericAppAuthControllerTest` had no equivalent of
+  `UserManagerPasswordHashingTest`'s wrong-password-against-a-legacy-row assertion — every existing
+  S4.2 rehash test used the *correct* password. Closed it with one new test method,
+  `testWrongPasswordAgainstLegacyPlaintextRowDoesNotAuthenticateOrRehash`, asserting a wrong password
+  against Bob's legacy plaintext fixture row still 401s AND leaves the stored value byte-for-byte
+  unchanged (verified against the real `GenericAppAuthController.login()` code path: the
+  `verifyCredential` gate at line 138 already returns before the rehash block at line 151 ever runs,
+  so this proves existing-correct behavior rather than fixing a bug).
+  **Deliberately did not create literal `PasswordRehashOnLoginTest.java`/`NewRegistrationIsHashedTest.java`
+  files** — doing so would mean two new top-level classes re-asserting, near-verbatim, scenarios the
+  three classes above already assert, under different names, for no safety benefit; that is exactly the
+  kind of manufactured-looking busywork this loop's conventions warn against elsewhere. The one real gap
+  (found by actually reading every existing test method rather than assuming "formalizes...already-proven"
+  meant "write it again") was closed instead, in the class that already owns that scenario family.
+  **Verification**: added the new method, ran `-Dtest=GenericAppAuthControllerTest` alone (15/15,
+  was 14/14), then **break-tested it** — temporarily neutered `login()`'s `verifyCredential` gate
+  (`if (userData == null /* ... */)`, dropping the credential check) and reran just the new method:
+  failed with the expected message (`expected: <401> but was: <200>`), confirming the test is
+  load-bearing, not vacuous. Reverted (confirmed via `git diff` showing zero remaining changes to the
+  main source file). Full `app-bana-service` suite: **639/639** (638 baseline + 1 new test, exact
+  match, 0 regressions). Re-ran `EstimateReconciliationTest`/`RouteCensusTest` (3/3 green — the Files
+  column for this row was left as the existing free-text "new tests" rather than backtick-listing the
+  touched file, since that column's backtick-token set must stay identical to the plan doc's `Where`
+  column for shared task rows, and the plan doc's own S4.5 row is unmodified by this decision). No plan
+  doc edit needed: this task's estimate/scope didn't change, only which pre-existing artifact satisfies it.
 - **S4.6** [Cat. 2 — no audit-log viewer exists anywhere in Studio/Runtime] Perform any normal UI action (e.g., S1.3's app edit), then inspect the resulting audit row directly and confirm `tenant_id`/`app_id` are populated.
 - **S4.7** [Cat. 2 — same reason as S4.6] Same method; confirm `actor` is the real userId, not a raw token.
 

@@ -259,6 +259,21 @@ class GenericAppAuthControllerTest {
                         + "rehashing an already-hashed value would corrupt the credential");
     }
 
+    @Test
+    @DisplayName("S4.5: a wrong password against a legacy plaintext row does not authenticate and does not rehash it")
+    void testWrongPasswordAgainstLegacyPlaintextRowDoesNotAuthenticateOrRehash() {
+        assertEquals(BOB_PLAINTEXT_PASSWORD, fetchStoredPassword(2L),
+                "fixture precondition: Bob's row must start out as plain text, not a hash");
+
+        LoginOutcome outcome = doLogin(loginBody(APP_1, TENANT_A, ENTITY_NAME, BOB_EMAIL, "totally-wrong-password"));
+        assertEquals(401, outcome.status(), "a wrong password against a legacy row must still fail authentication");
+        assertEquals(Map.of("error", "Invalid credentials"), outcome.body());
+
+        assertEquals(BOB_PLAINTEXT_PASSWORD, fetchStoredPassword(2L),
+                "a failed login attempt must never rehash or otherwise mutate the stored value - "
+                        + "rehashing must only ever happen after credentials have already verified");
+    }
+
     private String fetchStoredPassword(long id) {
         String table = physicalTableName().toUpperCase();
         String sql = "SELECT \"PASSWORD\" FROM \"" + table + "\" WHERE \"ID\" = ?";
