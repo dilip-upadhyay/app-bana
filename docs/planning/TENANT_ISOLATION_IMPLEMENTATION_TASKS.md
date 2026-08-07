@@ -2968,7 +2968,7 @@ enforcement.
 | S4.1 | Wire `PasswordService` (BCrypt) into `UserManager`: new registrations hash on write; a successful plaintext-compare login on a legacy row immediately rehashes and persists. | `UserManager.java` | 45 min | ✅ |
 | S4.2 | Same transparent-rehash treatment for `GenericAppAuthController`'s runtime end-user table: fetch-by-email-then-verify-in-Java, plus hash-on-write for every path that sets the password column, not just login. | `GenericAppAuthController.java` + password-write paths | 90 min | ✅ |
 | S4.3 | CSRF: remove dead `CsrfMiddleware` registration references from docs and delete the unused middleware (bearer-token auth today, not cookie-based — classic CSRF doesn't apply). Drive-by: fix the dead `/api/csrf/token` vs. real `/api/csrf-token` mismatch in `EXCLUDED_PATHS`. | `docs/features/SECURITY_FEATURES.md`, `CsrfMiddleware.java`, `SessionMiddleware.java` | 30 min | ✅ |
-| S4.4 | Correct `docs/features/SECURITY_FEATURES.md` end-to-end against post-S4 reality (remove false BCrypt-already-done / wired-CSRF claims; replace stale LitElement snippets). | `docs/features/SECURITY_FEATURES.md` | 30 min | ⬜ |
+| S4.4 | Correct `docs/features/SECURITY_FEATURES.md` end-to-end against post-S4 reality (remove false BCrypt-already-done / wired-CSRF claims; replace stale LitElement snippets). | `docs/features/SECURITY_FEATURES.md` | 30 min | ✅ |
 | S4.5 | Tests: `PasswordRehashOnLoginTest`, `NewRegistrationIsHashedTest`. | new tests | 45 min | ⬜ |
 | S4.6 | Add `tenant_id`/`app_id` columns to `appbana_audit`; populate on every write. | Liquibase changeset, `AuditLogService.java` | 60 min | ⬜ |
 | S4.7 | Stop writing the raw token/session id into `appbana_audit.actor` on any path — always resolve to the real userId via `resolveIdentity` first. | `GenericEntityRoutes.java` | 30 min | ⬜ |
@@ -2978,7 +2978,7 @@ enforcement.
 **Exit criteria — S4**
 - [ ] No code path compares a raw password string to a stored value.
 - [ ] Every pre-existing plaintext row transparently upgrades to BCrypt on its owner's next login — no forced reset.
-- [ ] `SECURITY_FEATURES.md` matches what's actually running.
+- [x] `SECURITY_FEATURES.md` matches what's actually running.
 - [ ] `appbana_audit` rows carry `tenant_id`/`app_id`; `actor` is never a raw token/session id.
 - [x] No generic entity GET/list/export/approval-queue response includes a raw password/secret column value.
 
@@ -3014,7 +3014,48 @@ enforcement.
   Bumped each file's own `version`/`lastUpdated` fields (patch version, today's date) as a freshness signal for the RAG index. Re-validated all 3 files parse as valid JSON (`json.load()`) after editing, then re-ran a repo-wide grep for `CsrfMiddleware`, `/api/csrf/token`, `156`, `16 end-to-end`, and `<5ms` across every `builder-database/*.json` file: zero remaining matches, confirming the reconciliation is complete rather than partial.
   Drive-by (unrelated to CSRF, found while re-reading this section to place this entry): fixed a duplicated `S4.4` one-liner (two identical lines) immediately below this entry in the list below.
   No break-test in the traditional sense — this is content correction in data files, not code — but the before/after JSON-validity check plus the exhaustive re-grep serves the same verification purpose S4.3's own dead-code removal used.
-- **S4.4** [Cat. 2 — documentation, not code] Read-through against S4.1–S4.3's actual landed behavior; not UI-testable by nature.
+- **S4.4** [Cat. 2 — documentation, not code] ✅ Done 2026-08-09: read `SECURITY_FEATURES.md` end-to-end
+  against S4.1/S4.2/S4.8's actual landed behavior. Two named things in the task row plus two more found
+  along the way:
+  **BCrypt-already-done wording** (named in the task row): the Password Security section's claims
+  ("Passwords never stored in plain text", etc.) describe `PasswordService` itself, which always hashed
+  correctly in isolation — the part that was false pre-S4.1/S4.2 is that neither real auth path
+  (`UserManager`, `GenericAppAuthController`) actually called it, so the guarantee wasn't true of the
+  app as a whole. Rather than silently leave the now-accidentally-true wording as if it had always been
+  correct, added an explicit `[!IMPORTANT]` callout stating this history, plus a new **Where Hashing Is
+  Applied** subsection naming both real call sites, the transparent-rehash-on-legacy-login mechanism
+  (verified against `UserManager.authenticate()`'s actual `looksLikeBcryptHash()`/rehash-on-write code),
+  and a pointer to S4.8's read-path redaction (a closely-related, previously undocumented fact in this
+  same section).
+  **Stale LitElement snippets** (named in the task row): Frontend Integration's 4 code samples
+  (`this.querySelector`, `this.showFieldError`, class-method `validateField()`/`setLoadingState()`) were
+  wholesale LitElement-era fiction with no current source equivalent. Replaced with 5 real, cited
+  (file+line) excerpts — bearer-token header inclusion, the actual `authedFetch()`/`AuthGate.tsx`
+  401-recovery event flow, and the real `useState`-based loading/disabled-button pattern — verified via
+  a dedicated `explore` sub-agent pass, then independently re-confirmed by direct `view`/`grep` reads of
+  every cited file before writing a single line (not trusted from the sub-agent report alone). Two
+  genuine, previously undocumented gaps surfaced while doing this and are stated plainly rather than
+  invented around: **no client-side password-strength/confirm-password validation exists in either
+  frontend** (only `required` on the input), and **no frontend handles HTTP 429 at all** (`authedFetch`
+  only special-cases 401) — both were simply removed from the doc rather than replaced with a fabricated
+  working example.
+  **Found during the read-through, not named in the task row but directly the same "doc matches
+  reality" defect class**: (1) the References section still flagged `builder-database/*.json` as
+  unreconciled and listed their pre-S4.9 version numbers — updated now that S4.9 (this same round)
+  closed that gap. (2) The Troubleshooting section's three Q&As referenced the same dead
+  `localStorage.getItem('appbana_token')`-only assumption (Studio doesn't use that key at all — Zustand
+  persist under `appbana-session`), the deleted `validateField()`/confirmPassword machinery, and gave no
+  indication 429 handling is manual-only — corrected all three to match the same reality established
+  above rather than leaving a second, easy-to-miss copy of the same staleness elsewhere in the doc. (3)
+  The Security Checklist's "401 redirects to login with delay" line prescribed the exact removed
+  LitElement pattern as the recommended practice for *new* features — corrected to name the real
+  event-based recovery mechanism so a developer following this checklist wouldn't rebuild the wrong
+  thing.
+  **Verification**: doc-only change, no Maven test applies directly, but re-ran
+  `EstimateReconciliationTest`/`RouteCensusTest` (3/3 green, unaffected by prose-only edits) as a
+  regression check since the same commit also touches the tracker/plan docs' estimate figures (S4.9).
+  Checked every new `(#anchor)` link resolves to a real heading. No live UI probe: this task is
+  documentation-only and doesn't change any running behavior to observe.
 - **S4.5** [Cat. 2 — automated tests] Formalizes S4.1/S4.2's already-proven scenarios.
 - **S4.6** [Cat. 2 — no audit-log viewer exists anywhere in Studio/Runtime] Perform any normal UI action (e.g., S1.3's app edit), then inspect the resulting audit row directly and confirm `tenant_id`/`app_id` are populated.
 - **S4.7** [Cat. 2 — same reason as S4.6] Same method; confirm `actor` is the real userId, not a raw token.

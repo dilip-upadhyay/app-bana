@@ -1,6 +1,6 @@
 # AppBana Security Features - Complete Guide
 
-**Last Updated:** April 2026 (CSRF section corrected — see S4.3 note below)  
+**Last Updated:** April 2026 (CSRF section corrected — S4.3; Password Security + Frontend Integration corrected end-to-end — S4.4)  
 **Status:** Production Ready  
 **Test Coverage:** See [`docs/planning/TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`](../planning/TENANT_ISOLATION_IMPLEMENTATION_TASKS.md) for the current, authoritative `app-bana-service` suite total — the count in [Testing](#testing) below covers only the security-feature test classes documented on this page (originally 156, now 131 after S4.3 removed `CsrfMiddlewareTest`), predating all of the S1–S4 tenant-isolation work, and was never meant to represent the whole module.
 
@@ -89,6 +89,16 @@ The following endpoints bypass authentication but still respect rate limiting:
 
 ## Password Security
 
+> [!IMPORTANT]
+> **S4.4 note:** the guarantees below describe `PasswordService` itself, which has always hashed
+> correctly in isolation — but before S4.1/S4.2 (tenant-isolation security initiative) neither of the
+> two real login/write paths actually called it: `UserManager` (Studio users) and
+> `GenericAppAuthController` (runtime end-user auth + generic-entity `password`-typed fields) compared
+> and stored raw plaintext directly, bypassing `PasswordService` entirely. So "passwords never stored
+> in plain text" was aspirational documentation, not yet a true statement about this app. S4.1 and
+> S4.2 wired both call sites to `PasswordService` — see [Where Hashing Is Applied](#where-hashing-is-applied)
+> below — so the guarantees are now genuinely true end-to-end, not just true of one isolated class.
+
 ### BCrypt Hashing
 
 **File:** `com.appbana.service.PasswordService`  
@@ -110,13 +120,34 @@ boolean isValid = PasswordService.verifyPassword("mySecurePassword123", hashedPa
 - **Constant-Time Comparison** - Prevents timing attacks
 - **Performance** - 100-500ms per hash (intentional delay)
 
+### Where Hashing Is Applied
+
+**S4.1 — `UserManager.java`** (Studio/AI-Builder users): `register()` hashes on write; `authenticate()`
+verifies against either a BCrypt hash or a legacy plaintext value (`looksLikeBcryptHash()` checks the
+`$2a$`/`$2b$`/`$2y$` prefix), and on a **successful** legacy-plaintext login, transparently rehashes and
+persists the BCrypt value immediately — no forced password reset, no dual-write path. Every row is
+migrated the first time its owner logs in; unvisited legacy rows remain plaintext until then.
+
+**S4.2 — `GenericAppAuthController.java`** (runtime end-user auth + any generic entity with a
+`password`-typed field): the same fetch-by-email/verify/transparent-rehash treatment, plus hash-on-write
+for **every** path that sets a password column — not just login — so a record created or edited through
+the generic entity API is hashed the moment it's written, never only at first login.
+
+**S4.8 — read-path redaction:** hashing on write is a separate concern from whether the hash is ever
+returned to a client. `EntityCrudService.redactSensitiveColumns()`/`redactSensitiveColumnsFromList()`
+omit any column whose name contains `password` or `secret` (case-insensitive) from every client-facing
+GET response (simple/advanced list, single record, bulk export, generic audit, and the approval
+pending-queue/audit-trail routes) — the hash is written and used internally (e.g. for approval
+revision-merges), but a client never sees it at all.
+
 ### Security Guarantees
 
-✅ Passwords never stored in plain text  
+✅ Passwords never stored in plain text (as of S4.1/S4.2 — see the note above)  
 ✅ Salts are cryptographically random  
 ✅ Verification uses constant-time comparison  
 ✅ Invalid hashes return false (no exceptions)  
 ✅ Work factor can be increased in future  
+✅ Password/secret columns are omitted from every client-facing read (S4.8)  
 
 ---
 
@@ -333,92 +364,113 @@ router.use(SessionMiddleware.create());
 All authed calls flow through `authedFetch()` which broadcasts a browser event on 401 so the auth gate can force re-login. Session headers are injected consistently.
 
 > [!NOTE]
-> **S4.3:** the code samples below predate the AI-native Studio/Runtime rebuild and describe the
-> retired LitElement `app-bana-ui` client, not the current React `app-bana-studio`/`app-bana-runtime`
-> frontends — treat them as illustrative of past patterns, not a literal reference for the current
-> code. The CSRF-token-fetching step that used to appear here has been removed entirely: the current
-> `api-client.ts` contains no CSRF references at all (confirmed by repo-wide search), consistent with
-> `CsrfMiddleware` never having been wired into the backend pipeline (see the top-of-document
-> callout).
+> **S4.4:** the code samples below now cite the current React `app-bana-studio`/`app-bana-runtime`
+> frontends directly (file + line references given for each), replacing the retired LitElement
+> `app-bana-ui` samples S4.3 flagged. Two real gaps were found while rewriting this section and are
+> documented honestly rather than papered over: neither frontend does any client-side
+> password-strength/confirm-password validation (§3 below), and neither handles HTTP 429 at all
+> despite the backend's rate limiter genuinely returning it (§4 below, see also
+> [Rate Limiting](#rate-limiting)).
 
 #### 1. Session Token Inclusion
 
 ```typescript
-const headers = {
-    'Content-Type': 'application/json',
-    'X-Session-Token': localStorage.getItem('appbana_token')
-};
+// app-bana-shared/src/api-client.ts:97-100 — every authed call attaches a bearer token
+export async function listApps(tenantId: string, token: string): Promise<AppMeta[]> {
+  const res = await authedFetch(`${BACKEND}/appbana-studio/${tenantId}/apps`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  ...
 ```
 
-**Storage:** `localStorage` key: `appbana_token`  
+**Header:** `Authorization: Bearer <token>` — not `X-Session-Token` as this section previously showed.
+Both forms are accepted by the backend (`SessionMiddleware.create()` checks `X-Session-Token` first,
+then falls back to `Authorization: Bearer`), but the frontend has only ever used the latter.  
+**Storage:** Studio persists the token via Zustand's `persist` middleware, `localStorage` key
+`appbana-session` ([`app-bana-studio/src/stores/session.ts`](../../app-bana-studio/src/stores/session.ts)).
+Runtime uses its own plain `localStorage` key `appbana_token`, read via `getRuntimeToken()`
+([`app-bana-runtime/src/runtime/qualifyEntityKey.ts`](../../app-bana-runtime/src/runtime/qualifyEntityKey.ts))
+— the two frontends do not share a token store.  
 **Lifetime:** 30 minutes with sliding window  
 
-#### 2. Password Validation
+#### 2. Session-Expiry Recovery (401)
 
 ```typescript
-validateField(element: HTMLInputElement) {
-    if (element.name === 'password') {
-        // Min 8 characters
-        if (element.value.length < 8) {
-            this.showFieldError(element, 'Password must be at least 8 characters');
-            return false;
-        }
-        // Letters + numbers
-        if (!/[a-zA-Z]/.test(element.value) || !/\d/.test(element.value)) {
-            this.showFieldError(element, 'Password must contain letters and numbers');
-            return false;
-        }
-    }
-    
-    if (element.name === 'confirmPassword') {
-        const password = this.querySelector('[name="password"]');
-        if (element.value !== password.value) {
-            this.showFieldError(element, 'Passwords do not match');
-            return false;
-        }
-    }
+// app-bana-shared/src/api-client.ts:16-22
+export async function authedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init);
+  if (res.status === 401 && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('appbana:auth:expired'));
+  }
+  return res;
 }
 ```
 
-**Timing:** On blur (after leaving field)  
-**Clearing:** On input (as user types)  
-
-#### 3. Error Handling
-
-```typescript
-// 401 - Session expired
-if (response.status === 401) {
-    this.showError('Session expired. Redirecting to login...');
-    setTimeout(() => window.location.href = '/login', 2000);
-    return;
-}
-
-// 429 - Rate limit
-if (response.status === 429) {
-    const retryAfter = response.headers.get('Retry-After') || '60';
-    this.showError(`Too many requests. Please try again in ${retryAfter} seconds.`);
-    return;
-}
-```
-
-#### 4. Loading States
-
-```typescript
-setLoadingState(loading: boolean) {
-    const submitButton = this.querySelector('button[type="submit"]');
-    if (loading) {
-        submitButton.textContent = 'Submitting...';
-        submitButton.disabled = true;
-        this.isSubmitting = true;
-    } else {
-        submitButton.textContent = this.submitButtonText;
-        submitButton.disabled = false;
-        this.isSubmitting = false;
+```tsx
+// app-bana-studio/src/features/auth/AuthGate.tsx:23-41
+useEffect(() => {
+  const handler = () => {
+    if (useSessionStore.getState().token) {
+      setSessionExpired(true);
+      clearSession();
+      resetSessionScopedState(); // also clears every session-scoped store — S2.8 fix
     }
-}
+  };
+  window.addEventListener('appbana:auth:expired', handler);
+  return () => window.removeEventListener('appbana:auth:expired', handler);
+}, [clearSession]);
 ```
 
-**Prevents:** Double-submit during request processing  
+**Studio:** listens globally (above) and falls through to the login form with a "Your session expired"
+banner — no hard redirect. `ChatPane.tsx` also re-dispatches this same event on an in-stream
+`auth_expired` SSE event, since that HTTP response itself is a 200.  
+**Runtime:** has **no equivalent listener** — confirmed via a repo-wide search for `auth:expired` in
+`app-bana-runtime/src` (zero matches). A 401 there is handled per-call by whichever hook/component made
+the request, not through this shared recovery path.
+
+#### 3. Password Validation
+
+> [!WARNING]
+> **Not currently implemented in either frontend.** Both signup/login forms —
+> [`AuthGate.tsx`](../../app-bana-studio/src/features/auth/AuthGate.tsx) (Studio, `<input type="password">`)
+> and [`LoginPage.tsx`](../../app-bana-runtime/src/pages/LoginPage.tsx) (Runtime) — mark the password
+> field `required` only: no minimum-length check, no letters+numbers check, and no confirm-password
+> field exists anywhere in either frontend. `PasswordService`'s server-side hashing
+> (§ [Password Security](#password-security)) is unconditional and doesn't depend on any client-side
+> check, so a weak password is still hashed safely — the user just gets no feedback before submitting
+> one. The previous version of this section showed a LitElement `validateField()` method; it described
+> a component that no longer exists in either React frontend and has been removed rather than repeated.
+
+#### 4. Rate-Limit (429) Handling
+
+> [!WARNING]
+> **Not currently implemented in either frontend.** The backend's `RateLimitMiddleware` genuinely
+> returns a 429 (§ [Rate Limiting](#rate-limiting)), but `authedFetch()` only special-cases 401 — there
+> is no `response.status === 429` handling anywhere in `app-bana-shared/src`, `app-bana-studio/src`, or
+> `app-bana-runtime/src`. A rate-limited request today surfaces as a generic fetch failure to whatever
+> error handling the calling component already has, with no `Retry-After` messaging. The e2e suite
+> already defensively skips a 429 it wasn't expecting; a real UI affordance does not exist yet. The
+> previous version of this section showed a matching `response.status === 429` code sample; it did not
+> correspond to any real source file and has been removed rather than repeated here.
+
+#### 5. Loading / Submit-Disabled State
+
+```tsx
+// app-bana-studio/src/features/auth/AuthGate.tsx:15, 48, 65, 128-135
+const [loading, setLoading] = useState(false);
+// ...
+setLoading(true);
+try { /* login/register call */ } finally { setLoading(false); }
+// ...
+<button type="submit" disabled={loading} className="... disabled:opacity-50 ...">
+  {loading ? 'Please wait…' : tab === 'login' ? 'Sign In' : 'Create Account'}
+</button>
+```
+
+**Prevents:** double-submit during the login/register request. Runtime's equivalent form uses a shared
+`<Button loading={loading}>` component
+([`app-bana-runtime/src/runtime/Button.tsx`](../../app-bana-runtime/src/runtime/Button.tsx)) that applies
+the same `disabled={disabled || loading}` pattern internally.
 
 ---
 
@@ -599,12 +651,12 @@ cookie-based sessions — bearer-token auth makes it a no-op (see [CSRF Protecti
 For any new feature with user input:
 
 - [ ] Forms include session token in headers
-- [ ] Password fields validated (8+ chars, letters+numbers)
+- [ ] Password fields validated (8+ chars, letters+numbers) — not currently done anywhere; see [§3](#frontend-integration)
 - [ ] confirmPassword field excluded from submission
 - [ ] Error messages user-friendly (not exposing internals)
 - [ ] Loading states prevent double-submit
-- [ ] 401 redirects to login with delay
-- [ ] 429 shows retry message
+- [ ] 401 triggers `appbana:auth:expired` → session clear → login form (no hard redirect — see [§2](#frontend-integration))
+- [ ] 429 shows retry message — not currently done anywhere; see [§4](#frontend-integration)
 - [ ] Backend validates all security checks
 - [ ] Tests cover security scenarios
 
@@ -615,13 +667,19 @@ For any new feature with user input:
 ### Common Issues
 
 **Q: Getting 401 session errors?**  
-A: Check `localStorage.getItem('appbana_token')` exists and session hasn't expired (30 min)
+A: Check your session token is present and not expired (30 min sliding window). Studio persists it via
+Zustand under the `appbana-session` `localStorage` key; Runtime uses a plain `localStorage.getItem('appbana_token')` (see [Frontend Integration](#frontend-integration)).
 
 **Q: Getting 429 rate limit errors?**  
-A: Wait for the time specified in `Retry-After` header (max 1 minute)
+A: Wait for the time specified in the response's `Retry-After` header (max 1 minute). Neither frontend
+currently surfaces this automatically — see [§4 Rate-Limit (429) Handling](#frontend-integration) — so
+today this means inspecting the raw HTTP response (e.g. browser devtools' Network tab).
 
 **Q: Password validation not working?**  
-A: Ensure `validateField()` is called on blur for password and confirmPassword fields
+A: There is no client-side password-strength or confirm-password validation in either frontend today
+(see [§3 Password Validation](#frontend-integration)) — `PasswordService` hashes whatever is submitted
+regardless of strength, so a weak password is still stored safely, but nothing currently blocks
+submitting one.
 
 **Q: Session not renewing?**  
 A: SessionMiddleware automatically renews valid sessions on each request (sliding window)
@@ -646,12 +704,11 @@ A: SessionMiddleware automatically renews valid sessions on each request (slidin
   - All test files in `src/test/java/com/appbana/middleware/`
   - `src/test/java/com/appbana/integration/SecurityIntegrationTest.java`
 
-- **Builder Database:** (AI Builder RAG knowledge sources — out of scope for this doc's S4.3
-  correction pass; still describe `CsrfMiddleware`/CSRF-fetching as if live and should be
-  reconciled separately)
-  - `builder-database/09-authentication.json` (v1.2.0)
-  - `builder-database/10-form-patterns.json` (v1.1.0)
-  - `builder-database/99-capabilities-index.json` (v1.4.0)
+- **Builder Database:** (AI Builder RAG knowledge sources — reconciled with `CsrfMiddleware`'s S4.3
+  deletion by S4.9; no longer describe it as live)
+  - `builder-database/09-authentication.json` (v1.2.1)
+  - `builder-database/10-form-patterns.json` (v1.1.1)
+  - `builder-database/99-capabilities-index.json` (v1.5.1)
 
 ---
 
