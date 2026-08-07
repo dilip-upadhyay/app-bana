@@ -63,6 +63,24 @@ public class PasswordService {
     }
 
     /**
+     * S4.2 — shared BCrypt-shape sniff test for the two new call sites that need it
+     * ({@code EntityCrudService}'s generic entity write paths and {@code SampleDataGenerator}'s
+     * LOCAL-env sample data). {@code UserManager} and {@code GenericAppAuthController} each
+     * already carry their own private, independently break-tested copy of this exact check
+     * (S4.1/S3.3) — left as-is here rather than refactored, so this addition stays purely
+     * additive and does not risk either already-verified call site. Any BCrypt hash produced by
+     * {@link #hashPassword} always starts with one of these three revision prefixes; used to
+     * make hash-on-write idempotent so a value that is already a hash is never hashed again.
+     *
+     * @param value the stored value to inspect; {@code null} is not a hash
+     * @return true if the value already looks like a BCrypt hash
+     */
+    public static boolean looksLikeBcryptHash(String value) {
+        return value != null
+                && (value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$"));
+    }
+
+    /**
      * Check if a password meets minimum security requirements.
      * Requirements:
      * - At least 8 characters

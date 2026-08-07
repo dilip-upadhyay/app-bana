@@ -140,6 +140,18 @@ public class GenericAppAuthController {
                     return;
                 }
 
+                // 3b. S4.2: transparent hash-on-write for the runtime end-user table, mirrored
+                // from UserManager's identical S4.1 fix. A legacy row just proved itself via the
+                // constant-time plaintext fallback in verifyCredential() above - rehash it to
+                // BCrypt and persist immediately so every future login for this row takes the
+                // BCrypt branch instead. No forced reset, no dual write path. Best-effort: a
+                // persistence failure here must never undo an authentication that already
+                // succeeded - the row simply remains eligible for the identical rehash on its
+                // next login.
+                if (!looksLikeBcryptHash(storedPassword)) {
+                    rehashLegacyPassword(dsName, tableName, schema, userData, email, password);
+                }
+
                 // 4. Issue a real, app-scoped session (S3.1/S3.3). tenantId here MUST be the
                 // app's own tenantId (schema.getTenantId(), authoritative for the schema we just
                 // matched on), never some other tenant the caller might separately claim -
@@ -172,8 +184,10 @@ public class GenericAppAuthController {
     /**
      * S3.3 (M5): verify in Java, never in SQL. Prefers a BCrypt comparison; falls back to a
      * constant-time plain-text equality check for rows still holding a pre-hash value (Phase 1
-     * prototype data - see the old TODO this replaced). S4.2 adds transparent hash-on-write and
-     * rehash-on-login so this fallback branch stops being reachable for any row it has touched.
+     * prototype data - see the old TODO this replaced). S4.2 (below, in login()) transparently
+     * rehashes-and-persists the instant one of these legacy rows verifies successfully, and
+     * hash-on-write in EntityCrudService means no newly-inserted/updated row can reach this
+     * fallback branch in the first place - it now only ever fires for a row neither has touched.
      *
      * Rejects a blank (non-null, empty) rawPassword here too - not just at the login() call site
      * - because PasswordService.verifyPassword throws IllegalArgumentException on an empty
@@ -194,6 +208,61 @@ public class GenericAppAuthController {
 
     private static boolean looksLikeBcryptHash(String value) {
         return value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$");
+    }
+
+    /**
+     * S4.2: mirrors {@code UserManager.authenticate}'s S4.1 rehash-on-login exactly, adapted to
+     * this class's raw-JDBC/dynamic-table shape instead of an in-memory {@code User} object.
+     * Called only after {@code verifyCredential} has already returned {@code true} against the
+     * constant-time legacy-plaintext fallback, so {@code rawPassword} is known-correct for this
+     * row - safe to hash and persist as the row's new value.
+     *
+     * <p>Uses the row's own primary-key column/value (from {@code userData}, already populated
+     * by the SELECT above) to target the UPDATE precisely. The physical column being written is
+     * always {@code "PASSWORD"}: {@code storedValue} can only be non-null/non-empty here because
+     * the SELECT loop above captured it from a column whose lower-cased name is exactly
+     * {@code "password"} (see the loop above), and {@code SchemaManager}'s column-creation
+     * convention always uppercases quoted identifiers, so that physical column is guaranteed to
+     * be {@code "PASSWORD"}.
+     *
+     * <p>Deliberately best-effort: a failure here is logged and swallowed rather than
+     * propagated, so a persistence hiccup on the rehash never undoes (or 500s) a login that has
+     * already genuinely succeeded. The row simply remains a legacy plaintext row eligible for
+     * the identical rehash attempt on its next login.
+     */
+    private static void rehashLegacyPassword(String dsName, String tableName, EntitySchema schema,
+            Map<String, Object> userData, String email, String rawPassword) {
+        EntitySchema.Field pk = schema.getFields() == null ? null : schema.getFields().stream()
+                .filter(EntitySchema.Field::isPrimaryKey)
+                .findFirst()
+                .orElse(null);
+        if (pk == null || pk.getName() == null) {
+            LOG.warn("Skipping legacy-password rehash for '{}' in table '{}': no primary key field on schema",
+                    email, tableName);
+            return;
+        }
+        Object pkValue = userData.get(pk.getName().toLowerCase());
+        if (pkValue == null) {
+            LOG.warn("Skipping legacy-password rehash for '{}' in table '{}': primary key value missing from row",
+                    email, tableName);
+            return;
+        }
+
+        String sql = "UPDATE \"" + tableName.toUpperCase() + "\" SET \"PASSWORD\" = ? WHERE \""
+                + pk.getName().toUpperCase() + "\" = ?";
+        try (Connection conn = JdbcManager.getConnection(dsName);
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, PasswordService.hashPassword(rawPassword));
+            ps.setObject(2, pkValue);
+            int updated = ps.executeUpdate();
+            if (updated > 0) {
+                LOG.info("Rehashed legacy plaintext password to BCrypt for '{}' in table '{}'", email, tableName);
+            } else {
+                LOG.warn("Legacy-password rehash for '{}' in table '{}' matched 0 rows", email, tableName);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to rehash legacy password for '{}' in table '{}': {}", email, tableName, e.getMessage());
+        }
     }
 
     /** Prefer the row's own primary-key value as the session's userId; fall back to email. */

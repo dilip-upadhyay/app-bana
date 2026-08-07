@@ -110,7 +110,7 @@ public class EntityCrudService {
             }
             if (data.containsKey(f.getName())) {
                 Object raw = data.get(f.getName());
-                Object val = coerceAndValidate(f, raw);
+                Object val = coerceValidateAndHashIfPassword(f, raw);
                 set.add(quote(f.getName()) + " = ?");
                 vals.add(val);
             }
@@ -267,7 +267,7 @@ public class EntityCrudService {
 
             cols.add(quote(fieldName));
             placeholders.add("?");
-            Object val = coerceAndValidate(field, raw);
+            Object val = coerceValidateAndHashIfPassword(field, raw);
             values.add(val);
         }
 
@@ -410,7 +410,7 @@ public class EntityCrudService {
             }
             if (data.containsKey(f.getName())) {
                 Object raw = data.get(f.getName());
-                Object val = coerceAndValidate(f, raw);
+                Object val = coerceValidateAndHashIfPassword(f, raw);
                 set.add(quote(f.getName()) + " = ?");
                 vals.add(val);
             }
@@ -1045,7 +1045,7 @@ public class EntityCrudService {
                             raw = new Timestamp(System.currentTimeMillis());
                         }
                     }
-                    Object val = coerceAndValidate(f, raw);
+                    Object val = coerceValidateAndHashIfPassword(f, raw);
                     ps.setObject(idx++, val);
                 }
                 ps.addBatch();
@@ -1129,6 +1129,61 @@ public class EntityCrudService {
             list.add(row);
         }
         return list;
+    }
+
+    /**
+     * S4.2 — the single choke point {@link #insertRecordLegacy}, {@link #insertBatch} and both
+     * {@code updateById} overloads now write every field's value through, so a fifth write path
+     * added later cannot repeat the mistake of leaving a "password" column unhashed (mirrors this
+     * class's own {@link #writableFields} precedent for exactly that reason).
+     *
+     * <p>A field literally named {@code "password"} (case-insensitive — matches
+     * {@code GenericAppAuthController.login()}'s own exact-match convention for the one column it
+     * verifies logins against) is handled specially; every other field is unaffected and goes
+     * straight through to {@link #coerceAndValidate}.
+     *
+     * <ul>
+     *   <li>If the incoming value already looks like a BCrypt hash ({@link
+     *       PasswordService#looksLikeBcryptHash}), it is passed through unchanged, bypassing
+     *       {@code coerceAndValidate}'s length/pattern checks entirely. This is what keeps a
+     *       routine "fetch the full record (which includes the raw stored column —
+     *       {@link #getById}/{@link #listAll} apply no password redaction, unlike
+     *       {@code GenericAppAuthController.login()}'s response), edit an unrelated field, PUT it
+     *       all back" round trip from re-hashing an already-hashed value (hashing a hash would
+     *       silently and permanently break the account's real password) or failing a complexity
+     *       {@code pattern} the schema may declare for a genuine plaintext password, which a
+     *       random-looking hash string has no reason to satisfy.</li>
+     *   <li>Otherwise it is a genuine new/changed plaintext password: validated as normal first
+     *       (so a schema's length/pattern rules still apply to the real password, not to its
+     *       eventual hash), then hashed via {@link PasswordService#hashPassword} before being
+     *       handed back for persistence. A blank/absent value is left to
+     *       {@code coerceAndValidate}'s own required-field handling — nothing to hash, and an
+     *       empty stored password already can never authenticate (see
+     *       {@code GenericAppAuthController.verifyCredential}'s own empty-value guard).</li>
+     * </ul>
+     *
+     * <p><b>Known constraint, deliberately not defended against here:</b> a BCrypt hash is always
+     * exactly 60 characters. {@code SchemaManager.sqlType()} only narrows a STRING column's
+     * physical {@code VARCHAR} width below the 255-char default when the schema's declared type is
+     * literally {@code "string"}/{@code "varchar"} <em>and</em> sets an explicit {@code length} —
+     * every other STRING-kind alias (e.g. {@code "email"}, {@code "phone"}) is a fixed
+     * {@code VARCHAR(255)} regardless of any {@code length} set on the field, which comfortably
+     * fits a hash. A schema that deliberately types "password" as {@code string} with an explicit
+     * {@code length} under 60 would validate the plaintext successfully here and then fail at the
+     * SQL layer on the now-60-char hash. No current schema-creation path (scaffold tool, Studio
+     * editor) does this, so this is documented rather than defended against — revisit if that
+     * changes.</p>
+     */
+    private static Object coerceValidateAndHashIfPassword(EntitySchema.Field f, Object raw) {
+        boolean isPasswordField = "password".equalsIgnoreCase(f.getName());
+        if (isPasswordField && raw instanceof String s && !s.isEmpty() && PasswordService.looksLikeBcryptHash(s)) {
+            return s;
+        }
+        Object val = coerceAndValidate(f, raw);
+        if (isPasswordField && val instanceof String plain && !plain.isEmpty()) {
+            return PasswordService.hashPassword(plain);
+        }
+        return val;
     }
 
     /**

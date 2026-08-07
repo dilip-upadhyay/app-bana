@@ -220,6 +220,60 @@ class GenericAppAuthControllerTest {
         assertFalse(userPayload.containsKey("password"));
     }
 
+    // ========================================
+    // S4.2: transparent rehash-on-login
+    // ========================================
+
+    @Test
+    @DisplayName("S4.2: a successful legacy-plaintext login transparently rehashes the stored row to BCrypt")
+    void testLegacyPlaintextPasswordIsRehashedToBcryptAfterLogin() {
+        assertEquals(BOB_PLAINTEXT_PASSWORD, fetchStoredPassword(2L),
+                "fixture precondition: Bob's row must start out as plain text, not a hash");
+
+        LoginOutcome outcome = doLogin(loginBody(APP_1, TENANT_A, ENTITY_NAME, BOB_EMAIL, BOB_PLAINTEXT_PASSWORD));
+        assertEquals(200, outcome.status(), "the rehash must be best-effort and never block a successful login");
+
+        String storedAfterLogin = fetchStoredPassword(2L);
+        assertNotEquals(BOB_PLAINTEXT_PASSWORD, storedAfterLogin,
+                "row must no longer be stored as plain text after a successful login");
+        assertTrue(PasswordService.looksLikeBcryptHash(storedAfterLogin),
+                "row must be rewritten as a BCrypt hash");
+        assertTrue(PasswordService.verifyPassword(BOB_PLAINTEXT_PASSWORD, storedAfterLogin),
+                "the new hash must still verify against the original plaintext password");
+    }
+
+    @Test
+    @DisplayName("S4.2: a row already rehashed to BCrypt is not rehashed again on a subsequent login (idempotent)")
+    void testAlreadyRehashedPasswordIsNotRehashedAgainOnSubsequentLogin() {
+        LoginOutcome first = doLogin(loginBody(APP_1, TENANT_A, ENTITY_NAME, BOB_EMAIL, BOB_PLAINTEXT_PASSWORD));
+        assertEquals(200, first.status());
+        String storedAfterFirstLogin = fetchStoredPassword(2L);
+        assertTrue(PasswordService.looksLikeBcryptHash(storedAfterFirstLogin));
+
+        LoginOutcome second = doLogin(loginBody(APP_1, TENANT_A, ENTITY_NAME, BOB_EMAIL, BOB_PLAINTEXT_PASSWORD));
+        assertEquals(200, second.status(), "the now-BCrypt row must still verify via the normal BCrypt path");
+
+        String storedAfterSecondLogin = fetchStoredPassword(2L);
+        assertEquals(storedAfterFirstLogin, storedAfterSecondLogin,
+                "a row that already looks like a BCrypt hash must be left untouched by a later login - "
+                        + "rehashing an already-hashed value would corrupt the credential");
+    }
+
+    private String fetchStoredPassword(long id) {
+        String table = physicalTableName().toUpperCase();
+        String sql = "SELECT \"PASSWORD\" FROM \"" + table + "\" WHERE \"ID\" = ?";
+        try (Connection c = JdbcManager.getConnection("default");
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, id);
+            try (var rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "fixture row " + id + " must exist");
+                return rs.getString(1);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Test
     @DisplayName("Default entity name ('User') is used when the request omits 'entity'")
     void testDefaultsToUserEntityWhenEntityFieldOmitted() throws SQLException {
