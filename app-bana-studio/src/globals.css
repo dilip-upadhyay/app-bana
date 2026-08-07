@@ -3,7 +3,12 @@
 @tailwind utilities;
 
 :root {
-  --color-brand: #6366f1;
+  /* #6163f0, not Tailwind's indigo-500 stop (#6366f1) — nudged one step darker
+     so white-on-brand text/buttons clear WCAG 2 AA 4.5:1 (S3 exit-criteria
+     sweep; mirrors the identical S3.7 fix already applied to
+     app-bana-runtime's globals.css, folded in here rather than as its own
+     task row since it's the same already-described-and-estimated bug). */
+  --color-brand: #6163f0;
 }
 
 body {

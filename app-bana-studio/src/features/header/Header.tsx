@@ -92,7 +92,8 @@ export function Header() {
     }
   }
 
-  const brandColor = branding?.primaryColor ?? '#6366f1';
+  // #6163f0, not Tailwind's indigo-500 stop (#6366f1) — see globals.css above.
+  const brandColor = branding?.primaryColor ?? '#6163f0';
 
   return (
     <header
