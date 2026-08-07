@@ -104,11 +104,11 @@ verdict: the plan is done — execute it.**
 | S0 | Unify identity resolution + route census | One `resolveIdentity()` every gate uses; machine-generated census of every registered route, now including **known callers** and **what data must exist for it to succeed** columns | ~10.17 hr |
 | S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~14.75 hr |
 | S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~13.75 hr |
-| S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)** | ~12.75 hr |
+| S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)**; **includes 2 data-hygiene fixes surfaced during the S3 exit-criteria sweep — S3.9/S3.10** | ~14.0 hr |
 | S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~5.5 hr |
 | S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~4.0 hr |
 
-**Total scope:** ~60.92 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
+**Total scope:** ~62.17 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
 hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
 plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
 consecutive round to add scope, though the first with no blocker; **round 6 adds none** — both findings
@@ -163,6 +163,18 @@ shape. S2 ~11.75→~12.75 hr, new grand total **~59.92 hr across 55 tasks**. **S
 ~1.0 hr** — new task S2.12 registered for an absence-census finding: the round-23 schema-block
 reconciliation itself still had cosmetic drift from `V19` even under maximum attention, proving nothing
 guards that claim from recurring. S2 ~12.75→~13.75 hr, new grand total **~60.92 hr across 56 tasks**.
+**S3 exit-criteria final sweep adds ~1.25 hr** — two new tasks registered and *implemented same-round*
+(not deferred), both surfaced as side effects of S3.7/S3.8's own work and flagged 3 times across prior
+review rounds without ever being registered: **S3.9** — `SchemaManager.deleteSchema(dropTable=true)`
+built its `DROP TABLE` from the logical registry key instead of `getPhysicalTableName()`, so the
+statement's `IF EXISTS` always silently no-opped, leaking the physical table on every call (S3.7's own
+fixture teardown left 6 such orphans, confirmed in that task's own narrative); and **S3.10** —
+`AppManager.deleteApp()` never deleted the corresponding `appbana_app_members` rows (no FK exists on
+that column at all), permanently orphaning every membership grant on a deleted app. Neither is a
+security hole — both leaks are unreachable/inert once the schema or app row is gone — but both are real,
+previously-undetected resource/data-hygiene leaks, each now fixed with a regression test and a live
+break-test proving the fix is load-bearing. S3 ~12.75→~14.0 hr, new grand total **~62.17 hr across 58
+tasks**.
 S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
