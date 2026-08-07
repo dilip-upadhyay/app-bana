@@ -12,6 +12,7 @@ import com.appbana.service.PasswordService;
 import com.appbana.service.SessionService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -99,14 +100,7 @@ public class ApprovalRoutesRedactionTest {
 
     @BeforeEach
     public void setUpSchemaAndRoles() throws Exception {
-        try (Connection c = JdbcManager.getConnection("default");
-                Statement s = c.createStatement()) {
-            // Scoped to this test's OWN fixture tenant -- never a blanket wipe of the shared dev
-            // Postgres instance's role grants / approval history (see ApprovalRoutesSecurityTest).
-            s.execute("DELETE FROM appbana_user_roles WHERE tenant_id = '" + TENANT_ID + "'");
-            s.execute("DELETE FROM appbana_approvals WHERE tenant_id = '" + TENANT_ID + "'");
-            s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
-        }
+        cleanUpFixtures();
 
         // C4.6 — business fields only; approval columns are materialised by SchemaManager from
         // setApprovalRequired(true) alone.
@@ -126,6 +120,35 @@ public class ApprovalRoutesRedactionTest {
 
         UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, MAKER, UserRoleService.Role.BOTH, "system");
         UserRoleService.grantRole(TENANT_ID, APP_ID, ENTITY_NAME, CHECKER, UserRoleService.Role.CHECKER, "system");
+    }
+
+    @AfterEach
+    public void tearDownSchemaAndRoles() throws Exception {
+        cleanUpFixtures();
+    }
+
+    /**
+     * round-84 review nit: this cleanup previously ran only in {@code @BeforeEach}, so the final
+     * test method's physical table lingered until the next test run re-cleaned it, and the
+     * {@code appbana_schemas} row was never deleted at all (harmless in practice — namespaced
+     * fixture keys, idempotent upsert on {@link SchemaManager#saveSchema}, zero {@code
+     * appbana_audit} residue confirmed by live scan — but inconsistent with {@link
+     * GenericEntityRoutesRedactionTest}'s {@code @AfterEach}-cleans-up-after-itself pattern). Now
+     * called from both {@code @BeforeEach} (so a prior run's leftovers never leak into this run)
+     * and {@code @AfterEach} (so this run never leaves anything for the next one), and now also
+     * deletes the {@code appbana_schemas} row, mirroring {@code GenericEntityRoutesRedactionTest
+     * #cleanUpFixtures}.
+     */
+    private void cleanUpFixtures() throws Exception {
+        try (Connection c = JdbcManager.getConnection("default");
+                Statement s = c.createStatement()) {
+            // Scoped to this test's OWN fixture tenant -- never a blanket wipe of the shared dev
+            // Postgres instance's role grants / approval history (see ApprovalRoutesSecurityTest).
+            s.execute("DELETE FROM appbana_user_roles WHERE tenant_id = '" + TENANT_ID + "'");
+            s.execute("DELETE FROM appbana_approvals WHERE tenant_id = '" + TENANT_ID + "'");
+            s.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
+            s.execute("DELETE FROM appbana_schemas WHERE tenant_id = '" + TENANT_ID + "' AND app_id = '" + APP_ID + "'");
+        }
     }
 
     // ---------------------------------------------------------------- helpers
