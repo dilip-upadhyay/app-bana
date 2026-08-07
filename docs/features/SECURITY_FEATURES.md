@@ -1,8 +1,20 @@
 # AppBana Security Features - Complete Guide
 
-**Last Updated:** December 30, 2025  
+**Last Updated:** April 2026 (CSRF section corrected — see S4.3 note below)  
 **Status:** Production Ready  
-**Test Coverage:** 156/156 tests passing (100%)
+**Test Coverage:** See [`docs/planning/TENANT_ISOLATION_IMPLEMENTATION_TASKS.md`](../planning/TENANT_ISOLATION_IMPLEMENTATION_TASKS.md) for the current, authoritative `app-bana-service` suite total — the count in [Testing](#testing) below covers only the security-feature test classes documented on this page (originally 156, now 131 after S4.3 removed `CsrfMiddlewareTest`), predating all of the S1–S4 tenant-isolation work, and was never meant to represent the whole module.
+
+> [!IMPORTANT]
+> **S4.3 (tenant-isolation security initiative):** `CsrfMiddleware` was deleted as dead code — it
+> was fully coded and unit-tested (24 tests) but **never registered** in `RouteRegistry.buildRouter()`'s
+> real middleware chain, so it never actually protected any request. This app authenticates via a
+> bearer token in a request header (`X-Session-Token` / `Authorization: Bearer`), never via cookies
+> (a legacy cookie-based fallback was already removed separately as dead-but-accepted attack
+> surface), so classic browser CSRF does not apply here regardless. The standalone
+> `CsrfService`/`CsrfController` token generate/validate endpoints (`GET /api/csrf-token`,
+> `POST /api/csrf-validate`) remain — they are real and registered — but nothing calls or enforces
+> them today. Every claim below that CSRF is actively "protecting" requests, wired into the
+> middleware pipeline, or fetched by the frontend has been corrected to reflect this.
 
 ---
 
@@ -23,12 +35,12 @@
 
 ## Overview
 
-AppBana provides a **complete enterprise-grade security suite** with automatic protection for all endpoints. All security features are production-ready with 156 passing tests.
+AppBana provides an **enterprise-grade security suite** with automatic protection for all endpoints.
 
 ### Security Features
 
 ✅ **Password Security** - BCrypt hashing with work factor 12  
-✅ **CSRF Protection** - Automatic token injection for state-changing requests  
+⚠️ **CSRF Token Service** - `CsrfService`/`CsrfController` endpoints exist but are not currently wired into the middleware pipeline or consumed by any frontend (see [CSRF Protection](#csrf-protection))  
 ✅ **Session Management** - 30-minute sliding window with automatic renewal  
 ✅ **Rate Limiting** - 100 requests/minute per IP per endpoint  
 ✅ **Middleware Pipeline** - Automatic security checks on all requests  
@@ -56,14 +68,12 @@ RateLimitMiddleware (100 req/min per IP)
     ↓
 SessionMiddleware (Validate session token)
     ↓
-CsrfMiddleware (Validate CSRF token for POST/PUT/DELETE)
-    ↓
 Handler (Process request)
     ↓
 Response
 ```
 
-**Performance:** <5ms total overhead per request
+**Performance:** <3ms total overhead per request
 
 ### Excluded Paths
 
@@ -71,7 +81,7 @@ The following endpoints bypass authentication but still respect rate limiting:
 
 - `/api/auth/login` - User login
 - `/api/auth/register` - User registration
-- `/api/csrf/token` - CSRF token generation
+- `/api/csrf-token` - CSRF token generation (see [CSRF Protection](#csrf-protection) — endpoint exists but nothing enforces its use)
 - `/health` - Health check
 - `/ready` - Readiness check
 
@@ -112,11 +122,16 @@ boolean isValid = PasswordService.verifyPassword("mySecurePassword123", hashedPa
 
 ## CSRF Protection
 
+> [!NOTE]
+> Despite the section title (kept for TOC/link stability), this describes a **standalone,
+> not-currently-enforced** token service, not active CSRF protection. See the S4.3 callout at the
+> top of this document.
+
 ### Token Generation & Validation
 
 **File:** `com.appbana.service.CsrfService`  
 **Tests:** `CsrfServiceTest.java` (24 tests)  
-**Middleware:** `com.appbana.middleware.CsrfMiddleware` (24 tests)
+**Registered routes:** `GET /api/csrf-token`, `POST /api/csrf-validate` (`CsrfController.java`, wired in `AuthRoutes.java`)
 
 ```java
 // Generate token for session
@@ -137,18 +152,14 @@ CsrfService.removeToken(sessionId);
 - **Thread-Safe** - Concurrent access with ConcurrentHashMap
 - **Automatic Cleanup** - Expired tokens removed automatically
 
-### Protection
+### Current Status
 
-✅ Prevents Cross-Site Request Forgery attacks  
-✅ All POST/PUT/DELETE requests require valid token  
-✅ Tokens expire after 30 minutes  
-✅ Tokens cannot be stolen via XSS (stored server-side)  
-
-### Error Codes
-
-- **CSRF_SESSION_MISSING** (403) - Session ID required
-- **CSRF_TOKEN_MISSING** (403) - CSRF token required
-- **CSRF_TOKEN_INVALID** (403) - Invalid or expired token
+⚠️ Tokens can be generated and validated via the two endpoints above, on demand  
+⚠️ **Nothing calls these endpoints today** - no frontend code fetches or sends a CSRF token, and no
+middleware rejects a request for lacking one (`CsrfMiddleware`, which used to do this, was deleted
+as dead code in S4.3 - it was never registered in the real request pipeline)  
+✅ This is intentional, not a regression: auth is bearer-token/header-only, never cookie-based, so
+classic Cross-Site Request Forgery does not apply
 
 ---
 
@@ -276,7 +287,7 @@ Retry-After: 60
 
 ### Automatic Security Checks
 
-**Integration Tests:** `SecurityIntegrationTest.java` (16 tests)
+**Integration Tests:** `SecurityIntegrationTest.java` (15 tests)
 
 All requests automatically flow through:
 
@@ -291,31 +302,24 @@ All requests automatically flow through:
    - Sets `request.attribute('session', sessionId)`
    - Returns 401 if invalid/missing
 
-3. **CsrfMiddleware** (if POST/PUT/DELETE)
-   - Validates CSRF token from `X-CSRF-Token` header
-   - Checks token matches session from `X-Session-Id` header
-   - Returns 403 if invalid/missing
-
-4. **Handler**
+3. **Handler**
    - Processes the actual request
    - Has access to validated session
 
 ### Pipeline Registration
 
 ```java
-// In ApiServer.java
+// In RouteRegistry.java
 Router router = new Router();
 router.use(RateLimitMiddleware.create());
 router.use(SessionMiddleware.create());
-router.use(CsrfMiddleware.validate());
 ```
 
 ### Performance
 
-- **Total Overhead:** <5ms per request
+- **Total Overhead:** <3ms per request
 - **RateLimit Check:** <1ms (in-memory lookup)
 - **Session Validation:** <2ms (in-memory lookup + renewal)
-- **CSRF Validation:** <2ms (in-memory lookup)
 
 ---
 
@@ -326,40 +330,30 @@ router.use(CsrfMiddleware.validate());
 **File:** [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts)  
 **Auth UI:** [`app-bana-studio/src/features/auth/AuthGate.tsx`](../../app-bana-studio/src/features/auth/AuthGate.tsx)
 
-All authed calls flow through `authedFetch()` which broadcasts a browser event on 401 so the auth gate can force re-login. CSRF tokens and session headers are injected consistently:
+All authed calls flow through `authedFetch()` which broadcasts a browser event on 401 so the auth gate can force re-login. Session headers are injected consistently.
 
-#### 1. CSRF Token Fetching
+> [!NOTE]
+> **S4.3:** the code samples below predate the AI-native Studio/Runtime rebuild and describe the
+> retired LitElement `app-bana-ui` client, not the current React `app-bana-studio`/`app-bana-runtime`
+> frontends — treat them as illustrative of past patterns, not a literal reference for the current
+> code. The CSRF-token-fetching step that used to appear here has been removed entirely: the current
+> `api-client.ts` contains no CSRF references at all (confirmed by repo-wide search), consistent with
+> `CsrfMiddleware` never having been wired into the backend pipeline (see the top-of-document
+> callout).
 
-```typescript
-async fetchCsrfToken() {
-    const response = await fetch('/api/csrf/token', {
-        headers: {
-            'X-Session-Token': localStorage.getItem('appbana_token')
-        }
-    });
-    const data = await response.json();
-    this.csrfToken = data.token;
-}
-```
-
-**When:** On form mount (`connectedCallback()`)  
-**Frequency:** Once per form instance  
-
-#### 2. Session Token Inclusion
+#### 1. Session Token Inclusion
 
 ```typescript
 const headers = {
     'Content-Type': 'application/json',
-    'X-CSRF-Token': this.csrfToken,
-    'X-Session-Token': localStorage.getItem('appbana_token'),
-    'X-Session-Id': localStorage.getItem('appbana_token')  // For CSRF
+    'X-Session-Token': localStorage.getItem('appbana_token')
 };
 ```
 
 **Storage:** `localStorage` key: `appbana_token`  
 **Lifetime:** 30 minutes with sliding window  
 
-#### 3. Password Validation
+#### 2. Password Validation
 
 ```typescript
 validateField(element: HTMLInputElement) {
@@ -389,19 +383,13 @@ validateField(element: HTMLInputElement) {
 **Timing:** On blur (after leaving field)  
 **Clearing:** On input (as user types)  
 
-#### 4. Error Handling
+#### 3. Error Handling
 
 ```typescript
 // 401 - Session expired
 if (response.status === 401) {
     this.showError('Session expired. Redirecting to login...');
     setTimeout(() => window.location.href = '/login', 2000);
-    return;
-}
-
-// 403 - CSRF failed
-if (response.status === 403) {
-    this.showError('Security validation failed. Please refresh and try again.');
     return;
 }
 
@@ -413,7 +401,7 @@ if (response.status === 429) {
 }
 ```
 
-#### 5. Loading States
+#### 4. Loading States
 
 ```typescript
 setLoadingState(loading: boolean) {
@@ -438,13 +426,17 @@ setLoadingState(loading: boolean) {
 
 ### CSRF Token Endpoint
 
+> Real, registered endpoint (`CsrfController.generateToken()`, wired in `AuthRoutes.java`) — but
+> nothing in the current frontend calls it (see the S4.3 callout at the top of this document).
+
 ```
-GET /api/csrf/token
+GET /api/csrf-token
 Headers:
-  X-Session-Token: <session-token>
-  
+  X-Session-Id: <session-id>
+
 Response: 200 OK
 {
+  "ok": true,
   "token": "abc123def456...",
   "expiresAt": 1703923200000
 }
@@ -480,8 +472,6 @@ Response: 200 OK
 POST /api/users
 Headers:
   X-Session-Token: <session-token>
-  X-Session-Id: <session-token>
-  X-CSRF-Token: <csrf-token>
   Content-Type: application/json
   
 Body:
@@ -504,21 +494,20 @@ Response: 201 Created
 
 ### Test Coverage Summary
 
-**Total:** 156 tests, 100% passing ✅
+**Total (this table only — a security-feature subset, not the full `app-bana-service` suite):** 131 tests, 100% passing ✅
 
 | Test Suite | Tests | Description |
 |------------|-------|-------------|
 | PasswordServiceTest | 21 | BCrypt hashing, verification, timing |
-| CsrfServiceTest | 24 | Token generation, validation, expiration |
-| CsrfMiddlewareTest | 24 | POST/PUT/DELETE protection, exclusions |
+| CsrfServiceTest | 24 | Token generation, validation, expiration (standalone service — see [CSRF Protection](#csrf-protection)) |
 | RateLimitServiceTest | 25 | Rate checking, sliding window, cleanup |
 | SessionServiceTest | 33 | Session CRUD, validation, renewal, expiration |
 | SessionMiddleware Test | 13 | Session validation, renewal, 401 responses |
-| **SecurityIntegrationTest** | **16** | **End-to-end pipeline testing** |
+| **SecurityIntegrationTest** | **15** | **End-to-end pipeline testing** |
 
 ### Integration Test Groups
 
-**SecurityIntegrationTest.java** covers complete pipeline:
+**SecurityIntegrationTest.java** covers the security pipeline:
 
 1. **Rate Limiting (2 tests)**
    - Blocks excessive requests (>100/min)
@@ -533,10 +522,9 @@ Response: 201 Created
    - Login/register bypass session check
    - But still enforce rate limits
 
-4. **CSRF Protection (3 tests)**
+4. **CSRF token service (2 tests, standalone — not part of the pipeline)**
    - Token generation works
-   - Valid token allows POST
-   - Invalid token blocks with 403
+   - Validation rejects invalid token
 
 5. **Complete Pipeline (3 tests)**
    - All checks pass → request succeeds
@@ -552,7 +540,7 @@ Response: 201 Created
 
 ```bash
 # All security tests
-mvn test -Dtest="PasswordServiceTest,CsrfServiceTest,CsrfMiddlewareTest,RateLimitServiceTest,SessionServiceTest,SessionMiddlewareTest,SecurityIntegrationTest"
+mvn test -Dtest="PasswordServiceTest,CsrfServiceTest,RateLimitServiceTest,SessionServiceTest,SessionMiddlewareTest,SecurityIntegrationTest"
 
 # Integration tests only
 mvn test -Dtest=SecurityIntegrationTest
@@ -569,14 +557,15 @@ mvn test -Dtest=SessionServiceTest
 
 When generating forms or authenticated features:
 
-✅ **Always** include CSRF token fetching  
 ✅ **Always** include session token headers  
 ✅ **Always** validate passwords (8+ chars, letters+numbers)  
-✅ **Always** handle 401/403/429 error responses  
+✅ **Always** handle 401/429 error responses  
 ✅ **Always** show loading states during submission  
 ✅ **Always** use constant-time password comparison  
 ✅ **Never** store passwords in plain text  
 ✅ **Never** bypass security checks on backend  
+✅ **Never** re-introduce CSRF token fetching/headers unless the auth model changes to
+cookie-based sessions — bearer-token auth makes it a no-op (see [CSRF Protection](#csrf-protection))
 
 ### For Developers
 
@@ -596,13 +585,12 @@ When generating forms or authenticated features:
 |---------|----------|-------|
 | **Password Hashing** | 100-500ms | Intentionally slow (BCrypt) |
 | **Password Verification** | 100-500ms | Same as hashing |
-| **CSRF Token Generation** | <1ms | Secure random + storage |
-| **CSRF Validation** | <2ms | In-memory lookup |
+| **CSRF Token Generation** | <1ms | Secure random + storage — only if `/api/csrf-token` is called directly; not part of the request pipeline |
 | **Session Creation** | <2ms | ID generation + storage |
 | **Session Validation** | <2ms | In-memory lookup |
 | **Session Renewal** | <3ms | Validation + update |
 | **Rate Limit Check** | <1ms | In-memory counter |
-| **Complete Pipeline** | <5ms | All middleware combined |
+| **Complete Pipeline** | <3ms | RateLimit + Session middleware combined |
 
 ---
 
@@ -610,9 +598,7 @@ When generating forms or authenticated features:
 
 For any new feature with user input:
 
-- [ ] Forms fetch CSRF token on mount
 - [ ] Forms include session token in headers
-- [ ] POST/PUT/DELETE include both CSRF and session tokens
 - [ ] Password fields validated (8+ chars, letters+numbers)
 - [ ] confirmPassword field excluded from submission
 - [ ] Error messages user-friendly (not exposing internals)
@@ -627,9 +613,6 @@ For any new feature with user input:
 ## Troubleshooting
 
 ### Common Issues
-
-**Q: Getting 403 CSRF errors?**  
-A: Ensure both `X-CSRF-Token` and `X-Session-Id` headers are present on POST/PUT/DELETE
 
 **Q: Getting 401 session errors?**  
 A: Check `localStorage.getItem('appbana_token')` exists and session hasn't expired (30 min)
@@ -650,9 +633,9 @@ A: SessionMiddleware automatically renews valid sessions on each request (slidin
 - **Source Files:**
   - `com.appbana.service.PasswordService`
   - `com.appbana.service.CsrfService`
+  - `com.appbana.api.CsrfController` (registers `GET /api/csrf-token`, `POST /api/csrf-validate` — see [CSRF Protection](#csrf-protection))
   - `com.appbana.service.RateLimitService`
   - `com.appbana.service.SessionService`
-  - `com.appbana.middleware.CsrfMiddleware`
   - `com.appbana.middleware.SessionMiddleware`
   - `com.appbana.middleware.RateLimitMiddleware`
   - [`app-bana-shared/src/api-client.ts`](../../app-bana-shared/src/api-client.ts)
@@ -663,7 +646,9 @@ A: SessionMiddleware automatically renews valid sessions on each request (slidin
   - All test files in `src/test/java/com/appbana/middleware/`
   - `src/test/java/com/appbana/integration/SecurityIntegrationTest.java`
 
-- **Builder Database:**
+- **Builder Database:** (AI Builder RAG knowledge sources — out of scope for this doc's S4.3
+  correction pass; still describe `CsrfMiddleware`/CSRF-fetching as if live and should be
+  reconciled separately)
   - `builder-database/09-authentication.json` (v1.2.0)
   - `builder-database/10-form-patterns.json` (v1.1.0)
   - `builder-database/99-capabilities-index.json` (v1.4.0)
@@ -671,6 +656,6 @@ A: SessionMiddleware automatically renews valid sessions on each request (slidin
 ---
 
 **Status:** Production Ready ✅  
-**Last Tested:** December 30, 2025  
-**Test Results:** 156/156 passing (100%)  
+**Last Tested:** April 2026 (this pass: `CsrfMiddleware` deletion verified via full `app-bana-service` suite — see `docs/planning/TENANT_ISOLATION_IMPLEMENTATION_TASKS.md` S4.3 for the exact count)  
+**Test Results:** 131/131 passing for the security-feature subset in [Testing](#testing) (100%) — see the tracker doc for the full module total  
 **Next Review:** Quarterly security audit

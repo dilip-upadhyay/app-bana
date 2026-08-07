@@ -1,7 +1,6 @@
 package com.appbana.integration;
 
 import com.appbana.api.Router;
-import com.appbana.middleware.CsrfMiddleware;
 import com.appbana.middleware.RateLimitMiddleware;
 import com.appbana.middleware.SessionMiddleware;
 import com.appbana.service.CsrfService;
@@ -19,11 +18,18 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Integration tests for complete security pipeline (Task 4)
- * Tests end-to-end flow: RateLimit → Session → CSRF → Handler
- * 
+ * Integration tests for the security pipeline (Task 4).
+ * Tests end-to-end flow: RateLimit → Session → Handler.
+ *
+ * <p>S4.3: {@code CsrfMiddleware} was removed as dead code (coded and tested in isolation but
+ * never registered in {@code RouteRegistry.buildRouter()}'s real middleware chain — this app
+ * authenticates via a bearer token in a header, not cookies, so classic CSRF does not apply). The
+ * standalone {@code CsrfService} generate/validate token endpoints (Task Group 4 below) remain —
+ * they are real, registered routes ({@code GET /api/csrf-token}, {@code POST /api/csrf-validate}
+ * in {@code AuthRoutes.java}) — but they are exercised directly here, not as a step in this
+ * pipeline, since nothing enforces them today.
+ *
  * Covers Stories:
- * - 1.2: CSRF Protection
  * - 1.3: Rate Limiting
  * - 2.1: Session Management
  * - 3.1: Form Integration
@@ -51,7 +57,8 @@ public class SecurityIntegrationTest {
         router = new Router();
         router.use(RateLimitMiddleware.create());
         router.use(SessionMiddleware.create());
-        // CSRF middleware would be added here in production
+        // S4.3: CsrfMiddleware removed as dead code -- it was never registered here or anywhere
+        // else in production (see class Javadoc above).
         
         // Setup mocks
         mockRequest = Mockito.mock(Router.HttpRequest.class);
@@ -255,7 +262,8 @@ public class SecurityIntegrationTest {
     }
     
     // ========================================
-    // Test Group 4: CSRF Integration
+    // Test Group 4: CSRF token service (standalone -- not part of the enforcement
+    // pipeline; see class Javadoc)
     // ========================================
     
     @Test
@@ -288,33 +296,6 @@ public class SecurityIntegrationTest {
         assertFalse(CsrfService.validateToken(sessionId, invalidToken), "Invalid token should fail");
     }
     
-    @Test
-    @Order(10)
-    @DisplayName("4.3: CSRF middleware validates token for POST requests")
-    public void testCsrfMiddlewareValidation() {
-        // Setup: Create valid session first
-        SessionData session = SessionService.createSession("user-csrf", 30);
-        String sessionId = session.sessionId();
-        String csrfToken = CsrfService.generateToken(sessionId);
-        
-        when(mockRequest.path()).thenReturn("/dashboard");
-        when(mockRequest.method()).thenReturn("POST");
-        when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.206");
-        when(mockRequest.header("X-Session-Token")).thenReturn(sessionId);
-        when(mockRequest.header("X-Session-Id")).thenReturn(sessionId); // For CSRF middleware
-        when(mockRequest.header("X-CSRF-Token")).thenReturn(csrfToken);
-        
-        // Run SessionMiddleware first to set session attribute
-        SessionMiddleware.create().accept(mockRequest, mockResponse);
-        
-        // Then run CSRF validation
-        var csrfMiddleware = CsrfMiddleware.validate();
-        csrfMiddleware.accept(mockRequest, mockResponse);
-        
-        // Should allow request through (valid CSRF)
-        verify(mockResponse, never()).json(eq(403), any());
-    }
-    
     // ========================================
     // Test Group 5: Complete Pipeline
     // ========================================
@@ -323,29 +304,23 @@ public class SecurityIntegrationTest {
     @Order(11)
     @DisplayName("5.1: Complete request pipeline with all security checks")
     public void testCompleteSecurityPipeline() {
-        // Setup: Create valid session and CSRF token
+        // Setup: Create valid session
         SessionData session = SessionService.createSession("user456", 30);
         String sessionId = session.sessionId();
-        String csrfToken = CsrfService.generateToken(sessionId);
         
         when(mockRequest.path()).thenReturn("/dashboard");
         when(mockRequest.method()).thenReturn("POST");
         when(mockRequest.header("X-Forwarded-For")).thenReturn("192.168.1.207");
         when(mockRequest.header("X-Session-Token")).thenReturn(sessionId);
-        when(mockRequest.header("X-Session-Id")).thenReturn(sessionId); // For CSRF middleware
-        when(mockRequest.header("X-CSRF-Token")).thenReturn(csrfToken);
         
-        // Run complete middleware pipeline
+        // Run complete middleware pipeline (S4.3: CsrfMiddleware removed as dead code -- see
+        // class Javadoc -- so the pipeline is now just RateLimit -> Session)
         RateLimitMiddleware.create().accept(mockRequest, mockResponse);
         SessionMiddleware.create().accept(mockRequest, mockResponse);
-        CsrfMiddleware.validate().accept(mockRequest, mockResponse);
-        SessionMiddleware.create().accept(mockRequest, mockResponse);
-        CsrfMiddleware.validate().accept(mockRequest, mockResponse);
         
         // Verify all checks passed
         verify(mockResponse, never()).json(eq(429), any()); // Rate limit OK
         verify(mockResponse, never()).json(eq(401), any()); // Session OK
-        verify(mockResponse, never()).json(eq(403), any()); // CSRF OK
         
         // Verify user context attached
         assertEquals("user456", requestAttributes.get("userId"));

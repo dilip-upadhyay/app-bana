@@ -43,7 +43,14 @@ public class SessionMiddleware {
             "/ready",
             "/ui/",
             "/openapi.json",
-            "/api/csrf/token", // CSRF token generation is public
+            // S4.3: this previously read "/api/csrf/token" (slash form), which never matched the
+            // real registered route (AuthRoutes.java registers "/api/csrf-token", hyphenated) and
+            // was therefore dead -- harmless only because ENTITY_API_PATTERN already treats any
+            // single-segment /api/{x} path as public before this list is even consulted (see
+            // isExcludedPath below), so both the wrong and right spelling were equally excluded in
+            // practice. Corrected to the real path for clarity/consistency, not because behavior
+            // was observed to differ.
+            "/api/csrf-token", // CSRF token generation is public
             "/api/templates", // Templates are public read-only resources
             "/api/apps/", // Public runtime APIs for end users
             "/api/ai/", // AI endpoints (development mode - for Magic Data Seed, AI generation)
