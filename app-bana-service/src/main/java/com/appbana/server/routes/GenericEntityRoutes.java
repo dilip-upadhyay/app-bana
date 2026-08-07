@@ -120,6 +120,32 @@ public class GenericEntityRoutes {
 
             try {
                 Map<String, Object> out = AuditLogService.query(entity, pk, limit, offset);
+                // S4.8 — the audit trail persists a full before/after/changes snapshot of
+                // every INSERT/UPDATE/DELETE (see AuditLogService.log/buildChanges), so a
+                // password/secret column value flows straight through into this response
+                // unless redacted here. Deliberately NOT redacted at the point AuditLogService
+                // persists it (AuditLogService.log/query only) — the stored record stays the
+                // real historical value for forensic purposes; only the client-facing read
+                // here is filtered, mirroring every other S4.8 call site's redact-at-the-edge
+                // approach. `changes` is keyed by field name with an [before, after] pair as
+                // the value, so the same key-based redactSensitiveColumns works unmodified.
+                Object rowsObj = out.get("rows");
+                if (rowsObj instanceof List<?> auditRows) {
+                    for (Object item : auditRows) {
+                        if (item instanceof Map<?, ?> auditRow) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> typedRow = (Map<String, Object>) auditRow;
+                            for (String key : List.of("before", "after", "changes")) {
+                                Object val = typedRow.get(key);
+                                if (val instanceof Map<?, ?> snapshot) {
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, Object> typedSnapshot = (Map<String, Object>) snapshot;
+                                    typedRow.put(key, EntityCrudService.redactSensitiveColumns(typedSnapshot));
+                                }
+                            }
+                        }
+                    }
+                }
                 res.json(200, out);
             } catch (Exception e) {
                 res.json(500, Map.of("error", e.getMessage()));
@@ -597,6 +623,16 @@ public class GenericEntityRoutes {
                 res.json(400, Map.of("error", "unknown groupBy field '" + groupByParam + "'"));
                 return;
             }
+            // S4.8 — grouping by a password/secret column would leak its raw value as a
+            // `groupCounts` map KEY (countByGroup selects the column's own distinct values,
+            // stringified, as keys), which redacting `rows` doesn't touch since groupCounts
+            // is an independent SQL query, not derived from the fetched row list. There is
+            // no legitimate reason to group by a credential column, so reject outright.
+            if (groupByParam != null && !groupByParam.isBlank()
+                    && EntityCrudService.isSensitiveColumnName(groupByParam)) {
+                res.json(400, Map.of("error", "cannot group by a sensitive field '" + groupByParam + "'"));
+                return;
+            }
 
             Map<String, Object> filters;
             try {
@@ -661,7 +697,10 @@ public class GenericEntityRoutes {
                             rows = filtered;
                         }
                     }
-                    res.json(200, rows);
+                    // S4.8 — redact password/secret columns before this row list is
+                    // serialized to the client (EntityCrudService.listAll itself applies
+                    // none, by design — see redactSensitiveColumns' javadoc).
+                    res.json(200, EntityCrudService.redactSensitiveColumnsFromList(rows));
                 } else {
                     if (countOnly) {
                         long total = crud.countOnly(schema, q, filters);
@@ -696,6 +735,14 @@ public class GenericEntityRoutes {
                                 out.put("rows", filtered);
                             }
                         }
+
+                        // S4.8 — redact before the groupBy bucketing below reads `rows` back
+                        // out of `out`, so the per-group `groups[].rows` this produces is
+                        // built from already-redacted row maps too, with no separate handling
+                        // needed for that shape.
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> rowsForRedaction = (List<Map<String, Object>>) out.get("rows");
+                        out.put("rows", EntityCrudService.redactSensitiveColumnsFromList(rowsForRedaction));
 
                         // Phase B5 — bucket the returned rows by a single column
                         // when the caller asked for it. Kept in Java so we don't
@@ -812,7 +859,8 @@ public class GenericEntityRoutes {
                             row = permissionService.filterReadableFields(userId, entity, row);
                         }
                     }
-                    res.json(200, row);
+                    // S4.8 — redact password/secret columns before serialization.
+                    res.json(200, EntityCrudService.redactSensitiveColumns(row));
                 }
             } catch (SQLException e) {
                 LOG.error("Get by id failed for entity {} id {}", entity, idStr, e);
@@ -1088,6 +1136,8 @@ public class GenericEntityRoutes {
                 }
             }
 
+            // S4.8 — redact password/secret columns before serialization.
+            rows = EntityCrudService.redactSensitiveColumnsFromList(rows);
             res.json(200, Map.of("count", rows.size(), "rows", rows));
         });
 
@@ -1259,6 +1309,8 @@ public class GenericEntityRoutes {
                     if (!anyAdv) {
                         // Simple list without filtering/pagination
                         List<Map<String, Object>> rows = crud.listAll(schema);
+                        // S4.8 — redact password/secret columns before serialization.
+                        rows = EntityCrudService.redactSensitiveColumnsFromList(rows);
                         res.json(200, Map.of("appId", appId, "entity", entity, "count", rows.size(), "rows", rows));
                     } else {
                         // Advanced list with filtering, sorting, pagination
@@ -1269,6 +1321,10 @@ public class GenericEntityRoutes {
                                 fieldsParam,
                                 sortParam,
                                 filters);
+                        // S4.8 — redact password/secret columns before serialization.
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> rowsForRedaction = (List<Map<String, Object>>) out.get("rows");
+                        out.put("rows", EntityCrudService.redactSensitiveColumnsFromList(rowsForRedaction));
                         out.put("appId", appId);
                         out.put("entity", entity);
                         res.json(200, out);
@@ -1325,7 +1381,8 @@ public class GenericEntityRoutes {
                     if (row == null) {
                         res.json(404, Map.of("error", "not found", "appId", appId, "entity", entity, "id", idStr));
                     } else {
-                        res.json(200, row);
+                        // S4.8 — redact password/secret columns before serialization.
+                        res.json(200, EntityCrudService.redactSensitiveColumns(row));
                     }
                 } finally {
                     TenantContext.clear();
@@ -1738,6 +1795,8 @@ public class GenericEntityRoutes {
                             schema, limit, offset, q, fieldsParam, sortParam, filters);
                     @SuppressWarnings("unchecked")
                     List<Map<String, Object>> rows = (List<Map<String, Object>>) advResult.get("rows");
+                    // S4.8 — redact password/secret columns before serialization.
+                    rows = EntityCrudService.redactSensitiveColumnsFromList(rows);
 
                     // Return proper response with rows and total
                     Map<String, Object> response = new LinkedHashMap<>();
@@ -1805,7 +1864,8 @@ public class GenericEntityRoutes {
                     if (row == null) {
                         res.json(404, Map.of("error", "not found"));
                     } else {
-                        res.json(200, row);
+                        // S4.8 — redact password/secret columns before serialization.
+                        res.json(200, EntityCrudService.redactSensitiveColumns(row));
                     }
                 } finally {
                     TenantContext.clear();

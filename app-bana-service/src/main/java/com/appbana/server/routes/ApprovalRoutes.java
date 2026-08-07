@@ -5,7 +5,9 @@ import com.appbana.approval.ApprovalConflictException;
 import com.appbana.approval.ApprovalService;
 import com.appbana.config.ConfigManager;
 import com.appbana.service.AuthService;
+import com.appbana.service.EntityCrudService;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +26,7 @@ import java.util.Map;
  */
 public class ApprovalRoutes {
     private static final Logger LOG = LoggerFactory.getLogger(ApprovalRoutes.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static void register(Router router) {
 
@@ -179,6 +182,8 @@ public class ApprovalRoutes {
 
                 List<Map<String, Object>> pending =
                         ApprovalService.getPendingQueue(tenantId, appId, entityName, callerUserId, offset, level);
+                // S4.8 — redact password/secret columns before serialization.
+                pending = EntityCrudService.redactSensitiveColumnsFromList(pending);
                 res.json(200, Map.of(
                         "tenantId", tenantId,
                         "appId", appId,
@@ -218,6 +223,40 @@ public class ApprovalRoutes {
 
             try {
                 List<Map<String, Object>> auditTrail = ApprovalService.getAuditTrail(tenantId, appId, entityName, rowId, callerUserId);
+                // S4.8 (additional discovery, found while writing tests) — a revision-merge
+                // (ApprovalService.mergeRevisionIntoParent) writes a "diff" column carrying a
+                // full pre-merge before/after row snapshot, so any password/secret column's real
+                // value flowed straight through this route. Unlike every other S4.8 call site,
+                // "diff" is a JSON-serialized STRING here (not an already-parsed Map), so it must
+                // be parsed, redacted, and re-serialized rather than redacted in place. The
+                // persisted appbana_approvals row is left untouched — only this client-facing
+                // read is filtered, matching the /audit route's redact-at-the-edge approach.
+                for (Map<String, Object> entry : auditTrail) {
+                    Object diffObj = entry.get("diff");
+                    if (diffObj instanceof String diffStr && !diffStr.isBlank()) {
+                        try {
+                            Map<String, Object> diffMap = MAPPER.readValue(diffStr, new TypeReference<>() {});
+                            boolean changed = false;
+                            for (String key : List.of("before", "after")) {
+                                Object snapshot = diffMap.get(key);
+                                if (snapshot instanceof Map<?, ?> snapshotMap) {
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, Object> typedSnapshot = (Map<String, Object>) snapshotMap;
+                                    diffMap.put(key, EntityCrudService.redactSensitiveColumns(typedSnapshot));
+                                    changed = true;
+                                }
+                            }
+                            if (changed) {
+                                entry.put("diff", MAPPER.writeValueAsString(diffMap));
+                            }
+                        } catch (Exception parseFailure) {
+                            // Not object JSON (e.g. a truncated diff — see
+                            // ApprovalService.MAX_DIFF_LEN) — leave as-is rather than fail the
+                            // whole request over a display detail.
+                            LOG.warn("[ApprovalRoutes] Could not parse diff for redaction check on {}/{}", entityName, rowId);
+                        }
+                    }
+                }
                 res.json(200, Map.of(
                         "tenantId", tenantId,
                         "appId", appId,

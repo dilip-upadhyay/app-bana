@@ -289,4 +289,37 @@ public class PasswordServiceTest {
         boolean failedAuth = PasswordService.verifyPassword(wrongLoginAttempt, storedHash);
         assertFalse(failedAuth, "User should NOT be authenticated with wrong password");
     }
+
+    // ==================== S4.2: looksLikeBcryptHash direct contract tests ====================
+    // (round-81 review nit: the method was previously exercised only indirectly, via the
+    // EntityCrudService/SampleDataGenerator hash-on-write tests and as an assertion helper)
+
+    @Test
+    @DisplayName("S4.2 - looksLikeBcryptHash recognizes a real generated hash")
+    public void testLooksLikeBcryptHashRecognizesRealHash() {
+        String hash = PasswordService.hashPassword("SomePlainPassword123!");
+        assertTrue(PasswordService.looksLikeBcryptHash(hash));
+    }
+
+    @Test
+    @DisplayName("S4.2 - looksLikeBcryptHash recognizes all three BCrypt revision prefixes")
+    public void testLooksLikeBcryptHashRecognizesAllThreePrefixes() {
+        assertTrue(PasswordService.looksLikeBcryptHash("$2a$12$abcdefghijklmnopqrstuv"));
+        assertTrue(PasswordService.looksLikeBcryptHash("$2b$12$abcdefghijklmnopqrstuv"));
+        assertTrue(PasswordService.looksLikeBcryptHash("$2y$12$abcdefghijklmnopqrstuv"));
+    }
+
+    @Test
+    @DisplayName("S4.2 - looksLikeBcryptHash rejects null")
+    public void testLooksLikeBcryptHashRejectsNull() {
+        assertFalse(PasswordService.looksLikeBcryptHash(null));
+    }
+
+    @Test
+    @DisplayName("S4.2 - looksLikeBcryptHash rejects plain text and non-BCrypt-shaped strings")
+    public void testLooksLikeBcryptHashRejectsNonHashValues() {
+        assertFalse(PasswordService.looksLikeBcryptHash(""));
+        assertFalse(PasswordService.looksLikeBcryptHash("PlainTextPassword123!"));
+        assertFalse(PasswordService.looksLikeBcryptHash("$argon2id$v=19$m=65536"));
+    }
 }

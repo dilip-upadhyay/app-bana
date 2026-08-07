@@ -1132,6 +1132,55 @@ public class EntityCrudService {
     }
 
     /**
+     * S4.8 — name-based match for any column whose name contains {@code "password"} or
+     * {@code "secret"} (case-insensitive), mirroring {@code GenericAppAuthController.login()}'s
+     * own {@code colName.contains("password") || colName.contains("secret")} convention.
+     *
+     * <p>Deliberately broader than {@link #coerceValidateAndHashIfPassword}'s exact-match
+     * {@code "password"} check: that convention decides which single column S4.2 auto-hashes on
+     * write, whereas this is a defense-in-depth filter over every column name a schema author
+     * might choose for any credential-shaped field on the read path.
+     */
+    public static boolean isSensitiveColumnName(String name) {
+        if (name == null) return false;
+        String lower = name.toLowerCase(Locale.ROOT);
+        return lower.contains("password") || lower.contains("secret");
+    }
+
+    /**
+     * S4.8 — returns a new map with every {@link #isSensitiveColumnName sensitive-named} key
+     * removed, matching {@code GenericAppAuthController.login()}'s own omit-the-key redaction
+     * (not a placeholder value). The input map is left unmodified.
+     *
+     * <p><b>Callers only:</b> this must be invoked explicitly at the point a row is about to be
+     * serialized back to an HTTP client — never inside {@link #getById}/{@link #listAll}/{@link
+     * #listAdvanced}/{@link #toList} themselves. Those shared read methods are also used
+     * internally by {@code GenericEntityRoutes.applyApprovalPutGuard}/{@code findOpenRevision} to
+     * carry the real column value forward into a new approval-revision row, and by audit logging
+     * — both need the genuine (unredacted) value. Redacting inside the shared methods would
+     * silently corrupt the real password hash on every approval revision-merge.
+     */
+    public static Map<String, Object> redactSensitiveColumns(Map<String, Object> row) {
+        if (row == null) return null;
+        Map<String, Object> redacted = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : row.entrySet()) {
+            if (isSensitiveColumnName(e.getKey())) continue;
+            redacted.put(e.getKey(), e.getValue());
+        }
+        return redacted;
+    }
+
+    /** S4.8 — {@link #redactSensitiveColumns} applied to every row in a list. */
+    public static List<Map<String, Object>> redactSensitiveColumnsFromList(List<Map<String, Object>> rows) {
+        if (rows == null) return null;
+        List<Map<String, Object>> redacted = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            redacted.add(redactSensitiveColumns(row));
+        }
+        return redacted;
+    }
+
+    /**
      * S4.2 — the single choke point {@link #insertRecordLegacy}, {@link #insertBatch} and both
      * {@code updateById} overloads now write every field's value through, so a fifth write path
      * added later cannot repeat the mistake of leaving a "password" column unhashed (mirrors this
@@ -1146,13 +1195,19 @@ public class EntityCrudService {
      *   <li>If the incoming value already looks like a BCrypt hash ({@link
      *       PasswordService#looksLikeBcryptHash}), it is passed through unchanged, bypassing
      *       {@code coerceAndValidate}'s length/pattern checks entirely. This is what keeps a
-     *       routine "fetch the full record (which includes the raw stored column —
-     *       {@link #getById}/{@link #listAll} apply no password redaction, unlike
-     *       {@code GenericAppAuthController.login()}'s response), edit an unrelated field, PUT it
-     *       all back" round trip from re-hashing an already-hashed value (hashing a hash would
-     *       silently and permanently break the account's real password) or failing a complexity
-     *       {@code pattern} the schema may declare for a genuine plaintext password, which a
-     *       random-looking hash string has no reason to satisfy.</li>
+     *       routine "fetch the full record (note: {@link #getById}/{@link #listAll}/{@link
+     *       #listAdvanced} themselves still apply zero redaction — S4.8 redacts at the
+     *       {@code GenericEntityRoutes}/{@code ApprovalRoutes} client-response call sites instead,
+     *       via {@link #redactSensitiveColumns}, precisely so this internal round trip keeps
+     *       seeing the real hash), edit an unrelated field, PUT it all back" round trip from
+     *       re-hashing an already-hashed value (hashing a hash would silently and permanently
+     *       break the account's real password) or failing a complexity {@code pattern} the schema
+     *       may declare for a genuine plaintext password, which a random-looking hash string has
+     *       no reason to satisfy. (A client that fetched via a route where S4.8 <em>does</em>
+     *       redact never sees the hash to begin with — {@code updateById} treats an absent key as
+     *       "leave this column unchanged", per its {@code data.containsKey(f.getName())} guard, so
+     *       that round trip is safe too: nothing here re-hashes or nulls a column the request body
+     *       simply didn't mention.)</li>
      *   <li>Otherwise it is a genuine new/changed plaintext password: validated as normal first
      *       (so a schema's length/pattern rules still apply to the real password, not to its
      *       eventual hash), then hashed via {@link PasswordService#hashPassword} before being

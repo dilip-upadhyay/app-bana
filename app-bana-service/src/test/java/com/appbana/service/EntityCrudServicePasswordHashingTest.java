@@ -3,6 +3,7 @@ package com.appbana.service;
 import com.appbana.JdbcManager;
 import com.appbana.SchemaManager;
 import com.appbana.model.EntitySchema;
+import com.appbana.model.TenantContext;
 import org.junit.jupiter.api.*;
 
 import java.sql.Connection;
@@ -181,6 +182,25 @@ class EntityCrudServicePasswordHashingTest {
         assertTrue(PasswordService.verifyPassword("RoundTrip123!", hashAfterRoundTrip),
                 "the original password must still authenticate after the round trip");
         assertEquals("Dave Updated", fetchStoredColumn(id, "name"), "the unrelated field edit must still apply");
+    }
+
+    @Test
+    @DisplayName("updateById(TenantContext, ...) overload also hashes a new plaintext password "
+            + "(round-81 review nit: this overload shares coerceValidateAndHashIfPassword with the "
+            + "3-arg overload, but had no test calling it directly)")
+    void testUpdateByIdWithTenantContextHashesNewPlaintextPassword() throws SQLException {
+        Object id = service.insertRecord(schema, row("grace@example.com", "GraceOld123!", "Grace"));
+
+        TenantContext context = new TenantContext(TENANT_A, APP_1);
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("password", "GraceNew456!");
+        int rows = service.updateById(context, schema, id.toString(), updates);
+        assertEquals(1, rows);
+
+        String stored = fetchStoredColumn(id, "password");
+        assertNotEquals("GraceNew456!", stored, "the raw plaintext must never reach the database");
+        assertTrue(PasswordService.looksLikeBcryptHash(stored));
+        assertTrue(PasswordService.verifyPassword("GraceNew456!", stored));
     }
 
     // ========================================

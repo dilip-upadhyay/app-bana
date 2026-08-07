@@ -105,10 +105,10 @@ verdict: the plan is done — execute it.**
 | S1 | Tenant boundary on app management | `AppRoutes` + `SchemaRoutes`, **every route per the S0 census** (not just list/get/update/delete) can no longer be pointed at another tenant's data, **except through an explicit per-app membership grant (review round 4, R4-1) or a valid break-glass admin/service token (review round 5, R5-1)** | ~14.75 hr |
 | S2 | Per-app membership model | `appbana_app_members` table (`owner`/`member`/**`end-user`**), `AppMembershipService`, `isAppOwnerOrSystem` becomes membership-aware everywhere it's called, bootstrap + backfill, activates S1.2's membership exception so a cross-tenant grant actually works (S2.6, review round 4, R4-1), **and gives that cross-tenant member a way to actually find the app they were granted (S2.10, review round 5, R5-3)** | ~13.75 hr |
 | S3 | Entity data API enforcement | Every route in `GenericEntityRoutes` per the S0 census (three route families, not one) requires real membership or a scoped runtime session; **the shipped Runtime keeps its existing login and gets an `end-user` app-membership row instead of a new session type (S3.7, revised)**; **includes 2 data-hygiene fixes surfaced during the S3 exit-criteria sweep — S3.9/S3.10** | ~14.0 hr |
-| S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene | ~5.5 hr |
+| S4 | Credential hygiene | Real BCrypt hashing (transparent migration), CSRF decision + doc correction, audit-log actor/tenant hygiene, generic-entity read-path password/secret redaction | ~7.0 hr |
 | S5 | Capstone tests + ai-builder trust chain | Cross-tenant test suite, ai-builder trusts a verified identity instead of client-supplied ids | ~4.0 hr |
 
-**Total scope:** ~62.17 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
+**Total scope:** ~63.67 hours (was ~27 hr pre-review, ~36 hr after round 1, ~38 hr after round 2, ~37.5
 hr after round 3, ~38.5 hr after round 4; round 5 adds ~2.25 hr — an admin-token admit branch in S1.2
 plus its test, and a cross-tenant discovery query/endpoint plus an index fix in S2 — the fifth
 consecutive round to add scope, though the first with no blocker; **round 6 adds none** — both findings
@@ -174,7 +174,11 @@ that column at all), permanently orphaning every membership grant on a deleted a
 security hole — both leaks are unreachable/inert once the schema or app row is gone — but both are real,
 previously-undetected resource/data-hygiene leaks, each now fixed with a regression test and a live
 break-test proving the fix is load-bearing. S3 ~12.75→~14.0 hr, new grand total **~62.17 hr across 58
-tasks**.
+tasks**. **S4.2 review follow-up adds ~1.5 hr** — new task S4.8 registered for a read-path redaction
+finding surfaced while actioning that review: `EntityCrudService.getById`/`listAll`/`listAdvanced` (and
+therefore every generic entity GET route, `bulk-export`, and `ApprovalRoutes`' pending-approval queue)
+return raw password/secret column values completely unredacted to the client — confirmed live in S4.2's
+own probe. S4 ~5.5→~7.0 hr, new grand total **~63.67 hr across 59 tasks**.
 S0 → S1 → S2 → S3
 is the strict serial *authoring* path; **S1 and S2 are additionally a single deployable unit (review
 round 5, R5-2)** — S1 must not ship to any environment with live deployed apps on its own; **S3's
@@ -1539,6 +1543,7 @@ entity name and a possibly-raw credential.
 | S4.5 | Tests: `PasswordRehashOnLoginTest` (plaintext row → hashed after one login), `NewRegistrationIsHashedTest` | new tests | 45 min |
 | S4.6 | **(New, review round 1, M4)** Add `tenant_id`/`app_id` columns to `appbana_audit` and populate them on every write, instead of only a bare `entity` name — without this, a cross-tenant incident is reproducible live but not provable after the fact from the audit trail alone. | Liquibase changeset, `AuditLogService.java` | 60 min |
 | S4.7 | **(New, review round 1, M3)** Stop writing the raw token/session id into `appbana_audit.actor` on any path — always resolve to the real userId first (via S0.1's `resolveIdentity`) before logging. | `GenericEntityRoutes.java` | 30 min |
+| S4.8 | **(New, S4.2 review follow-up)** `EntityCrudService.getById`/`listAll`/`listAdvanced` — and therefore every generic entity GET route, `bulk-export`, and `ApprovalRoutes`' pending-approval queue — return raw password/secret column values completely unredacted to the client, confirmed live in S4.2's own probe. Add a shared name-based redaction helper (mirrors `GenericAppAuthController.login()`'s `contains("password")\|\|contains("secret")` convention) and call it explicitly at every verified client-response call site — deliberately NOT inside `getById`/`listAll`/`toList` themselves, since those are also used internally by the approval revision-merge (`applyApprovalPutGuard`, `findOpenRevision`) and audit logging, which need the real hash value. | `EntityCrudService.java`, `GenericEntityRoutes.java`, `ApprovalRoutes.java` | 90 min |
 
 ### Exit criteria — S4
 
