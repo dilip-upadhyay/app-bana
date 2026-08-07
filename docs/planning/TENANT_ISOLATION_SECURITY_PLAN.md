@@ -1550,7 +1550,7 @@ entity name and a possibly-raw credential.
 | S4.3 | Decide and act on CSRF: current auth is bearer-token-in-header, not cookie-based, so classic CSRF does not apply today. Recommendation: remove the dead `CsrfMiddleware` registration references from docs and delete the unused middleware (or explicitly wire it in only if cookie-based auth is ever introduced). Drive-by: `SessionMiddleware.EXCLUDED_PATHS` lists `/api/csrf/token`, which doesn't match the real `/api/csrf-token` route — delete along with the rest of the CSRF cleanup. | `docs/features/SECURITY_FEATURES.md`, `CsrfMiddleware.java`, `SessionMiddleware.java` | 30 min |
 | S4.4 | Correct `docs/features/SECURITY_FEATURES.md` end-to-end against the post-S4 real state (remove the false BCrypt-already-done and wired-CSRF claims; the LitElement snippets are also stale per this repo's retired `app-bana-ui/` and should be replaced or removed) | `docs/features/SECURITY_FEATURES.md` | 30 min |
 | S4.5 | Tests: `PasswordRehashOnLoginTest` (plaintext row → hashed after one login), `NewRegistrationIsHashedTest` | new tests | 45 min |
-| S4.6 | **(New, review round 1, M4)** Add `tenant_id`/`app_id` columns to `appbana_audit` and populate them on every write, instead of only a bare `entity` name — without this, a cross-tenant incident is reproducible live but not provable after the fact from the audit trail alone. | Liquibase changeset, `AuditLogService.java` | 60 min |
+| S4.6 | **(New, review round 1, M4)** Add `tenant_id`/`app_id` columns to `appbana_audit` and populate them on every write, instead of only a bare `entity` name — without this, a cross-tenant incident is reproducible live but not provable after the fact from the audit trail alone. | Liquibase changeset, `AuditLogService.java`, `JdbcManager.java` | 60 min |
 | S4.7 | **(New, review round 1, M3)** Stop writing the raw token/session id into `appbana_audit.actor` on any path — always resolve to the real userId first (via S0.1's `resolveIdentity`) before logging. | `GenericEntityRoutes.java` | 30 min |
 | S4.8 | **(New, S4.2 review follow-up)** `EntityCrudService.getById`/`listAll`/`listAdvanced` — and therefore every generic entity GET route, `bulk-export`, and `ApprovalRoutes`' pending-approval queue — return raw password/secret column values completely unredacted to the client, confirmed live in S4.2's own probe. Add a shared name-based redaction helper (mirrors `GenericAppAuthController.login()`'s `contains("password")\|\|contains("secret")` convention) and call it explicitly at every verified client-response call site — deliberately NOT inside `getById`/`listAll`/`toList` themselves, since those are also used internally by the approval revision-merge (`applyApprovalPutGuard`, `findOpenRevision`) and audit logging, which need the real hash value. | `EntityCrudService.java`, `GenericEntityRoutes.java`, `ApprovalRoutes.java` | 90 min |
 
@@ -1713,6 +1713,8 @@ membership model is in place).
   hardened, optional future option for an app that wants its own separate user table.
 - `UserManager.java` — BCrypt wiring + transparent rehash (S4)
 - `AuditLogService.java` — write `tenant_id`/`app_id` (S4.6)
+- `JdbcManager.java` — secondary-datasource `appbana_audit` CREATE TABLE strings gain `tenant_id`/`app_id`
+  columns too, for the datasources' own independent table-creation path (S4.6)
 - `CsrfMiddleware.java` — remove or genuinely wire in (S4)
 - `docs/features/SECURITY_FEATURES.md` — corrected (S4)
 - `ApiServer.java` — startup warning when auth disabled (S1)

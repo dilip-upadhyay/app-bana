@@ -94,13 +94,13 @@ public class GenericEntityRoutesRedactionTest {
                 Statement s = c.createStatement()) {
             s.execute("DROP TABLE IF EXISTS \"" + physicalTableName().toUpperCase() + "\"");
             s.execute("DELETE FROM appbana_schemas WHERE tenant_id = '" + TENANT_ID + "' AND app_id = '" + APP_ID + "'");
-            // appbana_audit is keyed only by (entity short-name, pk) with NO tenant/app scoping
-            // columns at all (confirmed by reading AuditLogService's INSERT statement) — dropping
-            // and recreating the physical table above resets the identity sequence back to 1 on
-            // every test method, so without this cleanup, audit rows from earlier test methods in
-            // this class (same entity name "RedactUser", same reused pk) would silently leak into
-            // a later method's /audit query and inflate its row count. ENTITY_NAME is unique to
-            // this test class, so scoping the purge to it cannot affect any other test class.
+            // As of S4.6, appbana_audit also carries tenant_id/app_id columns, but this cleanup
+            // still scopes by entity name rather than (TENANT_ID, APP_ID): dropping and recreating
+            // the physical table above resets the identity sequence back to 1 on every test
+            // method, so without this cleanup, audit rows from earlier test methods in this class
+            // (same entity name "RedactUser", same reused pk) would silently leak into a later
+            // method's /audit query and inflate its row count. ENTITY_NAME is unique to this test
+            // class, so scoping the purge to it cannot affect any other test class.
             s.execute("DELETE FROM appbana_audit WHERE entity = '" + ENTITY_NAME + "'");
         } catch (Exception e) {
             throw new RuntimeException(e);

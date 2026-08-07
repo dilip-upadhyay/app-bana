@@ -490,7 +490,7 @@ public class GenericEntityRoutes {
                 Object idObj = crud.insertRecord(schema, data);
                 Map<String, Object> after = crud.getById(schema, idObj);
                 String id = String.valueOf(idObj);
-                AuditLogService.log("INSERT", schema.getName(), id, actor, null, after);
+                AuditLogService.log("INSERT", schema.getName(), id, actor, schema.getTenantId(), schema.getAppId(), null, after);
 
                 if (after != null) {
                     try {
@@ -569,7 +569,7 @@ public class GenericEntityRoutes {
                             continue;
                         try {
                             Map<String, Object> after = crud.getById(schema, String.valueOf(idVal));
-                            AuditLogService.log("INSERT", schema.getName(), String.valueOf(idVal), actor, null, after);
+                            AuditLogService.log("INSERT", schema.getName(), String.valueOf(idVal), actor, schema.getTenantId(), schema.getAppId(), null, after);
                         } catch (Exception ignore) {
                         }
                     }
@@ -934,7 +934,7 @@ public class GenericEntityRoutes {
                 int updated = crud.updateById(schema, idStr, data, true);
                 Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
                 if (updated > 0) {
-                    AuditLogService.log("UPDATE", schema.getName(), idStr, actor, before, after);
+                    AuditLogService.log("UPDATE", schema.getName(), idStr, actor, schema.getTenantId(), schema.getAppId(), before, after);
                     try {
                         com.appbana.workflow.api.WorkflowApi.checkAndStartWorkflows(
                                 schema.getName(), "ON_UPDATE", idStr, after);
@@ -998,7 +998,7 @@ public class GenericEntityRoutes {
                 Map<String, Object> before = crud.getById(schema, idStr);
                 int deleted = crud.deleteById(schema, idStr);
                 if (deleted > 0) {
-                    AuditLogService.log("DELETE", schema.getName(), idStr, actor, before, null);
+                    AuditLogService.log("DELETE", schema.getName(), idStr, actor, schema.getTenantId(), schema.getAppId(), before, null);
                 }
                 res.json(200, Map.of("deleted", deleted));
             } catch (SQLException e) {
@@ -1066,7 +1066,7 @@ public class GenericEntityRoutes {
                     if (d > 0) {
                         deletedCount += d;
                         deletedIds.add(idVal);
-                        AuditLogService.log("DELETE", schema.getName(), idStr, actor, before, null);
+                        AuditLogService.log("DELETE", schema.getName(), idStr, actor, schema.getTenantId(), schema.getAppId(), before, null);
                     }
                 } catch (SQLException e) {
                     LOG.warn("Bulk delete failed for {} id {}: {}", entity, idStr, e.getMessage());
@@ -1205,7 +1205,7 @@ public class GenericEntityRoutes {
                     String id = String.valueOf(idObj);
 
                     // M9 FIX — Audit actor is the authenticated studioUserId, not hardcoded "studio".
-                    AuditLogService.log("INSERT", schema.getName(), id, studioInsertUserId, null, after);
+                    AuditLogService.log("INSERT", schema.getName(), id, studioInsertUserId, schema.getTenantId(), schema.getAppId(), null, after);
 
                     res.json(201, Map.of("id", idObj, "appId", appId));
                 } finally {
@@ -1474,7 +1474,7 @@ public class GenericEntityRoutes {
                     Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
 
                     if (updated > 0) {
-                        AuditLogService.log("UPDATE", schema.getName(), idStr, studioUserId, before, after);
+                        AuditLogService.log("UPDATE", schema.getName(), idStr, studioUserId, schema.getTenantId(), schema.getAppId(), before, after);
                     }
 
                     res.json(200, Map.of("updated", updated, "appId", appId));
@@ -1555,7 +1555,7 @@ public class GenericEntityRoutes {
                     int deleted = crud.deleteById(schema, idStr);
 
                     if (deleted > 0) {
-                        AuditLogService.log("DELETE", schema.getName(), idStr, studioDeleteUserId, before, null);
+                        AuditLogService.log("DELETE", schema.getName(), idStr, studioDeleteUserId, schema.getTenantId(), schema.getAppId(), before, null);
                     }
 
                     res.json(200, Map.of("deleted", deleted, "appId", appId));
@@ -1620,7 +1620,7 @@ public class GenericEntityRoutes {
                     Map<String, Object> after = crud.getById(schema, idObj);
                     String id = String.valueOf(idObj);
 
-                    AuditLogService.log("INSERT", schema.getName(), id, runtimeUserId, null, after);
+                    AuditLogService.log("INSERT", schema.getName(), id, runtimeUserId, schema.getTenantId(), schema.getAppId(), null, after);
 
                     Map<String, Object> response = new LinkedHashMap<>();
                     response.put("id", idObj);
@@ -1690,7 +1690,7 @@ public class GenericEntityRoutes {
                     Map<String, Object> after = crud.getById(schema, idObj);
                     String id = String.valueOf(idObj);
 
-                    AuditLogService.log("INSERT", schema.getName(), id, envInsertUserId + "/env-" + env, null, after);
+                    AuditLogService.log("INSERT", schema.getName(), id, envInsertUserId + "/env-" + env, schema.getTenantId(), schema.getAppId(), null, after);
 
                     Map<String, Object> response = new LinkedHashMap<>();
                     response.put("id", idObj);
@@ -1959,7 +1959,7 @@ public class GenericEntityRoutes {
                     Map<String, Object> after = updated > 0 ? crud.getById(schema, idStr) : null;
                     
                     if (updated > 0) {
-                        AuditLogService.log("UPDATE", schema.getName(), idStr, envPutUserId + "/env-" + env, before, after);
+                        AuditLogService.log("UPDATE", schema.getName(), idStr, envPutUserId + "/env-" + env, schema.getTenantId(), schema.getAppId(), before, after);
                     }
                     
                     res.json(200, Map.of("updated", updated));
@@ -2044,7 +2044,7 @@ public class GenericEntityRoutes {
                     int deleted = crud.deleteById(schema, idStr);
                     
                     if (deleted > 0) {
-                        AuditLogService.log("DELETE", schema.getName(), idStr, envDeleteUserId + "/env-" + env, before, null);
+                        AuditLogService.log("DELETE", schema.getName(), idStr, envDeleteUserId + "/env-" + env, schema.getTenantId(), schema.getAppId(), before, null);
                     }
                     
                     res.json(200, Map.of("deleted", deleted));

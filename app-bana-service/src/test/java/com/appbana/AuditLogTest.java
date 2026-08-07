@@ -133,5 +133,99 @@ public class AuditLogTest {
         // DELETE: after null, before name Beta
         assertTrue(rows.get(2).get("after").isNull());
         assertEquals("Beta", rows.get(2).get("before").get("NAME").asText());
+        // S4.6 — every row must carry the schema's own tenant/app, not be left null.
+        for (int i = 0; i < 3; i++) {
+            assertEquals("default", rows.get(i).get("tenantId").asText(),
+                    "row " + i + " (" + rows.get(i).get("op").asText() + ") missing tenantId");
+            assertEquals("default", rows.get(i).get("appId").asText(),
+                    "row " + i + " (" + rows.get(i).get("op").asText() + ") missing appId");
+        }
+    }
+
+    /**
+     * S4.6 — proves the value written is genuinely sourced from the schema's own tenant/app, not
+     * a hardcoded "default"/"default" that the first test above alone couldn't rule out.
+     */
+    @Test
+    @Order(2)
+    void auditRowsCarryTheSchemasOwnTenantAndAppNotAHardcodedDefault() throws Exception {
+        String tenantId = "acme-corp";
+        String appId = "billing-app";
+        EntitySchema s = new EntitySchema();
+        s.setName("audit_demo_custom");
+        s.setTenantId(tenantId);
+        s.setAppId(appId);
+        s.setFields(List.of(field("id", "long", true, true), field("name", "string", false, false)));
+        SchemaManager.saveSchema(s);
+
+        SessionService.SessionData session = SessionService.createSession("custom-tenant-user", tenantId, appId);
+        String customToken = session.sessionId();
+        String packedKey = tenantId + "_" + appId + "_audit_demo_custom";
+
+        JsonNode created = postWithToken("/api/" + packedKey, "{\"name\":\"Gamma\"}", customToken);
+        long id = created.get("id").asLong();
+        assertTrue(id > 0);
+
+        JsonNode audit = getWithToken("/audit?entity=audit_demo_custom&pk=" + id + "&limit=10", customToken);
+        JsonNode rows = audit.get("rows");
+        assertEquals(1, rows.size(), "Expected 1 audit row (INSERT)");
+        assertEquals(tenantId, rows.get(0).get("tenantId").asText());
+        assertEquals(appId, rows.get(0).get("appId").asText());
+    }
+
+    /**
+     * S4.6 — the studio-scoped route family ({@code /appbana-studio/{tenantId}/apps/{appId}/{entity}})
+     * resolves the schema via {@code SchemaManager.loadSchema(appId, entity, tenantId)} rather than
+     * a packed key, a genuinely different code path from the plain {@code /api/{entity}} route above
+     * — worth its own live proof rather than assuming it behaves the same by inspection alone.
+     */
+    @Test
+    @Order(3)
+    void studioScopedWriteAlsoPopulatesTenantAndAppOnAudit() throws Exception {
+        String tenantId = "acme-corp-studio";
+        String appId = "billing-app-studio";
+        EntitySchema s = new EntitySchema();
+        s.setName("audit_demo_studio");
+        s.setTenantId(tenantId);
+        s.setAppId(appId);
+        s.setFields(List.of(field("id", "long", true, true), field("name", "string", false, false)));
+        SchemaManager.saveSchema(s);
+
+        SessionService.SessionData session = SessionService.createSession("studio-tenant-user", tenantId, appId);
+        String studioToken = session.sessionId();
+
+        JsonNode created = postWithToken(
+                "/appbana-studio/" + tenantId + "/apps/" + appId + "/audit_demo_studio",
+                "{\"name\":\"Delta\"}", studioToken);
+        long id = created.get("id").asLong();
+        assertTrue(id > 0);
+
+        JsonNode audit = getWithToken("/audit?entity=audit_demo_studio&pk=" + id + "&limit=10", studioToken);
+        JsonNode rows = audit.get("rows");
+        assertEquals(1, rows.size(), "Expected 1 audit row (INSERT)");
+        assertEquals(tenantId, rows.get(0).get("tenantId").asText());
+        assertEquals(appId, rows.get(0).get("appId").asText());
+    }
+
+    private static JsonNode postWithToken(String path, String json, String token) throws Exception {
+        HttpClient c = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))
+                .header("Content-Type", "application/json")
+                .header("X-Session-Token", token)
+                .POST(HttpRequest.BodyPublishers.ofString(json)).build();
+        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
+        assertTrue(resp.statusCode() == 200 || resp.statusCode() == 201,
+                () -> "Unexpected status: " + resp.statusCode() + " body=" + resp.body());
+        return M.readTree(resp.body());
+    }
+
+    private static JsonNode getWithToken(String path, String token) throws Exception {
+        HttpClient c = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))
+                .header("X-Session-Token", token)
+                .GET().build();
+        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, resp.statusCode(), () -> "Unexpected status: " + resp.statusCode() + " body=" + resp.body());
+        return M.readTree(resp.body());
     }
 }

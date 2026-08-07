@@ -97,4 +97,8 @@
         <sqlFile path="db/migration/V21__default_tenant_brand_color_contrast_fix.sql" splitStatements="true" stripComments="false"/>
     </changeSet>
 
+    <changeSet id="V22" author="appbana">
+        <sqlFile path="db/migration/V22__audit_tenant_app_columns.sql" splitStatements="true" stripComments="false"/>
+    </changeSet>
+
 </databaseChangeLog>

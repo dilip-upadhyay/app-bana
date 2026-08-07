@@ -2970,7 +2970,7 @@ enforcement.
 | S4.3 | CSRF: remove dead `CsrfMiddleware` registration references from docs and delete the unused middleware (bearer-token auth today, not cookie-based — classic CSRF doesn't apply). Drive-by: fix the dead `/api/csrf/token` vs. real `/api/csrf-token` mismatch in `EXCLUDED_PATHS`. | `docs/features/SECURITY_FEATURES.md`, `CsrfMiddleware.java`, `SessionMiddleware.java` | 30 min | ✅ |
 | S4.4 | Correct `docs/features/SECURITY_FEATURES.md` end-to-end against post-S4 reality (remove false BCrypt-already-done / wired-CSRF claims; replace stale LitElement snippets). | `docs/features/SECURITY_FEATURES.md` | 30 min | ✅ |
 | S4.5 | Tests: `PasswordRehashOnLoginTest`, `NewRegistrationIsHashedTest`. | new tests | 45 min | ✅ |
-| S4.6 | Add `tenant_id`/`app_id` columns to `appbana_audit`; populate on every write. | Liquibase changeset, `AuditLogService.java` | 60 min | ⬜ |
+| S4.6 | Add `tenant_id`/`app_id` columns to `appbana_audit`; populate on every write. | Liquibase changeset, `AuditLogService.java`, `JdbcManager.java` | 60 min | ✅ |
 | S4.7 | Stop writing the raw token/session id into `appbana_audit.actor` on any path — always resolve to the real userId via `resolveIdentity` first. | `GenericEntityRoutes.java` | 30 min | ⬜ |
 | S4.8 | **(New, S4.2 review follow-up)** `EntityCrudService.getById`/`listAll`/`listAdvanced` — and therefore every generic entity GET route, `bulk-export`, and `ApprovalRoutes`' pending-approval queue — return raw password/secret column values completely unredacted to the client, confirmed live in S4.2's own probe. Add a shared name-based redaction helper (mirrors `GenericAppAuthController.login()`'s `contains("password")\|\|contains("secret")` convention) and call it explicitly at every verified client-response call site — deliberately NOT inside `getById`/`listAll`/`toList` themselves, since those are also used internally by the approval revision-merge (`applyApprovalPutGuard`, `findOpenRevision`) and audit logging, which need the real hash value. | `EntityCrudService.java`, `GenericEntityRoutes.java`, `ApprovalRoutes.java` | 90 min | ✅ |
 | S4.9 | **(New, round-84 review nit)** `builder-database/*.json` (AI Builder's RAG knowledge sources, out of S4.3's file list) still described the deleted `CsrfMiddleware` as a live, registered class with its own test count, plus stale `/api/csrf/token` paths and pre-S4.3 `156`-test totals duplicated throughout — low impact (the "protection" claim was already misleading pre-deletion) but left uncorrected the AI Builder could describe a deleted class as real. Reconcile all 3 flagged files. | `builder-database/99-capabilities-index.json`, `builder-database/10-form-patterns.json`, `builder-database/09-authentication.json` | 20 min | ✅ |
@@ -3097,7 +3097,63 @@ enforcement.
   touched file, since that column's backtick-token set must stay identical to the plan doc's `Where`
   column for shared task rows, and the plan doc's own S4.5 row is unmodified by this decision). No plan
   doc edit needed: this task's estimate/scope didn't change, only which pre-existing artifact satisfies it.
-- **S4.6** [Cat. 2 — no audit-log viewer exists anywhere in Studio/Runtime] Perform any normal UI action (e.g., S1.3's app edit), then inspect the resulting audit row directly and confirm `tenant_id`/`app_id` are populated.
+- **S4.6** [Cat. 2 — no audit-log viewer exists anywhere in Studio/Runtime] ✅ Done 2026-08-08: added
+  `tenant_id`/`app_id` VARCHAR(200) columns to `appbana_audit` (new changeset `V22__audit_tenant_app_columns.sql`,
+  idempotent `ADD COLUMN IF NOT EXISTS` + a composite `(tenant_id, app_id)` index) and populated them at
+  every one of `AuditLogService.log()`'s **12** call sites in `GenericEntityRoutes.java`, all of which
+  already had `EntitySchema schema` in scope — passed as `schema.getTenantId(), schema.getAppId()`, the
+  same source of truth `SchemaManager.loadSchema()` backfills from `appbana_schemas` for every schema.
+  Also exposed both columns (camelCase `tenantId`/`appId`) in `AuditLogService.query()`'s row output —
+  `GET /audit` is a global-admin-only, already-cross-tenant surface with no per-row filtering today, so
+  this is a pure improvement, not a new exposure.
+  **Scope nuance not named in the task's Files column**: `appbana_audit` is actually created in **two**
+  independent places, not one — the Liquibase `V0__bootstrap_meta_tables.sql` changeset (default
+  datasource only) **and** `JdbcManager.ensureMetaTableFor(dsName)`'s five hardcoded per-dialect
+  `CREATE TABLE IF NOT EXISTS` strings (Postgres/MySQL-MariaDB/SQLite/MSSQL/Oracle), used for any
+  secondary datasource a schema declares via `datasourceName`. Updated all five dialect strings to
+  include `tenant_id`/`app_id` for freshly-created secondary-datasource tables. **Deliberately did NOT**
+  add cross-dialect self-heal/ALTER logic to `ensureMetaTableFor` for a hypothetical **pre-existing**
+  secondary-datasource `appbana_audit` table missing the new columns — `config.json` in this repo has no
+  `datasources` array today (single default datasource only), so the gap is real in principle but not
+  exercised in this environment; flagging it here rather than silently leaving it undocumented.
+  **Also deliberately did NOT** backfill existing NULL `appbana_audit` rows with `'default'` (unlike
+  V10's precedent for other tables) and did NOT add a `NOT NULL` constraint — backfilling pre-existing
+  forensic history with a value nobody actually recorded at the time would misrepresent it; genuinely
+  unknown stays NULL.
+  **Verification**: extended `AuditLogTest.createUpdateDeleteGeneratesAudit()` with `tenantId`/`appId`
+  assertions on all 3 rows (default/default), added
+  `auditRowsCarryTheSchemasOwnTenantAndAppNotAHardcodedDefault()` (a distinct `acme-corp`/`billing-app`
+  pair, proving the value is genuinely schema-sourced and not a hardcoded default) and
+  `studioScopedWriteAlsoPopulatesTenantAndAppOnAudit()` (the separate `/appbana-studio/{tenantId}/apps/
+  {appId}/{entity}` route family, which resolves its schema via a different `SchemaManager.loadSchema`
+  overload than the packed-key `/api/{entity}` route — worth its own live proof rather than assuming
+  the same behavior by inspection). Fixed a now-stale comment in
+  `GenericEntityRoutesRedactionTest.java` that claimed `appbana_audit` had "NO tenant/app scoping
+  columns at all" (its cleanup logic itself still correctly scopes by entity name, not by tenant/app —
+  see the updated comment for why that's still correct post-S4.6). Full `app-bana-service` suite:
+  **642/642** (639 baseline + 3 new tests, 0 regressions).
+  **Empty-database migration check** (round-90 review watch-item): spun up a disposable
+  `postgres:16-alpine` container (matching the dev container's own image/timezone exactly — an
+  earlier attempt with the Debian `postgres:16` image surfaced an unrelated pre-existing JVM
+  timezone-alias incompatibility that doesn't reproduce against the real dev image, so it was
+  discarded as a false lead), pointed a temporary `EmptyDbMigrationSmokeTest` at it via
+  `ApiServer.startJdk()`, confirmed all 22 changesets apply cleanly (`Rows affected: 188`, 1/1 test
+  green) to a genuinely empty database, and inspected the resulting `appbana_audit` table structure
+  directly (`\d appbana_audit`) — `tenant_id`/`app_id` VARCHAR(200) columns and the composite index
+  both present as expected. Deleted the temporary test file and container afterward; root `config.json`
+  was restored byte-for-byte (`git diff --stat config.json` empty).
+  **Live-verify against the real dev DB** (round-90 review watch-item — no audit-log UI viewer exists):
+  started the actual backend jar (not a test JVM) on port 8080 against the real dev Postgres, registered
+  a throwaway user via `/api/auth/register`, created a real app + entity through the real
+  `/appbana-studio/{tenantId}/apps` and `/schema` routes, granted the creator's entity role directly
+  (mirroring `UserRoleService.grantCreatorRoles`'s normal bootstrap, since this path was created without
+  going through `scaffold_app`), then performed a genuine POST/PUT/DELETE against `/api/{entity}` and
+  read the resulting rows straight out of `appbana_audit` via `psql`: all 3 rows (INSERT/UPDATE/DELETE)
+  carried the correct `tenant_id`/`app_id` for that specific throwaway tenant/app pair, not `default`/
+  `default` and not null. Cleaned up every fixture afterward (app, schema, physical table, audit rows,
+  role grants) and stopped the backend process; confirmed via direct count queries that nothing tenant-
+  scoped to the throwaway tenant id remains.
+  Re-ran `EstimateReconciliationTest`/`RouteCensusTest` after the doc edits below (3/3 green).
 - **S4.7** [Cat. 2 — same reason as S4.6] Same method; confirm `actor` is the real userId, not a raw token.
 
 ---

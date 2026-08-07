@@ -18,16 +18,25 @@ public class AuditLogService {
 
     public static String getLastError() { return LAST_ERROR; }
 
-    public static void log(String op, String entity, String pk, String actor, Map<String,Object> before, Map<String,Object> after) {
+    /**
+     * S4.6 — {@code tenantId}/{@code appId} are recorded so a cross-tenant incident is provable
+     * after the fact from the audit trail alone, not merely reproducible live. Every call site in
+     * {@code GenericEntityRoutes.java} sources both from the already-loaded {@code EntitySchema}
+     * (populated by {@code SchemaManager.loadSchema()} from either the schema's own JSON or the
+     * {@code appbana_schemas} table columns), not from client-supplied request data.
+     */
+    public static void log(String op, String entity, String pk, String actor, String tenantId, String appId, Map<String,Object> before, Map<String,Object> after) {
         try (Connection c = JdbcManager.getConnection(); PreparedStatement ps = c.prepareStatement(
-                "INSERT INTO appbana_audit(op, entity, pk, actor, before_json, after_json, changes_json) VALUES (?,?,?,?,?,?,?)")) {
+                "INSERT INTO appbana_audit(op, entity, pk, actor, tenant_id, app_id, before_json, after_json, changes_json) VALUES (?,?,?,?,?,?,?,?,?)")) {
             ps.setString(1, op);
             ps.setString(2, entity);
             ps.setString(3, pk);
             ps.setString(4, actor);
-            ps.setString(5, before==null? null : M.writeValueAsString(before));
-            ps.setString(6, after==null? null : M.writeValueAsString(after));
-            ps.setString(7, buildChanges(before, after));
+            ps.setString(5, tenantId);
+            ps.setString(6, appId);
+            ps.setString(7, before==null? null : M.writeValueAsString(before));
+            ps.setString(8, after==null? null : M.writeValueAsString(after));
+            ps.setString(9, buildChanges(before, after));
             ps.executeUpdate();
         } catch (Exception e) {
             java.io.StringWriter sw = new java.io.StringWriter();
@@ -54,7 +63,7 @@ public class AuditLogService {
     }
 
     public static Map<String,Object> query(String entity, String pk, int limit, int offset) throws Exception {
-        StringBuilder sql = new StringBuilder("SELECT id, ts, op, entity, pk, actor, before_json, after_json, changes_json FROM appbana_audit");
+        StringBuilder sql = new StringBuilder("SELECT id, ts, op, entity, pk, actor, tenant_id, app_id, before_json, after_json, changes_json FROM appbana_audit");
         List<Object> params = new ArrayList<>();
         List<String> where = new ArrayList<>();
         if (entity != null && !entity.isBlank()) { where.add("entity = ?"); params.add(entity); }
@@ -79,9 +88,11 @@ public class AuditLogService {
                         row.put("entity", rs.getString(4));
                         row.put("pk", rs.getString(5));
                         row.put("actor", rs.getString(6));
-                        row.put("before", parseJson(rs.getString(7)));
-                        row.put("after", parseJson(rs.getString(8)));
-                        row.put("changes", parseJson(rs.getString(9)));
+                        row.put("tenantId", rs.getString(7));
+                        row.put("appId", rs.getString(8));
+                        row.put("before", parseJson(rs.getString(9)));
+                        row.put("after", parseJson(rs.getString(10)));
+                        row.put("changes", parseJson(rs.getString(11)));
                         rows.add(row);
                     }
                 }
