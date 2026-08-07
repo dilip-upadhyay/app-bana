@@ -308,10 +308,13 @@ class PermissionServiceTest {
      * <p>Strengthened during the S3.8 port: the original assertion was only
      * {@code assertFalse(readableFields.isEmpty())}, which would pass even if the union collapsed
      * to just ONE of the two roles (or even an AND instead of OR) — it never proved genuine union.
-     * 'phone' is granted ONLY by the 'user' role and 'salary' ONLY by the 'hr' role
-     * ({@code V2__field_level_security.sql}); both being present can only happen if permissions from
-     * BOTH roles are actually combined. Break-tested (temporarily skipped the 'hr' role grant below,
-     * confirmed the 'salary' assertion fails with the exact expected message, then restored it).
+     * 'phone' is granted ONLY by the 'user' role ({@code V2__field_level_security.sql}) — true
+     * exclusivity. 'salary' is granted by 'hr' but also by 'finance'/'manager'; the load-bearing fact
+     * for THIS test is narrower: 'salary' is NOT granted by 'user', this multi-role user's other role,
+     * so its presence can only be explained by the 'hr' grant being unioned in. Both fields being
+     * present can only happen if permissions from BOTH of this user's roles are actually combined.
+     * Break-tested (temporarily skipped the 'hr' role grant below, confirmed the 'salary' assertion
+     * fails with the exact expected message, then restored it).
      */
     @Test
     @Order(4)
@@ -331,8 +334,8 @@ class PermissionServiceTest {
                    "Multi-role user should read 'phone' (granted ONLY by the 'user' role) "
                            + "- proves the 'user' role's grant is included in the union");
         assertTrue(readableFields.contains("salary"),
-                   "Multi-role user should read 'salary' (granted ONLY by the 'hr' role) "
-                           + "- proves the 'hr' role's grant is included in the union");
+                   "Multi-role user should read 'salary' (not granted by 'user', this user's other "
+                           + "role) - proves the 'hr' role's grant is included in the union");
     }
     
     /**
