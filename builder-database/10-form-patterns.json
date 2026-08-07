@@ -1,7 +1,7 @@
 {
-  "version": "1.1.0",
-  "lastUpdated": "2025-12-30T00:00:00Z",
-  "description": "Complete guide for building secure forms with CSRF protection, session management, and validation",
+  "version": "1.1.1",
+  "lastUpdated": "2026-08-08T00:00:00Z",
+  "description": "Guide for building secure forms with session management and validation. NOTE (S4.3, 2026-08): the CSRF-token-fetching/header flow and 403-CSRF-error handling described in the 'example' below reflect the retired LitElement-era app-bana-ui FormContainer.ts component, not the current backend - CsrfMiddleware was deleted (it was coded but never registered in the live middleware pipeline), and CsrfService/CsrfController remain only as standalone, unconsumed token endpoints. See docs/features/SECURITY_FEATURES.md's CSRF Protection section for the accurate current state.",
   
   "formComponents": {
     "input": {
@@ -245,7 +245,7 @@
     "automatic": {
       "csrfProtection": {
         "description": "Automatic CSRF token injection for all POST/PUT/DELETE requests",
-        "implementation": "FormContainer.ts fetches token from /api/csrf/token",
+        "implementation": "FormContainer.ts fetches token from /api/csrf-token",
         "headers": {
           "X-CSRF-Token": "Fetched CSRF token",
           "X-Session-Token": "Session token from localStorage (appbana_token)",
@@ -305,7 +305,7 @@
       "component": "FormContainer.ts (400+ lines)",
       "demo": "form-security-demo.html",
       "keyMethods": [
-        "fetchCsrfToken() - GET /api/csrf/token on mount",
+        "fetchCsrfToken() - GET /api/csrf-token on mount",
         "validateField() - Email, password strength, confirmPassword, required",
         "handleSubmit() - Pre-validation, token headers, double-submit prevention",
         "showFieldError() / clearFieldError() - Progressive validation UI",
@@ -325,7 +325,6 @@
         "5. Backend middleware pipeline:",
         "   - RateLimitMiddleware: Check 100 req/min limit",
         "   - SessionMiddleware: Validate session token, renew if valid",
-        "   - CsrfMiddleware: Validate CSRF token matches session",
         "   - Handler: Process form data",
         "6. Response handling:",
         "   - 200/201: Success message, clear form",
