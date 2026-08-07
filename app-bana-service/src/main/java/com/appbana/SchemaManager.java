@@ -1136,7 +1136,11 @@ public class SchemaManager {
                 ps.executeUpdate();
             }
             if (dropTable) {
-                String sql = "DROP TABLE IF EXISTS \"" + name.toUpperCase() + "\"";
+                // S3.9: must target the physical table name (e.g. APP_{tenantId}_{appId}_{entity}),
+                // not the logical registry key (`name`) — they never match, so a DROP built from
+                // `name` always silently no-ops under IF EXISTS, leaking the physical table forever.
+                String physicalTable = getPhysicalTableName(schema);
+                String sql = "DROP TABLE IF EXISTS \"" + physicalTable.toUpperCase(Locale.ROOT) + "\"";
                 try (Statement s = c.createStatement()) {
                     s.execute(sql);
                 }
