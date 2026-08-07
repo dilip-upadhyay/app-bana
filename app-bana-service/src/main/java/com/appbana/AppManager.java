@@ -444,13 +444,19 @@ public class AppManager {
     }
 
     /**
-     * Delete an app and all its pages
+     * Delete an app and all its pages and membership grants (S3.10).
      */
     public static boolean deleteApp(String tenantId, String appId) throws IOException {
         if (tenantId == null)
             tenantId = "default";
 
         String deletePagesSql = "DELETE FROM appbana_pages WHERE tenant_id = ? AND app_id = ?";
+        // S3.10: appbana_app_members has no FK on app_id (V19__appbana_app_members.sql)
+        // so a deleted app's membership grants are never cleaned up by the DB itself.
+        // tenant_id here is always the app's own home tenant (not a member's tenant —
+        // see AppMembershipService.grant's appTenantId param), so this catches every
+        // member, including cross-tenant end-users granted via S2.6.
+        String deleteMembersSql = "DELETE FROM appbana_app_members WHERE tenant_id = ? AND app_id = ?";
         String deleteAppSql = "DELETE FROM appbana_apps WHERE tenant_id = ? AND id = ?";
 
         try (Connection conn = JdbcManager.getConnection()) {
@@ -461,6 +467,13 @@ public class AppManager {
                     ps1.setString(1, tenantId);
                     ps1.setString(2, appId);
                     ps1.executeUpdate();
+                }
+
+                // Delete membership grants (S3.10)
+                try (PreparedStatement ps3 = conn.prepareStatement(deleteMembersSql)) {
+                    ps3.setString(1, tenantId);
+                    ps3.setString(2, appId);
+                    ps3.executeUpdate();
                 }
 
                 // Delete app

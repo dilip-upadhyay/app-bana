@@ -176,8 +176,19 @@ public class CrossTenantMembershipAllowsAccessTest {
         return new RouteCase("GET", "/appbana-studio/" + VICTIM_TENANT + "/apps");
     }
 
+    /**
+     * Read-only routes first, management routes last — deliberately, not incidentally (S3.10
+     * follow-up). {@code managementRoutes()} ends with {@code DELETE .../apps/{a}}, which actually
+     * deletes the app (and, since S3.10, cascades to delete every {@code appbana_app_members} row
+     * for it too). Before S3.10's fix, a deleted app's membership rows were silently left behind,
+     * so probing read-only routes AFTER the delete still "worked" (the guard found a stale
+     * membership row) — an accident of the very bug S3.10 fixed, not a real guarantee. Read-only
+     * routes must run first so every route in this list is checked against a still-fully-live app,
+     * matching {@link #crossTenantEndUserIsAdmittedToReadOnlyRoutesButDeniedManagementRoutes}'s
+     * (already correct) ordering.
+     */
     private List<RouteCase> allAppScopedRoutes() {
-        return java.util.stream.Stream.concat(managementRoutes().stream(), appScopedReadOnlyRoutes().stream()).toList();
+        return java.util.stream.Stream.concat(appScopedReadOnlyRoutes().stream(), managementRoutes().stream()).toList();
     }
 
     /** Every route in the 20-route census, app-scoped or not — used only for the no-membership baseline. */
