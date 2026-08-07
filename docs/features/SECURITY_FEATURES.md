@@ -128,10 +128,18 @@ verifies against either a BCrypt hash or a legacy plaintext value (`looksLikeBcr
 persists the BCrypt value immediately — no forced password reset, no dual-write path. Every row is
 migrated the first time its owner logs in; unvisited legacy rows remain plaintext until then.
 
-**S4.2 — `GenericAppAuthController.java`** (runtime end-user auth + any generic entity with a
-`password`-typed field): the same fetch-by-email/verify/transparent-rehash treatment, plus hash-on-write
-for **every** path that sets a password column — not just login — so a record created or edited through
-the generic entity API is hashed the moment it's written, never only at first login.
+**S4.2 — `GenericAppAuthController.java`** (runtime end-user auth): the same fetch-by-email/verify/
+transparent-rehash-on-legacy-login treatment as S4.1, adapted to the generic entity's `password` column
+(`rehashLegacyPassword()` — its own javadoc says it "mirrors `UserManager.authenticate`'s S4.1
+rehash-on-login exactly").
+
+**S4.2 — `EntityCrudService.java`** (`coerceValidateAndHashIfPassword()`, the single choke point shared
+by `insertRecordLegacy`, `insertBatch`, and both `updateById` overloads — not `GenericAppAuthController`):
+hash-on-write for **every** path that sets a column literally named `password` — not just login — so a
+record created or edited through the generic entity API is hashed the moment it's written, never only at
+first login. An incoming value that already looks like a BCrypt hash
+(`PasswordService.looksLikeBcryptHash()`) is passed through unchanged, which is what keeps a routine
+fetch-edit-PUT round trip from re-hashing an already-hashed value.
 
 **S4.8 — read-path redaction:** hashing on write is a separate concern from whether the hash is ever
 returned to a client. `EntityCrudService.redactSensitiveColumns()`/`redactSensitiveColumnsFromList()`

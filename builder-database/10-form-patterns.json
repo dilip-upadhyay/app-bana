@@ -1,5 +1,5 @@
 {
-  "version": "1.1.1",
+  "version": "1.1.2",
   "lastUpdated": "2026-08-08T00:00:00Z",
   "description": "Guide for building secure forms with session management and validation. NOTE (S4.3, 2026-08): the CSRF-token-fetching/header flow and 403-CSRF-error handling described in the 'example' below reflect the retired LitElement-era app-bana-ui FormContainer.ts component, not the current backend - CsrfMiddleware was deleted (it was coded but never registered in the live middleware pipeline), and CsrfService/CsrfController remain only as standalone, unconsumed token endpoints. See docs/features/SECURITY_FEATURES.md's CSRF Protection section for the accurate current state.",
   
@@ -240,7 +240,7 @@
 
   "securityIntegration": {
     "version": "1.0.0",
-    "status": "Production Ready",
+    "status": "RETIRED (S4.3, 2026-08) - describes the deleted app-bana-ui LitElement FormContainer.ts, not the current React frontend. See the top-level NOTE above and docs/features/SECURITY_FEATURES.md's CSRF Protection / Frontend Integration sections for accurate current state.",
     "description": "All forms automatically include CSRF protection, session validation, and secure submission",
     "automatic": {
       "csrfProtection": {
