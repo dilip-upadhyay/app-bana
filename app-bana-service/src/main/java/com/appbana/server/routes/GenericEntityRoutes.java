@@ -15,6 +15,7 @@ import com.appbana.service.AuthService;
 import com.appbana.service.EntityCrudService;
 import com.appbana.service.ErrorHandler;
 import com.appbana.service.PermissionService;
+import com.appbana.service.SessionService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,6 +96,37 @@ public class GenericEntityRoutes {
                 }
             }
 
+            // S4.10 (round-92 HIGH finding) — the checks above authenticate the caller but never
+            // scoped WHICH tenant's rows they may see: entity short-names (e.g. "Customer") are
+            // shared across every tenant that has one, so any authenticated session could read any
+            // other tenant's full audit history via ?entity=Customer&pk=<guess>. A valid
+            // service/admin token is an explicit, deliberate escape hatch — the same admit-first
+            // convention TenantAccessGuard uses everywhere else in this codebase. Every other
+            // caller is scoped to its own session's tenant (and app too, when the session is
+            // app-scoped via the 3-arg SessionService.createSession — an ordinary tenant-wide
+            // session's scopedAppId is null, so it still sees every app within its own tenant).
+            // A caller-derived filter is used — never a client-suppliable one — because there is no
+            // tenantId in this route's own path/query shape to compare against.
+            String scopeTenantId = null;
+            String scopeAppId = null;
+            String serviceToken = AuthService.extractServiceToken(req);
+            boolean isAdmin = serviceToken != null && !serviceToken.isBlank() && AuthService.hasAdmin(serviceToken, cfg);
+            if (!isAdmin) {
+                SessionService.SessionData session = AuthService.resolveSession(req);
+                if (session == null) {
+                    res.json(401, Map.of("error", "unauthorized"));
+                    return;
+                }
+                if (session.tenantId() == null || session.tenantId().isBlank()) {
+                    // Fail closed rather than silently falling through to an unscoped (all-tenant)
+                    // query — mirrors TenantAccessGuard's check (2) for a null-tenant session.
+                    res.json(403, Map.of("error", "forbidden"));
+                    return;
+                }
+                scopeTenantId = session.tenantId();
+                scopeAppId = session.scopedAppId();
+            }
+
             String entity = req.query("entity");
             String pk = req.query("pk");
             int limit = 50;
@@ -119,7 +151,7 @@ public class GenericEntityRoutes {
                 offset = 0;
 
             try {
-                Map<String, Object> out = AuditLogService.query(entity, pk, limit, offset);
+                Map<String, Object> out = AuditLogService.query(entity, pk, limit, offset, scopeTenantId, scopeAppId);
                 // S4.8 — the audit trail persists a full before/after/changes snapshot of
                 // every INSERT/UPDATE/DELETE (see AuditLogService.log/buildChanges), so a
                 // password/secret column value flows straight through into this response

@@ -6,7 +6,7 @@
 
 **Status legend:** ⬜ not started · 🔄 in progress · ✅ done (committed) · ⏸️ blocked (see note)
 
-**Total scope:** ~64.0 hr across 60 tasks (S4.9 +20 min — see the plan doc's Total scope note for the same round's correction). Rollout constraints carried over from the plan (do not lose these when executing):
+**Total scope:** ~65.0 hr across 61 tasks (S4.10 +60 min — see the plan doc's Total scope note for the same round's correction). Rollout constraints carried over from the plan (do not lose these when executing):
 - S0 must land before S1–S3 are written (its identity resolver + route census are inputs to them).
 - **S1 and S2 ship as one deployable unit** — do not deploy S1 alone to any environment with live deployed apps (every real end-user is a foreign-tenant session by construction until S2.6 lands).
 - **S3 completion is a deliberate one-time access reset** — every deployed app's end-users lose access until their owner re-grants via S2.7. Communicate before enabling.
@@ -2974,6 +2974,7 @@ enforcement.
 | S4.7 | Stop writing the raw token/session id into `appbana_audit.actor` on any path — always resolve to the real userId via `resolveIdentity` first. | `GenericEntityRoutes.java` | 30 min | ⬜ |
 | S4.8 | **(New, S4.2 review follow-up)** `EntityCrudService.getById`/`listAll`/`listAdvanced` — and therefore every generic entity GET route, `bulk-export`, and `ApprovalRoutes`' pending-approval queue — return raw password/secret column values completely unredacted to the client, confirmed live in S4.2's own probe. Add a shared name-based redaction helper (mirrors `GenericAppAuthController.login()`'s `contains("password")\|\|contains("secret")` convention) and call it explicitly at every verified client-response call site — deliberately NOT inside `getById`/`listAll`/`toList` themselves, since those are also used internally by the approval revision-merge (`applyApprovalPutGuard`, `findOpenRevision`) and audit logging, which need the real hash value. | `EntityCrudService.java`, `GenericEntityRoutes.java`, `ApprovalRoutes.java` | 90 min | ✅ |
 | S4.9 | **(New, round-84 review nit)** `builder-database/*.json` (AI Builder's RAG knowledge sources, out of S4.3's file list) still described the deleted `CsrfMiddleware` as a live, registered class with its own test count, plus stale `/api/csrf/token` paths and pre-S4.3 `156`-test totals duplicated throughout — low impact (the "protection" claim was already misleading pre-deletion) but left uncorrected the AI Builder could describe a deleted class as real. Reconcile all 3 flagged files. | `builder-database/99-capabilities-index.json`, `builder-database/10-form-patterns.json`, `builder-database/09-authentication.json` | 20 min | ✅ |
+| S4.10 | **(New, round-92 review HIGH follow-up)** `AuditLogService.query()` (the generic `GET /audit` route) filtered only by `entity` short-name + `pk`, never by tenant/app — since entity short names are shared across every tenant that has one, any authenticated session from any tenant could read any other tenant's full audit history (`before`/`after`/`changes`/`actor`) via `?entity=Customer&pk=<guess>`. Added required `callerTenantId`/`callerAppId` params to `query()` (WHERE-clause filters, no legacy overload — a missed call site now fails to compile rather than silently under-scoping); `GenericEntityRoutes.java`'s `/audit` handler resolves the caller's session and scopes by `session.tenantId()` (fail-closed 403 if null/blank) and, when set, `session.scopedAppId()`, with an explicit admin-service-token bypass (mirrors `TenantAccessGuard`'s admit-first convention) for the one legitimate unscoped case. | `AuditLogService.java`, `GenericEntityRoutes.java` | 60 min | ✅ |
 
 **Exit criteria — S4**
 - [ ] No code path compares a raw password string to a stored value.
@@ -2981,6 +2982,7 @@ enforcement.
 - [x] `SECURITY_FEATURES.md` matches what's actually running.
 - [ ] `appbana_audit` rows carry `tenant_id`/`app_id`; `actor` is never a raw token/session id.
 - [x] No generic entity GET/list/export/approval-queue response includes a raw password/secret column value.
+- [x] `GET /audit` scopes results to the caller's own tenant (and app, when session-scoped) unless a valid admin/service token is presented.
 
 ### UI verification script — S4
 - **S4.1** [Cat. 1 — against a real existing plaintext row] ✅ Done 2026-08-07: `UserManager.register()` previously stored `passwordHash` as the raw password verbatim (`// In a real app, hash this password!`); `authenticate()` did a plain `.equals()` comparison. Rewired to mirror `GenericAppAuthController`'s already-established S3.3/M5 pattern exactly (same method shapes/names, `verifyCredential`/`looksLikeBcryptHash`, deliberately not extracted into a shared helper so this diff stays scoped to `UserManager.java` alone, matching this row's own "Files" column and not preempting S4.2's separate scope on `GenericAppAuthController.java`): `register()` now stores `PasswordService.hashPassword(password)` (BCrypt, cost 12) and rejects a blank password before hashing; `authenticate()` verifies via BCrypt when the stored value already looks like a bcrypt hash (`$2a$`/`$2b$`/`$2y$` prefix), otherwise falls back to a constant-time `MessageDigest.isEqual` compare against the legacy plaintext value and, on success, immediately rehashes and persists — no forced reset, no dual write path.
@@ -3103,9 +3105,20 @@ enforcement.
   every one of `AuditLogService.log()`'s **12** call sites in `GenericEntityRoutes.java`, all of which
   already had `EntitySchema schema` in scope — passed as `schema.getTenantId(), schema.getAppId()`, the
   same source of truth `SchemaManager.loadSchema()` backfills from `appbana_schemas` for every schema.
-  Also exposed both columns (camelCase `tenantId`/`appId`) in `AuditLogService.query()`'s row output —
-  `GET /audit` is a global-admin-only, already-cross-tenant surface with no per-row filtering today, so
-  this is a pure improvement, not a new exposure.
+  Also exposed both columns (camelCase `tenantId`/`appId`) in `AuditLogService.query()`'s row output.
+  **Correction (round-92 review, MEDIUM)**: an earlier version of this note claimed `GET /audit` was
+  "global-admin-only," which is false against source and was corrected without live-testing it first.
+  The real gate, confirmed by direct code reading: `AuthService.authEnabled(cfg)` is `false` in this
+  repo's shipped `config.json` (`adminToken: null`, `readToken: null`), so the route's own `hasRead`
+  check is **skipped entirely** by default — and even when a deployment does configure tokens, `hasRead`
+  accepts a read-token OR an admin-token, i.e. read-OR-admin, never admin-only. `SessionMiddleware` does
+  **not** exclude `/audit` from session validation, so in practice every caller must present a valid
+  session token — but that session may belong to **any** tenant. So exposing `tenantId`/`appId` in the
+  row output did not introduce a new hole in an admin-only surface; the surface was already
+  authenticated-but-cross-tenant (any session, any tenant, could already read any other tenant's
+  `before`/`after`/`changes` via `entity`+`pk` alone, since entity short names are shared across
+  tenants by design). That pre-existing cross-tenant read is tracked and closed by **S4.10** below —
+  see that row for the fix, tests, and verification.
   **Scope nuance not named in the task's Files column**: `appbana_audit` is actually created in **two**
   independent places, not one — the Liquibase `V0__bootstrap_meta_tables.sql` changeset (default
   datasource only) **and** `JdbcManager.ensureMetaTableFor(dsName)`'s five hardcoded per-dialect
@@ -3154,6 +3167,66 @@ enforcement.
   role grants) and stopped the backend process; confirmed via direct count queries that nothing tenant-
   scoped to the throwaway tenant id remains.
   Re-ran `EstimateReconciliationTest`/`RouteCensusTest` after the doc edits below (3/3 green).
+- **S4.10** [Cat. 1 — read-path cross-tenant data exposure, confirmed by source reading] ✅ Done 2026-08-09:
+  round-92's review of S4.6 flagged (HIGH, not introduced by S4.6, pre-existing) that
+  `AuditLogService.query()` — the generic `GET /audit` route's only backing query — filtered exclusively
+  by `entity` short-name + `pk`, never by tenant/app. Since entity short names are shared across every
+  tenant that has ever created one (confirmed via `SchemaManager.getUniqueSchemaKey()`: `schema.getName()`
+  is always the bare short name, e.g. `"Customer"`, never the packed `{tenant}_{app}_{entity}` key), any
+  authenticated session — from *any* tenant — could read any other tenant's full audit history
+  (`before`/`after`/`changes`/`actor`) via `GET /audit?entity=Customer&pk=<guess>`, regardless of which
+  tenant's data it actually belonged to.
+  **Fix**: `AuditLogService.query()`'s signature now requires two additional parameters,
+  `callerTenantId`/`callerAppId`, adding `tenant_id = ?`/`app_id = ?` WHERE-clause filters whenever they're
+  non-blank. Deliberately **no legacy overload** — mirrors `log()`'s own single-signature convention
+  (explicitly praised in round-92 for preventing silent under-scoping) so any future call site must supply
+  explicit scope values or fail to compile, rather than silently defaulting to unscoped. In
+  `GenericEntityRoutes.java`'s `/audit` handler, inserted between the existing `authEnabled`/`hasRead` gate
+  and the `entity`/`pk` query-param parsing: resolves an admin/service token via
+  `AuthService.extractServiceToken`/`hasAdmin` as an explicit, deliberate escape hatch (mirrors
+  `TenantAccessGuard`'s admit-first convention, the only legitimate unscoped caller); every other caller
+  resolves its session via `AuthService.resolveSession(req)` (401 if none), fails closed with 403 if
+  `session.tenantId()` is null/blank (mirrors `TenantAccessGuard`'s check (2) for a null-tenant session —
+  never silently fall through to an unscoped, all-tenant query), then scopes by `session.tenantId()`
+  and, when set, `session.scopedAppId()`. The optional app-level scoping is a no-op for ordinary
+  Studio/Runtime sessions (`scopedAppId` is null unless created via the narrower 3-arg
+  `SessionService.createSession` overload reserved for S3.3's scoped end-user sessions), so an ordinary
+  tenant-wide session still correctly sees its whole tenant's audit trail across all of its own apps.
+  **Tests** (2 new, both in `AuditLogTest.java`, `@Order(4)`/`@Order(5)`, after the existing 3):
+  `sessionCannotReadAnotherTenantsAuditRowForTheSameEntityShortNameAndPk` creates two tenants each with an
+  entity of the identical short name, inserts one row per tenant via real HTTP, then asserts both
+  directions of the boundary using each tenant's own returned row id — asserted on row **content**
+  (`tenantId`/`after.NAME`), not a bare row-count, because separate physical tables each restart their own
+  auto-increment at 1, so the two tenants' ids routinely collide numerically and a same-numbered row is a
+  legitimate (not leaked) row the other tenant happens to own itself.
+  `nullCallerScopeIntentionallyReturnsRowsAcrossTenants` calls `AuditLogService.log()`/`query()` directly
+  (not over HTTP — this repo's `config.json` ships `adminToken: null`, so there is no real admin token to
+  drive the bypass branch through a live request) proving a scoped query sees only its own tenant's row
+  while a `null`/`null` scope (exactly what the route's admin bypass passes) sees both. Uses a
+  `System.nanoTime()`-suffixed pk rather than a literal, matching this test file's existing convention of
+  never hardcoding a pk — `flywayCleanOnStart` stays `false` by design (see config.json), so a literal
+  value collides with rows a prior `mvn test` run already left in the persistent dev DB and makes the
+  "exactly 1 / exactly 2" assertions flaky across repeated runs.
+  **Break-tested**: temporarily neutered both new WHERE-clause additions in `AuditLogService.query()`
+  (`if (false && ...)`), reran `AuditLogTest` alone — both new tests failed with the expected messages
+  (`"tenant A should see exactly its own audit row" ==> expected: <1> but was: <2>` and
+  `"tenant-X scope must see only its own row" ==> expected: <1> but was: <2>`), confirming they're
+  load-bearing rather than vacuous. Reverted (confirmed via `git diff` showing only the intended 17-line
+  change remaining). Full `app-bana-service` suite: **643/643**, 0 failures, 0 errors, `BUILD SUCCESS`.
+  Independently re-verified the baseline itself rather than trusting S4.6's own recorded "642" figure
+  secondhand: `git stash`-ed just this task's 3 source/test file changes and reran the full suite —
+  **641/641**, but with 1 expected failure (`EstimateReconciliationTest`, drift between the not-yet-
+  updated headline/summary numbers below and the S4.10 row already added to the tracker table — not a
+  code regression). 641 baseline + 2 new tests = 643, an exact match; `git stash pop` restored all 3
+  files before continuing.
+  **Live verification**: this file's tests already run against the real dev Postgres via
+  `ApiServer.startJdk()` in-process — real embedded Tomcat, real HTTP calls, real `SchemaManager`/session
+  resolution — the same mechanism S4.6's own DB-column/index verification relied on, so the full green run
+  above already constitutes live-DB verification, not a mock.
+  **Doc correction** (the round-92 MEDIUM, actioned first per the review's own ordering): corrected S4.6's
+  narrative bullet above, which had claimed `GET /audit` was "global-admin-only" — false against source,
+  see that entry's correction note for the accurate gate description.
+  Re-ran `EstimateReconciliationTest`/`RouteCensusTest` after all doc edits (3/3 green).
 - **S4.7** [Cat. 2 — same reason as S4.6] Same method; confirm `actor` is the real userId, not a raw token.
 
 ---

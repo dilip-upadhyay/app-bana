@@ -207,6 +207,112 @@ public class AuditLogTest {
         assertEquals(appId, rows.get(0).get("appId").asText());
     }
 
+    /**
+     * S4.10 (round-92 HIGH finding) — proves the actual security fix. Before this task,
+     * {@code AuditLogService.query()} filtered only by entity short-name + pk, with no tenant/app
+     * scoping at all, so any authenticated session could read any other tenant's full audit history
+     * for an entity sharing that short name (a routine occurrence — nothing stops two tenants from
+     * both naming an entity "Customer") by guessing a {@code pk}. Two distinct tenants each create
+     * an entity with the exact same short name here and the test asserts the isolation boundary in
+     * both directions using each tenant's own real returned row id — not a hardcoded pk — so the
+     * proof holds regardless of whether the two physical tables' auto-increment ids happen to
+     * collide numerically.
+     */
+    @Test
+    @Order(4)
+    void sessionCannotReadAnotherTenantsAuditRowForTheSameEntityShortNameAndPk() throws Exception {
+        String sharedEntityName = "audit_cross_tenant_demo";
+
+        String tenantA = "s410-tenant-a";
+        String appA = "s410-app-a";
+        EntitySchema schemaA = new EntitySchema();
+        schemaA.setName(sharedEntityName);
+        schemaA.setTenantId(tenantA);
+        schemaA.setAppId(appA);
+        schemaA.setFields(List.of(field("id", "long", true, true), field("name", "string", false, false)));
+        SchemaManager.saveSchema(schemaA);
+        String tokenA = SessionService.createSession("s410-user-a", tenantA, appA).sessionId();
+        JsonNode createdA = postWithToken("/api/" + tenantA + "_" + appA + "_" + sharedEntityName,
+                "{\"name\":\"TenantARow\"}", tokenA);
+        long idA = createdA.get("id").asLong();
+
+        String tenantB = "s410-tenant-b";
+        String appB = "s410-app-b";
+        EntitySchema schemaB = new EntitySchema();
+        schemaB.setName(sharedEntityName); // SAME short name as tenant A's entity, on purpose
+        schemaB.setTenantId(tenantB);
+        schemaB.setAppId(appB);
+        schemaB.setFields(List.of(field("id", "long", true, true), field("name", "string", false, false)));
+        SchemaManager.saveSchema(schemaB);
+        String tokenB = SessionService.createSession("s410-user-b", tenantB, appB).sessionId();
+        JsonNode createdB = postWithToken("/api/" + tenantB + "_" + appB + "_" + sharedEntityName,
+                "{\"name\":\"TenantBRow\"}", tokenB);
+        long idB = createdB.get("id").asLong();
+
+        // Tenant A must see its own row.
+        JsonNode auditAsA = getWithToken("/audit?entity=" + sharedEntityName + "&pk=" + idA + "&limit=10", tokenA);
+        JsonNode rowsAsA = auditAsA.get("rows");
+        assertEquals(1, rowsAsA.size(), "tenant A should see exactly its own audit row");
+        assertEquals(tenantA, rowsAsA.get(0).get("tenantId").asText());
+        assertEquals("TenantARow", rowsAsA.get(0).get("after").get("NAME").asText());
+
+        // Tenant B must NOT see tenant A's row when querying the same entity short-name + tenant A's
+        // pk — this is exactly the cross-tenant read the HIGH finding described. Asserted on row
+        // *content* (tenantId/name), not a bare row count: separate physical tables each restart
+        // their own auto-increment at 1, so idA and idB routinely collide numerically, meaning
+        // tenant B may legitimately have its OWN row at that same pk value — a non-empty result set
+        // here is fine as long as none of it is tenant A's data.
+        JsonNode auditAsBForA = getWithToken("/audit?entity=" + sharedEntityName + "&pk=" + idA + "&limit=10", tokenB);
+        for (JsonNode row : auditAsBForA.get("rows")) {
+            assertNotEquals(tenantA, row.get("tenantId").asText(),
+                    "tenant B must never see a row carrying tenant A's tenantId");
+            assertNotEquals("TenantARow", row.get("after") != null && !row.get("after").isNull()
+                    ? row.get("after").path("NAME").asText() : null,
+                    "tenant B must never see tenant A's actual row content");
+        }
+
+        // ...and the converse: tenant A must not see tenant B's row either.
+        JsonNode auditAsAForB = getWithToken("/audit?entity=" + sharedEntityName + "&pk=" + idB + "&limit=10", tokenA);
+        for (JsonNode row : auditAsAForB.get("rows")) {
+            assertNotEquals(tenantB, row.get("tenantId").asText(),
+                    "tenant A must never see a row carrying tenant B's tenantId");
+            assertNotEquals("TenantBRow", row.get("after") != null && !row.get("after").isNull()
+                    ? row.get("after").path("NAME").asText() : null,
+                    "tenant A must never see tenant B's actual row content");
+        }
+    }
+
+    /**
+     * S4.10 — proves the other half of the fix directly against {@link AuditLogService#query}
+     * (rather than over HTTP): passing {@code null} for both caller-scope parameters — exactly what
+     * the {@code /audit} route does only for its explicit admin-token bypass — intentionally returns
+     * rows across every tenant. Exercised at this layer because {@code config.json} ships
+     * {@code adminToken: null} in this environment ({@code AuthService.authEnabled() == false}), so
+     * there is no real admin service token to mint and drive the same proof over HTTP.
+     */
+    @Test
+    @Order(5)
+    void nullCallerScopeIntentionallyReturnsRowsAcrossTenants() throws Exception {
+        String entity = "audit_null_scope_demo";
+        // Unique per test invocation (not a hardcoded literal): AuditLogService.log() here writes
+        // directly, bypassing the auto-increment pk a real entity INSERT would generate, so without
+        // a fresh value each run this collides with rows left behind by earlier runs against the
+        // persistent dev DB (flywayCleanOnStart stays false by design — see config.json) and the
+        // "exactly 1 / exactly 2" assertions below become flaky across repeated `mvn test` runs.
+        String pk = "s410-shared-pk-" + System.nanoTime();
+        AuditLogService.log("INSERT", entity, pk, "s410-user-x", "s410-null-scope-tenant-x", "s410-app-x",
+                null, java.util.Map.of("name", "X"));
+        AuditLogService.log("INSERT", entity, pk, "s410-user-y", "s410-null-scope-tenant-y", "s410-app-y",
+                null, java.util.Map.of("name", "Y"));
+
+        java.util.Map<String, Object> scopedToX = AuditLogService.query(entity, pk, 50, 0, "s410-null-scope-tenant-x", null);
+        assertEquals(1L, ((Number) scopedToX.get("total")).longValue(), "tenant-X scope must see only its own row");
+
+        java.util.Map<String, Object> unscoped = AuditLogService.query(entity, pk, 50, 0, null, null);
+        assertEquals(2L, ((Number) unscoped.get("total")).longValue(),
+                "null/null scope (the route's admin bypass) must see rows across tenants");
+    }
+
     private static JsonNode postWithToken(String path, String json, String token) throws Exception {
         HttpClient c = HttpClient.newHttpClient();
         HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))

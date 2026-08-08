@@ -62,12 +62,28 @@ public class AuditLogService {
         return M.writeValueAsString(diff);
     }
 
-    public static Map<String,Object> query(String entity, String pk, int limit, int offset) throws Exception {
+    /**
+     * S4.10 (round-92 HIGH finding) — {@code callerTenantId}/{@code callerAppId} scope the result
+     * to the caller's own session, resolved server-side by {@code GenericEntityRoutes}'s
+     * {@code /audit} handler from {@code AuthService.resolveSession(req)} — never a client-suppliable
+     * request parameter. Before this, {@code entity} (a bare short name, e.g. "Customer") and
+     * {@code pk} were the only filters, and short names are shared across every tenant that has
+     * ever created an entity with that name (see V22's own migration comment) — so any
+     * authenticated session, from any tenant, could read any other tenant's full audit history
+     * (before/after/changes/actor) via {@code GET /audit?entity=Customer&pk=<guess>}.
+     * <p>Passing {@code null}/blank for both is reserved for the route's explicit admin-token
+     * bypass (mirrors {@code TenantAccessGuard}'s "admit-first" convention) — every other caller
+     * must supply at least {@code callerTenantId}, and the route fails closed (403) rather than
+     * calling this with a null tenant for an ordinary session.
+     */
+    public static Map<String,Object> query(String entity, String pk, int limit, int offset, String callerTenantId, String callerAppId) throws Exception {
         StringBuilder sql = new StringBuilder("SELECT id, ts, op, entity, pk, actor, tenant_id, app_id, before_json, after_json, changes_json FROM appbana_audit");
         List<Object> params = new ArrayList<>();
         List<String> where = new ArrayList<>();
         if (entity != null && !entity.isBlank()) { where.add("entity = ?"); params.add(entity); }
         if (pk != null && !pk.isBlank()) { where.add("pk = ?"); params.add(pk); }
+        if (callerTenantId != null && !callerTenantId.isBlank()) { where.add("tenant_id = ?"); params.add(callerTenantId); }
+        if (callerAppId != null && !callerAppId.isBlank()) { where.add("app_id = ?"); params.add(callerAppId); }
         if (!where.isEmpty()) sql.append(" WHERE ").append(String.join(" AND ", where));
         sql.append(" ORDER BY id ASC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
         try (Connection c = JdbcManager.getConnection()) {
