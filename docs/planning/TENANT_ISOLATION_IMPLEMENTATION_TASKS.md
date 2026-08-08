@@ -2971,7 +2971,7 @@ enforcement.
 | S4.4 | Correct `docs/features/SECURITY_FEATURES.md` end-to-end against post-S4 reality (remove false BCrypt-already-done / wired-CSRF claims; replace stale LitElement snippets). | `docs/features/SECURITY_FEATURES.md` | 30 min | ✅ |
 | S4.5 | Tests: `PasswordRehashOnLoginTest`, `NewRegistrationIsHashedTest`. | new tests | 45 min | ✅ |
 | S4.6 | Add `tenant_id`/`app_id` columns to `appbana_audit`; populate on every write. | Liquibase changeset, `AuditLogService.java`, `JdbcManager.java` | 60 min | ✅ |
-| S4.7 | Stop writing the raw token/session id into `appbana_audit.actor` on any path — always resolve to the real userId via `resolveIdentity` first. | `GenericEntityRoutes.java` | 30 min | ⬜ |
+| S4.7 | Stop writing the raw token/session id into `appbana_audit.actor` on any path — always resolve to the real userId via `resolveIdentity` first. | `GenericEntityRoutes.java` | 30 min | ✅ |
 | S4.8 | **(New, S4.2 review follow-up)** `EntityCrudService.getById`/`listAll`/`listAdvanced` — and therefore every generic entity GET route, `bulk-export`, and `ApprovalRoutes`' pending-approval queue — return raw password/secret column values completely unredacted to the client, confirmed live in S4.2's own probe. Add a shared name-based redaction helper (mirrors `GenericAppAuthController.login()`'s `contains("password")\|\|contains("secret")` convention) and call it explicitly at every verified client-response call site — deliberately NOT inside `getById`/`listAll`/`toList` themselves, since those are also used internally by the approval revision-merge (`applyApprovalPutGuard`, `findOpenRevision`) and audit logging, which need the real hash value. | `EntityCrudService.java`, `GenericEntityRoutes.java`, `ApprovalRoutes.java` | 90 min | ✅ |
 | S4.9 | **(New, round-84 review nit)** `builder-database/*.json` (AI Builder's RAG knowledge sources, out of S4.3's file list) still described the deleted `CsrfMiddleware` as a live, registered class with its own test count, plus stale `/api/csrf/token` paths and pre-S4.3 `156`-test totals duplicated throughout — low impact (the "protection" claim was already misleading pre-deletion) but left uncorrected the AI Builder could describe a deleted class as real. Reconcile all 3 flagged files. | `builder-database/99-capabilities-index.json`, `builder-database/10-form-patterns.json`, `builder-database/09-authentication.json` | 20 min | ✅ |
 | S4.10 | **(New, round-92 review HIGH follow-up)** `AuditLogService.query()` (the generic `GET /audit` route) filtered only by `entity` short-name + `pk`, never by tenant/app — since entity short names are shared across every tenant that has one, any authenticated session from any tenant could read any other tenant's full audit history (`before`/`after`/`changes`/`actor`) via `?entity=Customer&pk=<guess>`. Added required `callerTenantId`/`callerAppId` params to `query()` (WHERE-clause filters, no legacy overload — a missed call site now fails to compile rather than silently under-scoping); `GenericEntityRoutes.java`'s `/audit` handler resolves the caller's session and scopes by `session.tenantId()` (fail-closed 403 if null/blank) and, when set, `session.scopedAppId()`, with an explicit admin-service-token bypass (mirrors `TenantAccessGuard`'s admit-first convention) for the one legitimate unscoped case. | `AuditLogService.java`, `GenericEntityRoutes.java` | 60 min | ✅ |
@@ -2980,7 +2980,7 @@ enforcement.
 - [ ] No code path compares a raw password string to a stored value.
 - [ ] Every pre-existing plaintext row transparently upgrades to BCrypt on its owner's next login — no forced reset.
 - [x] `SECURITY_FEATURES.md` matches what's actually running.
-- [ ] `appbana_audit` rows carry `tenant_id`/`app_id`; `actor` is never a raw token/session id.
+- [x] `appbana_audit` rows carry `tenant_id`/`app_id`; `actor` is never a raw token/session id.
 - [x] No generic entity GET/list/export/approval-queue response includes a raw password/secret column value.
 - [x] `GET /audit` scopes results to the caller's own tenant (and app, when session-scoped) unless a valid admin/service token is presented.
 
@@ -3227,7 +3227,51 @@ enforcement.
   narrative bullet above, which had claimed `GET /audit` was "global-admin-only" — false against source,
   see that entry's correction note for the accurate gate description.
   Re-ran `EstimateReconciliationTest`/`RouteCensusTest` after all doc edits (3/3 green).
-- **S4.7** [Cat. 2 — same reason as S4.6] Same method; confirm `actor` is the real userId, not a raw token.
+- **S4.7** [Cat. 2 — same reason as S4.6] ✅ Done 2026-08-09: round-94's review (comment 12, the S4.7
+  pre-brief) census'd all 12 `AuditLogService.log()` call sites in `GenericEntityRoutes.java` (packed-key
+  insert/batch-insert/update/delete/bulk-delete; studio insert/update/delete; runtime insert; env
+  insert/update/delete) and flagged that they pass heterogeneous actor variable names (`actor`,
+  `studioInsertUserId`, `runtimeUserId`, `envInsertUserId + "/env-" + env`, etc.), asking S4.7 to confirm
+  none of them is a raw token/session id.
+  **Investigation finding**: all 12 call sites already resolve through `actorOrSystem(req, cfg)` ->
+  `AuthService.extractUserId` -> `resolveIdentity` (S0.1's canonical identity resolver) — confirmed by
+  reading every call site's surrounding context, not assumed from naming alone. `git log -S actorOrSystem`
+  traced this to commit `3d57bb4` (S3.4, "wire EntityAccessGuard into every GenericEntityRoutes route"),
+  which added the `actorOrSystem` helper for audit-log attribution as a side effect of that unrelated task
+  — meaning S4.7's originally-identified gap was already closed before this task began, and no
+  `GenericEntityRoutes.java` change was needed. Also verified there is no bypass: `resolveIdentity` itself
+  never returns a raw credential (only `"admin"`, an `X-User-Id` header value, or `session.userId()` — the
+  *resolved* id, never the token used to look it up), and `SessionMiddleware` stores `session.userId()`
+  (not the raw session token) under the `"userId"` request attribute that `resolveIdentity` reads. The
+  env-suffixed sites correctly preserve the `"/env-{env}"` annotation while still resolving the id part
+  (`envInsertUserId + "/env-" + env` where `envInsertUserId` is itself `actorOrSystem(req, cfg)`), and
+  `"system"` (the only non-real-identity value ever written) is a defensive-fallback marker documented as
+  such, never a credential — satisfying the reviewer's fail-closed watch-item.
+  **What this task actually added**: since production code needed no change, the task's contribution is
+  the missing regression test the reviewer explicitly asked for (watch-item (c)) — nothing previously
+  asserted on `actor`'s value at all. Added
+  `actorColumnNeverContainsRawSessionTokenAcrossAllRouteFamilies` to `AuditLogTest.java` (`@Order(6)`,
+  1 new test bringing that file to 6): creates one session per route family via
+  `SessionService.createSession(userId, tenantId, appId)`, drives a real HTTP insert/update/delete (plus
+  batch-insert and bulk-delete for the packed-key family) through each of the 12 call sites, then asserts
+  every resulting audit row's `actor` equals the session's real `userId` — and is never equal to the raw
+  session token — via `GET /audit`. This is a meaningful, not-accidentally-true proof because
+  `SessionService.generateSessionId()` produces a random Base64 string wholly unrelated to the `userId`
+  passed to `createSession`. The env-family assertions additionally check the exact
+  `"<userId>/env-<env>"` format, and that the *id* portion is resolved rather than the raw token being
+  concatenated. Table-name gotcha hit and fixed while writing this: `SchemaManager.getPhysicalTableName()`
+  reads `TenantContext.getOrNull()` at call time to decide the env-prefixed physical table name (e.g.
+  `APP_SIT_...`), so the env-family fixture schema had to be created under the same env-scoped
+  `TenantContext` the route itself sets, or the route's own INSERT 500s against a table that was created
+  without the `SIT_` prefix.
+  **Break-tested**: temporarily changed the packed-key insert route's `actor` derivation from
+  `actorOrSystem(req, cfg)` to `AuthService.extractSessionCredential(req)` (the raw token) — the new test
+  failed with the expected message (`"packed-key actor must be the resolved userId, op=\"INSERT\""
+  ==> expected the real userId but was the raw Base64 session token), confirming the test is load-bearing
+  rather than vacuous. Reverted; `git diff` on the production file showed no residue. Full
+  `app-bana-service` suite: **644/644**, 0 failures, 0 errors, `BUILD SUCCESS` (643 baseline + 1 new test).
+  Re-ran `EstimateReconciliationTest`/`RouteCensusTest` after the doc edits (both green; no route or
+  estimate changes — S4.7 keeps its original 30 min, no new routes were added).
 
 ---
 

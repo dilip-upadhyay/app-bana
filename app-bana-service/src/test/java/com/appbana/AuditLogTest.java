@@ -313,6 +313,159 @@ public class AuditLogTest {
                 "null/null scope (the route's admin bypass) must see rows across tenants");
     }
 
+    /**
+     * S4.7 — proves {@code appbana_audit.actor} is always the caller's real resolved userId,
+     * never the raw {@code X-Session-Token} value, across every one of the 12
+     * {@code AuditLogService.log()} call sites in {@link com.appbana.server.routes.GenericEntityRoutes}:
+     * packed-key insert/batch-insert/update/delete/bulk-delete, studio insert/update/delete,
+     * runtime insert, and env insert/update/delete.
+     * <p>
+     * {@code SessionService}'s session id is a random Base64 string wholly unrelated to the
+     * userId passed to {@code createSession} (see {@code generateSessionId()}), so asserting
+     * {@code actor == userId} and {@code actor != rawToken} is a meaningful, not-accidentally-true
+     * proof rather than a tautology.
+     * <p>
+     * Investigation for this task found all 12 call sites already resolve through
+     * {@code actorOrSystem(req, cfg)} -&gt; {@code AuthService.extractUserId} -&gt;
+     * {@code resolveIdentity} (S0.1) as a side effect of S3.4 (commit {@code 3d57bb4}, which
+     * introduced the {@code actorOrSystem} helper for audit-log attribution when wiring
+     * {@code EntityAccessGuard} into every route). No production code required a change for
+     * S4.7 — this test locks the invariant in for the future rather than leaving it an
+     * unverified accident of the current call sites.
+     */
+    @Test
+    @Order(6)
+    void actorColumnNeverContainsRawSessionTokenAcrossAllRouteFamilies() throws Exception {
+        // Unique per test invocation (not a hardcoded literal): flywayCleanOnStart stays false by
+        // design (see config.json), so a fixed tenant/app name here would accumulate audit rows
+        // across repeated `mvn test` runs against the persistent dev DB and make the exact-row-count
+        // assertions below flaky. One shared suffix keeps all 4 route-family sections isolated from
+        // both prior runs and each other.
+        String run = String.valueOf(System.nanoTime());
+
+        // ---- packed-key family: insert, update, delete, batch-insert, bulk-delete ----
+        String apiUser = "s47-api-user-" + run;
+        String apiTenant = "s47-tenant-api-" + run;
+        String apiApp = "s47-app-api-" + run;
+        EntitySchema apiSchema = new EntitySchema();
+        apiSchema.setName("audit_actor_api");
+        apiSchema.setTenantId(apiTenant);
+        apiSchema.setAppId(apiApp);
+        apiSchema.setFields(List.of(field("id", "long", true, true), field("name", "string", false, false)));
+        SchemaManager.saveSchema(apiSchema);
+        String apiToken = SessionService.createSession(apiUser, apiTenant, apiApp).sessionId();
+        String apiPacked = apiTenant + "_" + apiApp + "_audit_actor_api";
+
+        JsonNode apiCreated = postWithToken("/api/" + apiPacked, "{\"name\":\"A1\"}", apiToken);
+        long apiId = apiCreated.get("id").asLong();
+        putWithToken("/api/" + apiPacked + "/" + apiId, "{\"name\":\"A2\"}", apiToken);
+        deleteWithToken("/api/" + apiPacked + "/" + apiId, apiToken);
+
+        postWithToken("/api/" + apiPacked + "/batch", "[{\"name\":\"A3\"}]", apiToken);
+
+        JsonNode bulkTarget = postWithToken("/api/" + apiPacked, "{\"name\":\"A4\"}", apiToken);
+        long bulkId = bulkTarget.get("id").asLong();
+        postWithToken("/api/" + apiPacked + "/bulk-delete", "{\"ids\":[" + bulkId + "]}", apiToken);
+
+        JsonNode apiAudit = getWithToken("/audit?entity=audit_actor_api&limit=50", apiToken);
+        // insert(A1) + update(A2) + delete + batch-insert(A3) + insert(A4, the bulk-delete target)
+        // + bulk-delete = 6 rows.
+        assertEquals(6, apiAudit.get("rows").size(),
+                "expected insert+update+delete+batch-insert+insert(bulk target)+bulk-delete rows");
+        for (JsonNode row : apiAudit.get("rows")) {
+            String actor = row.get("actor").asText();
+            assertEquals(apiUser, actor, "packed-key actor must be the resolved userId, op=" + row.get("op"));
+            assertNotEquals(apiToken, actor, "packed-key actor must never be the raw session token, op=" + row.get("op"));
+        }
+
+        // ---- studio family: insert, update, delete ----
+        String studioUser = "s47-studio-user-" + run;
+        String studioTenant = "s47-tenant-studio-" + run;
+        String studioApp = "s47-app-studio-" + run;
+        EntitySchema studioSchema = new EntitySchema();
+        studioSchema.setName("audit_actor_studio");
+        studioSchema.setTenantId(studioTenant);
+        studioSchema.setAppId(studioApp);
+        studioSchema.setFields(List.of(field("id", "long", true, true), field("name", "string", false, false)));
+        SchemaManager.saveSchema(studioSchema);
+        String studioToken = SessionService.createSession(studioUser, studioTenant, studioApp).sessionId();
+        String studioBase = "/appbana-studio/" + studioTenant + "/apps/" + studioApp + "/audit_actor_studio";
+
+        JsonNode studioCreated = postWithToken(studioBase, "{\"name\":\"S1\"}", studioToken);
+        long studioId = studioCreated.get("id").asLong();
+        putWithToken(studioBase + "/" + studioId, "{\"name\":\"S2\"}", studioToken);
+        deleteWithToken(studioBase + "/" + studioId, studioToken);
+
+        JsonNode studioAudit = getWithToken("/audit?entity=audit_actor_studio&limit=50", studioToken);
+        assertEquals(3, studioAudit.get("rows").size(), "expected insert+update+delete rows");
+        for (JsonNode row : studioAudit.get("rows")) {
+            String actor = row.get("actor").asText();
+            assertEquals(studioUser, actor, "studio actor must be the resolved userId, op=" + row.get("op"));
+            assertNotEquals(studioToken, actor, "studio actor must never be the raw session token, op=" + row.get("op"));
+        }
+
+        // ---- runtime family: insert (the only runtime call site that audit-logs) ----
+        String runtimeUser = "s47-runtime-user-" + run;
+        String runtimeTenant = "s47-tenant-runtime-" + run;
+        String runtimeApp = "s47-app-runtime-" + run;
+        EntitySchema runtimeSchema = new EntitySchema();
+        runtimeSchema.setName("audit_actor_runtime");
+        runtimeSchema.setTenantId(runtimeTenant);
+        runtimeSchema.setAppId(runtimeApp);
+        runtimeSchema.setFields(List.of(field("id", "long", true, true), field("name", "string", false, false)));
+        SchemaManager.saveSchema(runtimeSchema);
+        String runtimeToken = SessionService.createSession(runtimeUser, runtimeTenant, runtimeApp).sessionId();
+
+        postWithToken("/api/" + runtimeTenant + "/apps/" + runtimeApp + "/audit_actor_runtime",
+                "{\"name\":\"R1\"}", runtimeToken);
+
+        JsonNode runtimeAudit = getWithToken("/audit?entity=audit_actor_runtime&limit=50", runtimeToken);
+        assertEquals(1, runtimeAudit.get("rows").size(), "expected 1 insert row");
+        String runtimeActor = runtimeAudit.get("rows").get(0).get("actor").asText();
+        assertEquals(runtimeUser, runtimeActor, "runtime actor must be the resolved userId");
+        assertNotEquals(runtimeToken, runtimeActor, "runtime actor must never be the raw session token");
+
+        // ---- env family: insert, update, delete — actor carries the "/env-{env}" suffix ----
+        String envUser = "s47-env-user-" + run;
+        String envTenant = "s47-tenant-env-" + run;
+        String envApp = "s47-app-env-" + run;
+        String env = "sit";
+        EntitySchema envSchema = new EntitySchema();
+        envSchema.setName("audit_actor_env");
+        envSchema.setTenantId(envTenant);
+        envSchema.setAppId(envApp);
+        envSchema.setFields(List.of(field("id", "long", true, true), field("name", "string", false, false)));
+        // SchemaManager.getPhysicalTableName() reads the current TenantContext to decide the
+        // env-prefixed physical table name (e.g. APP_SIT_...) — the table must be created under
+        // the same env-scoped context the env route below will use, or the route's later INSERT
+        // 500s against a table that was created without the "SIT_" prefix.
+        com.appbana.model.TenantContext.set(new com.appbana.model.TenantContext(envTenant, envApp, env));
+        try {
+            SchemaManager.saveSchema(envSchema);
+        } finally {
+            com.appbana.model.TenantContext.clear();
+        }
+        String envToken = SessionService.createSession(envUser, envTenant, envApp).sessionId();
+        String envBase = "/api/" + envTenant + "/apps/" + envApp + "/env/" + env + "/audit_actor_env";
+
+        JsonNode envCreated = postWithToken(envBase, "{\"name\":\"E1\"}", envToken);
+        long envId = envCreated.get("id").asLong();
+        putWithToken(envBase + "/" + envId, "{\"name\":\"E2\"}", envToken);
+        deleteWithToken(envBase + "/" + envId, envToken);
+
+        JsonNode envAudit = getWithToken("/audit?entity=audit_actor_env&limit=50", envToken);
+        assertEquals(3, envAudit.get("rows").size(), "expected insert+update+delete rows");
+        String expectedEnvActor = envUser + "/env-" + env;
+        for (JsonNode row : envAudit.get("rows")) {
+            String actor = row.get("actor").asText();
+            assertEquals(expectedEnvActor, actor,
+                    "env actor must be resolved userId + \"/env-\" + env, op=" + row.get("op"));
+            assertNotEquals(envToken, actor, "env actor must never be the raw session token, op=" + row.get("op"));
+            assertNotEquals(envToken + "/env-" + env, actor,
+                    "env actor must resolve the id part, not concatenate the raw token, op=" + row.get("op"));
+        }
+    }
+
     private static JsonNode postWithToken(String path, String json, String token) throws Exception {
         HttpClient c = HttpClient.newHttpClient();
         HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))
@@ -322,6 +475,27 @@ public class AuditLogTest {
         HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
         assertTrue(resp.statusCode() == 200 || resp.statusCode() == 201,
                 () -> "Unexpected status: " + resp.statusCode() + " body=" + resp.body());
+        return M.readTree(resp.body());
+    }
+
+    private static JsonNode putWithToken(String path, String json, String token) throws Exception {
+        HttpClient c = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))
+                .header("Content-Type", "application/json")
+                .header("X-Session-Token", token)
+                .PUT(HttpRequest.BodyPublishers.ofString(json)).build();
+        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, resp.statusCode(), () -> "Unexpected status: " + resp.statusCode() + " body=" + resp.body());
+        return M.readTree(resp.body());
+    }
+
+    private static JsonNode deleteWithToken(String path, String token) throws Exception {
+        HttpClient c = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(BASE + path))
+                .header("X-Session-Token", token)
+                .DELETE().build();
+        HttpResponse<String> resp = c.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, resp.statusCode(), () -> "Unexpected status: " + resp.statusCode() + " body=" + resp.body());
         return M.readTree(resp.body());
     }
 

@@ -1567,7 +1567,7 @@ entity name and a possibly-raw credential.
 - [ ] No code path compares a raw password string to a stored value.
 - [ ] Every pre-existing plaintext row is transparently upgraded to BCrypt the next time its owner logs in — no user-visible disruption, no forced reset.
 - [ ] `SECURITY_FEATURES.md` accurately reflects what is actually running.
-- [ ] `appbana_audit` rows carry `tenant_id`/`app_id`, and `actor` is never a raw token/session id.
+- [x] `appbana_audit` rows carry `tenant_id`/`app_id`, and `actor` is never a raw token/session id (S4.6 added the columns; S4.7 confirmed `actor` resolution and added the regression test — see the implementation tracker for details).
 - [x] `GET /audit` scopes results to the caller's own tenant (and app, when session-scoped) unless a valid admin/service token is presented (S4.10, round-92 review HIGH follow-up).
 
 ---
