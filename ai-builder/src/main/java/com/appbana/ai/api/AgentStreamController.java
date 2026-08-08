@@ -7,6 +7,7 @@ import com.appbana.ai.agent.StreamEmitter;
 import com.appbana.ai.api.dto.ChatRequest;
 import com.appbana.ai.dialogue.DialogueManager;
 import com.appbana.ai.rag.ConversationMemory;
+import com.appbana.ai.security.AgentAccessVerifier;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -40,13 +41,16 @@ public class AgentStreamController {
     private final AiAgent agent;
     private final ConversationMemory conversationMemory;
     private final DialogueManager dialogueManager;
+    private final AgentAccessVerifier accessVerifier;
 
     public AgentStreamController(AiAgent agent,
                                  ConversationMemory conversationMemory,
-                                 DialogueManager dialogueManager) {
+                                 DialogueManager dialogueManager,
+                                 AgentAccessVerifier accessVerifier) {
         this.agent = agent;
         this.conversationMemory = conversationMemory;
         this.dialogueManager = dialogueManager;
+        this.accessVerifier = accessVerifier;
     }
 
     /**
@@ -86,6 +90,20 @@ public class AgentStreamController {
                 log.warn("[STREAM] Rejecting tokenless request from user {}", userId);
                 res.json(401, Map.of("error", "Unauthorized", "message", "Missing session token"));
                 return;
+            }
+
+            // S5.1 -- same trust-chain gap as AiChatController: tenantId/appId above are read
+            // straight from the client body. Verify against app-bana-service's own
+            // TenantAccessGuard-gated routes before opening the SSE stream (headers not yet
+            // sent, so a plain res.json(...) denial is safe here).
+            if (accessVerifier != null) {
+                AgentAccessVerifier.VerifyResult verifyResult = accessVerifier.verify(tenantId, appId, token);
+                if (!verifyResult.allowed()) {
+                    log.warn("[STREAM] Rejecting request: tenant/app access denied for user {} tenant={} app={} status={}",
+                            userId, tenantId, appId, verifyResult.statusCode());
+                    res.json(verifyResult.statusCode(), Map.of("error", "Forbidden", "message", verifyResult.message()));
+                    return;
+                }
             }
 
             List<ConversationMemory.Conversation> history;

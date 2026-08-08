@@ -12,6 +12,7 @@ import com.appbana.ai.rag.ConversationMemory;
 import com.appbana.ai.learning.UserPreferenceEngine;
 import com.appbana.ai.optimization.DirectAnswerService;
 import com.appbana.ai.optimization.PatternExecutor;
+import com.appbana.ai.security.AgentAccessVerifier;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
 
@@ -32,6 +33,7 @@ public class AiChatController {
     private final PatternExecutor patternExecutor;
     private final DialogueManager dialogueManager;
     private final LlmRegistry llmRegistry;
+    private final AgentAccessVerifier accessVerifier;
 
     public AiChatController(
             LlmRegistry llmRegistry,
@@ -41,7 +43,8 @@ public class AiChatController {
             UserPreferenceEngine userPreferenceEngine,
             DirectAnswerService directAnswerService,
             PatternExecutor patternExecutor,
-            DialogueManager dialogueManager) {
+            DialogueManager dialogueManager,
+            AgentAccessVerifier accessVerifier) {
         this.conversationMemory = conversationMemory;
         this.agent = agent;
         this.userPreferenceEngine = userPreferenceEngine;
@@ -49,6 +52,7 @@ public class AiChatController {
         this.patternExecutor = patternExecutor;
         this.dialogueManager = dialogueManager;
         this.llmRegistry = llmRegistry;
+        this.accessVerifier = accessVerifier;
     }
 
     /**
@@ -94,6 +98,22 @@ public class AiChatController {
             log.warn("[CHAT] Rejecting tokenless request from user {}", userId);
             res.json(401, Map.of("error", "Unauthorized", "message", "Missing session token"));
             return;
+        }
+
+        // S5.1 -- tenantId/appId above are read straight from the client body with only a
+        // null-coalesce default, never the caller's actual access. Verify against
+        // app-bana-service's own TenantAccessGuard-gated routes (the same ones ListAppsTool /
+        // ListEntitiesTool already call) before any tool call, history load, or AgentContext is
+        // built -- same placement rationale as the token check above: this must run before the
+        // pattern-executor short-circuit below, which also creates apps.
+        if (accessVerifier != null) {
+            AgentAccessVerifier.VerifyResult verifyResult = accessVerifier.verify(tenantId, appId, token);
+            if (!verifyResult.allowed()) {
+                log.warn("[CHAT] Rejecting request: tenant/app access denied for user {} tenant={} app={} status={}",
+                        userId, tenantId, appId, verifyResult.statusCode());
+                res.json(verifyResult.statusCode(), Map.of("error", "Forbidden", "message", verifyResult.message()));
+                return;
+            }
         }
 
         // 1. Get Contextual Data

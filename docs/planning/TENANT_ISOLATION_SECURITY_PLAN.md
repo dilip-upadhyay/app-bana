@@ -1582,16 +1582,28 @@ S5.3 moved to **S0.3** — it has to exist *before* S1–S3 are implemented, as 
 phases where to apply their guards, not just as a check afterward. Keeping it here as well would have
 given it two owners.
 
+**Scope correction (S5.1 implementation):** this row's own "Where" column named only
+`AiChatController.java`, but `AgentStreamController.java` (`POST /api/ai/chat/agent/stream`, the SSE
+endpoint) turned out to have the identical trust-chain gap and to be the endpoint the real Studio UI
+actually calls — confirmed via `app-bana-shared/src/api-client.ts`'s `streamAgentChat`, the only chat
+call in `app-bana-studio/src/features/chat/ChatPane.tsx`. `AiChatController`'s sync endpoint is not
+reachable from the browser today. Both controllers needed the fix and now share one
+`AgentAccessVerifier` instance; see the implementation tracker for the full writeup, including the
+honest "defense-in-depth, not a currently-exploitable hole" framing.
+
 | # | Task | Where | Est. |
 |---|---|---|---|
-| S5.1 | `AiChatController`/`AgentContext` verifies the caller's `tenantId`/`appId` against app-bana-service (reusing `EntityAccessGuard`/`isAppOwnerOrSystem` via a lightweight internal check) instead of trusting the client-supplied JSON body fields | [`AiChatController.java`](../../ai-builder/src/main/java/com/appbana/ai/api/AiChatController.java) | 90 min |
+| S5.1 | `AiChatController`/`AgentContext` verifies the caller's `tenantId`/`appId` against app-bana-service (reusing `EntityAccessGuard`/`isAppOwnerOrSystem` via a lightweight internal check) instead of trusting the client-supplied JSON body fields | [`AiChatController.java`](../../ai-builder/src/main/java/com/appbana/ai/api/AiChatController.java), [`AgentStreamController.java`](../../ai-builder/src/main/java/com/appbana/ai/api/AgentStreamController.java) | 90 min |
 | S5.2 | `CrossTenantIsolationTest` capstone suite — 2 tenants × 2+ apps each, asserting no session from one tenant/app combination can read/write/delete another's apps, roles, files, saved views, templates writes, or entity rows in any of the three entity-route families | new integration test | 120 min |
 | S5.3 | Document the enforced model in `.github/copilot-instructions.md` (new section, mirroring how Maker-Checker got documented) | `.github/copilot-instructions.md` | 30 min |
 
 ### Exit criteria — S5
 
 - [ ] Capstone cross-tenant suite passes and is wired into CI (not a one-off manual run).
-- [ ] ai-builder no longer trusts client-supplied tenant/app identity for any tool call.
+- [x] ai-builder no longer trusts client-supplied tenant/app identity for any tool call (S5.1 — new
+  `AgentAccessVerifier` gates both `AiChatController` and `AgentStreamController` by re-checking the
+  caller's session against app-bana-service's own `TenantAccessGuard`-gated routes; see the
+  implementation tracker for the full writeup).
 
 ---
 

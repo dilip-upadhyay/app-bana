@@ -22,6 +22,7 @@ import com.appbana.ai.rag.EmbeddingService;
 import com.appbana.ai.rag.QdrantService;
 import com.appbana.ai.rag.VectorStoreService;
 import com.appbana.ai.rag.ConversationMemory;
+import com.appbana.ai.security.AgentAccessVerifier;
 import org.flywaydb.core.Flyway;
 import com.sun.net.httpserver.HttpServer;
 import com.zaxxer.hikari.HikariConfig;
@@ -191,6 +192,12 @@ public class AiServer {
 
             // AI Chat Controller (Story 3.1 — wire in DialogueManager)
             DialogueManager dialogueManager = new DialogueManager();
+
+            // S5.1 -- verifies the client-claimed tenantId/appId against app-bana-service's own
+            // TenantAccessGuard-gated routes before either chat controller runs any tool or
+            // builds an AgentContext. Shared by both controllers below.
+            AgentAccessVerifier accessVerifier = new AgentAccessVerifier(backendUrl);
+
             AiChatController chatController = new AiChatController(
                     llmRegistry,
                     promptEngine,
@@ -199,11 +206,12 @@ public class AiServer {
                     userPreferenceEngine,
                     directAnswerService,
                     patternExecutor,
-                    dialogueManager);
+                    dialogueManager,
+                    accessVerifier);
 
             // SSE streaming controller (Stage 0 — AI-native UI rebuild)
             com.appbana.ai.api.AgentStreamController streamController =
-                    new com.appbana.ai.api.AgentStreamController(agent, conversationMemory, dialogueManager);
+                    new com.appbana.ai.api.AgentStreamController(agent, conversationMemory, dialogueManager, accessVerifier);
 
             // Chat History Controller
             ChatHistoryController historyController = new ChatHistoryController(conversationMemory);
